@@ -1,0 +1,290 @@
+// Mirrors docs/api.md exactly — the single source of truth for shapes.
+// Never invent shapes in components; change the doc first, then this file
+// and crates/nit/src/api/types.rs together.
+
+// ---------------------------------------------------------------------------
+// Health
+
+export interface Health {
+  status: "ok";
+  version: string;
+}
+
+// ---------------------------------------------------------------------------
+// Chains
+
+export type ChainStatus = "active" | "merged" | "abandoned";
+
+/** Derived chain state — see the normative state table in docs/api.md. */
+export type ChainState =
+  | "waiting_for_review"
+  | "agents_turn"
+  | "ready_to_merge"
+  | "merged"
+  | "abandoned";
+
+export type ChangeStatus =
+  | "pending"
+  | "approved"
+  | "changes_requested"
+  | "commented"
+  | "orphaned";
+
+export interface Chain {
+  id: number;
+  repo_path: string;
+  branch: string;
+  base: string;
+  status: ChainStatus;
+  state: ChainState;
+  last_scan_error: string | null;
+  scan_warnings: string[];
+  web_url: string;
+  created_at: string;
+  updated_at: string;
+  /** Chain order; orphaned ones last. */
+  changes: ChangeSummary[];
+}
+
+export interface ChangeSummary {
+  id: number;
+  position: number | null;
+  change_key: string;
+  subject: string;
+  status: ChangeStatus;
+  /** Latest revision number. */
+  revision: number;
+  /** Max revision with a review; null if none. */
+  last_reviewed_revision: number | null;
+  commit_sha: string;
+  short_sha: string;
+  /** Fixup folding conflicted. */
+  needs_rebase: boolean;
+  counts: ChangeCounts;
+}
+
+export interface ChangeCounts {
+  revisions: number;
+  published_comments: number;
+  drafts: number;
+  unresolved: number;
+}
+
+export interface RegisterChainRequest {
+  repo_path: string;
+  branch: string;
+  base: string;
+}
+
+export interface ChainList {
+  chains: Chain[];
+}
+
+// ---------------------------------------------------------------------------
+// Changes
+
+export interface ChangeDetail {
+  id: number;
+  chain_id: number;
+  change_key: string;
+  position: number | null;
+  status: ChangeStatus;
+  subject: string;
+  last_reviewed_revision: number | null;
+  /** Ascending. */
+  revisions: Revision[];
+  /** Published + drafts, all revisions. */
+  comments: Comment[];
+  reviews: Review[];
+}
+
+export interface Revision {
+  number: number;
+  commit_sha: string;
+  short_sha: string;
+  parent_sha: string;
+  /** Full commit message. */
+  message: string;
+  fixups: Fixup[];
+  needs_rebase: boolean;
+  created_at: string;
+}
+
+export interface Fixup {
+  sha: string;
+  short_sha: string;
+  message: string;
+}
+
+export type Verdict = "approve" | "request_changes" | "comment";
+
+export interface Review {
+  id: number;
+  revision: number;
+  verdict: Verdict;
+  /** Cover message. */
+  message: string;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Diffs
+
+export type FileStatus = "added" | "deleted" | "modified" | "renamed";
+
+export interface Diff {
+  files: DiffFile[];
+}
+
+export interface DiffFile {
+  /** New path (old path when deleted). */
+  path: string;
+  /** Only set for renames. */
+  old_path?: string;
+  status: FileStatus;
+  binary: boolean;
+  additions: number;
+  deletions: number;
+  /** Empty when binary. */
+  hunks: Hunk[];
+}
+
+export interface Hunk {
+  old_start: number;
+  old_lines: number;
+  new_start: number;
+  new_lines: number;
+  header: string;
+  lines: Line[];
+}
+
+export type LineKind = "context" | "add" | "del";
+
+export interface Line {
+  kind: LineKind;
+  /** Old line number; absent for add. */
+  old?: number;
+  /** New line number; absent for del. */
+  new?: number;
+  /** Without trailing newline. */
+  text: string;
+}
+
+// ---------------------------------------------------------------------------
+// Comments
+
+export type CommentAuthor = "reviewer" | "agent";
+export type CommentSide = "old" | "new";
+export type CommentState = "draft" | "published";
+
+export interface Comment {
+  id: number;
+  change_id: number;
+  /** Revision the comment was written against. */
+  revision: number;
+  parent_id: number | null;
+  author: CommentAuthor;
+  file: string | null;
+  line: number | null;
+  side: CommentSide;
+  /** Snapshot of the anchored line. */
+  line_text: string | null;
+  /** Anchor ported to the requested revision; null when outdated. */
+  rendered_line: number | null;
+  outdated: boolean;
+  body: string;
+  state: CommentState;
+  resolved: boolean;
+  review_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDraftRequest {
+  revision: number;
+  /** Optional: change-level comment when absent. */
+  file?: string;
+  /** Optional: file-level comment when absent. */
+  line?: number;
+  /** Defaults to "new". */
+  side?: CommentSide;
+  body: string;
+  parent_id?: number | null;
+}
+
+export interface UpdateDraftRequest {
+  body: string;
+}
+
+// ---------------------------------------------------------------------------
+// Reviews
+
+export interface SubmitReviewRequest {
+  revision: number;
+  verdict: Verdict;
+  message: string;
+}
+
+export interface SubmitReviewResponse {
+  review: Review;
+  published_comments: Comment[];
+}
+
+// ---------------------------------------------------------------------------
+// Agent endpoints
+
+export interface ReplyRequest {
+  body: string;
+  resolve: boolean;
+}
+
+export interface Feedback {
+  state: ChainState;
+  /** ≡ state != waiting_for_review. */
+  actionable: boolean;
+  chain: FeedbackChain;
+  /** Live changes, chain order. */
+  changes: FeedbackChange[];
+}
+
+export interface FeedbackChain {
+  id: number;
+  branch: string;
+  base: string;
+  web_url: string;
+  last_scan_error: string | null;
+  scan_warnings: string[];
+}
+
+export interface FeedbackChange {
+  change_id: number;
+  change_key: string;
+  subject: string;
+  commit_sha: string;
+  revision: number;
+  status: ChangeStatus;
+  needs_rebase: boolean;
+  unresolved: number;
+  /** Latest review, null if none. */
+  review: FeedbackReview | null;
+  /** That review's comments only, plus still-unresolved threads from earlier reviews. */
+  comments: Comment[];
+}
+
+export interface FeedbackReview {
+  verdict: Verdict;
+  message: string;
+  revision: number;
+}
+
+export interface WaitResponse {
+  cursor: number;
+  feedback: Feedback;
+}
+
+// ---------------------------------------------------------------------------
+// Errors
+
+export interface ApiErrorBody {
+  error: string;
+}
