@@ -351,14 +351,25 @@ async fn create_draft(
         if req.line.is_some() && req.file.is_none() {
             return Err(Error::bad_request("a line anchor requires a file"));
         }
-        if let Some(parent_id) = req.parent_id {
-            let parent = load_comment(&conn, parent_id)?;
-            if parent.change_id != change.id {
-                return Err(Error::bad_request(
-                    "parent comment belongs to a different change",
-                ));
+        // Thread under the root, wherever the draft pointed (like replies):
+        // feedback scoping only walks one level below roots, so a comment
+        // threaded under a reply would silently vanish from the agent's view.
+        let parent_id = match req.parent_id {
+            Some(parent_id) => {
+                let parent = load_comment(&conn, parent_id)?;
+                if parent.change_id != change.id {
+                    return Err(Error::bad_request(
+                        "parent comment belongs to a different change",
+                    ));
+                }
+                let mut root = parent;
+                while let Some(up) = root.parent_id {
+                    root = load_comment(&conn, up)?;
+                }
+                Some(root.id)
             }
-        }
+            None => None,
+        };
         let line_text = match (req.file.as_deref(), req.line) {
             (Some(file), Some(line)) => open_repo(&conn, change.chain_id)
                 .and_then(|repo| anchor_line_text(&repo, &rev, side, file, line)),
@@ -369,7 +380,7 @@ async fn create_draft(
             &db::NewComment {
                 change_id: change.id,
                 revision_number: rev.number,
-                parent_id: req.parent_id,
+                parent_id,
                 author: "reviewer",
                 file: req.file.as_deref(),
                 line: req.line,
@@ -566,6 +577,7 @@ async fn submit_review(
                 "chain_id": change.chain_id,
                 "change_id": change.id,
                 "review_id": review.id,
+                "verdict": req.verdict,
             }),
             &now,
         )?;
