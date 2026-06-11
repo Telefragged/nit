@@ -17,11 +17,17 @@ happens.
   time. Chains gone (merged/abandoned) disappear. Poll via react-query
   `refetchInterval: 5000`.
 - `/chains/:id` **Chain** — ordered commit list: position, subject, status
-  chip, revision count, comment/draft counts. Click → change view.
+  chip, revision count, comment/draft/unresolved counts, an "updated since
+  your review (1→2)" badge when `last_reviewed_revision < revision`.
+  Orphaned changes render collapsed at the bottom (comments preserved).
+  `last_scan_error` / `scan_warnings` show as a banner. Click → change view.
 - `/changes/:id` **Review** (the core) —
   - header: subject, expandable full message, chain breadcrumb, revision
-    selector (`1 … N`, default latest), interdiff toggle ("vs revision m"),
-    base info, `needs_rebase` warning banner when set;
+    selector (`1 … N`, default latest), fixup messages of the shown
+    revision, base info, `needs_rebase` warning banner when set;
+  - interdiff: when `last_reviewed_revision` exists and is behind, default
+    to the interdiff `last_reviewed → latest` with a one-click "full diff"
+    escape; otherwise full diff with a "vs revision m" toggle;
   - file list (left rail): path, status letter, +/- counts; selecting
     scrolls to the file section; all files render in one scroll column
     (diffshub style), unified ⇄ side-by-side toggle persisted in
@@ -30,12 +36,18 @@ happens.
     coloring, per-line syntax highlighting (language from extension; skip
     silently when unknown), hunk separators showing skipped ranges;
   - comments: click a gutter/line → inline draft editor under that line
-    (file+line+side from context). Published comments render as threads
-    under their line with author chrome; drafts get a dashed border +
-    `DRAFT` tag and edit/delete;
-  - review bar (sticky bottom): draft count, cover-message input, buttons
-    `Approve` / `Request changes` / `Comment` → POST review, then navigate
-    to the next pending change in the chain (or back to the chain).
+    (file+line+side from context; in interdiff view only new-side lines are
+    commentable). Published comments render as threads (replies via
+    `parent_id`, author chrome for reviewer/agent, resolve toggle) under
+    their `rendered_line`; comments with `outdated: true` group at the top
+    of their file with their `line_text` excerpt; drafts get a dashed
+    border + `DRAFT` tag and edit/delete;
+  - review bar (sticky bottom): draft count, unresolved count,
+    cover-message input, buttons `Approve` / `Request changes` / `Comment`
+    → POST review, then navigate to the next pending change in the chain
+    (or back to the chain). On a 409 (agent pushed meanwhile): keep the
+    cover message and drafts, refetch, show "new revision landed", re-offer
+    submit.
 - 404/error states: plain message + link home. Loading: skeleton rows, no
   spinner-only screens.
 

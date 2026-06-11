@@ -34,18 +34,25 @@ agent                         nit server                      reviewer (browser)
 - **Local-first**: server and agents share a filesystem. No auth; binds 127.0.0.1.
 - **Repos are read in place** via libgit2. Registering a chain stores only
   `(repo path, branch name, base ref)`.
-- **Rescan-on-read**: every dashboard/chain GET and every push re-walks
-  `base..tip` and reconciles the db. A walk is milliseconds; no file watchers.
-  Merged/deleted branches are detected the same way.
+- **Rescan-on-read, but safe**: pushes and (throttled) dashboard/chain GETs
+  re-walk `base..tip` and reconcile the db. A walk is milliseconds; no file
+  watchers. Merged/deleted branches are detected the same way. Scans and
+  review submissions serialize through a per-chain lock in single
+  transactions; scans never destroy review data (changes are orphaned, not
+  deleted) and a failing chain never breaks the others (data-model.md
+  "Concurrency").
 - **Unit of review is the commit** (a "change"), grouped in a "chain"
   (one registered branch). Change identity survives rebases — see
   [data-model.md](data-model.md).
 - **Fixups fold into revisions**: a `fixup!` commit becomes a new revision of
   the change it targets (in-memory tree merge), gerrit patchset style.
+  Attachment mirrors `git rebase --autosquash` exactly; folded trees are
+  pinned against `git gc` by `refs/nit/keep/*` refs.
 - **Drafts live server-side** so the reviewer can move between commits and
   sessions without losing them; they publish atomically with a verdict.
-- **Events table = cursor stream** powering both `nit wait` long-polling and
-  UI freshness polling.
+- **Events table = cursor stream** powering the `/wait` long-poll; clients
+  act on the feedback snapshot it returns, never on raw events, so wakeups
+  can't be missed between calls.
 
 Deeper reading: [data-model.md](data-model.md) (schema, scan algorithm),
 [api.md](api.md) (the HTTP contract), [frontend.md](frontend.md) (UI),

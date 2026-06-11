@@ -1,98 +1,155 @@
 # Data model
 
-SQLite, migrations applied at startup (`PRAGMA user_version`). Review state
-only — git objects stay in the user's repo.
+SQLite, migrations applied at startup (`PRAGMA user_version`), WAL mode,
+`busy_timeout` set. Review state only — git objects stay in the user's repo,
+pinned where needed (see "GC safety"). **Nothing is ever hard-deleted**:
+rows are status-flagged and every status is re-derivable by a later scan.
 
 ## Tables
 
 ```sql
 repos     (id, path UNIQUE, created_at)
-chains    (id, repo_id, branch, base, status, created_at, updated_at,
-           UNIQUE(repo_id, branch))
-           -- status: active | merged | abandoned
+chains    (id, repo_id, branch, base, status, last_scan_error,
+           created_at, updated_at, UNIQUE(repo_id, branch))
+           -- status: active | merged | abandoned   (all re-derivable)
+           -- last_scan_error: NULL or human-readable scan failure
 changes   (id, chain_id, change_key, position, status,
            UNIQUE(chain_id, change_key))
-           -- status: pending | approved | changes_requested
+           -- status: pending | approved | changes_requested | commented
+           --         | orphaned
+changes   -- position is NULL while orphaned
 revisions (id, change_id, number, commit_sha, parent_sha, effective_tree,
-           fixup_shas, message, created_at, UNIQUE(change_id, number))
+           fixups, message, created_at, UNIQUE(change_id, number))
            -- number: 1-based patchset number
            -- effective_tree: tree sha with this change's fixups folded in
-           --   (equals the commit's own tree when there are no fixups;
-           --    NULL when folding hit a merge conflict)
-           -- fixup_shas: JSON array of folded fixup commit shas, in order
-comments  (id, change_id, revision_number, file, line, side, body, state,
-           review_id, created_at, updated_at)
-           -- state: draft | published; side: old | new
-           -- file NULL = change-level comment; line NULL = file-level
+           --   (the commit's own tree when no fixups; NULL = fold conflict)
+           -- fixups: JSON [{sha, message}] folded in, branch order
+comments  (id, change_id, revision_number, parent_id, author, file, line,
+           side, line_text, body, state, resolved, review_id,
+           created_at, updated_at)
+           -- author: reviewer | agent;  state: draft | published
+           -- side: old | new;  line_text: snapshot of the anchored line
+           -- parent_id: reply threading; resolved: thread-level bool
 reviews   (id, change_id, revision_number, verdict, message, created_at)
            -- verdict: approve | request_changes | comment
 events    (id, chain_id, kind, payload, created_at)
            -- id is the monotonic long-poll cursor
-           -- kind: chain_updated | review_submitted | chain_merged
+           -- kind: chain_updated | review_submitted | comment_replied
+           --       | chain_closed
 ```
+
+## Concurrency (normative)
+
+- One **per-chain async mutex** serializes every scan of a chain *and* every
+  review submission to it. No revision insert, status flip, or 409 check
+  happens outside it.
+- Each scan / review-submit runs in **one transaction** (`BEGIN IMMEDIATE`).
+- Scans are throttled: a scan that finished < 2s ago is not repeated; reads
+  serve current DB state instead of waiting on a running scan.
+- A failed scan **never** partially reconciles: the transaction rolls back,
+  `chains.last_scan_error` is set, previous state stays served. One broken
+  chain must not affect listing the others.
 
 ## Change identity (`change_key`)
 
-A change must keep its identity while its commit sha changes (rebase, amend,
+A change keeps its identity while its commit sha changes (rebase, amend,
 autosquash). Matching, in priority order:
 
-1. **`Change-Id:` trailer** in the commit message (gerrit-style, any opaque
-   token). Agents are told to add one — see agent-workflow.md.
+1. **`Change-Id:` trailer** (gerrit-style, any opaque token). If two live
+   commits in one chain carry the same trailer, the first (oldest) keeps it;
+   later ones get derived keys (`I123#2`, …) and the scan records a warning
+   surfaced in the push response and chain banner.
 2. **Exact sha** — commit unchanged since last scan.
-3. **Patch-id** (`git patch-id --stable` equivalent) — same diff, new sha
-   (pure rebase).
-4. **Subject** — first line matches an existing change in this chain whose
-   commit is no longer in the branch.
+3. **Patch-id** (`git patch-id --stable` semantics; empty diffs use the
+   sentinel patch-id of the empty string) — same diff, new sha.
+4. **Subject** — first line matches an existing non-orphaned change whose
+   commit left the branch.
 
-Unmatched commits become new changes; existing changes whose commit
-disappears and matches nothing are deleted (their comments/reviews go with
-them — the agent dropped the commit).
+Unmatched commits become new changes. Existing changes whose commit
+disappears and matches nothing become **`orphaned`** — comments, drafts and
+reviews are kept; the UI shows them collapsed. A later scan that finds a
+matching commit again (rules above) re-attaches the orphan (status returns
+to its pre-orphan value). Orphans are how transient git states (mid-rebase
+resets, dropped-and-restored commits) and "split this commit" reworks stay
+lossless.
 
-## Scan algorithm (runs on push and on every chain read)
+## Scan algorithm (push + throttled on reads, always under the chain lock)
 
-1. Resolve `base` and branch tip. If the branch ref is gone → chain status
-   `abandoned`. If tip is an ancestor of base, or every change's patch-id
-   appears in `base@{<recent>}..base` → `merged`. Both emit `chain_merged`
-   and stop. (Status can flip back to `active` if a later scan finds the
-   branch alive again — e.g. force-push reusing the name.)
-2. Walk `base..tip` oldest-first. Split commits into **regular** and
-   **fixup** (`fixup! ` / `squash! ` subject prefix).
-3. Attach each fixup to its target: searching *earlier* commits in the walk —
-   exact subject match, then subject-prefix match, then sha-prefix match
-   (autosquash semantics). A fixup whose target is missing is treated as a
-   regular change. Fixups of fixups chain to the root target.
-4. Match regular commits to existing change rows (identity rules above);
-   create/delete/reposition as needed.
-5. For each change compute its **effective state**:
-   `(commit_sha, [fixup shas in branch order])`. Effective tree = commit's
-   tree with each fixup's diff folded in via in-memory three-way tree merge
-   (`merge_trees(ancestor=fixup_parent, ours=acc, theirs=fixup_tree)`;
-   trees are written to the repo odb — unreachable objects, gc-able).
-   Conflict → `effective_tree = NULL`; UI shows the fixup separately with a
-   "needs rebase" flag.
-6. If the effective state differs from the latest revision → insert revision
-   `number+1`. Status effects:
-   - same diff as previous revision (patch-id equal, e.g. pure rebase) →
-     keep status (approvals survive rebases);
-   - otherwise → status back to `pending` (reviewer must re-look).
-7. Any structural difference emits one `chain_updated` event.
+1. Open repo; resolve `base` and branch tip. Failures (repo moved, base
+   gone) → set `last_scan_error`, keep prior state, done.
+   - Branch ref missing: only after the ref is missing on **two consecutive
+     scans ≥ 10s apart** → status `abandoned` + `chain_closed` event
+     (protects against mid-rebase windows).
+   - Merged test: tip is ancestor-or-equal of base **and** every live
+     non-empty change's patch-id appears in `merge-base..base` → `merged`
+     + `chain_closed`. (`tip == base` *without* the patch-id quorum is just
+     an empty active chain — e.g. an agent's `reset --hard base` rebuild.)
+   - A later scan that finds the branch alive with commits flips
+     merged/abandoned back to `active`.
+2. Walk `base..tip` oldest-first. **Any merge commit aborts the scan** with
+   error "chain contains merge commits — rebase onto the base instead"
+   (kept state + error surfaced, as above). Split remaining commits into
+   regular and fixup (`fixup! ` / `squash! ` subject prefix; `squash!` is
+   folded like a fixup but adds a push warning since its message-editing
+   semantics are interactive).
+3. Attach each fixup to its target using **git autosquash semantics**
+   (`todo_list_rearrange_squash`): among *earlier* commits, the **oldest**
+   exact-subject match wins, else the oldest subject-prefix match, else
+   resolve the remainder as a commit-ish (sha prefix). Fixups of fixups
+   chain to the root target. A fixup with no target is a regular change.
+   (Differential tests compare attachment against
+   `git rebase -i --autosquash` todo output.)
+4. Match regular commits to change rows (identity rules above); create new
+   rows, update positions, orphan the unmatched, re-attach returning
+   orphans.
+5. Compute each change's **effective state**: `(commit_sha, [fixup shas])`.
+   Effective tree = commit's tree with each fixup folded in by in-memory
+   three-way merge (ancestor = fixup's parent tree, ours = accumulated
+   tree, theirs = fixup tree). Conflict → `effective_tree = NULL`,
+   `needs_rebase` reported on the change until the agent restructures.
+6. If the effective state differs from the latest revision, insert revision
+   `number+1`. Status effect:
+   - fixup list unchanged **and** patch-id equal (pure rebase) → keep
+     status, and review submission auto-retargets (see api.md);
+   - anything else — including a patch-id-equal *new fixup* (the agent may
+     be arguing in the fixup message) → status `pending`: the reviewer
+     must look again.
+7. Net structural difference → one `chain_updated` event.
 
 A change's diff is always `parent_sha → effective_tree` of the selected
-revision. Earlier changes' fixups are *not* folded into later changes'
-parents — each change's diff is self-contained against its real parent.
-The interdiff between revisions m and n is `effective_tree(m) → effective_tree(n)`.
+revision; earlier changes' fixups are *not* folded into later changes'
+parents. Interdiff m→n is `effective_tree(m) → effective_tree(n)`.
+
+## GC safety
+
+Synthesized effective trees (and the fixup/commit objects review history
+points at) must survive `git gc` and post-merge reflog expiry. After each
+scan nit maintains one ref per live revision:
+`refs/nit/keep/<chain-id>/<change-id>/<revision-number>` → a synthetic
+commit whose tree is the effective tree and whose parents are
+`[parent_sha's commit, original commit]` (making parent, original and fold
+all reachable). Refs for merged/abandoned chains are deleted by the scan
+that closes them (review rows keep the shas; after that, history display is
+best-effort). If a tree is missing anyway, the scan re-folds on demand.
 
 ## Status machine
 
 ```
-change:  pending ──approve──▶ approved      (review verdict)
+change:  pending ──approve──▶ approved
          pending ──request_changes──▶ changes_requested
-         any ──new revision with different diff──▶ pending
+         pending ──comment──▶ commented        (reviewer asked/remarked)
+         any ──new revision (per scan rule 6)──▶ pending
+         any ──commit vanished──▶ orphaned ──reappears──▶ previous status
+
 chain state (derived, not stored):
-         any change changes_requested  → agents_turn
-         else any change pending       → waiting_for_review
-         else                          → ready_to_merge
-chain status (stored): active → merged | abandoned   (scan step 1)
+         any live change changes_requested | commented | needs_rebase
+                                          → agents_turn
+         else any live change pending     → waiting_for_review
+         else all approved (≥1 change)    → ready_to_merge
+         else (no live changes)           → agents_turn   (empty chain)
+
+chain status (stored): active | merged | abandoned  — scan step 1; closed
+chains leave the dashboard.
 ```
 
-`comment` verdict publishes drafts without moving the change's status.
+The full actionable/feedback contract lives in [api.md](api.md).
