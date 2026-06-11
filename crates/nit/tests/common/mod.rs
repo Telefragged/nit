@@ -149,22 +149,202 @@ impl Fixture {
 }
 
 fn commit_in(repo: &Repository, parents: &[Oid], message: &str, files: &[(&str, &str)]) -> Oid {
+    let upserts: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(path, content)| (*path, content.as_bytes()))
+        .collect();
+    commit_full_in(repo, parents, message, &upserts, &[])
+}
+
+fn commit_full_in(
+    repo: &Repository,
+    parents: &[Oid],
+    message: &str,
+    upserts: &[(&str, &[u8])],
+    deletes: &[&str],
+) -> Oid {
     let parent_commits: Vec<git2::Commit> = parents
         .iter()
         .map(|&oid| repo.find_commit(oid).unwrap())
         .collect();
     let parent_refs: Vec<&git2::Commit> = parent_commits.iter().collect();
-    let base_tree = parent_commits.first().map(|c| c.tree().unwrap());
-    let mut builder = repo.treebuilder(base_tree.as_ref()).unwrap();
-    for (path, content) in files {
-        let blob = repo.blob(content.as_bytes()).unwrap();
-        builder.insert(path, blob, 0o100644).unwrap();
+    // An in-memory index handles nested paths (treebuilder is flat-only).
+    let mut index = git2::Index::new().unwrap();
+    if let Some(parent) = parent_commits.first() {
+        index.read_tree(&parent.tree().unwrap()).unwrap();
     }
-    let tree_oid = builder.write().unwrap();
+    for (path, content) in upserts {
+        let entry = git2::IndexEntry {
+            ctime: git2::IndexTime::new(0, 0),
+            mtime: git2::IndexTime::new(0, 0),
+            dev: 0,
+            ino: 0,
+            mode: 0o100644,
+            uid: 0,
+            gid: 0,
+            file_size: content.len() as u32,
+            id: repo.blob(content).unwrap(),
+            flags: 0,
+            flags_extended: 0,
+            path: path.as_bytes().to_vec(),
+        };
+        index.add(&entry).unwrap();
+    }
+    for path in deletes {
+        index.remove_path(std::path::Path::new(path)).unwrap();
+    }
+    let tree_oid = index.write_tree_to(repo).unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
     let s = sig();
     repo.commit(None, &s, &s, message, &tree, &parent_refs)
         .unwrap()
+}
+
+// ---------------------------------------------------------------------------
+// HTTP/API test harness: a bare git repo builder (no db — the server owns
+// it), a real `nit::api` server on port 0, and blocking HTTP helpers.
+
+/// A standalone fixture repo: `main` with one root commit.
+pub struct GitRepo {
+    pub dir: tempfile::TempDir,
+    pub repo: Repository,
+    pub root: Oid,
+}
+
+impl GitRepo {
+    pub fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let mut opts = RepositoryInitOptions::new();
+        opts.initial_head("refs/heads/main");
+        let repo = Repository::init_opts(dir.path().join("repo"), &opts).unwrap();
+        let root = commit_in(&repo, &[], "init\n", &[("README", "hello\n")]);
+        repo.reference("refs/heads/main", root, true, "test")
+            .unwrap();
+        GitRepo { dir, repo, root }
+    }
+
+    pub fn workdir(&self) -> std::path::PathBuf {
+        self.repo.workdir().unwrap().to_path_buf()
+    }
+
+    pub fn commit(&self, parents: &[Oid], message: &str, files: &[(&str, &str)]) -> Oid {
+        commit_in(&self.repo, parents, message, files)
+    }
+
+    pub fn commit_full(
+        &self,
+        parents: &[Oid],
+        message: &str,
+        upserts: &[(&str, &[u8])],
+        deletes: &[&str],
+    ) -> Oid {
+        commit_full_in(&self.repo, parents, message, upserts, deletes)
+    }
+
+    pub fn branch(&self, name: &str, target: Oid) {
+        self.repo
+            .reference(&format!("refs/heads/{name}"), target, true, "test")
+            .unwrap();
+    }
+
+    pub fn delete_branch(&self, name: &str) {
+        self.repo
+            .find_reference(&format!("refs/heads/{name}"))
+            .unwrap()
+            .delete()
+            .unwrap();
+    }
+
+    pub fn tip(&self, name: &str) -> Oid {
+        self.repo
+            .find_reference(&format!("refs/heads/{name}"))
+            .unwrap()
+            .target()
+            .unwrap()
+    }
+}
+
+/// A real `nit::api` server (the binary's stack) bound on port 0.
+pub struct TestServer {
+    pub base: String,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+    rt: Option<tokio::runtime::Runtime>,
+}
+
+impl TestServer {
+    pub fn start(db_path: std::path::PathBuf, web_dist: Option<std::path::PathBuf>) -> Self {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        let listener = rt.block_on(tokio::net::TcpListener::bind("127.0.0.1:0"));
+        let listener = listener.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        rt.spawn(async move {
+            nit::api::serve_on(listener, db_path, web_dist, async {
+                let _ = rx.await;
+            })
+            .await
+            .unwrap();
+        });
+        TestServer {
+            base,
+            shutdown: Some(tx),
+            rt: Some(rt),
+        }
+    }
+
+    pub fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.base)
+    }
+}
+
+impl Drop for TestServer {
+    fn drop(&mut self) {
+        if let Some(tx) = self.shutdown.take() {
+            let _ = tx.send(());
+        }
+        if let Some(rt) = self.rt.take() {
+            rt.shutdown_timeout(std::time::Duration::from_secs(5));
+        }
+    }
+}
+
+fn agent() -> ureq::Agent {
+    // Non-2xx responses must come back as (status, body), not errors.
+    ureq::config::Config::builder()
+        .http_status_as_error(false)
+        .build()
+        .new_agent()
+}
+
+fn read(mut response: ureq::http::Response<ureq::Body>) -> (u16, serde_json::Value) {
+    let status = response.status().as_u16();
+    let text = response.body_mut().read_to_string().unwrap();
+    let value = if text.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text))
+    };
+    (status, value)
+}
+
+pub fn http_get(url: &str) -> (u16, serde_json::Value) {
+    read(agent().get(url).call().unwrap())
+}
+
+pub fn http_post(url: &str, body: &serde_json::Value) -> (u16, serde_json::Value) {
+    read(agent().post(url).send_json(body).unwrap())
+}
+
+pub fn http_patch(url: &str, body: &serde_json::Value) -> (u16, serde_json::Value) {
+    read(agent().patch(url).send_json(body).unwrap())
+}
+
+pub fn http_delete(url: &str) -> (u16, serde_json::Value) {
+    read(agent().delete(url).call().unwrap())
 }
 
 /// `subject` + `Change-Id` trailer message.
