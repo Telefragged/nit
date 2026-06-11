@@ -171,3 +171,53 @@ fn request_validation() {
     assert_eq!(st, 200);
     assert_eq!(unresolved["resolved"], false);
 }
+
+#[test]
+fn review_rejected_on_orphaned_change_and_needs_rebase_revision() {
+    let g = GitRepo::new();
+    let seed = g.commit(&[g.root], "seed\n", &[("f.txt", "a\nb\nc\nd\ne\n")]);
+    g.branch("main", seed);
+    let c1 = g.commit(&[seed], &msg("one", "I001"), &[("f.txt", "A\nb\nc\nd\ne\n")]);
+    // A second change edits line 2, and the fixup for change one edits
+    // that same line from the tip: folding it onto change one (where the
+    // line still reads "b") conflicts with undoing change two's edit —
+    // exactly what `git rebase --autosquash` would conflict on.
+    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("f.txt", "A\nB\nc\nd\ne\n")]);
+    g.branch("feat", c2);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let register = json!({
+        "repo_path": g.workdir().to_string_lossy(),
+        "branch": "feat",
+        "base": "main",
+    });
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+
+    let evil = g.commit(&[c2], "fixup! one\n", &[("f.txt", "A\nB2\nc\nd\ne\n")]);
+    g.branch("feat", evil);
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200);
+    // Sanity: this layout must actually conflict for the test to bite.
+    assert_eq!(chain["changes"][0]["needs_rebase"], json!(true), "{chain}");
+    let revision = chain["changes"][0]["revision"].as_i64().unwrap();
+
+    let (st, body) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reviews")),
+        &json!({"revision": revision, "verdict": "approve", "message": "blind"}),
+    );
+    assert_eq!(st, 409, "approving an undiffable revision must fail: {body}");
+    assert!(body["error"].as_str().unwrap().contains("rebase"));
+
+    // Orphan the change (reset to base) — verdicts must be rejected.
+    g.branch("feat", seed);
+    let (st, _) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200);
+    let (st, body) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reviews")),
+        &json!({"revision": revision, "verdict": "approve", "message": "ghost"}),
+    );
+    assert_eq!(st, 409, "reviewing an orphaned change must fail: {body}");
+    assert!(body["error"].as_str().unwrap().contains("orphaned"));
+}

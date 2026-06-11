@@ -516,8 +516,18 @@ async fn submit_review(
         let mut conn = st.open_db()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let change = load_change(&tx, id)?;
+        if change.position.is_none() {
+            return Err(Error::conflict(
+                "change is orphaned (its commit left the branch) — wait for it to re-attach",
+            ));
+        }
         let latest = db::latest_revision(&tx, change.id)?
             .ok_or_else(|| Error::internal(format!("change {id} has no revisions")))?;
+        if req.verdict != "comment" && latest.effective_tree.is_none() {
+            return Err(Error::conflict(
+                "revision needs a rebase (fixup folding conflicted) — its diff cannot be reviewed",
+            ));
+        }
 
         let target = if req.revision == latest.number {
             latest.number
