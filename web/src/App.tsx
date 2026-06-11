@@ -1,19 +1,20 @@
-import { useEffect, useState } from "react";
+import { Link, Outlet } from "react-router-dom";
 
 export default function App() {
-  const [health, setHealth] = useState<string>("connecting…");
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then((d) => setHealth(d.status))
-      .catch(() => setHealth("backend unreachable"));
-  }, []);
-
   return (
-    <main>
-      <h1>nit</h1>
-      <p>backend: {health}</p>
-    </main>
+    <>
+      <header className="topbar">
+        <Link to="/" className="logo">
+          nit
+        </Link>
+        <span className="spacer" />
+        {import.meta.env.VITE_MOCK ? (
+          <span className="mock-flag" title="Serving canned fixtures — no backend">
+            MOCK
+          </span>
+        ) : null}
+      </header>
+      <Outlet />
+    </>
   );
 }
