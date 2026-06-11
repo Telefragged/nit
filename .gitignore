@@ -17,3 +17,6 @@ result-*
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
+
+# TypeScript incremental build state
+*.tsbuildinfo
