@@ -177,7 +177,11 @@ fn review_rejected_on_orphaned_change_and_needs_rebase_revision() {
     let g = GitRepo::new();
     let seed = g.commit(&[g.root], "seed\n", &[("f.txt", "a\nb\nc\nd\ne\n")]);
     g.branch("main", seed);
-    let c1 = g.commit(&[seed], &msg("one", "I001"), &[("f.txt", "A\nb\nc\nd\ne\n")]);
+    let c1 = g.commit(
+        &[seed],
+        &msg("one", "I001"),
+        &[("f.txt", "A\nb\nc\nd\ne\n")],
+    );
     // A second change edits line 2, and the fixup for change one edits
     // that same line from the tip: folding it onto change one (where the
     // line still reads "b") conflicts with undoing change two's edit —
@@ -207,7 +211,10 @@ fn review_rejected_on_orphaned_change_and_needs_rebase_revision() {
         &server.url(&format!("/api/changes/{change_id}/reviews")),
         &json!({"revision": revision, "verdict": "approve", "message": "blind"}),
     );
-    assert_eq!(st, 409, "approving an undiffable revision must fail: {body}");
+    assert_eq!(
+        st, 409,
+        "approving an undiffable revision must fail: {body}"
+    );
     assert!(body["error"].as_str().unwrap().contains("rebase"));
 
     // Orphan the change (reset to base) — verdicts must be rejected.
