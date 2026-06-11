@@ -9,10 +9,14 @@
     "check": "tsc -b"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.0",
+    "highlight.js": "^11.11.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.17.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.59.1",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
