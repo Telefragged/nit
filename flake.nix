@@ -47,6 +47,59 @@
         };
       });
 
+      packages = forAllSystems (pkgs: rec {
+        nit-web = pkgs.buildNpmPackage {
+          pname = "nit-web";
+          version = "0.1.0";
+          src = ./web;
+          npmDepsHash = "sha256-hkGbJDK43S60/GMQkhLTRucy98frj3ytBXQtpbweCB4=";
+          installPhase = ''
+            runHook preInstall
+            cp -r dist $out
+            runHook postInstall
+          '';
+        };
+
+        nit-unwrapped = pkgs.rustPlatform.buildRustPackage {
+          pname = "nit";
+          version = "0.1.0";
+          src = ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+          nativeBuildInputs = [ pkgs.pkg-config ];
+          buildInputs = [
+            pkgs.libgit2
+            pkgs.sqlite
+            pkgs.zlib
+          ];
+          # The test suite builds real repos and runs `git rebase` in the
+          # differential test; the sandbox has no git or identity config.
+          nativeCheckInputs = [ pkgs.git ];
+          preCheck = ''
+            export HOME=$TMPDIR
+            export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
+            export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
+          '';
+        };
+
+        # The real product: nit with the built web UI baked in via env.
+        nit =
+          pkgs.runCommand "nit"
+            {
+              nativeBuildInputs = [ pkgs.makeWrapper ];
+            }
+            ''
+              mkdir -p $out/bin
+              makeWrapper ${nit-unwrapped}/bin/nit $out/bin/nit \
+                --set-default NIT_WEB_DIST ${nit-web}
+            '';
+
+        default = nit;
+      });
+
+      checks = forAllSystems (pkgs: {
+        build = self.packages.${pkgs.system}.nit;
+      });
+
       formatter = forAllSystems (pkgs: pkgs.nixfmt-rfc-style);
     };
 }
