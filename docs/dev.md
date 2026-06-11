@@ -24,18 +24,24 @@ nix build                                      # → result/bin/nit
 
 ## Screenshot harness (frontend checking for AI agents)
 
-AI agents can't look at a browser; they look at PNGs. From `web/`:
+AI agents can't look at a browser; they look at PNGs. Both modes write to
+`screenshots/*.png` (repo root, gitignored) — to "see" the app, run one and
+`Read` the PNGs:
 
 ```sh
-nix develop -c npm run screenshots
+# mock mode — every UI state from canned fixtures, no backend needed
+cd web && nix develop -c npm run screenshots
+
+# live mode — seeds a demo repo, runs the real nix-built server + UI
+nix develop -c scripts/screenshots-live.sh     # needs ./result from nix build
 ```
 
-builds the UI, seeds a throwaway fixture repo + review state, starts the
-real server, and captures every page/state into `screenshots/*.png` (repo
-root, gitignored). To "see" the app, run it and `Read` the PNGs. Add a new
-capture whenever you add a page or significant state. Implementation lives
-in `web/screenshots/`; the npm `@playwright/test` version must match
-`pkgs.playwright-driver` (the devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
+Mock mode is the design-review workhorse (it covers detailed states:
+drafts, 409s, interdiff, needs_rebase…); live mode verifies real backend
+data renders. Add a mock capture whenever you add a page or significant
+state. Implementation lives in `web/screenshots/capture.mjs`; the npm
+`@playwright/test` version must match `pkgs.playwright-driver` (the
+devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
 
 ## Testing expectations
 

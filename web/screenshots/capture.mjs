@@ -75,6 +75,24 @@ const captures = [
   { name: "review-needs-rebase", path: "/changes/21" },
 ];
 
+/**
+ * Against a real server (NIT_BASE_URL) the mock-fixture ids above don't
+ * exist; discover what does and capture it generically. Detailed UI states
+ * stay covered by mock mode — live mode verifies real backend data renders.
+ */
+async function liveCaptures(baseUrl) {
+  const res = await fetch(`${baseUrl}/api/chains`);
+  const { chains } = await res.json();
+  const caps = [{ name: "live-dashboard", path: "/" }];
+  for (const chain of chains) {
+    caps.push({ name: `live-chain-${chain.id}`, path: `/chains/${chain.id}` });
+    for (const ch of chain.changes.slice(0, 2)) {
+      caps.push({ name: `live-change-${ch.id}`, path: `/changes/${ch.id}` });
+    }
+  }
+  return caps;
+}
+
 async function waitForServer(url, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -110,6 +128,7 @@ async function main() {
   try {
     await waitForServer(baseUrl);
     mkdirSync(outDir, { recursive: true });
+    const list = process.env.NIT_BASE_URL ? await liveCaptures(baseUrl) : captures;
 
     const browser = await chromium.launch();
     const context = await browser.newContext({
@@ -120,7 +139,7 @@ async function main() {
     // Keep captures order-independent (e.g. the persisted diff layout).
     await context.addInitScript(() => localStorage.clear());
 
-    for (const cap of captures) {
+    for (const cap of list) {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (err) => errors.push(String(err)));
