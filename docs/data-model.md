@@ -91,13 +91,18 @@ lossless.
      encoded as the branch-missing `last_scan_error` marker; repeat missing
      scans must not re-bump `chains.updated_at`, which times the window.
    - Merged test: tip is ancestor-or-equal of base **and** every live
-     non-empty change's patch-id appears in `fork..base`, where *fork* is
-     the recorded `parent_sha` of the first live change's latest revision
-     (a plain merge-base would be empty after a ff-merge). The patch-id is
-     taken over the **folded** diff (`parent_sha → effective_tree`) — that
-     is what lands in base after autosquash-then-merge. Match → `merged` +
-     `chain_closed`. (`tip == base` *without* the quorum is just an empty
-     active chain — e.g. an agent's `reset --hard base` rebuild.)
+     change matches a commit in `fork..base`, where *fork* is the recorded
+     `parent_sha` of the first live change's latest revision (a plain
+     merge-base would be empty after a ff-merge). A change matches by
+     **Change-Id trailer first** — immune to the patch-id context drift
+     that an autosquash of a *neighboring* change causes — then by the
+     patch-id of its **folded** diff (`parent_sha → effective_tree`, what
+     lands in base after autosquash-then-merge); empty diffs are trivially
+     matched but at least one real match is required. If no live changes
+     exist (an earlier failed quorum orphaned them), the orphans are
+     judged instead — reset-to-base rebuilds still can't match. Match →
+     `merged` + `chain_closed`. (`tip == base` *without* the quorum is
+     just an empty active chain.)
    - A later scan that finds the branch alive with commits flips
      merged/abandoned back to `active`.
 2. Walk `base..tip` oldest-first. **Any merge commit aborts the scan** with

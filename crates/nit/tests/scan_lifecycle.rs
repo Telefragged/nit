@@ -221,3 +221,68 @@ fn abandoned_chain_reopens_when_branch_returns() {
         "same commit: no new revision"
     );
 }
+
+#[test]
+fn merged_despite_fixup_context_drift() {
+    let mut f = Fixture::new();
+    // Two changes in one file, close enough that change one's fixup sits
+    // inside change two's diff context.
+    let b0 = f.commit(&[f.root], "seed\n", &[("f.txt", "a\nb\nc\nd\ne\n")]);
+    f.branch("main", b0);
+    let c1 = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A1\nb\nc\nd\ne\n")]);
+    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("f.txt", "A1\nb\nc\nD\ne\n")]);
+    f.branch("feat", c2);
+    f.scan();
+
+    // Feedback round: fixup on change one folds cleanly.
+    let fx = f.commit(&[c2], "fixup! one\n", &[("f.txt", "A2\nb\nc\nD\ne\n")]);
+    f.branch("feat", fx);
+    assert_eq!(f.scan().chain.status, ChainStatus::Active);
+
+    // The agent autosquashes (messages survive) and ff-merges. Change
+    // two's rebased diff now has different context (A2, not A1) — its
+    // patch-id drifted; only the Change-Id trailer still matches.
+    let c1r = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A2\nb\nc\nd\ne\n")]);
+    let c2r = f.commit(
+        &[c1r],
+        &msg("two", "I002"),
+        &[("f.txt", "A2\nb\nc\nD\ne\n")],
+    );
+    f.branch("feat", c2r);
+    f.branch("main", c2r);
+    assert_eq!(f.scan().chain.status, ChainStatus::Merged);
+}
+
+#[test]
+fn orphaned_chain_still_detects_merge() {
+    let mut f = Fixture::new();
+    let b0 = f.commit(&[f.root], "seed\n", &[("f.txt", "a\nb\nc\nd\ne\n")]);
+    f.branch("main", b0);
+    let c1 = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A1\nb\nc\nd\ne\n")]);
+    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("f.txt", "A1\nb\nc\nD\ne\n")]);
+    f.branch("feat", c2);
+    f.scan();
+
+    // Agent rebuilds from scratch: reset-to-base must NOT read as merged,
+    // and orphans every change.
+    f.branch("feat", b0);
+    let outcome = f.scan();
+    assert_eq!(outcome.chain.status, ChainStatus::Active);
+    assert!(
+        f.changes()
+            .iter()
+            .all(|c| c.status == ChangeStatus::Orphaned)
+    );
+
+    // The work lands on main anyway (rebased elsewhere); even with every
+    // change orphaned the trailer quorum must recognize the merge.
+    let c1r = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A2\nb\nc\nd\ne\n")]);
+    let c2r = f.commit(
+        &[c1r],
+        &msg("two", "I002"),
+        &[("f.txt", "A2\nb\nc\nD\ne\n")],
+    );
+    f.branch("feat", c2r);
+    f.branch("main", c2r);
+    assert_eq!(f.scan().chain.status, ChainStatus::Merged);
+}

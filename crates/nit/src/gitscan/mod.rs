@@ -501,26 +501,40 @@ fn merged_quorum(
     chain: &db::Chain,
     base: &Commit,
 ) -> Result<bool> {
-    let mut live: Vec<db::Revision> = Vec::new();
-    for row in db::changes_for_chain(tx, chain.id)? {
+    let rows = db::changes_for_chain(tx, chain.id)?;
+    let mut candidates: Vec<(String, db::Revision)> = Vec::new();
+    for row in &rows {
         if row.position.is_none() {
             continue;
         }
         match db::latest_revision(tx, row.id)? {
-            Some(rev) => live.push(rev),
+            Some(rev) => candidates.push((row.change_key.clone(), rev)),
             None => return Ok(false),
         }
     }
-    let Some(first) = live.first() else {
+    // A quorum that failed on the first post-merge scan (e.g. patch-id
+    // context drift, see below) orphans every change; later scans must
+    // still be able to recognize the merge from the orphans. Safe against
+    // reset-to-base rebuilds: those match neither trailers nor patch-ids.
+    if candidates.is_empty() {
+        for row in &rows {
+            if let Some(rev) = db::latest_revision(tx, row.id)? {
+                candidates.push((row.change_key.clone(), rev));
+            }
+        }
+    }
+    let Some((_, first)) = candidates.first() else {
         return Ok(false);
     };
     let Ok(fork) = Oid::from_str(&first.parent_sha) else {
         return Ok(false);
     };
 
-    // Patch-ids of base-side commits in fork..base (first-parent diffs;
-    // merge commits don't carry a meaningful single patch-id).
+    // Patch-ids and Change-Id trailers of base-side commits in fork..base
+    // (first-parent diffs; merge commits don't carry a meaningful single
+    // patch-id, but their trailers still count).
     let mut base_patch_ids: HashSet<String> = HashSet::new();
+    let mut base_trailers: HashSet<String> = HashSet::new();
     let Ok(mut walk) = repo.revwalk() else {
         return Ok(false);
     };
@@ -532,6 +546,11 @@ fn merged_quorum(
         let Ok(commit) = repo.find_commit(oid) else {
             return Ok(false);
         };
+        if let Some(trailer) =
+            identity::change_id_trailer(&String::from_utf8_lossy(commit.message_bytes()))
+        {
+            base_trailers.insert(trailer);
+        }
         if commit.parent_count() == 1
             && let (Ok(parent_tree), Ok(tree)) =
                 (commit.parent(0).and_then(|p| p.tree()), commit.tree())
@@ -541,20 +560,24 @@ fn merged_quorum(
         }
     }
 
-    let mut any_non_empty = false;
-    for rev in &live {
+    // A change matches by Change-Id trailer first (immune to the patch-id
+    // context drift an autosquash of a *neighboring* change causes), then
+    // by folded patch-id. Empty diffs are trivially matched but don't
+    // count toward the quorum.
+    let mut any_matched = false;
+    for (key, rev) in &candidates {
+        if base_trailers.contains(key) {
+            any_matched = true;
+            continue;
+        }
         match revision_effective_patch_id(repo, rev) {
-            None => return Ok(false), // unverifiable (conflicted fold, pruned objects)
             Some(pid) if pid == fold::EMPTY_PATCH_ID => continue,
-            Some(pid) => {
-                if !base_patch_ids.contains(&pid) {
-                    return Ok(false);
-                }
-                any_non_empty = true;
-            }
+            Some(pid) if base_patch_ids.contains(&pid) => any_matched = true,
+            // Unverifiable (conflicted fold, pruned objects) or unmatched.
+            _ => return Ok(false),
         }
     }
-    Ok(any_non_empty)
+    Ok(any_matched)
 }
 
 /// Patch-id of a revision's reviewed diff: `parent_sha → effective_tree`.
