@@ -827,8 +827,12 @@ table.list tbody tr:hover {
 }
 .diff-table td.code {
   white-space: pre-wrap;
-  word-break: break-all;
-  padding: 0 10px 0 4px;
+  /* Break long lines at word boundaries when possible (never mid-token
+     unless unavoidable), and give wrapped continuations a hanging indent
+     so they read as continuations, not as fresh source lines. */
+  overflow-wrap: anywhere;
+  padding: 0 10px 0 24px;
+  text-indent: -20px;
   width: auto;
 }
 .diff-table td.code.half {
