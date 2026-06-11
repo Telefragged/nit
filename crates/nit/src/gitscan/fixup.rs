@@ -2,10 +2,11 @@
 //!
 //! Mirrors git's `todo_list_rearrange_squash` (sequencer.c), the function
 //! behind `git rebase -i --autosquash`, with the lookup order documented
-//! in docs/data-model.md (scan step 3): among *earlier* commits, the
-//! oldest exact-subject match wins, else the oldest subject-prefix match,
-//! else the remainder resolves as a commit-ish. Fixups of fixups chain to
-//! the root target; a fixup with no target is a regular change.
+//! in docs/data-model.md (scan step 3) — git's actual probe order: among
+//! *earlier* commits, the oldest exact-subject match wins, else the
+//! needle resolves as a commit-ish, else the oldest subject-prefix match.
+//! Fixups of fixups chain to the root target; a fixup with no target is a
+//! regular change.
 
 use std::collections::HashMap;
 
@@ -95,15 +96,16 @@ pub fn attach_fixups(
         if let Some(needle) = fixup_needle(subject) {
             // 1. Oldest exact-subject match (non-attached items only).
             target = by_subject.get(needle).copied();
-            // 2. Oldest subject-prefix match among all earlier commits
-            //    (including already-attached fixups; chains to root below).
-            if target.is_none() {
-                target = (0..i).find(|&j| commits[j].subject.starts_with(needle));
-            }
-            // 3. Commit-ish — git only tries this for space-free needles.
+            // 2. Commit-ish — git tries this before the prefix scan, and
+            //    only for space-free needles.
             if target.is_none() && !needle.contains(' ') {
                 target =
                     resolve_commitish(needle).and_then(|sha| by_sha.get(sha.as_str()).copied());
+            }
+            // 3. Oldest subject-prefix match among all earlier commits
+            //    (including already-attached fixups; chains to root below).
+            if target.is_none() {
+                target = (0..i).find(|&j| commits[j].subject.starts_with(needle));
             }
         }
         match target {
@@ -282,6 +284,22 @@ mod tests {
             attach_fixups(&commits, no_resolve),
             vec![None, Some(0), Some(0)]
         );
+    }
+
+    #[test]
+    fn commitish_beats_prefix_match() {
+        // A space-free needle that both resolves as a commit-ish of an
+        // earlier commit AND prefix-matches an earlier subject: git probes
+        // the commit name before the prefix scan.
+        let sha_b = "deadbee".to_owned() + &"0".repeat(33);
+        let commits = meta(&[
+            ("a", "deadbee cleanup"), // prefix match for the needle
+            (sha_b.as_str(), "other work"),
+            ("c", "fixup! deadbee"),
+        ]);
+        let resolve =
+            |needle: &str| (needle == "deadbee").then(|| "deadbee".to_owned() + &"0".repeat(33));
+        assert_eq!(attach_fixups(&commits, resolve), vec![None, None, Some(1)]);
     }
 
     #[test]
