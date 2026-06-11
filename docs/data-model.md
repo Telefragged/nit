@@ -36,7 +36,15 @@ events    (id, chain_id, kind, payload, created_at)
            -- id is the monotonic long-poll cursor
            -- kind: chain_updated | review_submitted | comment_replied
            --       | chain_closed
+           -- payloads are internal (clients act on /wait's feedback
+           -- snapshot, never on events): chain_updated {chain_id},
+           -- chain_closed {chain_id, status}, review_submitted
+           -- {chain_id, change_id, review_id, verdict}, comment_replied
+           -- {chain_id, change_id, comment_id}
 ```
+
+Scan warnings (duplicate Change-Id, squash! seen, …) are per-scan,
+recomputed each rescan and held in memory only — they are not persisted.
 
 ## Concurrency (normative)
 
@@ -79,23 +87,31 @@ lossless.
    gone) → set `last_scan_error`, keep prior state, done.
    - Branch ref missing: only after the ref is missing on **two consecutive
      scans ≥ 10s apart** → status `abandoned` + `chain_closed` event
-     (protects against mid-rebase windows).
+     (protects against mid-rebase windows). The first observation is
+     encoded as the branch-missing `last_scan_error` marker; repeat missing
+     scans must not re-bump `chains.updated_at`, which times the window.
    - Merged test: tip is ancestor-or-equal of base **and** every live
-     non-empty change's patch-id appears in `merge-base..base` → `merged`
-     + `chain_closed`. (`tip == base` *without* the patch-id quorum is just
-     an empty active chain — e.g. an agent's `reset --hard base` rebuild.)
+     non-empty change's patch-id appears in `fork..base`, where *fork* is
+     the recorded `parent_sha` of the first live change's latest revision
+     (a plain merge-base would be empty after a ff-merge). The patch-id is
+     taken over the **folded** diff (`parent_sha → effective_tree`) — that
+     is what lands in base after autosquash-then-merge. Match → `merged` +
+     `chain_closed`. (`tip == base` *without* the quorum is just an empty
+     active chain — e.g. an agent's `reset --hard base` rebuild.)
    - A later scan that finds the branch alive with commits flips
      merged/abandoned back to `active`.
 2. Walk `base..tip` oldest-first. **Any merge commit aborts the scan** with
    error "chain contains merge commits — rebase onto the base instead"
-   (kept state + error surfaced, as above). Split remaining commits into
+   (kept state + error surfaced, as above); a root commit in the range
+   (unrelated history) aborts the same way. Split remaining commits into
    regular and fixup (`fixup! ` / `squash! ` subject prefix; `squash!` is
    folded like a fixup but adds a push warning since its message-editing
    semantics are interactive).
 3. Attach each fixup to its target using **git autosquash semantics**
    (`todo_list_rearrange_squash`): among *earlier* commits, the **oldest**
-   exact-subject match wins, else the oldest subject-prefix match, else
-   resolve the remainder as a commit-ish (sha prefix). Fixups of fixups
+   exact-subject match wins, else the remainder resolved as a commit-ish
+   (sha prefix), else the oldest subject-prefix match — git's actual
+   probe order. Fixups of fixups
    chain to the root target. A fixup with no target is a regular change.
    (Differential tests compare attachment against
    `git rebase -i --autosquash` todo output.)
@@ -124,11 +140,14 @@ parents. Interdiff m→n is `effective_tree(m) → effective_tree(n)`.
 
 Synthesized effective trees (and the fixup/commit objects review history
 points at) must survive `git gc` and post-merge reflog expiry. After each
-scan nit maintains one ref per live revision:
+scan nit maintains one ref per revision of every change — orphans included,
+their history must stay renderable — on active chains:
 `refs/nit/keep/<chain-id>/<change-id>/<revision-number>` → a synthetic
 commit whose tree is the effective tree and whose parents are
-`[parent_sha's commit, original commit]` (making parent, original and fold
-all reachable). Refs for merged/abandoned chains are deleted by the scan
+`[parent_sha's commit, original commit, each folded fixup commit]` (making
+parent, original, fold *and* fixups reachable — the fixups are needed for
+later pure-rebase comparisons and re-folds). Refs for merged/abandoned
+chains are deleted by the scan
 that closes them (review rows keep the shas; after that, history display is
 best-effort). If a tree is missing anyway, the scan re-folds on demand.
 

@@ -39,7 +39,8 @@ Chain = {
   "changes": [ChangeSummary]     // chain order; orphaned ones last
 }
 ChangeSummary = {
-  "id": 10, "position": 0, "change_key": "I3f2…",
+  "id": 10, "position": 0,           // null while orphaned
+  "change_key": "I3f2…",
   "subject": "server: add health endpoint",
   "status": "pending",  // pending | approved | changes_requested
                         // | commented | orphaned
@@ -87,7 +88,8 @@ DiffFile = {
   "hunks": [Hunk]               // empty when binary
 }
 Hunk = {"old_start": 1, "old_lines": 5, "new_start": 1, "new_lines": 7,
-        "header": "fn main()", "lines": [Line]}
+        "header": "fn main()",  // "" when there is no enclosing context
+        "lines": [Line]}
 Line = {"kind": "context",      // context | add | del
         "old": 1,               // old line number; absent for add
         "new": 1,               // new line number; absent for del
@@ -109,8 +111,10 @@ Comments are anchored where they were written (`revision`, `file`, `line`,
 ```json
 Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
            "author": "reviewer",         // reviewer | agent
-           "file": "src/main.rs", "line": 14, "side": "new",
-           "line_text": "    let x = parse(input);",
+           "file": "src/main.rs",        // null: change-level comment
+           "line": 14,                   // null: file-/change-level
+           "side": "new",
+           "line_text": "    let x = parse(input);",  // null without line
            "rendered_line": 14,          // for the requested revision
            "outdated": false,
            "body": "…", "state": "draft",   // draft | published
