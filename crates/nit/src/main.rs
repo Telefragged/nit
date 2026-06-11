@@ -4,7 +4,11 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "nit", version, about = "Commit-level code review for AI coding agents")]
+#[command(
+    name = "nit",
+    version,
+    about = "Commit-level code review for AI coding agents"
+)]
 struct Args {
     #[command(subcommand)]
     cmd: Cmd,
