@@ -496,6 +496,17 @@ pub fn insert_change(
     })
 }
 
+pub fn change_key_exists(conn: &Connection, chain_id: i64, change_key: &str) -> Result<bool> {
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM changes WHERE chain_id = ?1 AND change_key = ?2",
+            params![chain_id, change_key],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
+}
+
 pub fn change_set_position_status(
     conn: &Connection,
     id: i64,
