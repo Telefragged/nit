@@ -1,0 +1,193 @@
+//! Shared server state: per-chain locks + notifications, scan
+//! orchestration (throttle, error isolation) and the API error type.
+//!
+//! Concurrency contract (docs/data-model.md "Concurrency"): one per-chain
+//! async mutex serializes every scan of a chain *and* every review
+//! submission to it; scans < 2s old are not repeated; a failing chain
+//! never breaks the others.
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::{Duration, Instant};
+
+use axum::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use rusqlite::Connection;
+use tokio::sync::{Mutex, Notify};
+
+use crate::db;
+use crate::gitscan;
+
+use super::types;
+
+/// Scans younger than this are not repeated (reads serve current DB state).
+const SCAN_THROTTLE: Duration = Duration::from_secs(2);
+
+pub struct AppState {
+    pub db_path: PathBuf,
+    /// `http://<listen addr>` — prefix of every `web_url`.
+    pub public_base: String,
+    chains: StdMutex<HashMap<i64, Arc<ChainEntry>>>,
+}
+
+/// Per-chain coordination: the serializing lock, the `/wait` wakeup
+/// channel, and the latest scan's warnings (per-scan data, not persisted —
+/// docs/api.md `scan_warnings`).
+pub struct ChainEntry {
+    pub gate: Mutex<ScanGate>,
+    pub notify: Notify,
+    warnings: StdMutex<Vec<String>>,
+}
+
+#[derive(Default)]
+pub struct ScanGate {
+    last_scan: Option<Instant>,
+}
+
+impl AppState {
+    pub fn new(db_path: PathBuf, public_base: String) -> Arc<Self> {
+        Arc::new(AppState {
+            db_path,
+            public_base,
+            chains: StdMutex::new(HashMap::new()),
+        })
+    }
+
+    /// The coordination entry for a chain (created on first touch).
+    pub fn entry(&self, chain_id: i64) -> Arc<ChainEntry> {
+        let mut map = self.chains.lock().expect("chain map poisoned");
+        map.entry(chain_id)
+            .or_insert_with(|| {
+                Arc::new(ChainEntry {
+                    gate: Mutex::new(ScanGate::default()),
+                    notify: Notify::new(),
+                    warnings: StdMutex::new(Vec::new()),
+                })
+            })
+            .clone()
+    }
+
+    /// Open a database connection (blocking — call inside
+    /// `spawn_blocking`).
+    pub fn open_db(&self) -> anyhow::Result<Connection> {
+        db::open(&self.db_path)
+    }
+
+    /// The latest scan's warnings for a chain (empty until a scan ran in
+    /// this server's lifetime).
+    pub fn scan_warnings(&self, chain_id: i64) -> Vec<String> {
+        self.entry(chain_id)
+            .warnings
+            .lock()
+            .expect("warnings poisoned")
+            .clone()
+    }
+}
+
+/// Run a scan for `chain_id` under its chain lock. `force` skips the
+/// throttle (`nit push` always rescans; dashboard reads don't). Scan-level
+/// git failures are *not* errors here — they land in `last_scan_error`
+/// (error isolation); only infrastructure problems (broken db) surface.
+pub async fn scan_chain(state: &Arc<AppState>, chain_id: i64, force: bool) -> Result<(), Error> {
+    let entry = state.entry(chain_id);
+    let mut gate = entry.gate.lock().await;
+    if !force
+        && gate
+            .last_scan
+            .is_some_and(|at| at.elapsed() < SCAN_THROTTLE)
+    {
+        return Ok(());
+    }
+    let st = state.clone();
+    let outcome = blocking(move || {
+        let mut conn = st.open_db()?;
+        Ok(gitscan::scan(&mut conn, chain_id)?)
+    })
+    .await?;
+    gate.last_scan = Some(Instant::now());
+    *entry.warnings.lock().expect("warnings poisoned") = outcome.warnings;
+    drop(gate);
+    if outcome.updated {
+        entry.notify.notify_waiters();
+    }
+    Ok(())
+}
+
+/// Run blocking (rusqlite / git2) work off the async threads.
+pub async fn blocking<T, F>(f: F) -> Result<T, Error>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, Error> + Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| Error::internal(format!("blocking task panicked: {e}")))?
+}
+
+// ---------------------------------------------------------------------------
+// Error type: non-2xx with {"error": "human readable message"}
+
+#[derive(Debug)]
+pub struct Error {
+    pub status: StatusCode,
+    pub message: String,
+}
+
+impl Error {
+    pub fn bad_request(message: impl Into<String>) -> Self {
+        Error {
+            status: StatusCode::BAD_REQUEST,
+            message: message.into(),
+        }
+    }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Error {
+            status: StatusCode::NOT_FOUND,
+            message: message.into(),
+        }
+    }
+
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Error {
+            status: StatusCode::CONFLICT,
+            message: message.into(),
+        }
+    }
+
+    pub fn internal(message: impl Into<String>) -> Self {
+        Error {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: message.into(),
+        }
+    }
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(err: anyhow::Error) -> Self {
+        Error::internal(format!("{err:#}"))
+    }
+}
+
+impl From<rusqlite::Error> for Error {
+    fn from(err: rusqlite::Error) -> Self {
+        Error::internal(format!("database error: {err}"))
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        if self.status.is_server_error() {
+            tracing::error!("{}: {}", self.status, self.message);
+        }
+        (
+            self.status,
+            Json(types::ApiError {
+                error: self.message,
+            }),
+        )
+            .into_response()
+    }
+}
