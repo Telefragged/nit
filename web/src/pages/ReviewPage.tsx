@@ -1,9 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { getChain, getChange, getDiff } from "../api/client";
+import { createDraft, getChain, getChange, getDiff } from "../api/client";
 import type { ChangeDetail, Comment, Revision } from "../api/types";
 import { StatusChip } from "../components/badges";
+import CommentEditor from "../components/CommentEditor";
 import type { Thread } from "../components/CommentThread";
 import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
@@ -105,6 +106,8 @@ export default function ReviewPage() {
   );
   const [editingTarget, setEditingTarget] = useState<DraftTarget | null>(null);
   const [activeFile, setActiveFile] = useState<number | null>(null);
+  const [changeCommentOpen, setChangeCommentOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   // --- derive revision/diff mode (before any early return: no hooks below)
   const revisions = change?.revisions ?? [];
@@ -161,6 +164,16 @@ export default function ReviewPage() {
   const navigate = useNavigate();
   const chainChanges = chainQ.data?.changes;
   const fileCount = diffQ.data?.files.length ?? 0;
+
+  // Change-level draft (no file/line anchor).
+  const createChangeComment = useMutation({
+    mutationFn: (body: string) =>
+      createDraft(changeId, { revision: selected, body }),
+    onSuccess: () => {
+      setChangeCommentOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["change", changeId] });
+    },
+  });
 
   // Keyboard nav: [ / ] previous/next file, n / p next/previous change.
   useEffect(() => {
@@ -362,6 +375,12 @@ export default function ReviewPage() {
             )}
           </div>
           <div className="diffbar-toggles">
+            <button
+              className="linkish change-comment-btn"
+              onClick={() => setChangeCommentOpen(true)}
+            >
+              + change comment
+            </button>
             <span
               className="kbd-hint"
               title="Keyboard: [ and ] switch files, n and p switch changes"
@@ -400,7 +419,7 @@ export default function ReviewPage() {
             }}
           />
           <div className="diff-column">
-            {changeLevelThreads.length > 0 ? (
+            {changeLevelThreads.length > 0 || changeCommentOpen ? (
               <section className="change-threads">
                 <div className="outdated-title">Change discussion</div>
                 {changeLevelThreads.map((t) => (
@@ -411,6 +430,14 @@ export default function ReviewPage() {
                     draftRevision={selected}
                   />
                 ))}
+                {changeCommentOpen ? (
+                  <CommentEditor
+                    placeholder="Comment on the whole change…"
+                    saving={createChangeComment.isPending}
+                    onSave={(body) => createChangeComment.mutate(body)}
+                    onCancel={() => setChangeCommentOpen(false)}
+                  />
+                ) : null}
               </section>
             ) : null}
 

@@ -610,6 +610,13 @@ table.list tbody tr:hover {
 .diffbar-toggles {
   margin-left: auto;
 }
+.change-comment-btn {
+  margin-right: 14px;
+}
+.change-threads .editor {
+  margin-left: 0;
+}
+
 .kbd-hint {
   color: var(--text-faint);
   font-size: 11px;
