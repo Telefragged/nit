@@ -5,7 +5,7 @@ mod common;
 
 use common::{Fixture, msg};
 use nit::db::{self, ChangeStatus};
-use nit::gitscan::MERGE_COMMIT_ERROR;
+use nit::gitscan::{self, MERGE_COMMIT_ERROR};
 
 #[test]
 fn happy_path_creates_changes_and_revisions() {
@@ -208,6 +208,59 @@ fn merge_commit_aborts_scan_and_keeps_state() {
     f.branch("feat", c1);
     let outcome = f.scan();
     assert_eq!(outcome.chain.last_scan_error, None);
+}
+
+#[test]
+fn register_validates_and_canonicalizes() {
+    let f = Fixture::new();
+    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    f.branch("feat", c1);
+    let workdir = f.repo.path().parent().unwrap();
+
+    // Unresolvable branch/base are registration-time errors (HTTP 400).
+    assert!(gitscan::register(&f.conn, workdir, "nope", "main").is_err());
+    assert!(gitscan::register(&f.conn, workdir, "feat", "nope").is_err());
+    assert!(
+        gitscan::register(
+            &f.conn,
+            std::path::Path::new("/no/such/dir"),
+            "feat",
+            "main"
+        )
+        .is_err()
+    );
+
+    // A non-canonical spelling of the path lands on the same chain row.
+    let chain_a = gitscan::register(&f.conn, workdir, "feat", "main").unwrap();
+    let chain_b = gitscan::register(&f.conn, &workdir.join("."), "feat", "main").unwrap();
+    assert_eq!(chain_a.id, chain_b.id, "idempotent re-registration");
+
+    // Re-registration can move the base.
+    let with_base = gitscan::register(&f.conn, workdir, "feat", "HEAD").unwrap();
+    assert_eq!(with_base.id, chain_a.id);
+    assert_eq!(with_base.base, "HEAD");
+}
+
+#[test]
+fn unrelated_root_commit_sets_scan_error() {
+    let mut f = Fixture::new();
+    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    f.branch("feat", c1);
+    f.scan();
+
+    // A branch rebuilt from an unrelated root: the walk hits a parentless
+    // commit, which the diff/identity model cannot represent.
+    let rogue = f.commit(&[], "unrelated root\n", &[("z.rs", "z\n")]);
+    f.branch("feat", rogue);
+    let outcome = f.scan();
+    assert!(
+        outcome
+            .chain
+            .last_scan_error
+            .unwrap()
+            .contains("root commit")
+    );
+    assert_eq!(f.changes().len(), 1, "prior state kept");
 }
 
 #[test]

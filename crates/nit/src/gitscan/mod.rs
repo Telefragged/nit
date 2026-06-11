@@ -65,6 +65,37 @@ struct Recon {
     warnings: Vec<String>,
 }
 
+/// Register (or refresh) a chain: canonicalize the repo path, auto-create
+/// the repo row, upsert the chain (idempotent; re-registration updates
+/// `base`). Errors when the repo can't be opened or branch/base don't
+/// resolve — the 400 case of `POST /api/chains`. Does not scan.
+pub fn register(
+    conn: &Connection,
+    repo_path: &std::path::Path,
+    branch: &str,
+    base: &str,
+) -> Result<db::Chain> {
+    let canonical = std::fs::canonicalize(repo_path)
+        .map_err(|e| anyhow!("cannot resolve repo path {}: {e}", repo_path.display()))?;
+    let repo = Repository::open(&canonical).map_err(|e| {
+        anyhow!(
+            "cannot open repository {}: {}",
+            canonical.display(),
+            e.message()
+        )
+    })?;
+    repo.revparse_single(base)
+        .and_then(|o| o.peel_to_commit())
+        .map_err(|e| anyhow!("cannot resolve base '{base}': {}", e.message()))?;
+    repo.find_branch(branch, BranchType::Local)
+        .map_err(|e| anyhow!("cannot resolve branch '{branch}': {}", e.message()))?;
+    let canonical = canonical
+        .to_str()
+        .ok_or_else(|| anyhow!("repo path is not valid UTF-8"))?;
+    let repo_row = db::get_or_create_repo(conn, canonical)?;
+    db::get_or_create_chain(conn, repo_row.id, branch, base)
+}
+
 /// Scan a chain: walk `base..tip` and reconcile the database. The caller
 /// must hold the chain's exclusive lock. Returns `Err` only for
 /// infrastructure problems (unknown chain, broken database); git-level
