@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "check": "tsc -b"
+    "check": "tsc -b",
+    "screenshots": "node screenshots/capture.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",
