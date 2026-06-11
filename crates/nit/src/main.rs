@@ -2,6 +2,7 @@ mod server;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use nit::cli;
 
 #[derive(Parser)]
 #[command(
@@ -18,6 +19,14 @@ struct Args {
 enum Cmd {
     /// Run the review server and web UI
     Serve(server::ServeArgs),
+    /// Register/refresh the current branch for review (idempotent)
+    Push(cli::PushArgs),
+    /// Block until the reviewer acts; prints the feedback JSON
+    Wait(cli::WaitArgs),
+    /// Print the current feedback JSON without blocking
+    Status(cli::StatusArgs),
+    /// Reply to a review comment as the agent
+    Reply(cli::ReplyArgs),
 }
 
 fn main() -> Result<()> {
@@ -30,5 +39,9 @@ fn main() -> Result<()> {
 
     match Args::parse().cmd {
         Cmd::Serve(args) => server::run(args),
+        Cmd::Push(args) => cli::push(args),
+        Cmd::Wait(args) => cli::wait(args),
+        Cmd::Status(args) => cli::status(args),
+        Cmd::Reply(args) => cli::reply(args),
     }
 }
