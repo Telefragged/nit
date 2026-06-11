@@ -20,3 +20,6 @@ result-*
 
 # TypeScript incremental build state
 *.tsbuildinfo
+
+# Parallel-track worktrees
+/.worktrees/
