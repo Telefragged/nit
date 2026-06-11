@@ -29,6 +29,15 @@ export default function ReviewBar({
     (c) => c.state === "published" && c.parent_id === null && !c.resolved,
   ).length;
 
+  // A needs_rebase revision can't be diffed, so a verdict on it would be
+  // blind; block Approve / Request changes (plain comments stay allowed).
+  const needsRebase =
+    change.revisions.find((r) => r.number === selectedRevision)
+      ?.needs_rebase ?? false;
+  const verdictTitle = needsRebase
+    ? "revision needs rebase — wait for the agent"
+    : undefined;
+
   const submit = useMutation({
     mutationFn: (verdict: Verdict) =>
       submitReview(change.id, {
@@ -108,14 +117,16 @@ export default function ReviewBar({
         />
         <button
           className="btn-approve"
-          disabled={submit.isPending}
+          disabled={submit.isPending || needsRebase}
+          title={verdictTitle}
           onClick={() => submit.mutate("approve")}
         >
           Approve
         </button>
         <button
           className="btn-request"
-          disabled={submit.isPending}
+          disabled={submit.isPending || needsRebase}
+          title={verdictTitle}
           onClick={() => submit.mutate("request_changes")}
         >
           Request changes
