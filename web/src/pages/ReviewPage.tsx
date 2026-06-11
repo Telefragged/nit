@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getChain, getChange, getDiff } from "../api/client";
 import type { ChangeDetail, Comment, Revision } from "../api/types";
 import { StatusChip } from "../components/badges";
@@ -157,6 +157,44 @@ export default function ReviewPage() {
     () => buildThreads(change?.comments ?? []),
     [change?.comments],
   );
+
+  const navigate = useNavigate();
+  const chainChanges = chainQ.data?.changes;
+  const fileCount = diffQ.data?.files.length ?? 0;
+
+  // Keyboard nav: [ / ] previous/next file, n / p next/previous change.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (e.key === "[" || e.key === "]") {
+        if (fileCount === 0) return;
+        setActiveFile((prev) => {
+          const cur = prev ?? (e.key === "]" ? -1 : fileCount);
+          const next = Math.min(
+            fileCount - 1,
+            Math.max(0, cur + (e.key === "]" ? 1 : -1)),
+          );
+          document
+            .getElementById(fileDomId(next))
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          return next;
+        });
+      } else if (e.key === "n" || e.key === "p") {
+        if (!chainChanges || !change || change.position === null) return;
+        const live = chainChanges
+          .filter((c) => c.position !== null)
+          .sort((a, b) => a.position! - b.position!);
+        const idx = live.findIndex((c) => c.id === change.id);
+        if (idx < 0) return;
+        const next = live[idx + (e.key === "n" ? 1 : -1)];
+        if (next) navigate(`/changes/${next.id}`);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fileCount, chainChanges, change, navigate]);
 
   const files = diffQ.data?.files ?? [];
   const threadsByFile = useMemo(() => {
@@ -324,6 +362,14 @@ export default function ReviewPage() {
             )}
           </div>
           <div className="diffbar-toggles">
+            <span
+              className="kbd-hint"
+              title="Keyboard: [ and ] switch files, n and p switch changes"
+            >
+              <kbd>[</kbd>
+              <kbd>]</kbd> files · <kbd>n</kbd>
+              <kbd>p</kbd> changes
+            </span>
             <span className="seg">
               <button
                 className={layout === "unified" ? "active" : ""}

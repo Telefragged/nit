@@ -610,6 +610,22 @@ table.list tbody tr:hover {
 .diffbar-toggles {
   margin-left: auto;
 }
+.kbd-hint {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-right: 12px;
+  cursor: default;
+}
+.kbd-hint kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 0 3px;
+  margin: 0 1px;
+  background: var(--bg-inset);
+}
+
 .seg {
   display: inline-flex;
   border: 1px solid var(--border-strong);
