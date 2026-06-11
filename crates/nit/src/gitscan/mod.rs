@@ -322,7 +322,7 @@ fn reconcile(
                 let status = if row.status == ChangeStatus::Orphaned {
                     // Re-attachment: status returns to its pre-orphan value,
                     // re-derived from the review history.
-                    pre_orphan_status(tx, row.id)?
+                    pre_orphan_status(tx, &repo, row.id)?
                 } else {
                     row.status
                 };
@@ -726,23 +726,48 @@ pub fn pure_rebase_equivalent(
             .all(|(o, n)| eq(&o.sha, &n.sha))
 }
 
-/// A change's pre-orphan status, re-derived from review history: the
-/// latest review on its latest revision, else pending.
-fn pre_orphan_status(tx: &Connection, change_id: i64) -> Result<ChangeStatus> {
-    let Some(latest) = db::latest_revision(tx, change_id)? else {
+/// A change's pre-orphan status, re-derived from review history — exactly
+/// what the status machine would have produced: a review counts if it sits
+/// on the latest revision *or* on any older revision connected to it by an
+/// unbroken run of pure rebases (rule 6 keeps status across those, and the
+/// review row stays on the old revision number).
+fn pre_orphan_status(tx: &Connection, repo: &Repository, change_id: i64) -> Result<ChangeStatus> {
+    let revisions = db::revisions_for_change(tx, change_id)?; // ascending
+    let Some(latest) = revisions.last() else {
         return Ok(ChangeStatus::Pending);
     };
-    Ok(
-        match db::latest_review_on_revision(tx, change_id, latest.number)? {
-            Some(review) => match review.verdict.as_str() {
-                "approve" => ChangeStatus::Approved,
-                "request_changes" => ChangeStatus::ChangesRequested,
-                "comment" => ChangeStatus::Commented,
-                _ => ChangeStatus::Pending,
-            },
-            None => ChangeStatus::Pending,
+    let mut eligible = vec![latest.number];
+    let mut newer = latest;
+    for older in revisions.iter().rev().skip(1) {
+        if !pure_rebase_equivalent(
+            repo,
+            &older.commit_sha,
+            &older.fixups,
+            &newer.commit_sha,
+            &newer.fixups,
+        ) {
+            break;
+        }
+        eligible.push(older.number);
+        newer = older;
+    }
+    let mut best: Option<db::Review> = None;
+    for number in eligible {
+        if let Some(review) = db::latest_review_on_revision(tx, change_id, number)?
+            && best.as_ref().is_none_or(|b| review.id > b.id)
+        {
+            best = Some(review);
+        }
+    }
+    Ok(match best {
+        Some(review) => match review.verdict.as_str() {
+            "approve" => ChangeStatus::Approved,
+            "request_changes" => ChangeStatus::ChangesRequested,
+            "comment" => ChangeStatus::Commented,
+            _ => ChangeStatus::Pending,
         },
-    )
+        None => ChangeStatus::Pending,
+    })
 }
 
 /// First free change key: `base`, else `base#2`, `base#3`, … (collisions

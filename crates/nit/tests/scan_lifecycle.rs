@@ -286,3 +286,35 @@ fn orphaned_chain_still_detects_merge() {
     f.branch("main", c2r);
     assert_eq!(f.scan().chain.status, ChainStatus::Merged);
 }
+
+#[test]
+fn orphan_reattach_keeps_approval_carried_across_pure_rebase() {
+    let mut f = Fixture::new();
+    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    f.branch("feat", c1);
+    f.scan();
+    let change = f.changes().remove(0);
+    f.review(change.id, "approve");
+
+    // Pure rebase onto a moved main: revision 2, approval carried by
+    // scan rule 6 while the review row stays on revision 1.
+    let m1 = f.commit(&[f.root], "main moves\n", &[("m.txt", "m\n")]);
+    f.branch("main", m1);
+    let c1r = f.commit(&[m1], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    f.branch("feat", c1r);
+    f.scan();
+    let row = f.changes().remove(0);
+    assert_eq!(row.status, ChangeStatus::Approved);
+    assert_eq!(f.latest_rev(row.id).number, 2);
+
+    // Orphan (rebuild from base) and restore the exact rebased commit:
+    // the pre-orphan status must come back as approved, not pending.
+    f.branch("feat", m1);
+    f.scan();
+    assert_eq!(f.changes()[0].status, ChangeStatus::Orphaned);
+    f.branch("feat", c1r);
+    f.scan();
+    let row = f.changes().remove(0);
+    assert_eq!(row.status, ChangeStatus::Approved, "approval survived");
+    assert_eq!(f.latest_rev(row.id).number, 2, "no spurious revision");
+}
