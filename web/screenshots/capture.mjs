@@ -32,6 +32,17 @@ const captures = [
   { name: "chain-agents-turn", path: "/chains/2" },
   // Change 11 has last_reviewed_revision 1 < latest 2 → interdiff by default.
   { name: "review-interdiff", path: "/changes/11" },
+  // Long review cover message expanded via the "more" toggle. Viewport-only
+  // so the header text stays at full resolution.
+  {
+    name: "review-cover-expanded",
+    path: "/changes/11",
+    fullPage: false,
+    actions: async (page) => {
+      await page.locator(".review-item .review-more").click();
+      await page.waitForTimeout(100);
+    },
+  },
   { name: "review-full-unified", path: "/changes/11?view=full" },
   {
     name: "review-split",
@@ -152,7 +163,7 @@ async function main() {
       });
       await page.waitForTimeout(150); // settle fonts/highlighting
       const file = resolve(outDir, `${cap.name}.png`);
-      await page.screenshot({ path: file, fullPage: true });
+      await page.screenshot({ path: file, fullPage: cap.fullPage ?? true });
       console.log(
         `captured ${cap.name}.png${errors.length ? `  PAGE ERRORS: ${errors.join("; ")}` : ""}`,
       );

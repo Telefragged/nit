@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { createDraft, getChain, getChange, getDiff } from "../api/client";
-import type { ChangeDetail, Comment, Revision } from "../api/types";
+import type { ChangeDetail, Comment, Review, Revision } from "../api/types";
 import { StatusChip } from "../components/badges";
 import CommentEditor from "../components/CommentEditor";
 import type { Thread } from "../components/CommentThread";
@@ -61,21 +61,46 @@ function RevisionSelector({
   );
 }
 
+/** One published review line; long cover messages get a more/less toggle. */
+function ReviewItem({ review }: { review: Review }) {
+  const badge = VERDICT_BADGE[review.verdict]!;
+  const [expanded, setExpanded] = useState(false);
+  const [truncated, setTruncated] = useState(false);
+  const msgRef = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = msgRef.current;
+    if (el) setTruncated(el.scrollWidth > el.clientWidth);
+  }, [review.message]);
+  return (
+    <div className="review-item">
+      <span className={`badge ${badge.cls}`}>{badge.label}</span>
+      <span className="mono dim">r{review.revision}</span>
+      <span
+        ref={msgRef}
+        className={`review-message ${expanded ? "expanded" : ""}`}
+      >
+        {review.message}
+      </span>
+      {truncated || expanded ? (
+        <button
+          className="linkish review-more"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "less" : "more"}
+        </button>
+      ) : null}
+      <span className="dim">{timeAgo(review.created_at)}</span>
+    </div>
+  );
+}
+
 function ReviewsStrip({ change }: { change: ChangeDetail }) {
   if (change.reviews.length === 0) return null;
   return (
     <div className="reviews-strip">
-      {change.reviews.map((review) => {
-        const badge = VERDICT_BADGE[review.verdict]!;
-        return (
-          <div className="review-item" key={review.id}>
-            <span className={`badge ${badge.cls}`}>{badge.label}</span>
-            <span className="mono dim">r{review.revision}</span>
-            <span className="review-message">{review.message}</span>
-            <span className="dim">{timeAgo(review.created_at)}</span>
-          </div>
-        );
-      })}
+      {change.reviews.map((review) => (
+        <ReviewItem review={review} key={review.id} />
+      ))}
     </div>
   );
 }

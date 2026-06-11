@@ -584,6 +584,14 @@ table.list tbody tr:hover {
   white-space: nowrap;
   max-width: 640px;
 }
+.review-item .review-message.expanded {
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+.review-item .review-more {
+  flex: none;
+}
 
 /* diffbar */
 
