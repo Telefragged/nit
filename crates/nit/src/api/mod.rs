@@ -20,8 +20,9 @@ use std::time::Duration;
 
 use axum::Json;
 use axum::Router;
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::routing::{get, patch, post};
 use git2::{Oid, Repository};
 use rusqlite::{Connection, TransactionBehavior};
@@ -30,7 +31,7 @@ use serde::Deserialize;
 use crate::db::{self, ChangeStatus};
 use crate::gitscan;
 
-pub use state::{AppState, Error, blocking, scan_chain};
+pub use state::{AppJson, AppPath, AppQuery, AppState, Error, blocking, scan_chain};
 
 /// The `/api` router. Static UI serving is layered on top in [`app`].
 pub fn router(state: Arc<AppState>) -> Router {
@@ -53,18 +54,37 @@ pub fn router(state: Arc<AppState>) -> Router {
 
 /// Full application: `/api` plus the built web UI (`--web-dist` /
 /// `$NIT_WEB_DIST`) with an `index.html` SPA fallback for client-side
-/// routes. Without a web dist the server is API-only.
+/// routes. Without a web dist the server is API-only. Unknown `/api/*`
+/// paths must stay JSON 404s (api.md "Everything under /api, JSON
+/// in/out") — they never fall through to the SPA.
 pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
-    let api = router(state);
-    match web_dist {
-        Some(dist) => {
-            let spa = tower_http::services::ServeDir::new(&dist).fallback(
-                tower_http::services::ServeFile::new(dist.join("index.html")),
-            );
-            api.fallback_service(spa)
+    let api = router(state).method_not_allowed_fallback(|| async {
+        Error {
+            status: StatusCode::METHOD_NOT_ALLOWED,
+            message: "method not allowed".to_string(),
         }
-        None => api,
-    }
+    });
+    let spa = web_dist.map(|dist| {
+        tower_http::services::ServeDir::new(&dist).fallback(tower_http::services::ServeFile::new(
+            dist.join("index.html"),
+        ))
+    });
+    api.fallback(move |req: axum::extract::Request| {
+        let spa = spa.clone();
+        async move {
+            let path = req.uri().path();
+            if path == "/api" || path.starts_with("/api/") {
+                return Error::not_found(format!("no such endpoint: {path}")).into_response();
+            }
+            match spa {
+                Some(spa) => match tower::ServiceExt::oneshot(spa, req).await {
+                    Ok(resp) => resp.into_response(),
+                    Err(infallible) => match infallible {},
+                },
+                None => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
+    })
 }
 
 /// Serve `app` on an already-bound listener until `shutdown` resolves.
@@ -139,7 +159,7 @@ async fn health() -> Json<types::Health> {
 
 async fn register_chain(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<types::RegisterChain>,
+    AppJson(req): AppJson<types::RegisterChain>,
 ) -> Result<Json<types::Chain>, Error> {
     let st = state.clone();
     let chain = blocking(move || {
@@ -175,7 +195,7 @@ struct ListChainsQuery {
 
 async fn list_chains(
     State(state): State<Arc<AppState>>,
-    Query(q): Query<ListChainsQuery>,
+    AppQuery(q): AppQuery<ListChainsQuery>,
 ) -> Result<Json<types::ChainList>, Error> {
     let include_closed = match q.status.as_deref() {
         None | Some("active") => false,
@@ -222,7 +242,7 @@ async fn list_chains(
 
 async fn get_chain(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
 ) -> Result<Json<types::Chain>, Error> {
     let st = state.clone();
     blocking(move || {
@@ -244,8 +264,8 @@ struct ChangeQuery {
 
 async fn get_change_detail(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-    Query(q): Query<ChangeQuery>,
+    AppPath(id): AppPath<i64>,
+    AppQuery(q): AppQuery<ChangeQuery>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
@@ -278,8 +298,8 @@ struct DiffQuery {
 
 async fn revision_diff(
     State(state): State<Arc<AppState>>,
-    Path((id, n)): Path<(i64, i64)>,
-    Query(q): Query<DiffQuery>,
+    AppPath((id, n)): AppPath<(i64, i64)>,
+    AppQuery(q): AppQuery<DiffQuery>,
 ) -> Result<Json<types::Diff>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
@@ -334,8 +354,8 @@ fn parse_oid(sha: &str) -> Result<Oid, Error> {
 
 async fn create_draft(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-    Json(req): Json<types::NewDraft>,
+    AppPath(id): AppPath<i64>,
+    AppJson(req): AppJson<types::NewDraft>,
 ) -> Result<Json<types::Comment>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
@@ -420,8 +440,8 @@ fn anchor_line_text(
 
 async fn edit_draft(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-    Json(req): Json<types::EditDraft>,
+    AppPath(id): AppPath<i64>,
+    AppJson(req): AppJson<types::EditDraft>,
 ) -> Result<Json<types::Comment>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
@@ -438,7 +458,7 @@ async fn edit_draft(
 
 async fn delete_draft(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
 ) -> Result<StatusCode, Error> {
     blocking(move || {
         let conn = state.open_db()?;
@@ -457,21 +477,21 @@ async fn delete_draft(
 
 async fn resolve_comment(
     state: State<Arc<AppState>>,
-    path: Path<i64>,
+    path: AppPath<i64>,
 ) -> Result<Json<types::Comment>, Error> {
     set_resolved(state, path, true).await
 }
 
 async fn unresolve_comment(
     state: State<Arc<AppState>>,
-    path: Path<i64>,
+    path: AppPath<i64>,
 ) -> Result<Json<types::Comment>, Error> {
     set_resolved(state, path, false).await
 }
 
 async fn set_resolved(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
     resolved: bool,
 ) -> Result<Json<types::Comment>, Error> {
     blocking(move || {
@@ -497,8 +517,8 @@ async fn set_resolved(
 
 async fn submit_review(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-    Json(req): Json<types::SubmitReview>,
+    AppPath(id): AppPath<i64>,
+    AppJson(req): AppJson<types::SubmitReview>,
 ) -> Result<Json<types::SubmitReviewResponse>, Error> {
     let status = match req.verdict.as_str() {
         "approve" => ChangeStatus::Approved,
@@ -601,8 +621,8 @@ async fn submit_review(
 
 async fn create_reply(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-    Json(req): Json<types::NewReply>,
+    AppPath(id): AppPath<i64>,
+    AppJson(req): AppJson<types::NewReply>,
 ) -> Result<Json<types::Comment>, Error> {
     let st = state.clone();
     let (chain_id, reply) = blocking(move || {
@@ -664,7 +684,7 @@ async fn create_reply(
 
 async fn get_feedback(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
+    AppPath(id): AppPath<i64>,
 ) -> Result<Json<types::Feedback>, Error> {
     feedback_response(state, id).await
 }
@@ -701,8 +721,8 @@ struct WaitQuery {
 /// immediately.
 async fn wait_chain(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-    Query(q): Query<WaitQuery>,
+    AppPath(id): AppPath<i64>,
+    AppQuery(q): AppQuery<WaitQuery>,
 ) -> Result<Json<types::WaitResponse>, Error> {
     let cursor = q.cursor.unwrap_or(0);
     let timeout = q.timeout.unwrap_or(55).min(120);

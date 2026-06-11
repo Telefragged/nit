@@ -199,6 +199,75 @@ impl Error {
     }
 }
 
+/// Extractor wrappers that turn axum's built-in rejections (text/plain
+/// bodies) into the documented `{"error": …}` JSON shape — api.md promises
+/// it for *every* non-2xx under /api.
+pub struct AppJson<T>(pub T);
+
+impl<S, T> axum::extract::FromRequest<S> for AppJson<T>
+where
+    T: serde::de::DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
+        match axum::Json::<T>::from_request(req, state).await {
+            Ok(axum::Json(value)) => Ok(AppJson(value)),
+            Err(rej) => Err(Error {
+                status: rej.status(),
+                message: rej.body_text(),
+            }),
+        }
+    }
+}
+
+pub struct AppPath<T>(pub T);
+
+impl<S, T> axum::extract::FromRequestParts<S> for AppPath<T>
+where
+    T: serde::de::DeserializeOwned + Send,
+    S: Send + Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        match axum::extract::Path::<T>::from_request_parts(parts, state).await {
+            Ok(axum::extract::Path(value)) => Ok(AppPath(value)),
+            Err(rej) => Err(Error {
+                status: rej.status(),
+                message: rej.body_text(),
+            }),
+        }
+    }
+}
+
+pub struct AppQuery<T>(pub T);
+
+impl<S, T> axum::extract::FromRequestParts<S> for AppQuery<T>
+where
+    T: serde::de::DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        match axum::extract::Query::<T>::from_request_parts(parts, state).await {
+            Ok(axum::extract::Query(value)) => Ok(AppQuery(value)),
+            Err(rej) => Err(Error {
+                status: rej.status(),
+                message: rej.body_text(),
+            }),
+        }
+    }
+}
+
 /// SQLITE_BUSY/LOCKED anywhere in an error chain: cross-chain write
 /// contention, not a broken database.
 pub fn is_sqlite_busy(err: &anyhow::Error) -> bool {

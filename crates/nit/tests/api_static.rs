@@ -53,3 +53,56 @@ fn runs_api_only_without_web_dist() {
     let (st, _) = http_get(&server.url("/chains/1"));
     assert_eq!(st, 404);
 }
+
+/// api.md line 1: everything under /api is JSON in/out — including paths
+/// axum rejects before a handler runs (unknown endpoint, bad path/body
+/// types, wrong method). None of it may fall through to the SPA.
+#[test]
+fn api_errors_are_json_everywhere() {
+    let dir = tempfile::tempdir().unwrap();
+    let dist = dir.path().join("dist");
+    std::fs::create_dir_all(&dist).unwrap();
+    std::fs::write(dist.join("index.html"), "<html>nit-spa</html>").unwrap();
+    let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(dist));
+
+    // Unknown /api paths: JSON 404, not the SPA.
+    for path in ["/api", "/api/", "/api/nonexistent", "/api/chain/1"] {
+        let (st, body) = http_get(&server.url(path));
+        assert_eq!(st, 404, "{path}: {body}");
+        assert!(body["error"].is_string(), "{path}: {body}");
+    }
+
+    // Non-numeric path param: JSON 400.
+    let (st, body) = http_get(&server.url("/api/chains/abc"));
+    assert_eq!(st, 400, "{body}");
+    assert!(body["error"].is_string(), "{body}");
+
+    // Malformed JSON body: JSON 400, not text/plain.
+    let resp = ureq::Agent::new_with_defaults()
+        .post(&server.url("/api/chains"))
+        .header("content-type", "application/json")
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send("{not json")
+        .unwrap();
+    let st = resp.status().as_u16();
+    let body: serde_json::Value =
+        serde_json::from_str(&resp.into_body().read_to_string().unwrap()).unwrap();
+    assert_eq!(st, 400, "{body}");
+    assert!(body["error"].is_string(), "{body}");
+
+    // Wrong method: JSON 405.
+    let resp = ureq::Agent::new_with_defaults()
+        .delete(&server.url("/api/health"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .call()
+        .unwrap();
+    let st = resp.status().as_u16();
+    let body: serde_json::Value =
+        serde_json::from_str(&resp.into_body().read_to_string().unwrap()).unwrap();
+    assert_eq!(st, 405, "{body}");
+    assert!(body["error"].is_string(), "{body}");
+}
