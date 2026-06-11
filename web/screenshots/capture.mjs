@@ -30,7 +30,49 @@ const captures = [
   { name: "dashboard", path: "/" },
   { name: "chain-warnings", path: "/chains/1" },
   { name: "chain-agents-turn", path: "/chains/2" },
-  { name: "review-placeholder", path: "/changes/11" },
+  // Change 11 has last_reviewed_revision 1 < latest 2 → interdiff by default.
+  { name: "review-interdiff", path: "/changes/11" },
+  { name: "review-full-unified", path: "/changes/11?view=full" },
+  {
+    name: "review-split",
+    path: "/changes/11?view=full",
+    actions: async (page) => {
+      await page.getByRole("button", { name: "Side-by-side" }).click();
+      await page.waitForTimeout(200);
+    },
+  },
+  // Old revision selected: full diff of r1, threads at their written lines.
+  { name: "review-rev1", path: "/changes/11?revision=1" },
+  {
+    name: "review-draft-editor",
+    path: "/changes/11?view=full",
+    actions: async (page) => {
+      await page
+        .locator("td.code", { hasText: "self.store.revoke_family" })
+        .first()
+        .click();
+      await page.waitForSelector("textarea");
+      await page
+        .locator("textarea")
+        .fill("Should revoke_family also bump the metrics counter?");
+    },
+  },
+  // Submitting against a stale revision → 409, drafts + message kept.
+  {
+    name: "review-409",
+    path: "/changes/11?revision=1",
+    actions: async (page) => {
+      await page
+        .getByPlaceholder("Cover message (published with the verdict)…")
+        .fill("Looks good overall, minor nits.");
+      await page.getByRole("button", { name: "Comment", exact: true }).click();
+      await page.waitForSelector(".review-conflict");
+    },
+  },
+  // Rename + binary file in one diff.
+  { name: "review-binary-rename", path: "/changes/12" },
+  // needs_rebase: diff endpoint refuses with 409, banner shown.
+  { name: "review-needs-rebase", path: "/changes/21" },
 ];
 
 async function waitForServer(url, timeoutMs = 30_000) {
@@ -75,6 +117,8 @@ async function main() {
       colorScheme: "dark",
       reducedMotion: "reduce",
     });
+    // Keep captures order-independent (e.g. the persisted diff layout).
+    await context.addInitScript(() => localStorage.clear());
 
     for (const cap of captures) {
       const page = await context.newPage();
@@ -82,6 +126,11 @@ async function main() {
       page.on("pageerror", (err) => errors.push(String(err)));
       await page.goto(baseUrl + cap.path, { waitUntil: "networkidle" });
       if (cap.actions) await cap.actions(page);
+      // Fixed elements repeat confusingly in full-page captures; pin the
+      // review bar to the end of the document instead.
+      await page.addStyleTag({
+        content: ".review-bar { position: static !important; }",
+      });
       await page.waitForTimeout(150); // settle fonts/highlighting
       const file = resolve(outDir, `${cap.name}.png`);
       await page.screenshot({ path: file, fullPage: true });
