@@ -57,9 +57,11 @@ pub fn keep_ref_name(chain_id: i64, change_id: i64, revision_number: i64) -> Str
 
 /// Ensure the keep ref for a revision exists: a synthetic commit whose
 /// tree is the effective tree (the original commit's tree when folding
-/// conflicted) and whose parents are `[parent, original]` — making
-/// parent, original and fold all reachable. Best-effort: failures (e.g.
-/// objects already pruned) are logged, never fatal.
+/// conflicted) and whose parents are `[parent, original, fixups…]` —
+/// making parent, original, fold *and* the folded fixup commits reachable
+/// (the fixups are needed for later pure-rebase comparisons and re-folds).
+/// Best-effort: failures (e.g. objects already pruned) are logged, never
+/// fatal.
 pub fn ensure_keep_ref(repo: &Repository, chain_id: i64, change_id: i64, rev: &db::Revision) {
     if let Err(err) = try_ensure_keep_ref(repo, chain_id, change_id, rev) {
         tracing::warn!(
@@ -84,16 +86,21 @@ fn try_ensure_keep_ref(
         Some(t) => repo.find_tree(Oid::from_str(t)?)?,
         None => original.tree()?,
     };
+    let mut parents = vec![parent, original];
+    for fixup in &rev.fixups {
+        parents.push(repo.find_commit(Oid::from_str(&fixup.sha)?)?);
+    }
     // Deterministic signature: recreating the synthetic commit yields the
     // same oid, so repeated scans are no-ops.
     let sig = git2::Signature::new("nit", "nit@localhost", &git2::Time::new(0, 0))?;
+    let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
     let oid = repo.commit(
         None,
         &sig,
         &sig,
-        "nit: pin review objects (parent, original, fold)",
+        "nit: pin review objects (parent, original, fold, fixups)",
         &tree,
-        &[&parent, &original],
+        &parent_refs,
     )?;
     let current = repo.find_reference(&name).ok().and_then(|r| r.target());
     if current != Some(oid) {
