@@ -1,0 +1,19 @@
+# Rust
+/target
+
+# Node
+node_modules/
+web/dist/
+
+# Nix
+result
+result-*
+.direnv/
+
+# Screenshot harness output
+/screenshots
+
+# Local state
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
