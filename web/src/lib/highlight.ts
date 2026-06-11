@@ -87,3 +87,37 @@ export function highlightLine(text: string, language: string | null): string {
     return escapeHtml(text);
   }
 }
+
+/**
+ * Wrap the text range [start, end) of a highlighted line in
+ * `<span class="intraline">` (intraline change emphasis). Offsets are into
+ * the raw line text; walking the rendered DOM keeps entity escaping and
+ * hljs token spans intact, splitting the mark across token boundaries.
+ */
+export function markIntraline(html: string, start: number, end: number): string {
+  if (start >= end) return html;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const walker = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT);
+  const texts: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    texts.push(n as Text);
+  }
+  let offset = 0;
+  for (const node of texts) {
+    const nodeStart = offset;
+    offset += node.data.length;
+    const from = Math.max(start, nodeStart) - nodeStart;
+    const to = Math.min(end, offset) - nodeStart;
+    if (from >= to) continue;
+    const span = document.createElement("span");
+    span.className = "intraline";
+    span.textContent = node.data.slice(from, to);
+    const frag = document.createDocumentFragment();
+    if (from > 0) frag.append(node.data.slice(0, from));
+    frag.append(span);
+    if (to < node.data.length) frag.append(node.data.slice(to));
+    node.replaceWith(frag);
+  }
+  return tpl.innerHTML;
+}

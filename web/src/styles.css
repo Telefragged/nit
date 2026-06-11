@@ -25,8 +25,10 @@
 
   --add-bg: rgba(63, 185, 80, 0.1);
   --add-gutter: rgba(63, 185, 80, 0.18);
+  --add-intraline: rgba(63, 185, 80, 0.3);
   --del-bg: rgba(248, 81, 73, 0.09);
   --del-gutter: rgba(248, 81, 73, 0.16);
+  --del-intraline: rgba(248, 81, 73, 0.28);
 
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
@@ -865,6 +867,17 @@ td.g.del {
 td.code.void,
 td.g.void {
   background: var(--bg-inset);
+}
+/* Intraline (word-level) emphasis inside modified line pairs. */
+tr.add td.code .intraline,
+td.code.add .intraline {
+  background: var(--add-intraline);
+  border-radius: 2px;
+}
+tr.del td.code .intraline,
+td.code.del .intraline {
+  background: var(--del-intraline);
+  border-radius: 2px;
 }
 tr.line-row.clickable:hover td.code,
 td.code.clickable:hover {

@@ -2,8 +2,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo } from "react";
 import { createDraft } from "../../api/client";
 import type { DiffFile, Hunk, Line } from "../../api/types";
-import { pairLines, skippedBefore } from "../../lib/diffview";
-import { highlightLine, languageFor } from "../../lib/highlight";
+import type { IntralineRange } from "../../lib/diffview";
+import { intralineMarks, pairLines, skippedBefore } from "../../lib/diffview";
+import { highlightLine, languageFor, markIntraline } from "../../lib/highlight";
 import type { DraftTarget } from "../../pages/reviewContext";
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
@@ -16,8 +17,19 @@ const STATUS_LETTER: Record<DiffFile["status"], string> = {
   renamed: "R",
 };
 
-function Code({ text, lang }: { text: string; lang: string | null }) {
-  const html = useMemo(() => highlightLine(text, lang), [text, lang]);
+function Code({
+  text,
+  lang,
+  mark,
+}: {
+  text: string;
+  lang: string | null;
+  mark?: IntralineRange;
+}) {
+  const html = useMemo(() => {
+    const highlighted = highlightLine(text, lang);
+    return mark ? markIntraline(highlighted, mark[0], mark[1]) : highlighted;
+  }, [text, lang, mark]);
   // Highlight.js escapes its input; nothing user-controlled is injected raw.
   return <span dangerouslySetInnerHTML={{ __html: html || "​" }} />;
 }
@@ -67,6 +79,18 @@ export default function DiffFileView({
   const ctx = useReview();
   const queryClient = useQueryClient();
   const lang = languageFor(file.path);
+
+  // Intraline emphasis for modified line pairs, per hunk (keyed by line
+  // object identity, so unified and split rows share the same map).
+  const marks = useMemo(() => {
+    const map = new Map<Line, IntralineRange>();
+    for (const hunk of file.hunks) {
+      for (const [line, range] of intralineMarks(hunk.lines)) {
+        map.set(line, range);
+      }
+    }
+    return map;
+  }, [file]);
 
   // Anchors actually present in this diff, per side.
   const present = useMemo(() => {
@@ -188,7 +212,7 @@ export default function DiffFileView({
               <span className="sign">
                 {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}
               </span>
-              <Code text={line.text} lang={lang} />
+              <Code text={line.text} lang={lang} mark={marks.get(line)} />
             </td>
           </tr>
           {metaRows(line, 3)}
@@ -221,7 +245,13 @@ export default function DiffFileView({
                 leftTarget ? () => ctx.setEditingTarget(leftTarget) : undefined
               }
             >
-              {pair.left ? <Code text={pair.left.text} lang={lang} /> : null}
+              {pair.left ? (
+                <Code
+                  text={pair.left.text}
+                  lang={lang}
+                  mark={marks.get(pair.left)}
+                />
+              ) : null}
             </td>
             <td
               className={`g ${pair.right ? pair.right.kind : "void"}`}
@@ -241,7 +271,13 @@ export default function DiffFileView({
                   : undefined
               }
             >
-              {pair.right ? <Code text={pair.right.text} lang={lang} /> : null}
+              {pair.right ? (
+                <Code
+                  text={pair.right.text}
+                  lang={lang}
+                  mark={marks.get(pair.right)}
+                />
+              ) : null}
             </td>
           </tr>
           {pair.left && pair.left.kind !== "context"
