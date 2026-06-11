@@ -626,37 +626,56 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
             claimed.insert(ei);
         };
 
+    // Index rows once per rule (lowest ei wins, like the linear scans this
+    // replaces — O(commits × rows) comparisons made dashboard reads of big
+    // chains measurably slow).
+    let first_unclaimed = |cands: Option<&Vec<usize>>, claimed: &HashSet<usize>| {
+        cands.and_then(|v| v.iter().copied().find(|ei| !claimed.contains(ei)))
+    };
+
     // Rule 1: Change-Id trailer (including derived duplicate keys).
+    let mut key_index: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (ei, row) in existing.iter().enumerate() {
+        key_index
+            .entry(row.change_key.as_str())
+            .or_default()
+            .push(ei);
+    }
     for (ri, key) in keys.iter().enumerate() {
         if let Some(key) = key
-            && let Some(ei) = existing.iter().position(|row| &row.change_key == key)
-            && !claimed.contains(&ei)
+            && let Some(ei) = first_unclaimed(key_index.get(key.as_str()), &claimed)
         {
             claim(&mut matched, &mut claimed, ri, ei);
         }
     }
 
     // Rule 2: exact sha — commit unchanged since last scan.
+    let mut sha_index: HashMap<&str, Vec<usize>> = HashMap::new();
+    for ei in 0..existing.len() {
+        if let Some(rev) = latest(ei) {
+            sha_index
+                .entry(rev.commit_sha.as_str())
+                .or_default()
+                .push(ei);
+        }
+    }
     for ri in 0..regulars.len() {
         if matched[ri].is_some() {
             continue;
         }
-        let sha = &metas[regulars[ri]].sha;
-        if let Some(ei) = (0..existing.len()).find(|&ei| {
-            !claimed.contains(&ei) && latest(ei).is_some_and(|rev| &rev.commit_sha == sha)
-        }) {
+        let sha = metas[regulars[ri]].sha.as_str();
+        if let Some(ei) = first_unclaimed(sha_index.get(sha), &claimed) {
             claim(&mut matched, &mut claimed, ri, ei);
         }
     }
 
     // Rule 3: patch-id — same diff, new sha. Row patch-ids come from the
     // stored shas (pinned by keep refs); unverifiable rows never match.
-    let mut row_pid_cache: HashMap<usize, Option<String>> = HashMap::new();
-    let mut row_pid = |ei: usize| -> Option<String> {
-        row_pid_cache
-            .entry(ei)
-            .or_insert_with(|| {
-                let rev = latest(ei)?;
+    // The index is only built when something is still unmatched.
+    if matched.iter().any(Option::is_none) {
+        let mut pid_index: HashMap<String, Vec<usize>> = HashMap::new();
+        for ei in 0..existing.len() {
+            let pid = latest(ei).and_then(|rev| {
                 let parent = repo
                     .find_commit(Oid::from_str(&rev.parent_sha).ok()?)
                     .ok()?;
@@ -664,36 +683,47 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
                     .find_commit(Oid::from_str(&rev.commit_sha).ok()?)
                     .ok()?;
                 fold::tree_patch_id(repo, &parent.tree().ok()?, &commit.tree().ok()?).ok()
-            })
-            .clone()
-    };
-    for ri in 0..regulars.len() {
-        if matched[ri].is_some() {
-            continue;
+            });
+            if let Some(pid) = pid {
+                pid_index.entry(pid).or_default().push(ei);
+            }
         }
-        let Ok(pid) = fold::commit_patch_id(repo, &commits[regulars[ri]]) else {
-            continue;
-        };
-        if let Some(ei) = (0..existing.len())
-            .find(|&ei| !claimed.contains(&ei) && row_pid(ei).as_deref() == Some(pid.as_str()))
-        {
-            claim(&mut matched, &mut claimed, ri, ei);
+        for ri in 0..regulars.len() {
+            if matched[ri].is_some() {
+                continue;
+            }
+            let Ok(pid) = fold::commit_patch_id(repo, &commits[regulars[ri]]) else {
+                continue;
+            };
+            if let Some(ei) = first_unclaimed(pid_index.get(&pid), &claimed) {
+                claim(&mut matched, &mut claimed, ri, ei);
+            }
         }
     }
 
     // Rule 4: subject — only against changes that were live at scan start
     // (whose commit left the branch); orphans don't subject-match.
-    for ri in 0..regulars.len() {
-        if matched[ri].is_some() {
-            continue;
+    if matched.iter().any(Option::is_none) {
+        let mut subject_index: HashMap<String, Vec<usize>> = HashMap::new();
+        for (ei, row) in existing.iter().enumerate() {
+            if row.status == ChangeStatus::Orphaned {
+                continue;
+            }
+            if let Some(rev) = latest(ei) {
+                subject_index
+                    .entry(fixup::subject_of(&rev.message))
+                    .or_default()
+                    .push(ei);
+            }
         }
-        let subject = &metas[regulars[ri]].subject;
-        if let Some(ei) = (0..existing.len()).find(|&ei| {
-            !claimed.contains(&ei)
-                && existing[ei].status != ChangeStatus::Orphaned
-                && latest(ei).is_some_and(|rev| &fixup::subject_of(&rev.message) == subject)
-        }) {
-            claim(&mut matched, &mut claimed, ri, ei);
+        for ri in 0..regulars.len() {
+            if matched[ri].is_some() {
+                continue;
+            }
+            let subject = &metas[regulars[ri]].subject;
+            if let Some(ei) = first_unclaimed(subject_index.get(subject), &claimed) {
+                claim(&mut matched, &mut claimed, ri, ei);
+            }
         }
     }
 

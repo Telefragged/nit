@@ -92,7 +92,16 @@ impl AppState {
 /// (error isolation); only infrastructure problems (broken db) surface.
 pub async fn scan_chain(state: &Arc<AppState>, chain_id: i64, force: bool) -> Result<(), Error> {
     let entry = state.entry(chain_id);
-    let mut gate = entry.gate.lock().await;
+    let mut gate = if force {
+        entry.gate.lock().await
+    } else {
+        // Reads never wait on a running scan — they serve current DB state
+        // (data-model.md "Concurrency").
+        match entry.gate.try_lock() {
+            Ok(gate) => gate,
+            Err(_) => return Ok(()),
+        }
+    };
     if !force
         && gate
             .last_scan
@@ -103,9 +112,27 @@ pub async fn scan_chain(state: &Arc<AppState>, chain_id: i64, force: bool) -> Re
     let st = state.clone();
     let outcome = blocking(move || {
         let mut conn = st.open_db()?;
-        Ok(gitscan::scan(&mut conn, chain_id)?)
+        match gitscan::scan(&mut conn, chain_id) {
+            Ok(outcome) => Ok(Some(outcome)),
+            // Another chain's scan holds the db write lock past the busy
+            // timeout: skip — previous state stays served, the next read
+            // retries. Pushes (force) report it: the caller must retry.
+            Err(err) if is_sqlite_busy(&err) => {
+                if force {
+                    Err(Error::unavailable(
+                        "database is busy (another chain is being scanned) — retry shortly",
+                    ))
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(err) => Err(err.into()),
+        }
     })
     .await?;
+    let Some(outcome) = outcome else {
+        return Ok(());
+    };
     gate.last_scan = Some(Instant::now());
     *entry.warnings.lock().expect("warnings poisoned") = outcome.warnings;
     drop(gate);
@@ -163,6 +190,26 @@ impl Error {
             message: message.into(),
         }
     }
+
+    pub fn unavailable(message: impl Into<String>) -> Self {
+        Error {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            message: message.into(),
+        }
+    }
+}
+
+/// SQLITE_BUSY/LOCKED anywhere in an error chain: cross-chain write
+/// contention, not a broken database.
+pub fn is_sqlite_busy(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause.downcast_ref::<rusqlite::Error>().is_some_and(|e| {
+            matches!(
+                e.sqlite_error_code(),
+                Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
+            )
+        })
+    })
 }
 
 impl From<anyhow::Error> for Error {
