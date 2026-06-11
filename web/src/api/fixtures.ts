@@ -1148,7 +1148,8 @@ const comments: CommentRecord[] = [
     review_id: null,
     created_at: ago(30),
     updated_at: ago(30),
-    renderAt: {},
+    // The anchored line does not exist in revision 1's tree.
+    renderAt: { 1: { line: null, outdated: true } },
   },
   {
     id: 101,
@@ -1166,7 +1167,8 @@ const comments: CommentRecord[] = [
     review_id: null,
     created_at: ago(25),
     updated_at: ago(25),
-    renderAt: {},
+    // tests/rotation.rs does not exist at revision 1.
+    renderAt: { 1: { line: null, outdated: true } },
   },
   // change 20 — two unresolved threads from the request_changes review.
   {
