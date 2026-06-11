@@ -260,6 +260,25 @@ pub struct Revision {
 }
 
 #[derive(Debug, Clone)]
+pub struct Comment {
+    pub id: i64,
+    pub change_id: i64,
+    pub revision_number: i64,
+    pub parent_id: Option<i64>,
+    pub author: String,
+    pub file: Option<String>,
+    pub line: Option<i64>,
+    pub side: String,
+    pub line_text: Option<String>,
+    pub body: String,
+    pub state: String,
+    pub resolved: bool,
+    pub review_id: Option<i64>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct Review {
     pub id: i64,
     pub change_id: i64,
@@ -344,6 +363,37 @@ fn finish_revision((mut rev, fixups): (Revision, String)) -> Result<Revision> {
     rev.fixups = serde_json::from_str(&fixups)
         .with_context(|| format!("revision {}: bad fixups JSON", rev.id))?;
     Ok(rev)
+}
+
+fn comment_from_row(row: &rusqlite::Row) -> rusqlite::Result<Comment> {
+    Ok(Comment {
+        id: row.get("id")?,
+        change_id: row.get("change_id")?,
+        revision_number: row.get("revision_number")?,
+        parent_id: row.get("parent_id")?,
+        author: row.get("author")?,
+        file: row.get("file")?,
+        line: row.get("line")?,
+        side: row.get("side")?,
+        line_text: row.get("line_text")?,
+        body: row.get("body")?,
+        state: row.get("state")?,
+        resolved: row.get::<_, i64>("resolved")? != 0,
+        review_id: row.get("review_id")?,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
+    })
+}
+
+fn review_from_row(row: &rusqlite::Row) -> rusqlite::Result<Review> {
+    Ok(Review {
+        id: row.get("id")?,
+        change_id: row.get("change_id")?,
+        revision_number: row.get("revision_number")?,
+        verdict: row.get("verdict")?,
+        message: row.get("message")?,
+        created_at: row.get("created_at")?,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -453,6 +503,24 @@ pub fn chain_set_scan_error(
     Ok(())
 }
 
+/// Chain row for an (already canonicalized) repo path + branch, if any —
+/// without creating anything. CLI clients resolve their chain this way.
+pub fn find_chain_by_repo_branch(
+    conn: &Connection,
+    repo_path: &str,
+    branch: &str,
+) -> Result<Option<Chain>> {
+    conn.query_row(
+        "SELECT chains.* FROM chains JOIN repos ON repos.id = chains.repo_id
+         WHERE repos.path = ?1 AND chains.branch = ?2",
+        params![repo_path, branch],
+        chain_from_row,
+    )
+    .optional()?
+    .map(finish_chain)
+    .transpose()
+}
+
 pub fn chain_touch(conn: &Connection, id: i64, now: &str) -> Result<()> {
     conn.execute(
         "UPDATE chains SET updated_at = ?2 WHERE id = ?1",
@@ -463,6 +531,17 @@ pub fn chain_touch(conn: &Connection, id: i64, now: &str) -> Result<()> {
 
 // ---------------------------------------------------------------------------
 // Changes
+
+pub fn get_change(conn: &Connection, id: i64) -> Result<Option<Change>> {
+    conn.query_row(
+        "SELECT * FROM changes WHERE id = ?1",
+        params![id],
+        change_from_row,
+    )
+    .optional()?
+    .map(finish_change)
+    .transpose()
+}
 
 /// All changes of a chain: live ones first in `position` order, orphaned
 /// ones last (by id).
@@ -527,6 +606,17 @@ pub fn revisions_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Rev
     let mut stmt = conn.prepare("SELECT * FROM revisions WHERE change_id = ?1 ORDER BY number")?;
     let rows = stmt.query_map(params![change_id], revision_from_row)?;
     rows.map(|r| finish_revision(r?)).collect()
+}
+
+pub fn get_revision(conn: &Connection, change_id: i64, number: i64) -> Result<Option<Revision>> {
+    conn.query_row(
+        "SELECT * FROM revisions WHERE change_id = ?1 AND number = ?2",
+        params![change_id, number],
+        revision_from_row,
+    )
+    .optional()?
+    .map(finish_revision)
+    .transpose()
 }
 
 pub fn latest_revision(conn: &Connection, change_id: i64) -> Result<Option<Revision>> {
@@ -627,22 +717,171 @@ pub fn latest_review_on_revision(
     revision_number: i64,
 ) -> Result<Option<Review>> {
     conn.query_row(
-        "SELECT id, change_id, revision_number, verdict, message, created_at
-         FROM reviews WHERE change_id = ?1 AND revision_number = ?2
+        "SELECT * FROM reviews WHERE change_id = ?1 AND revision_number = ?2
          ORDER BY id DESC LIMIT 1",
         params![change_id, revision_number],
-        |row| {
-            Ok(Review {
-                id: row.get(0)?,
-                change_id: row.get(1)?,
-                revision_number: row.get(2)?,
-                verdict: row.get(3)?,
-                message: row.get(4)?,
-                created_at: row.get(5)?,
-            })
-        },
+        review_from_row,
     )
     .optional()
+    .map_err(Into::into)
+}
+
+pub fn reviews_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Review>> {
+    let mut stmt = conn.prepare("SELECT * FROM reviews WHERE change_id = ?1 ORDER BY id")?;
+    let rows = stmt.query_map(params![change_id], review_from_row)?;
+    rows.map(|r| r.map_err(Into::into)).collect()
+}
+
+/// The change's most recent review across all revisions (feedback scope).
+pub fn latest_review_for_change(conn: &Connection, change_id: i64) -> Result<Option<Review>> {
+    conn.query_row(
+        "SELECT * FROM reviews WHERE change_id = ?1 ORDER BY id DESC LIMIT 1",
+        params![change_id],
+        review_from_row,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+/// Max revision number carrying a review (`last_reviewed_revision`).
+pub fn last_reviewed_revision(conn: &Connection, change_id: i64) -> Result<Option<i64>> {
+    conn.query_row(
+        "SELECT MAX(revision_number) FROM reviews WHERE change_id = ?1",
+        params![change_id],
+        |row| row.get(0),
+    )
+    .map_err(Into::into)
+}
+
+// ---------------------------------------------------------------------------
+// Comments
+
+pub fn get_comment(conn: &Connection, id: i64) -> Result<Option<Comment>> {
+    conn.query_row(
+        "SELECT * FROM comments WHERE id = ?1",
+        params![id],
+        comment_from_row,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+pub fn comments_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Comment>> {
+    let mut stmt = conn.prepare("SELECT * FROM comments WHERE change_id = ?1 ORDER BY id")?;
+    let rows = stmt.query_map(params![change_id], comment_from_row)?;
+    rows.map(|r| r.map_err(Into::into)).collect()
+}
+
+pub struct NewComment<'a> {
+    pub change_id: i64,
+    pub revision_number: i64,
+    pub parent_id: Option<i64>,
+    pub author: &'a str,
+    pub file: Option<&'a str>,
+    pub line: Option<i64>,
+    pub side: &'a str,
+    pub line_text: Option<&'a str>,
+    pub body: &'a str,
+    pub state: &'a str,
+    pub resolved: bool,
+}
+
+pub fn insert_comment(conn: &Connection, c: &NewComment, now: &str) -> Result<Comment> {
+    conn.execute(
+        "INSERT INTO comments
+           (change_id, revision_number, parent_id, author, file, line, side,
+            line_text, body, state, resolved, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)",
+        params![
+            c.change_id,
+            c.revision_number,
+            c.parent_id,
+            c.author,
+            c.file,
+            c.line,
+            c.side,
+            c.line_text,
+            c.body,
+            c.state,
+            c.resolved as i64,
+            now
+        ],
+    )?;
+    Ok(Comment {
+        id: conn.last_insert_rowid(),
+        change_id: c.change_id,
+        revision_number: c.revision_number,
+        parent_id: c.parent_id,
+        author: c.author.to_string(),
+        file: c.file.map(str::to_string),
+        line: c.line,
+        side: c.side.to_string(),
+        line_text: c.line_text.map(str::to_string),
+        body: c.body.to_string(),
+        state: c.state.to_string(),
+        resolved: c.resolved,
+        review_id: None,
+        created_at: now.to_string(),
+        updated_at: now.to_string(),
+    })
+}
+
+pub fn update_draft_body(conn: &Connection, id: i64, body: &str, now: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE comments SET body = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, body, now],
+    )?;
+    Ok(())
+}
+
+/// Hard-delete a draft (the one deliberate exception to "nothing is ever
+/// hard-deleted": unpublished drafts are reviewer-private scratch state,
+/// `DELETE /api/drafts/{id}`).
+pub fn delete_comment(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM comments WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+pub fn comment_set_resolved(conn: &Connection, id: i64, resolved: bool, now: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE comments SET resolved = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, resolved as i64, now],
+    )?;
+    Ok(())
+}
+
+/// Publish every draft on a change under a freshly created review
+/// (review submission). Returns the published rows.
+pub fn publish_drafts(
+    conn: &Connection,
+    change_id: i64,
+    review_id: i64,
+    now: &str,
+) -> Result<Vec<Comment>> {
+    conn.execute(
+        "UPDATE comments SET state = 'published', review_id = ?2, updated_at = ?3
+         WHERE change_id = ?1 AND state = 'draft'",
+        params![change_id, review_id, now],
+    )?;
+    let mut stmt =
+        conn.prepare("SELECT * FROM comments WHERE change_id = ?1 AND review_id = ?2 ORDER BY id")?;
+    let rows = stmt.query_map(params![change_id, review_id], comment_from_row)?;
+    rows.map(|r| r.map_err(Into::into)).collect()
+}
+
+/// Per-change comment tallies for `ChangeSummary.counts`: published
+/// comments (incl. replies), drafts, and unresolved published root threads.
+pub fn comment_counts(conn: &Connection, change_id: i64) -> Result<(i64, i64, i64)> {
+    conn.query_row(
+        "SELECT
+           COUNT(*) FILTER (WHERE state = 'published'),
+           COUNT(*) FILTER (WHERE state = 'draft'),
+           COUNT(*) FILTER (WHERE state = 'published' AND parent_id IS NULL
+                              AND resolved = 0)
+         FROM comments WHERE change_id = ?1",
+        params![change_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )
     .map_err(Into::into)
 }
 
@@ -662,6 +901,16 @@ pub fn insert_event(
         params![chain_id, kind, payload.to_string(), now],
     )?;
     Ok(conn.last_insert_rowid())
+}
+
+/// Latest event id for a chain (0 when none) — the `/wait` cursor.
+pub fn latest_event_id(conn: &Connection, chain_id: i64) -> Result<i64> {
+    conn.query_row(
+        "SELECT COALESCE(MAX(id), 0) FROM events WHERE chain_id = ?1",
+        params![chain_id],
+        |row| row.get(0),
+    )
+    .map_err(Into::into)
 }
 
 pub fn events_for_chain(conn: &Connection, chain_id: i64) -> Result<Vec<Event>> {
@@ -874,6 +1123,164 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn comment_lifecycle_and_counts() {
+        let (_dir, conn) = temp_db();
+        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
+        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
+        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending).unwrap();
+        let now = now_rfc3339();
+
+        let draft = insert_comment(
+            &conn,
+            &NewComment {
+                change_id: change.id,
+                revision_number: 1,
+                parent_id: None,
+                author: "reviewer",
+                file: Some("src/main.rs"),
+                line: Some(14),
+                side: "new",
+                line_text: Some("    let x = 1;"),
+                body: "why?",
+                state: "draft",
+                resolved: false,
+            },
+            &now,
+        )
+        .unwrap();
+        assert_eq!(draft.state, "draft");
+        assert_eq!(comment_counts(&conn, change.id).unwrap(), (0, 1, 0));
+
+        update_draft_body(&conn, draft.id, "why though?", &now).unwrap();
+        assert_eq!(
+            get_comment(&conn, draft.id).unwrap().unwrap().body,
+            "why though?"
+        );
+
+        let review = insert_review(&conn, change.id, 1, "request_changes", "m", &now).unwrap();
+        let published = publish_drafts(&conn, change.id, review.id, &now).unwrap();
+        assert_eq!(published.len(), 1);
+        assert_eq!(published[0].state, "published");
+        assert_eq!(published[0].review_id, Some(review.id));
+        // published root, unresolved
+        assert_eq!(comment_counts(&conn, change.id).unwrap(), (1, 0, 1));
+
+        // Agent reply under the root, then resolve the thread.
+        let reply = insert_comment(
+            &conn,
+            &NewComment {
+                change_id: change.id,
+                revision_number: 1,
+                parent_id: Some(draft.id),
+                author: "agent",
+                file: Some("src/main.rs"),
+                line: Some(14),
+                side: "new",
+                line_text: None,
+                body: "fixed",
+                state: "published",
+                resolved: false,
+            },
+            &now,
+        )
+        .unwrap();
+        assert_eq!(reply.parent_id, Some(draft.id));
+        comment_set_resolved(&conn, draft.id, true, &now).unwrap();
+        assert_eq!(comment_counts(&conn, change.id).unwrap(), (2, 0, 0));
+        assert_eq!(comments_for_change(&conn, change.id).unwrap().len(), 2);
+
+        delete_comment(&conn, reply.id).unwrap();
+        assert!(get_comment(&conn, reply.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn review_query_helpers() {
+        let (_dir, conn) = temp_db();
+        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
+        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
+        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending).unwrap();
+        let now = now_rfc3339();
+        assert!(
+            latest_review_for_change(&conn, change.id)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(last_reviewed_revision(&conn, change.id).unwrap(), None);
+
+        insert_review(&conn, change.id, 2, "request_changes", "a", &now).unwrap();
+        insert_review(&conn, change.id, 1, "comment", "b", &now).unwrap();
+        let latest = latest_review_for_change(&conn, change.id).unwrap().unwrap();
+        assert_eq!(latest.verdict, "comment"); // latest by id, not revision
+        assert_eq!(last_reviewed_revision(&conn, change.id).unwrap(), Some(2));
+        assert_eq!(reviews_for_change(&conn, change.id).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn chain_lookup_and_event_cursor() {
+        let (_dir, conn) = temp_db();
+        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
+        let chain = get_or_create_chain(&conn, repo.id, "feat", "main").unwrap();
+        assert_eq!(
+            find_chain_by_repo_branch(&conn, "/tmp/r", "feat")
+                .unwrap()
+                .unwrap()
+                .id,
+            chain.id
+        );
+        assert!(
+            find_chain_by_repo_branch(&conn, "/tmp/r", "other")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            find_chain_by_repo_branch(&conn, "/tmp/x", "feat")
+                .unwrap()
+                .is_none()
+        );
+
+        assert_eq!(latest_event_id(&conn, chain.id).unwrap(), 0);
+        let now = now_rfc3339();
+        let id = insert_event(
+            &conn,
+            chain.id,
+            "chain_updated",
+            &serde_json::json!({}),
+            &now,
+        )
+        .unwrap();
+        assert_eq!(latest_event_id(&conn, chain.id).unwrap(), id);
+    }
+
+    #[test]
+    fn change_and_revision_getters() {
+        let (_dir, conn) = temp_db();
+        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
+        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
+        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending).unwrap();
+        assert_eq!(get_change(&conn, change.id).unwrap().unwrap().id, change.id);
+        assert!(get_change(&conn, 999).unwrap().is_none());
+
+        let now = now_rfc3339();
+        insert_revision(
+            &conn,
+            change.id,
+            1,
+            &"a".repeat(40),
+            &"b".repeat(40),
+            None,
+            &[],
+            "subj",
+            &now,
+        )
+        .unwrap();
+        assert_eq!(
+            get_revision(&conn, change.id, 1).unwrap().unwrap().number,
+            1
+        );
+        assert!(get_revision(&conn, change.id, 2).unwrap().is_none());
     }
 
     #[test]
