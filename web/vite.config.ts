@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -10,5 +11,12 @@ export default defineConfig({
     proxy: {
       "/api": "http://127.0.0.1:8877",
     },
+  },
+  // Vitest (`npm test`): jsdom so component tests have a DOM; VITE_MOCK so
+  // client.ts answers from the contract-true fixtures — the same canned
+  // data the screenshot harness renders.
+  test: {
+    environment: "jsdom",
+    env: { VITE_MOCK: "1" },
   },
 });

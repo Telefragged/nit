@@ -59,7 +59,9 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
   integration tests (`tempfile` + git2 building tiny repos). `cargo test`
   must stay green.
 - Frontend: tsc-clean always; component logic that's easy to break (diff
-  rendering, comment anchoring) deserves vitest tests if it grows hairy.
+  rendering, comment anchoring) deserves vitest tests — `npm test` runs
+  them (jsdom + testing-library, colocated `*.test.ts(x)` under `src/`)
+  and must stay green.
 - End-to-end: `scripts/e2e.sh` drives the full agent↔reviewer loop against
   a fixture repo using the built binary.
 

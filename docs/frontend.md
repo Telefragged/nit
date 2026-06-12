@@ -83,6 +83,7 @@ diff). Keep fixtures contract-true; they double as component-test data.
 
 ## Checking your work
 
-`npm run check` (tsc) and `npm run build` must pass inside the devShell.
+`npm run check` (tsc), `npm run build` and `npm test` (vitest; jsdom +
+testing-library, against the mock fixtures) must pass inside the devShell.
 Visual verification happens through the screenshot harness — see
 [dev.md](dev.md).
