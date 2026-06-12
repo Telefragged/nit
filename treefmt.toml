@@ -1,0 +1,39 @@
+# Repo-wide formatting: `nix develop -c treefmt` (or `nix fmt`). Every
+# formatter binary comes from the devShell (flake.nix), so results are
+# pinned and identical for every contributor. The walker skips gitignored
+# paths but does visit (and mutate) untracked files.
+
+[formatter.rust]
+command = "rustfmt"
+options = ["--edition", "2024"]
+includes = ["*.rs"]
+
+[formatter.nix]
+command = "nixfmt"
+includes = ["*.nix"]
+
+[formatter.prettier]
+command = "prettier"
+options = ["--write"]
+includes = [
+  "*.ts",
+  "*.tsx",
+  "*.mjs",
+  "*.css",
+  "*.html",
+  "*.json",
+  "*.md",
+  "*.yml",
+  "*.yaml",
+]
+excludes = ["web/package-lock.json"]
+
+[formatter.shell]
+command = "shfmt"
+options = ["-i", "2", "-w"]
+includes = ["*.sh"]
+
+[formatter.toml]
+command = "taplo"
+options = ["format"]
+includes = ["*.toml"]

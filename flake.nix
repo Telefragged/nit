@@ -34,6 +34,14 @@
             # Web frontend
             nodejs_22
 
+            # Formatting — treefmt drives the per-language formatters
+            # configured in treefmt.toml (rustfmt above covers Rust)
+            treefmt
+            nixfmt
+            prettier
+            shfmt
+            taplo
+
             # Screenshot harness / frontend checking
             playwright-driver
           ];
@@ -100,6 +108,22 @@
         build = self.packages.${pkgs.system}.nit;
       });
 
-      formatter = forAllSystems (pkgs: pkgs.nixfmt-rfc-style);
+      # `nix fmt` = the same whole-tree treefmt the devShell runs,
+      # self-contained (formatters on PATH without entering the shell).
+      formatter = forAllSystems (
+        pkgs:
+        pkgs.writeShellApplication {
+          name = "treefmt";
+          runtimeInputs = with pkgs; [
+            treefmt
+            rustfmt
+            nixfmt
+            prettier
+            shfmt
+            taplo
+          ];
+          text = ''exec treefmt "$@"'';
+        }
+      );
     };
 }
