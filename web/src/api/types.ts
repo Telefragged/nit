@@ -130,6 +130,14 @@ export interface Review {
 // ---------------------------------------------------------------------------
 // Diffs
 
+/**
+ * Reserved synthetic diff path: the revision's commit message as a
+ * reviewable file, listed first in every diff (docs/api.md "The commit
+ * message as a file"). Git tree paths cannot start with "/", so it never
+ * collides with a real file.
+ */
+export const COMMIT_MSG_PATH = "/COMMIT_MSG";
+
 export type FileStatus = "added" | "deleted" | "modified" | "renamed";
 
 export interface Diff {

@@ -6,14 +6,21 @@
 // Coverage on purpose:
 //   chain 1  waiting_for_review — 3 changes; change 11 has 2 revisions with
 //            a fixup (interdiff available), a resolved thread, an unresolved
-//            thread, an outdated comment, 2 drafts; change 12's diff has a
-//            rename and a binary file; the chain carries a scan warning.
+//            thread, an outdated comment, 2 drafts, plus a resolved thread
+//            on its commit message (/COMMIT_MSG) and a reworded r2 message
+//            so the interdiff carries a real message diff; change 12's diff
+//            has a rename and a binary file; the chain carries a scan
+//            warning.
 //   chain 2  agents_turn — a changes_requested change plus a needs_rebase
 //            change whose diff endpoint 409s.
 //   chain 3  ready_to_merge — single approved change.
 //   chain 4  merged — only visible via ?status=all.
+//
+// Every stored diff leads with the synthetic /COMMIT_MSG file, like the
+// real server (docs/api.md "The commit message as a file").
 
 import { ApiError } from "./client";
+import { COMMIT_MSG_PATH } from "./types";
 import type {
   Chain,
   ChainState,
@@ -27,6 +34,7 @@ import type {
   CommentState,
   CreateDraftRequest,
   Diff,
+  DiffFile,
   Line,
   Review,
   Revision,
@@ -60,6 +68,28 @@ const ctx = (old: number, nw: number, text: string): Line => ({
 });
 const add = (nw: number, text: string): Line => ({ kind: "add", new: nw, text });
 const del = (old: number, text: string): Line => ({ kind: "del", old, text });
+
+/** The /COMMIT_MSG entry of a vs-parent diff: the whole message, all-add. */
+function msgFile(message: string): DiffFile {
+  const lines = message.replace(/\n$/, "").split("\n");
+  return {
+    path: COMMIT_MSG_PATH,
+    status: "added",
+    binary: false,
+    additions: lines.length,
+    deletions: 0,
+    hunks: [
+      {
+        old_start: 0,
+        old_lines: 0,
+        new_start: 1,
+        new_lines: lines.length,
+        header: "",
+        lines: lines.map((text, i) => add(i + 1, text)),
+      },
+    ],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Mutable store shapes
@@ -130,6 +160,13 @@ const c11fix = sha(113);
 const c12r1 = sha(121);
 const parent10 = sha(100);
 
+const msg10r1 =
+  "auth: add TokenStore schema and config plumbing\n\n" +
+  "Refresh tokens get their own table keyed by token hash, with a\n" +
+  "family id so a later change can revoke descendants in one\n" +
+  "statement. Config grows [auth.rotation] with a ttl knob.\n\n" +
+  "Change-Id: I9a41c7e2b3d4f5a6";
+
 const change10: ChangeRecord = {
   id: 10,
   chain_id: 1,
@@ -145,12 +182,7 @@ const change10: ChangeRecord = {
       commit_sha: c10r1,
       short_sha: short(c10r1),
       parent_sha: parent10,
-      message:
-        "auth: add TokenStore schema and config plumbing\n\n" +
-        "Refresh tokens get their own table keyed by token hash, with a\n" +
-        "family id so a later change can revoke descendants in one\n" +
-        "statement. Config grows [auth.rotation] with a ttl knob.\n\n" +
-        "Change-Id: I9a41c7e2b3d4f5a6",
+      message: msg10r1,
       fixups: [],
       needs_rebase: false,
       created_at: ago(26 * 60),
@@ -168,6 +200,7 @@ const change10: ChangeRecord = {
   diffs: {
     [diffKey(1)]: {
       files: [
+        msgFile(msg10r1),
         {
           path: "migrations/0004_refresh_tokens.sql",
           status: "added",
@@ -228,6 +261,22 @@ const change10: ChangeRecord = {
   },
 };
 
+const msg11r1 =
+  "auth: rotate refresh tokens on use\n\n" +
+  "Every presented refresh token is exchanged for a fresh one and the\n" +
+  "old row is marked rotated, so a stolen token stops working the\n" +
+  "moment the legitimate client refreshes.\n\n" +
+  "Change-Id: I3f2d8a91c0b7e514";
+// r2 rewords the message (answering the /COMMIT_MSG thread below), so
+// the r1 → r2 interdiff carries a real message diff.
+const msg11r2 =
+  "auth: rotate refresh tokens on use\n\n" +
+  "Every presented refresh token is exchanged for a fresh one and the\n" +
+  "old row is marked rotated, so a stolen token stops working the\n" +
+  "moment the legitimate client refreshes.\n\n" +
+  "Token reuse now revokes the whole family (RFC 6819 §5.2.2.3).\n\n" +
+  "Change-Id: I3f2d8a91c0b7e514";
+
 const change11: ChangeRecord = {
   id: 11,
   chain_id: 1,
@@ -243,12 +292,7 @@ const change11: ChangeRecord = {
       commit_sha: c11r1,
       short_sha: short(c11r1),
       parent_sha: c10r1,
-      message:
-        "auth: rotate refresh tokens on use\n\n" +
-        "Every presented refresh token is exchanged for a fresh one and the\n" +
-        "old row is marked rotated, so a stolen token stops working the\n" +
-        "moment the legitimate client refreshes.\n\n" +
-        "Change-Id: I3f2d8a91c0b7e514",
+      message: msg11r1,
       fixups: [],
       needs_rebase: false,
       created_at: ago(25 * 60),
@@ -258,12 +302,7 @@ const change11: ChangeRecord = {
       commit_sha: c11r2,
       short_sha: short(c11r2),
       parent_sha: c10r1,
-      message:
-        "auth: rotate refresh tokens on use\n\n" +
-        "Every presented refresh token is exchanged for a fresh one and the\n" +
-        "old row is marked rotated, so a stolen token stops working the\n" +
-        "moment the legitimate client refreshes.\n\n" +
-        "Change-Id: I3f2d8a91c0b7e514",
+      message: msg11r2,
       fixups: [
         {
           sha: c11fix,
@@ -293,6 +332,7 @@ const change11: ChangeRecord = {
     // Full diff of revision 1 (parent -> rev1 tree).
     [diffKey(1)]: {
       files: [
+        msgFile(msg11r1),
         {
           path: "src/auth/rotate.rs",
           status: "modified",
@@ -354,6 +394,7 @@ const change11: ChangeRecord = {
     // Full diff of revision 2 (parent -> effective tree with the fixup).
     [diffKey(2)]: {
       files: [
+        msgFile(msg11r2),
         {
           path: "src/auth/rotate.rs",
           status: "modified",
@@ -473,9 +514,34 @@ const change11: ChangeRecord = {
         },
       ],
     },
-    // Interdiff: effective tree of rev 1 -> effective tree of rev 2.
+    // Interdiff: effective tree of rev 1 -> effective tree of rev 2,
+    // message(1) -> message(2) for /COMMIT_MSG.
     [diffKey(2, 1)]: {
       files: [
+        {
+          path: COMMIT_MSG_PATH,
+          status: "modified",
+          binary: false,
+          additions: 2,
+          deletions: 0,
+          hunks: [
+            {
+              old_start: 4,
+              old_lines: 4,
+              new_start: 4,
+              new_lines: 6,
+              header: "",
+              lines: [
+                ctx(4, 4, "old row is marked rotated, so a stolen token stops working the"),
+                ctx(5, 5, "moment the legitimate client refreshes."),
+                ctx(6, 6, ""),
+                add(7, "Token reuse now revokes the whole family (RFC 6819 §5.2.2.3)."),
+                add(8, ""),
+                ctx(7, 9, "Change-Id: I3f2d8a91c0b7e514"),
+              ],
+            },
+          ],
+        },
         {
           path: "src/auth/rotate.rs",
           status: "modified",
@@ -571,6 +637,12 @@ const change11: ChangeRecord = {
   },
 };
 
+const msg12r1 =
+  "auth: document rotation and ship flow diagram\n\n" +
+  "Renames the stale auth doc and adds the sequence diagram the\n" +
+  "incident-review asked for.\n\n" +
+  "Change-Id: I77b0e4f5a8123c9d";
+
 const change12: ChangeRecord = {
   id: 12,
   chain_id: 1,
@@ -586,11 +658,7 @@ const change12: ChangeRecord = {
       commit_sha: c12r1,
       short_sha: short(c12r1),
       parent_sha: c11r2,
-      message:
-        "auth: document rotation and ship flow diagram\n\n" +
-        "Renames the stale auth doc and adds the sequence diagram the\n" +
-        "incident-review asked for.\n\n" +
-        "Change-Id: I77b0e4f5a8123c9d",
+      message: msg12r1,
       fixups: [],
       needs_rebase: false,
       created_at: ago(90),
@@ -600,6 +668,7 @@ const change12: ChangeRecord = {
   diffs: {
     [diffKey(1)]: {
       files: [
+        msgFile(msg12r1),
         {
           path: "docs/auth-rotation.md",
           old_path: "docs/auth.md",
@@ -651,6 +720,12 @@ const c20r1 = sha(201);
 const c21r1 = sha(211);
 const parent20 = sha(200);
 
+const msg20r1 =
+  "wal: checkpoint on idle, not on every commit\n\n" +
+  "Checkpointing after each commit stalls writers; move it to the idle\n" +
+  "loop with a 4MiB backlog threshold.\n\n" +
+  "Change-Id: Ib8d3e6f1a4c75290";
+
 const change20: ChangeRecord = {
   id: 20,
   chain_id: 2,
@@ -666,11 +741,7 @@ const change20: ChangeRecord = {
       commit_sha: c20r1,
       short_sha: short(c20r1),
       parent_sha: parent20,
-      message:
-        "wal: checkpoint on idle, not on every commit\n\n" +
-        "Checkpointing after each commit stalls writers; move it to the idle\n" +
-        "loop with a 4MiB backlog threshold.\n\n" +
-        "Change-Id: Ib8d3e6f1a4c75290",
+      message: msg20r1,
       fixups: [],
       needs_rebase: false,
       created_at: ago(8 * 60),
@@ -690,6 +761,7 @@ const change20: ChangeRecord = {
   diffs: {
     [diffKey(1)]: {
       files: [
+        msgFile(msg20r1),
         {
           path: "src/wal.rs",
           status: "modified",
@@ -788,6 +860,11 @@ const change21: ChangeRecord = {
 
 const c30r1 = sha(301);
 
+const msg30r1 =
+  "ci: key caches on lockfile hash only\n\n" +
+  "Keying on the branch name made every PR start cold.\n\n" +
+  "Change-Id: Ie1f4a7b2c5d80936";
+
 const change30: ChangeRecord = {
   id: 30,
   chain_id: 3,
@@ -803,10 +880,7 @@ const change30: ChangeRecord = {
       commit_sha: c30r1,
       short_sha: short(c30r1),
       parent_sha: sha(300),
-      message:
-        "ci: key caches on lockfile hash only\n\n" +
-        "Keying on the branch name made every PR start cold.\n\n" +
-        "Change-Id: Ie1f4a7b2c5d80936",
+      message: msg30r1,
       fixups: [],
       needs_rebase: false,
       created_at: ago(50 * 60),
@@ -824,6 +898,7 @@ const change30: ChangeRecord = {
   diffs: {
     [diffKey(1)]: {
       files: [
+        msgFile(msg30r1),
         {
           path: ".github/workflows/ci.yml",
           status: "modified",
@@ -857,6 +932,9 @@ const change30: ChangeRecord = {
 
 const c40r1 = sha(401);
 
+const msg40r1 =
+  "build: drop unused openssl feature\n\nChange-Id: I0d9c8b7a6f5e4321";
+
 const change40: ChangeRecord = {
   id: 40,
   chain_id: 4,
@@ -872,8 +950,7 @@ const change40: ChangeRecord = {
       commit_sha: c40r1,
       short_sha: short(c40r1),
       parent_sha: sha(400),
-      message:
-        "build: drop unused openssl feature\n\nChange-Id: I0d9c8b7a6f5e4321",
+      message: msg40r1,
       fixups: [],
       needs_rebase: false,
       created_at: ago(4 * 24 * 60),
@@ -891,6 +968,7 @@ const change40: ChangeRecord = {
   diffs: {
     [diffKey(1)]: {
       files: [
+        msgFile(msg40r1),
         {
           path: "Cargo.toml",
           status: "modified",
@@ -1130,6 +1208,48 @@ const comments: CommentRecord[] = [
     created_at: ago(100),
     updated_at: ago(100),
     renderAt: { 2: { line: null, outdated: true } },
+  },
+  // change 11 — resolved thread on the commit message: the r2 reword
+  // answers it; the anchored line survives unchanged (no shift needed).
+  {
+    id: 77,
+    change_id: 11,
+    revision: 1,
+    parent_id: null,
+    author: "reviewer",
+    file: COMMIT_MSG_PATH,
+    line: 5,
+    side: "new",
+    line_text: "moment the legitimate client refreshes.",
+    body:
+      "The body never says what happens on token *reuse* — state the " +
+      "family-revocation behavior here; it's the headline of this change.",
+    state: "published",
+    resolved: true,
+    review_id: 5,
+    created_at: ago(21 * 60),
+    updated_at: ago(21 * 60),
+    renderAt: { 2: { line: 5, outdated: false } },
+  },
+  {
+    id: 78,
+    change_id: 11,
+    revision: 1,
+    parent_id: 77,
+    author: "agent",
+    file: COMMIT_MSG_PATH,
+    line: 5,
+    side: "new",
+    line_text: "moment the legitimate client refreshes.",
+    body:
+      "Reworded: the message now calls out family revocation " +
+      "(RFC 6819 §5.2.2.3).",
+    state: "published",
+    resolved: true,
+    review_id: null,
+    created_at: ago(96),
+    updated_at: ago(96),
+    renderAt: { 2: { line: 5, outdated: false } },
   },
   // change 11 — two drafts on revision 2.
   {
