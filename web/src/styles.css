@@ -944,6 +944,18 @@ td.code.del .intraline {
   background: var(--del-intraline);
   border-radius: 2px;
 }
+/* Commented text ranges (docs/api.md "Range comments"). Amber = needs
+   reviewer attention, kept translucent so syntax colors read through;
+   overlapping ranges nest and the rgba stacks darker. The dotted rule
+   points at the thread below the range's last line. */
+.code-text .comment-range {
+  background: rgba(210, 153, 34, 0.18);
+  border-bottom: 1px dotted rgba(210, 153, 34, 0.7);
+}
+.code-text .comment-range-active {
+  background: rgba(210, 153, 34, 0.32);
+  border-bottom-style: solid;
+}
 /* Transient "why c did nothing" notice in the diffbar. */
 .selection-miss {
   color: var(--amber);

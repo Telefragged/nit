@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Line } from "../api/types";
-import { intralineDiff, pairLines, skippedBefore } from "./diffview";
+import {
+  intralineDiff,
+  pairLines,
+  rangeSliceOnLine,
+  skippedBefore,
+} from "./diffview";
 
 const ctx = (old: number, nw: number, text = "ctx"): Line => ({
   kind: "context",
@@ -88,5 +93,38 @@ describe("skippedBefore", () => {
 
   it("is zero for adjacent hunks", () => {
     expect(skippedBefore(hunk(1, 3, 1, 3), hunk(4, 2, 4, 2))).toBe(0);
+  });
+});
+
+describe("rangeSliceOnLine", () => {
+  const range = { start_line: 12, start_char: 4, end_line: 14, end_char: 7 };
+
+  it("misses lines outside the range", () => {
+    expect(rangeSliceOnLine(range, 11, 20)).toBeNull();
+    expect(rangeSliceOnLine(range, 15, 20)).toBeNull();
+  });
+
+  it("starts at start_char on the first line and runs to its end", () => {
+    expect(rangeSliceOnLine(range, 12, 20)).toEqual([4, 20]);
+  });
+
+  it("covers interior lines whole", () => {
+    expect(rangeSliceOnLine(range, 13, 9)).toEqual([0, 9]);
+  });
+
+  it("ends at end_char on the last line", () => {
+    expect(rangeSliceOnLine(range, 14, 20)).toEqual([0, 7]);
+  });
+
+  it("clamps offsets to the text and drops empty windows", () => {
+    expect(rangeSliceOnLine(range, 14, 5)).toEqual([0, 5]);
+    expect(rangeSliceOnLine(range, 12, 3)).toBeNull(); // start past the text
+    expect(rangeSliceOnLine(range, 13, 0)).toBeNull(); // empty interior line
+  });
+
+  it("handles a single-line range", () => {
+    const one = { start_line: 5, start_char: 2, end_line: 5, end_char: 6 };
+    expect(rangeSliceOnLine(one, 5, 10)).toEqual([2, 6]);
+    expect(rangeSliceOnLine(one, 4, 10)).toBeNull();
   });
 });

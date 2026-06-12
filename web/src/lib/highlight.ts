@@ -90,14 +90,17 @@ export function highlightLine(text: string, language: string | null): string {
 
 /**
  * Wrap the text range [start, end) of a highlighted line in
- * `<span class="intraline">` (intraline change emphasis). Offsets are into
- * the raw line text; walking the rendered DOM keeps entity escaping and
- * hljs token spans intact, splitting the mark across token boundaries.
+ * `<span class="{className}">`. Offsets are into the raw line text;
+ * walking the rendered DOM keeps entity escaping and hljs token spans
+ * intact, splitting the mark across token boundaries. Repeated
+ * application stacks marks (text offsets are invariant under added
+ * tags), so overlapping ranges simply nest.
  */
-export function markIntraline(
+export function markTextRange(
   html: string,
   start: number,
   end: number,
+  className: string,
 ): string {
   if (start >= end) return html;
   const tpl = document.createElement("template");
@@ -115,7 +118,7 @@ export function markIntraline(
     const to = Math.min(end, offset) - nodeStart;
     if (from >= to) continue;
     const span = document.createElement("span");
-    span.className = "intraline";
+    span.className = className;
     span.textContent = node.data.slice(from, to);
     const frag = document.createDocumentFragment();
     if (from > 0) frag.append(node.data.slice(0, from));
@@ -124,4 +127,13 @@ export function markIntraline(
     node.replaceWith(frag);
   }
   return tpl.innerHTML;
+}
+
+/** Intraline change emphasis: [`markTextRange`] with the diff tint. */
+export function markIntraline(
+  html: string,
+  start: number,
+  end: number,
+): string {
+  return markTextRange(html, start, end, "intraline");
 }

@@ -1,6 +1,6 @@
 // Pure diff-presentation logic, kept out of components so it stays testable.
 
-import type { DiffFile, Hunk, Line } from "../api/types";
+import type { CommentRange, DiffFile, Hunk, Line } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
 
 /** Display label for a diff path: the synthetic /COMMIT_MSG file reads
@@ -151,6 +151,28 @@ export function intralineDiff(
     [prefix, oldText.length - suffix],
     [prefix, newText.length - suffix],
   ];
+}
+
+/**
+ * The char window ([start, end) into the line's text) a comment range
+ * covers on line `lineNo` of its side, or null when the range misses the
+ * line or the window is empty. Offsets clamp to the text (the contract
+ * does not validate them against contents — docs/api.md "Range
+ * comments"); interior lines are covered whole.
+ */
+export function rangeSliceOnLine(
+  range: CommentRange,
+  lineNo: number,
+  textLength: number,
+): [number, number] | null {
+  if (lineNo < range.start_line || lineNo > range.end_line) return null;
+  const start = lineNo === range.start_line ? range.start_char : 0;
+  const end = lineNo === range.end_line ? range.end_char : textLength;
+  const window: [number, number] = [
+    Math.min(start, textLength),
+    Math.min(end, textLength),
+  ];
+  return window[0] < window[1] ? window : null;
 }
 
 /** Lines skipped between the previous hunk (if any) and this one. */

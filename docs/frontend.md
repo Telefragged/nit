@@ -70,7 +70,10 @@ happens.
     selection (sides disagree, a hunk gap, the old side of an interdiff),
     a transient notice in the diffbar says why. The selection-to-range
     mapping lives in `lib/selection.ts` against DiffFileView's data
-    attributes. Published comments render as threads (replies via
+    attributes. Ranged threads tint their selected text amber in the
+    diff (ported per revision — `rendered_range`); the open editor's
+    pending selection tints brighter. Published comments render as
+    threads (replies via
     `parent_id`, author chrome for reviewer/agent, resolve toggle) under
     their `rendered_line`; comments with `outdated: true` group at the top
     of their file with their `line_text` excerpt; drafts get a dashed

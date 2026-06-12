@@ -172,6 +172,51 @@ const captures = [
         .fill("Should revoke_family also bump the metrics counter?");
     },
   },
+  // Published range threads: the multi-line selection on rotate.rs and
+  // the partial-line one on the commit message render tinted
+  // (docs/api.md "Range comments").
+  {
+    name: "review-range-comments",
+    path: "/changes/11?against=base",
+    actions: expandAllFiles,
+  },
+  // Selecting diff text and pressing c: the inline editor opens on the
+  // selection's last line with the pending range tinted "active".
+  {
+    name: "review-range-draft",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page.evaluate(() => {
+        const texts = [...document.querySelectorAll("td.code .code-text")];
+        const cell = (needle) =>
+          texts.find((t) => t.textContent.includes(needle));
+        // hljs splits lines into token spans; find the text node (and
+        // offset) carrying the needle for a partial-line boundary.
+        const point = (root, needle, atEnd) => {
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+            const i = t.data.indexOf(needle);
+            if (i >= 0) return [t, atEnd ? i + needle.length : i];
+          }
+          return [root, 0];
+        };
+        const range = document.createRange();
+        range.setStart(...point(cell("if entry.rotated_at"), "entry", false));
+        range.setEnd(
+          ...point(cell("RotateError::ReuseDetected)"), "ReuseDetected", true),
+        );
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+      await page.keyboard.press("c");
+      await page.waitForSelector("textarea");
+      await page
+        .locator("textarea")
+        .fill("This whole reuse branch deserves its own unit test.");
+    },
+  },
   // Reply modal opened via the `a` shortcut, cover message typed. Typed
   // key by key (not fill, which replaces content) so a shortcut keystroke
   // leaking into the autofocused textarea would show up in the capture.
