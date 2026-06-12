@@ -228,7 +228,7 @@ mod tests {
             let mut builder = self.repo.treebuilder(None).unwrap();
             for (path, content) in files {
                 let blob = self.repo.blob(content).unwrap();
-                builder.insert(path, blob, 0o100644).unwrap();
+                builder.insert(path, blob, 0o100_644).unwrap();
             }
             builder.write().unwrap()
         }

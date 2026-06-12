@@ -316,8 +316,8 @@ fn reconcile(
             })
             .collect();
 
-        let (change_id, stored_position, stored_status, mut status, is_new) = match matched[ri] {
-            Some(ei) => {
+        let (change_id, stored_position, stored_status, mut status, is_new) =
+            if let Some(ei) = matched[ri] {
                 let row = &existing[ei];
                 let status = if row.status == ChangeStatus::Orphaned {
                     // Re-attachment: status returns to its pre-orphan value,
@@ -327,8 +327,7 @@ fn reconcile(
                     row.status
                 };
                 (row.id, row.position, row.status, status, false)
-            }
-            None => {
+            } else {
                 let base_key = keys[ri].clone().unwrap_or_else(|| metas[ci].sha.clone());
                 let key = unique_key(tx, chain.id, &base_key)?;
                 let row = db::insert_change(tx, chain.id, &key, position, ChangeStatus::Pending)?;
@@ -340,8 +339,7 @@ fn reconcile(
                     ChangeStatus::Pending,
                     true,
                 )
-            }
-        };
+            };
 
         let latest = latest_by_change.get(&change_id).cloned().flatten();
         let same_state = latest.as_ref().is_some_and(|l| {
@@ -417,7 +415,7 @@ fn reconcile(
 /// Walk `base..tip` oldest-first. Any merge commit aborts the scan with
 /// the documented error; so does a root commit (the diff/identity model
 /// needs a first parent everywhere).
-fn walk_chain<'r>(repo: &'r Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'r>>> {
+fn walk_chain(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>> {
     let mut walk = repo.revwalk()?;
     walk.push(tip)?;
     walk.hide(base)?;
@@ -571,7 +569,7 @@ fn merged_quorum(
             continue;
         }
         match revision_effective_patch_id(repo, rev) {
-            Some(pid) if pid == fold::EMPTY_PATCH_ID => continue,
+            Some(pid) if pid == fold::EMPTY_PATCH_ID => {}
             Some(pid) if base_patch_ids.contains(&pid) => any_matched = true,
             // Unverifiable (conflicted fold, pruned objects) or unmatched.
             _ => return Ok(false),

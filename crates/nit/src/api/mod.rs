@@ -748,8 +748,8 @@ async fn wait_chain(
             break;
         }
         tokio::select! {
-            _ = &mut notified => continue,
-            _ = tokio::time::sleep_until(deadline) => break,
+            () = &mut notified => {}
+            () = tokio::time::sleep_until(deadline) => break,
         }
     }
 

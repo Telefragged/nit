@@ -179,7 +179,7 @@ fn commit_full_in(
             mtime: git2::IndexTime::new(0, 0),
             dev: 0,
             ino: 0,
-            mode: 0o100644,
+            mode: 0o100_644,
             uid: 0,
             gid: 0,
             file_size: u32::try_from(content.len()).unwrap(),

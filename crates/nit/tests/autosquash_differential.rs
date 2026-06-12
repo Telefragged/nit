@@ -7,6 +7,7 @@
 mod common;
 
 use std::collections::HashMap;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
@@ -84,7 +85,6 @@ fn run_layout(
     )
     .unwrap();
     let mut perms = std::fs::metadata(&editor).unwrap().permissions();
-    use std::os::unix::fs::PermissionsExt;
     perms.set_mode(0o755);
     std::fs::set_permissions(&editor, perms).unwrap();
 
