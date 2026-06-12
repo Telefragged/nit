@@ -29,7 +29,13 @@ nit reviews **commits**, not branches. Make each commit one reviewable unit
 ## The loop
 
 ```sh
-nit push                      # register/refresh current branch (repo cwd)
+# while building — after EVERY completed commit (green, one concern,
+#   Change-Id'd), not once at the end:
+nit push --partial            # register/refresh the chain as partial
+#   the FIRST push creates the chain — report web_url to the human now;
+#   review starts on commit one.
+nit ready                     # last commit done: clears partial, refreshes —
+                              #   the chain can now reach ready_to_merge
 nit wait                      # block until the reviewer acts; prints JSON
 # read feedback; for each comment: fix → git commit --fixup=…,
 #   or answer with: nit reply <comment-id> [--resolve] -m "…"
@@ -42,11 +48,18 @@ nit wait                      # …repeat until state=ready_to_merge
 nit push                      # optional: next scan marks the chain merged
 ```
 
-- `nit push [--base <ref>] [--branch <name>] [--server <url>]` — defaults:
-  branch = current HEAD branch, base = `main` (falls back to `master`),
-  server = `$NIT_SERVER` or `http://127.0.0.1:8877`. Prints the chain JSON
-  including `web_url` — tell the human where to review. Exit ≠ 0 on scan
-  errors; re-running is always safe (idempotent).
+- `nit push [--partial] [--base <ref>] [--branch <name>] [--server <url>]`
+  — defaults: branch = current HEAD branch, base = `main` (falls back to
+  `master`), server = `$NIT_SERVER` or `http://127.0.0.1:8877`. Prints the
+  chain JSON including `web_url` — tell the human where to review. Exit
+  ≠ 0 on scan errors; re-running is always safe (idempotent). `--partial`
+  marks the chain partial: review can start, merging cannot. Sticky — a plain
+  push never clears it. Feedback can land mid-build: each push response
+  carries the change statuses, and `nit status` shows the full Feedback
+  JSON without blocking — handle it as normal `agents_turn` work
+  (fixups/replies below), folded into the next incremental push.
+- `nit ready [--base <ref>] [--branch <name>] [--server <url>]` — same
+  defaults; clears the partial flag and refreshes (idempotent).
 - `nit wait [--timeout <secs>]` — returns immediately when the state is
   actionable, else long-polls (internally re-polling until `--timeout`,
   default forever). Exit 0 with the Feedback JSON on stdout. Survives
@@ -69,6 +82,11 @@ Shape: `Feedback` in docs/api.md. Decide on `state`:
   reasoning); any change with `needs_rebase: true`: restructure the chain.
   Then `nit push` and wait again. `commented` means the reviewer asked
   questions without blocking — reply, don't just wait.
+  Exception: on a partial chain (`chain.partial: true`) with **no**
+  `changes_requested`/`commented`/`needs_rebase` entries, `agents_turn`
+  just means every pushed change is approved — the reviewer is caught up.
+  Not an error, nothing to address: keep pushing commits, or `nit ready`
+  when the branch is done.
 - `ready_to_merge` — every change approved: autosquash-rebase onto base,
   merge/ff, done. The chain leaves the dashboard on the next scan.
 - `waiting_for_review` — nothing actionable (the poll timed out); wait

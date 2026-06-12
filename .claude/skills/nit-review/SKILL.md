@@ -1,6 +1,6 @@
 ---
 name: nit-review
-description: Land changes through nit's review loop (push branch → wait → fixup → ff-merge). Use when work is ready for human review, on "push for review", or when acting on nit feedback. Exemptions: docs/dev.md.
+description: Land changes through nit's review loop (push --partial per commit → ready → wait → fixup → ff-merge). Use as soon as the first commit on a feature branch is done — review runs alongside the build — on "push for review", or when acting on nit feedback. Exemptions: docs/dev.md.
 ---
 
 # nit-review — the dogfood loop
@@ -10,8 +10,9 @@ This skill is the operational checklist for driving it from a Claude session.
 
 ## When
 
-- A unit of work is complete on a feature branch and a human should review
-  it before it lands on `main`.
+- The first commit of a piece of work is done on a feature branch and a
+  human should review the work before it lands on `main` — review runs
+  alongside the rest of the build, not after it.
 - The user asks for review, or asks to act on feedback from an existing chain.
 
 **When not:**
@@ -20,7 +21,8 @@ This skill is the operational checklist for driving it from a Claude session.
   skips the *review*, not the branch discipline: finish the work on its
   branch/worktree and ff-merge to `main` exactly where the loop's merge
   step would have run.
-- Work is mid-flight. Push only coherent, green chains.
+- The current *commit* is mid-flight. Push only completed, green commits;
+  an incomplete chain is fine — that is what `--partial` marks.
 
 ## Preconditions
 
@@ -41,13 +43,20 @@ This skill is the operational checklist for driving it from a Claude session.
 ## The loop
 
 ```sh
-nit push            # register/refresh current branch
-# → report web_url to the user, then wait in a background task:
+# after EVERY completed commit (green, one concern, Change-Id'd):
+nit push --partial  # register/refresh the chain as partial (sticky)
+# → FIRST push: report web_url to the user now — review starts on
+#   commit one, not when the branch is done
+# after the LAST commit:
+nit ready           # clears partial; the chain can now reach ready_to_merge
 nit wait            # blocks; prints Feedback JSON on wake
 ```
 
-Run `nit wait` as a background Bash task so the review wakes the session.
-On wake, branch on `feedback.state`:
+After `nit ready`, run `nit wait` as a background Bash task so the review
+wakes the session. Feedback arriving mid-build is handled exactly like the
+`agents_turn` branch below, folded into the next incremental push
+(`nit status` shows it without blocking). On wake, branch on
+`feedback.state`:
 
 - **`agents_turn`** — for each change with `request_changes`/`commented`:
   - code feedback → fix it, `git commit --fixup=<commit_sha of the change>`,
@@ -56,6 +65,9 @@ On wake, branch on `feedback.state`:
   - `needs_rebase: true` → a fixup conflicted; restructure the branch
     (squash manually), push again before waiting.
   - Then `nit push` (fixups fold into new revisions) and wait again.
+  - On a partial chain, `agents_turn` with none of the above (every pushed
+    change approved) is not an error and not feedback — the reviewer is
+    caught up. Keep building, or `nit ready` when the branch is done.
 - **`ready_to_merge`** — every change approved. Land it (order matters —
   scan must see the merge while the branch ref still exists, so it records
   `merged`, not `abandoned`):
@@ -74,10 +86,15 @@ On wake, branch on `feedback.state`:
 - **`waiting_for_review`** — poll timeout; wait again.
 
 Never submit a review verdict yourself (`POST /api/changes/*/reviews` is
-the human's side). The agent surface is push / wait / status / reply.
+the human's side). The agent surface is push / ready / wait / status /
+reply.
 
 ## Wait pitfalls (learned in production)
 
+- `nit wait` before `nit ready` on a partial chain whose pushed changes are all
+  approved returns immediately, forever — all-approved-while-partial is
+  `agents_turn` (actionable, "reviewer caught up"). Do not spin: keep
+  building; wait only after `nit ready`.
 - A comment-only verdict leaves the change `commented` (actionable) until a
   **new revision** lands. If you answered with replies alone — no code
   change — `nit wait` returns immediately, forever. Do not spin: report to
