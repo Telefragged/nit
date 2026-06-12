@@ -271,6 +271,7 @@ impl GitRepo {
 pub struct TestServer {
     pub base: String,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+    served: Option<tokio::task::JoinHandle<()>>,
     rt: Option<tokio::runtime::Runtime>,
 }
 
@@ -285,7 +286,7 @@ impl TestServer {
         let listener = listener.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-        rt.spawn(async move {
+        let served = rt.spawn(async move {
             nit::api::serve_on(listener, db_path, web_dist, async {
                 let _ = rx.await;
             })
@@ -295,6 +296,7 @@ impl TestServer {
         TestServer {
             base,
             shutdown: Some(tx),
+            served: Some(served),
             rt: Some(rt),
         }
     }
@@ -310,6 +312,15 @@ impl Drop for TestServer {
             let _ = tx.send(());
         }
         if let Some(rt) = self.rt.take() {
+            // Graceful like the binary: wait (bounded) for serve_on to
+            // finish in-flight responses — dropping/shutting down a tokio
+            // runtime *cancels* async tasks at their next yield, it never
+            // waits for them.
+            if let Some(served) = self.served.take() {
+                let _ = rt.block_on(async {
+                    tokio::time::timeout(std::time::Duration::from_secs(5), served).await
+                });
+            }
             rt.shutdown_timeout(std::time::Duration::from_secs(5));
         }
     }

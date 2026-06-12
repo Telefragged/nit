@@ -15,7 +15,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use rusqlite::Connection;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{Mutex, Notify, watch};
 
 use crate::db;
 use crate::gitscan;
@@ -30,6 +30,9 @@ pub struct AppState {
     /// `http://<listen addr>` — prefix of every `web_url`.
     pub public_base: String,
     chains: StdMutex<HashMap<i64, Arc<ChainEntry>>>,
+    /// Flips to `true` when graceful shutdown begins so long-polls can
+    /// return early instead of holding the server open.
+    shutdown: watch::Sender<bool>,
 }
 
 /// Per-chain coordination: the serializing lock, the `/wait` wakeup
@@ -49,11 +52,27 @@ pub struct ScanGate {
 impl AppState {
     #[must_use]
     pub fn new(db_path: PathBuf, public_base: String) -> Arc<Self> {
+        let (shutdown, _) = watch::channel(false);
         Arc::new(AppState {
             db_path,
             public_base,
             chains: StdMutex::new(HashMap::new()),
+            shutdown,
         })
+    }
+
+    /// Mark the server as shutting down, waking every subscribed
+    /// long-poll. Idempotent.
+    pub fn begin_shutdown(&self) {
+        // send_replace, not send: it works even with no receivers.
+        self.shutdown.send_replace(true);
+    }
+
+    /// Observe [`AppState::begin_shutdown`]. Level-triggered (watch, not
+    /// Notify): a receiver subscribed *after* the flip still sees `true`.
+    #[must_use]
+    pub fn shutdown_watch(&self) -> watch::Receiver<bool> {
+        self.shutdown.subscribe()
     }
 
     /// The coordination entry for a chain (created on first touch).

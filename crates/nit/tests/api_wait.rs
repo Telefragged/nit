@@ -99,3 +99,30 @@ fn wait_wakes_up_when_the_reviewer_acts() {
     assert_eq!(woke["feedback"]["state"], "agents_turn");
     assert_eq!(woke["feedback"]["changes"][0]["status"], "commented");
 }
+
+#[test]
+fn shutdown_returns_inflight_polls_promptly() {
+    let (_g, server, chain_id) = setup();
+    let (_, boot) = http_get(&server.url(&format!("/api/chains/{chain_id}/wait?cursor=0")));
+    let cursor = boot["cursor"].as_i64().unwrap();
+
+    let wait_url = server.url(&format!(
+        "/api/chains/{chain_id}/wait?cursor={cursor}&timeout=30"
+    ));
+    let started = Instant::now();
+    let waiter = std::thread::spawn(move || http_get(&wait_url));
+
+    // Let the poll actually block, then begin graceful shutdown.
+    std::thread::sleep(Duration::from_millis(400));
+    drop(server);
+
+    // Without the early return the poll holds graceful shutdown until its
+    // 30s timeout; TestServer's 5s runtime force-kill then severs the
+    // connection and http_get panics.
+    let (st, resp) = waiter.join().expect("poll must complete, not be severed");
+    let elapsed = started.elapsed();
+    assert_eq!(st, 200);
+    assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
+    assert_eq!(resp["cursor"].as_i64().unwrap(), cursor);
+    assert_eq!(resp["feedback"]["actionable"], false);
+}

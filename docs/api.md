@@ -204,7 +204,9 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
   `{"cursor": <latest event id>, "feedback": Feedback}` — cursor first
   obtained by calling with `cursor=0` (which returns immediately with the
   current snapshot). Clients must decide on `feedback`, never on the events
-  themselves; re-poll with the returned cursor.
+  themselves; re-poll with the returned cursor. The server may also return
+  before the timeout with an unchanged snapshot (e.g. while shutting down);
+  clients just re-poll with the returned cursor.
 
 ### State table (normative)
 

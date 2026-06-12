@@ -102,6 +102,14 @@ pub async fn serve_on(
     let state = AppState::new(db_path, format!("http://{addr}"));
     state.open_db()?; // fail fast: create/migrate before accepting requests
     tracing::info!("listening on http://{addr}");
+    // Flip the state's shutdown watch the moment graceful shutdown
+    // begins: axum waits for in-flight requests, so without it a parked
+    // /wait long-poll would hold ctrl-c hostage for its full timeout.
+    let st = state.clone();
+    let shutdown = async move {
+        shutdown.await;
+        st.begin_shutdown();
+    };
     axum::serve(listener, app(state, web_dist))
         .with_graceful_shutdown(shutdown)
         .await?;
@@ -740,6 +748,7 @@ async fn wait_chain(
     let timeout = q.timeout.unwrap_or(55).min(120);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout);
     let entry = state.entry(id);
+    let mut shutdown = state.shutdown_watch();
 
     loop {
         // Arm the wakeup *before* checking the db so an event landing
@@ -762,6 +771,11 @@ async fn wait_chain(
         tokio::select! {
             () = &mut notified => {}
             () = tokio::time::sleep_until(deadline) => break,
+            // Graceful shutdown: hand back the unchanged snapshot now
+            // instead of holding shutdown open for the poll timeout.
+            // wait_for checks the current value first, so a poll admitted
+            // just after the flip still exits immediately.
+            _ = shutdown.wait_for(|&stopping| stopping) => break,
         }
     }
 
