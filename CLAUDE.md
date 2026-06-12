@@ -16,6 +16,10 @@ with `fixup!` commits. Product spec: `nit.md`.
    `web/src/api/types.ts`).
 4. **To see the UI, render it**: `cd web && nix develop -c npm run
    screenshots`, then Read `screenshots/*.png`.
+5. **Changes land through nit itself** — branch, then drive the review
+   loop with the `nit-review` skill (`.claude/skills/nit-review/SKILL.md`).
+   Direct-to-main only for ad-hoc user opt-outs and the exemptions listed
+   in docs/dev.md.
 
 ## Layout
 

@@ -62,3 +62,21 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
   commits anywhere.
 - End commit messages with `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
   when Claude wrote them.
+
+## Landing changes — the nit review loop
+
+This repo dogfoods itself: finished work is pushed as a nit chain and
+reviewed by a human before it ff-merges to `main`. Agents drive the loop
+with the `nit-review` skill (`.claude/skills/nit-review/SKILL.md`); the
+underlying protocol is `docs/agent-workflow.md`.
+
+### Review exemptions
+
+Changes matching an entry here may land on `main` directly (same commit
+discipline, still green):
+
+- *(none yet — add bullets like "screenshot fixture data" or
+  "typo-level doc fixes" as policy emerges)*
+
+Ad-hoc exemption: the user saying "skip nit" / "land this directly" for a
+specific change. When in doubt, review.
