@@ -3,19 +3,18 @@ import { Fragment, useMemo } from "react";
 import { createDraft } from "../../api/client";
 import type { DiffFile, Hunk, Line } from "../../api/types";
 import type { IntralineRange } from "../../lib/diffview";
-import { intralineMarks, pairLines, skippedBefore } from "../../lib/diffview";
+import {
+  displayPath,
+  intralineMarks,
+  pairLines,
+  skippedBefore,
+  statusLetter,
+} from "../../lib/diffview";
 import { highlightLine, languageFor, markIntraline } from "../../lib/highlight";
 import type { DraftTarget } from "../../pages/reviewContext";
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread, { type Thread } from "../CommentThread";
-
-const STATUS_LETTER: Record<DiffFile["status"], string> = {
-  added: "A",
-  deleted: "D",
-  modified: "M",
-  renamed: "R",
-};
 
 function Code({
   text,
@@ -296,12 +295,13 @@ export default function DiffFileView({
   }
 
   const colSpan = layout === "unified" ? 3 : 4;
+  const letter = statusLetter(file);
 
   return (
     <section className="file-section" id={domId}>
       <header className="file-header">
-        <span className={`fstat fstat-${STATUS_LETTER[file.status]}`}>
-          {STATUS_LETTER[file.status]}
+        <span className={letter ? `fstat fstat-${letter}` : "fstat"}>
+          {letter}
         </span>
         <span className="fpath">
           {file.old_path ? (
@@ -309,7 +309,7 @@ export default function DiffFileView({
               <span className="old-path">{file.old_path}</span> → {file.path}
             </>
           ) : (
-            file.path
+            displayPath(file.path)
           )}
         </span>
         <span className="spacer" />

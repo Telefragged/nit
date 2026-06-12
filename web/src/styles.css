@@ -503,30 +503,6 @@ table.list tbody tr:hover {
   font-size: 12px;
   flex-wrap: wrap;
 }
-.message-details {
-  display: inline-block;
-}
-.message-details summary {
-  color: var(--blue);
-  font-size: 12px;
-  cursor: pointer;
-  list-style: none;
-}
-.message-details summary::-webkit-details-marker {
-  display: none;
-}
-.commit-message {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text);
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 10px 12px;
-  margin: 8px 0 0;
-  max-width: 760px;
-  white-space: pre-wrap;
-}
 
 .fixup-list {
   margin-top: 7px;

@@ -10,6 +10,7 @@ import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
 import FileRail, { fileDomId } from "../components/diff/FileRail";
 import ReviewBar from "../components/ReviewBar";
+import { displayPath } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
 import { timeAgo } from "../lib/time";
 import { ErrorPanel } from "./NotFound";
@@ -400,10 +401,6 @@ export default function ReviewPage() {
               parent <span className="mono">{selectedRev.parent_sha.slice(0, 12)}</span>
             </span>
             <span className="dim">{timeAgo(selectedRev.created_at)}</span>
-            <details className="message-details">
-              <summary>full message</summary>
-              <pre className="commit-message">{selectedRev.message}</pre>
-            </details>
           </div>
           {selectedRev.fixups.length > 0 ? (
             <div className="fixup-list">
@@ -543,7 +540,9 @@ export default function ReviewPage() {
                 </div>
                 {orphanFileThreads.map(([path, fileThreads]) => (
                   <div key={path} className="leftover-file">
-                    <div className="leftover-path mono">{path}</div>
+                    <div className="leftover-path mono">
+                      {displayPath(path)}
+                    </div>
                     {fileThreads.map((t) => (
                       <div className="outdated-item" key={t.root.id}>
                         {t.root.line_text ? (

@@ -1,12 +1,6 @@
 import type { DiffFile } from "../../api/types";
+import { displayPath, statusLetter } from "../../lib/diffview";
 import type { Thread } from "../CommentThread";
-
-const STATUS_LETTER: Record<DiffFile["status"], string> = {
-  added: "A",
-  deleted: "D",
-  modified: "M",
-  renamed: "R",
-};
 
 export function fileDomId(index: number): string {
   return `file-${index}`;
@@ -34,21 +28,24 @@ export default function FileRail({
         const threads = threadsByFile.get(file.path) ?? [];
         const drafts = threads.filter((t) => t.root.state === "draft").length;
         const published = threads.length - drafts;
+        const letter = statusLetter(file);
         return (
           <div
             key={file.path}
             className={`rail-item ${i === activeIndex ? "active" : ""}`}
             onClick={() => onSelect(i)}
             title={
-              file.old_path ? `${file.old_path} → ${file.path}` : file.path
+              file.old_path
+                ? `${file.old_path} → ${file.path}`
+                : displayPath(file.path)
             }
           >
-            <span className={`fstat fstat-${STATUS_LETTER[file.status]}`}>
-              {STATUS_LETTER[file.status]}
+            <span className={letter ? `fstat fstat-${letter}` : "fstat"}>
+              {letter}
             </span>
             <span className="pathname">
               {/* bdi keeps the rtl ellipsis trick from reordering chars */}
-              <bdi>{file.path}</bdi>
+              <bdi>{displayPath(file.path)}</bdi>
             </span>
             {drafts > 0 ? (
               <span className="rail-counts draft-count">{drafts}d</span>

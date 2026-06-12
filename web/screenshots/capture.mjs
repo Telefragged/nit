@@ -44,6 +44,8 @@ const captures = [
     },
   },
   { name: "review-full-unified", path: "/changes/11?against=base" },
+  // The synthetic "Commit message" file with its resolved inline thread.
+  { name: "review-commit-msg", path: "/changes/11?against=base", fullPage: false },
   {
     name: "review-split",
     path: "/changes/11?against=base",

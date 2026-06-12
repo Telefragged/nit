@@ -1,6 +1,26 @@
 // Pure diff-presentation logic, kept out of components so it stays testable.
 
-import type { Hunk, Line } from "../api/types";
+import type { DiffFile, Hunk, Line } from "../api/types";
+import { COMMIT_MSG_PATH } from "../api/types";
+
+/** Display label for a diff path: the synthetic /COMMIT_MSG file reads
+ * "Commit message" (gerrit-style); real paths are themselves. */
+export function displayPath(path: string): string {
+  return path === COMMIT_MSG_PATH ? "Commit message" : path;
+}
+
+const STATUS_LETTER: Record<DiffFile["status"], string> = {
+  added: "A",
+  deleted: "D",
+  modified: "M",
+  renamed: "R",
+};
+
+/** Status letter for a file's stat box. The commit message is not an
+ * added file: it gets none (its empty box keeps flex alignment). */
+export function statusLetter(file: DiffFile): string {
+  return file.path === COMMIT_MSG_PATH ? "" : STATUS_LETTER[file.status];
+}
 
 /** One visual row in side-by-side view. */
 export interface RowPair {
