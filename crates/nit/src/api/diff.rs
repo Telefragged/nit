@@ -2,8 +2,8 @@
 //! "Comment rendering across revisions").
 //!
 //! All functions take trees, not commits: a change's diff is always
-//! `parent_sha → effective_tree` of the selected revision, an interdiff is
-//! `effective_tree(m) → effective_tree(n)` (docs/data-model.md).
+//! `parent_sha → commit tree` of the selected revision, an interdiff is
+//! `tree(m) → tree(n)` (docs/data-model.md).
 
 use std::path::Path;
 
@@ -16,6 +16,15 @@ use super::types;
 /// message (docs/api.md "The commit message as a file"). Git tree paths
 /// cannot start with `/`, so it can never collide with a real file.
 pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
+
+/// The tree of the commit `sha` names, when everything resolves.
+#[must_use]
+pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
+    repo.find_commit(git2::Oid::from_str(sha).ok()?)
+        .ok()?
+        .tree()
+        .ok()
+}
 
 /// Render the diff `old → new` as the wire shape: context 3, rename
 /// detection, binary files flagged with no hunks.

@@ -60,8 +60,6 @@ export interface ChangeSummary {
   last_reviewed_revision: number | null;
   commit_sha: string;
   short_sha: string;
-  /** Fixup folding conflicted. */
-  needs_rebase: boolean;
   counts: ChangeCounts;
 }
 
@@ -112,15 +110,7 @@ export interface Revision {
   parent_sha: string;
   /** Full commit message. */
   message: string;
-  fixups: Fixup[];
-  needs_rebase: boolean;
   created_at: string;
-}
-
-export interface Fixup {
-  sha: string;
-  short_sha: string;
-  message: string;
 }
 
 export type Verdict = "approve" | "request_changes" | "comment";
@@ -280,7 +270,6 @@ export interface FeedbackChange {
   commit_sha: string;
   revision: number;
   status: ChangeStatus;
-  needs_rebase: boolean;
   unresolved: number;
   /** Latest review, null if none. */
   review: FeedbackReview | null;

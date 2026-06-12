@@ -4,15 +4,14 @@
 // works without a backend. The data doubles as component-test fixtures.
 //
 // Coverage on purpose:
-//   chain 1  waiting_for_review — 3 changes; change 11 has 2 revisions with
-//            a fixup (interdiff available), a resolved thread, an unresolved
-//            thread, an outdated comment, 2 drafts, plus a resolved thread
-//            on its commit message (/COMMIT_MSG) and a reworded r2 message
-//            so the interdiff carries a real message diff; change 12's diff
-//            has a rename and a binary file; the chain carries a scan
-//            warning.
-//   chain 2  agents_turn — a changes_requested change plus a needs_rebase
-//            change whose diff endpoint 409s.
+//   chain 1  waiting_for_review — 3 changes; change 11 has 2 revisions
+//            (amended in place, interdiff available), a resolved thread,
+//            an unresolved thread, an outdated comment, 2 drafts, plus a
+//            resolved thread on its commit message (/COMMIT_MSG) and a
+//            reworded r2 message so the interdiff carries a real message
+//            diff; change 12's diff has a rename and a binary file; the
+//            chain carries a scan warning.
+//   chain 2  agents_turn — a changes_requested change, mid-push (partial).
 //   chain 3  ready_to_merge — single approved change.
 //   chain 4  merged — only visible via ?status=all.
 //
@@ -118,7 +117,6 @@ interface ChangeRecord {
   status: ChangeStatus;
   subject: string;
   last_reviewed_revision: number | null;
-  needs_rebase: boolean;
   revisions: Revision[];
   reviews: Review[];
   /** Keyed by diffKey(revision, against). */
@@ -158,7 +156,6 @@ const diffKey = (revision: number, against?: number) =>
 const c10r1 = sha(101);
 const c11r1 = sha(111);
 const c11r2 = sha(112);
-const c11fix = sha(113);
 const c12r1 = sha(121);
 const parent10 = sha(100);
 
@@ -177,7 +174,6 @@ const change10: ChangeRecord = {
   status: "approved",
   subject: "auth: add TokenStore schema and config plumbing",
   last_reviewed_revision: 1,
-  needs_rebase: false,
   revisions: [
     {
       number: 1,
@@ -185,8 +181,6 @@ const change10: ChangeRecord = {
       short_sha: short(c10r1),
       parent_sha: parent10,
       message: msg10r1,
-      fixups: [],
-      needs_rebase: false,
       created_at: ago(26 * 60),
     },
   ],
@@ -287,7 +281,6 @@ const change11: ChangeRecord = {
   status: "pending",
   subject: "auth: rotate refresh tokens on use",
   last_reviewed_revision: 1,
-  needs_rebase: false,
   revisions: [
     {
       number: 1,
@@ -295,27 +288,16 @@ const change11: ChangeRecord = {
       short_sha: short(c11r1),
       parent_sha: c10r1,
       message: msg11r1,
-      fixups: [],
-      needs_rebase: false,
       created_at: ago(25 * 60),
     },
+    // r2 is the commit amended in place: same Change-Id, same parent,
+    // new sha.
     {
       number: 2,
       commit_sha: c11r2,
       short_sha: short(c11r2),
       parent_sha: c10r1,
       message: msg11r2,
-      fixups: [
-        {
-          sha: c11fix,
-          short_sha: short(c11fix),
-          message:
-            "fixup! auth: rotate refresh tokens on use\n\n" +
-            "Return a typed error instead of unwrapping, and revoke the whole\n" +
-            "family on reuse per RFC 6819 §5.2.2.3.",
-        },
-      ],
-      needs_rebase: false,
       created_at: ago(95),
     },
   ],
@@ -393,7 +375,7 @@ const change11: ChangeRecord = {
         },
       ],
     },
-    // Full diff of revision 2 (parent -> effective tree with the fixup).
+    // Full diff of revision 2 (parent -> rev2 tree).
     [diffKey(2)]: {
       files: [
         msgFile(msg11r2),
@@ -653,7 +635,6 @@ const change12: ChangeRecord = {
   status: "pending",
   subject: "auth: document rotation and ship flow diagram",
   last_reviewed_revision: null,
-  needs_rebase: false,
   revisions: [
     {
       number: 1,
@@ -661,8 +642,6 @@ const change12: ChangeRecord = {
       short_sha: short(c12r1),
       parent_sha: c11r2,
       message: msg12r1,
-      fixups: [],
-      needs_rebase: false,
       created_at: ago(90),
     },
   ],
@@ -719,7 +698,6 @@ const change12: ChangeRecord = {
 // Chain 2 — fix/wal-checkpoint (agents_turn)
 
 const c20r1 = sha(201);
-const c21r1 = sha(211);
 const parent20 = sha(200);
 
 const msg20r1 =
@@ -736,7 +714,6 @@ const change20: ChangeRecord = {
   status: "changes_requested",
   subject: "wal: checkpoint on idle, not on every commit",
   last_reviewed_revision: 1,
-  needs_rebase: false,
   revisions: [
     {
       number: 1,
@@ -744,8 +721,6 @@ const change20: ChangeRecord = {
       short_sha: short(c20r1),
       parent_sha: parent20,
       message: msg20r1,
-      fixups: [],
-      needs_rebase: false,
       created_at: ago(8 * 60),
     },
   ],
@@ -824,39 +799,6 @@ const change20: ChangeRecord = {
   },
 };
 
-const change21: ChangeRecord = {
-  id: 21,
-  chain_id: 2,
-  change_key: "I5c2f9b0d7e8a1364",
-  position: 1,
-  status: "pending",
-  subject: "wal: surface checkpoint lag in metrics",
-  last_reviewed_revision: null,
-  needs_rebase: true,
-  revisions: [
-    {
-      number: 1,
-      commit_sha: c21r1,
-      short_sha: short(c21r1),
-      parent_sha: c20r1,
-      message:
-        "wal: surface checkpoint lag in metrics\n\n" +
-        "Change-Id: I5c2f9b0d7e8a1364",
-      fixups: [
-        {
-          sha: sha(212),
-          short_sha: short(sha(212)),
-          message: "fixup! wal: surface checkpoint lag in metrics",
-        },
-      ],
-      needs_rebase: true,
-      created_at: ago(2 * 60),
-    },
-  ],
-  reviews: [],
-  diffs: {},
-};
-
 // ---------------------------------------------------------------------------
 // Chain 3 — chore/dedupe-ci-cache (ready_to_merge)
 
@@ -875,7 +817,6 @@ const change30: ChangeRecord = {
   status: "approved",
   subject: "ci: key caches on lockfile hash only",
   last_reviewed_revision: 1,
-  needs_rebase: false,
   revisions: [
     {
       number: 1,
@@ -883,8 +824,6 @@ const change30: ChangeRecord = {
       short_sha: short(c30r1),
       parent_sha: sha(300),
       message: msg30r1,
-      fixups: [],
-      needs_rebase: false,
       created_at: ago(50 * 60),
     },
   ],
@@ -945,7 +884,6 @@ const change40: ChangeRecord = {
   status: "approved",
   subject: "build: drop unused openssl feature",
   last_reviewed_revision: 1,
-  needs_rebase: false,
   revisions: [
     {
       number: 1,
@@ -953,8 +891,6 @@ const change40: ChangeRecord = {
       short_sha: short(c40r1),
       parent_sha: sha(400),
       message: msg40r1,
-      fixups: [],
-      needs_rebase: false,
       created_at: ago(4 * 24 * 60),
     },
   ],
@@ -1011,7 +947,7 @@ const chains: ChainRecord[] = [
     partial: false,
     last_scan_error: null,
     scan_warnings: [
-      "squash! commit 9f3c21a4 was folded as a fixup; its message edits were ignored",
+      "duplicate Change-Id I3f2d8a91c0b7e514: commit 9f3c21a4d2e1 tracked as I3f2d8a91c0b7e514#2",
     ],
     created_at: ago(26 * 60),
     updated_at: ago(85),
@@ -1029,7 +965,7 @@ const chains: ChainRecord[] = [
     scan_warnings: [],
     created_at: ago(9 * 60),
     updated_at: ago(112),
-    change_ids: [20, 21],
+    change_ids: [20],
   },
   {
     id: 3,
@@ -1064,7 +1000,6 @@ const changes: ChangeRecord[] = [
   change11,
   change12,
   change20,
-  change21,
   change30,
   change40,
 ];
@@ -1092,7 +1027,7 @@ const comments: CommentRecord[] = [
     updated_at: ago(22 * 60),
     renderAt: {},
   },
-  // change 11 — resolved thread (anchor survives the fixup, line shifts).
+  // change 11 — resolved thread (anchor survives the amend, line shifts).
   {
     id: 71,
     change_id: 11,
@@ -1175,7 +1110,7 @@ const comments: CommentRecord[] = [
     updated_at: ago(105),
     renderAt: { 2: { line: 58, outdated: false } },
   },
-  // change 11 — outdated thread: the anchored line was rewritten by the fixup.
+  // change 11 — outdated thread: the anchored line was rewritten in r2.
   {
     id: 75,
     change_id: 11,
@@ -1207,7 +1142,7 @@ const comments: CommentRecord[] = [
     side: "new",
     line_text: "        let entry = self.store.lookup(presented).unwrap();",
     body:
-      "Done in the fixup: lookup() errors are typed (RotateError) and reuse " +
+      "Done in r2: lookup() errors are typed (RotateError) and reuse " +
       "now revokes the family.",
     state: "published",
     resolved: true,
@@ -1352,10 +1287,7 @@ function chainState(chain: ChainRecord): ChainState {
   );
   if (
     live.some(
-      (c) =>
-        c.status === "changes_requested" ||
-        c.status === "commented" ||
-        c.needs_rebase,
+      (c) => c.status === "changes_requested" || c.status === "commented",
     )
   ) {
     return "agents_turn";
@@ -1382,7 +1314,6 @@ function changeSummary(c: ChangeRecord): ChangeSummary {
     last_reviewed_revision: c.last_reviewed_revision,
     commit_sha: latest.commit_sha,
     short_sha: latest.short_sha,
-    needs_rebase: c.needs_rebase,
     counts: {
       revisions: c.revisions.length,
       published_comments: own.filter((x) => x.state === "published").length,
@@ -1523,9 +1454,6 @@ export async function mockRequest(
     const against = q.has("against") ? Number(q.get("against")) : undefined;
     const rev = c.revisions.find((r) => r.number === revision);
     if (!rev) notFound(`revision ${revision}`);
-    if (rev!.needs_rebase) {
-      throw new ApiError(409, "revision needs rebase: fixup folding conflicted");
-    }
     const diff = c.diffs[diffKey(revision, against)];
     if (!diff) notFound(`diff for revision ${revision}`);
     return structuredClone(diff);

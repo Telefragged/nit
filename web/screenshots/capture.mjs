@@ -199,8 +199,6 @@ const captures = [
     path: "/changes/12",
     actions: expandAllFiles,
   },
-  // needs_rebase: diff endpoint refuses with 409, banner shown.
-  { name: "review-needs-rebase", path: "/changes/21" },
 ];
 
 /**

@@ -223,10 +223,10 @@ fn abandoned_chain_reopens_when_branch_returns() {
 }
 
 #[test]
-fn merged_despite_fixup_context_drift() {
+fn merged_despite_amend_context_drift() {
     let mut f = Fixture::new();
-    // Two changes in one file, close enough that change one's fixup sits
-    // inside change two's diff context.
+    // Two changes in one file, close enough that amending change one
+    // rewrites change two's diff context.
     let b0 = f.commit(&[f.root], "seed\n", &[("f.txt", "a\nb\nc\nd\ne\n")]);
     f.branch("main", b0);
     let c1 = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A1\nb\nc\nd\ne\n")]);
@@ -234,14 +234,10 @@ fn merged_despite_fixup_context_drift() {
     f.branch("feat", c2);
     f.scan();
 
-    // Feedback round: fixup on change one folds cleanly.
-    let fx = f.commit(&[c2], "fixup! one\n", &[("f.txt", "A2\nb\nc\nD\ne\n")]);
-    f.branch("feat", fx);
-    assert_eq!(f.scan().chain.status, ChainStatus::Active);
-
-    // The agent autosquashes (messages survive) and ff-merges. Change
-    // two's rebased diff now has different context (A2, not A1) — its
-    // patch-id drifted; only the Change-Id trailer still matches.
+    // The agent amends change one in place (A1 → A2), rebases change two
+    // on top, and ff-merges without an intermediate scan. Both stored
+    // diffs now differ from what landed (A2 context, not A1) — their
+    // patch-ids drifted; only the Change-Id trailers still match.
     let c1r = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A2\nb\nc\nd\ne\n")]);
     let c2r = f.commit(
         &[c1r],

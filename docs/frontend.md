@@ -24,8 +24,7 @@ happens.
   Orphaned changes render collapsed at the bottom (comments preserved).
   `last_scan_error` / `scan_warnings` show as a banner. Click → change view.
 - `/changes/:id` **Review** (the core) —
-  - header: subject, chain breadcrumb, fixup messages of the shown
-    revision, base info, `needs_rebase` warning banner when set;
+  - header: subject, chain breadcrumb, base info;
   - chain strip: inline at the right end of the header's meta line
     (commit/parent/age) — one status dot per change in chain order (the
     current change ringed, siblings click through; same dot pattern as the
@@ -95,7 +94,7 @@ piece of chrome must earn its pixels. Keyboard shortcuts (`[`/`]` file nav,
 
 `VITE_MOCK=1 npm run dev` makes `client.ts` serve canned fixtures from
 `web/src/api/fixtures.ts` (a realistic chain: 3 changes, one with 2
-revisions + fixup, drafts, published thread, binary + renamed files in the
+revisions, drafts, published thread, binary + renamed files in the
 diff). Keep fixtures contract-true; they double as component-test data.
 
 ## Checking your work

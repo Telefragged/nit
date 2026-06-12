@@ -1,8 +1,18 @@
-//! Change identity helpers: `Change-Id:` trailer extraction and the
+//! Change identity helpers: `Change-Id:` trailer extraction, the
 //! derived-key scheme for duplicated trailers (docs/data-model.md "Change
-//! identity", rule 1).
+//! identity", rule 1), and commit subject extraction.
 
 use std::collections::HashMap;
+
+/// The subject of a commit message: first paragraph, leading blank lines
+/// skipped, inner newlines collapsed to spaces (git's
+/// `find_commit_subject` + `format_subject`).
+#[must_use]
+pub fn subject_of(message: &str) -> String {
+    let body = message.trim_start_matches(['\n', '\r']);
+    let para = body.split("\n\n").next().unwrap_or("");
+    para.replace('\n', " ").trim().to_string()
+}
 
 /// Extract the `Change-Id:` trailer value from a commit message using
 /// git's trailer parser. Keys match ASCII-case-insensitively; when a
@@ -57,6 +67,15 @@ pub fn assign_trailer_keys(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn subject_extraction() {
+        assert_eq!(subject_of("one line\n\nbody"), "one line");
+        assert_eq!(subject_of("wrapped\nsubject\n\nbody"), "wrapped subject");
+        assert_eq!(subject_of("\n\nleading blank"), "leading blank");
+        assert_eq!(subject_of("trailing newline\n"), "trailing newline");
+        assert_eq!(subject_of(""), "");
+    }
 
     #[test]
     fn trailer_basic() {

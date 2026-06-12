@@ -39,9 +39,6 @@ fn happy_path_creates_changes_and_revisions() {
     assert_eq!(rev1.number, 1);
     assert_eq!(rev1.commit_sha, c1.to_string());
     assert_eq!(rev1.parent_sha, f.root.to_string());
-    // No fixups: effective tree is the commit's own tree.
-    assert_eq!(rev1.effective_tree.as_deref(), Some(f.tree_of(c1).as_str()));
-    assert!(rev1.fixups.is_empty());
     assert!(rev1.message.starts_with("server: add health endpoint"));
 
     let rev2 = f.latest_rev(changes[1].id);
@@ -103,9 +100,9 @@ fn reword_only_amend_resets_status() {
     let change = f.changes().remove(0);
     f.review(change.id, "approve");
 
-    // Same diff (patch-id equal), same (empty) fixups — only the message
-    // changed. The message is reviewable (/COMMIT_MSG), so rule 6 does
-    // not treat a reword as a pure rebase: the reviewer must look again.
+    // Same diff (patch-id equal) — only the message changed. The message
+    // is reviewable (/COMMIT_MSG), so rule 4 does not treat a reword as a
+    // pure rebase: the reviewer must look again.
     let c1b = f.commit(
         &[f.root],
         &msg("one\n\nnow with body", "I001"),

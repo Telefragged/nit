@@ -38,7 +38,7 @@ Chain = {
   "state": "waiting_for_review", // derived — see state table below
   "partial": false,              // sticky; set by push --partial, cleared by ready
   "last_scan_error": null,       // string when the last scan failed
-  "scan_warnings": [],           // e.g. duplicate Change-Id, squash! seen
+  "scan_warnings": [],           // e.g. duplicate Change-Id
   "web_url": "http://127.0.0.1:8877/chains/1",
   "created_at": "...", "updated_at": "...",
   "changes": [ChangeSummary]     // chain order; orphaned ones last
@@ -52,7 +52,6 @@ ChangeSummary = {
   "revision": 2,                 // latest revision number
   "last_reviewed_revision": 1,   // max revision with a review; null if none
   "commit_sha": "…", "short_sha": "abc123def456",
-  "needs_rebase": false,         // fixup folding conflicted
   "counts": {"revisions": 2, "published_comments": 3, "drafts": 1,
              "unresolved": 2}
 }
@@ -72,16 +71,14 @@ ChangeSummary = {
   }
   Revision = {"number": 2, "commit_sha": "…", "short_sha": "…",
               "parent_sha": "…", "message": "full commit message\n…",
-              "fixups": [{"sha": "…", "short_sha": "…", "message": "…"}],
-              "needs_rebase": false, "created_at": "…"}
+              "created_at": "…"}
   Review   = {"id": 5, "revision": 2, "verdict": "request_changes",
               "message": "cover message", "created_at": "…"}
   ```
 - `GET /api/changes/{id}/revisions/{n}/diff` → Diff of revision n against
-  its parent. 409 if the revision `needs_rebase`.
+  its parent.
 - `GET /api/changes/{id}/revisions/{n}/diff?against={m}` → interdiff
-  (revision m's effective tree → revision n's). 409 if either side
-  `needs_rebase`.
+  (revision m's tree → revision n's).
 
 ```json
 Diff = {"files": [DiffFile]}
@@ -130,7 +127,7 @@ revisions").
 Comments are anchored where they were written (`revision`, `file`, `line`,
 `side`, plus a `line_text` snapshot). When the change is served at
 `?revision=n`, the server ports each comment's anchor through
-`diff(effective_tree(comment.revision), effective_tree(n))` per file. For
+`diff(tree(comment.revision), tree(n))` per file. For
 `/COMMIT_MSG` anchors the server ports through
 `diff(message(comment.revision), message(n))` instead — same
 shifted/outdated rules:
@@ -175,8 +172,8 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
   `request_changes`→changes_requested, `comment`→commented), emits
   `review_submitted`.
   - If `revision` is no longer latest but the latest is **patch-id-equal
-    with the same fixups and an unchanged commit message** (pure rebase),
-    the review auto-retargets to the latest revision and succeeds.
+    with an unchanged commit message** (pure rebase), the review
+    auto-retargets to the latest revision and succeeds.
   - Otherwise stale `revision` → 409; the UI must keep the cover message
     and drafts, refetch, and re-offer submission.
   → `{"review": Review, "published_comments": [Comment]}`
@@ -196,7 +193,7 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
     "changes": [               // live changes, chain order
       {"change_id": 10, "change_key": "I3f2…", "subject": "…",
        "commit_sha": "…", "revision": 2, "status": "changes_requested",
-       "needs_rebase": false, "unresolved": 2,
+       "unresolved": 2,
        "review": {"verdict": "request_changes", "message": "…",
                   "revision": 2},          // latest review, null if none
        "comments": [Comment]}              // that review's comments only,
@@ -218,7 +215,7 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
 | state                | meaning                                   | actionable |
 |----------------------|-------------------------------------------|------------|
 | `waiting_for_review` | reviewer's turn; nothing for the agent    | false      |
-| `agents_turn`        | request_changes/commented/needs_rebase on a latest revision, empty chain, or all approved while `partial` (agent still pushing — `ready_to_merge` is inexpressible while the flag is set) | true |
+| `agents_turn`        | request_changes/commented on a latest revision, empty chain, or all approved while `partial` (agent still pushing — `ready_to_merge` is inexpressible while the flag is set) | true |
 | `ready_to_merge`     | every live change approved (≥1) and the chain is not `partial` | true |
 | `merged`             | chain closed: work is in the base         | true       |
 | `abandoned`          | chain closed: branch disappeared          | true       |

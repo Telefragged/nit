@@ -21,9 +21,6 @@ function ChangeRow({ change }: { change: ChangeSummary }) {
         </Link>
         <div className="meta">
           <span className="mono sha">{change.short_sha}</span>
-          {change.needs_rebase ? (
-            <span className="badge badge-red">NEEDS REBASE</span>
-          ) : null}
           {change.last_reviewed_revision !== null &&
           change.last_reviewed_revision < change.revision ? (
             <span

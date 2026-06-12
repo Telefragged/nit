@@ -9,7 +9,7 @@ use git2::{Oid, Repository};
 use rusqlite::Connection;
 
 use crate::db::{self, ChainStatus, ChangeStatus};
-use crate::gitscan::fixup::subject_of;
+use crate::gitscan::identity::subject_of;
 
 use super::diff;
 use super::types;
@@ -22,13 +22,7 @@ pub fn short_sha(sha: &str) -> String {
 // ---------------------------------------------------------------------------
 // Chain state (derived, never stored) — docs/data-model.md status machine
 
-/// One live change's inputs to the state derivation.
-struct LiveChange {
-    status: ChangeStatus,
-    needs_rebase: bool,
-}
-
-fn derive_state(status: ChainStatus, partial: bool, live: &[LiveChange]) -> &'static str {
+fn derive_state(status: ChainStatus, partial: bool, live: &[ChangeStatus]) -> &'static str {
     match status {
         ChainStatus::Merged => "merged",
         ChainStatus::Abandoned => "abandoned",
@@ -36,18 +30,12 @@ fn derive_state(status: ChainStatus, partial: bool, live: &[LiveChange]) -> &'st
             if live.is_empty() {
                 return "agents_turn"; // empty chain
             }
-            if live.iter().any(|c| {
-                c.needs_rebase
-                    || matches!(
-                        c.status,
-                        ChangeStatus::ChangesRequested | ChangeStatus::Commented
-                    )
-            }) {
-                "agents_turn"
-            } else if live
+            if live
                 .iter()
-                .any(|c| !matches!(c.status, ChangeStatus::Approved))
+                .any(|s| matches!(s, ChangeStatus::ChangesRequested | ChangeStatus::Commented))
             {
+                "agents_turn"
+            } else if live.iter().any(|s| !matches!(s, ChangeStatus::Approved)) {
                 "waiting_for_review"
             } else if partial {
                 // All approved but the agent is still pushing (push
@@ -85,10 +73,7 @@ pub fn build_chain(
             continue; // defensive: a change row always has revisions
         };
         if change.position.is_some() {
-            live.push(LiveChange {
-                status: change.status,
-                needs_rebase: summary.needs_rebase,
-            });
+            live.push(change.status);
         }
         summaries.push(summary);
     }
@@ -124,7 +109,6 @@ fn change_summary(conn: &Connection, change: &db::Change) -> Result<Option<types
         last_reviewed_revision: db::last_reviewed_revision(conn, change.id)?,
         commit_sha: latest.commit_sha.clone(),
         short_sha: short_sha(&latest.commit_sha),
-        needs_rebase: latest.effective_tree.is_none(),
         counts: types::ChangeCounts {
             revisions: latest.number,
             published_comments,
@@ -193,7 +177,7 @@ impl<'a> CommentRenderer<'a> {
             self.tree_oid(comment.revision_number, new_side),
             self.tree_oid(self.target, new_side),
         ) else {
-            return (None, true); // fold conflict / pruned objects
+            return (None, true); // pruned objects
         };
         let ported = repo
             .find_tree(from)
@@ -243,8 +227,8 @@ impl<'a> CommentRenderer<'a> {
         self.revision(revision).map(|rev| rev.message.clone())
     }
 
-    /// The tree a side of a revision's diff shows: effective tree (new) or
-    /// the parent commit's tree (old — deleted lines live there).
+    /// The tree a side of a revision's diff shows: the commit's tree (new)
+    /// or the parent commit's tree (old — deleted lines live there).
     fn tree_oid(&mut self, revision: i64, new_side: bool) -> Option<Oid> {
         if let Some(cached) = self.trees.get(&(revision, new_side)) {
             return *cached;
@@ -257,15 +241,12 @@ impl<'a> CommentRenderer<'a> {
     fn lookup_tree(&mut self, revision: i64, new_side: bool) -> Option<Oid> {
         let repo = self.repo?;
         let rev = self.revision(revision)?;
-        if new_side {
-            let oid = Oid::from_str(rev.effective_tree.as_deref()?).ok()?;
-            repo.find_tree(oid).ok().map(|t| t.id())
+        let sha = if new_side {
+            &rev.commit_sha
         } else {
-            let parent = repo
-                .find_commit(Oid::from_str(&rev.parent_sha).ok()?)
-                .ok()?;
-            Some(parent.tree_id())
-        }
+            &rev.parent_sha
+        };
+        Some(diff::commit_tree(repo, sha)?.id())
     }
 }
 
@@ -351,16 +332,6 @@ pub fn revision_json(rev: &db::Revision) -> types::Revision {
         short_sha: short_sha(&rev.commit_sha),
         parent_sha: rev.parent_sha.clone(),
         message: rev.message.clone(),
-        fixups: rev
-            .fixups
-            .iter()
-            .map(|f| types::RevisionFixup {
-                sha: f.sha.clone(),
-                short_sha: short_sha(&f.sha),
-                message: f.message.clone(),
-            })
-            .collect(),
-        needs_rebase: rev.effective_tree.is_none(),
         created_at: rev.created_at.clone(),
     }
 }
@@ -400,11 +371,7 @@ pub fn build_feedback(
         let Some(latest) = db::latest_revision(conn, change.id)? else {
             continue;
         };
-        let needs_rebase = latest.effective_tree.is_none();
-        live.push(LiveChange {
-            status: change.status,
-            needs_rebase,
-        });
+        live.push(change.status);
 
         let latest_review = db::latest_review_for_change(conn, change.id)?;
         let comments =
@@ -417,7 +384,6 @@ pub fn build_feedback(
             commit_sha: latest.commit_sha.clone(),
             revision: latest.number,
             status: change.status.as_str().to_string(),
-            needs_rebase,
             unresolved,
             review: latest_review.as_ref().map(|r| types::FeedbackReview {
                 verdict: r.verdict.clone(),
@@ -486,12 +452,9 @@ mod tests {
 
     #[test]
     fn state_table() {
-        let live = |spec: &[(&str, bool)]| -> Vec<LiveChange> {
+        let live = |spec: &[&str]| -> Vec<ChangeStatus> {
             spec.iter()
-                .map(|(s, nr)| LiveChange {
-                    status: ChangeStatus::parse(s).expect("status fixture should parse"),
-                    needs_rebase: *nr,
-                })
+                .map(|s| ChangeStatus::parse(s).expect("status fixture should parse"))
                 .collect()
         };
         assert_eq!(derive_state(ChainStatus::Merged, false, &[]), "merged");
@@ -501,57 +464,37 @@ mod tests {
         );
         assert_eq!(derive_state(ChainStatus::Active, false, &[]), "agents_turn");
         assert_eq!(
-            derive_state(ChainStatus::Active, false, &live(&[("pending", false)])),
+            derive_state(ChainStatus::Active, false, &live(&["pending"])),
             "waiting_for_review"
         );
         assert_eq!(
             derive_state(
                 ChainStatus::Active,
                 false,
-                &live(&[("approved", false), ("changes_requested", false)])
+                &live(&["approved", "changes_requested"])
             ),
             "agents_turn"
         );
         assert_eq!(
-            derive_state(ChainStatus::Active, false, &live(&[("commented", false)])),
+            derive_state(ChainStatus::Active, false, &live(&["commented"])),
             "agents_turn"
         );
         assert_eq!(
-            derive_state(ChainStatus::Active, false, &live(&[("pending", true)])),
-            "agents_turn" // needs_rebase wins over pending
-        );
-        assert_eq!(
-            derive_state(
-                ChainStatus::Active,
-                false,
-                &live(&[("approved", false), ("approved", false)])
-            ),
+            derive_state(ChainStatus::Active, false, &live(&["approved", "approved"])),
             "ready_to_merge"
         );
         assert_eq!(
-            derive_state(
-                ChainStatus::Active,
-                false,
-                &live(&[("approved", false), ("pending", false)])
-            ),
+            derive_state(ChainStatus::Active, false, &live(&["approved", "pending"])),
             "waiting_for_review"
         );
         // partial: all approved derives agents_turn (the agent is still
         // pushing), pending keeps waiting_for_review.
         assert_eq!(
-            derive_state(
-                ChainStatus::Active,
-                true,
-                &live(&[("approved", false), ("approved", false)])
-            ),
+            derive_state(ChainStatus::Active, true, &live(&["approved", "approved"])),
             "agents_turn"
         );
         assert_eq!(
-            derive_state(
-                ChainStatus::Active,
-                true,
-                &live(&[("approved", false), ("pending", false)])
-            ),
+            derive_state(ChainStatus::Active, true, &live(&["approved", "pending"])),
             "waiting_for_review"
         );
         assert!(actionable("agents_turn"));

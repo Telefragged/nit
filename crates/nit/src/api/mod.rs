@@ -381,7 +381,7 @@ async fn revision_diff(
             .ok_or_else(|| Error::not_found(format!("revision {n} not found")))?;
         let repo = open_repo(&conn, change.chain_id)
             .ok_or_else(|| Error::internal("cannot open the chain's repository"))?;
-        let new_tree = effective_tree_of(&repo, &rev)?;
+        let new_tree = revision_tree(&repo, &rev)?;
         // Interdiffs also diff the two revisions' commit messages; vs
         // parent the message has no old side (against_message: None).
         let (old_tree, against_message) = match q.against {
@@ -397,7 +397,7 @@ async fn revision_diff(
             Some(m) => {
                 let against = db::get_revision(&conn, change.id, m)?
                     .ok_or_else(|| Error::not_found(format!("revision {m} not found")))?;
-                (effective_tree_of(&repo, &against)?, Some(against.message))
+                (revision_tree(&repo, &against)?, Some(against.message))
             }
         };
         let mut wire = diff::diff_trees(&repo, &old_tree, &new_tree)?;
@@ -410,20 +410,10 @@ async fn revision_diff(
     .await
 }
 
-/// A revision's effective tree, or the documented 409 when folding
-/// conflicted (`needs_rebase`).
-fn effective_tree_of<'r>(
-    repo: &'r Repository,
-    rev: &db::Revision,
-) -> Result<git2::Tree<'r>, Error> {
-    let sha = rev.effective_tree.as_deref().ok_or_else(|| {
-        Error::conflict(format!(
-            "revision {} needs a rebase — fixup folding conflicted",
-            rev.number
-        ))
-    })?;
-    repo.find_tree(parse_oid(sha)?)
-        .map_err(|e| Error::internal(format!("effective tree missing: {e}")))
+/// A revision's reviewed tree: its commit's own tree.
+fn revision_tree<'r>(repo: &'r Repository, rev: &db::Revision) -> Result<git2::Tree<'r>, Error> {
+    diff::commit_tree(repo, &rev.commit_sha)
+        .ok_or_else(|| Error::internal(format!("revision {} tree missing", rev.number)))
 }
 
 fn parse_oid(sha: &str) -> Result<Oid, Error> {
@@ -504,7 +494,7 @@ async fn create_draft(
     .await
 }
 
-/// Snapshot of the anchored line: the effective tree for `new`, the
+/// Snapshot of the anchored line: the commit's tree for `new`, the
 /// parent commit's tree for `old` (deleted lines live there).
 fn anchor_line_text(
     repo: &Repository,
@@ -513,16 +503,12 @@ fn anchor_line_text(
     file: &str,
     line: i64,
 ) -> Option<String> {
-    let tree = if side == "old" {
-        repo.find_commit(Oid::from_str(&rev.parent_sha).ok()?)
-            .ok()?
-            .tree()
-            .ok()?
+    let sha = if side == "old" {
+        &rev.parent_sha
     } else {
-        repo.find_tree(Oid::from_str(rev.effective_tree.as_deref()?).ok()?)
-            .ok()?
+        &rev.commit_sha
     };
-    diff::line_text(repo, &tree, file, line)
+    diff::line_text(repo, &diff::commit_tree(repo, sha)?, file, line)
 }
 
 async fn edit_draft(
@@ -641,11 +627,6 @@ async fn submit_review(
         }
         let latest = db::latest_revision(&tx, change.id)?
             .ok_or_else(|| Error::internal(format!("change {id} has no revisions")))?;
-        if req.verdict != "comment" && latest.effective_tree.is_none() {
-            return Err(Error::conflict(
-                "revision needs a rebase (fixup folding conflicted) — its diff cannot be reviewed",
-            ));
-        }
 
         let target = if req.revision == latest.number {
             latest.number
@@ -653,8 +634,7 @@ async fn submit_review(
             let reviewed = db::get_revision(&tx, change.id, req.revision)?.ok_or_else(|| {
                 Error::bad_request(format!("revision {} not found", req.revision))
             })?;
-            // Pure rebase (patch-id-equal, same fixups, same message):
-            // auto-retarget.
+            // Pure rebase (patch-id-equal, same message): auto-retarget.
             let retargets = open_repo(&tx, change.chain_id).is_some_and(|repo| {
                 gitscan::pure_rebase_equivalent(&repo, (&reviewed).into(), (&latest).into())
             });

@@ -21,12 +21,9 @@ changes   (id, chain_id, change_key, position, status,
            -- status: pending | approved | changes_requested | commented
            --         | orphaned
 changes   -- position is NULL while orphaned
-revisions (id, change_id, number, commit_sha, parent_sha, effective_tree,
-           fixups, message, created_at, UNIQUE(change_id, number))
+revisions (id, change_id, number, commit_sha, parent_sha, message,
+           created_at, UNIQUE(change_id, number))
            -- number: 1-based patchset number
-           -- effective_tree: tree sha with this change's fixups folded in
-           --   (the commit's own tree when no fixups; NULL = fold conflict)
-           -- fixups: JSON [{sha, message}] folded in, branch order
 comments  (id, change_id, revision_number, parent_id, author, file, line,
            side, line_text, body, state, resolved, review_id,
            created_at, updated_at)
@@ -46,8 +43,8 @@ events    (id, chain_id, kind, payload, created_at)
            -- {chain_id, change_id, comment_id}
 ```
 
-Scan warnings (duplicate Change-Id, squash! seen, …) are per-scan,
-recomputed each rescan and held in memory only — they are not persisted.
+Scan warnings (duplicate Change-Id, …) are per-scan, recomputed each
+rescan and held in memory only — they are not persisted.
 
 ## Concurrency (normative)
 
@@ -64,8 +61,8 @@ recomputed each rescan and held in memory only — they are not persisted.
 
 ## Change identity (`change_key`)
 
-A change keeps its identity while its commit sha changes (rebase, amend,
-autosquash). Matching, in priority order:
+A change keeps its identity while its commit sha changes (rebase, amend).
+Matching, in priority order:
 
 1. **`Change-Id:` trailer** (gerrit-style, any opaque token). If two live
    commits in one chain carry the same trailer, the first (oldest) keeps it;
@@ -99,9 +96,9 @@ lossless.
      `parent_sha` of the first live change's latest revision (a plain
      merge-base would be empty after a ff-merge). A change matches by
      **Change-Id trailer first** — immune to the patch-id context drift
-     that an autosquash of a *neighboring* change causes — then by the
-     patch-id of its **folded** diff (`parent_sha → effective_tree`, what
-     lands in base after autosquash-then-merge); empty diffs are trivially
+     that amending a *neighboring* change causes — then by the
+     patch-id of its diff (`parent_sha → commit tree`, what lands in base
+     after rebase-then-merge); empty diffs are trivially
      matched but at least one real match is required. If no live changes
      exist (an earlier failed quorum orphaned them), the orphans are
      judged instead — reset-to-base rebuilds still can't match. Match →
@@ -112,55 +109,32 @@ lossless.
 2. Walk `base..tip` oldest-first. **Any merge commit aborts the scan** with
    error "chain contains merge commits — rebase onto the base instead"
    (kept state + error surfaced, as above); a root commit in the range
-   (unrelated history) aborts the same way. Split remaining commits into
-   regular and fixup (`fixup! ` / `squash! ` subject prefix; `squash!` is
-   folded like a fixup but adds a push warning since its message-editing
-   semantics are interactive).
-3. Attach each fixup to its target using **git autosquash semantics**
-   (`todo_list_rearrange_squash`): among *earlier* commits, the **oldest**
-   exact-subject match wins, else the remainder resolved as a commit-ish
-   (sha prefix), else the oldest subject-prefix match — git's actual
-   probe order. Fixups of fixups
-   chain to the root target. A fixup with no target is a regular change.
-   (Differential tests compare attachment against
-   `git rebase -i --autosquash` todo output.)
-4. Match regular commits to change rows (identity rules above); create new
+   (unrelated history) aborts the same way.
+3. Match commits to change rows (identity rules above); create new
    rows, update positions, orphan the unmatched, re-attach returning
    orphans.
-5. Compute each change's **effective state**: `(commit_sha, [fixup shas])`.
-   Effective tree = commit's tree with each fixup folded in by in-memory
-   three-way merge (ancestor = fixup's parent tree, ours = accumulated
-   tree, theirs = fixup tree). Conflict → `effective_tree = NULL`,
-   `needs_rebase` reported on the change until the agent restructures.
-6. If the effective state differs from the latest revision, insert revision
-   `number+1`. Status effect:
-   - fixup list unchanged **and** patch-id equal **and** commit message
-     unchanged (pure rebase) → keep status, and review submission
-     auto-retargets (see api.md);
-   - anything else — including a patch-id-equal *new fixup* (the agent may
-     be arguing in the fixup message) or a message reword (the message is
+4. If a change's commit sha differs from its latest revision's, insert
+   revision `number+1`. Status effect:
+   - patch-id equal **and** commit message unchanged (pure rebase) → keep
+     status, and review submission auto-retargets (see api.md);
+   - anything else — including a message reword (the message is
      reviewable as `/COMMIT_MSG`) → status `pending`: the reviewer must
      look again.
-7. Net structural difference → one `chain_updated` event.
+5. Net structural difference → one `chain_updated` event.
 
-A change's diff is always `parent_sha → effective_tree` of the selected
-revision; earlier changes' fixups are *not* folded into later changes'
-parents. Interdiff m→n is `effective_tree(m) → effective_tree(n)`.
+A change's diff is always `parent_sha → commit tree` of the selected
+revision. Interdiff m→n is `tree(m) → tree(n)`.
 
 ## GC safety
 
-Synthesized effective trees (and the fixup/commit objects review history
-points at) must survive `git gc` and post-merge reflog expiry. After each
-scan nit maintains one ref per revision of every change — orphans included,
-their history must stay renderable — on active chains:
-`refs/nit/keep/<chain-id>/<change-id>/<revision-number>` → a synthetic
-commit whose tree is the effective tree and whose parents are
-`[parent_sha's commit, original commit, each folded fixup commit]` (making
-parent, original, fold *and* fixups reachable — the fixups are needed for
-later pure-rebase comparisons and re-folds). Refs for merged/abandoned
-chains are deleted by the scan
-that closes them (review rows keep the shas; after that, history display is
-best-effort). If a tree is missing anyway, the scan re-folds on demand.
+The commit objects review history points at must survive `git gc` and
+post-merge reflog expiry. After each scan nit maintains one ref per
+revision of every change — orphans included, their history must stay
+renderable — on active chains:
+`refs/nit/keep/<chain-id>/<change-id>/<revision-number>` → the revision's
+commit (its parent, the diff's old side, is reachable through it). Refs
+for merged/abandoned chains are deleted by the scan that closes them
+(review rows keep the shas; after that, history display is best-effort).
 
 ## Status machine
 
@@ -168,11 +142,11 @@ best-effort). If a tree is missing anyway, the scan re-folds on demand.
 change:  pending ──approve──▶ approved
          pending ──request_changes──▶ changes_requested
          pending ──comment──▶ commented        (reviewer asked/remarked)
-         any ──new revision (per scan rule 6)──▶ pending
+         any ──new revision (per scan rule 4)──▶ pending
          any ──commit vanished──▶ orphaned ──reappears──▶ previous status
 
 chain state (derived, not stored):
-         any live change changes_requested | commented | needs_rebase
+         any live change changes_requested | commented
                                           → agents_turn
          else any live change pending     → waiting_for_review
          else all approved (≥1 change)    → agents_turn if the chain is

@@ -1,6 +1,6 @@
 //! The full review loop over real HTTP against a real repo:
-//! push → drafts → review (unblocks /wait) → reply → fixup push (new
-//! revision + comment porting) → interdiff → stale-review 409 →
+//! push → drafts → review (unblocks /wait) → reply → amend push (new
+//! revisions + comment porting) → interdiff → stale-review 409 →
 //! approvals → merge detection. docs/api.md end to end.
 
 mod common;
@@ -184,7 +184,7 @@ fn full_review_loop() {
     // --- agent replies and resolves one thread -----------------------------
     let (st, reply) = http_post(
         &server.url(&format!("/api/comments/{draft_a_id}/replies")),
-        &json!({"body": "renamed in the fixup", "resolve": true}),
+        &json!({"body": "renamed in r2", "resolve": true}),
     );
     assert_eq!(st, 200, "{reply}");
     assert_eq!(reply["author"], "agent");
@@ -199,23 +199,31 @@ fn full_review_loop() {
         3
     );
 
-    // --- fixup push: new revision + comment porting ------------------------
-    // L0 inserted on top (shifts L10 to 11), L3 itself rewritten (outdates
-    // draft A's anchor).
+    // --- amend push: new revisions + comment porting ------------------------
+    // The agent amends change one in place (same Change-Id) and rebases
+    // change two on top. L0 inserted on top (shifts L10 to 11), L3 itself
+    // rewritten (outdates draft A's anchor).
     let lib_v2 = format!("L0\n{}", lib_v1.replace("L3\n", "L3 changed\n"));
-    let cf = g.commit(
-        &[c2],
-        "fixup! server: add api\n",
+    let c1b = g.commit(
+        &[g.root],
+        &msg("server: add api", "Ione"),
         &[("src/lib.rs", &lib_v2)],
     );
-    g.branch("feat", cf);
+    let c2b = g.commit(
+        &[c1b],
+        &msg("docs: add docs", "Itwo"),
+        &[("docs.md", "docs\n")],
+    );
+    g.branch("feat", c2b);
 
     let (st, chain_now) = http_post(&server.url("/api/chains"), &register);
     assert_eq!(st, 200);
     let ch1 = &chain_now["changes"][0];
     assert_eq!(ch1["revision"], 2);
-    assert_eq!(ch1["status"], "pending", "new fixup → reviewer looks again");
-    assert_eq!(ch1["needs_rebase"], false);
+    assert_eq!(
+        ch1["status"], "pending",
+        "content changed → reviewer looks again"
+    );
     assert_eq!(ch1["counts"]["revisions"], 2);
     assert_eq!(ch1["last_reviewed_revision"], 1);
 
@@ -224,7 +232,7 @@ fn full_review_loop() {
     assert_eq!(detail["revisions"].as_array().unwrap().len(), 2);
     let rev2 = &detail["revisions"][1];
     assert_eq!(rev2["number"], 2);
-    assert_eq!(rev2["fixups"][0]["sha"], cf.to_string());
+    assert_eq!(rev2["commit_sha"], c1b.to_string());
     let comments = detail["comments"].as_array().unwrap();
     let by_id = |id: i64| {
         comments
@@ -271,7 +279,7 @@ fn full_review_loop() {
     assert_eq!(st, 200);
     let files = interdiff["files"].as_array().unwrap();
     assert_eq!(files.len(), 2);
-    // The message is identical between r1 and r2 (the fixup doesn't touch
+    // The message is identical between r1 and r2 (the amend doesn't touch
     // it): one all-context hunk, zero counts.
     assert_eq!(files[0]["path"], "/COMMIT_MSG");
     assert_eq!(files[0]["status"], "modified");
@@ -306,30 +314,22 @@ fn full_review_loop() {
         &json!({"revision": 2, "verdict": "approve", "message": "lgtm"}),
     );
     assert_eq!(st, 200);
-    let (st, _) = http_post(
+    // Change two's rebase was pure (same diff, same message): a review
+    // against revision 1 auto-retargets to revision 2.
+    let (st, retargeted) = http_post(
         &server.url(&format!("/api/changes/{change2}/reviews")),
         &json!({"revision": 1, "verdict": "approve", "message": ""}),
     );
-    assert_eq!(st, 200);
+    assert_eq!(st, 200, "{retargeted}");
+    assert_eq!(retargeted["review"]["revision"], 2);
 
     let (_, feedback) = http_get(&server.url(&format!("/api/chains/{chain_id}/feedback")));
     assert_eq!(feedback["state"], "ready_to_merge");
     assert_eq!(feedback["actionable"], true);
 
-    // --- autosquash + ff-merge → chain leaves the dashboard ------------------
-    // The agent folds the fixup (rewriting feat) and fast-forwards main.
-    let f1 = g.commit(
-        &[g.root],
-        &msg("server: add api", "Ione"),
-        &[("src/lib.rs", &lib_v2)],
-    );
-    let f2 = g.commit(
-        &[f1],
-        &msg("docs: add docs", "Itwo"),
-        &[("docs.md", "docs\n")],
-    );
-    g.branch("feat", f2);
-    g.branch("main", f2);
+    // --- ff-merge → chain leaves the dashboard -------------------------------
+    // The chain is already in its final shape: fast-forward main.
+    g.branch("main", c2b);
 
     let (st, merged) = http_post(&server.url("/api/chains"), &register);
     assert_eq!(st, 200);

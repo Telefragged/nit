@@ -80,8 +80,6 @@ pub struct ChangeSummary {
     pub last_reviewed_revision: Option<i64>,
     pub commit_sha: String,
     pub short_sha: String,
-    /// Fixup folding conflicted on the latest revision.
-    pub needs_rebase: bool,
     pub counts: ChangeCounts,
 }
 
@@ -122,16 +120,7 @@ pub struct Revision {
     pub parent_sha: String,
     /// Full commit message.
     pub message: String,
-    pub fixups: Vec<RevisionFixup>,
-    pub needs_rebase: bool,
     pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RevisionFixup {
-    pub sha: String,
-    pub short_sha: String,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -310,7 +299,6 @@ pub struct FeedbackChange {
     /// Latest revision number.
     pub revision: i64,
     pub status: String,
-    pub needs_rebase: bool,
     pub unresolved: i64,
     /// Latest review, null if none.
     pub review: Option<FeedbackReview>,

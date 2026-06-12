@@ -7,15 +7,12 @@
 //! transaction rolls back and the failure is recorded in
 //! `chains.last_scan_error` while previous state stays served.
 //!
-//! - [`fixup`] — `fixup!`/`squash!` classification and autosquash target
-//!   attachment (pure logic, differentially tested against git).
 //! - [`identity`] — `Change-Id:` trailer extraction and duplicate-trailer
 //!   derived keys.
-//! - [`fold`] — patch-ids, effective-tree folding, GC-safety keep refs.
+//! - [`objects`] — patch-ids and GC-safety keep refs.
 
-pub mod fixup;
-pub mod fold;
 pub mod identity;
+pub mod objects;
 
 use std::collections::{HashMap, HashSet};
 
@@ -24,14 +21,12 @@ use git2::{BranchType, Commit, ErrorCode, Oid, Repository, Sort};
 use rusqlite::{Connection, TransactionBehavior};
 
 use crate::db::{self, ChainStatus, ChangeStatus};
-use fixup::CommitMeta;
 
 /// Documented scan error for chains containing merge commits.
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
-/// What one scan did. `warnings` (duplicate Change-Id, squash! commits)
-/// are per-scan and surface in the push response / chain banner; they are
-/// not persisted.
+/// What one scan did. `warnings` (duplicate Change-Id) are per-scan and
+/// surface in the push response / chain banner; they are not persisted.
 #[derive(Debug)]
 pub struct ScanOutcome {
     /// The chain row after the scan (post-reconcile or with
@@ -247,58 +242,23 @@ fn reconcile(
         }
     }
 
-    // Step 2/3: classify fixups and attach them autosquash-style.
-    let metas: Vec<CommitMeta> = commits
-        .iter()
-        .map(|c| CommitMeta {
-            sha: c.id().to_string(),
-            subject: fixup::subject_of(&String::from_utf8_lossy(c.message_bytes())),
-        })
-        .collect();
     let messages: Vec<String> = commits
         .iter()
         .map(|c| String::from_utf8_lossy(c.message_bytes()).into_owned())
         .collect();
-    let resolver = |needle: &str| {
-        repo.revparse_single(needle)
-            .ok()
-            .and_then(|o| o.peel_to_commit().ok())
-            .map(|c| c.id().to_string())
-    };
-    let roots = fixup::attach_fixups(&metas, resolver);
-
-    let mut warnings: Vec<String> = Vec::new();
-    for (i, root) in roots.iter().enumerate() {
-        if root.is_some() && fixup::classify(&metas[i].subject) == Some(fixup::FixupKind::Squash) {
-            warnings.push(format!(
-                "squash! commit {} folded as a plain fixup (its message edits need an \
-                 interactive rebase) — prefer fixup!",
-                &metas[i].sha[..12]
-            ));
-        }
-    }
-
-    let regulars: Vec<usize> = (0..commits.len()).filter(|&i| roots[i].is_none()).collect();
-    let mut fixups_of: HashMap<usize, Vec<usize>> = HashMap::new();
-    for (i, root) in roots.iter().enumerate() {
-        if let Some(r) = *root {
-            fixups_of.entry(r).or_default().push(i);
-        }
-    }
 
     // Identity rule 1: Change-Id trailers, duplicates get derived keys.
-    let trailers: Vec<Option<String>> = regulars
+    let trailers: Vec<Option<String>> = messages
         .iter()
-        .map(|&i| identity::change_id_trailer(&messages[i]))
+        .map(|m| identity::change_id_trailer(m))
         .collect();
-    let short_shas: Vec<String> = regulars
+    let short_shas: Vec<String> = commits
         .iter()
-        .map(|&i| metas[i].sha[..12].to_string())
+        .map(|c| c.id().to_string()[..12].to_string())
         .collect();
-    let (keys, dup_warnings) = identity::assign_trailer_keys(&trailers, &short_shas);
-    warnings.extend(dup_warnings);
+    let (keys, warnings) = identity::assign_trailer_keys(&trailers, &short_shas);
 
-    // Step 4: match regular commits to change rows.
+    // Step 3: match commits to change rows.
     let existing = db::changes_for_chain(tx, chain.id)?; // live by position, orphans last
     let mut latest_by_change: HashMap<i64, Option<db::Revision>> = HashMap::new();
     for row in &existing {
@@ -307,31 +267,20 @@ fn reconcile(
     let matched = match_changes(MatchInput {
         repo: &repo,
         commits: &commits,
-        metas: &metas,
-        regulars: &regulars,
+        messages: &messages,
         keys: &keys,
         existing: &existing,
         latest_by_change: &latest_by_change,
     });
 
-    // Steps 5/6: per live change, fold the effective tree and insert a new
-    // revision when the effective state moved.
+    // Step 4: per live change, insert a new revision when the commit moved.
     let claimed: HashSet<usize> = matched.iter().flatten().copied().collect();
-    for (ri, &ci) in regulars.iter().enumerate() {
-        let commit = &commits[ci];
-        let position = i64::try_from(ri).expect("chain length fits i64");
-        let fix_indices = fixups_of.get(&ci).cloned().unwrap_or_default();
-        let fix_commits: Vec<&Commit> = fix_indices.iter().map(|&i| &commits[i]).collect();
-        let fixup_rows: Vec<db::Fixup> = fix_indices
-            .iter()
-            .map(|&i| db::Fixup {
-                sha: metas[i].sha.clone(),
-                message: messages[i].clone(),
-            })
-            .collect();
+    for (i, commit) in commits.iter().enumerate() {
+        let sha = commit.id().to_string();
+        let position = i64::try_from(i).expect("chain length fits i64");
 
         let (change_id, stored_position, stored_status, mut status, is_new) =
-            if let Some(ei) = matched[ri] {
+            if let Some(ei) = matched[i] {
                 let row = &existing[ei];
                 let status = if row.status == ChangeStatus::Orphaned {
                     // Re-attachment: status returns to its pre-orphan value,
@@ -342,7 +291,7 @@ fn reconcile(
                 };
                 (row.id, row.position, row.status, status, false)
             } else {
-                let base_key = keys[ri].clone().unwrap_or_else(|| metas[ci].sha.clone());
+                let base_key = keys[i].clone().unwrap_or_else(|| sha.clone());
                 let key = unique_key(tx, chain.id, &base_key)?;
                 let row = db::insert_change(tx, chain.id, &key, position, ChangeStatus::Pending)?;
                 updated = true;
@@ -356,39 +305,29 @@ fn reconcile(
             };
 
         let latest = latest_by_change.get(&change_id).cloned().flatten();
-        let same_state = latest.as_ref().is_some_and(|l| {
-            l.commit_sha == metas[ci].sha
-                && l.fixups
-                    .iter()
-                    .map(|f| &f.sha)
-                    .eq(fixup_rows.iter().map(|f| &f.sha))
-        });
+        let same_state = latest.as_ref().is_some_and(|l| l.commit_sha == sha);
         if !same_state {
-            let eff = fold::effective_tree(&repo, commit, &fix_commits)?;
             let number = latest.as_ref().map_or(1, |l| l.number + 1);
             let parent_sha = commit.parent_id(0)?.to_string();
             db::insert_revision(
                 tx,
                 change_id,
                 number,
-                &metas[ci].sha,
+                &sha,
                 &parent_sha,
-                eff.map(|o| o.to_string()).as_deref(),
-                &fixup_rows,
-                &messages[ci],
+                &messages[i],
                 &now_str,
             )?;
             updated = true;
-            // Rule 6 status effect: pure rebase keeps status; anything
+            // Rule 4 status effect: pure rebase keeps status; anything
             // else means the reviewer must look again.
             let pure = latest.as_ref().is_some_and(|l| {
                 pure_rebase_equivalent(
                     &repo,
                     l.into(),
                     EffectiveState {
-                        commit_sha: &metas[ci].sha,
-                        message: &messages[ci],
-                        fixups: &fixup_rows,
+                        commit_sha: &sha,
+                        message: &messages[i],
                     },
                 )
             });
@@ -403,7 +342,7 @@ fn reconcile(
         }
     }
 
-    // Step 4, orphaning: live rows whose commit matched nothing. Never
+    // Step 3, orphaning: live rows whose commit matched nothing. Never
     // deleted — comments, drafts and reviews stay.
     for (ei, row) in existing.iter().enumerate() {
         if !claimed.contains(&ei) && row.status != ChangeStatus::Orphaned {
@@ -412,15 +351,14 @@ fn reconcile(
         }
     }
 
-    // GC safety: keep refs for every revision; re-fold vanished trees.
+    // GC safety: keep refs for every revision.
     for row in db::changes_for_chain(tx, chain.id)? {
         for rev in db::revisions_for_change(tx, row.id)? {
-            let rev = repair_effective_tree(tx, &repo, rev)?;
-            fold::ensure_keep_ref(&repo, chain.id, row.id, &rev);
+            objects::ensure_keep_ref(&repo, chain.id, row.id, &rev);
         }
     }
 
-    // Step 7: net structural difference → one chain_updated event.
+    // Step 5: net structural difference → one chain_updated event.
     if updated {
         db::insert_event(
             tx,
@@ -506,15 +444,15 @@ fn close_chain(
         &serde_json::json!({"chain_id": chain.id, "status": status.as_str()}),
         now_str,
     )?;
-    fold::delete_chain_keep_refs(repo, chain.id);
+    objects::delete_chain_keep_refs(repo, chain.id);
     Ok(())
 }
 
-/// Merged quorum (step 1): every live non-empty change's effective
-/// patch-id must appear in `fork..base`, where fork is the chain's
-/// recorded fork point (the first live change's parent). At least one
-/// non-empty live change must vote, else `tip == base` is just an empty
-/// active chain. Anything unverifiable counts against merging.
+/// Merged quorum (step 1): every live non-empty change's patch-id must
+/// appear in `fork..base`, where fork is the chain's recorded fork point
+/// (the first live change's parent). At least one non-empty live change
+/// must vote, else `tip == base` is just an empty active chain. Anything
+/// unverifiable counts against merging.
 fn merged_quorum(
     tx: &Connection,
     repo: &Repository,
@@ -574,48 +512,45 @@ fn merged_quorum(
         if commit.parent_count() == 1
             && let (Ok(parent_tree), Ok(tree)) =
                 (commit.parent(0).and_then(|p| p.tree()), commit.tree())
-            && let Ok(pid) = fold::tree_patch_id(repo, &parent_tree, &tree)
+            && let Ok(pid) = objects::tree_patch_id(repo, &parent_tree, &tree)
         {
             base_patch_ids.insert(pid);
         }
     }
 
     // A change matches by Change-Id trailer first (immune to the patch-id
-    // context drift an autosquash of a *neighboring* change causes), then
-    // by folded patch-id. Empty diffs are trivially matched but don't
-    // count toward the quorum.
+    // context drift that rewriting a *neighboring* change causes), then by
+    // patch-id. Empty diffs are trivially matched but don't count toward
+    // the quorum.
     let mut any_matched = false;
     for (key, rev) in &candidates {
         if base_trailers.contains(key) {
             any_matched = true;
             continue;
         }
-        match revision_effective_patch_id(repo, rev) {
-            Some(pid) if pid == fold::EMPTY_PATCH_ID => {}
+        match revision_patch_id(repo, rev) {
+            Some(pid) if pid == objects::EMPTY_PATCH_ID => {}
             Some(pid) if base_patch_ids.contains(&pid) => any_matched = true,
-            // Unverifiable (conflicted fold, pruned objects) or unmatched.
+            // Unverifiable (pruned objects) or unmatched.
             _ => return Ok(false),
         }
     }
     Ok(any_matched)
 }
 
-/// Patch-id of a revision's reviewed diff: `parent_sha → effective_tree`.
-fn revision_effective_patch_id(repo: &Repository, rev: &db::Revision) -> Option<String> {
-    let parent = repo
-        .find_commit(Oid::from_str(&rev.parent_sha).ok()?)
+/// Patch-id of a revision's reviewed diff: `parent_sha → commit tree`.
+fn revision_patch_id(repo: &Repository, rev: &db::Revision) -> Option<String> {
+    let commit = repo
+        .find_commit(Oid::from_str(&rev.commit_sha).ok()?)
         .ok()?;
-    let eff = rev.effective_tree.as_deref()?;
-    let tree = repo.find_tree(Oid::from_str(eff).ok()?).ok()?;
-    fold::tree_patch_id(repo, &parent.tree().ok()?, &tree).ok()
+    objects::commit_patch_id(repo, &commit).ok()
 }
 
 #[derive(Clone, Copy)]
 struct MatchInput<'a, 'r> {
     repo: &'r Repository,
     commits: &'a [Commit<'r>],
-    metas: &'a [CommitMeta],
-    regulars: &'a [usize],
+    messages: &'a [String],
     keys: &'a [Option<String>],
     existing: &'a [db::Change],
     latest_by_change: &'a HashMap<i64, Option<db::Revision>>,
@@ -623,7 +558,7 @@ struct MatchInput<'a, 'r> {
 
 /// Identity matching, in contract priority order across the whole scan:
 /// one pass per rule, each pass in walk order, each row claimable once.
-/// Returns, per regular commit, the index into `existing` it matched.
+/// Returns, per walked commit, the index into `existing` it matched.
 #[expect(
     clippy::too_many_lines,
     reason = "one block per identity rule, in contract priority order"
@@ -632,8 +567,7 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
     let MatchInput {
         repo,
         commits,
-        metas,
-        regulars,
+        messages,
         keys,
         existing,
         latest_by_change,
@@ -643,7 +577,7 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
             .get(&existing[ei].id)
             .and_then(|r| r.as_ref())
     };
-    let mut matched: Vec<Option<usize>> = vec![None; regulars.len()];
+    let mut matched: Vec<Option<usize>> = vec![None; commits.len()];
     let mut claimed: HashSet<usize> = HashSet::new();
     let claim =
         |matched: &mut Vec<Option<usize>>, claimed: &mut HashSet<usize>, ri: usize, ei: usize| {
@@ -684,12 +618,12 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
                 .push(ei);
         }
     }
-    for ri in 0..regulars.len() {
+    for (ri, commit) in commits.iter().enumerate() {
         if matched[ri].is_some() {
             continue;
         }
-        let sha = metas[regulars[ri]].sha.as_str();
-        if let Some(ei) = first_unclaimed(sha_index.get(sha), &claimed) {
+        let sha = commit.id().to_string();
+        if let Some(ei) = first_unclaimed(sha_index.get(sha.as_str()), &claimed) {
             claim(&mut matched, &mut claimed, ri, ei);
         }
     }
@@ -701,23 +635,20 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
         let mut pid_index: HashMap<String, Vec<usize>> = HashMap::new();
         for ei in 0..existing.len() {
             let pid = latest(ei).and_then(|rev| {
-                let parent = repo
-                    .find_commit(Oid::from_str(&rev.parent_sha).ok()?)
-                    .ok()?;
                 let commit = repo
                     .find_commit(Oid::from_str(&rev.commit_sha).ok()?)
                     .ok()?;
-                fold::tree_patch_id(repo, &parent.tree().ok()?, &commit.tree().ok()?).ok()
+                objects::commit_patch_id(repo, &commit).ok()
             });
             if let Some(pid) = pid {
                 pid_index.entry(pid).or_default().push(ei);
             }
         }
-        for ri in 0..regulars.len() {
+        for (ri, commit) in commits.iter().enumerate() {
             if matched[ri].is_some() {
                 continue;
             }
-            let Ok(pid) = fold::commit_patch_id(repo, &commits[regulars[ri]]) else {
+            let Ok(pid) = objects::commit_patch_id(repo, commit) else {
                 continue;
             };
             if let Some(ei) = first_unclaimed(pid_index.get(&pid), &claimed) {
@@ -736,17 +667,17 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
             }
             if let Some(rev) = latest(ei) {
                 subject_index
-                    .entry(fixup::subject_of(&rev.message))
+                    .entry(identity::subject_of(&rev.message))
                     .or_default()
                     .push(ei);
             }
         }
-        for ri in 0..regulars.len() {
+        for ri in 0..commits.len() {
             if matched[ri].is_some() {
                 continue;
             }
-            let subject = &metas[regulars[ri]].subject;
-            if let Some(ei) = first_unclaimed(subject_index.get(subject), &claimed) {
+            let subject = identity::subject_of(&messages[ri]);
+            if let Some(ei) = first_unclaimed(subject_index.get(&subject), &claimed) {
                 claim(&mut matched, &mut claimed, ri, ei);
             }
         }
@@ -761,7 +692,6 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
 pub struct EffectiveState<'a> {
     pub commit_sha: &'a str,
     pub message: &'a str,
-    pub fixups: &'a [db::Fixup],
 }
 
 impl<'a> From<&'a db::Revision> for EffectiveState<'a> {
@@ -769,40 +699,34 @@ impl<'a> From<&'a db::Revision> for EffectiveState<'a> {
         EffectiveState {
             commit_sha: &rev.commit_sha,
             message: &rev.message,
-            fixups: &rev.fixups,
         }
     }
 }
 
-/// True when two effective states differ only by a rebase: same fixup
-/// count, patch-id-equal commit, pairwise patch-id-equal fixups, and an
-/// unchanged commit message (rule 6; the same predicate is behind review
-/// auto-retargeting in api.md). Messages compare for exact equality —
-/// they are reviewable as `/COMMIT_MSG`, so a reword must put the change
-/// back in front of the reviewer; true rebases replay them verbatim.
-/// Unverifiable objects make it false — the reviewer looks again.
+/// True when two effective states differ only by a rebase: a
+/// patch-id-equal commit with an unchanged commit message (rule 4; the
+/// same predicate is behind review auto-retargeting in api.md). Messages
+/// compare for exact equality — they are reviewable as `/COMMIT_MSG`, so
+/// a reword must put the change back in front of the reviewer; true
+/// rebases replay them verbatim. Unverifiable objects make it false — the
+/// reviewer looks again.
 #[must_use]
 pub fn pure_rebase_equivalent(repo: &Repository, old: EffectiveState, new: EffectiveState) -> bool {
-    if old.message != new.message || old.fixups.len() != new.fixups.len() {
+    if old.message != new.message {
         return false;
     }
     let pid = |sha: &str| -> Option<String> {
         let commit = repo.find_commit(Oid::from_str(sha).ok()?).ok()?;
-        fold::commit_patch_id(repo, &commit).ok()
+        objects::commit_patch_id(repo, &commit).ok()
     };
-    let eq = |a: &str, b: &str| a == b || matches!((pid(a), pid(b)), (Some(x), Some(y)) if x == y);
-    eq(old.commit_sha, new.commit_sha)
-        && old
-            .fixups
-            .iter()
-            .zip(new.fixups)
-            .all(|(o, n)| eq(&o.sha, &n.sha))
+    old.commit_sha == new.commit_sha
+        || matches!((pid(old.commit_sha), pid(new.commit_sha)), (Some(x), Some(y)) if x == y)
 }
 
 /// A change's pre-orphan status, re-derived from review history — exactly
 /// what the status machine would have produced: a review counts if it sits
 /// on the latest revision *or* on any older revision connected to it by an
-/// unbroken run of pure rebases (rule 6 keeps status across those, and the
+/// unbroken run of pure rebases (rule 4 keeps status across those, and the
 /// review row stays on the old revision number).
 fn pre_orphan_status(tx: &Connection, repo: &Repository, change_id: i64) -> Result<ChangeStatus> {
     let revisions = db::revisions_for_change(tx, change_id)?; // ascending
@@ -850,49 +774,4 @@ fn unique_key(tx: &Connection, chain_id: i64, base: &str) -> Result<String> {
         }
     }
     unreachable!()
-}
-
-/// Re-fold a revision whose effective tree object vanished (gc despite
-/// keep refs, or keep refs dropped at close before a reopen). Best-effort.
-fn repair_effective_tree(
-    tx: &Connection,
-    repo: &Repository,
-    rev: db::Revision,
-) -> Result<db::Revision> {
-    let Some(tree_sha) = rev.effective_tree.as_deref() else {
-        return Ok(rev);
-    };
-    if Oid::from_str(tree_sha)
-        .ok()
-        .and_then(|oid| repo.find_tree(oid).ok())
-        .is_some()
-    {
-        return Ok(rev);
-    }
-    let Some(commit) = Oid::from_str(&rev.commit_sha)
-        .ok()
-        .and_then(|oid| repo.find_commit(oid).ok())
-    else {
-        return Ok(rev); // original pruned too; history is best-effort now
-    };
-    let mut fix_commits = Vec::new();
-    for fixup in &rev.fixups {
-        match Oid::from_str(&fixup.sha)
-            .ok()
-            .and_then(|oid| repo.find_commit(oid).ok())
-        {
-            Some(c) => fix_commits.push(c),
-            None => return Ok(rev),
-        }
-    }
-    let fix_refs: Vec<&Commit> = fix_commits.iter().collect();
-    if let Some(oid) = fold::effective_tree(repo, &commit, &fix_refs)? {
-        let oid = oid.to_string();
-        db::revision_set_effective_tree(tx, rev.id, Some(&oid))?;
-        return Ok(db::Revision {
-            effective_tree: Some(oid),
-            ..rev
-        });
-    }
-    Ok(rev)
 }

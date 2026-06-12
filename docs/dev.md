@@ -53,7 +53,7 @@ nix develop -c scripts/screenshots-live.sh     # needs ./result from nix build
 ```
 
 Mock mode is the design-review workhorse (it covers detailed states:
-drafts, 409s, interdiff, needs_rebase…); live mode verifies real backend
+drafts, 409s, interdiff…); live mode verifies real backend
 data renders. Add a mock capture whenever you add a page or significant
 state. Implementation lives in `web/screenshots/capture.mjs`; the npm
 `@playwright/test` version must match `pkgs.playwright-driver` (the

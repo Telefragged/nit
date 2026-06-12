@@ -231,7 +231,7 @@ export default function ReviewPage() {
   const diffQ = useQuery({
     queryKey: ["diff", changeId, selected, against ?? null],
     queryFn: () => getDiff(changeId, selected, against),
-    enabled: change !== undefined && !(selectedRev?.needs_rebase ?? false),
+    enabled: change !== undefined,
     retry: false,
   });
   const files = useMemo(() => diffQ.data?.files ?? [], [diffQ.data]);
@@ -525,29 +525,7 @@ export default function ReviewPage() {
             <span className="dim">{timeAgo(selectedRev.created_at)}</span>
             <ChainStrip chain={chain} currentId={changeId} />
           </div>
-          {selectedRev.fixups.length > 0 ? (
-            <div className="fixup-list">
-              {selectedRev.fixups.map((fixup) => (
-                <div className="fixup-item" key={fixup.sha} title={fixup.message}>
-                  <span className="badge badge-blue">FIXUP</span>
-                  <span className="mono dim">{fixup.short_sha}</span>
-                  <span className="fixup-subject">
-                    {fixup.message.split("\n")[0]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
           <ReviewsStrip change={change} />
-          {selectedRev.needs_rebase ? (
-            <div className="banner banner-error">
-              <strong>needs rebase</strong>
-              <span className="banner-body">
-                Fixup folding conflicted on this revision — the agent must
-                restructure before it can be diffed or reviewed.
-              </span>
-            </div>
-          ) : null}
         </div>
 
         <div className="diffbar">
@@ -637,11 +615,7 @@ export default function ReviewPage() {
               </section>
             ) : null}
 
-            {selectedRev.needs_rebase ? (
-              <div className="empty-state">
-                Diff unavailable while the revision needs a rebase.
-              </div>
-            ) : diffQ.isError ? (
+            {diffQ.isError ? (
               <ErrorPanel error={diffQ.error} />
             ) : diffQ.isPending ? (
               <div>

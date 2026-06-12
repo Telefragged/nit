@@ -134,21 +134,6 @@ impl Fixture {
         db::change_set_position_status(&self.conn, change_id, row.position, status).unwrap();
     }
 
-    /// The tree sha of a commit.
-    pub fn tree_of(&self, commit: Oid) -> String {
-        self.repo.find_commit(commit).unwrap().tree_id().to_string()
-    }
-
-    /// Read `path` out of a tree (by sha string).
-    pub fn blob_in_tree(&self, tree_sha: &str, path: &str) -> String {
-        let tree = self
-            .repo
-            .find_tree(Oid::from_str(tree_sha).unwrap())
-            .unwrap();
-        let entry = tree.get_name(path).unwrap();
-        let blob = self.repo.find_blob(entry.id()).unwrap();
-        String::from_utf8(blob.content().to_vec()).unwrap()
-    }
 }
 
 fn commit_in(repo: &Repository, parents: &[Oid], message: &str, files: &[(&str, &str)]) -> Oid {

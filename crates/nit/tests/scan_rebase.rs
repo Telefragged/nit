@@ -41,35 +41,6 @@ fn pure_rebase_keeps_status_and_positions() {
 }
 
 #[test]
-fn rebase_preserving_fixups_is_still_pure() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let f1 = f.commit(&[c1], "fixup! one\n", &[("b.txt", "b\n")]);
-    f.branch("feat", f1);
-    f.scan();
-    let change = f.changes().remove(0);
-    f.review(change.id, "approve");
-
-    let m1 = f.commit(&[f.root], "main: unrelated\n", &[("main.txt", "m\n")]);
-    f.branch("main", m1);
-    let c1b = f.commit(&[m1], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let f1b = f.commit(&[c1b], "fixup! one\n", &[("b.txt", "b\n")]);
-    f.branch("feat", f1b);
-
-    f.scan();
-    let changes = f.changes();
-    assert_eq!(changes.len(), 1);
-    assert_eq!(
-        changes[0].status,
-        ChangeStatus::Approved,
-        "rebased fixup is patch-id-equal: pure rebase"
-    );
-    let rev = f.latest_rev(change.id);
-    assert_eq!(rev.number, 2);
-    assert_eq!(rev.fixups[0].sha, f1b.to_string());
-}
-
-#[test]
 fn reorder_updates_positions_and_keeps_statuses() {
     let mut f = Fixture::new();
     let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);

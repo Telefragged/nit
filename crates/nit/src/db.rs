@@ -14,7 +14,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::{Deserialize, Serialize};
 
 /// RFC3339 timestamp for "now" (UTC), the format stored in every
 /// `created_at`/`updated_at` column.
@@ -146,6 +145,12 @@ const MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE chains ADD COLUMN partial INTEGER NOT NULL DEFAULT 0;
     ",
+    // v3: fixup! tracking removed — a revision's reviewed tree is its
+    // commit's own tree.
+    "
+    ALTER TABLE revisions DROP COLUMN effective_tree;
+    ALTER TABLE revisions DROP COLUMN fixups;
+    ",
 ];
 
 fn migrate(conn: &Connection) -> Result<()> {
@@ -260,14 +265,6 @@ pub struct Change {
     pub status: ChangeStatus,
 }
 
-/// One folded `fixup!`/`squash!` commit, stored in `revisions.fixups`
-/// (JSON array, branch order).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Fixup {
-    pub sha: String,
-    pub message: String,
-}
-
 #[derive(Debug, Clone)]
 pub struct Revision {
     pub id: i64,
@@ -275,8 +272,6 @@ pub struct Revision {
     pub number: i64,
     pub commit_sha: String,
     pub parent_sha: String,
-    pub effective_tree: Option<String>,
-    pub fixups: Vec<Fixup>,
     pub message: String,
     pub created_at: String,
 }
@@ -364,28 +359,16 @@ fn finish_change((mut change, status): (Change, String)) -> Result<Change> {
     Ok(change)
 }
 
-fn revision_from_row(row: &rusqlite::Row) -> rusqlite::Result<(Revision, String)> {
-    let fixups: String = row.get("fixups")?;
-    Ok((
-        Revision {
-            id: row.get("id")?,
-            change_id: row.get("change_id")?,
-            number: row.get("number")?,
-            commit_sha: row.get("commit_sha")?,
-            parent_sha: row.get("parent_sha")?,
-            effective_tree: row.get("effective_tree")?,
-            fixups: Vec::new(), // patched below
-            message: row.get("message")?,
-            created_at: row.get("created_at")?,
-        },
-        fixups,
-    ))
-}
-
-fn finish_revision((mut rev, fixups): (Revision, String)) -> Result<Revision> {
-    rev.fixups = serde_json::from_str(&fixups)
-        .with_context(|| format!("revision {}: bad fixups JSON", rev.id))?;
-    Ok(rev)
+fn revision_from_row(row: &rusqlite::Row) -> rusqlite::Result<Revision> {
+    Ok(Revision {
+        id: row.get("id")?,
+        change_id: row.get("change_id")?,
+        number: row.get("number")?,
+        commit_sha: row.get("commit_sha")?,
+        parent_sha: row.get("parent_sha")?,
+        message: row.get("message")?,
+        created_at: row.get("created_at")?,
+    })
 }
 
 fn comment_from_row(row: &rusqlite::Row) -> rusqlite::Result<Comment> {
@@ -678,69 +661,50 @@ pub fn change_set_position_status(
 pub fn revisions_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Revision>> {
     let mut stmt = conn.prepare("SELECT * FROM revisions WHERE change_id = ?1 ORDER BY number")?;
     let rows = stmt.query_map(params![change_id], revision_from_row)?;
-    rows.map(|r| finish_revision(r?)).collect()
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// # Errors
 /// When the query fails or a stored row doesn't decode.
 pub fn get_revision(conn: &Connection, change_id: i64, number: i64) -> Result<Option<Revision>> {
-    conn.query_row(
-        "SELECT * FROM revisions WHERE change_id = ?1 AND number = ?2",
-        params![change_id, number],
-        revision_from_row,
-    )
-    .optional()?
-    .map(finish_revision)
-    .transpose()
+    Ok(conn
+        .query_row(
+            "SELECT * FROM revisions WHERE change_id = ?1 AND number = ?2",
+            params![change_id, number],
+            revision_from_row,
+        )
+        .optional()?)
 }
 
 /// # Errors
 /// When the query fails or a stored row doesn't decode.
 pub fn latest_revision(conn: &Connection, change_id: i64) -> Result<Option<Revision>> {
-    conn.query_row(
-        "SELECT * FROM revisions WHERE change_id = ?1
-         ORDER BY number DESC LIMIT 1",
-        params![change_id],
-        revision_from_row,
-    )
-    .optional()?
-    .map(finish_revision)
-    .transpose()
+    Ok(conn
+        .query_row(
+            "SELECT * FROM revisions WHERE change_id = ?1
+             ORDER BY number DESC LIMIT 1",
+            params![change_id],
+            revision_from_row,
+        )
+        .optional()?)
 }
 
 /// # Errors
-/// When serializing `fixups` or the insert fails.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one argument per inserted column"
-)]
+/// When the insert fails.
 pub fn insert_revision(
     conn: &Connection,
     change_id: i64,
     number: i64,
     commit_sha: &str,
     parent_sha: &str,
-    effective_tree: Option<&str>,
-    fixups: &[Fixup],
     message: &str,
     now: &str,
 ) -> Result<Revision> {
-    let fixups_json = serde_json::to_string(fixups)?;
     conn.execute(
         "INSERT INTO revisions
-           (change_id, number, commit_sha, parent_sha, effective_tree,
-            fixups, message, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![
-            change_id,
-            number,
-            commit_sha,
-            parent_sha,
-            effective_tree,
-            fixups_json,
-            message,
-            now
-        ],
+           (change_id, number, commit_sha, parent_sha, message, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![change_id, number, commit_sha, parent_sha, message, now],
     )?;
     Ok(Revision {
         id: conn.last_insert_rowid(),
@@ -748,23 +712,9 @@ pub fn insert_revision(
         number,
         commit_sha: commit_sha.to_string(),
         parent_sha: parent_sha.to_string(),
-        effective_tree: effective_tree.map(str::to_string),
-        fixups: fixups.to_vec(),
         message: message.to_string(),
         created_at: now.to_string(),
     })
-}
-
-/// Used by the scan's "re-fold if tree missing" repair path.
-///
-/// # Errors
-/// When the statement fails.
-pub fn revision_set_effective_tree(conn: &Connection, id: i64, tree: Option<&str>) -> Result<()> {
-    conn.execute(
-        "UPDATE revisions SET effective_tree = ?2 WHERE id = ?1",
-        params![id, tree],
-    )?;
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1193,10 +1143,6 @@ mod tests {
                 .expect("query should succeed")
                 .is_none()
         );
-        let fixups = vec![Fixup {
-            sha: "f".repeat(40),
-            message: "fixup! subj".into(),
-        }];
         let now = now_rfc3339();
         insert_revision(
             &conn,
@@ -1204,8 +1150,6 @@ mod tests {
             1,
             &"a".repeat(40),
             &"b".repeat(40),
-            Some(&"c".repeat(40)),
-            &fixups,
             "subj\n\nbody",
             &now,
         )
@@ -1214,8 +1158,7 @@ mod tests {
             .expect("query should succeed")
             .expect("row should exist");
         assert_eq!(rev.number, 1);
-        assert_eq!(rev.fixups, fixups);
-        assert_eq!(rev.effective_tree.as_deref(), Some("c".repeat(40).as_str()));
+        assert_eq!(rev.commit_sha, "a".repeat(40));
 
         // UNIQUE(change_id, number)
         assert!(
@@ -1225,8 +1168,6 @@ mod tests {
                 1,
                 &"a".repeat(40),
                 &"b".repeat(40),
-                None,
-                &[],
                 "x",
                 &now,
             )
@@ -1522,8 +1463,6 @@ mod tests {
             1,
             &"a".repeat(40),
             &"b".repeat(40),
-            None,
-            &[],
             "subj",
             &now,
         )

@@ -511,24 +511,6 @@ table.list tbody tr:hover {
   flex-wrap: wrap;
 }
 
-.fixup-list {
-  margin-top: 7px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.fixup-item {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  font-size: 12px;
-}
-.fixup-subject {
-  color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 11.5px;
-}
-
 .reviews-strip {
   margin-top: 8px;
   display: flex;

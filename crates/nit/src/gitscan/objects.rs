@@ -1,6 +1,5 @@
-//! Git object plumbing for the scan: patch-ids, effective-tree folding
-//! (scan step 5) and the GC-safety keep refs (docs/data-model.md "GC
-//! safety").
+//! Git object plumbing for the scan: patch-ids and the GC-safety keep
+//! refs (docs/data-model.md "GC safety").
 
 use anyhow::Result;
 use git2::{Commit, Oid, Repository, Tree};
@@ -32,45 +31,14 @@ pub fn commit_patch_id(repo: &Repository, commit: &Commit) -> Result<String> {
     tree_patch_id(repo, &parent_tree, &commit.tree()?)
 }
 
-/// Fold `fixups` (branch order) into `commit`'s tree by iterated in-memory
-/// three-way merge: ancestor = the fixup's parent tree, ours = the
-/// accumulated tree, theirs = the fixup's tree. `Ok(None)` = fold conflict
-/// (`effective_tree` NULL, `needs_rebase`). Merged trees are written to
-/// the repository odb so they outlive the scan.
-///
-/// # Errors
-/// When git object lookup or the merge machinery fails — a fold
-/// *conflict* is `Ok(None)`, not an error.
-pub fn effective_tree(
-    repo: &Repository,
-    commit: &Commit,
-    fixups: &[&Commit],
-) -> Result<Option<Oid>> {
-    let mut ours = commit.tree()?;
-    for fixup in fixups {
-        let ancestor = fixup.parent(0)?.tree()?;
-        let theirs = fixup.tree()?;
-        let mut index = repo.merge_trees(&ancestor, &ours, &theirs, None)?;
-        if index.has_conflicts() {
-            return Ok(None);
-        }
-        let oid = index.write_tree_to(repo)?;
-        ours = repo.find_tree(oid)?;
-    }
-    Ok(Some(ours.id()))
-}
-
 /// Ref name pinning one revision's git objects against `git gc`.
 #[must_use]
 pub fn keep_ref_name(chain_id: i64, change_id: i64, revision_number: i64) -> String {
     format!("refs/nit/keep/{chain_id}/{change_id}/{revision_number}")
 }
 
-/// Ensure the keep ref for a revision exists: a synthetic commit whose
-/// tree is the effective tree (the original commit's tree when folding
-/// conflicted) and whose parents are `[parent, original, fixups…]` —
-/// making parent, original, fold *and* the folded fixup commits reachable
-/// (the fixups are needed for later pure-rebase comparisons and re-folds).
+/// Ensure the keep ref for a revision exists, pointing at the revision's
+/// commit — its parent (the diff's old side) is reachable through it.
 /// Best-effort: failures (e.g. objects already pruned) are logged, never
 /// fatal.
 pub fn ensure_keep_ref(repo: &Repository, chain_id: i64, change_id: i64, rev: &db::Revision) {
@@ -91,30 +59,10 @@ fn try_ensure_keep_ref(
     rev: &db::Revision,
 ) -> Result<()> {
     let name = keep_ref_name(chain_id, change_id, rev.number);
-    let parent = repo.find_commit(Oid::from_str(&rev.parent_sha)?)?;
-    let original = repo.find_commit(Oid::from_str(&rev.commit_sha)?)?;
-    let tree = match &rev.effective_tree {
-        Some(t) => repo.find_tree(Oid::from_str(t)?)?,
-        None => original.tree()?,
-    };
-    let mut parents = vec![parent, original];
-    for fixup in &rev.fixups {
-        parents.push(repo.find_commit(Oid::from_str(&fixup.sha)?)?);
-    }
-    // Deterministic signature: recreating the synthetic commit yields the
-    // same oid, so repeated scans are no-ops.
-    let sig = git2::Signature::new("nit", "nit@localhost", &git2::Time::new(0, 0))?;
-    let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
-    let oid = repo.commit(
-        None,
-        &sig,
-        &sig,
-        "nit: pin review objects (parent, original, fold, fixups)",
-        &tree,
-        &parent_refs,
-    )?;
+    let oid = Oid::from_str(&rev.commit_sha)?;
     let current = repo.find_reference(&name).ok().and_then(|r| r.target());
     if current != Some(oid) {
+        // Writing the ref validates the target object exists.
         repo.reference(&name, oid, true, "nit: keep")?;
     }
     Ok(())
