@@ -382,7 +382,15 @@ fn reconcile(
             // Rule 6 status effect: pure rebase keeps status; anything
             // else means the reviewer must look again.
             let pure = latest.as_ref().is_some_and(|l| {
-                pure_rebase_equivalent(&repo, &l.commit_sha, &l.fixups, &metas[ci].sha, &fixup_rows)
+                pure_rebase_equivalent(
+                    &repo,
+                    l.into(),
+                    EffectiveState {
+                        commit_sha: &metas[ci].sha,
+                        message: &messages[ci],
+                        fixups: &fixup_rows,
+                    },
+                )
             });
             if !pure {
                 status = ChangeStatus::Pending;
@@ -747,19 +755,35 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
     matched
 }
 
+/// One side of the [`pure_rebase_equivalent`] comparison: the fields
+/// that define a revision's effective state.
+#[derive(Clone, Copy)]
+pub struct EffectiveState<'a> {
+    pub commit_sha: &'a str,
+    pub message: &'a str,
+    pub fixups: &'a [db::Fixup],
+}
+
+impl<'a> From<&'a db::Revision> for EffectiveState<'a> {
+    fn from(rev: &'a db::Revision) -> Self {
+        EffectiveState {
+            commit_sha: &rev.commit_sha,
+            message: &rev.message,
+            fixups: &rev.fixups,
+        }
+    }
+}
+
 /// True when two effective states differ only by a rebase: same fixup
-/// count, patch-id-equal commit, pairwise patch-id-equal fixups (rule 6;
-/// the same predicate is behind review auto-retargeting in api.md).
+/// count, patch-id-equal commit, pairwise patch-id-equal fixups, and an
+/// unchanged commit message (rule 6; the same predicate is behind review
+/// auto-retargeting in api.md). Messages compare for exact equality —
+/// they are reviewable as `/COMMIT_MSG`, so a reword must put the change
+/// back in front of the reviewer; true rebases replay them verbatim.
 /// Unverifiable objects make it false — the reviewer looks again.
 #[must_use]
-pub fn pure_rebase_equivalent(
-    repo: &Repository,
-    old_commit_sha: &str,
-    old_fixups: &[db::Fixup],
-    new_commit_sha: &str,
-    new_fixups: &[db::Fixup],
-) -> bool {
-    if old_fixups.len() != new_fixups.len() {
+pub fn pure_rebase_equivalent(repo: &Repository, old: EffectiveState, new: EffectiveState) -> bool {
+    if old.message != new.message || old.fixups.len() != new.fixups.len() {
         return false;
     }
     let pid = |sha: &str| -> Option<String> {
@@ -767,10 +791,11 @@ pub fn pure_rebase_equivalent(
         fold::commit_patch_id(repo, &commit).ok()
     };
     let eq = |a: &str, b: &str| a == b || matches!((pid(a), pid(b)), (Some(x), Some(y)) if x == y);
-    eq(old_commit_sha, new_commit_sha)
-        && old_fixups
+    eq(old.commit_sha, new.commit_sha)
+        && old
+            .fixups
             .iter()
-            .zip(new_fixups)
+            .zip(new.fixups)
             .all(|(o, n)| eq(&o.sha, &n.sha))
 }
 
@@ -787,13 +812,7 @@ fn pre_orphan_status(tx: &Connection, repo: &Repository, change_id: i64) -> Resu
     let mut eligible = vec![latest.number];
     let mut newer = latest;
     for older in revisions.iter().rev().skip(1) {
-        if !pure_rebase_equivalent(
-            repo,
-            &older.commit_sha,
-            &older.fixups,
-            &newer.commit_sha,
-            &newer.fixups,
-        ) {
+        if !pure_rebase_equivalent(repo, older.into(), newer.into()) {
             break;
         }
         eligible.push(older.number);

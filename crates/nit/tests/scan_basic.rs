@@ -95,7 +95,7 @@ fn amend_creates_new_revision_and_resets_status() {
 }
 
 #[test]
-fn reword_only_amend_keeps_status() {
+fn reword_only_amend_resets_status() {
     let mut f = Fixture::new();
     let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
     f.branch("feat", c1);
@@ -104,7 +104,8 @@ fn reword_only_amend_keeps_status() {
     f.review(change.id, "approve");
 
     // Same diff (patch-id equal), same (empty) fixups — only the message
-    // changed: rule 6 treats this as a pure rebase and keeps the status.
+    // changed. The message is reviewable (/COMMIT_MSG), so rule 6 does
+    // not treat a reword as a pure rebase: the reviewer must look again.
     let c1b = f.commit(
         &[f.root],
         &msg("one\n\nnow with body", "I001"),
@@ -114,7 +115,7 @@ fn reword_only_amend_keeps_status() {
     f.scan();
 
     let changes = f.changes();
-    assert_eq!(changes[0].status, ChangeStatus::Approved);
+    assert_eq!(changes[0].status, ChangeStatus::Pending);
     assert_eq!(f.latest_rev(change.id).number, 2);
 }
 

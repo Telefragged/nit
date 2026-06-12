@@ -569,15 +569,10 @@ async fn submit_review(
             let reviewed = db::get_revision(&tx, change.id, req.revision)?.ok_or_else(|| {
                 Error::bad_request(format!("revision {} not found", req.revision))
             })?;
-            // Pure rebase (patch-id-equal, same fixups): auto-retarget.
+            // Pure rebase (patch-id-equal, same fixups, same message):
+            // auto-retarget.
             let retargets = open_repo(&tx, change.chain_id).is_some_and(|repo| {
-                gitscan::pure_rebase_equivalent(
-                    &repo,
-                    &reviewed.commit_sha,
-                    &reviewed.fixups,
-                    &latest.commit_sha,
-                    &latest.fixups,
-                )
+                gitscan::pure_rebase_equivalent(&repo, (&reviewed).into(), (&latest).into())
             });
             if !retargets {
                 return Err(Error::conflict(format!(

@@ -194,8 +194,9 @@ fn patch_id_match_survives_subject_rewrite() {
     let change = f.changes().remove(0);
     f.review(change.id, "approve");
 
-    // Same diff, new sha and new subject → rule 3 (patch-id) matches, and
-    // it is even a pure rebase (status kept).
+    // Same diff, new sha and new subject → rule 3 (patch-id) keeps the
+    // identity, but the message changed (reviewable as /COMMIT_MSG), so
+    // it is not a pure rebase: the reviewer must look again.
     let c1b = f.commit(&[f.root], "new subject\n", &[("a.txt", "a\n")]);
     f.branch("feat", c1b);
     f.scan();
@@ -203,7 +204,8 @@ fn patch_id_match_survives_subject_rewrite() {
     let changes = f.changes();
     assert_eq!(changes.len(), 1);
     assert_eq!(changes[0].id, change.id);
-    assert_eq!(changes[0].status, ChangeStatus::Approved);
+    assert_eq!(changes[0].status, ChangeStatus::Pending);
+    assert_eq!(f.latest_rev(change.id).number, 2);
 }
 
 #[test]

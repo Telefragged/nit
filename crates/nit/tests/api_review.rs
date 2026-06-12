@@ -74,6 +74,50 @@ fn review_auto_retargets_after_pure_rebase() {
 }
 
 #[test]
+fn reword_blocks_stale_review_retarget() {
+    let g = GitRepo::new();
+    let a_txt = "a1\na2\na3\n";
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", a_txt)]);
+    g.branch("feat", c1);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let register = json!({
+        "repo_path": g.workdir().to_string_lossy(),
+        "branch": "feat",
+        "base": "main",
+    });
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+
+    // The agent rewords the message (same diff, same parent, same
+    // trailer): patch-id-equal, but the reviewer never saw this message.
+    let c1b = g.commit(
+        &[g.root],
+        &msg("core: add a, but explained", "Ia"),
+        &[("a.txt", a_txt)],
+    );
+    g.branch("feat", c1b);
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200);
+    assert_eq!(chain["changes"][0]["revision"], 2);
+    assert_eq!(chain["changes"][0]["status"], "pending");
+
+    // A review against the pre-reword revision must not auto-retarget.
+    let (st, e) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reviews")),
+        &json!({"revision": 1, "verdict": "approve", "message": "lgtm"}),
+    );
+    assert_eq!(st, 409, "{e}");
+    assert!(
+        e["error"]
+            .as_str()
+            .unwrap()
+            .contains("no longer the latest")
+    );
+}
+
+#[test]
 fn request_validation() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
