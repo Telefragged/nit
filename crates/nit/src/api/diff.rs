@@ -12,6 +12,11 @@ use git2::{Delta, DiffOptions, Patch, Repository, Tree};
 
 use super::types;
 
+/// The reserved synthetic diff path carrying the revision's commit
+/// message (docs/api.md "The commit message as a file"). Git tree paths
+/// cannot start with `/`, so it can never collide with a real file.
+pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
+
 /// Render the diff `old → new` as the wire shape: context 3, rename
 /// detection, binary files flagged with no hunks.
 ///
@@ -115,6 +120,62 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<types::Hunk>> {
         });
     }
     Ok(hunks)
+}
+
+/// The synthetic [`COMMIT_MSG_PATH`] entry injected at the front of every
+/// diff (docs/api.md "The commit message as a file"): vs parent
+/// (`old: None`) the whole message as one all-`add` hunk; interdiff a
+/// real line diff `old → new`, identical messages rendered as a single
+/// all-`context` hunk so the message stays visible and commentable.
+///
+/// # Errors
+/// When git can't build or read the buffer diff.
+pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> {
+    let mut opts = DiffOptions::new();
+    opts.context_lines(3);
+    let mut patch = Patch::from_buffers(
+        old.unwrap_or_default().as_bytes(),
+        None,
+        new.as_bytes(),
+        None,
+        Some(&mut opts),
+    )?;
+    let (_, additions, deletions) = patch.line_stats()?;
+    let mut hunks = patch_hunks(&mut patch)?;
+    if hunks.is_empty() && !new.is_empty() {
+        // Identical interdiff: synthesize the all-context hunk.
+        let lines: Vec<types::Line> = new
+            .lines()
+            .enumerate()
+            .map(|(i, text)| {
+                let n = i64::try_from(i)? + 1;
+                Ok(types::Line {
+                    kind: "context".to_string(),
+                    old: Some(n),
+                    new: Some(n),
+                    text: text.to_string(),
+                })
+            })
+            .collect::<Result<_>>()?;
+        let count = i64::try_from(lines.len())?;
+        hunks.push(types::Hunk {
+            old_start: 1,
+            old_lines: count,
+            new_start: 1,
+            new_lines: count,
+            header: String::new(),
+            lines,
+        });
+    }
+    Ok(types::DiffFile {
+        path: COMMIT_MSG_PATH.to_string(),
+        old_path: None,
+        status: if old.is_some() { "modified" } else { "added" }.to_string(),
+        binary: false,
+        additions: i64::try_from(additions)?,
+        deletions: i64::try_from(deletions)?,
+        hunks,
+    })
 }
 
 /// The function-context part of a raw hunk header:
@@ -372,6 +433,87 @@ mod tests {
         assert!(bin.binary);
         assert!(bin.hunks.is_empty());
         assert_eq!((bin.additions, bin.deletions), (0, 0));
+    }
+
+    #[test]
+    fn commit_msg_file_vs_parent_is_all_add() {
+        let msg = "feat: subject\n\nA body line.\n\nChange-Id: Iabc\n";
+        let f = commit_msg_file(None, msg).expect("message file should build");
+        assert_eq!(f.path, COMMIT_MSG_PATH);
+        assert_eq!(f.old_path, None);
+        assert_eq!(f.status, "added");
+        assert!(!f.binary);
+        assert_eq!((f.additions, f.deletions), (5, 0));
+        assert_eq!(f.hunks.len(), 1);
+        let h = &f.hunks[0];
+        assert_eq!(
+            (h.old_start, h.old_lines, h.new_start, h.new_lines),
+            (0, 0, 1, 5)
+        );
+        let texts: Vec<(&str, Option<i64>, Option<i64>, &str)> = h
+            .lines
+            .iter()
+            .map(|l| (l.kind.as_str(), l.old, l.new, l.text.as_str()))
+            .collect();
+        assert_eq!(
+            texts,
+            vec![
+                ("add", None, Some(1), "feat: subject"),
+                ("add", None, Some(2), ""),
+                ("add", None, Some(3), "A body line."),
+                ("add", None, Some(4), ""),
+                ("add", None, Some(5), "Change-Id: Iabc"),
+            ]
+        );
+    }
+
+    #[test]
+    fn commit_msg_file_interdiff_diffs_messages() {
+        let old = "feat: subject\n\nOld body.\n\nChange-Id: Iabc\n";
+        let new = "feat: subject\n\nNew body,\nover two lines.\n\nChange-Id: Iabc\n";
+        let f = commit_msg_file(Some(old), new).expect("message file should build");
+        assert_eq!(f.path, COMMIT_MSG_PATH);
+        assert_eq!(f.status, "modified");
+        assert_eq!((f.additions, f.deletions), (2, 1));
+        assert_eq!(f.hunks.len(), 1);
+        let del = f.hunks[0]
+            .lines
+            .iter()
+            .find(|l| l.kind == "del")
+            .expect("del line should exist");
+        assert_eq!((del.old, del.text.as_str()), (Some(3), "Old body."));
+        let adds: Vec<(&str, Option<i64>)> = f.hunks[0]
+            .lines
+            .iter()
+            .filter(|l| l.kind == "add")
+            .map(|l| (l.text.as_str(), l.new))
+            .collect();
+        assert_eq!(
+            adds,
+            vec![("New body,", Some(3)), ("over two lines.", Some(4))]
+        );
+    }
+
+    #[test]
+    fn commit_msg_file_identical_interdiff_is_all_context() {
+        let msg = "feat: subject\n\nSame body.\n\nChange-Id: Iabc\n";
+        let f = commit_msg_file(Some(msg), msg).expect("message file should build");
+        assert_eq!(f.status, "modified");
+        assert_eq!((f.additions, f.deletions), (0, 0));
+        assert_eq!(f.hunks.len(), 1);
+        let h = &f.hunks[0];
+        assert_eq!(
+            (h.old_start, h.old_lines, h.new_start, h.new_lines),
+            (1, 5, 1, 5)
+        );
+        assert_eq!(h.header, "");
+        assert!(h.lines.iter().all(|l| l.kind == "context"));
+        assert_eq!(h.lines.len(), 5);
+        let l = &h.lines[4];
+        assert_eq!(
+            (l.old, l.new, l.text.as_str()),
+            (Some(5), Some(5), "Change-Id: Iabc")
+        );
     }
 
     #[test]

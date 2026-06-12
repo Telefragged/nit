@@ -65,6 +65,28 @@ fn diff_json_golden() {
     let (st, diff) = http_get(&server.url(&format!("/api/changes/{change_id}/revisions/1/diff")));
     assert_eq!(st, 200, "{diff}");
 
+    // The synthetic commit-message file leads the response (docs/api.md
+    // "The commit message as a file") — asserted before sorting.
+    assert_eq!(
+        diff["files"][0],
+        json!({
+            "path": "/COMMIT_MSG",
+            "status": "added",
+            "binary": false,
+            "additions": 3,
+            "deletions": 0,
+            "hunks": [{
+                "old_start": 0, "old_lines": 0, "new_start": 1, "new_lines": 3,
+                "header": "",
+                "lines": [
+                    {"kind": "add", "new": 1, "text": "feat: golden"},
+                    {"kind": "add", "new": 2, "text": ""},
+                    {"kind": "add", "new": 3, "text": "Change-Id: Igold"},
+                ],
+            }],
+        })
+    );
+
     let mut files = diff["files"].as_array().unwrap().clone();
     files.sort_by_key(|f| f["path"].as_str().unwrap().to_string());
     let by_path = |files: &[Value], p: &str| {
@@ -75,7 +97,7 @@ fn diff_json_golden() {
             .clone()
     };
 
-    assert_eq!(files.len(), 4);
+    assert_eq!(files.len(), 5);
 
     assert_eq!(
         by_path(&files, "data.bin"),

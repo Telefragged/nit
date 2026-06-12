@@ -312,22 +312,30 @@ async fn revision_diff(
         let repo = open_repo(&conn, change.chain_id)
             .ok_or_else(|| Error::internal("cannot open the chain's repository"))?;
         let new_tree = effective_tree_of(&repo, &rev)?;
-        let old_tree = match q.against {
+        // Interdiffs also diff the two revisions' commit messages; vs
+        // parent the message has no old side (against_message: None).
+        let (old_tree, against_message) = match q.against {
             None => {
                 let parent = repo
                     .find_commit(parse_oid(&rev.parent_sha)?)
                     .map_err(|e| Error::internal(format!("parent commit missing: {e}")))?;
-                parent
+                let tree = parent
                     .tree()
-                    .map_err(|e| Error::internal(format!("parent tree missing: {e}")))?
+                    .map_err(|e| Error::internal(format!("parent tree missing: {e}")))?;
+                (tree, None)
             }
             Some(m) => {
                 let against = db::get_revision(&conn, change.id, m)?
                     .ok_or_else(|| Error::not_found(format!("revision {m} not found")))?;
-                effective_tree_of(&repo, &against)?
+                (effective_tree_of(&repo, &against)?, Some(against.message))
             }
         };
-        Ok(Json(diff::diff_trees(&repo, &old_tree, &new_tree)?))
+        let mut wire = diff::diff_trees(&repo, &old_tree, &new_tree)?;
+        wire.files.insert(
+            0,
+            diff::commit_msg_file(against_message.as_deref(), &rev.message)?,
+        );
+        Ok(Json(wire))
     })
     .await
 }

@@ -253,23 +253,36 @@ fn full_review_loop() {
     assert_eq!(st, 404);
 
     // --- diff + interdiff ---------------------------------------------------
+    // /COMMIT_MSG leads every diff response: all-add vs parent.
     let (st, diff) = http_get(&server.url(&format!("/api/changes/{change1}/revisions/2/diff")));
     assert_eq!(st, 200);
     let files = diff["files"].as_array().unwrap();
-    assert_eq!(files.len(), 1);
-    assert_eq!(files[0]["path"], "src/lib.rs");
+    assert_eq!(files.len(), 2);
+    assert_eq!(files[0]["path"], "/COMMIT_MSG");
     assert_eq!(files[0]["status"], "added");
-    assert_eq!(files[0]["additions"], 13);
+    assert_eq!(files[0]["additions"], 3); // subject, blank, Change-Id
+    assert_eq!(files[1]["path"], "src/lib.rs");
+    assert_eq!(files[1]["status"], "added");
+    assert_eq!(files[1]["additions"], 13);
 
     let (st, interdiff) = http_get(&server.url(&format!(
         "/api/changes/{change1}/revisions/2/diff?against=1"
     )));
     assert_eq!(st, 200);
     let files = interdiff["files"].as_array().unwrap();
-    assert_eq!(files.len(), 1);
+    assert_eq!(files.len(), 2);
+    // The message is identical between r1 and r2 (the fixup doesn't touch
+    // it): one all-context hunk, zero counts.
+    assert_eq!(files[0]["path"], "/COMMIT_MSG");
     assert_eq!(files[0]["status"], "modified");
-    assert_eq!(files[0]["additions"], 2);
-    assert_eq!(files[0]["deletions"], 1);
+    assert_eq!(files[0]["additions"], 0);
+    assert_eq!(files[0]["deletions"], 0);
+    let msg_lines = files[0]["hunks"][0]["lines"].as_array().unwrap();
+    assert!(msg_lines.iter().all(|l| l["kind"] == "context"));
+    assert_eq!(files[1]["path"], "src/lib.rs");
+    assert_eq!(files[1]["status"], "modified");
+    assert_eq!(files[1]["additions"], 2);
+    assert_eq!(files[1]["deletions"], 1);
 
     let (st, _) = http_get(&server.url(&format!("/api/changes/{change1}/revisions/9/diff")));
     assert_eq!(st, 404);
