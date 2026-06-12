@@ -7,6 +7,7 @@ use std::collections::HashMap;
 /// Extract the `Change-Id:` trailer value from a commit message using
 /// git's trailer parser. Keys match ASCII-case-insensitively; when a
 /// message (incorrectly) carries several, the last one wins.
+#[must_use]
 pub fn change_id_trailer(message: &str) -> Option<String> {
     let trailers = git2::message_trailers_strs(message).ok()?;
     let mut found = None;
@@ -26,6 +27,7 @@ pub fn change_id_trailer(message: &str) -> Option<String> {
 /// later duplicates get derived keys `<token>#2`, `<token>#3`, … plus a
 /// scan warning each. `short_shas` parallels `trailers` and is only used
 /// in warning texts.
+#[must_use]
 pub fn assign_trailer_keys(
     trailers: &[Option<String>],
     short_shas: &[String],

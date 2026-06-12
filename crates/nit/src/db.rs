@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 /// RFC3339 timestamp for "now" (UTC), the format stored in every
 /// `created_at`/`updated_at` column.
+#[must_use]
 pub fn now_rfc3339() -> String {
     jiff::Timestamp::now().to_string()
 }
@@ -158,6 +159,7 @@ pub enum ChainStatus {
 }
 
 impl ChainStatus {
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             ChainStatus::Active => "active",
@@ -186,6 +188,7 @@ pub enum ChangeStatus {
 }
 
 impl ChangeStatus {
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             ChangeStatus::Pending => "pending",

@@ -742,6 +742,7 @@ fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
 /// count, patch-id-equal commit, pairwise patch-id-equal fixups (rule 6;
 /// the same predicate is behind review auto-retargeting in api.md).
 /// Unverifiable objects make it false — the reviewer looks again.
+#[must_use]
 pub fn pure_rebase_equivalent(
     repo: &Repository,
     old_commit_sha: &str,

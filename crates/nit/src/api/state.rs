@@ -47,6 +47,7 @@ pub struct ScanGate {
 }
 
 impl AppState {
+    #[must_use]
     pub fn new(db_path: PathBuf, public_base: String) -> Arc<Self> {
         Arc::new(AppState {
             db_path,
@@ -270,6 +271,7 @@ where
 
 /// `SQLITE_BUSY/LOCKED` anywhere in an error chain: cross-chain write
 /// contention, not a broken database.
+#[must_use]
 pub fn is_sqlite_busy(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| {
         cause.downcast_ref::<rusqlite::Error>().is_some_and(|e| {

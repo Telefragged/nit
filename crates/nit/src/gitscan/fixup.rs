@@ -22,6 +22,7 @@ pub enum FixupKind {
 
 /// Classify a commit subject. Only an exact `fixup! `/`squash! ` prefix
 /// (with the space, like git) counts.
+#[must_use]
 pub fn classify(subject: &str) -> Option<FixupKind> {
     if subject.starts_with("fixup! ") {
         Some(FixupKind::Fixup)
@@ -35,6 +36,7 @@ pub fn classify(subject: &str) -> Option<FixupKind> {
 /// The subject of a commit message: first paragraph, leading blank lines
 /// skipped, inner newlines collapsed to spaces (git's
 /// `find_commit_subject` + `format_subject`).
+#[must_use]
 pub fn subject_of(message: &str) -> String {
     let body = message.trim_start_matches(['\n', '\r']);
     let para = body.split("\n\n").next().unwrap_or("");
@@ -50,6 +52,7 @@ fn strip_one(s: &str) -> Option<&str> {
 /// loop, returning the needle used for target lookup — or `None` when the
 /// subject isn't fixup-ish at all. This is why fixups of fixups attach to
 /// the root target.
+#[must_use]
 pub fn fixup_needle(subject: &str) -> Option<&str> {
     let mut p = strip_one(subject)?;
     loop {

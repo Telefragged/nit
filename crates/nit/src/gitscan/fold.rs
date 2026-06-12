@@ -51,6 +51,7 @@ pub fn effective_tree(
 }
 
 /// Ref name pinning one revision's git objects against `git gc`.
+#[must_use]
 pub fn keep_ref_name(chain_id: i64, change_id: i64, revision_number: i64) -> String {
     format!("refs/nit/keep/{chain_id}/{change_id}/{revision_number}")
 }

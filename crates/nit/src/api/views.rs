@@ -14,6 +14,7 @@ use crate::gitscan::fixup::subject_of;
 use super::diff;
 use super::types;
 
+#[must_use]
 pub fn short_sha(sha: &str) -> String {
     sha.chars().take(12).collect()
 }
@@ -242,6 +243,7 @@ fn comment_json(c: &db::Comment, rendered_line: Option<i64>, outdated: bool) -> 
 
 /// A comment rendered at its own revision (draft CRUD / reply / publish
 /// responses — porting happens when the change is *viewed*).
+#[must_use]
 pub fn comment_at_own_revision(c: &db::Comment) -> types::Comment {
     comment_json(c, c.line, false)
 }
@@ -286,6 +288,7 @@ pub fn build_change_detail(
     })
 }
 
+#[must_use]
 pub fn revision_json(rev: &db::Revision) -> types::Revision {
     types::Revision {
         number: rev.number,
@@ -307,6 +310,7 @@ pub fn revision_json(rev: &db::Revision) -> types::Revision {
     }
 }
 
+#[must_use]
 pub fn review_json(review: &db::Review) -> types::Review {
     types::Review {
         id: review.id,
