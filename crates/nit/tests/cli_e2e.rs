@@ -1,4 +1,4 @@
-//! End-to-end CLI: the real `nit` binary (CARGO_BIN_EXE) run from inside
+//! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside
 //! a fixture repo against a real server — push / status / wait / reply
 //! per docs/agent-workflow.md.
 

@@ -1,6 +1,6 @@
 //! Differential test: nit's fixup attachment must mirror
 //! `git rebase -i --autosquash`. For each layout we build a real repo with
-//! the git CLI, capture the rearranged todo via GIT_SEQUENCE_EDITOR (the
+//! the git CLI, capture the rearranged todo via `GIT_SEQUENCE_EDITOR` (the
 //! editor copies it and exits non-zero so the rebase aborts untouched),
 //! and compare every commit's group root against `attach_fixups`.
 

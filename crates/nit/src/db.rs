@@ -1,11 +1,11 @@
-//! SQLite persistence layer.
+//! `SQLite` persistence layer.
 //!
 //! Schema contract: `docs/data-model.md` ("Tables"). Review state only —
 //! git objects stay in the user's repos. Nothing is ever hard-deleted:
 //! rows are status-flagged and every status is re-derivable by a later
 //! scan.
 //!
-//! [`open`] applies pragmas (WAL, busy_timeout, foreign keys ON) and runs
+//! [`open`] applies pragmas (WAL, `busy_timeout`, foreign keys ON) and runs
 //! `PRAGMA user_version` migrations. Row structs and focused query helpers
 //! live here; all multi-statement write flows (scans, review submission)
 //! are driven by callers inside a single transaction.

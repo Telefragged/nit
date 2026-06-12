@@ -66,7 +66,7 @@ pub struct ChangeSummary {
     pub position: Option<i64>,
     pub change_key: String,
     pub subject: String,
-    /// pending | approved | changes_requested | commented | orphaned
+    /// pending | approved | `changes_requested` | commented | orphaned
     pub status: String,
     /// Latest revision number.
     pub revision: i64,
@@ -132,7 +132,7 @@ pub struct RevisionFixup {
 pub struct Review {
     pub id: i64,
     pub revision: i64,
-    /// approve | request_changes | comment
+    /// approve | `request_changes` | comment
     pub verdict: String,
     /// Cover message.
     pub message: String,
@@ -248,7 +248,7 @@ pub struct EditDraft {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitReview {
     pub revision: i64,
-    /// approve | request_changes | comment
+    /// approve | `request_changes` | comment
     pub verdict: String,
     #[serde(default)]
     pub message: String,
@@ -276,7 +276,7 @@ pub struct NewReply {
 pub struct Feedback {
     /// See the api.md state table.
     pub state: String,
-    /// ≡ state != waiting_for_review
+    /// ≡ state != `waiting_for_review`
     pub actionable: bool,
     pub chain: FeedbackChain,
     /// Live changes, chain order.

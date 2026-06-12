@@ -268,7 +268,7 @@ where
     }
 }
 
-/// SQLITE_BUSY/LOCKED anywhere in an error chain: cross-chain write
+/// `SQLITE_BUSY/LOCKED` anywhere in an error chain: cross-chain write
 /// contention, not a broken database.
 pub fn is_sqlite_busy(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| {

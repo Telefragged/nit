@@ -31,7 +31,7 @@ pub struct PushArgs {
     /// Branch to register (default: the current HEAD branch)
     #[arg(long)]
     pub branch: Option<String>,
-    /// nit server URL (default: $NIT_SERVER or http://127.0.0.1:8877)
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
 }
@@ -41,14 +41,14 @@ pub struct WaitArgs {
     /// Give up after this many seconds (default: wait forever)
     #[arg(long)]
     pub timeout: Option<u64>,
-    /// nit server URL (default: $NIT_SERVER or http://127.0.0.1:8877)
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
 }
 
 #[derive(clap::Args)]
 pub struct StatusArgs {
-    /// nit server URL (default: $NIT_SERVER or http://127.0.0.1:8877)
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
 }
@@ -63,7 +63,7 @@ pub struct ReplyArgs {
     /// Mark the thread resolved
     #[arg(long)]
     pub resolve: bool,
-    /// nit server URL (default: $NIT_SERVER or http://127.0.0.1:8877)
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
 }

@@ -2,7 +2,7 @@
 //!
 //! Library surface for the `nit` binary and its tests:
 //!
-//! - [`db`] — SQLite persistence: open/migrate, typed rows, query helpers
+//! - [`db`] — `SQLite` persistence: open/migrate, typed rows, query helpers
 //!   (schema contract: `docs/data-model.md`).
 //! - [`gitscan`] — the scan engine: walks `base..tip` of a registered
 //!   branch, reconciles changes/revisions, folds `fixup!` commits, detects

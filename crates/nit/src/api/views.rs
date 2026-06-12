@@ -135,7 +135,7 @@ pub struct CommentRenderer<'a> {
     repo: Option<&'a Repository>,
     change_id: i64,
     target: i64,
-    /// (revision, is_new_side) → tree oid, None = unresolvable.
+    /// (revision, `is_new_side`) → tree oid, None = unresolvable.
     trees: HashMap<(i64, bool), Option<Oid>>,
 }
 

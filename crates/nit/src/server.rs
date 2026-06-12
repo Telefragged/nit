@@ -11,11 +11,11 @@ pub struct ServeArgs {
     /// Address to listen on
     #[arg(long, default_value = "127.0.0.1:8877")]
     pub listen: SocketAddr,
-    /// SQLite database path (default: $XDG_DATA_HOME/nit/nit.sqlite3)
+    /// Database path (default: `$XDG_DATA_HOME/nit/nit.sqlite3`)
     #[arg(long)]
     pub db: Option<PathBuf>,
     /// Built web UI directory served outside /api
-    /// (default: $NIT_WEB_DIST; API-only when unset)
+    /// (default: `$NIT_WEB_DIST`; API-only when unset)
     #[arg(long)]
     pub web_dist: Option<PathBuf>,
 }
