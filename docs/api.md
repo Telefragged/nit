@@ -130,7 +130,7 @@ revisions").
 ### Comment rendering across revisions
 
 Comments are anchored where they were written (`revision`, `file`, `line`,
-`side`, plus a `line_text` snapshot). When the change is served at
+`side`, an optional `range`, plus a `line_text` snapshot). When the change is served at
 `?revision=n`, the server ports each comment's anchor through
 `diff(tree(comment.revision), tree(n))` per file. For
 `/COMMIT_MSG` anchors the server ports through
@@ -148,23 +148,54 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
            "file": "src/main.rs",        // null: change-level comment
            "line": 14,                   // null: file-/change-level
            "side": "new",
+           "range": CommentRange,        // null: whole-line comment
            "line_text": "    let x = parse(input);",  // null without line
            "rendered_line": 14,          // for the requested revision
+           "rendered_range": CommentRange,  // ported; null when not portable
            "outdated": false,
            "body": "…", "state": "draft",   // draft | published
            "resolved": false,
            "review_id": null, "created_at": "…", "updated_at": "…"}
 ```
 
+### Range comments
+
+A line comment may carry a `range` — the selected text it anchors to,
+gerrit-style:
+
+```json
+CommentRange = {"start_line": 12, "start_char": 4,
+                "end_line": 14, "end_char": 7}
+```
+
+- Lines are 1-based on the comment's `side`; chars are 0-based offsets
+  into the line text, `end_char` exclusive.
+- `end_line` equals the comment's `line` (the thread renders under the
+  selection's last line) and the range is non-empty and forward:
+  `start_line < end_line`, or `start_line == end_line` with
+  `start_char < end_char`; `end_char >= 1` always (a selection ending
+  before a line's first character belongs to the previous line).
+  Violations → 400.
+- Char offsets are not validated against file contents (the repo may not
+  even be readable at draft time); the UI clamps when rendering.
+
+`rendered_range` ports with the same diff as `rendered_line`: the range
+shifts onto the requested revision only when no hunk touches
+`[start_line, end_line]` — untouched lines are byte-identical, so the
+char offsets carry over. When the region was touched, `rendered_range`
+is null and the comment falls back to its line anchor (`rendered_line`,
+which may itself still port or go outdated).
+
 ## Comments (drafts → published) — reviewer side
 
 - `POST /api/changes/{id}/drafts` →
-  `req: {"revision": 2, "file": "src/main.rs", "line": 14, "side": "new", "body": "…", "parent_id": null}`
+  `req: {"revision": 2, "file": "src/main.rs", "line": 14, "side": "new", "range": CommentRange, "body": "…", "parent_id": null}`
   → Comment. `file`/`line` optional (change-/file-level). `side` defaults
-  `"new"`. `file` may be the reserved `/COMMIT_MSG` (commit-message
-  comments; `side` must be `"new"`, else 400). In interdiff view the UI
-  may only attach comments to the _new_ side; old-side interdiff
-  commenting is unsupported in v1.
+  `"new"`. `range` optional: requires a `line` and must satisfy the
+  "Range comments" rules, else 400. `file` may be the reserved
+  `/COMMIT_MSG` (commit-message comments; `side` must be `"new"`, else
+  400). In interdiff view the UI may only attach comments to the _new_
+  side; old-side interdiff commenting is unsupported in v1.
 - `PATCH /api/drafts/{id}` — `{"body": "…"}` → Comment. 404 unless draft.
 - `DELETE /api/drafts/{id}` → 204. 404 unless draft.
 - `POST /api/comments/{id}/resolve` / `…/unresolve` → Comment (root

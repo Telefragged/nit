@@ -25,10 +25,13 @@ revisions (id, change_id, number, commit_sha, parent_sha, message,
            created_at, UNIQUE(change_id, number))
            -- number: 1-based patchset number
 comments  (id, change_id, revision_number, parent_id, author, file, line,
-           side, line_text, body, state, resolved, review_id,
+           side, range_start_line, range_start_char, range_end_line,
+           range_end_char, line_text, body, state, resolved, review_id,
            created_at, updated_at)
            -- author: reviewer | agent;  state: draft | published
            -- side: old | new;  line_text: snapshot of the anchored line
+           -- range_*: optional selected-text anchor (api.md "Range
+           --   comments"); all four set or all NULL; range_end_line = line
            -- parent_id: reply threading; resolved: thread-level bool
 reviews   (id, change_id, revision_number, verdict, message, created_at)
            -- verdict: approve | request_changes | comment
