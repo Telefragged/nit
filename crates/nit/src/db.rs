@@ -689,7 +689,10 @@ pub fn latest_revision(conn: &Connection, change_id: i64) -> Result<Option<Revis
 
 /// # Errors
 /// When serializing `fixups` or the insert fails.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one argument per inserted column"
+)]
 pub fn insert_revision(
     conn: &Connection,
     change_id: i64,

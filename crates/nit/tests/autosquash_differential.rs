@@ -46,7 +46,10 @@ fn git_ok(dir: &Path, args: &[&str]) {
 
 /// Build the repo, run autosquash, return (commit shas in branch order,
 /// todo-derived root per sha, our root per sha).
-#[allow(clippy::type_complexity)]
+#[expect(
+    clippy::type_complexity,
+    reason = "the differential triple (shas, git's roots, our roots)"
+)]
 fn run_layout(
     layout: &[Spec],
 ) -> (

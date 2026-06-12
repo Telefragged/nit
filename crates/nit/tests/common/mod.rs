@@ -4,7 +4,10 @@
 //!
 //! Each integration-test binary compiles its own copy, so helpers unused
 //! by one binary are fine.
-#![allow(dead_code)]
+#![expect(
+    dead_code,
+    reason = "each test binary compiles its own copy and uses a subset"
+)]
 
 use std::sync::atomic::{AtomicI64, Ordering};
 

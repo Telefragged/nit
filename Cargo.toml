@@ -10,5 +10,9 @@ license = "MIT"
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
+# Suppressions must be #[expect] (flagged when stale) and say why.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
 # Fires on deliberately parallel names (change1/change2, draft_b/draft_c).
 similar_names = "allow"
