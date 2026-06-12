@@ -48,6 +48,18 @@ nit wait                      # …repeat until state=ready_to_merge
 nit push                      # optional: next scan marks the chain merged
 ```
 
+The push duty is **per branch, owned by whoever builds it**. In
+multi-agent setups (an orchestrator fanning out workers, one
+worktree/branch each) every worker drives `nit push --partial` for its
+own branch from its own worktree, starting the moment its first commit
+is green — the orchestrator must write that into each worker's
+instructions, and must not centralize pushing, batch it, or gate it on
+later phases. "Completed" means green and coherent now, not final:
+amends and `fixup!`s after a push fold into new revisions by design, so
+a planned follow-up pass (cleanup, self-review, verification) is no
+reason to hold the first push back. From the reviewer's seat, an
+unpushed branch is invisible work.
+
 - `nit push [--partial] [--base <ref>] [--branch <name>] [--server <url>]`
   — defaults: branch = current HEAD branch, base = `main` (falls back to
   `master`), server = `$NIT_SERVER` or `http://127.0.0.1:8877`. Prints the

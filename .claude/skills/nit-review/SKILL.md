@@ -14,6 +14,11 @@ This skill is the operational checklist for driving it from a Claude session.
   human should review the work before it lands on `main` — review runs
   alongside the rest of the build, not after it.
 - The user asks for review, or asks to act on feedback from an existing chain.
+- You are spawning agents that build branches (one worktree/branch per
+  task): the loop belongs to **each worker, for its own branch, from its
+  own worktree** — write it into every worker's instructions. Do not keep
+  nit interaction to yourself as a coordinator, batch pushes, or schedule
+  them after later phases; until someone pushes, the reviewer sees nothing.
 
 **When not:**
 - The change matches a "Review exemptions" entry in `docs/dev.md`, or the
@@ -22,7 +27,10 @@ This skill is the operational checklist for driving it from a Claude session.
   branch/worktree and ff-merge to `main` exactly where the loop's merge
   step would have run.
 - The current *commit* is mid-flight. Push only completed, green commits;
-  an incomplete chain is fine — that is what `--partial` marks.
+  an incomplete chain is fine — that is what `--partial` marks. Completed
+  is not final: a planned cleanup/self-review/verification pass that may
+  still amend the commit is no reason to hold the push — post-push amends
+  fold into new revisions by design.
 
 ## Preconditions
 
