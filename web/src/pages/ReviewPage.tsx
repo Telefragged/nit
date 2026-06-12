@@ -142,18 +142,17 @@ export default function ReviewPage() {
     latest;
   const selected = selectedRev?.number ?? 1;
 
-  const viewParam = searchParams.get("view"); // "full" forces full diff
-  const againstParam = searchParams.get("against")
-    ? Number(searchParams.get("against"))
-    : undefined;
+  // ?against: absent → implicit default below; "base" → explicit full diff
+  // vs parent; "M" → interdiff rM → rSelected when 1 <= M < selected.
+  const againstRaw = searchParams.get("against");
   const lastReviewed = change?.last_reviewed_revision ?? null;
 
   let against: number | undefined;
-  if (viewParam !== "full" && change && latest) {
-    if (againstParam !== undefined && againstParam >= 1 && againstParam < selected) {
-      against = againstParam;
+  if (change && latest && againstRaw !== "base") {
+    if (againstRaw !== null) {
+      const m = Number(againstRaw);
+      if (Number.isInteger(m) && m >= 1 && m < selected) against = m;
     } else if (
-      againstParam === undefined &&
       lastReviewed !== null &&
       lastReviewed < latest.number &&
       selected === latest.number
@@ -319,7 +318,6 @@ export default function ReviewPage() {
               onSelect={(n) =>
                 updateParams({
                   revision: String(n),
-                  view: null,
                   against: null,
                 })
               }
@@ -367,11 +365,11 @@ export default function ReviewPage() {
               <>
                 <span className="mode-label">
                   Interdiff <span className="mono">r{against} → r{selected}</span>
-                  {against === lastReviewed && againstParam === undefined ? (
+                  {against === lastReviewed && againstRaw === null ? (
                     <span className="dim"> — changes since your review</span>
                   ) : null}
                 </span>
-                <button onClick={() => updateParams({ view: "full", against: null })}>
+                <button onClick={() => updateParams({ against: "base" })}>
                   Show full diff
                 </button>
               </>
@@ -387,10 +385,7 @@ export default function ReviewPage() {
                     <button
                       key={r.number}
                       onClick={() =>
-                        updateParams({
-                          against: String(r.number),
-                          view: null,
-                        })
+                        updateParams({ against: String(r.number) })
                       }
                     >
                       vs r{r.number}

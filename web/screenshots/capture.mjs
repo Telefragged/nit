@@ -43,10 +43,10 @@ const captures = [
       await page.waitForTimeout(100);
     },
   },
-  { name: "review-full-unified", path: "/changes/11?view=full" },
+  { name: "review-full-unified", path: "/changes/11?against=base" },
   {
     name: "review-split",
-    path: "/changes/11?view=full",
+    path: "/changes/11?against=base",
     actions: async (page) => {
       await page.getByRole("button", { name: "Side-by-side" }).click();
       await page.waitForTimeout(200);
@@ -56,7 +56,7 @@ const captures = [
   { name: "review-rev1", path: "/changes/11?revision=1" },
   {
     name: "review-draft-editor",
-    path: "/changes/11?view=full",
+    path: "/changes/11?against=base",
     actions: async (page) => {
       await page
         .locator("td.code", { hasText: "self.store.revoke_family" })
