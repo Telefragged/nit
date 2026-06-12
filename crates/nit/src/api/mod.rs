@@ -382,6 +382,11 @@ async fn create_draft(
         if req.line.is_some() && req.file.is_none() {
             return Err(Error::bad_request("a line anchor requires a file"));
         }
+        if req.file.as_deref() == Some(diff::COMMIT_MSG_PATH) && side == "old" {
+            return Err(Error::bad_request(
+                "/COMMIT_MSG has no old side — comment with side \"new\"",
+            ));
+        }
         // Thread under the root, wherever the draft pointed (like replies):
         // feedback scoping only walks one level below roots, so a comment
         // threaded under a reply would silently vanish from the agent's view.
@@ -402,6 +407,7 @@ async fn create_draft(
             None => None,
         };
         let line_text = match (req.file.as_deref(), req.line) {
+            (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&rev.message, line),
             (Some(file), Some(line)) => open_repo(&conn, change.chain_id)
                 .and_then(|repo| anchor_line_text(&repo, &rev, side, file, line)),
             _ => None,

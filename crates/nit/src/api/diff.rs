@@ -263,21 +263,45 @@ fn port_through_hunks(patch: &Patch, line: i64) -> Result<Option<i64>> {
     Ok(Some(line + offset))
 }
 
-/// Snapshot of line `line` (1-based) of `file` in `tree`, for
-/// `comments.line_text`. `None` when the path/line/encoding make that
-/// impossible.
-pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: i64) -> Option<String> {
+/// [`port_line`] for [`COMMIT_MSG_PATH`] anchors: ports `line` through
+/// `diff(old, new)` of the two revisions' message texts (docs/api.md
+/// "Comment rendering across revisions") — same shifted/outdated rules.
+///
+/// # Errors
+/// When git can't build or read the buffer diff.
+pub fn port_line_in_text(old: &str, new: &str, line: i64) -> Result<Option<i64>> {
+    if line < 1 {
+        return Ok(None); // anchor never existed
+    }
+    let mut opts = DiffOptions::new();
+    opts.context_lines(0);
+    let patch = Patch::from_buffers(old.as_bytes(), None, new.as_bytes(), None, Some(&mut opts))?;
+    port_through_hunks(&patch, line)
+}
+
+/// Line `line` (1-based) of `text`, `None` out of range — the snapshot
+/// primitive behind `comments.line_text`, applied to commit messages
+/// ([`COMMIT_MSG_PATH`] drafts) and tree files ([`line_text`]) alike.
+#[must_use]
+pub fn nth_line(text: &str, line: i64) -> Option<String> {
     if line < 1 {
         return None;
     }
+    let idx = usize::try_from(line - 1).ok()?;
+    text.lines().nth(idx).map(str::to_string)
+}
+
+/// Snapshot of line `line` (1-based) of `file` in `tree`, for
+/// `comments.line_text`. `None` when the path/line/encoding make that
+/// impossible.
+#[must_use]
+pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: i64) -> Option<String> {
     let entry = tree.get_path(Path::new(file)).ok()?;
     let blob = repo.find_blob(entry.id()).ok()?;
     if blob.is_binary() {
         return None;
     }
-    let content = String::from_utf8_lossy(blob.content()).into_owned();
-    let idx = usize::try_from(line - 1).ok()?;
-    content.lines().nth(idx).map(str::to_string)
+    nth_line(&String::from_utf8_lossy(blob.content()), line)
 }
 
 #[cfg(test)]
@@ -573,6 +597,44 @@ mod tests {
             port_line(&r.repo, &t_b, &t_a, "a.txt", 1).expect("porting should succeed"),
             None
         );
+    }
+
+    #[test]
+    fn port_line_in_text_shifts_and_outdates() {
+        let old = lines(1..=10);
+        // Insert two lines after line 2, change line 7, delete line 9 —
+        // the same cases port_line proves against trees.
+        let new = old
+            .replace("line 2\n", "line 2\nins a\nins b\n")
+            .replace("line 7\n", "line seven\n")
+            .replace("line 9\n", "");
+        let port = |line| port_line_in_text(&old, &new, line).expect("text porting should succeed");
+
+        assert_eq!(port(1), Some(1)); // above all edits
+        assert_eq!(port(2), Some(2)); // insertion is *after* line 2
+        assert_eq!(port(3), Some(5)); // shifted by the two inserted lines
+        assert_eq!(port(7), None); // the line itself changed
+        assert_eq!(port(8), Some(10)); // between change and deletion
+        assert_eq!(port(9), None); // deleted
+        assert_eq!(port(10), Some(11)); // +2 -1
+        assert_eq!(port(0), None); // nonsense anchor
+
+        // Identical texts: identity.
+        assert_eq!(
+            port_line_in_text(&old, &old, 4).expect("text porting should succeed"),
+            Some(4)
+        );
+    }
+
+    #[test]
+    fn nth_line_snapshot() {
+        let msg = "subject\n\nbody\n";
+        assert_eq!(nth_line(msg, 1).as_deref(), Some("subject"));
+        assert_eq!(nth_line(msg, 2).as_deref(), Some(""));
+        assert_eq!(nth_line(msg, 3).as_deref(), Some("body"));
+        assert_eq!(nth_line(msg, 4), None);
+        assert_eq!(nth_line(msg, 0), None);
+        assert_eq!(nth_line(msg, -1), None);
     }
 
     #[test]

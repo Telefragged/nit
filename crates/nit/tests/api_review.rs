@@ -118,6 +118,93 @@ fn reword_blocks_stale_review_retarget() {
 }
 
 #[test]
+fn commit_msg_comments_port_across_reword() {
+    let g = GitRepo::new();
+    let a_txt = "a1\na2\n";
+    // Message lines: 1 subject, 2 blank, 3/4 body, 5 blank, 6 trailer.
+    let c1 = g.commit(
+        &[g.root],
+        "core: add a\n\nFirst body line.\nSecond body line.\n\nChange-Id: Ia\n",
+        &[("a.txt", a_txt)],
+    );
+    g.branch("feat", c1);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let register = json!({
+        "repo_path": g.workdir().to_string_lossy(),
+        "branch": "feat",
+        "base": "main",
+    });
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+
+    let drafts_url = server.url(&format!("/api/changes/{change_id}/drafts"));
+    let (st, on_body) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "file": "/COMMIT_MSG", "line": 4, "body": "second?"}),
+    );
+    assert_eq!(st, 200, "{on_body}");
+    assert_eq!(on_body["line_text"], "Second body line.");
+    let on_body_id = on_body["id"].as_i64().unwrap();
+    let (st, on_subject) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "file": "/COMMIT_MSG", "line": 1, "body": "explain more"}),
+    );
+    assert_eq!(st, 200);
+    let on_subject_id = on_subject["id"].as_i64().unwrap();
+    let (st, _) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reviews")),
+        &json!({"revision": 1, "verdict": "request_changes", "message": "message nits"}),
+    );
+    assert_eq!(st, 200);
+
+    // Reword: the subject line changes (outdates its anchor), a line is
+    // inserted above "Second body line." (shifts its anchor 4 → 5).
+    let c1b = g.commit(
+        &[g.root],
+        "core: add a, explained\n\nFirst body line.\nAn inserted line.\nSecond body line.\n\n\
+         Change-Id: Ia\n",
+        &[("a.txt", a_txt)],
+    );
+    g.branch("feat", c1b);
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200);
+    assert_eq!(chain["changes"][0]["revision"], 2);
+
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+    assert_eq!(st, 200);
+    let comments = detail["comments"].as_array().unwrap();
+    let by_id = |id: i64| {
+        comments
+            .iter()
+            .find(|c| c["id"].as_i64() == Some(id))
+            .unwrap()
+    };
+    let body = by_id(on_body_id);
+    assert_eq!(body["rendered_line"], 5, "unchanged region shifts");
+    assert_eq!(body["outdated"], false);
+    let subject = by_id(on_subject_id);
+    assert_eq!(subject["rendered_line"], Value::Null);
+    assert_eq!(subject["outdated"], true, "edited line goes outdated");
+    assert_eq!(subject["line_text"], "core: add a");
+
+    // Served at revision 1, both anchors are where they were written.
+    let (_, at_r1) = http_get(&server.url(&format!("/api/changes/{change_id}?revision=1")));
+    let comments = at_r1["comments"].as_array().unwrap();
+    let find = |id: i64| {
+        comments
+            .iter()
+            .find(|c| c["id"].as_i64() == Some(id))
+            .unwrap()
+    };
+    assert_eq!(find(on_body_id)["rendered_line"], 4);
+    assert_eq!(find(on_body_id)["outdated"], false);
+    assert_eq!(find(on_subject_id)["rendered_line"], 1);
+    assert_eq!(find(on_subject_id)["outdated"], false);
+}
+
+#[test]
 fn request_validation() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
@@ -156,6 +243,22 @@ fn request_validation() {
         let (st, e) = http_post(&drafts_url, body);
         assert!((400..=404).contains(&st), "{what}: {st} {e}");
     }
+
+    // /COMMIT_MSG drafts: the message has no old side; new-side anchors
+    // snapshot message lines (docs/api.md "The commit message as a file").
+    let (st, e) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "file": "/COMMIT_MSG", "line": 1, "side": "old", "body": "x"}),
+    );
+    assert_eq!(st, 400, "{e}");
+    assert!(e["error"].as_str().unwrap().contains("old side"));
+    let (st, msg_draft) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "file": "/COMMIT_MSG", "line": 1, "body": "subject nit"}),
+    );
+    assert_eq!(st, 200, "{msg_draft}");
+    assert_eq!(msg_draft["line_text"], "core: x");
+    assert_eq!(msg_draft["rendered_line"], 1);
 
     // Reviews: bad verdict, unknown revision.
     let (st, e) = http_post(

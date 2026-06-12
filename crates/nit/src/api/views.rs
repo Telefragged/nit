@@ -140,6 +140,9 @@ pub struct CommentRenderer<'a> {
     repo: Option<&'a Repository>,
     change_id: i64,
     target: i64,
+    /// revision → row, None = unknown revision. Trees and messages both
+    /// derive from this — one `db::get_revision` per revision per render.
+    revisions: HashMap<i64, Option<db::Revision>>,
     /// (revision, `is_new_side`) → tree oid, None = unresolvable.
     trees: HashMap<(i64, bool), Option<Oid>>,
 }
@@ -156,6 +159,7 @@ impl<'a> CommentRenderer<'a> {
             repo,
             change_id,
             target,
+            revisions: HashMap::new(),
             trees: HashMap::new(),
         }
     }
@@ -172,6 +176,9 @@ impl<'a> CommentRenderer<'a> {
         };
         if comment.revision_number == self.target {
             return (Some(line), false);
+        }
+        if file == diff::COMMIT_MSG_PATH {
+            return self.port_message_anchor(comment, line);
         }
         let new_side = comment.side != "old";
         let Some(repo) = self.repo else {
@@ -195,6 +202,42 @@ impl<'a> CommentRenderer<'a> {
         }
     }
 
+    /// `/COMMIT_MSG` anchors port through the two revisions' message
+    /// texts, not trees (docs/api.md) — and so survive an unopenable
+    /// repository. Old-side data renders outdated defensively (the
+    /// message has no old side; such drafts are rejected with 400).
+    fn port_message_anchor(&mut self, comment: &db::Comment, line: i64) -> (Option<i64>, bool) {
+        if comment.side == "old" {
+            return (None, true);
+        }
+        let (Some(from), Some(to)) = (
+            self.message(comment.revision_number),
+            self.message(self.target),
+        ) else {
+            return (None, true);
+        };
+        match diff::port_line_in_text(&from, &to, line) {
+            Ok(Some(ported)) => (Some(ported), false),
+            _ => (None, true),
+        }
+    }
+
+    /// The cached revision row, fetched on first use.
+    fn revision(&mut self, revision: i64) -> Option<&db::Revision> {
+        self.revisions
+            .entry(revision)
+            .or_insert_with(|| {
+                db::get_revision(self.conn, self.change_id, revision)
+                    .ok()
+                    .flatten()
+            })
+            .as_ref()
+    }
+
+    fn message(&mut self, revision: i64) -> Option<String> {
+        self.revision(revision).map(|rev| rev.message.clone())
+    }
+
     /// The tree a side of a revision's diff shows: effective tree (new) or
     /// the parent commit's tree (old — deleted lines live there).
     fn tree_oid(&mut self, revision: i64, new_side: bool) -> Option<Oid> {
@@ -206,11 +249,9 @@ impl<'a> CommentRenderer<'a> {
         oid
     }
 
-    fn lookup_tree(&self, revision: i64, new_side: bool) -> Option<Oid> {
-        let rev = db::get_revision(self.conn, self.change_id, revision)
-            .ok()
-            .flatten()?;
+    fn lookup_tree(&mut self, revision: i64, new_side: bool) -> Option<Oid> {
         let repo = self.repo?;
+        let rev = self.revision(revision)?;
         if new_side {
             let oid = Oid::from_str(rev.effective_tree.as_deref()?).ok()?;
             repo.find_tree(oid).ok().map(|t| t.id())
