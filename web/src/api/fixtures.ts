@@ -100,6 +100,8 @@ interface ChainRecord {
   branch: string;
   base: string;
   status: ChainStatus;
+  /** Sticky; set by push --partial, cleared by ready. */
+  partial: boolean;
   last_scan_error: string | null;
   scan_warnings: string[];
   created_at: string;
@@ -1006,6 +1008,7 @@ const chains: ChainRecord[] = [
     branch: "feat/token-rotation",
     base: "main",
     status: "active",
+    partial: false,
     last_scan_error: null,
     scan_warnings: [
       "squash! commit 9f3c21a4 was folded as a fixup; its message edits were ignored",
@@ -1020,6 +1023,8 @@ const chains: ChainRecord[] = [
     branch: "fix/wal-checkpoint",
     base: "main",
     status: "active",
+    // The agent is mid-push (nit push --partial); exercises the PARTIAL badge.
+    partial: true,
     last_scan_error: null,
     scan_warnings: [],
     created_at: ago(9 * 60),
@@ -1032,6 +1037,7 @@ const chains: ChainRecord[] = [
     branch: "chore/dedupe-ci-cache",
     base: "main",
     status: "active",
+    partial: false,
     last_scan_error: null,
     scan_warnings: [],
     created_at: ago(50 * 60),
@@ -1044,6 +1050,7 @@ const chains: ChainRecord[] = [
     branch: "build/rustls",
     base: "main",
     status: "merged",
+    partial: false,
     last_scan_error: null,
     scan_warnings: [],
     created_at: ago(5 * 24 * 60),
@@ -1355,7 +1362,9 @@ function chainState(chain: ChainRecord): ChainState {
   }
   if (live.some((c) => c.status === "pending")) return "waiting_for_review";
   if (live.length > 0 && live.every((c) => c.status === "approved")) {
-    return "ready_to_merge";
+    // All approved while partial is agents_turn, never ready_to_merge — the
+    // agent is still pushing (api.md state table).
+    return chain.partial ? "agents_turn" : "ready_to_merge";
   }
   return "agents_turn"; // empty chain
 }
@@ -1393,6 +1402,7 @@ function chainView(chain: ChainRecord): Chain {
     base: chain.base,
     status: chain.status,
     state: chainState(chain),
+    partial: chain.partial,
     last_scan_error: chain.last_scan_error,
     scan_warnings: [...chain.scan_warnings],
     web_url: `${WEB_BASE}/chains/${chain.id}`,

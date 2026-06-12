@@ -219,6 +219,13 @@ select:focus {
   background: var(--gray-dim);
 }
 
+/* Side-by-side badges (e.g. state + PARTIAL on a dashboard row). */
+.badge-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .dot {
   display: inline-block;
   width: 9px;

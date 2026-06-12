@@ -27,6 +27,14 @@ export function StateBadge({ state }: { state: ChainState }) {
   );
 }
 
+/**
+ * Sticky partial-chain marker: the agent is still pushing commits.
+ * Informational, not a call to action — gray, never amber.
+ */
+export function PartialBadge() {
+  return <span className="badge badge-gray">PARTIAL</span>;
+}
+
 const STATUS_LABEL: Record<ChangeStatus, string> = {
   pending: "PENDING",
   approved: "APPROVED",

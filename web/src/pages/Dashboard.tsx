@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { listChains } from "../api/client";
 import type { Chain } from "../api/types";
-import { StateBadge, StatusDot } from "../components/badges";
+import { StateBadge, StatusDot, PartialBadge } from "../components/badges";
 import { timeAgo } from "../lib/time";
 import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
@@ -33,7 +33,10 @@ function ChainRow({ chain }: { chain: Chain }) {
         </div>
       </td>
       <td>
-        <StateBadge state={chain.state} />
+        <div className="badge-group">
+          <StateBadge state={chain.state} />
+          {chain.partial ? <PartialBadge /> : null}
+        </div>
       </td>
       <td>
         <div className="dots">

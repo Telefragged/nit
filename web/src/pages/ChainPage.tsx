@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { getChain } from "../api/client";
 import type { ChangeSummary } from "../api/types";
-import { StateBadge, StatusChip } from "../components/badges";
+import { StateBadge, StatusChip, PartialBadge } from "../components/badges";
 import { timeAgo } from "../lib/time";
 import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
@@ -104,6 +104,7 @@ export default function ChainPage() {
       <div className="chain-header">
         <h1 className="mono">{chain.branch}</h1>
         <StateBadge state={chain.state} />
+        {chain.partial ? <PartialBadge /> : null}
       </div>
       <p className="subtitle">
         <span className="mono">{chain.repo_path}</span> → base{" "}

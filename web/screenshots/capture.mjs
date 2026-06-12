@@ -29,6 +29,8 @@ const PORT = 5187;
 const captures = [
   { name: "dashboard", path: "/" },
   { name: "chain-warnings", path: "/chains/1" },
+  // Chain 2 is partial (push --partial): covers the PARTIAL badge in the chain
+  // header here and on its dashboard row above.
   { name: "chain-agents-turn", path: "/chains/2" },
   // Change 11 has last_reviewed_revision 1 < latest 2 → interdiff by default.
   { name: "review-interdiff", path: "/changes/11" },

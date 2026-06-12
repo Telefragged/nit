@@ -37,6 +37,8 @@ export interface Chain {
   base: string;
   status: ChainStatus;
   state: ChainState;
+  /** Sticky; set by push --partial, cleared by ready. */
+  partial: boolean;
   last_scan_error: string | null;
   scan_warnings: string[];
   web_url: string;
@@ -74,6 +76,11 @@ export interface RegisterChainRequest {
   repo_path: string;
   branch: string;
   base: string;
+  /**
+   * Sticky: true marks the chain partial (`nit push --partial`), false clears
+   * it (`nit ready`), absent leaves it unchanged.
+   */
+  partial?: boolean;
 }
 
 export interface ChainList {
@@ -260,6 +267,8 @@ export interface FeedbackChain {
   branch: string;
   base: string;
   web_url: string;
+  /** Sticky; set by push --partial, cleared by ready. */
+  partial: boolean;
   last_scan_error: string | null;
   scan_warnings: string[];
 }

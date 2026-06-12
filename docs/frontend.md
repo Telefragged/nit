@@ -13,10 +13,12 @@ happens.
 
 - `/` **Dashboard** — table of active chains: branch, repo basename, state
   badge (`WAITING FOR REVIEW` amber / `AGENT'S TURN` blue / `READY TO MERGE`
-  green), per-change status dots in chain order (click-through), updated
-  time. Chains gone (merged/abandoned) disappear. Poll via react-query
-  `refetchInterval: 5000`.
-- `/chains/:id` **Chain** — ordered commit list: position, subject, status
+  green) plus a gray `PARTIAL` badge while the agent is still pushing
+  (`chain.partial`), per-change status dots in chain order (click-through),
+  updated time. Chains gone (merged/abandoned) disappear. Poll via
+  react-query `refetchInterval: 5000`.
+- `/chains/:id` **Chain** — header: branch, state badge, the gray `PARTIAL`
+  badge while `partial`. Ordered commit list: position, subject, status
   chip, revision count, comment/draft/unresolved counts, an "updated since
   your review (1→2)" badge when `last_reviewed_revision < revision`.
   Orphaned changes render collapsed at the bottom (comments preserved).
@@ -66,7 +68,9 @@ happens.
 Expert-dense, dark-first (single dark theme for v1). Background `#0d1117`-ish,
 mono font for code/shas (`ui-monospace` stack), sans for chrome. Amber =
 needs reviewer, blue = agent working, green = approved/ready, red =
-changes requested/deletions. Compact paddings; no marketing fluff; every
+changes requested/deletions; gray = informational (the `PARTIAL` badge is not
+a call to action — amber stays reserved for "needs reviewer").
+Compact paddings; no marketing fluff; every
 piece of chrome must earn its pixels. Keyboard shortcuts (`[`/`]` file nav,
 `n`/`p` change nav, `a` reply modal) are welcome but optional in v1.
 
