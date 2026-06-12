@@ -30,9 +30,11 @@
   --del-gutter: rgba(248, 81, 73, 0.16);
   --del-intraline: rgba(248, 81, 73, 0.28);
 
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
+  --mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+  --sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
     "Helvetica Neue", sans-serif;
 }
 

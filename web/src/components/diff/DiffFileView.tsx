@@ -145,7 +145,10 @@ export default function DiffFileView({
 
   /** Comment anchor a click on this line produces, or null if forbidden. */
   function targetFor(line: Line): DraftTarget | null {
-    if (line.kind === "del" || (line.kind === "context" && line.new === undefined)) {
+    if (
+      line.kind === "del" ||
+      (line.kind === "context" && line.new === undefined)
+    ) {
       if (ctx.interdiff) return null; // old side of an interdiff: unsupported
       if (line.old === undefined) return null;
       return { file: file.path, side: "old", line: line.old };
@@ -234,7 +237,9 @@ export default function DiffFileView({
 
   function splitRows(hunk: Hunk) {
     return pairLines(hunk.lines).map((pair, pi) => {
-      const leftTarget = pair.left ? targetFor({ ...pair.left, new: undefined }) : null;
+      const leftTarget = pair.left
+        ? targetFor({ ...pair.left, new: undefined })
+        : null;
       const rightTarget =
         pair.right && pair.right.new !== undefined
           ? { file: file.path, side: "new" as const, line: pair.right.new }

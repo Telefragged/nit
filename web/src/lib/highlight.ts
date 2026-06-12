@@ -94,7 +94,11 @@ export function highlightLine(text: string, language: string | null): string {
  * the raw line text; walking the rendered DOM keeps entity escaping and
  * hljs token spans intact, splitting the mark across token boundaries.
  */
-export function markIntraline(html: string, start: number, end: number): string {
+export function markIntraline(
+  html: string,
+  start: number,
+  end: number,
+): string {
   if (start >= end) return html;
   const tpl = document.createElement("template");
   tpl.innerHTML = html;

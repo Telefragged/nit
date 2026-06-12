@@ -3,9 +3,10 @@ I want to build a tool that lets expert programmers efficiently review code prod
 It should be tool-agnostic and connect in a way that lets the agent register their changes, and lets them automatically resume when a user provides feedback or approves their changes.
 
 The user (expert programmer) will interact with a webpage. You can decide the architecture, but the review page itself should:
+
 - Have a diff-view similar to diffshub.com
 - Allow users to comment on specific lines of changes, like gerrit, and approve or request changes on the commit with said comments.
-    - Also, like in gerrit, comments should be in a draft state before the user chooses to submit them all.
+  - Also, like in gerrit, comments should be in a draft state before the user chooses to submit them all.
 
 The unit for review in this case will to begin with be a single commit like it is in gerrit.
 The optimal workflow for this tool would then naturally be agents making smaller commits and presenting them to the user instead of a single branch.

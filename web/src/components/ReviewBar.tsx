@@ -122,10 +122,7 @@ export default function ReviewBar({
     <>
       <div className="review-bar">
         {stats}
-        <button
-          className="btn-primary"
-          onClick={() => onReplyOpenChange(true)}
-        >
+        <button className="btn-primary" onClick={() => onReplyOpenChange(true)}>
           Review (a)
         </button>
       </div>

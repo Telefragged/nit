@@ -21,12 +21,13 @@ This skill is the operational checklist for driving it from a Claude session.
   them after later phases; until someone pushes, the reviewer sees nothing.
 
 **When not:**
+
 - The change matches a "Review exemptions" entry in `docs/dev.md`, or the
   user opts this change out ("skip nit", "land directly"). Skipping nit
-  skips the *review*, not the branch discipline: finish the work on its
+  skips the _review_, not the branch discipline: finish the work on its
   branch/worktree and ff-merge to `main` exactly where the loop's merge
   step would have run.
-- The current *commit* is mid-flight. Push only completed, green commits;
+- The current _commit_ is mid-flight. Push only completed, green commits;
   an incomplete chain is fine — that is what `--partial` marks. Completed
   is not final: a planned cleanup/self-review/verification pass that may
   still amend the commit is no reason to hold the push — post-push amends
@@ -91,7 +92,7 @@ wakes the session. Feedback arriving mid-build is handled exactly like the
   git branch -d <branch>
   ```
   In a worktree (`.worktrees/*`): rebase there, but never `git checkout
-  main` — main is checked out elsewhere. Run the merge from the primary
+main` — main is checked out elsewhere. Run the merge from the primary
   checkout: `git -C <primary-checkout> merge --ff-only <branch>`; if that
   checkout isn't yours to drive (parallel agents), stop at
   `ready_to_merge` and report to the coordinator.
@@ -116,8 +117,8 @@ reply.
   cursor is unchanged).
 - Edge-triggered waiting has a bootstrap race: events landing before your
   first cursor read are invisible. Always check
-  `GET /api/chains/{id}/feedback` for unresolved reviewer comments *after*
-  taking the cursor and *before* blocking.
+  `GET /api/chains/{id}/feedback` for unresolved reviewer comments _after_
+  taking the cursor and _before_ blocking.
 - If a push fails with a Change-Id scan error (missing or duplicate
   trailer, or a `fixup!`/`squash!` commit), fix the commit messages and
   push again — a blank line splitting the trailer block is the usual

@@ -5,7 +5,8 @@ export default function NotFound() {
     <main className="page">
       <h1>Not found</h1>
       <p className="subtitle">
-        Nothing lives at this address. <Link to="/">Back to the dashboard</Link>.
+        Nothing lives at this address. <Link to="/">Back to the dashboard</Link>
+        .
       </p>
     </main>
   );

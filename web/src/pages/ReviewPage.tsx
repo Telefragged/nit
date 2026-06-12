@@ -7,7 +7,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { createDraft, getChain, getChange, getDiff } from "../api/client";
 import type { ChangeDetail, Comment, Review, Revision } from "../api/types";
 import { StatusChip } from "../components/badges";
@@ -364,7 +369,15 @@ export default function ReviewPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fileCount, activeFile, revealFile, chainChanges, change, navigate, replyOpen]);
+  }, [
+    fileCount,
+    activeFile,
+    revealFile,
+    chainChanges,
+    change,
+    navigate,
+    replyOpen,
+  ]);
 
   // Scroll spy: keep activeFile — the rail highlight and the [ / ] cursor —
   // on the file section currently under the sticky chrome. The threshold is
@@ -520,7 +533,10 @@ export default function ReviewPage() {
               commit <span className="mono">{selectedRev.short_sha}</span>
             </span>
             <span className="dim">
-              parent <span className="mono">{selectedRev.parent_sha.slice(0, 12)}</span>
+              parent{" "}
+              <span className="mono">
+                {selectedRev.parent_sha.slice(0, 12)}
+              </span>
             </span>
             <span className="dim">{timeAgo(selectedRev.created_at)}</span>
             <ChainStrip chain={chain} currentId={changeId} />
@@ -620,8 +636,14 @@ export default function ReviewPage() {
             ) : diffQ.isPending ? (
               <div>
                 <div className="skeleton" style={{ height: 14 }} />
-                <div className="skeleton" style={{ height: 14, marginTop: 8, width: "80%" }} />
-                <div className="skeleton" style={{ height: 14, marginTop: 8, width: "90%" }} />
+                <div
+                  className="skeleton"
+                  style={{ height: 14, marginTop: 8, width: "80%" }}
+                />
+                <div
+                  className="skeleton"
+                  style={{ height: 14, marginTop: 8, width: "90%" }}
+                />
               </div>
             ) : files.length === 0 ? (
               <div className="empty-state">Empty diff — no file changes.</div>

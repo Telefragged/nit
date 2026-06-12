@@ -73,7 +73,7 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
 
 ## Commit & branch discipline
 
-- Small commits, one concern each, imperative subject, body explains *why*.
+- Small commits, one concern each, imperative subject, body explains _why_.
 - Never mix refactors with behavior changes.
 - Parallel work happens in worktrees under `.worktrees/` on `track/*`
   branches; they land on `main` via rebase + fast-forward only. No merge
@@ -93,8 +93,8 @@ underlying protocol is `docs/agent-workflow.md`.
 Changes matching an entry here may land on `main` directly (same commit
 discipline, still green):
 
-- *(none yet — add bullets like "screenshot fixture data" or
-  "typo-level doc fixes" as policy emerges)*
+- _(none yet — add bullets like "screenshot fixture data" or
+  "typo-level doc fixes" as policy emerges)_
 
 Ad-hoc exemption: the user saying "skip nit" / "land this directly" for a
 specific change. When in doubt, review.

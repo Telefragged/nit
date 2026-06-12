@@ -90,7 +90,11 @@ const captures = [
     },
   },
   // The synthetic "Commit message" file with its resolved inline thread.
-  { name: "review-commit-msg", path: "/changes/11?against=base", fullPage: false },
+  {
+    name: "review-commit-msg",
+    path: "/changes/11?against=base",
+    fullPage: false,
+  },
   {
     name: "review-split",
     path: "/changes/11?against=base",
@@ -111,7 +115,10 @@ const captures = [
       await expandAllFiles(page);
       await page.evaluate(() => {
         const el = document.getElementById("file-2");
-        window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 40);
+        window.scrollTo(
+          0,
+          window.scrollY + el.getBoundingClientRect().top - 40,
+        );
       });
       await page.waitForTimeout(250); // rAF measure + react re-render
     },
@@ -255,7 +262,9 @@ async function main() {
   try {
     await waitForServer(baseUrl);
     mkdirSync(outDir, { recursive: true });
-    const list = process.env.NIT_BASE_URL ? await liveCaptures(baseUrl) : captures;
+    const list = process.env.NIT_BASE_URL
+      ? await liveCaptures(baseUrl)
+      : captures;
 
     const browser = await chromium.launch();
     const context = await browser.newContext({

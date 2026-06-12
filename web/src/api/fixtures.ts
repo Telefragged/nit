@@ -65,7 +65,11 @@ const ctx = (old: number, nw: number, text: string): Line => ({
   new: nw,
   text,
 });
-const add = (nw: number, text: string): Line => ({ kind: "add", new: nw, text });
+const add = (nw: number, text: string): Line => ({
+  kind: "add",
+  new: nw,
+  text,
+});
 const del = (old: number, text: string): Line => ({ kind: "del", old, text });
 
 /** The /COMMIT_MSG entry of a vs-parent diff: the whole message, all-add. */
@@ -188,7 +192,8 @@ const change10: ChangeRecord = {
       id: 4,
       revision: 1,
       verdict: "approve",
-      message: "Schema is right, hash-keyed lookup avoids the timing leak. LGTM.",
+      message:
+        "Schema is right, hash-keyed lookup avoids the timing leak. LGTM.",
       created_at: ago(22 * 60),
     },
   ],
@@ -218,7 +223,10 @@ const change10: ChangeRecord = {
                 add(6, "    revoked    INTEGER NOT NULL DEFAULT 0,"),
                 add(7, "    created_at TEXT NOT NULL"),
                 add(8, ");"),
-                add(9, "CREATE INDEX idx_tokens_family ON refresh_tokens(family_id);"),
+                add(
+                  9,
+                  "CREATE INDEX idx_tokens_family ON refresh_tokens(family_id);",
+                ),
               ],
             },
           ],
@@ -331,11 +339,28 @@ const change11: ChangeRecord = {
               header: "impl TokenRotator",
               lines: [
                 ctx(18, 18, "impl TokenRotator {"),
-                ctx(19, 19, "    /// Exchange `presented` for a fresh refresh token."),
-                ctx(20, 20, "    pub fn rotate(&self, presented: &str) -> Token {"),
-                del(21, "        self.store.swap(presented, Token::generate(&mut self.rng.lock()))"),
-                add(21, "        let entry = self.store.lookup(presented).unwrap();"),
-                add(22, "        let fresh = Token::generate(&mut self.rng.lock());"),
+                ctx(
+                  19,
+                  19,
+                  "    /// Exchange `presented` for a fresh refresh token.",
+                ),
+                ctx(
+                  20,
+                  20,
+                  "    pub fn rotate(&self, presented: &str) -> Token {",
+                ),
+                del(
+                  21,
+                  "        self.store.swap(presented, Token::generate(&mut self.rng.lock()))",
+                ),
+                add(
+                  21,
+                  "        let entry = self.store.lookup(presented).unwrap();",
+                ),
+                add(
+                  22,
+                  "        let fresh = Token::generate(&mut self.rng.lock());",
+                ),
                 add(23, "        self.store.mark_rotated(entry.id, &fresh);"),
                 add(24, "        fresh"),
                 ctx(22, 25, "    }"),
@@ -359,13 +384,27 @@ const change11: ChangeRecord = {
               header: "impl TokenStore",
               lines: [
                 ctx(52, 52, "impl TokenStore {"),
-                ctx(53, 53, "    pub fn lookup(&self, raw: &str) -> Option<Entry> {"),
-                ctx(54, 54, "        self.with_conn(|c| c.query_row(LOOKUP_SQL, [hash(raw)], Entry::from_row).ok())"),
+                ctx(
+                  53,
+                  53,
+                  "    pub fn lookup(&self, raw: &str) -> Option<Entry> {",
+                ),
+                ctx(
+                  54,
+                  54,
+                  "        self.with_conn(|c| c.query_row(LOOKUP_SQL, [hash(raw)], Entry::from_row).ok())",
+                ),
                 ctx(55, 55, "    }"),
                 add(56, ""),
-                add(57, "    pub fn mark_rotated(&self, id: EntryId, next: &Token) {"),
+                add(
+                  57,
+                  "    pub fn mark_rotated(&self, id: EntryId, next: &Token) {",
+                ),
                 add(58, "        let conn = self.pool.clone().get();"),
-                add(59, "        conn.execute(MARK_SQL, params![id, hash(&next.raw), now()]);"),
+                add(
+                  59,
+                  "        conn.execute(MARK_SQL, params![id, hash(&next.raw), now()]);",
+                ),
                 add(60, "    }"),
                 ctx(56, 61, "}"),
               ],
@@ -393,20 +432,39 @@ const change11: ChangeRecord = {
               header: "impl TokenRotator",
               lines: [
                 ctx(18, 18, "impl TokenRotator {"),
-                ctx(19, 19, "    /// Exchange `presented` for a fresh refresh token."),
+                ctx(
+                  19,
+                  19,
+                  "    /// Exchange `presented` for a fresh refresh token.",
+                ),
                 del(20, "    pub fn rotate(&self, presented: &str) -> Token {"),
-                add(20, "    pub fn rotate(&self, presented: &str) -> Result<Token, RotateError> {"),
-                del(21, "        self.store.swap(presented, Token::generate(&mut self.rng.lock()))"),
+                add(
+                  20,
+                  "    pub fn rotate(&self, presented: &str) -> Result<Token, RotateError> {",
+                ),
+                del(
+                  21,
+                  "        self.store.swap(presented, Token::generate(&mut self.rng.lock()))",
+                ),
                 add(21, "        let entry = self"),
                 add(22, "            .store"),
                 add(23, "            .lookup(presented)"),
                 add(24, "            .ok_or(RotateError::UnknownToken)?;"),
                 add(25, "        if entry.rotated_at.is_some() {"),
-                add(26, "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3)."),
-                add(27, "            self.store.revoke_family(entry.family_id);"),
+                add(
+                  26,
+                  "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
+                ),
+                add(
+                  27,
+                  "            self.store.revoke_family(entry.family_id);",
+                ),
                 add(28, "            return Err(RotateError::ReuseDetected);"),
                 add(29, "        }"),
-                add(30, "        let fresh = Token::generate(&mut self.rng.lock());"),
+                add(
+                  30,
+                  "        let fresh = Token::generate(&mut self.rng.lock());",
+                ),
                 add(31, "        self.store.mark_rotated(entry.id, &fresh);"),
                 add(32, "        Ok(fresh)"),
                 ctx(22, 33, "    }"),
@@ -448,13 +506,27 @@ const change11: ChangeRecord = {
               header: "impl TokenStore",
               lines: [
                 ctx(52, 52, "impl TokenStore {"),
-                ctx(53, 53, "    pub fn lookup(&self, raw: &str) -> Option<Entry> {"),
-                ctx(54, 54, "        self.with_conn(|c| c.query_row(LOOKUP_SQL, [hash(raw)], Entry::from_row).ok())"),
+                ctx(
+                  53,
+                  53,
+                  "    pub fn lookup(&self, raw: &str) -> Option<Entry> {",
+                ),
+                ctx(
+                  54,
+                  54,
+                  "        self.with_conn(|c| c.query_row(LOOKUP_SQL, [hash(raw)], Entry::from_row).ok())",
+                ),
                 ctx(55, 55, "    }"),
                 add(56, ""),
-                add(57, "    pub fn mark_rotated(&self, id: EntryId, next: &Token) {"),
+                add(
+                  57,
+                  "    pub fn mark_rotated(&self, id: EntryId, next: &Token) {",
+                ),
                 add(58, "        let conn = self.pool.clone().get();"),
-                add(59, "        conn.execute(MARK_SQL, params![id, hash(&next.raw), now()]);"),
+                add(
+                  59,
+                  "        conn.execute(MARK_SQL, params![id, hash(&next.raw), now()]);",
+                ),
                 add(60, "    }"),
                 ctx(56, 61, "}"),
               ],
@@ -480,7 +552,10 @@ const change11: ChangeRecord = {
                 add(3, "#[test]"),
                 add(4, "fn rotates_fresh_token() {"),
                 add(5, "    let (rotator, seeded) = harness();"),
-                add(6, "    let next = rotator.rotate(&seeded).expect(\"first use rotates\");"),
+                add(
+                  6,
+                  '    let next = rotator.rotate(&seeded).expect("first use rotates");',
+                ),
                 add(7, "    assert_ne!(next.raw, seeded);"),
                 add(8, "}"),
                 add(9, ""),
@@ -515,10 +590,17 @@ const change11: ChangeRecord = {
               new_lines: 6,
               header: "",
               lines: [
-                ctx(4, 4, "old row is marked rotated, so a stolen token stops working the"),
+                ctx(
+                  4,
+                  4,
+                  "old row is marked rotated, so a stolen token stops working the",
+                ),
                 ctx(5, 5, "moment the legitimate client refreshes."),
                 ctx(6, 6, ""),
-                add(7, "Token reuse now revokes the whole family (RFC 6819 §5.2.2.3)."),
+                add(
+                  7,
+                  "Token reuse now revokes the whole family (RFC 6819 §5.2.2.3).",
+                ),
                 add(8, ""),
                 ctx(7, 9, "Change-Id: I3f2d8a91c0b7e514"),
               ],
@@ -540,21 +622,45 @@ const change11: ChangeRecord = {
               header: "impl TokenRotator",
               lines: [
                 ctx(18, 18, "impl TokenRotator {"),
-                ctx(19, 19, "    /// Exchange `presented` for a fresh refresh token."),
+                ctx(
+                  19,
+                  19,
+                  "    /// Exchange `presented` for a fresh refresh token.",
+                ),
                 del(20, "    pub fn rotate(&self, presented: &str) -> Token {"),
-                add(20, "    pub fn rotate(&self, presented: &str) -> Result<Token, RotateError> {"),
-                del(21, "        let entry = self.store.lookup(presented).unwrap();"),
+                add(
+                  20,
+                  "    pub fn rotate(&self, presented: &str) -> Result<Token, RotateError> {",
+                ),
+                del(
+                  21,
+                  "        let entry = self.store.lookup(presented).unwrap();",
+                ),
                 add(21, "        let entry = self"),
                 add(22, "            .store"),
                 add(23, "            .lookup(presented)"),
                 add(24, "            .ok_or(RotateError::UnknownToken)?;"),
                 add(25, "        if entry.rotated_at.is_some() {"),
-                add(26, "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3)."),
-                add(27, "            self.store.revoke_family(entry.family_id);"),
+                add(
+                  26,
+                  "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
+                ),
+                add(
+                  27,
+                  "            self.store.revoke_family(entry.family_id);",
+                ),
                 add(28, "            return Err(RotateError::ReuseDetected);"),
                 add(29, "        }"),
-                ctx(22, 30, "        let fresh = Token::generate(&mut self.rng.lock());"),
-                ctx(23, 31, "        self.store.mark_rotated(entry.id, &fresh);"),
+                ctx(
+                  22,
+                  30,
+                  "        let fresh = Token::generate(&mut self.rng.lock());",
+                ),
+                ctx(
+                  23,
+                  31,
+                  "        self.store.mark_rotated(entry.id, &fresh);",
+                ),
                 del(24, "        fresh"),
                 add(32, "        Ok(fresh)"),
                 ctx(25, 33, "    }"),
@@ -600,7 +706,10 @@ const change11: ChangeRecord = {
                 add(3, "#[test]"),
                 add(4, "fn rotates_fresh_token() {"),
                 add(5, "    let (rotator, seeded) = harness();"),
-                add(6, "    let next = rotator.rotate(&seeded).expect(\"first use rotates\");"),
+                add(
+                  6,
+                  '    let next = rotator.rotate(&seeded).expect("first use rotates");',
+                ),
                 add(7, "    assert_ne!(next.raw, seeded);"),
                 add(8, "}"),
                 add(9, ""),
@@ -668,8 +777,14 @@ const change12: ChangeRecord = {
                 add(1, "# Refresh-token rotation"),
                 ctx(2, 2, ""),
                 del(3, "TODO: describe the token flow."),
-                add(3, "Every presented refresh token is single-use. On use the server"),
-                add(4, "issues a successor in the same *family*; presenting a token that"),
+                add(
+                  3,
+                  "Every presented refresh token is single-use. On use the server",
+                ),
+                add(
+                  4,
+                  "issues a successor in the same *family*; presenting a token that",
+                ),
                 add(5, "was already rotated revokes the entire family."),
                 add(6, ""),
                 add(7, "![rotation flow](../assets/rotation-flow.png)"),
@@ -753,19 +868,34 @@ const change20: ChangeRecord = {
               header: "fn commit",
               lines: [
                 ctx(88, 88, "        self.append(frame)?;"),
-                del(89, "        self.checkpoint()?; // stalls every writer behind fsync"),
+                del(
+                  89,
+                  "        self.checkpoint()?; // stalls every writer behind fsync",
+                ),
                 ctx(90, 89, "        Ok(seq)"),
                 ctx(91, 90, "    }"),
                 ctx(92, 91, ""),
-                add(92, "    /// Called from the idle loop; cheap no-op below the backlog threshold."),
-                add(93, "    pub fn maybe_checkpoint(&self) -> io::Result<()> {"),
-                add(94, "        if self.backlog_bytes() < CHECKPOINT_BACKLOG {"),
+                add(
+                  92,
+                  "    /// Called from the idle loop; cheap no-op below the backlog threshold.",
+                ),
+                add(
+                  93,
+                  "    pub fn maybe_checkpoint(&self) -> io::Result<()> {",
+                ),
+                add(
+                  94,
+                  "        if self.backlog_bytes() < CHECKPOINT_BACKLOG {",
+                ),
                 add(95, "            return Ok(());"),
                 add(96, "        }"),
                 add(97, "        self.checkpoint()"),
                 ctx(93, 98, "    }"),
                 del(94, "    fn backoff(&self) -> Duration {"),
-                del(95, "        Duration::from_millis(2u64.pow(self.retries.min(6)))"),
+                del(
+                  95,
+                  "        Duration::from_millis(2u64.pow(self.retries.min(6)))",
+                ),
               ],
             },
           ],
@@ -855,7 +985,10 @@ const change30: ChangeRecord = {
               lines: [
                 ctx(24, 24, "      - uses: actions/cache@v4"),
                 ctx(25, 25, "        with:"),
-                del(26, "          key: cargo-${{ github.ref }}-${{ hashFiles('Cargo.lock') }}"),
+                del(
+                  26,
+                  "          key: cargo-${{ github.ref }}-${{ hashFiles('Cargo.lock') }}",
+                ),
                 add(26, "          key: cargo-${{ hashFiles('Cargo.lock') }}"),
                 ctx(27, 27, "          path: ~/.cargo"),
               ],
@@ -920,10 +1053,16 @@ const change40: ChangeRecord = {
               new_lines: 3,
               header: "[dependencies]",
               lines: [
-                ctx(14, 14, "serde = { version = \"1\", features = [\"derive\"] }"),
-                del(15, "reqwest = { version = \"0.12\", features = [\"native-tls\"] }"),
-                add(15, "reqwest = { version = \"0.12\", default-features = false, features = [\"rustls-tls\"] }"),
-                ctx(16, 16, "tokio = { version = \"1\", features = [\"full\"] }"),
+                ctx(14, 14, 'serde = { version = "1", features = ["derive"] }'),
+                del(
+                  15,
+                  'reqwest = { version = "0.12", features = ["native-tls"] }',
+                ),
+                add(
+                  15,
+                  'reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }',
+                ),
+                ctx(16, 16, 'tokio = { version = "1", features = ["full"] }'),
               ],
             },
           ],
@@ -1199,7 +1338,8 @@ const comments: CommentRecord[] = [
     file: "src/auth/rotate.rs",
     line: 26,
     side: "new",
-    line_text: "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
+    line_text:
+      "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
     body: "Put the RFC section in the error message too — operators grep for it.",
     state: "draft",
     resolved: false,
@@ -1443,7 +1583,10 @@ export async function mockRequest(
     return changeDetail(c, revision);
   }
 
-  if ((m = /^\/changes\/(\d+)\/revisions\/(\d+)\/diff$/.exec(p)) && method === "GET") {
+  if (
+    (m = /^\/changes\/(\d+)\/revisions\/(\d+)\/diff$/.exec(p)) &&
+    method === "GET"
+  ) {
     const c = getChange(Number(m[1]));
     const revision = Number(m[2]);
     const against = q.has("against") ? Number(q.get("against")) : undefined;
@@ -1482,7 +1625,9 @@ export async function mockRequest(
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "PATCH") {
-    const c = comments.find((x) => x.id === Number(m![1]) && x.state === "draft");
+    const c = comments.find(
+      (x) => x.id === Number(m![1]) && x.state === "draft",
+    );
     if (!c) notFound(`draft ${m[1]}`);
     c!.body = (body as { body: string }).body;
     c!.updated_at = new Date().toISOString();
@@ -1498,7 +1643,10 @@ export async function mockRequest(
     return undefined;
   }
 
-  if ((m = /^\/comments\/(\d+)\/(resolve|unresolve)$/.exec(p)) && method === "POST") {
+  if (
+    (m = /^\/comments\/(\d+)\/(resolve|unresolve)$/.exec(p)) &&
+    method === "POST"
+  ) {
     const c = comments.find((x) => x.id === Number(m![1]));
     if (!c || c.parent_id !== null) notFound(`root comment ${m[1]}`);
     const resolved = m[2] === "resolve";

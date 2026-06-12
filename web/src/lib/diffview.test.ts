@@ -8,7 +8,11 @@ const ctx = (old: number, nw: number, text = "ctx"): Line => ({
   new: nw,
   text,
 });
-const add = (nw: number, text = "add"): Line => ({ kind: "add", new: nw, text });
+const add = (nw: number, text = "add"): Line => ({
+  kind: "add",
+  new: nw,
+  text,
+});
 const del = (old: number, text = "del"): Line => ({ kind: "del", old, text });
 
 describe("pairLines", () => {
@@ -55,7 +59,12 @@ describe("intralineDiff", () => {
 });
 
 describe("skippedBefore", () => {
-  const hunk = (oldStart: number, oldLines: number, newStart: number, newLines: number) => ({
+  const hunk = (
+    oldStart: number,
+    oldLines: number,
+    newStart: number,
+    newLines: number,
+  ) => ({
     old_start: oldStart,
     old_lines: oldLines,
     new_start: newStart,

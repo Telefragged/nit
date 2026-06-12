@@ -11,7 +11,10 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 NIT=${1:-"$ROOT/result/bin/nit"}
-[[ -x $NIT ]] || { echo "no nit binary at $NIT (nix build first?)" >&2; exit 1; }
+[[ -x $NIT ]] || {
+  echo "no nit binary at $NIT (nix build first?)" >&2
+  exit 1
+}
 NIT=$(readlink -f "$NIT")
 
 PORT=8923
@@ -21,7 +24,7 @@ SRV_PID=
 trap '[[ -n $SRV_PID ]] && kill $SRV_PID 2>/dev/null; rm -rf "$TMP"' EXIT
 
 commit_change() { # <file> <content> <subject> <change-id-suffix>
-  printf '%s' "$2" > "$1"
+  printf '%s' "$2" >"$1"
   git add "$1"
   git commit -qm "$3
 
@@ -32,7 +35,7 @@ git init -q -b main "$TMP/repo"
 cd "$TMP/repo"
 git config user.name demo
 git config user.email demo@nit
-printf 'fn main() {\n    println!("hello");\n}\n' > main.rs
+printf 'fn main() {\n    println!("hello");\n}\n' >main.rs
 git add . && git commit -qm "initial layout"
 
 # Chain A — two commits, untouched by review: WAITING FOR REVIEW.

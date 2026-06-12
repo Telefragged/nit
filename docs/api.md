@@ -10,9 +10,11 @@ Concurrency guarantees behind these endpoints: docs/data-model.md
 ("Concurrency", normative).
 
 ## Health
+
 - `GET /api/health` → `{"status":"ok","version":"0.1.0"}`
 
 ## Chains
+
 - `POST /api/chains` — register or refresh (idempotent; this is `nit push`)
   ```json
   req:  {"repo_path": "/abs/path", "branch": "feat/x", "base": "main",
@@ -21,7 +23,7 @@ Concurrency guarantees behind these endpoints: docs/data-model.md
   ```
   `repo_path` is canonicalized; the repo row is auto-created. 400 if the
   repo/branch/base can't be resolved at registration. A scan failure on an
-  *existing* chain is not an HTTP error: it appears as `last_scan_error`.
+  _existing_ chain is not an HTTP error: it appears as `last_scan_error`.
   Every commit in `base..tip` must carry its own `Change-Id:` trailer and
   must not be a `fixup!`/`squash!` commit — violations fail the scan
   (docs/data-model.md "Change identity").
@@ -60,6 +62,7 @@ ChangeSummary = {
 ```
 
 ## Changes
+
 - `GET /api/changes/{id}?revision={n}` — `revision` defaults to latest and
   controls comment rendering (below).
   ```json
@@ -154,12 +157,13 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
 ```
 
 ## Comments (drafts → published) — reviewer side
+
 - `POST /api/changes/{id}/drafts` →
   `req: {"revision": 2, "file": "src/main.rs", "line": 14, "side": "new", "body": "…", "parent_id": null}`
   → Comment. `file`/`line` optional (change-/file-level). `side` defaults
   `"new"`. `file` may be the reserved `/COMMIT_MSG` (commit-message
   comments; `side` must be `"new"`, else 400). In interdiff view the UI
-  may only attach comments to the *new* side; old-side interdiff
+  may only attach comments to the _new_ side; old-side interdiff
   commenting is unsupported in v1.
 - `PATCH /api/drafts/{id}` — `{"body": "…"}` → Comment. 404 unless draft.
 - `DELETE /api/drafts/{id}` → 204. 404 unless draft.
@@ -167,6 +171,7 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
   comments only; reviewer toggling thread resolution).
 
 ## Reviews
+
 - `POST /api/changes/{id}/reviews` —
   `req: {"revision": 2, "verdict": "approve" | "request_changes" | "comment", "message": "…"}`
   Under the chain lock: publishes **all** drafts on the change, creates the
@@ -178,9 +183,10 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
     auto-retargets to the latest revision and succeeds.
   - Otherwise stale `revision` → 409; the UI must keep the cover message
     and drafts, refetch, and re-offer submission.
-  → `{"review": Review, "published_comments": [Comment]}`
+    → `{"review": Review, "published_comments": [Comment]}`
 
 ## Agent endpoints
+
 - `POST /api/comments/{id}/replies` —
   `req: {"body": "…", "resolve": true}` → Comment (author=agent, published
   immediately, threaded under the root comment; `resolve` marks the thread
@@ -214,18 +220,19 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
 
 ### State table (normative)
 
-| state                | meaning                                   | actionable |
-|----------------------|-------------------------------------------|------------|
-| `waiting_for_review` | reviewer's turn; nothing for the agent    | false      |
-| `agents_turn`        | request_changes/commented on a latest revision, empty chain, or all approved while `partial` (agent still pushing — `ready_to_merge` is inexpressible while the flag is set) | true |
-| `ready_to_merge`     | every live change approved (≥1) and the chain is not `partial` | true |
-| `merged`             | chain closed: work is in the base         | true       |
-| `abandoned`          | chain closed: branch disappeared          | true       |
+| state                | meaning                                                                                                                                                                      | actionable |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `waiting_for_review` | reviewer's turn; nothing for the agent                                                                                                                                       | false      |
+| `agents_turn`        | request_changes/commented on a latest revision, empty chain, or all approved while `partial` (agent still pushing — `ready_to_merge` is inexpressible while the flag is set) | true       |
+| `ready_to_merge`     | every live change approved (≥1) and the chain is not `partial`                                                                                                               | true       |
+| `merged`             | chain closed: work is in the base                                                                                                                                            | true       |
+| `abandoned`          | chain closed: branch disappeared                                                                                                                                             | true       |
 
 `actionable` ≡ `state != waiting_for_review`. Every `actionable=true`
 state has a documented agent action (agent-workflow.md).
 
 ## Static UI
+
 Everything outside `/api` serves the built SPA (`--web-dist`/`$NIT_WEB_DIST`),
 falling back to `index.html` for client-side routes (`/chains/1`,
 `/changes/10`).

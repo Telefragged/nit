@@ -11,7 +11,10 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 NIT=${1:-"$ROOT/result/bin/nit"}
-[[ -x $NIT ]] || { echo "no nit binary at $NIT (nix build first?)" >&2; exit 1; }
+[[ -x $NIT ]] || {
+  echo "no nit binary at $NIT (nix build first?)" >&2
+  exit 1
+}
 NIT=$(readlink -f "$NIT")
 
 PORT=8917
@@ -20,10 +23,13 @@ TMP=$(mktemp -d)
 SRV_PID=
 trap '[[ -n $SRV_PID ]] && kill $SRV_PID 2>/dev/null; rm -rf "$TMP"' EXIT
 
-say()  { printf '== %s\n' "$*"; }
-fail() { echo "E2E FAIL: $*" >&2; exit 1; }
+say() { printf '== %s\n' "$*"; }
+fail() {
+  echo "E2E FAIL: $*" >&2
+  exit 1
+}
 # jqe <json> <filter> <expected>
-jqe()  {
+jqe() {
   local got
   got=$(jq -r "$2" <<<"$1")
   [[ $got == "$3" ]] || fail "$2 = '$got', want '$3'"
@@ -35,16 +41,16 @@ git init -q -b main "$REPO"
 cd "$REPO"
 git config user.name e2e
 git config user.email e2e@test
-echo base > file.txt
+echo base >file.txt
 git add . && git commit -qm "base"
 git checkout -qb feat/demo
-printf 'def greet(name):\n    print("hello " + name)\n' > greet.py
+printf 'def greet(name):\n    print("hello " + name)\n' >greet.py
 git add . && git commit -qm "add greet module
 
 Change-Id: Ie2e0000000000000000000000000000000000001"
 # Separate file: a fixup to greet.py must fold (and later autosquash)
 # without touching this change's context.
-printf 'def farewell(name):\n    print("bye " + name)\n' > farewell.py
+printf 'def farewell(name):\n    print("bye " + name)\n' >farewell.py
 git add . && git commit -qm "add farewell module
 
 Change-Id: Ie2e0000000000000000000000000000000000002"
@@ -86,7 +92,7 @@ say "agent: reply --resolve, fix with a fixup!, push"
 sed -i 's/print("hello " + name)/print(f"hello {name}")/' greet.py
 git add . && git commit -q --fixup="$(git rev-parse HEAD~1)"
 CHAIN=$("$NIT" push --server $SERVER)
-jqe "$CHAIN" .partial true   # plain push leaves the sticky flag alone
+jqe "$CHAIN" .partial true # plain push leaves the sticky flag alone
 jqe "$CHAIN" '.changes[0].revision' 2
 jqe "$CHAIN" '.changes[0].status' pending
 jqe "$CHAIN" '.changes[0].needs_rebase' false
@@ -94,12 +100,13 @@ jqe "$CHAIN" '.changes[0].counts.unresolved' 0
 
 say "reviewer: comment from revision 1 ports to revision 2"
 DETAIL=$(curl -sf "$SERVER/api/changes/$CH1?revision=2")
-jqe "$DETAIL" '.comments[0].outdated' true   # the commented line itself changed
+jqe "$DETAIL" '.comments[0].outdated' true # the commented line itself changed
 
 say "reviewer: approve every change at its latest revision"
 CHAIN=$(curl -sf $SERVER/api/chains/$CHAIN_ID)
 while read -r row; do
-  id=$(jq -r .id <<<"$row"); rev=$(jq -r .revision <<<"$row")
+  id=$(jq -r .id <<<"$row")
+  rev=$(jq -r .revision <<<"$row")
   curl -sf -X POST $SERVER/api/changes/$id/reviews -H content-type:application/json \
     -d "{\"revision\":$rev,\"verdict\":\"approve\",\"message\":\"lgtm\"}" >/dev/null
 done < <(jq -c '.changes[]' <<<"$CHAIN")
@@ -122,7 +129,7 @@ git checkout -q main
 git merge -q --ff-only feat/demo
 
 say "chain leaves the dashboard after the next scan"
-sleep 2.5   # outlast the per-chain scan throttle so the GET rescans
+sleep 2.5 # outlast the per-chain scan throttle so the GET rescans
 LIST=$(curl -sf $SERVER/api/chains)
 jqe "$LIST" '.chains | length' 0
 LIST=$(curl -sf "$SERVER/api/chains?status=all")

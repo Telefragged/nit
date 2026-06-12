@@ -9,7 +9,10 @@ export default function App() {
         </Link>
         <span className="spacer" />
         {import.meta.env.VITE_MOCK ? (
-          <span className="mock-flag" title="Serving canned fixtures — no backend">
+          <span
+            className="mock-flag"
+            title="Serving canned fixtures — no backend"
+          >
             MOCK
           </span>
         ) : null}

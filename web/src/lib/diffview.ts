@@ -137,7 +137,8 @@ export function intralineDiff(
   let suffix = 0;
   while (
     suffix < limit - prefix &&
-    oldText[oldText.length - 1 - suffix] === newText[newText.length - 1 - suffix]
+    oldText[oldText.length - 1 - suffix] ===
+      newText[newText.length - 1 - suffix]
   ) {
     suffix++;
   }

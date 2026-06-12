@@ -7,7 +7,8 @@ import { timeAgo } from "../lib/time";
 import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
 
-const basename = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
+const basename = (path: string) =>
+  path.split("/").filter(Boolean).pop() ?? path;
 
 function ChainRow({ chain }: { chain: Chain }) {
   const rowNav = useRowNav(`/chains/${chain.id}`);
