@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { DiffFile } from "../../api/types";
-import { displayPath, statusLetter } from "../../lib/diffview";
+import { diffTotals, displayPath, statusLetter } from "../../lib/diffview";
 import type { Thread } from "../CommentThread";
 
 export function fileDomId(index: number): string {
@@ -8,9 +8,11 @@ export function fileDomId(index: number): string {
 }
 
 /** Left rail: every file in the diff with status letter, +/- counts and
- * comment markers. Selecting expands the file section and scrolls to it;
- * the title row toggles all sections at once (the only bulk affordance —
- * with every file collapsed by default a long diff needs one). */
+ * comment markers. Selecting expands the file section and scrolls to it.
+ * The title row totals the diff (count and +/- sums, /COMMIT_MSG excluded
+ * — `diffTotals`; the rail itself still lists the commit-message entry)
+ * and toggles all sections at once (the only bulk affordance — with every
+ * file collapsed by default a long diff needs one). */
 export default function FileRail({
   files,
   threadsByFile,
@@ -37,11 +39,19 @@ export default function FileRail({
       .item(activeIndex)
       ?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
+  const totals = diffTotals(files);
   return (
     <aside className="file-rail" ref={railRef}>
       <div className="rail-title">
         <span>
-          {files.length} file{files.length === 1 ? "" : "s"}
+          {totals.count} file{totals.count === 1 ? "" : "s"}
+          {/* Diff still loading (or empty): no sums to summarize. */}
+          {files.length > 0 ? (
+            <span className="rail-total">
+              <span className="plus">+{totals.additions}</span>{" "}
+              <span className="minus">−{totals.deletions}</span>
+            </span>
+          ) : null}
         </span>
         {files.length > 0 ? (
           <button className="linkish rail-toggle-all" onClick={onToggleAll}>

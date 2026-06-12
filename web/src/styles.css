@@ -663,6 +663,11 @@ table.list tbody tr:hover {
   color: var(--text-faint);
   padding: 2px 8px 6px;
 }
+.rail-title .rail-total {
+  margin-left: 7px;
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
 .rail-toggle-all {
   font-size: 10px;
   text-transform: none;

@@ -22,6 +22,27 @@ export function statusLetter(file: DiffFile): string {
   return file.path === COMMIT_MSG_PATH ? "" : STATUS_LETTER[file.status];
 }
 
+/** Whole-diff totals for the file-rail title. The synthetic /COMMIT_MSG
+ * entry is excluded from the count and the sums alike — it is not a file,
+ * and its message churn would distort the code totals. Binary files count
+ * as files but contribute 0/0. */
+export function diffTotals(files: DiffFile[]): {
+  count: number;
+  additions: number;
+  deletions: number;
+} {
+  let count = 0;
+  let additions = 0;
+  let deletions = 0;
+  for (const file of files) {
+    if (file.path === COMMIT_MSG_PATH) continue;
+    count++;
+    additions += file.additions;
+    deletions += file.deletions;
+  }
+  return { count, additions, deletions };
+}
+
 /** One visual row in side-by-side view. */
 export interface RowPair {
   left: Line | null;

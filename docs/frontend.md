@@ -37,7 +37,9 @@ happens.
   - the diff column and file rail start with a synthetic "Commit message"
     file (`/COMMIT_MSG`, docs/api.md), commentable like code — the full
     message lives there, not in the header;
-  - file list (left rail): path, status letter, +/- counts; selecting
+  - file list (left rail): titled with the diff totals — file count and
+    summed +/- counts, both excluding `/COMMIT_MSG` (the message is not a
+    file); then per file: path, status letter, +/- counts; selecting
     expands the file section and scrolls to it (the scroll is issued only
     after the expansion has rendered, so it lands right with other files
     collapsed); while scrolling, the rail highlights the file under the
