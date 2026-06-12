@@ -128,6 +128,9 @@ export default function DiffFileView({
         body: input.body,
       }),
     onSuccess: () => {
+      // The body was saved, not discarded: clear dirtiness before the
+      // guarded setter closes the editor so it doesn't prompt.
+      ctx.editorDirty.current = false;
       ctx.setEditingTarget(null);
       void queryClient.invalidateQueries({
         queryKey: ["change", ctx.changeId],
@@ -187,6 +190,9 @@ export default function DiffFileView({
                   create.mutate({ target: ctx.editingTarget!, body })
                 }
                 onCancel={() => ctx.setEditingTarget(null)}
+                onDirtyChange={(dirty) => {
+                  ctx.editorDirty.current = dirty;
+                }}
               />
             </td>
           </tr>,

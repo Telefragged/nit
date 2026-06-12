@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { createDraft, getChain, getChange, getDiff } from "../api/client";
 import type { ChangeDetail, Comment, Review, Revision } from "../api/types";
 import { StatusChip } from "../components/badges";
-import CommentEditor from "../components/CommentEditor";
+import CommentEditor, { confirmDiscard } from "../components/CommentEditor";
 import type { Thread } from "../components/CommentThread";
 import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
@@ -187,6 +187,7 @@ export default function ReviewPage() {
     localStorage.getItem(LAYOUT_KEY) === "split" ? "split" : "unified",
   );
   const [editingTarget, setEditingTarget] = useState<DraftTarget | null>(null);
+  const editorDirty = useRef(false);
   const [activeFile, setActiveFile] = useState<number | null>(null);
   const [changeCommentOpen, setChangeCommentOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -221,7 +222,24 @@ export default function ReviewPage() {
       draftRevision: selected,
       interdiff: against !== undefined,
       editingTarget,
-      setEditingTarget,
+      // Moving or clearing the target unmounts the inline CommentEditor and
+      // destroys its draft, so this is a discard path: confirm while dirty.
+      // Same-anchor clicks keep the editor mounted and are no-ops.
+      setEditingTarget: (t) => {
+        const cur = editingTarget;
+        if (
+          t &&
+          cur &&
+          t.file === cur.file &&
+          t.side === cur.side &&
+          t.line === cur.line
+        ) {
+          return;
+        }
+        if (!confirmDiscard(editorDirty.current)) return;
+        setEditingTarget(t);
+      },
+      editorDirty,
     }),
     [changeId, selected, against, editingTarget],
   );
