@@ -130,11 +130,13 @@ lossless.
    `needs_rebase` reported on the change until the agent restructures.
 6. If the effective state differs from the latest revision, insert revision
    `number+1`. Status effect:
-   - fixup list unchanged **and** patch-id equal (pure rebase) → keep
-     status, and review submission auto-retargets (see api.md);
+   - fixup list unchanged **and** patch-id equal **and** commit message
+     unchanged (pure rebase) → keep status, and review submission
+     auto-retargets (see api.md);
    - anything else — including a patch-id-equal *new fixup* (the agent may
-     be arguing in the fixup message) → status `pending`: the reviewer
-     must look again.
+     be arguing in the fixup message) or a message reword (the message is
+     reviewable as `/COMMIT_MSG`) → status `pending`: the reviewer must
+     look again.
 7. Net structural difference → one `chain_updated` event.
 
 A change's diff is always `parent_sha → effective_tree` of the selected

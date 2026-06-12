@@ -96,12 +96,39 @@ Line = {"kind": "context",      // context | add | del
         "text": "fn main() {"}  // without trailing newline
 ```
 
+### The commit message as a file
+
+Every diff response lists the synthetic path `/COMMIT_MSG` as its
+**first** file: the revision's full commit message, reviewable like code.
+The path is reserved — git tree paths cannot start with `/`, so it can
+never collide with a real file.
+
+- vs parent: `status: "added"`, the whole message as one all-`add` hunk;
+  `new` line numbers are 1-based message lines;
+- interdiff (`?against=m`): `status: "modified"`, a real line diff of
+  message(m) → message(n); identical messages yield one all-`context`
+  hunk so the message stays visible and commentable;
+- `binary` is always `false`, `old_path` never set; `additions`/
+  `deletions` count message lines like any text file.
+
+Line comments on `/COMMIT_MSG` use `side: "new"` only; old-side drafts
+are rejected with 400. No UI state can produce one — vs parent the
+message renders all-`add` (no old-side lines exist), and the `modified`
+presentation only occurs in interdiffs, where old-side commenting is
+unsupported for every file in v1 (see drafts below) — so the 400 only
+guards raw API clients. Anchors port across revisions by diffing the two
+revisions' message texts, not trees (see "Comment rendering across
+revisions").
+
 ### Comment rendering across revisions
 
 Comments are anchored where they were written (`revision`, `file`, `line`,
 `side`, plus a `line_text` snapshot). When the change is served at
 `?revision=n`, the server ports each comment's anchor through
-`diff(effective_tree(comment.revision), effective_tree(n))` per file:
+`diff(effective_tree(comment.revision), effective_tree(n))` per file. For
+`/COMMIT_MSG` anchors the server ports through
+`diff(message(comment.revision), message(n))` instead — same
+shifted/outdated rules:
 
 - line lies in an unchanged region → `rendered_line` = shifted line number;
 - the anchored line itself was changed/deleted (or porting is impossible) →
@@ -126,8 +153,10 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
 - `POST /api/changes/{id}/drafts` →
   `req: {"revision": 2, "file": "src/main.rs", "line": 14, "side": "new", "body": "…", "parent_id": null}`
   → Comment. `file`/`line` optional (change-/file-level). `side` defaults
-  `"new"`. In interdiff view the UI may only attach comments to the *new*
-  side; old-side interdiff commenting is unsupported in v1.
+  `"new"`. `file` may be the reserved `/COMMIT_MSG` (commit-message
+  comments; `side` must be `"new"`, else 400). In interdiff view the UI
+  may only attach comments to the *new* side; old-side interdiff
+  commenting is unsupported in v1.
 - `PATCH /api/drafts/{id}` — `{"body": "…"}` → Comment. 404 unless draft.
 - `DELETE /api/drafts/{id}` → 204. 404 unless draft.
 - `POST /api/comments/{id}/resolve` / `…/unresolve` → Comment (root
@@ -141,8 +170,8 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
   `request_changes`→changes_requested, `comment`→commented), emits
   `review_submitted`.
   - If `revision` is no longer latest but the latest is **patch-id-equal
-    with the same fixups** (pure rebase), the review auto-retargets to the
-    latest revision and succeeds.
+    with the same fixups and an unchanged commit message** (pure rebase),
+    the review auto-retargets to the latest revision and succeeds.
   - Otherwise stale `revision` → 409; the UI must keep the cover message
     and drafts, refetch, and re-offer submission.
   → `{"review": Review, "published_comments": [Comment]}`

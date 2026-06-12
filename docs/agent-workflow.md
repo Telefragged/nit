@@ -75,3 +75,9 @@ Comments in feedback are scoped to each change's **latest review**, plus
 any still-unresolved threads from earlier reviews. `outdated: true` means
 the code under the comment has changed since (its `line_text` shows what
 was commented on). `side: "old"` anchors to a deleted line.
+
+Comments with `file: "/COMMIT_MSG"` target the **commit message** (line
+numbers are 1-based message lines). Answer them by rewording the commit
+(interactive-rebase reword / `git commit --amend`), not with a `fixup!` —
+a fixup can't change the message. A reword creates a new revision and
+resets the change to `pending`, exactly like a code edit.
