@@ -229,6 +229,54 @@ fn resolve_chain(client: &Client) -> Result<i64> {
 // ---------------------------------------------------------------------------
 // HTTP plumbing
 
+/// A failed call, classified for retry decisions: is the server merely
+/// unreachable (down/restarting — a retry can succeed) or did it answer
+/// definitively (HTTP error body, malformed response, misconfiguration)?
+#[derive(Debug)]
+enum CallError {
+    /// Transport-level failure: nobody answered, or the connection died
+    /// mid-response.
+    Unreachable(anyhow::Error),
+    /// A definitive failure retrying cannot fix.
+    Fatal(anyhow::Error),
+}
+
+impl CallError {
+    /// Today's user-facing error: `Unreachable` keeps the exact
+    /// "is 'nit serve' running?" message (`cli_e2e` asserts it).
+    fn into_error(self, base: &str) -> anyhow::Error {
+        match self {
+            CallError::Unreachable(cause) => {
+                anyhow!("cannot reach the nit server at {base}: {cause} — is 'nit serve' running?")
+            }
+            CallError::Fatal(err) => err,
+        }
+    }
+}
+
+/// Classify a ureq failure. With `http_status_as_error(false)` every
+/// `Err` here is transport-or-client-side — HTTP error bodies arrive as
+/// non-2xx *responses* and become `Fatal` in [`Client::read`] instead.
+fn classify(err: ureq::Error, path: &str) -> CallError {
+    match err {
+        // Refused/reset connections and timeouts: the restart signature.
+        ureq::Error::Io(_) | ureq::Error::ConnectionFailed | ureq::Error::Timeout(_) => {
+            CallError::Unreachable(err.into())
+        }
+        // read_json wraps body io errors in serde_json: io-kind means the
+        // server died mid-body, anything else is a malformed response.
+        ureq::Error::Json(ref e) if e.io_error_kind().is_some() => {
+            CallError::Unreachable(err.into())
+        }
+        ureq::Error::Json(_) => {
+            CallError::Fatal(anyhow::Error::new(err).context(format!("invalid JSON from {path}")))
+        }
+        // BadUri, HostNotFound, Tls, Protocol, …: persistent
+        // misconfiguration or protocol trouble — fail fast.
+        _ => CallError::Fatal(err.into()),
+    }
+}
+
 struct Client {
     agent: ureq::Agent,
     base: String,
@@ -248,37 +296,45 @@ impl Client {
     }
 
     fn get(&self, path: &str) -> Result<Value> {
-        let url = format!("{}{path}", self.base);
-        let response = self.agent.get(&url).call().map_err(|e| self.io_err(&e))?;
-        Self::read(response, path)
+        self.get_raw(path).map_err(|e| e.into_error(&self.base))
     }
 
     fn post(&self, path: &str, body: &Value) -> Result<Value> {
+        self.post_raw(path, body)
+            .map_err(|e| e.into_error(&self.base))
+    }
+
+    fn get_raw(&self, path: &str) -> Result<Value, CallError> {
+        let url = format!("{}{path}", self.base);
+        let response = self.agent.get(&url).call().map_err(|e| classify(e, path))?;
+        Self::read(response, path)
+    }
+
+    fn post_raw(&self, path: &str, body: &Value) -> Result<Value, CallError> {
         let url = format!("{}{path}", self.base);
         let response = self
             .agent
             .post(&url)
             .send_json(body)
-            .map_err(|e| self.io_err(&e))?;
+            .map_err(|e| classify(e, path))?;
         Self::read(response, path)
     }
 
-    fn io_err(&self, err: &ureq::Error) -> anyhow::Error {
-        anyhow!(
-            "cannot reach the nit server at {}: {err} — is 'nit serve' running?",
-            self.base
-        )
-    }
-
-    fn read(mut response: ureq::http::Response<ureq::Body>, path: &str) -> Result<Value> {
+    fn read(
+        mut response: ureq::http::Response<ureq::Body>,
+        path: &str,
+    ) -> Result<Value, CallError> {
         let status = response.status();
         let value: Value = response
             .body_mut()
             .read_json()
-            .with_context(|| format!("invalid JSON from {path}"))?;
+            .map_err(|e| classify(e, path))?;
         if !status.is_success() {
             let message = value["error"].as_str().unwrap_or("unknown error");
-            bail!("{path}: {} — {message}", status.as_u16());
+            return Err(CallError::Fatal(anyhow!(
+                "{path}: {} — {message}",
+                status.as_u16()
+            )));
         }
         Ok(value)
     }
@@ -340,6 +396,59 @@ mod tests {
 
         let (_dir3, repo3) = repo_with_head("refs/heads/trunk");
         assert!(default_base(&repo3).is_err());
+    }
+
+    #[test]
+    fn classify_transport_failures_as_unreachable() {
+        let cases = [
+            ureq::Error::Io(std::io::Error::from(std::io::ErrorKind::ConnectionRefused)),
+            ureq::Error::Io(std::io::Error::from(std::io::ErrorKind::ConnectionReset)),
+            ureq::Error::ConnectionFailed,
+            ureq::Error::Timeout(ureq::Timeout::Connect),
+        ];
+        for err in cases {
+            let label = format!("{err}");
+            assert!(
+                matches!(classify(err, "/x"), CallError::Unreachable(_)),
+                "{label}"
+            );
+        }
+    }
+
+    #[test]
+    fn classify_severed_response_body_as_unreachable() {
+        // The server died mid-body: serde_json wraps the io error.
+        struct FailingReader;
+        impl std::io::Read for FailingReader {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from(std::io::ErrorKind::ConnectionReset))
+            }
+        }
+        let json_io = serde_json::from_reader::<_, Value>(FailingReader)
+            .expect_err("reading from a failing reader must error");
+        assert!(json_io.io_error_kind().is_some());
+        assert!(matches!(
+            classify(ureq::Error::Json(json_io), "/x"),
+            CallError::Unreachable(_)
+        ));
+    }
+
+    #[test]
+    fn classify_definitive_failures_as_fatal() {
+        let bad_uri = ureq::Error::BadUri("not a uri".into());
+        assert!(matches!(classify(bad_uri, "/x"), CallError::Fatal(_)));
+
+        let parse =
+            serde_json::from_str::<Value>("not json").expect_err("parsing garbage must error");
+        assert!(parse.io_error_kind().is_none());
+        let classified = classify(ureq::Error::Json(parse), "/x");
+        let CallError::Fatal(err) = classified else {
+            panic!("JSON parse errors must be fatal");
+        };
+        assert!(
+            format!("{err:#}").contains("invalid JSON from /x"),
+            "{err:#}"
+        );
     }
 
     #[test]
