@@ -102,6 +102,41 @@ fn push_wait_status_reply_loop() {
 }
 
 #[test]
+fn partial_push_blocks_merge_until_ready() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    // push --partial: chain registers partial, review can start.
+    let (ok, chain, stderr) = nit(&server, &g, &["push", "--partial"]);
+    assert!(ok, "{stderr}");
+    assert_eq!(chain["partial"], true);
+    assert_eq!(chain["state"], "waiting_for_review");
+    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+
+    // Reviewer approves the only change (over HTTP, as the browser would).
+    let (st, _) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reviews")),
+        &json!({"revision": 1, "verdict": "approve", "message": "lgtm"}),
+    );
+    assert_eq!(st, 200);
+
+    // All approved but still partial: agents_turn, never ready_to_merge.
+    let (ok, feedback, stderr) = nit(&server, &g, &["status"]);
+    assert!(ok, "{stderr}");
+    assert_eq!(feedback["state"], "agents_turn");
+    assert_eq!(feedback["chain"]["partial"], true);
+
+    // ready clears the flag; the approved chain becomes mergeable.
+    let (ok, chain, stderr) = nit(&server, &g, &["ready"]);
+    assert!(ok, "{stderr}");
+    assert_eq!(chain["partial"], false);
+    assert_eq!(chain["state"], "ready_to_merge");
+}
+
+#[test]
 fn cli_errors_are_human_readable() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);

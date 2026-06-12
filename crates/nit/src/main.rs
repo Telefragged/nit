@@ -23,6 +23,8 @@ enum Cmd {
     Serve(server::ServeArgs),
     /// Register/refresh the current branch for review (idempotent)
     Push(cli::PushArgs),
+    /// Mark the chain complete: clear the partial flag and refresh (idempotent)
+    Ready(cli::ReadyArgs),
     /// Block until the reviewer acts; prints the feedback JSON
     Wait(cli::WaitArgs),
     /// Print the current feedback JSON without blocking
@@ -42,6 +44,7 @@ fn main() -> Result<()> {
     match Args::parse().cmd {
         Cmd::Serve(args) => server::run(args),
         Cmd::Push(args) => cli::push(args),
+        Cmd::Ready(args) => cli::ready(args),
         Cmd::Wait(args) => cli::wait(args),
         Cmd::Status(args) => cli::status(args),
         Cmd::Reply(args) => cli::reply(args),

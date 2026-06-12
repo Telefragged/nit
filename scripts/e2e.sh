@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end check of the full agent <-> reviewer loop against a throwaway
-# repo, exercising the real binary: push -> review -> wait -> reply ->
-# fixup -> new revision -> approve -> merge -> chain leaves the dashboard.
+# repo, exercising the real binary: push --partial -> review -> wait ->
+# reply -> fixup -> new revision -> approve -> ready -> merge -> chain
+# leaves the dashboard.
 #
 # Usage: scripts/e2e.sh [nit-binary]     (default: ./result/bin/nit)
 # Run inside the devShell: nix develop -c scripts/e2e.sh
@@ -57,9 +58,10 @@ for _ in $(seq 50); do
 done
 curl -sf $SERVER/api/health >/dev/null || fail "server did not come up"
 
-say "agent: push registers the chain"
-CHAIN=$("$NIT" push --server $SERVER)
+say "agent: push --partial registers the chain as partial"
+CHAIN=$("$NIT" push --partial --server $SERVER)
 jqe "$CHAIN" .state waiting_for_review
+jqe "$CHAIN" .partial true
 jqe "$CHAIN" '.changes | length' 2
 jqe "$CHAIN" '.changes[0].status' pending
 CHAIN_ID=$(jq -r .id <<<"$CHAIN")
@@ -84,6 +86,7 @@ say "agent: reply --resolve, fix with a fixup!, push"
 sed -i 's/print("hello " + name)/print(f"hello {name}")/' greet.py
 git add . && git commit -q --fixup="$(git rev-parse HEAD~1)"
 CHAIN=$("$NIT" push --server $SERVER)
+jqe "$CHAIN" .partial true   # plain push leaves the sticky flag alone
 jqe "$CHAIN" '.changes[0].revision' 2
 jqe "$CHAIN" '.changes[0].status' pending
 jqe "$CHAIN" '.changes[0].needs_rebase' false
@@ -101,7 +104,15 @@ while read -r row; do
     -d "{\"revision\":$rev,\"verdict\":\"approve\",\"message\":\"lgtm\"}" >/dev/null
 done < <(jq -c '.changes[]' <<<"$CHAIN")
 
-say "agent: state is ready_to_merge"
+say "agent: all approved but partial — still agents_turn, not mergeable"
+FB=$("$NIT" status --server $SERVER)
+jqe "$FB" .state agents_turn
+jqe "$FB" .chain.partial true
+
+say "agent: ready clears partial; state is ready_to_merge"
+CHAIN=$("$NIT" ready --server $SERVER)
+jqe "$CHAIN" .partial false
+jqe "$CHAIN" .state ready_to_merge
 FB=$("$NIT" status --server $SERVER)
 jqe "$FB" .state ready_to_merge
 

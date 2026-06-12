@@ -31,6 +31,23 @@ pub struct PushArgs {
     /// Branch to register (default: the current HEAD branch)
     #[arg(long)]
     pub branch: Option<String>,
+    /// Mark the chain partial: review can start, merging
+    /// cannot; sticky until `nit ready`
+    #[arg(long)]
+    pub partial: bool,
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
+    #[arg(long)]
+    pub server: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct ReadyArgs {
+    /// Base ref to review against (default: main, falling back to master)
+    #[arg(long)]
+    pub base: Option<String>,
+    /// Branch to register (default: the current HEAD branch)
+    #[arg(long)]
+    pub branch: Option<String>,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -72,30 +89,59 @@ pub struct ReplyArgs {
 // Commands
 
 /// Register/refresh the current branch as a chain; idempotent.
+/// `--partial` marks the chain partial; without it the sticky flag is left
+/// untouched (never cleared by a plain push).
 ///
 /// # Errors
 /// When the repo or server is unreachable, and when the scan failed —
 /// the chain JSON still prints first so the agent sees
 /// `last_scan_error` and `web_url`.
 pub fn push(args: PushArgs) -> Result<()> {
+    register(
+        args.base,
+        args.branch,
+        args.server,
+        args.partial.then_some(true),
+    )
+}
+
+/// Mark the chain complete: clear the sticky partial flag set by
+/// `nit push --partial` and refresh; idempotent.
+///
+/// # Errors
+/// Same as [`push`].
+pub fn ready(args: ReadyArgs) -> Result<()> {
+    register(args.base, args.branch, args.server, Some(false))
+}
+
+/// Shared push/ready core: register/refresh the chain via
+/// `POST /api/chains`, sending `partial` only when an override is given
+/// (absent leaves the server's sticky flag unchanged).
+fn register(
+    base: Option<String>,
+    branch: Option<String>,
+    server: Option<String>,
+    partial: Option<bool>,
+) -> Result<()> {
     let (root, repo) = discover_repo()?;
-    let branch = match args.branch {
+    let branch = match branch {
         Some(b) => b,
         None => current_branch(&repo)?,
     };
-    let base = match args.base {
+    let base = match base {
         Some(b) => b,
         None => default_base(&repo)?,
     };
-    let client = Client::new(server_url(args.server));
-    let chain = client.post(
-        "/api/chains",
-        &json!({
-            "repo_path": root.to_string_lossy(),
-            "branch": branch,
-            "base": base,
-        }),
-    )?;
+    let client = Client::new(server_url(server));
+    let mut body = json!({
+        "repo_path": root.to_string_lossy(),
+        "branch": branch,
+        "base": base,
+    });
+    if let Some(partial) = partial {
+        body["partial"] = json!(partial);
+    }
+    let chain = client.post("/api/chains", &body)?;
     print_json(&chain)?;
     if let Some(err) = chain["last_scan_error"].as_str() {
         bail!("scan failed: {err}");
