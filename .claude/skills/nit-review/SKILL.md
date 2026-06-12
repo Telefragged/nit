@@ -8,6 +8,24 @@ description: Land changes through nit's review loop (push --partial per commit �
 This repo reviews itself with nit. Protocol reference: `docs/agent-workflow.md`.
 This skill is the operational checklist for driving it from a Claude session.
 
+## Cadence — the rule to get right before anything else
+
+**`nit push --partial` is part of finishing each commit**, with the same
+standing as treefmt and the Change-Id trailer — never a phase that comes
+after the branch. The moment a commit is green and committed, push it.
+Nothing in the plan moves a push later:
+
+- a planned cleanup / self-review / simplification / verification pass
+  does not hold pushes back — push now, amend later; post-push amends
+  become new revisions **by design**, and interdiffs show the reviewer
+  exactly what the pass changed;
+- a user instruction to add a later pass reorders that _pass_, not the
+  pushes;
+- coordinators never batch, centralize, or phase-gate workers' pushes.
+
+If commit N+1 is being started while commit N is unpushed, the cadence
+is already broken. An unpushed commit is invisible to the reviewer.
+
 ## When
 
 - The first commit of a piece of work is done on a feature branch and a

@@ -38,6 +38,13 @@ nit reviews **commits**, not branches. Make each commit one reviewable unit
 
 ## The loop
 
+**Cadence: pushing is part of completing a commit, not a phase after the
+branch.** Commit, push `--partial`, build the next commit. A planned
+later pass over the chain (cleanup, self-review, verification) is never
+a reason to hold pushes — push now, amend later: post-push amends become
+new revisions by design, and the reviewer sees the pass as interdiffs.
+The only thing that delays a push is the commit itself not being done.
+
 ```sh
 # while building — after EVERY completed commit (green, formatter-clean,
 #   one concern, Change-Id'd), not once at the end:

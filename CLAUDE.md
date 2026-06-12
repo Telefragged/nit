@@ -26,6 +26,12 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
    loop with the `nit-review` skill (`.claude/skills/nit-review/SKILL.md`).
    Direct-to-main only for ad-hoc user opt-outs and the exemptions listed
    in docs/dev.md.
+7. **`nit push --partial` after every completed commit** — pushing is part
+   of finishing a commit, like treefmt and the Change-Id, never a phase
+   after the branch. No planned later step (cleanup, self-review,
+   verification pass) delays a push: push now, amend later — amends become
+   new revisions by design. An unpushed commit is invisible to the
+   reviewer.
 
 ## Layout
 
