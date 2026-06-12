@@ -270,6 +270,7 @@ impl GitRepo {
 /// A real `nit::api` server (the binary's stack) bound on port 0.
 pub struct TestServer {
     pub base: String,
+    pub addr: std::net::SocketAddr,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
     served: Option<tokio::task::JoinHandle<()>>,
     rt: Option<tokio::runtime::Runtime>,
@@ -277,14 +278,25 @@ pub struct TestServer {
 
 impl TestServer {
     pub fn start(db_path: std::path::PathBuf, web_dist: Option<std::path::PathBuf>) -> Self {
+        Self::start_at("127.0.0.1:0".parse().unwrap(), db_path, web_dist)
+    }
+
+    /// Bind a specific address: restart "the same server" (same
+    /// host:port, same db) after dropping a previous instance.
+    pub fn start_at(
+        addr: std::net::SocketAddr,
+        db_path: std::path::PathBuf,
+        web_dist: Option<std::path::PathBuf>,
+    ) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
             .build()
             .unwrap();
-        let listener = rt.block_on(tokio::net::TcpListener::bind("127.0.0.1:0"));
+        let listener = rt.block_on(tokio::net::TcpListener::bind(addr));
         let listener = listener.unwrap();
-        let base = format!("http://{}", listener.local_addr().unwrap());
+        let addr = listener.local_addr().unwrap();
+        let base = format!("http://{addr}");
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
         let served = rt.spawn(async move {
             nit::api::serve_on(listener, db_path, web_dist, async {
@@ -295,6 +307,7 @@ impl TestServer {
         });
         TestServer {
             base,
+            addr,
             shutdown: Some(tx),
             served: Some(served),
             rt: Some(rt),
@@ -324,6 +337,25 @@ impl Drop for TestServer {
             rt.shutdown_timeout(std::time::Duration::from_secs(5));
         }
     }
+}
+
+/// Run the real `nit` binary (`CARGO_BIN_EXE`) from inside `repo`
+/// against `server`: (exit ok, parsed stdout JSON, stderr).
+pub fn nit(
+    server: &TestServer,
+    repo: &GitRepo,
+    args: &[&str],
+) -> (bool, serde_json::Value, String) {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_nit"))
+        .args(args)
+        .current_dir(repo.workdir())
+        .env("NIT_SERVER", &server.base)
+        .output()
+        .expect("running nit");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    let value = serde_json::from_str(stdout.trim()).unwrap_or(serde_json::Value::Null);
+    (out.status.success(), value, stderr)
 }
 
 fn agent() -> ureq::Agent {

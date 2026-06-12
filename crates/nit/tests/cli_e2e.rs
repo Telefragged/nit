@@ -6,21 +6,8 @@ mod common;
 
 use std::process::Command;
 
-use common::{GitRepo, TestServer, http_post, msg};
+use common::{GitRepo, TestServer, http_post, msg, nit};
 use serde_json::{Value, json};
-
-fn nit(server: &TestServer, repo: &GitRepo, args: &[&str]) -> (bool, Value, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(args)
-        .current_dir(repo.workdir())
-        .env("NIT_SERVER", &server.base)
-        .output()
-        .expect("running nit");
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
-    let value = serde_json::from_str(stdout.trim()).unwrap_or(Value::Null);
-    (out.status.success(), value, stderr)
-}
 
 #[test]
 fn push_wait_status_reply_loop() {

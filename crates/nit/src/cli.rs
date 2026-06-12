@@ -105,20 +105,25 @@ pub fn push(args: PushArgs) -> Result<()> {
 
 /// Block until the chain state is actionable (or `--timeout` expires),
 /// then print the Feedback JSON. Decides purely on
-/// `feedback.state`/`actionable`, never on raw events.
+/// `feedback.state`/`actionable`, never on raw events. Rides out server
+/// restarts: transport failures are retried with backoff (one stderr
+/// notice per outage) because the wait cursor is persisted server-side.
 ///
 /// # Errors
-/// When the server can't be reached or returns a malformed response
-/// (a `--timeout` expiry prints the snapshot and exits 0).
+/// When the server returns an error or malformed response, and when
+/// `--timeout` expires while the server is unreachable (a fresh snapshot
+/// cannot be fetched; a plain expiry prints the snapshot and exits 0).
 pub fn wait(args: WaitArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    let chain_id = resolve_chain(&client)?;
+    // Computed first: --timeout also bounds the resolve phase.
     let deadline = args
         .timeout
         .map(|secs| Instant::now() + Duration::from_secs(secs));
+    let retry = Retry::UntilUp { deadline };
+    let chain_id = resolve_chain(&client, retry)?;
 
     // Bootstrap: cursor=0 returns the current snapshot immediately.
-    let mut resp = client.get(&format!("/api/chains/{chain_id}/wait?cursor=0"))?;
+    let mut resp = client.get_retry(&format!("/api/chains/{chain_id}/wait?cursor=0"), retry)?;
     loop {
         let feedback = resp
             .get("feedback")
@@ -136,9 +141,10 @@ pub fn wait(args: WaitArgs) -> Result<()> {
             poll = poll.min(remaining.max(1));
         }
         let cursor = resp["cursor"].as_i64().unwrap_or(0);
-        resp = client.get(&format!(
-            "/api/chains/{chain_id}/wait?cursor={cursor}&timeout={poll}"
-        ))?;
+        resp = client.get_retry(
+            &format!("/api/chains/{chain_id}/wait?cursor={cursor}&timeout={poll}"),
+            retry,
+        )?;
     }
 }
 
@@ -149,7 +155,7 @@ pub fn wait(args: WaitArgs) -> Result<()> {
 /// branch.
 pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    let chain_id = resolve_chain(&client)?;
+    let chain_id = resolve_chain(&client, Retry::No)?;
     let feedback = client.get(&format!("/api/chains/{chain_id}/feedback"))?;
     print_json(&feedback)
 }
@@ -206,12 +212,14 @@ fn default_base(repo: &Repository) -> Result<String> {
 
 /// The registered chain for the cwd's repo + branch, via
 /// `GET /api/chains?status=all` (the server stores canonicalized paths).
-fn resolve_chain(client: &Client) -> Result<i64> {
+/// `retry` covers only that GET — repo discovery and "branch not
+/// registered" stay fatal.
+fn resolve_chain(client: &Client, retry: Retry) -> Result<i64> {
     let (root, repo) = discover_repo()?;
     let branch = current_branch(&repo)?;
     let canonical = std::fs::canonicalize(&root)
         .with_context(|| format!("cannot resolve repo path {}", root.display()))?;
-    let list = client.get("/api/chains?status=all")?;
+    let list = client.get_retry("/api/chains?status=all", retry)?;
     let chains = list["chains"]
         .as_array()
         .ok_or_else(|| anyhow!("malformed chain list: {list}"))?;
@@ -277,6 +285,23 @@ fn classify(err: ureq::Error, path: &str) -> CallError {
     }
 }
 
+/// What to do when the server is unreachable ([`CallError::Fatal`]
+/// always fails immediately).
+#[derive(Clone, Copy)]
+enum Retry {
+    /// Fail fast — push/status/reply, where an immediate "is 'nit serve'
+    /// running?" beats hanging and rerunning is cheap.
+    No,
+    /// Keep retrying with backoff until the server is back (`None`
+    /// deadline: forever) — `nit wait` riding out a server restart.
+    UntilUp { deadline: Option<Instant> },
+}
+
+/// Backoff between reconnect attempts: 1, 2, 4, 8 then 10s, capped.
+fn retry_delay(attempt: u32) -> Duration {
+    Duration::from_secs(1 << attempt.min(4)).min(Duration::from_secs(10))
+}
+
 struct Client {
     agent: ureq::Agent,
     base: String,
@@ -296,7 +321,44 @@ impl Client {
     }
 
     fn get(&self, path: &str) -> Result<Value> {
-        self.get_raw(path).map_err(|e| e.into_error(&self.base))
+        self.get_retry(path, Retry::No)
+    }
+
+    /// GET with `Retry` semantics while the server is unreachable. One
+    /// stderr notice per outage (an outage is contained in a single call:
+    /// the next call only starts after a success); stdout stays pure
+    /// JSON. When a deadline is set, sleeps are capped at the remaining
+    /// time and its expiry returns the transport error instead of a
+    /// stale snapshot — exit 0 must mean the feedback is fresh.
+    fn get_retry(&self, path: &str, retry: Retry) -> Result<Value> {
+        let mut attempt: u32 = 0;
+        loop {
+            let cause = match self.get_raw(path) {
+                Ok(value) => return Ok(value),
+                Err(fatal @ CallError::Fatal(_)) => return Err(fatal.into_error(&self.base)),
+                Err(CallError::Unreachable(cause)) => cause,
+            };
+            let Retry::UntilUp { deadline } = retry else {
+                return Err(CallError::Unreachable(cause).into_error(&self.base));
+            };
+            if attempt == 0 {
+                eprintln!("nit: server unreachable ({cause}); retrying…");
+            }
+            let mut delay = retry_delay(attempt);
+            if let Some(d) = deadline {
+                let remaining = d.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(CallError::Unreachable(cause)
+                        .into_error(&self.base)
+                        .context(
+                            "gave up: --timeout expired while the nit server was unreachable",
+                        ));
+                }
+                delay = delay.min(remaining);
+            }
+            std::thread::sleep(delay);
+            attempt += 1;
+        }
     }
 
     fn post(&self, path: &str, body: &Value) -> Result<Value> {
@@ -396,6 +458,12 @@ mod tests {
 
         let (_dir3, repo3) = repo_with_head("refs/heads/trunk");
         assert!(default_base(&repo3).is_err());
+    }
+
+    #[test]
+    fn retry_delay_backs_off_to_a_ten_second_cap() {
+        let schedule: Vec<u64> = (0..6).map(|a| retry_delay(a).as_secs()).collect();
+        assert_eq!(schedule, [1, 2, 4, 8, 10, 10]);
     }
 
     #[test]
