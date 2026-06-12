@@ -71,9 +71,12 @@ pub struct ReplyArgs {
 // ---------------------------------------------------------------------------
 // Commands
 
-/// Register/refresh the current branch as a chain; idempotent. Exits
-/// non-zero (Err) when the scan failed — the chain JSON still prints so
-/// the agent sees `last_scan_error` and `web_url`.
+/// Register/refresh the current branch as a chain; idempotent.
+///
+/// # Errors
+/// When the repo or server is unreachable, and when the scan failed —
+/// the chain JSON still prints first so the agent sees
+/// `last_scan_error` and `web_url`.
 pub fn push(args: PushArgs) -> Result<()> {
     let (root, repo) = discover_repo()?;
     let branch = match args.branch {
@@ -103,6 +106,10 @@ pub fn push(args: PushArgs) -> Result<()> {
 /// Block until the chain state is actionable (or `--timeout` expires),
 /// then print the Feedback JSON. Decides purely on
 /// `feedback.state`/`actionable`, never on raw events.
+///
+/// # Errors
+/// When the server can't be reached or returns a malformed response
+/// (a `--timeout` expiry prints the snapshot and exits 0).
 pub fn wait(args: WaitArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
     let chain_id = resolve_chain(&client)?;
@@ -136,6 +143,10 @@ pub fn wait(args: WaitArgs) -> Result<()> {
 }
 
 /// Print the current Feedback JSON without blocking.
+///
+/// # Errors
+/// When the server can't be reached or no chain matches the current
+/// branch.
 pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
     let chain_id = resolve_chain(&client)?;
@@ -144,6 +155,9 @@ pub fn status(args: StatusArgs) -> Result<()> {
 }
 
 /// Threaded reply as the agent; `--resolve` closes the thread.
+///
+/// # Errors
+/// When the server can't be reached or the comment id is unknown.
 pub fn reply(args: ReplyArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
     let comment = client.post(

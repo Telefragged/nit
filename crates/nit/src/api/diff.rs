@@ -14,6 +14,9 @@ use super::types;
 
 /// Render the diff `old → new` as the wire shape: context 3, rename
 /// detection, binary files flagged with no hunks.
+///
+/// # Errors
+/// When git can't build or read the diff's patches.
 pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<types::Diff> {
     let mut opts = DiffOptions::new();
     opts.context_lines(3);
@@ -128,6 +131,9 @@ fn hunk_function_context(header: &[u8]) -> String {
 /// rendering across revisions"): `Some(shifted)` when the line lies in an
 /// unchanged region, `None` when the anchored line itself was changed or
 /// deleted (or porting is impossible) — the `outdated` case.
+///
+/// # Errors
+/// When git can't diff `file` between the trees.
 pub fn port_line(
     repo: &Repository,
     old_tree: &Tree,

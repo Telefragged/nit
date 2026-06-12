@@ -57,6 +57,9 @@ impl AppState {
     }
 
     /// The coordination entry for a chain (created on first touch).
+    ///
+    /// # Panics
+    /// When the chain-map mutex is poisoned.
     pub fn entry(&self, chain_id: i64) -> Arc<ChainEntry> {
         let mut map = self.chains.lock().expect("chain map poisoned");
         map.entry(chain_id)
@@ -72,12 +75,18 @@ impl AppState {
 
     /// Open a database connection (blocking — call inside
     /// `spawn_blocking`).
+    ///
+    /// # Errors
+    /// See [`db::open`].
     pub fn open_db(&self) -> anyhow::Result<Connection> {
         db::open(&self.db_path)
     }
 
     /// The latest scan's warnings for a chain (empty until a scan ran in
     /// this server's lifetime).
+    ///
+    /// # Panics
+    /// When the warnings mutex is poisoned.
     pub fn scan_warnings(&self, chain_id: i64) -> Vec<String> {
         self.entry(chain_id)
             .warnings
@@ -88,9 +97,14 @@ impl AppState {
 }
 
 /// Run a scan for `chain_id` under its chain lock. `force` skips the
-/// throttle (`nit push` always rescans; dashboard reads don't). Scan-level
-/// git failures are *not* errors here — they land in `last_scan_error`
-/// (error isolation); only infrastructure problems (broken db) surface.
+/// throttle (`nit push` always rescans; dashboard reads don't).
+///
+/// # Errors
+/// Only infrastructure problems (broken db) — scan-level git failures
+/// land in `last_scan_error` instead (error isolation).
+///
+/// # Panics
+/// When the warnings mutex is poisoned.
 pub async fn scan_chain(state: &Arc<AppState>, chain_id: i64, force: bool) -> Result<(), Error> {
     let entry = state.entry(chain_id);
     let mut gate = if force {
@@ -144,6 +158,9 @@ pub async fn scan_chain(state: &Arc<AppState>, chain_id: i64, force: bool) -> Re
 }
 
 /// Run blocking (rusqlite / git2) work off the async threads.
+///
+/// # Errors
+/// Whatever `f` returns; a panicked task maps to a 500.
 pub async fn blocking<T, F>(f: F) -> Result<T, Error>
 where
     T: Send + 'static,

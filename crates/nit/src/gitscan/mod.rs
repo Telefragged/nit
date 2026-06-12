@@ -67,8 +67,11 @@ struct Recon {
 
 /// Register (or refresh) a chain: canonicalize the repo path, auto-create
 /// the repo row, upsert the chain (idempotent; re-registration updates
-/// `base`). Errors when the repo can't be opened or branch/base don't
-/// resolve — the 400 case of `POST /api/chains`. Does not scan.
+/// `base`). Does not scan.
+///
+/// # Errors
+/// When the repo can't be opened or branch/base don't resolve — the 400
+/// case of `POST /api/chains`.
 pub fn register(
     conn: &Connection,
     repo_path: &std::path::Path,
@@ -97,9 +100,12 @@ pub fn register(
 }
 
 /// Scan a chain: walk `base..tip` and reconcile the database. The caller
-/// must hold the chain's exclusive lock. Returns `Err` only for
-/// infrastructure problems (unknown chain, broken database); git-level
-/// failures are recorded in `last_scan_error` on the returned chain.
+/// must hold the chain's exclusive lock.
+///
+/// # Errors
+/// Only infrastructure problems (unknown chain, broken database) —
+/// git-level failures are recorded in `last_scan_error` on the returned
+/// chain instead.
 pub fn scan(conn: &mut Connection, chain_id: i64) -> Result<ScanOutcome> {
     scan_at(conn, chain_id, jiff::Timestamp::now())
 }
@@ -107,6 +113,9 @@ pub fn scan(conn: &mut Connection, chain_id: i64) -> Result<ScanOutcome> {
 /// [`scan`] with an injectable clock — the abandoned-branch rule compares
 /// `now` against the previous scan's timestamp. Tests use this; everyone
 /// else wants [`scan`].
+///
+/// # Errors
+/// See [`scan`].
 pub fn scan_at(conn: &mut Connection, chain_id: i64, now: jiff::Timestamp) -> Result<ScanOutcome> {
     let chain =
         db::get_chain(conn, chain_id)?.ok_or_else(|| anyhow!("chain {chain_id} not found"))?;

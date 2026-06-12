@@ -89,6 +89,9 @@ pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
 
 /// Serve `app` on an already-bound listener until `shutdown` resolves.
 /// `public_base` (every `web_url`) comes from the listener's local addr.
+///
+/// # Errors
+/// When accepting connections on `listener` fails.
 pub async fn serve_on(
     listener: tokio::net::TcpListener,
     db_path: PathBuf,

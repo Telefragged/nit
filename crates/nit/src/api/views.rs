@@ -63,6 +63,10 @@ fn actionable(state: &str) -> bool {
 // ---------------------------------------------------------------------------
 // Chain + ChangeSummary
 
+/// Chain JSON: the chain plus per-change summaries, live first.
+///
+/// # Errors
+/// When reading review state from the database fails.
 pub fn build_chain(
     conn: &Connection,
     public_base: &str,
@@ -251,6 +255,11 @@ pub fn comment_at_own_revision(c: &db::Comment) -> types::Comment {
 // ---------------------------------------------------------------------------
 // Change detail
 
+/// Change detail JSON: revisions, and comments rendered at
+/// `requested_revision`.
+///
+/// # Errors
+/// When reading review state from the database fails.
 pub fn build_change_detail(
     conn: &Connection,
     repo: Option<&Repository>,
@@ -324,6 +333,11 @@ pub fn review_json(review: &db::Review) -> types::Review {
 // ---------------------------------------------------------------------------
 // Feedback (agent side)
 
+/// Feedback JSON (the agent side): chain state plus actionable
+/// comments per live change (docs/api.md "Feedback").
+///
+/// # Errors
+/// When reading review state from the database fails.
 pub fn build_feedback(
     conn: &Connection,
     repo: Option<&Repository>,

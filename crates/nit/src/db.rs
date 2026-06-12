@@ -25,6 +25,9 @@ pub fn now_rfc3339() -> String {
 
 /// Default database location: `$XDG_DATA_HOME/nit/nit.sqlite3`, falling
 /// back to `~/.local/share/nit/nit.sqlite3`.
+///
+/// # Errors
+/// When neither `$XDG_DATA_HOME` nor `$HOME` is set.
 pub fn default_db_path() -> Result<PathBuf> {
     data_dir(
         std::env::var_os("XDG_DATA_HOME").map(PathBuf::from),
@@ -45,6 +48,11 @@ fn data_dir(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> Result<Pat
 
 /// Open (creating if needed) the database at `path`, apply pragmas and
 /// run migrations. Parent directories are created.
+///
+/// # Errors
+/// When the directory or database can't be created or opened, a
+/// pragma fails, or a migration fails (including a negative
+/// `user_version`).
 pub fn open(path: &Path) -> Result<Connection> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
@@ -168,6 +176,8 @@ impl ChainStatus {
         }
     }
 
+    /// # Errors
+    /// When `s` is not a recognized status.
     pub fn parse(s: &str) -> Result<Self> {
         match s {
             "active" => Ok(ChainStatus::Active),
@@ -199,6 +209,8 @@ impl ChangeStatus {
         }
     }
 
+    /// # Errors
+    /// When `s` is not a recognized status.
     pub fn parse(s: &str) -> Result<Self> {
         match s {
             "pending" => Ok(ChangeStatus::Pending),
@@ -404,6 +416,9 @@ fn review_from_row(row: &rusqlite::Row) -> rusqlite::Result<Review> {
 // Repos & chains
 
 /// Look up or insert the repo row for an (already canonicalized) path.
+///
+/// # Errors
+/// When the query fails.
 pub fn get_or_create_repo(conn: &Connection, path: &str) -> Result<Repo> {
     conn.execute(
         "INSERT OR IGNORE INTO repos (path, created_at) VALUES (?1, ?2)",
@@ -425,6 +440,9 @@ pub fn get_or_create_repo(conn: &Connection, path: &str) -> Result<Repo> {
 
 /// Look up or insert the chain for `(repo, branch)`; `base` is updated on
 /// re-registration (idempotent `nit push --base`).
+///
+/// # Errors
+/// When the query fails.
 pub fn get_or_create_chain(
     conn: &Connection,
     repo_id: i64,
@@ -446,6 +464,8 @@ pub fn get_or_create_chain(
     finish_chain(row)
 }
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn get_chain(conn: &Connection, id: i64) -> Result<Option<Chain>> {
     conn.query_row(
         "SELECT * FROM chains WHERE id = ?1",
@@ -457,6 +477,8 @@ pub fn get_chain(conn: &Connection, id: i64) -> Result<Option<Chain>> {
     .transpose()
 }
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn list_chains(conn: &Connection) -> Result<Vec<Chain>> {
     let mut stmt = conn.prepare("SELECT * FROM chains ORDER BY id")?;
     let rows = stmt.query_map([], chain_from_row)?;
@@ -464,6 +486,9 @@ pub fn list_chains(conn: &Connection) -> Result<Vec<Chain>> {
 }
 
 /// Repo path for a chain (joined through `repos`).
+///
+/// # Errors
+/// When the query fails.
 pub fn chain_repo_path(conn: &Connection, chain_id: i64) -> Result<Option<String>> {
     conn.query_row(
         "SELECT repos.path FROM chains JOIN repos ON repos.id = chains.repo_id
@@ -475,6 +500,8 @@ pub fn chain_repo_path(conn: &Connection, chain_id: i64) -> Result<Option<String
     .map_err(Into::into)
 }
 
+/// # Errors
+/// When the statement fails.
 pub fn chain_set_status(conn: &Connection, id: i64, status: ChainStatus, now: &str) -> Result<()> {
     conn.execute(
         "UPDATE chains SET status = ?2, updated_at = ?3 WHERE id = ?1",
@@ -486,6 +513,9 @@ pub fn chain_set_status(conn: &Connection, id: i64, status: ChainStatus, now: &s
 /// Set or clear `last_scan_error`. `touch` controls whether `updated_at`
 /// is bumped (the abandoned-branch two-scan rule keys off the timestamp of
 /// the scan that *first* saw the ref missing).
+///
+/// # Errors
+/// When the statement fails.
 pub fn chain_set_scan_error(
     conn: &Connection,
     id: i64,
@@ -509,6 +539,9 @@ pub fn chain_set_scan_error(
 
 /// Chain row for an (already canonicalized) repo path + branch, if any —
 /// without creating anything. CLI clients resolve their chain this way.
+///
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn find_chain_by_repo_branch(
     conn: &Connection,
     repo_path: &str,
@@ -525,6 +558,8 @@ pub fn find_chain_by_repo_branch(
     .transpose()
 }
 
+/// # Errors
+/// When the statement fails.
 pub fn chain_touch(conn: &Connection, id: i64, now: &str) -> Result<()> {
     conn.execute(
         "UPDATE chains SET updated_at = ?2 WHERE id = ?1",
@@ -536,6 +571,8 @@ pub fn chain_touch(conn: &Connection, id: i64, now: &str) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Changes
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn get_change(conn: &Connection, id: i64) -> Result<Option<Change>> {
     conn.query_row(
         "SELECT * FROM changes WHERE id = ?1",
@@ -549,6 +586,9 @@ pub fn get_change(conn: &Connection, id: i64) -> Result<Option<Change>> {
 
 /// All changes of a chain: live ones first in `position` order, orphaned
 /// ones last (by id).
+///
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn changes_for_chain(conn: &Connection, chain_id: i64) -> Result<Vec<Change>> {
     let mut stmt = conn.prepare(
         "SELECT * FROM changes WHERE chain_id = ?1
@@ -558,6 +598,8 @@ pub fn changes_for_chain(conn: &Connection, chain_id: i64) -> Result<Vec<Change>
     rows.map(|r| finish_change(r?)).collect()
 }
 
+/// # Errors
+/// When the insert fails.
 pub fn insert_change(
     conn: &Connection,
     chain_id: i64,
@@ -579,6 +621,8 @@ pub fn insert_change(
     })
 }
 
+/// # Errors
+/// When the query fails.
 pub fn change_key_exists(conn: &Connection, chain_id: i64, change_key: &str) -> Result<bool> {
     Ok(conn
         .query_row(
@@ -590,6 +634,8 @@ pub fn change_key_exists(conn: &Connection, chain_id: i64, change_key: &str) -> 
         .is_some())
 }
 
+/// # Errors
+/// When the statement fails.
 pub fn change_set_position_status(
     conn: &Connection,
     id: i64,
@@ -606,12 +652,16 @@ pub fn change_set_position_status(
 // ---------------------------------------------------------------------------
 // Revisions
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn revisions_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Revision>> {
     let mut stmt = conn.prepare("SELECT * FROM revisions WHERE change_id = ?1 ORDER BY number")?;
     let rows = stmt.query_map(params![change_id], revision_from_row)?;
     rows.map(|r| finish_revision(r?)).collect()
 }
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn get_revision(conn: &Connection, change_id: i64, number: i64) -> Result<Option<Revision>> {
     conn.query_row(
         "SELECT * FROM revisions WHERE change_id = ?1 AND number = ?2",
@@ -623,6 +673,8 @@ pub fn get_revision(conn: &Connection, change_id: i64, number: i64) -> Result<Op
     .transpose()
 }
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn latest_revision(conn: &Connection, change_id: i64) -> Result<Option<Revision>> {
     conn.query_row(
         "SELECT * FROM revisions WHERE change_id = ?1
@@ -635,6 +687,8 @@ pub fn latest_revision(conn: &Connection, change_id: i64) -> Result<Option<Revis
     .transpose()
 }
 
+/// # Errors
+/// When serializing `fixups` or the insert fails.
 #[allow(clippy::too_many_arguments)]
 pub fn insert_revision(
     conn: &Connection,
@@ -678,6 +732,9 @@ pub fn insert_revision(
 }
 
 /// Used by the scan's "re-fold if tree missing" repair path.
+///
+/// # Errors
+/// When the statement fails.
 pub fn revision_set_effective_tree(conn: &Connection, id: i64, tree: Option<&str>) -> Result<()> {
     conn.execute(
         "UPDATE revisions SET effective_tree = ?2 WHERE id = ?1",
@@ -689,6 +746,8 @@ pub fn revision_set_effective_tree(conn: &Connection, id: i64, tree: Option<&str
 // ---------------------------------------------------------------------------
 // Reviews
 
+/// # Errors
+/// When the insert fails.
 pub fn insert_review(
     conn: &Connection,
     change_id: i64,
@@ -715,6 +774,9 @@ pub fn insert_review(
 /// The most recent review on a given revision of a change, if any. Used to
 /// re-derive a change's pre-orphan status (docs/data-model.md: statuses are
 /// re-derivable).
+///
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn latest_review_on_revision(
     conn: &Connection,
     change_id: i64,
@@ -730,6 +792,8 @@ pub fn latest_review_on_revision(
     .map_err(Into::into)
 }
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn reviews_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Review>> {
     let mut stmt = conn.prepare("SELECT * FROM reviews WHERE change_id = ?1 ORDER BY id")?;
     let rows = stmt.query_map(params![change_id], review_from_row)?;
@@ -737,6 +801,9 @@ pub fn reviews_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Revie
 }
 
 /// The change's most recent review across all revisions (feedback scope).
+///
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn latest_review_for_change(conn: &Connection, change_id: i64) -> Result<Option<Review>> {
     conn.query_row(
         "SELECT * FROM reviews WHERE change_id = ?1 ORDER BY id DESC LIMIT 1",
@@ -748,6 +815,9 @@ pub fn latest_review_for_change(conn: &Connection, change_id: i64) -> Result<Opt
 }
 
 /// Max revision number carrying a review (`last_reviewed_revision`).
+///
+/// # Errors
+/// When the query fails.
 pub fn last_reviewed_revision(conn: &Connection, change_id: i64) -> Result<Option<i64>> {
     conn.query_row(
         "SELECT MAX(revision_number) FROM reviews WHERE change_id = ?1",
@@ -760,6 +830,8 @@ pub fn last_reviewed_revision(conn: &Connection, change_id: i64) -> Result<Optio
 // ---------------------------------------------------------------------------
 // Comments
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn get_comment(conn: &Connection, id: i64) -> Result<Option<Comment>> {
     conn.query_row(
         "SELECT * FROM comments WHERE id = ?1",
@@ -770,6 +842,8 @@ pub fn get_comment(conn: &Connection, id: i64) -> Result<Option<Comment>> {
     .map_err(Into::into)
 }
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn comments_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Comment>> {
     let mut stmt = conn.prepare("SELECT * FROM comments WHERE change_id = ?1 ORDER BY id")?;
     let rows = stmt.query_map(params![change_id], comment_from_row)?;
@@ -790,6 +864,8 @@ pub struct NewComment<'a> {
     pub resolved: bool,
 }
 
+/// # Errors
+/// When the insert fails.
 pub fn insert_comment(conn: &Connection, c: &NewComment, now: &str) -> Result<Comment> {
     conn.execute(
         "INSERT INTO comments
@@ -830,6 +906,8 @@ pub fn insert_comment(conn: &Connection, c: &NewComment, now: &str) -> Result<Co
     })
 }
 
+/// # Errors
+/// When the statement fails.
 pub fn update_draft_body(conn: &Connection, id: i64, body: &str, now: &str) -> Result<()> {
     conn.execute(
         "UPDATE comments SET body = ?2, updated_at = ?3 WHERE id = ?1",
@@ -841,11 +919,16 @@ pub fn update_draft_body(conn: &Connection, id: i64, body: &str, now: &str) -> R
 /// Hard-delete a draft (the one deliberate exception to "nothing is ever
 /// hard-deleted": unpublished drafts are reviewer-private scratch state,
 /// `DELETE /api/drafts/{id}`).
+///
+/// # Errors
+/// When the statement fails.
 pub fn delete_comment(conn: &Connection, id: i64) -> Result<()> {
     conn.execute("DELETE FROM comments WHERE id = ?1", params![id])?;
     Ok(())
 }
 
+/// # Errors
+/// When the statement fails.
 pub fn comment_set_resolved(conn: &Connection, id: i64, resolved: bool, now: &str) -> Result<()> {
     conn.execute(
         "UPDATE comments SET resolved = ?2, updated_at = ?3 WHERE id = ?1",
@@ -856,6 +939,9 @@ pub fn comment_set_resolved(conn: &Connection, id: i64, resolved: bool, now: &st
 
 /// Publish every draft on a change under a freshly created review
 /// (review submission). Returns the published rows.
+///
+/// # Errors
+/// When any statement in the publish flow fails.
 pub fn publish_drafts(
     conn: &Connection,
     change_id: i64,
@@ -875,6 +961,9 @@ pub fn publish_drafts(
 
 /// Per-change comment tallies for `ChangeSummary.counts`: published
 /// comments (incl. replies), drafts, and unresolved published root threads.
+///
+/// # Errors
+/// When the tally queries fail.
 pub fn comment_counts(conn: &Connection, change_id: i64) -> Result<(i64, i64, i64)> {
     conn.query_row(
         "SELECT
@@ -892,6 +981,8 @@ pub fn comment_counts(conn: &Connection, change_id: i64) -> Result<(i64, i64, i6
 // ---------------------------------------------------------------------------
 // Events
 
+/// # Errors
+/// When the insert fails.
 pub fn insert_event(
     conn: &Connection,
     chain_id: i64,
@@ -908,6 +999,9 @@ pub fn insert_event(
 }
 
 /// Latest event id for a chain (0 when none) — the `/wait` cursor.
+///
+/// # Errors
+/// When the query fails.
 pub fn latest_event_id(conn: &Connection, chain_id: i64) -> Result<i64> {
     conn.query_row(
         "SELECT COALESCE(MAX(id), 0) FROM events WHERE chain_id = ?1",
@@ -917,6 +1011,8 @@ pub fn latest_event_id(conn: &Connection, chain_id: i64) -> Result<i64> {
     .map_err(Into::into)
 }
 
+/// # Errors
+/// When the query fails or a stored row doesn't decode.
 pub fn events_for_chain(conn: &Connection, chain_id: i64) -> Result<Vec<Event>> {
     let mut stmt = conn.prepare(
         "SELECT id, chain_id, kind, payload, created_at
