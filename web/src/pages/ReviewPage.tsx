@@ -37,27 +37,84 @@ function buildThreads(comments: Comment[]): Thread[] {
   }));
 }
 
-function RevisionSelector({
+/** Resolve the ?against param into a diff base for the selected revision.
+ * Grammar: "base" → explicit full diff vs parent; "M" → interdiff
+ * rM → rSelected when 1 <= M < selected (junk falls back to full diff);
+ * absent → implicit interdiff since the reviewer's last review when they
+ * are behind on the latest revision (the only `implicit: true` case). */
+function deriveDiffBase(
+  raw: string | null,
+  selected: number,
+  lastReviewed: number | null,
+  latestNumber: number | undefined,
+): { against: number | undefined; implicit: boolean } {
+  if (raw !== null) {
+    const m = Number(raw);
+    const valid = Number.isInteger(m) && m >= 1 && m < selected;
+    return { against: valid ? m : undefined, implicit: false };
+  }
+  if (
+    lastReviewed !== null &&
+    latestNumber !== undefined &&
+    lastReviewed < latestNumber &&
+    selected === latestNumber
+  ) {
+    // Reviewer is behind: default to the interdiff since their review.
+    return { against: lastReviewed, implicit: true };
+  }
+  return { against: undefined, implicit: false };
+}
+
+/** Gerrit-style diff range: [Base|rM] → [rN]. Left picks the diff base,
+ * right the revision under review. */
+function DiffRangeSelect({
   revisions,
   selected,
-  onSelect,
+  against,
+  onLeft,
+  onRight,
 }: {
   revisions: Revision[];
   selected: number;
-  onSelect: (n: number) => void;
+  against: number | undefined;
+  onLeft: (v: string) => void;
+  onRight: (n: number) => void;
 }) {
   return (
-    <span className="rev-selector" title="Revision (patchset)">
-      {revisions.map((rev) => (
-        <button
-          key={rev.number}
-          className={`rev-btn ${rev.number === selected ? "active" : ""}`}
-          onClick={() => onSelect(rev.number)}
-        >
-          r{rev.number}
-        </button>
-      ))}
-    </span>
+    <>
+      <select
+        className="rev-select"
+        aria-label="Diff base"
+        title="Base = parent commit; rM = interdiff against revision M"
+        value={against === undefined ? "base" : String(against)}
+        onChange={(e) => onLeft(e.target.value)}
+      >
+        <option value="base">Base</option>
+        {revisions.map((r) => (
+          <option
+            key={r.number}
+            value={String(r.number)}
+            disabled={r.number >= selected}
+          >
+            r{r.number}
+          </option>
+        ))}
+      </select>
+      <span className="dim mono">→</span>
+      <select
+        className="rev-select"
+        aria-label="Revision"
+        title="Revision (patchset) under review"
+        value={String(selected)}
+        onChange={(e) => onRight(Number(e.target.value))}
+      >
+        {revisions.map((r) => (
+          <option key={r.number} value={String(r.number)}>
+            r{r.number}
+          </option>
+        ))}
+      </select>
+    </>
   );
 }
 
@@ -142,25 +199,14 @@ export default function ReviewPage() {
     latest;
   const selected = selectedRev?.number ?? 1;
 
-  // ?against: absent → implicit default below; "base" → explicit full diff
-  // vs parent; "M" → interdiff rM → rSelected when 1 <= M < selected.
   const againstRaw = searchParams.get("against");
   const lastReviewed = change?.last_reviewed_revision ?? null;
-
-  let against: number | undefined;
-  if (change && latest && againstRaw !== "base") {
-    if (againstRaw !== null) {
-      const m = Number(againstRaw);
-      if (Number.isInteger(m) && m >= 1 && m < selected) against = m;
-    } else if (
-      lastReviewed !== null &&
-      lastReviewed < latest.number &&
-      selected === latest.number
-    ) {
-      // Reviewer is behind: default to the interdiff since their review.
-      against = lastReviewed;
-    }
-  }
+  const { against, implicit } = deriveDiffBase(
+    againstRaw,
+    selected,
+    lastReviewed,
+    latest?.number,
+  );
 
   const diffQ = useQuery({
     queryKey: ["diff", changeId, selected, against ?? null],
@@ -282,6 +328,23 @@ export default function ReviewPage() {
     setSearchParams(next, { replace: true });
   };
 
+  // Diff range dropdowns. Left writes ?against ("base" | "1".."N-1").
+  // Right writes ?revision; a still-valid numeric base is preserved (the
+  // dropdowns are independent coordinates, as in Gerrit), an invalid one
+  // resets to Base, an explicit "base" is kept.
+  const onLeft = (v: string) => updateParams({ against: v });
+  const onRight = (n: number) => {
+    const patch: Record<string, string | null> = { revision: String(n) };
+    if (
+      againstRaw !== null &&
+      againstRaw !== "base" &&
+      deriveDiffBase(againstRaw, n, lastReviewed, latest.number).against ===
+        undefined
+    )
+      patch.against = null; // numeric base not valid for the viewed rev
+    updateParams(patch);
+  };
+
   const setLayoutPersist = (l: Layout) => {
     setLayout(l);
     localStorage.setItem(LAYOUT_KEY, l);
@@ -312,16 +375,6 @@ export default function ReviewPage() {
             <StatusChip status={change.status} />
           </div>
           <div className="meta-line">
-            <RevisionSelector
-              revisions={revisions}
-              selected={selected}
-              onSelect={(n) =>
-                updateParams({
-                  revision: String(n),
-                  against: null,
-                })
-              }
-            />
             <span className="dim">
               commit <span className="mono">{selectedRev.short_sha}</span>
             </span>
@@ -361,38 +414,16 @@ export default function ReviewPage() {
 
         <div className="diffbar">
           <div className="diffbar-mode">
-            {against !== undefined ? (
-              <>
-                <span className="mode-label">
-                  Interdiff <span className="mono">r{against} → r{selected}</span>
-                  {against === lastReviewed && againstRaw === null ? (
-                    <span className="dim"> — changes since your review</span>
-                  ) : null}
-                </span>
-                <button onClick={() => updateParams({ against: "base" })}>
-                  Show full diff
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="mode-label">
-                  Full diff <span className="mono">r{selected}</span>
-                  <span className="dim"> vs parent</span>
-                </span>
-                {revisions
-                  .filter((r) => r.number < selected)
-                  .map((r) => (
-                    <button
-                      key={r.number}
-                      onClick={() =>
-                        updateParams({ against: String(r.number) })
-                      }
-                    >
-                      vs r{r.number}
-                    </button>
-                  ))}
-              </>
-            )}
+            <DiffRangeSelect
+              revisions={revisions}
+              selected={selected}
+              against={against}
+              onLeft={onLeft}
+              onRight={onRight}
+            />
+            {implicit ? (
+              <span className="dim">— changes since your review</span>
+            ) : null}
           </div>
           <div className="diffbar-toggles">
             <button

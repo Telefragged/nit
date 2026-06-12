@@ -22,12 +22,17 @@ happens.
   Orphaned changes render collapsed at the bottom (comments preserved).
   `last_scan_error` / `scan_warnings` show as a banner. Click → change view.
 - `/changes/:id` **Review** (the core) —
-  - header: subject, expandable full message, chain breadcrumb, revision
-    selector (`1 … N`, default latest), fixup messages of the shown
-    revision, base info, `needs_rebase` warning banner when set;
-  - interdiff: when `last_reviewed_revision` exists and is behind, default
-    to the interdiff `last_reviewed → latest` with a one-click "full diff"
-    escape; otherwise full diff with a "vs revision m" toggle;
+  - header: subject, expandable full message, chain breadcrumb, fixup
+    messages of the shown revision, base info, `needs_rebase` warning
+    banner when set;
+  - diff range: Gerrit-style dropdown pair in the diffbar, `Base|rM → rN`.
+    The right select is the revision under review — it drives `?revision=`
+    (default latest) and the revision new comments anchor to. The left
+    select drives `?against=`: `base` is an explicit full diff vs parent,
+    an earlier `rM` an interdiff `rM → rN` (later revisions shown
+    disabled). Default when `last_reviewed_revision` exists and is behind:
+    the interdiff `last_reviewed → latest` with a "changes since your
+    review" hint; otherwise Base → latest;
   - file list (left rail): path, status letter, +/- counts; selecting
     scrolls to the file section; all files render in one scroll column
     (diffshub style), unified ⇄ side-by-side toggle persisted in
