@@ -22,6 +22,16 @@ nix develop -c npm run build
 nix build                                      # → result/bin/nit
 ```
 
+## Restarting the server
+
+Rebuild (`nix build` or `cargo build`), ctrl-c the running `nit serve`
+(in-flight `/wait` long-polls return immediately, so shutdown is prompt),
+then start it again with the same `--db`. Parked `nit wait`s are
+unaffected: each prints one stderr notice, retries with backoff (1–10s)
+until the server is back, and resumes the same sqlite-persisted cursor —
+no review events are missed. `nit push`/`status`/`reply` issued during
+the gap fail fast ("is 'nit serve' running?"); just rerun them.
+
 ## Screenshot harness (frontend checking for AI agents)
 
 AI agents can't look at a browser; they look at PNGs. Both modes write to

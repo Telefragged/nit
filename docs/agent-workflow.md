@@ -49,7 +49,11 @@ nit push                      # optional: next scan marks the chain merged
   errors; re-running is always safe (idempotent).
 - `nit wait [--timeout <secs>]` — returns immediately when the state is
   actionable, else long-polls (internally re-polling until `--timeout`,
-  default forever). Exit 0 with the Feedback JSON on stdout.
+  default forever). Exit 0 with the Feedback JSON on stdout. Survives
+  server restarts: transport failures are retried with backoff (a single
+  stderr notice per outage; stdout stays pure JSON). With `--timeout`,
+  expiry while the server is unreachable exits non-zero instead of
+  printing a stale snapshot.
 - `nit status` — current Feedback JSON without blocking.
 - `nit reply <comment-id> [--resolve] -m "text"` — threaded reply as the
   agent; `--resolve` closes the thread (do this for addressed comments —
