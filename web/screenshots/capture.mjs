@@ -52,6 +52,24 @@ const captures = [
       await page.waitForTimeout(100);
     },
   },
+  // Chain strip collapsed: status dots (current ringed) and the N/M toggle
+  // inline at the right end of the header's meta line.
+  {
+    name: "review-chain-strip",
+    path: "/changes/11?against=base",
+    fullPage: false,
+  },
+  // Chain strip expanded: the panel lists the whole chain in normal flow
+  // on its own meta-line row, pushing the content below it down.
+  {
+    name: "review-chain-expanded",
+    path: "/changes/11",
+    fullPage: false,
+    actions: async (page) => {
+      await page.locator(".chain-strip-toggle").click();
+      await page.waitForSelector(".chain-strip-panel");
+    },
+  },
   {
     name: "review-full-unified",
     path: "/changes/11?against=base",

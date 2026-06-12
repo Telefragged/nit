@@ -11,6 +11,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { createDraft, getChain, getChange, getDiff } from "../api/client";
 import type { ChangeDetail, Comment, Review, Revision } from "../api/types";
 import { StatusChip } from "../components/badges";
+import ChainStrip from "../components/ChainStrip";
 import CommentEditor, { confirmDiscard } from "../components/CommentEditor";
 import type { Thread } from "../components/CommentThread";
 import CommentThread from "../components/CommentThread";
@@ -522,6 +523,7 @@ export default function ReviewPage() {
               parent <span className="mono">{selectedRev.parent_sha.slice(0, 12)}</span>
             </span>
             <span className="dim">{timeAgo(selectedRev.created_at)}</span>
+            <ChainStrip chain={chain} currentId={changeId} />
           </div>
           {selectedRev.fixups.length > 0 ? (
             <div className="fixup-list">

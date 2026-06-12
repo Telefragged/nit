@@ -26,6 +26,12 @@ happens.
 - `/changes/:id` **Review** (the core) —
   - header: subject, chain breadcrumb, fixup messages of the shown
     revision, base info, `needs_rebase` warning banner when set;
+  - chain strip: inline at the right end of the header's meta line
+    (commit/parent/age) — one status dot per change in chain order (the
+    current change ringed, siblings click through; same dot pattern as the
+    dashboard) and an `N/M ▾` toggle. Expanding lists the chain (position,
+    subject, unresolved count, status chip per change) in normal flow,
+    pushing the content below down; navigating to another change closes it;
   - diff range: Gerrit-style dropdown pair in the diffbar, `Base|rM → rN`.
     The right select is the revision under review — it drives `?revision=`
     (default latest) and the revision new comments anchor to. The left
