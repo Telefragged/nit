@@ -23,7 +23,6 @@ similar_names = "allow"
 # clean under `clippy -D warnings`. Remove each allow together with the
 # commit that fixes its warnings.
 elidable_lifetime_names = "allow"
-format_collect = "allow"
 ignored_unit_patterns = "allow"
 items_after_statements = "allow"
 needless_continue = "allow"

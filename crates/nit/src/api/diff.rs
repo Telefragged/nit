@@ -239,7 +239,11 @@ mod tests {
     }
 
     fn lines(n: std::ops::RangeInclusive<i64>) -> String {
-        n.map(|i| format!("line {i}\n")).collect()
+        use std::fmt::Write;
+        n.fold(String::new(), |mut s, i| {
+            writeln!(s, "line {i}").unwrap();
+            s
+        })
     }
 
     #[test]

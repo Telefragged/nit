@@ -9,7 +9,11 @@ use common::{GitRepo, TestServer, http_delete, http_get, http_patch, http_post, 
 use serde_json::{Value, json};
 
 fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
-    n.map(|i| format!("{prefix}{i}\n")).collect()
+    use std::fmt::Write;
+    n.fold(String::new(), |mut s, i| {
+        writeln!(s, "{prefix}{i}").unwrap();
+        s
+    })
 }
 
 #[test]

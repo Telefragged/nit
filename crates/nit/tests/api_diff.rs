@@ -8,7 +8,11 @@ use common::{GitRepo, TestServer, http_get, http_post, msg};
 use serde_json::{Value, json};
 
 fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
-    n.map(|i| format!("{prefix}{i}\n")).collect()
+    use std::fmt::Write;
+    n.fold(String::new(), |mut s, i| {
+        writeln!(s, "{prefix}{i}").unwrap();
+        s
+    })
 }
 
 #[test]
