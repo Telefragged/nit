@@ -54,6 +54,17 @@ const captures = [
   },
   // Old revision selected: full diff of r1, threads at their written lines.
   { name: "review-rev1", path: "/changes/11?revision=1" },
+  // Explicit interdiff picked via the base dropdown (no "since your
+  // review" hint) — exercises select → URL → refetch end to end.
+  {
+    name: "review-interdiff-picked",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await page.getByLabel("Diff base").selectOption("1");
+      await page.waitForTimeout(200);
+    },
+  },
   {
     name: "review-draft-editor",
     path: "/changes/11?against=base",
