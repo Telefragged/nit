@@ -152,7 +152,6 @@ pub fn port_line(
 
     // No rename detection: a renamed file shows up as delete+add and the
     // anchor goes outdated — conservative, and `file` keeps its meaning.
-    let mut offset = 0i64;
     for idx in 0..diff.deltas().len() {
         let delta = diff
             .get_delta(idx)
@@ -169,26 +168,36 @@ pub fn port_line(
         if patch.delta().flags().is_binary() {
             return Ok(None);
         }
-        for h in 0..patch.num_hunks() {
-            let (hunk, _) = patch.hunk(h)?;
-            let old_start = i64::from(hunk.old_start());
-            let old_lines = i64::from(hunk.old_lines());
-            let new_lines = i64::from(hunk.new_lines());
-            if old_lines == 0 {
-                // Pure insertion *after* old line `old_start`.
-                if line <= old_start {
-                    return Ok(Some(line + offset));
-                }
-            } else {
-                if line < old_start {
-                    return Ok(Some(line + offset));
-                }
-                if line < old_start + old_lines {
-                    return Ok(None); // the anchored line itself changed
-                }
+        return port_through_hunks(&patch, line);
+    }
+    Ok(Some(line)) // file untouched between the trees
+}
+
+/// The hunk-offset walk shared by every anchor-porting path: shift `line`
+/// (an old-side line number) through `patch`'s hunks — `Some(shifted)`
+/// when the line lies in an unchanged region, `None` when a hunk touches
+/// the line itself.
+fn port_through_hunks(patch: &Patch, line: i64) -> Result<Option<i64>> {
+    let mut offset = 0i64;
+    for h in 0..patch.num_hunks() {
+        let (hunk, _) = patch.hunk(h)?;
+        let old_start = i64::from(hunk.old_start());
+        let old_lines = i64::from(hunk.old_lines());
+        let new_lines = i64::from(hunk.new_lines());
+        if old_lines == 0 {
+            // Pure insertion *after* old line `old_start`.
+            if line <= old_start {
+                return Ok(Some(line + offset));
             }
-            offset += new_lines - old_lines;
+        } else {
+            if line < old_start {
+                return Ok(Some(line + offset));
+            }
+            if line < old_start + old_lines {
+                return Ok(None); // the anchored line itself changed
+            }
         }
+        offset += new_lines - old_lines;
     }
     Ok(Some(line + offset))
 }
