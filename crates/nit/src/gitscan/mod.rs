@@ -155,6 +155,11 @@ pub fn scan_at(conn: &mut Connection, chain_id: i64, now: jiff::Timestamp) -> Re
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "transaction script for the documented scan algorithm; \
+              splitting the steps apart would obscure the contract"
+)]
 fn reconcile(
     tx: &Connection,
     repo_path: &str,
@@ -602,6 +607,10 @@ struct MatchInput<'a, 'r> {
 /// Identity matching, in contract priority order across the whole scan:
 /// one pass per rule, each pass in walk order, each row claimable once.
 /// Returns, per regular commit, the index into `existing` it matched.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one block per identity rule, in contract priority order"
+)]
 fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
     let MatchInput {
         repo,

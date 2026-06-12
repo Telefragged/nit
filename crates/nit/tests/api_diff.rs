@@ -16,6 +16,7 @@ fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "linear end-to-end scenario")]
 fn diff_json_golden() {
     let g = GitRepo::new();
     let keep_v1 = lines("k", 1..=12);

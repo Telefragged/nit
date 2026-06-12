@@ -17,6 +17,7 @@ fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "linear end-to-end scenario")]
 fn full_review_loop() {
     let g = GitRepo::new();
     let lib_v1 = lines("L", 1..=12);
