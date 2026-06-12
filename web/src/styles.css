@@ -566,7 +566,8 @@ table.list tbody tr:hover {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 16px;
+  height: 33px; /* pinned: the 73/78/116px sticky offsets below assume it */
+  padding: 0 16px;
   background: var(--bg-raised);
   border-bottom: 1px solid var(--border);
 }
@@ -710,20 +711,22 @@ table.list tbody tr:hover {
 .file-section {
   border: 1px solid var(--border);
   border-radius: 6px;
+  /* clip (not hidden — that would break the sticky header) rounds the
+     header's corners at rest and squares them while stuck */
+  overflow: clip;
   margin-bottom: 14px;
   background: var(--bg);
   scroll-margin-top: 116px;
 }
 .file-header {
   position: sticky;
-  top: 73px;
+  top: 73px; /* topbar 40px + diffbar 33px */
   z-index: 10;
   display: flex;
   gap: 8px;
   align-items: center;
   background: var(--bg-raised);
   border-bottom: 1px solid var(--border);
-  border-radius: 6px 6px 0 0;
   padding: 5px 10px;
   font-family: var(--mono);
   font-size: 12px;
@@ -732,10 +735,10 @@ table.list tbody tr:hover {
 .file-header:hover {
   background: var(--bg-hover);
 }
-/* A collapsed section is just its header: full radius, no inner edge. */
+/* A collapsed section is just its header: no inner edge (the section's
+   clip already rounds all four header corners). */
 .file-section.collapsed .file-header {
   border-bottom: none;
-  border-radius: 6px;
 }
 .fchevron {
   flex: none;

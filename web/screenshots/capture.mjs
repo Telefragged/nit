@@ -97,6 +97,23 @@ const captures = [
       await page.waitForTimeout(250); // rAF measure + react re-render
     },
   },
+  // Scrolled mid-file: the sticky file header must pin flush under the
+  // diffbar as one opaque box (regression view for the sticky offsets in
+  // styles.css — diffbar height and .file-header top must agree). Expands
+  // first: a collapsed file is header-only, so nothing would pin.
+  {
+    name: "review-scrolled-sticky",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page.evaluate(() => {
+        const sec = document.getElementById("file-1");
+        window.scrollTo(0, sec.offsetTop + 200);
+      });
+      await page.waitForTimeout(200);
+    },
+  },
   // Old revision selected: full diff of r1, threads at their written lines.
   {
     name: "review-rev1",
