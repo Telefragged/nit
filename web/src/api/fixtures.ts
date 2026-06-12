@@ -29,6 +29,7 @@ import type {
   ChangeSummary,
   Comment,
   CommentAuthor,
+  CommentRange,
   CommentSide,
   CommentState,
   CreateDraftRequest,
@@ -135,6 +136,8 @@ interface CommentRecord {
   file: string | null;
   line: number | null;
   side: CommentSide;
+  /** Selected-text anchor; most fixture comments are whole-line. */
+  range?: CommentRange | null;
   line_text: string | null;
   body: string;
   state: CommentState;
@@ -145,9 +148,13 @@ interface CommentRecord {
   /**
    * Where this anchor lands when the change is served at another revision
    * (the real server ports anchors through the interdiff). Missing entry =
-   * unchanged region, same line number.
+   * unchanged region, same line number and range. A present entry without
+   * `range` renders the range as not portable (rendered_range: null).
    */
-  renderAt: Record<number, { line: number | null; outdated: boolean }>;
+  renderAt: Record<
+    number,
+    { line: number | null; outdated: boolean; range?: CommentRange }
+  >;
 }
 
 const diffKey = (revision: number, against?: number) =>
@@ -1245,6 +1252,36 @@ const comments: CommentRecord[] = [
     updated_at: ago(105),
     renderAt: { 2: { line: 58, outdated: false } },
   },
+  // change 11 — unresolved range thread: the selection spans the
+  // generate/mark pair (partial first line through mid last line) and
+  // survives the amend, shifting 22-23 → 30-31 with chars intact.
+  {
+    id: 79,
+    change_id: 11,
+    revision: 1,
+    parent_id: null,
+    author: "reviewer",
+    file: "src/auth/rotate.rs",
+    line: 23,
+    side: "new",
+    range: { start_line: 22, start_char: 8, end_line: 23, end_char: 50 },
+    line_text: "        self.store.mark_rotated(entry.id, &fresh);",
+    body:
+      "Generate-then-mark isn't atomic: a crash between these two " +
+      "statements hands out a token the store never recorded.",
+    state: "published",
+    resolved: false,
+    review_id: 5,
+    created_at: ago(21 * 60),
+    updated_at: ago(21 * 60),
+    renderAt: {
+      2: {
+        line: 31,
+        outdated: false,
+        range: { start_line: 30, start_char: 8, end_line: 31, end_char: 50 },
+      },
+    },
+  },
   // change 11 — outdated thread: the anchored line was rewritten in r2.
   {
     id: 75,
@@ -1297,6 +1334,8 @@ const comments: CommentRecord[] = [
     file: COMMIT_MSG_PATH,
     line: 5,
     side: "new",
+    // Single-line partial selection: "the legitimate client refreshes."
+    range: { start_line: 5, start_char: 7, end_line: 5, end_char: 40 },
     line_text: "moment the legitimate client refreshes.",
     body:
       "The body never says what happens on token *reuse* — state the " +
@@ -1306,7 +1345,13 @@ const comments: CommentRecord[] = [
     review_id: 5,
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
-    renderAt: { 2: { line: 5, outdated: false } },
+    renderAt: {
+      2: {
+        line: 5,
+        outdated: false,
+        range: { start_line: 5, start_char: 7, end_line: 5, end_char: 40 },
+      },
+    },
   },
   {
     id: 78,
@@ -1317,6 +1362,8 @@ const comments: CommentRecord[] = [
     file: COMMIT_MSG_PATH,
     line: 5,
     side: "new",
+    // Replies copy the root's whole anchor, range included.
+    range: { start_line: 5, start_char: 7, end_line: 5, end_char: 40 },
     line_text: "moment the legitimate client refreshes.",
     body:
       "Reworded: the message now calls out family revocation " +
@@ -1482,17 +1529,20 @@ function chainView(chain: ChainRecord): Chain {
 
 /** Port a comment's anchor to the requested revision (docs/api.md). */
 function renderComment(c: CommentRecord, atRevision: number): Comment {
+  const range = c.range ?? null;
   let rendered_line = c.line;
+  let rendered_range = range;
   let outdated = false;
   if (atRevision !== c.revision) {
     const ported = c.renderAt[atRevision];
     if (ported) {
       rendered_line = ported.line;
+      rendered_range = ported.range ?? null;
       outdated = ported.outdated;
     }
   }
   const { renderAt: _renderAt, ...rest } = c;
-  return { ...rest, rendered_line, outdated };
+  return { ...rest, range, rendered_line, rendered_range, outdated };
 }
 
 function changeDetail(c: ChangeRecord, atRevision: number): ChangeDetail {
@@ -1611,6 +1661,7 @@ export async function mockRequest(
       file: req.file ?? null,
       line: req.line ?? null,
       side,
+      range: req.range ?? null,
       line_text: snapshotLineText(c, req.revision, req.file, req.line, side),
       body: req.body,
       state: "draft",

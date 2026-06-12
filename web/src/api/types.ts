@@ -181,6 +181,18 @@ export type CommentAuthor = "reviewer" | "agent";
 export type CommentSide = "old" | "new";
 export type CommentState = "draft" | "published";
 
+/**
+ * Selected-text anchor of a line comment (docs/api.md "Range comments"):
+ * 1-based lines on the comment's side, 0-based chars, `end_char`
+ * exclusive, `end_line` = the comment's `line`.
+ */
+export interface CommentRange {
+  start_line: number;
+  start_char: number;
+  end_line: number;
+  end_char: number;
+}
+
 export interface Comment {
   id: number;
   change_id: number;
@@ -191,10 +203,15 @@ export interface Comment {
   file: string | null;
   line: number | null;
   side: CommentSide;
+  /** Null: whole-line comment. */
+  range: CommentRange | null;
   /** Snapshot of the anchored line. */
   line_text: string | null;
   /** Anchor ported to the requested revision; null when outdated. */
   rendered_line: number | null;
+  /** `range` ported to the requested revision; null when the spanned
+   * region was touched (the comment falls back to its line anchor). */
+  rendered_range: CommentRange | null;
   outdated: boolean;
   body: string;
   state: CommentState;
@@ -212,6 +229,8 @@ export interface CreateDraftRequest {
   line?: number;
   /** Defaults to "new". */
   side?: CommentSide;
+  /** Optional: requires `line`; docs/api.md "Range comments". */
+  range?: CommentRange;
   body: string;
   parent_id?: number | null;
 }
