@@ -115,12 +115,6 @@ export default function ChainPage() {
           <span className="banner-body">{chain.last_scan_error}</span>
         </div>
       ) : null}
-      {chain.scan_warnings.map((w) => (
-        <div className="banner banner-warn" key={w}>
-          <strong>warning</strong>
-          <span className="banner-body">{w}</span>
-        </div>
-      ))}
 
       <table className="list changes-table">
         <thead>

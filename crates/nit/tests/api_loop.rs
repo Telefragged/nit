@@ -47,7 +47,6 @@ fn full_review_loop() {
     assert_eq!(chain["status"], "active");
     assert_eq!(chain["state"], "waiting_for_review");
     assert_eq!(chain["last_scan_error"], Value::Null);
-    assert_eq!(chain["scan_warnings"], json!([]));
     assert_eq!(
         chain["web_url"],
         json!(format!("{}/chains/{chain_id}", server.base))

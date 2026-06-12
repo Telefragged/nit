@@ -22,6 +22,9 @@ Concurrency guarantees behind these endpoints: docs/data-model.md
   `repo_path` is canonicalized; the repo row is auto-created. 400 if the
   repo/branch/base can't be resolved at registration. A scan failure on an
   *existing* chain is not an HTTP error: it appears as `last_scan_error`.
+  Every commit in `base..tip` must carry its own `Change-Id:` trailer and
+  must not be a `fixup!`/`squash!` commit — violations fail the scan
+  (docs/data-model.md "Change identity").
   `partial` is optional and sticky across pushes: `true` marks the chain
   partial (`nit push --partial`), `false` clears it (`nit ready`),
   absent leaves it unchanged. New chains default to not-partial.
@@ -38,7 +41,6 @@ Chain = {
   "state": "waiting_for_review", // derived — see state table below
   "partial": false,              // sticky; set by push --partial, cleared by ready
   "last_scan_error": null,       // string when the last scan failed
-  "scan_warnings": [],           // e.g. duplicate Change-Id
   "web_url": "http://127.0.0.1:8877/chains/1",
   "created_at": "...", "updated_at": "...",
   "changes": [ChangeSummary]     // chain order; orphaned ones last
@@ -189,7 +191,7 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
     "state": "agents_turn",   // see state table
     "actionable": true,
     "chain": {"id": 1, "branch": "feat/x", "base": "main", "web_url": "…",
-              "partial": false, "last_scan_error": null, "scan_warnings": []},
+              "partial": false, "last_scan_error": null},
     "changes": [               // live changes, chain order
       {"change_id": 10, "change_key": "I3f2…", "subject": "…",
        "commit_sha": "…", "revision": 2, "status": "changes_requested",

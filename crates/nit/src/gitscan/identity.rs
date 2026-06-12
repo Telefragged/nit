@@ -1,6 +1,6 @@
 //! Change identity helpers: `Change-Id:` trailer extraction, the
-//! derived-key scheme for duplicated trailers (docs/data-model.md "Change
-//! identity", rule 1), and commit subject extraction.
+//! required-Change-Id validation (docs/data-model.md "Change identity"),
+//! and commit subject extraction.
 
 use std::collections::HashMap;
 
@@ -32,36 +32,60 @@ pub fn change_id_trailer(message: &str) -> Option<String> {
     found
 }
 
-/// Assign effective change keys for the walked regular commits' trailers
-/// (walk order, oldest first). The first commit carrying a token keeps it;
-/// later duplicates get derived keys `<token>#2`, `<token>#3`, … plus a
-/// scan warning each. `short_shas` parallels `trailers` and is only used
-/// in warning texts.
-#[must_use]
-pub fn assign_trailer_keys(
-    trailers: &[Option<String>],
-    short_shas: &[String],
-) -> (Vec<Option<String>>, Vec<String>) {
-    debug_assert_eq!(trailers.len(), short_shas.len());
-    let mut seen: HashMap<&str, u32> = HashMap::new();
-    let mut keys = Vec::with_capacity(trailers.len());
-    let mut warnings = Vec::new();
-    for (trailer, short_sha) in trailers.iter().zip(short_shas) {
-        keys.push(trailer.as_deref().map(|token| {
-            let n = seen.entry(token).or_insert(0);
-            *n += 1;
-            if *n == 1 {
-                token.to_string()
-            } else {
-                let derived = format!("{token}#{n}");
-                warnings.push(format!(
-                    "duplicate Change-Id {token}: commit {short_sha} tracked as {derived}"
-                ));
-                derived
-            }
-        }));
+/// Change keys for the walked commits' messages (walk order, oldest
+/// first), enforcing the required-Change-Id contract: every commit
+/// carries a `Change-Id:` trailer, no two commits share one, and
+/// `fixup!`/`squash!` commits are rejected — squash them locally before
+/// pushing. `short_shas` parallels `messages` and is only used in error
+/// texts.
+///
+/// # Errors
+/// The documented scan-failure message for the first violated rule.
+pub fn require_keys(messages: &[String], short_shas: &[String]) -> Result<Vec<String>, String> {
+    debug_assert_eq!(messages.len(), short_shas.len());
+
+    let fixups: Vec<&str> = messages
+        .iter()
+        .zip(short_shas)
+        .filter(|(m, _)| {
+            let subject = subject_of(m);
+            subject.starts_with("fixup! ") || subject.starts_with("squash! ")
+        })
+        .map(|(_, sha)| sha.as_str())
+        .collect();
+    if !fixups.is_empty() {
+        return Err(format!(
+            "chain contains fixup!/squash! commits ({}) — squash them into \
+             their targets before pushing",
+            fixups.join(", ")
+        ));
     }
-    (keys, warnings)
+
+    let mut keys = Vec::with_capacity(messages.len());
+    let mut missing = Vec::new();
+    for (message, sha) in messages.iter().zip(short_shas) {
+        match change_id_trailer(message) {
+            Some(token) => keys.push(token),
+            None => missing.push(sha.as_str()),
+        }
+    }
+    if !missing.is_empty() {
+        return Err(format!(
+            "commits without a Change-Id trailer ({}) — every commit needs one",
+            missing.join(", ")
+        ));
+    }
+
+    let mut seen: HashMap<&str, &str> = HashMap::new(); // token → first sha
+    for (key, sha) in keys.iter().zip(short_shas) {
+        if let Some(first) = seen.insert(key.as_str(), sha.as_str()) {
+            return Err(format!(
+                "duplicate Change-Id {key} on commits {first} and {sha} — \
+                 every commit needs its own"
+            ));
+        }
+    }
+    Ok(keys)
 }
 
 #[cfg(test)]
@@ -109,29 +133,52 @@ mod tests {
         assert_eq!(change_id_trailer(msg), None);
     }
 
+    fn msgs(texts: &[&str]) -> Vec<String> {
+        texts.iter().map(ToString::to_string).collect()
+    }
+
+    fn shas(n: usize) -> Vec<String> {
+        (0..n).map(|i| format!("sha{i}")).collect()
+    }
+
     #[test]
-    fn derived_keys_for_duplicates() {
-        let trailers = vec![
-            Some("Iaaa".to_string()),
-            None,
-            Some("Iaaa".to_string()),
-            Some("Ibbb".to_string()),
-            Some("Iaaa".to_string()),
-        ];
-        let shas: Vec<String> = (0..5).map(|i| format!("sha{i}")).collect();
-        let (keys, warnings) = assign_trailer_keys(&trailers, &shas);
+    fn require_keys_happy_path() {
+        let messages = msgs(&["a\n\nChange-Id: Iaaa\n", "b\n\nChange-Id: Ibbb\n"]);
         assert_eq!(
-            keys,
-            vec![
-                Some("Iaaa".to_string()),
-                None,
-                Some("Iaaa#2".to_string()),
-                Some("Ibbb".to_string()),
-                Some("Iaaa#3".to_string()),
-            ]
+            require_keys(&messages, &shas(2)),
+            Ok(vec!["Iaaa".to_string(), "Ibbb".to_string()])
         );
-        assert_eq!(warnings.len(), 2);
-        assert!(warnings[0].contains("Iaaa") && warnings[0].contains("sha2"));
-        assert!(warnings[1].contains("Iaaa#3"));
+    }
+
+    #[test]
+    fn require_keys_rejects_fixup_and_squash_commits() {
+        let messages = msgs(&[
+            "a\n\nChange-Id: Iaaa\n",
+            "fixup! a\n",
+            "squash! a\n\nChange-Id: Ibbb\n",
+        ]);
+        let err = require_keys(&messages, &shas(3)).expect_err("should be rejected");
+        assert!(err.contains("fixup!/squash!"), "{err}");
+        assert!(err.contains("sha1") && err.contains("sha2"), "{err}");
+    }
+
+    #[test]
+    fn require_keys_rejects_missing_trailer() {
+        let messages = msgs(&["a\n\nChange-Id: Iaaa\n", "no trailer\n"]);
+        let err = require_keys(&messages, &shas(2)).expect_err("should be rejected");
+        assert!(err.contains("without a Change-Id trailer"), "{err}");
+        assert!(err.contains("sha1") && !err.contains("sha0"), "{err}");
+    }
+
+    #[test]
+    fn require_keys_rejects_duplicate_trailer() {
+        let messages = msgs(&[
+            "a\n\nChange-Id: Idup\n",
+            "b\n\nChange-Id: Ibbb\n",
+            "c\n\nChange-Id: Idup\n",
+        ]);
+        let err = require_keys(&messages, &shas(3)).expect_err("should be rejected");
+        assert!(err.contains("duplicate Change-Id Idup"), "{err}");
+        assert!(err.contains("sha0") && err.contains("sha2"), "{err}");
     }
 }

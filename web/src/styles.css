@@ -292,12 +292,6 @@ table.list tbody tr:hover {
   font-size: 11.5px;
   margin-top: 1px;
 }
-.warn-glyph {
-  color: var(--amber);
-  margin-left: 6px;
-  cursor: help;
-  font-size: 12px;
-}
 .error-glyph {
   color: var(--red);
   margin-left: 6px;

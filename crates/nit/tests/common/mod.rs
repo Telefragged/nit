@@ -133,7 +133,6 @@ impl Fixture {
             .unwrap();
         db::change_set_position_status(&self.conn, change_id, row.position, status).unwrap();
     }
-
 }
 
 fn commit_in(repo: &Repository, parents: &[Oid], message: &str, files: &[(&str, &str)]) -> Oid {

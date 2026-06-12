@@ -9,9 +9,9 @@
 //            an unresolved thread, an outdated comment, 2 drafts, plus a
 //            resolved thread on its commit message (/COMMIT_MSG) and a
 //            reworded r2 message so the interdiff carries a real message
-//            diff; change 12's diff has a rename and a binary file; the
-//            chain carries a scan warning.
-//   chain 2  agents_turn — a changes_requested change, mid-push (partial).
+//            diff; change 12's diff has a rename and a binary file.
+//   chain 2  agents_turn — a changes_requested change, mid-push (partial),
+//            plus a Change-Id-validation scan error.
 //   chain 3  ready_to_merge — single approved change.
 //   chain 4  merged — only visible via ?status=all.
 //
@@ -102,7 +102,6 @@ interface ChainRecord {
   /** Sticky; set by push --partial, cleared by ready. */
   partial: boolean;
   last_scan_error: string | null;
-  scan_warnings: string[];
   created_at: string;
   updated_at: string;
   /** Change ids in chain order. */
@@ -946,9 +945,6 @@ const chains: ChainRecord[] = [
     status: "active",
     partial: false,
     last_scan_error: null,
-    scan_warnings: [
-      "duplicate Change-Id I3f2d8a91c0b7e514: commit 9f3c21a4d2e1 tracked as I3f2d8a91c0b7e514#2",
-    ],
     created_at: ago(26 * 60),
     updated_at: ago(85),
     change_ids: [10, 11, 12],
@@ -961,8 +957,10 @@ const chains: ChainRecord[] = [
     status: "active",
     // The agent is mid-push (nit push --partial); exercises the PARTIAL badge.
     partial: true,
-    last_scan_error: null,
-    scan_warnings: [],
+    // The latest push failed Change-Id validation; exercises the scan-error
+    // banner (prior state stays served).
+    last_scan_error:
+      "commits without a Change-Id trailer (9f3c21a4d2e1) — every commit needs one",
     created_at: ago(9 * 60),
     updated_at: ago(112),
     change_ids: [20],
@@ -975,7 +973,6 @@ const chains: ChainRecord[] = [
     status: "active",
     partial: false,
     last_scan_error: null,
-    scan_warnings: [],
     created_at: ago(50 * 60),
     updated_at: ago(40 * 60),
     change_ids: [30],
@@ -988,7 +985,6 @@ const chains: ChainRecord[] = [
     status: "merged",
     partial: false,
     last_scan_error: null,
-    scan_warnings: [],
     created_at: ago(5 * 24 * 60),
     updated_at: ago(3 * 24 * 60),
     change_ids: [40],
@@ -1335,7 +1331,6 @@ function chainView(chain: ChainRecord): Chain {
     state: chainState(chain),
     partial: chain.partial,
     last_scan_error: chain.last_scan_error,
-    scan_warnings: [...chain.scan_warnings],
     web_url: `${WEB_BASE}/chains/${chain.id}`,
     created_at: chain.created_at,
     updated_at: chain.updated_at,

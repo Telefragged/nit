@@ -6,8 +6,9 @@ use git2::{Commit, Oid, Repository, Tree};
 
 use crate::db;
 
-/// Patch-id of the empty diff: the sha1 of the empty string
-/// (docs/data-model.md identity rule 3 sentinel).
+/// Patch-id of the empty diff: the sha1 of the empty string (the
+/// merged-test sentinel for trivially-matched empty diffs,
+/// docs/data-model.md "Scan algorithm").
 pub const EMPTY_PATCH_ID: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
 
 /// `git patch-id --stable`-equivalent id of the diff `old → new`.
@@ -29,6 +30,14 @@ pub fn tree_patch_id(repo: &Repository, old: &Tree, new: &Tree) -> Result<String
 pub fn commit_patch_id(repo: &Repository, commit: &Commit) -> Result<String> {
     let parent_tree = commit.parent(0)?.tree()?;
     tree_patch_id(repo, &parent_tree, &commit.tree()?)
+}
+
+/// [`commit_patch_id`] for the commit `sha` names; `None` when anything
+/// is unresolvable.
+#[must_use]
+pub fn sha_patch_id(repo: &Repository, sha: &str) -> Option<String> {
+    let commit = repo.find_commit(Oid::from_str(sha).ok()?).ok()?;
+    commit_patch_id(repo, &commit).ok()
 }
 
 /// Ref name pinning one revision's git objects against `git gc`.

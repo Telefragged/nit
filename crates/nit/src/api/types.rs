@@ -52,7 +52,6 @@ pub struct Chain {
     /// Sticky; set by push --partial, cleared by ready.
     pub partial: bool,
     pub last_scan_error: Option<String>,
-    pub scan_warnings: Vec<String>,
     pub web_url: String,
     pub created_at: String,
     pub updated_at: String,
@@ -287,7 +286,6 @@ pub struct FeedbackChain {
     /// Sticky; set by push --partial, cleared by ready.
     pub partial: bool,
     pub last_scan_error: Option<String>,
-    pub scan_warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

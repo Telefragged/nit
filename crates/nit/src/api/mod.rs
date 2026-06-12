@@ -138,19 +138,12 @@ fn open_repo(conn: &Connection, chain_id: i64) -> Option<Repository> {
     Repository::open(path).ok()
 }
 
-/// Build the full Chain JSON for responses (current db state + the latest
-/// scan's warnings).
+/// Build the full Chain JSON for responses from current db state.
 async fn chain_response(state: Arc<AppState>, chain_id: i64) -> Result<Json<types::Chain>, Error> {
-    let warnings = state.scan_warnings(chain_id);
     blocking(move || {
         let conn = state.open_db()?;
         let chain = load_chain(&conn, chain_id)?;
-        Ok(Json(views::build_chain(
-            &conn,
-            &state.public_base,
-            warnings,
-            &chain,
-        )?))
+        Ok(Json(views::build_chain(&conn, &state.public_base, &chain)?))
     })
     .await
 }
@@ -292,21 +285,17 @@ async fn list_chains(
         scan_chain(&state, *id, false).await?;
     }
 
-    let warnings: Vec<(i64, Vec<String>)> = ids
-        .iter()
-        .map(|&id| (id, state.scan_warnings(id)))
-        .collect();
     blocking(move || {
         let conn = state.open_db()?;
         let mut chains = Vec::new();
-        for (id, warn) in warnings {
+        for id in ids {
             let Some(chain) = db::get_chain(&conn, id)? else {
                 continue;
             };
             if !include_closed && chain.status != db::ChainStatus::Active {
                 continue;
             }
-            chains.push(views::build_chain(&conn, &state.public_base, warn, &chain)?);
+            chains.push(views::build_chain(&conn, &state.public_base, &chain)?);
         }
         Ok(Json(types::ChainList { chains }))
     })
@@ -635,9 +624,8 @@ async fn submit_review(
                 Error::bad_request(format!("revision {} not found", req.revision))
             })?;
             // Pure rebase (patch-id-equal, same message): auto-retarget.
-            let retargets = open_repo(&tx, change.chain_id).is_some_and(|repo| {
-                gitscan::pure_rebase_equivalent(&repo, (&reviewed).into(), (&latest).into())
-            });
+            let retargets = open_repo(&tx, change.chain_id)
+                .is_some_and(|repo| gitscan::pure_rebase_equivalent(&repo, &reviewed, &latest));
             if !retargets {
                 return Err(Error::conflict(format!(
                     "revision {} is no longer the latest (revision {} landed) — refetch and resubmit",
@@ -755,7 +743,6 @@ async fn feedback_response(
     state: Arc<AppState>,
     chain_id: i64,
 ) -> Result<Json<types::Feedback>, Error> {
-    let warnings = state.scan_warnings(chain_id);
     blocking(move || {
         let conn = state.open_db()?;
         let chain = load_chain(&conn, chain_id)?;
@@ -764,7 +751,6 @@ async fn feedback_response(
             &conn,
             repo.as_ref(),
             &state.public_base,
-            warnings,
             &chain,
         )?))
     })

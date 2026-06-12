@@ -62,7 +62,6 @@ fn actionable(state: &str) -> bool {
 pub fn build_chain(
     conn: &Connection,
     public_base: &str,
-    warnings: Vec<String>,
     chain: &db::Chain,
 ) -> Result<types::Chain> {
     let repo_path = db::chain_repo_path(conn, chain.id)?.unwrap_or_default();
@@ -86,7 +85,6 @@ pub fn build_chain(
         state: derive_state(chain.status, chain.partial, &live).to_string(),
         partial: chain.partial,
         last_scan_error: chain.last_scan_error.clone(),
-        scan_warnings: warnings,
         web_url: format!("{public_base}/chains/{}", chain.id),
         created_at: chain.created_at.clone(),
         updated_at: chain.updated_at.clone(),
@@ -359,7 +357,6 @@ pub fn build_feedback(
     conn: &Connection,
     repo: Option<&Repository>,
     public_base: &str,
-    warnings: Vec<String>,
     chain: &db::Chain,
 ) -> Result<types::Feedback> {
     let mut live = Vec::new();
@@ -404,7 +401,6 @@ pub fn build_feedback(
             web_url: format!("{public_base}/chains/{}", chain.id),
             partial: chain.partial,
             last_scan_error: chain.last_scan_error.clone(),
-            scan_warnings: warnings,
         },
         changes,
     })

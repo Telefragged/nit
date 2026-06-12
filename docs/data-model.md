@@ -43,9 +43,6 @@ events    (id, chain_id, kind, payload, created_at)
            -- {chain_id, change_id, comment_id}
 ```
 
-Scan warnings (duplicate Change-Id, …) are per-scan, recomputed each
-rescan and held in memory only — they are not persisted.
-
 ## Concurrency (normative)
 
 - One **per-chain async mutex** serializes every scan of a chain, every
@@ -61,26 +58,22 @@ rescan and held in memory only — they are not persisted.
 
 ## Change identity (`change_key`)
 
-A change keeps its identity while its commit sha changes (rebase, amend).
-Matching, in priority order:
+The **`Change-Id:` trailer** (gerrit-style, any opaque token) is the
+identity, required and canonical: every commit in `base..tip` must carry
+its own — a missing trailer, a token shared by two commits, or a
+`fixup!`/`squash!` commit (squash locally before pushing) aborts the scan
+with the violation in `last_scan_error`, kept state, like merge commits.
 
-1. **`Change-Id:` trailer** (gerrit-style, any opaque token). If two live
-   commits in one chain carry the same trailer, the first (oldest) keeps it;
-   later ones get derived keys (`I123#2`, …) and the scan records a warning
-   surfaced in the push response and chain banner.
-2. **Exact sha** — commit unchanged since last scan.
-3. **Patch-id** (`git patch-id --stable` semantics; empty diffs use the
-   sentinel patch-id of the empty string) — same diff, new sha.
-4. **Subject** — first line matches an existing non-orphaned change whose
-   commit left the branch.
+`change_key` = the trailer. A change keeps its identity — and its comment
+history — while its commit sha changes (rebase, amend, reword); changing
+a commit's Change-Id makes it a new change.
 
-Unmatched commits become new changes. Existing changes whose commit
-disappears and matches nothing become **`orphaned`** — comments, drafts and
-reviews are kept; the UI shows them collapsed. A later scan that finds a
-matching commit again (rules above) re-attaches the orphan (status returns
-to its pre-orphan value). Orphans are how transient git states (mid-rebase
-resets, dropped-and-restored commits) and "split this commit" reworks stay
-lossless.
+Commits with a new trailer become new changes. Existing changes whose
+trailer disappears from the walk become **`orphaned`** — comments, drafts
+and reviews are kept; the UI shows them collapsed. A later scan that sees
+the trailer again re-attaches the orphan (status returns to its
+pre-orphan value). Orphans are how transient git states (mid-rebase
+resets, dropped-and-restored commits) stay lossless.
 
 ## Scan algorithm (push + throttled on reads, always under the chain lock)
 
@@ -109,8 +102,11 @@ lossless.
 2. Walk `base..tip` oldest-first. **Any merge commit aborts the scan** with
    error "chain contains merge commits — rebase onto the base instead"
    (kept state + error surfaced, as above); a root commit in the range
-   (unrelated history) aborts the same way.
-3. Match commits to change rows (identity rules above); create new
+   (unrelated history) aborts the same way. Then validate identity: every
+   walked commit must carry its own `Change-Id:` trailer and must not be a
+   `fixup!`/`squash!` commit — violations abort the same way ("Change
+   identity" above).
+3. Match commits to change rows by Change-Id key; create new
    rows, update positions, orphan the unmatched, re-attach returning
    orphans.
 4. If a change's commit sha differs from its latest revision's, insert

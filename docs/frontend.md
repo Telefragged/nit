@@ -22,7 +22,7 @@ happens.
   chip, revision count, comment/draft/unresolved counts, an "updated since
   your review (1→2)" badge when `last_reviewed_revision < revision`.
   Orphaned changes render collapsed at the bottom (comments preserved).
-  `last_scan_error` / `scan_warnings` show as a banner. Click → change view.
+  `last_scan_error` shows as a banner. Click → change view.
 - `/changes/:id` **Review** (the core) —
   - header: subject, chain breadcrumb, base info;
   - chain strip: inline at the right end of the header's meta line

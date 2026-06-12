@@ -40,7 +40,6 @@ export interface Chain {
   /** Sticky; set by push --partial, cleared by ready. */
   partial: boolean;
   last_scan_error: string | null;
-  scan_warnings: string[];
   web_url: string;
   created_at: string;
   updated_at: string;
@@ -260,7 +259,6 @@ export interface FeedbackChain {
   /** Sticky; set by push --partial, cleared by ready. */
   partial: boolean;
   last_scan_error: string | null;
-  scan_warnings: string[];
 }
 
 export interface FeedbackChange {

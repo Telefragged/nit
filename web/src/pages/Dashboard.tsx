@@ -22,10 +22,6 @@ function ChainRow({ chain }: { chain: Chain }) {
             <span className="error-glyph" title={chain.last_scan_error}>
               ✗ scan failed
             </span>
-          ) : chain.scan_warnings.length > 0 ? (
-            <span className="warn-glyph" title={chain.scan_warnings.join("\n")}>
-              ⚠
-            </span>
           ) : null}
         </div>
         <div className="repo">

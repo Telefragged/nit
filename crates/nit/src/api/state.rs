@@ -35,13 +35,11 @@ pub struct AppState {
     shutdown: watch::Sender<bool>,
 }
 
-/// Per-chain coordination: the serializing lock, the `/wait` wakeup
-/// channel, and the latest scan's warnings (per-scan data, not persisted —
-/// docs/api.md `scan_warnings`).
+/// Per-chain coordination: the serializing lock and the `/wait` wakeup
+/// channel.
 pub struct ChainEntry {
     pub gate: Mutex<ScanGate>,
     pub notify: Notify,
-    warnings: StdMutex<Vec<String>>,
 }
 
 #[derive(Default)]
@@ -86,7 +84,6 @@ impl AppState {
                 Arc::new(ChainEntry {
                     gate: Mutex::new(ScanGate::default()),
                     notify: Notify::new(),
-                    warnings: StdMutex::new(Vec::new()),
                 })
             })
             .clone()
@@ -100,19 +97,6 @@ impl AppState {
     pub fn open_db(&self) -> anyhow::Result<Connection> {
         db::open(&self.db_path)
     }
-
-    /// The latest scan's warnings for a chain (empty until a scan ran in
-    /// this server's lifetime).
-    ///
-    /// # Panics
-    /// When the warnings mutex is poisoned.
-    pub fn scan_warnings(&self, chain_id: i64) -> Vec<String> {
-        self.entry(chain_id)
-            .warnings
-            .lock()
-            .expect("warnings poisoned")
-            .clone()
-    }
 }
 
 /// Run a scan for `chain_id` under its chain lock. `force` skips the
@@ -121,9 +105,6 @@ impl AppState {
 /// # Errors
 /// Only infrastructure problems (broken db) — scan-level git failures
 /// land in `last_scan_error` instead (error isolation).
-///
-/// # Panics
-/// When the warnings mutex is poisoned.
 pub async fn scan_chain(state: &Arc<AppState>, chain_id: i64, force: bool) -> Result<(), Error> {
     let entry = state.entry(chain_id);
     let mut gate = if force {
@@ -168,7 +149,6 @@ pub async fn scan_chain(state: &Arc<AppState>, chain_id: i64, force: bool) -> Re
         return Ok(());
     };
     gate.last_scan = Some(Instant::now());
-    *entry.warnings.lock().expect("warnings poisoned") = outcome.warnings;
     drop(gate);
     if outcome.updated {
         entry.notify.notify_waiters();

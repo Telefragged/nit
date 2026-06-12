@@ -7,8 +7,8 @@
 //! transaction rolls back and the failure is recorded in
 //! `chains.last_scan_error` while previous state stays served.
 //!
-//! - [`identity`] — `Change-Id:` trailer extraction and duplicate-trailer
-//!   derived keys.
+//! - [`identity`] — `Change-Id:` trailer extraction, the
+//!   required-Change-Id validation, and commit subject extraction.
 //! - [`objects`] — patch-ids and GC-safety keep refs.
 
 pub mod identity;
@@ -25,14 +25,12 @@ use crate::db::{self, ChainStatus, ChangeStatus};
 /// Documented scan error for chains containing merge commits.
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
-/// What one scan did. `warnings` (duplicate Change-Id) are per-scan and
-/// surface in the push response / chain banner; they are not persisted.
+/// What one scan did.
 #[derive(Debug)]
 pub struct ScanOutcome {
     /// The chain row after the scan (post-reconcile or with
     /// `last_scan_error` set).
     pub chain: db::Chain,
-    pub warnings: Vec<String>,
     /// Whether the scan made a net structural difference (and emitted a
     /// `chain_updated`/`chain_closed` event).
     pub updated: bool,
@@ -53,11 +51,6 @@ enum ScanAbort {
 
 fn fail(msg: String) -> anyhow::Error {
     anyhow::Error::new(ScanAbort::Failed(msg))
-}
-
-struct Recon {
-    updated: bool,
-    warnings: Vec<String>,
 }
 
 /// Register (or refresh) a chain: canonicalize the repo path, auto-create
@@ -120,18 +113,14 @@ pub fn scan_at(conn: &mut Connection, chain_id: i64, now: jiff::Timestamp) -> Re
 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     match reconcile(&tx, &repo_path, &chain, now) {
-        Ok(rec) => {
+        Ok(updated) => {
             if chain.last_scan_error.is_some() {
                 db::chain_set_scan_error(&tx, chain_id, None, &now_str, true)?;
             }
             tx.commit()?;
             let chain = db::get_chain(conn, chain_id)?
                 .ok_or_else(|| anyhow!("chain {chain_id} vanished"))?;
-            Ok(ScanOutcome {
-                chain,
-                warnings: rec.warnings,
-                updated: rec.updated,
-            })
+            Ok(ScanOutcome { chain, updated })
         }
         Err(err) => {
             drop(tx); // rollback — a failed scan never partially reconciles
@@ -152,7 +141,6 @@ pub fn scan_at(conn: &mut Connection, chain_id: i64, now: jiff::Timestamp) -> Re
                 .ok_or_else(|| anyhow!("chain {chain_id} vanished"))?;
             Ok(ScanOutcome {
                 chain,
-                warnings: Vec::new(),
                 updated: false,
             })
         }
@@ -169,7 +157,7 @@ fn reconcile(
     repo_path: &str,
     chain: &db::Chain,
     now: jiff::Timestamp,
-) -> Result<Recon> {
+) -> Result<bool> {
     let now_str = now.to_string();
     let repo = Repository::open(repo_path).map_err(|e| {
         fail(format!(
@@ -216,10 +204,7 @@ fn reconcile(
 
     if chain.status != ChainStatus::Active {
         if commits.is_empty() {
-            return Ok(Recon {
-                updated: false,
-                warnings: Vec::new(),
-            });
+            return Ok(false);
         }
         db::chain_set_status(tx, chain.id, ChainStatus::Active, &now_str)?;
     }
@@ -235,10 +220,7 @@ fn reconcile(
                 .unwrap_or(false);
         if tip_in_base && merged_quorum(tx, &repo, chain, &base_commit)? {
             close_chain(tx, &repo, chain, ChainStatus::Merged, &now_str)?;
-            return Ok(Recon {
-                updated: true,
-                warnings: Vec::new(),
-            });
+            return Ok(true);
         }
     }
 
@@ -246,74 +228,66 @@ fn reconcile(
         .iter()
         .map(|c| String::from_utf8_lossy(c.message_bytes()).into_owned())
         .collect();
+    let shas: Vec<String> = commits.iter().map(|c| c.id().to_string()).collect();
 
-    // Identity rule 1: Change-Id trailers, duplicates get derived keys.
-    let trailers: Vec<Option<String>> = messages
-        .iter()
-        .map(|m| identity::change_id_trailer(m))
-        .collect();
-    let short_shas: Vec<String> = commits
-        .iter()
-        .map(|c| c.id().to_string()[..12].to_string())
-        .collect();
-    let (keys, warnings) = identity::assign_trailer_keys(&trailers, &short_shas);
+    // Step 2, identity validation: every commit carries its own Change-Id
+    // trailer (and is not a fixup!/squash! commit) or the scan aborts.
+    let short_shas: Vec<String> = shas.iter().map(|s| s[..12].to_string()).collect();
+    let keys = identity::require_keys(&messages, &short_shas).map_err(fail)?;
 
-    // Step 3: match commits to change rows.
+    // Step 3: match commits to change rows — the Change-Id key is the
+    // identity (docs/data-model.md "Change identity").
     let existing = db::changes_for_chain(tx, chain.id)?; // live by position, orphans last
-    let mut latest_by_change: HashMap<i64, Option<db::Revision>> = HashMap::new();
-    for row in &existing {
-        latest_by_change.insert(row.id, db::latest_revision(tx, row.id)?);
-    }
-    let matched = match_changes(MatchInput {
-        repo: &repo,
-        commits: &commits,
-        messages: &messages,
-        keys: &keys,
-        existing: &existing,
-        latest_by_change: &latest_by_change,
-    });
+    let row_by_key: HashMap<&str, usize> = existing
+        .iter()
+        .enumerate()
+        .map(|(ei, row)| (row.change_key.as_str(), ei))
+        .collect();
+    let matched: Vec<Option<usize>> = keys
+        .iter()
+        .map(|key| row_by_key.get(key.as_str()).copied())
+        .collect();
 
     // Step 4: per live change, insert a new revision when the commit moved.
     let claimed: HashSet<usize> = matched.iter().flatten().copied().collect();
     for (i, commit) in commits.iter().enumerate() {
-        let sha = commit.id().to_string();
+        let sha = shas[i].as_str();
         let position = i64::try_from(i).expect("chain length fits i64");
 
-        let (change_id, stored_position, stored_status, mut status, is_new) =
-            if let Some(ei) = matched[i] {
-                let row = &existing[ei];
-                let status = if row.status == ChangeStatus::Orphaned {
-                    // Re-attachment: status returns to its pre-orphan value,
-                    // re-derived from the review history.
-                    pre_orphan_status(tx, &repo, row.id)?
-                } else {
-                    row.status
-                };
-                (row.id, row.position, row.status, status, false)
+        let (change_id, stored_position, stored_status, mut status, is_new) = if let Some(ei) =
+            matched[i]
+        {
+            let row = &existing[ei];
+            let status = if row.status == ChangeStatus::Orphaned {
+                // Re-attachment: status returns to its pre-orphan value,
+                // re-derived from the review history.
+                pre_orphan_status(tx, &repo, row.id)?
             } else {
-                let base_key = keys[i].clone().unwrap_or_else(|| sha.clone());
-                let key = unique_key(tx, chain.id, &base_key)?;
-                let row = db::insert_change(tx, chain.id, &key, position, ChangeStatus::Pending)?;
-                updated = true;
-                (
-                    row.id,
-                    Some(position),
-                    ChangeStatus::Pending,
-                    ChangeStatus::Pending,
-                    true,
-                )
+                row.status
             };
+            (row.id, row.position, row.status, status, false)
+        } else {
+            let row = db::insert_change(tx, chain.id, &keys[i], position, ChangeStatus::Pending)?;
+            updated = true;
+            (
+                row.id,
+                Some(position),
+                ChangeStatus::Pending,
+                ChangeStatus::Pending,
+                true,
+            )
+        };
 
-        let latest = latest_by_change.get(&change_id).cloned().flatten();
+        let latest = db::latest_revision(tx, change_id)?;
         let same_state = latest.as_ref().is_some_and(|l| l.commit_sha == sha);
         if !same_state {
             let number = latest.as_ref().map_or(1, |l| l.number + 1);
             let parent_sha = commit.parent_id(0)?.to_string();
-            db::insert_revision(
+            let new_rev = db::insert_revision(
                 tx,
                 change_id,
                 number,
-                &sha,
+                sha,
                 &parent_sha,
                 &messages[i],
                 &now_str,
@@ -321,16 +295,9 @@ fn reconcile(
             updated = true;
             // Rule 4 status effect: pure rebase keeps status; anything
             // else means the reviewer must look again.
-            let pure = latest.as_ref().is_some_and(|l| {
-                pure_rebase_equivalent(
-                    &repo,
-                    l.into(),
-                    EffectiveState {
-                        commit_sha: &sha,
-                        message: &messages[i],
-                    },
-                )
-            });
+            let pure = latest
+                .as_ref()
+                .is_some_and(|l| pure_rebase_equivalent(&repo, l, &new_rev));
             if !pure {
                 status = ChangeStatus::Pending;
             }
@@ -369,7 +336,7 @@ fn reconcile(
         )?;
         db::chain_touch(tx, chain.id, &now_str)?;
     }
-    Ok(Recon { updated, warnings })
+    Ok(updated)
 }
 
 /// Walk `base..tip` oldest-first. Any merge commit aborts the scan with
@@ -407,12 +374,9 @@ fn missing_branch(
     repo: &Repository,
     chain: &db::Chain,
     now: jiff::Timestamp,
-) -> Result<Recon> {
+) -> Result<bool> {
     if chain.status != ChainStatus::Active {
-        return Ok(Recon {
-            updated: false,
-            warnings: Vec::new(),
-        });
+        return Ok(false);
     }
     let marker = format!("branch '{}' not found", chain.branch);
     if chain.last_scan_error.as_deref() == Some(marker.as_str())
@@ -420,10 +384,7 @@ fn missing_branch(
         && now.as_second() - prev.as_second() >= 10
     {
         close_chain(tx, repo, chain, ChainStatus::Abandoned, &now.to_string())?;
-        return Ok(Recon {
-            updated: true,
-            warnings: Vec::new(),
-        });
+        return Ok(true);
     }
     Err(anyhow::Error::new(ScanAbort::BranchMissing(marker)))
 }
@@ -528,7 +489,7 @@ fn merged_quorum(
             any_matched = true;
             continue;
         }
-        match revision_patch_id(repo, rev) {
+        match objects::sha_patch_id(repo, &rev.commit_sha) {
             Some(pid) if pid == objects::EMPTY_PATCH_ID => {}
             Some(pid) if base_patch_ids.contains(&pid) => any_matched = true,
             // Unverifiable (pruned objects) or unmatched.
@@ -538,189 +499,26 @@ fn merged_quorum(
     Ok(any_matched)
 }
 
-/// Patch-id of a revision's reviewed diff: `parent_sha → commit tree`.
-fn revision_patch_id(repo: &Repository, rev: &db::Revision) -> Option<String> {
-    let commit = repo
-        .find_commit(Oid::from_str(&rev.commit_sha).ok()?)
-        .ok()?;
-    objects::commit_patch_id(repo, &commit).ok()
-}
-
-#[derive(Clone, Copy)]
-struct MatchInput<'a, 'r> {
-    repo: &'r Repository,
-    commits: &'a [Commit<'r>],
-    messages: &'a [String],
-    keys: &'a [Option<String>],
-    existing: &'a [db::Change],
-    latest_by_change: &'a HashMap<i64, Option<db::Revision>>,
-}
-
-/// Identity matching, in contract priority order across the whole scan:
-/// one pass per rule, each pass in walk order, each row claimable once.
-/// Returns, per walked commit, the index into `existing` it matched.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one block per identity rule, in contract priority order"
-)]
-fn match_changes(input: MatchInput) -> Vec<Option<usize>> {
-    let MatchInput {
-        repo,
-        commits,
-        messages,
-        keys,
-        existing,
-        latest_by_change,
-    } = input;
-    let latest = |ei: usize| {
-        latest_by_change
-            .get(&existing[ei].id)
-            .and_then(|r| r.as_ref())
-    };
-    let mut matched: Vec<Option<usize>> = vec![None; commits.len()];
-    let mut claimed: HashSet<usize> = HashSet::new();
-    let claim =
-        |matched: &mut Vec<Option<usize>>, claimed: &mut HashSet<usize>, ri: usize, ei: usize| {
-            matched[ri] = Some(ei);
-            claimed.insert(ei);
-        };
-
-    // Index rows once per rule (lowest ei wins, like the linear scans this
-    // replaces — O(commits × rows) comparisons made dashboard reads of big
-    // chains measurably slow).
-    let first_unclaimed = |cands: Option<&Vec<usize>>, claimed: &HashSet<usize>| {
-        cands.and_then(|v| v.iter().copied().find(|ei| !claimed.contains(ei)))
-    };
-
-    // Rule 1: Change-Id trailer (including derived duplicate keys).
-    let mut key_index: HashMap<&str, Vec<usize>> = HashMap::new();
-    for (ei, row) in existing.iter().enumerate() {
-        key_index
-            .entry(row.change_key.as_str())
-            .or_default()
-            .push(ei);
-    }
-    for (ri, key) in keys.iter().enumerate() {
-        if let Some(key) = key
-            && let Some(ei) = first_unclaimed(key_index.get(key.as_str()), &claimed)
-        {
-            claim(&mut matched, &mut claimed, ri, ei);
-        }
-    }
-
-    // Rule 2: exact sha — commit unchanged since last scan.
-    let mut sha_index: HashMap<&str, Vec<usize>> = HashMap::new();
-    for ei in 0..existing.len() {
-        if let Some(rev) = latest(ei) {
-            sha_index
-                .entry(rev.commit_sha.as_str())
-                .or_default()
-                .push(ei);
-        }
-    }
-    for (ri, commit) in commits.iter().enumerate() {
-        if matched[ri].is_some() {
-            continue;
-        }
-        let sha = commit.id().to_string();
-        if let Some(ei) = first_unclaimed(sha_index.get(sha.as_str()), &claimed) {
-            claim(&mut matched, &mut claimed, ri, ei);
-        }
-    }
-
-    // Rule 3: patch-id — same diff, new sha. Row patch-ids come from the
-    // stored shas (pinned by keep refs); unverifiable rows never match.
-    // The index is only built when something is still unmatched.
-    if matched.iter().any(Option::is_none) {
-        let mut pid_index: HashMap<String, Vec<usize>> = HashMap::new();
-        for ei in 0..existing.len() {
-            let pid = latest(ei).and_then(|rev| {
-                let commit = repo
-                    .find_commit(Oid::from_str(&rev.commit_sha).ok()?)
-                    .ok()?;
-                objects::commit_patch_id(repo, &commit).ok()
-            });
-            if let Some(pid) = pid {
-                pid_index.entry(pid).or_default().push(ei);
-            }
-        }
-        for (ri, commit) in commits.iter().enumerate() {
-            if matched[ri].is_some() {
-                continue;
-            }
-            let Ok(pid) = objects::commit_patch_id(repo, commit) else {
-                continue;
-            };
-            if let Some(ei) = first_unclaimed(pid_index.get(&pid), &claimed) {
-                claim(&mut matched, &mut claimed, ri, ei);
-            }
-        }
-    }
-
-    // Rule 4: subject — only against changes that were live at scan start
-    // (whose commit left the branch); orphans don't subject-match.
-    if matched.iter().any(Option::is_none) {
-        let mut subject_index: HashMap<String, Vec<usize>> = HashMap::new();
-        for (ei, row) in existing.iter().enumerate() {
-            if row.status == ChangeStatus::Orphaned {
-                continue;
-            }
-            if let Some(rev) = latest(ei) {
-                subject_index
-                    .entry(identity::subject_of(&rev.message))
-                    .or_default()
-                    .push(ei);
-            }
-        }
-        for ri in 0..commits.len() {
-            if matched[ri].is_some() {
-                continue;
-            }
-            let subject = identity::subject_of(&messages[ri]);
-            if let Some(ei) = first_unclaimed(subject_index.get(&subject), &claimed) {
-                claim(&mut matched, &mut claimed, ri, ei);
-            }
-        }
-    }
-
-    matched
-}
-
-/// One side of the [`pure_rebase_equivalent`] comparison: the fields
-/// that define a revision's effective state.
-#[derive(Clone, Copy)]
-pub struct EffectiveState<'a> {
-    pub commit_sha: &'a str,
-    pub message: &'a str,
-}
-
-impl<'a> From<&'a db::Revision> for EffectiveState<'a> {
-    fn from(rev: &'a db::Revision) -> Self {
-        EffectiveState {
-            commit_sha: &rev.commit_sha,
-            message: &rev.message,
-        }
-    }
-}
-
-/// True when two effective states differ only by a rebase: a
-/// patch-id-equal commit with an unchanged commit message (rule 4; the
-/// same predicate is behind review auto-retargeting in api.md). Messages
-/// compare for exact equality — they are reviewable as `/COMMIT_MSG`, so
-/// a reword must put the change back in front of the reviewer; true
-/// rebases replay them verbatim. Unverifiable objects make it false — the
-/// reviewer looks again.
+/// True when two revisions differ only by a rebase: a patch-id-equal
+/// commit with an unchanged commit message (rule 4; the same predicate is
+/// behind review auto-retargeting in api.md). Messages compare for exact
+/// equality — they are reviewable as `/COMMIT_MSG`, so a reword must put
+/// the change back in front of the reviewer; true rebases replay them
+/// verbatim. Unverifiable objects make it false — the reviewer looks
+/// again.
 #[must_use]
-pub fn pure_rebase_equivalent(repo: &Repository, old: EffectiveState, new: EffectiveState) -> bool {
+pub fn pure_rebase_equivalent(repo: &Repository, old: &db::Revision, new: &db::Revision) -> bool {
     if old.message != new.message {
         return false;
     }
-    let pid = |sha: &str| -> Option<String> {
-        let commit = repo.find_commit(Oid::from_str(sha).ok()?).ok()?;
-        objects::commit_patch_id(repo, &commit).ok()
-    };
     old.commit_sha == new.commit_sha
-        || matches!((pid(old.commit_sha), pid(new.commit_sha)), (Some(x), Some(y)) if x == y)
+        || matches!(
+            (
+                objects::sha_patch_id(repo, &old.commit_sha),
+                objects::sha_patch_id(repo, &new.commit_sha),
+            ),
+            (Some(x), Some(y)) if x == y
+        )
 }
 
 /// A change's pre-orphan status, re-derived from review history — exactly
@@ -736,7 +534,7 @@ fn pre_orphan_status(tx: &Connection, repo: &Repository, change_id: i64) -> Resu
     let mut eligible = vec![latest.number];
     let mut newer = latest;
     for older in revisions.iter().rev().skip(1) {
-        if !pure_rebase_equivalent(repo, older.into(), newer.into()) {
+        if !pure_rebase_equivalent(repo, older, newer) {
             break;
         }
         eligible.push(older.number);
@@ -759,19 +557,4 @@ fn pre_orphan_status(tx: &Connection, repo: &Repository, change_id: i64) -> Resu
         },
         None => ChangeStatus::Pending,
     })
-}
-
-/// First free change key: `base`, else `base#2`, `base#3`, … (collisions
-/// only happen for sha-derived keys of long-orphaned rows).
-fn unique_key(tx: &Connection, chain_id: i64, base: &str) -> Result<String> {
-    if !db::change_key_exists(tx, chain_id, base)? {
-        return Ok(base.to_string());
-    }
-    for n in 2.. {
-        let key = format!("{base}#{n}");
-        if !db::change_key_exists(tx, chain_id, &key)? {
-            return Ok(key);
-        }
-    }
-    unreachable!()
 }

@@ -1,5 +1,5 @@
 //! Scan happy path: change creation, revisions, amends, events,
-//! idempotency, warnings, and scan-failure isolation.
+//! idempotency, Change-Id validation, and scan-failure isolation.
 
 mod common;
 
@@ -24,7 +24,6 @@ fn happy_path_creates_changes_and_revisions() {
 
     let outcome = f.scan();
     assert!(outcome.updated);
-    assert!(outcome.warnings.is_empty());
     assert_eq!(outcome.chain.last_scan_error, None);
 
     let changes = f.changes();
@@ -140,40 +139,59 @@ fn new_commit_appends_change() {
 }
 
 #[test]
-fn missing_change_id_keys_off_first_sha() {
+fn missing_change_id_fails_scan_and_keeps_state() {
     let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], "no trailer here\n", &[("a.rs", "a\n")]);
+    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
     f.branch("feat", c1);
     f.scan();
 
-    let changes = f.changes();
-    assert_eq!(changes[0].change_key, c1.to_string());
+    // A new commit without a trailer poisons the chain until it is fixed.
+    let c2 = f.commit(&[c1], "no trailer here\n", &[("b.rs", "b\n")]);
+    f.branch("feat", c2);
+    let outcome = f.scan();
+    assert!(!outcome.updated);
+    let err = outcome.chain.last_scan_error.unwrap();
+    assert!(err.contains("without a Change-Id trailer"), "{err}");
+    assert!(err.contains(&c2.to_string()[..12]), "{err}");
+    assert_eq!(f.changes().len(), 1, "prior state kept");
+
+    // Adding the trailer (new sha) clears the error.
+    let c2b = f.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
+    f.branch("feat", c2b);
+    let outcome = f.scan();
+    assert_eq!(outcome.chain.last_scan_error, None);
+    assert_eq!(f.changes().len(), 2);
 }
 
 #[test]
-fn duplicate_change_id_gets_derived_key_and_warning() {
+fn duplicate_change_id_fails_scan() {
     let mut f = Fixture::new();
     let c1 = f.commit(&[f.root], &msg("one", "Idup"), &[("a.rs", "a\n")]);
     let c2 = f.commit(&[c1], &msg("two", "Idup"), &[("b.rs", "b\n")]);
     f.branch("feat", c2);
 
     let outcome = f.scan();
-    assert_eq!(outcome.warnings.len(), 1);
-    assert!(outcome.warnings[0].contains("duplicate Change-Id Idup"));
+    let err = outcome.chain.last_scan_error.unwrap();
+    assert!(err.contains("duplicate Change-Id Idup"), "{err}");
+    assert_eq!(f.changes().len(), 0, "nothing reconciled");
+}
 
-    let changes = f.changes();
-    assert_eq!(changes[0].change_key, "Idup");
-    assert_eq!(changes[1].change_key, "Idup#2");
+#[test]
+fn fixup_commit_fails_scan() {
+    let mut f = Fixture::new();
+    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    f.branch("feat", c1);
+    f.scan();
 
-    // Stable across rescans: same derived keys, no new rows.
+    // fixup!/squash! commits are a local pre-push convenience only:
+    // the agent must autosquash before pushing.
+    let fx = f.commit(&[c1], "fixup! one\n", &[("a.rs", "a2\n")]);
+    f.branch("feat", fx);
     let outcome = f.scan();
-    assert!(!outcome.updated);
-    assert_eq!(
-        outcome.warnings.len(),
-        1,
-        "warning re-surfaces while the duplicate exists"
-    );
-    assert_eq!(f.changes().len(), 2);
+    let err = outcome.chain.last_scan_error.unwrap();
+    assert!(err.contains("fixup!/squash!"), "{err}");
+    assert!(err.contains(&fx.to_string()[..12]), "{err}");
+    assert_eq!(f.changes().len(), 1, "prior state kept");
 }
 
 #[test]
