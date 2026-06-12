@@ -63,17 +63,23 @@ function HunkSeparator({
 }
 
 /** One file section: header, outdated/unanchored threads, hunks with inline
- * threads and the draft editor. */
+ * threads and the draft editor. Collapsible: when collapsed only the header
+ * row renders (inline threads included — the rail's counts still signal
+ * them); the header click toggles. */
 export default function DiffFileView({
   file,
   layout,
   threads,
   domId,
+  collapsed,
+  onToggle,
 }: {
   file: DiffFile;
   layout: "unified" | "split";
   threads: Thread[];
   domId: string;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   const ctx = useReview();
   const queryClient = useQueryClient();
@@ -298,8 +304,17 @@ export default function DiffFileView({
   const letter = statusLetter(file);
 
   return (
-    <section className="file-section" id={domId}>
-      <header className="file-header">
+    <section
+      className={`file-section ${collapsed ? "collapsed" : ""}`}
+      id={domId}
+    >
+      <header
+        className="file-header"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        title={collapsed ? "Expand file" : "Collapse file"}
+      >
+        <span className="fchevron">{collapsed ? "▸" : "▾"}</span>
         <span className={letter ? `fstat fstat-${letter}` : "fstat"}>
           {letter}
         </span>
@@ -323,47 +338,54 @@ export default function DiffFileView({
         )}
       </header>
 
-      {topThreads.length > 0 ? (
-        <div className="outdated-group">
-          <div className="outdated-title">
-            Comments not anchored in this diff
-          </div>
-          {topThreads.map((t) => (
-            <div className="outdated-item" key={t.root.id}>
-              <div className="line-excerpt">
-                {t.root.outdated ? (
-                  <span className="badge badge-amber outdated-tag">
-                    OUTDATED
-                  </span>
-                ) : null}
-                <span className="excerpt-line">r{t.root.revision}</span>
-                <Code text={t.root.line_text ?? "(file comment)"} lang={lang} />
+      {collapsed ? null : (
+        <>
+          {topThreads.length > 0 ? (
+            <div className="outdated-group">
+              <div className="outdated-title">
+                Comments not anchored in this diff
               </div>
-              <CommentThread
-                thread={t}
-                changeId={ctx.changeId}
-                draftRevision={ctx.draftRevision}
-              />
+              {topThreads.map((t) => (
+                <div className="outdated-item" key={t.root.id}>
+                  <div className="line-excerpt">
+                    {t.root.outdated ? (
+                      <span className="badge badge-amber outdated-tag">
+                        OUTDATED
+                      </span>
+                    ) : null}
+                    <span className="excerpt-line">r{t.root.revision}</span>
+                    <Code
+                      text={t.root.line_text ?? "(file comment)"}
+                      lang={lang}
+                    />
+                  </div>
+                  <CommentThread
+                    thread={t}
+                    changeId={ctx.changeId}
+                    draftRevision={ctx.draftRevision}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      ) : null}
+          ) : null}
 
-      {file.binary ? (
-        <div className="binary-note">Binary file — contents not shown</div>
-      ) : (
-        <table className="diff-table">
-          {file.hunks.map((hunk, hi) => (
-            <tbody key={hi}>
-              <HunkSeparator
-                prev={file.hunks[hi - 1]}
-                hunk={hunk}
-                colSpan={colSpan}
-              />
-              {layout === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
-            </tbody>
-          ))}
-        </table>
+          {file.binary ? (
+            <div className="binary-note">Binary file — contents not shown</div>
+          ) : (
+            <table className="diff-table">
+              {file.hunks.map((hunk, hi) => (
+                <tbody key={hi}>
+                  <HunkSeparator
+                    prev={file.hunks[hi - 1]}
+                    hunk={hunk}
+                    colSpan={colSpan}
+                  />
+                  {layout === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
+                </tbody>
+              ))}
+            </table>
+          )}
+        </>
       )}
     </section>
   );

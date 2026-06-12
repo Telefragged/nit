@@ -38,9 +38,16 @@ happens.
     file (`/COMMIT_MSG`, docs/api.md), commentable like code — the full
     message lives there, not in the header;
   - file list (left rail): path, status letter, +/- counts; selecting
-    scrolls to the file section; all files render in one scroll column
-    (diffshub style), unified ⇄ side-by-side toggle persisted in
-    localStorage;
+    expands the file section and scrolls to it (the scroll is issued only
+    after the expansion has rendered, so it lands right with other files
+    collapsed); all files render in one scroll column (diffshub style),
+    unified ⇄ side-by-side toggle persisted in localStorage;
+  - file sections are collapsible (header click toggles) and start
+    collapsed — except the commit message, the entry point of a commit
+    review. Collapsed files hide their inline threads; the rail's
+    draft/comment counts still signal them. The rail title carries an
+    expand-all ⇄ collapse-all toggle; `[`/`]` file nav reveals like a
+    rail click. Collapse state resets per diff (change/revision/base);
   - diff: monospace, full-width gutters with old/new line numbers, add/del
     coloring, per-line syntax highlighting (language from extension; skip
     silently when unknown), hunk separators showing skipped ranges;

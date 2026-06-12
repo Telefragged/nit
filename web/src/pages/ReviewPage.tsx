@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { createDraft, getChain, getChange, getDiff } from "../api/client";
 import type { ChangeDetail, Comment, Review, Revision } from "../api/types";
@@ -10,6 +17,14 @@ import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
 import FileRail, { fileDomId } from "../components/diff/FileRail";
 import ReviewBar from "../components/ReviewBar";
+import {
+  allExpanded,
+  collapseAll,
+  defaultExpanded,
+  expand,
+  expandAll,
+  toggle,
+} from "../lib/collapse";
 import { displayPath } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
 import { timeAgo } from "../lib/time";
@@ -217,6 +232,51 @@ export default function ReviewPage() {
     enabled: change !== undefined && !(selectedRev?.needs_rebase ?? false),
     retry: false,
   });
+  const files = useMemo(() => diffQ.data?.files ?? [], [diffQ.data]);
+
+  // Collapsed-by-default file sections. Expansion is keyed by file path
+  // and reset whenever a different diff is shown (other change, revision
+  // or base); only the commit message starts expanded (lib/collapse.ts).
+  const [expanded, setExpanded] =
+    useState<ReadonlySet<string>>(defaultExpanded);
+  // File index whose reveal still owes a scroll — see the layout effect.
+  const [pendingScroll, setPendingScroll] = useState<number | null>(null);
+  const diffIdentity = `${changeId}:${selected}:${against ?? "base"}`;
+  const [shownDiff, setShownDiff] = useState(diffIdentity);
+  if (shownDiff !== diffIdentity) {
+    // Adjust-during-render, not an effect: the reset is part of the same
+    // render that switches diffs, so stale expansion never paints.
+    setShownDiff(diffIdentity);
+    setExpanded(defaultExpanded());
+    setPendingScroll(null);
+  }
+
+  /** Reveal a file: activate + expand it, then scroll once the expansion
+   * is in the DOM. Shared by rail clicks and the [ / ] keys. */
+  const revealFile = useCallback(
+    (index: number) => {
+      setActiveFile(index);
+      const path = files[index]?.path;
+      if (path !== undefined) setExpanded((cur) => expand(cur, path));
+      setPendingScroll(index);
+    },
+    [files],
+  );
+
+  // The scroll half of revealFile. The pitfall this ordering guards:
+  // scrollIntoView positions against the layout at call time, and
+  // expanding a section reflows everything below it — with files above
+  // the target collapsed, a scroll issued in the event handler itself
+  // would target the pre-expansion position and land wrong. This layout
+  // effect runs only after React commits the expanded section, so the
+  // position scrollIntoView computes is the final one.
+  useLayoutEffect(() => {
+    if (pendingScroll === null) return;
+    document
+      .getElementById(fileDomId(pendingScroll))
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setPendingScroll(null);
+  }, [pendingScroll]);
 
   const ctxValue: ReviewCtx = useMemo(
     () => ({
@@ -253,7 +313,7 @@ export default function ReviewPage() {
 
   const navigate = useNavigate();
   const chainChanges = chainQ.data?.changes;
-  const fileCount = diffQ.data?.files.length ?? 0;
+  const fileCount = files.length;
 
   // Change-level draft (no file/line anchor).
   const createChangeComment = useMutation({
@@ -265,10 +325,11 @@ export default function ReviewPage() {
     },
   });
 
-  // Keyboard nav: [ / ] previous/next file, n / p next/previous change,
-  // a opens the reply modal. All inert while the modal is open — it is a
-  // showModal() dialog, so it owns the keyboard (Escape arrives as its
-  // cancel event) and the page behind it is inert.
+  // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
+  // expanded, then scrolled), n / p next/previous change, a opens the
+  // reply modal. All inert while the modal is open — it is a showModal()
+  // dialog, so it owns the keyboard (Escape arrives as its cancel event)
+  // and the page behind it is inert.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (replyOpen) return;
@@ -277,17 +338,12 @@ export default function ReviewPage() {
       if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
       if (e.key === "[" || e.key === "]") {
         if (fileCount === 0) return;
-        setActiveFile((prev) => {
-          const cur = prev ?? (e.key === "]" ? -1 : fileCount);
-          const next = Math.min(
-            fileCount - 1,
-            Math.max(0, cur + (e.key === "]" ? 1 : -1)),
-          );
-          document
-            .getElementById(fileDomId(next))
-            ?.scrollIntoView({ behavior: "smooth", block: "start" });
-          return next;
-        });
+        const cur = activeFile ?? (e.key === "]" ? -1 : fileCount);
+        const next = Math.min(
+          fileCount - 1,
+          Math.max(0, cur + (e.key === "]" ? 1 : -1)),
+        );
+        revealFile(next);
       } else if (e.key === "n" || e.key === "p") {
         if (!chainChanges || !change || change.position === null) return;
         const live = chainChanges
@@ -306,9 +362,8 @@ export default function ReviewPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fileCount, chainChanges, change, navigate, replyOpen]);
+  }, [fileCount, activeFile, revealFile, chainChanges, change, navigate, replyOpen]);
 
-  const files = diffQ.data?.files ?? [];
   const threadsByFile = useMemo(() => {
     const map = new Map<string, Thread[]>();
     for (const t of threads) {
@@ -343,6 +398,23 @@ export default function ReviewPage() {
   }
 
   const chain = chainQ.data;
+  const allFilesExpanded = allExpanded(expanded, files);
+
+  /** Collapsing the section that hosts the open inline CommentEditor
+   * unmounts it and destroys its draft — the same discard path the guarded
+   * setEditingTarget covers: confirm while dirty. `hidesEditor` says
+   * whether the attempted collapse covers the editor's section; returns
+   * false when the user keeps their text, and the caller must abort the
+   * collapse (no state change). On an accepted discard the target is
+   * cleared too — left in place, re-expanding the file would resurrect an
+   * empty editor at the stale anchor. */
+  const confirmEditorCollapse = (hidesEditor: boolean): boolean => {
+    if (!hidesEditor) return true;
+    if (!confirmDiscard(editorDirty.current)) return false;
+    editorDirty.current = false;
+    setEditingTarget(null);
+    return true;
+  };
   const changeLevelThreads = threads.filter((t) => t.root.file === null);
   const orphanFileThreads = [...threadsByFile.entries()].filter(
     ([path]) => !files.some((f) => f.path === path),
@@ -487,11 +559,18 @@ export default function ReviewPage() {
             files={files}
             threadsByFile={threadsByFile}
             activeIndex={activeFile}
-            onSelect={(i) => {
-              setActiveFile(i);
-              document
-                .getElementById(fileDomId(i))
-                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            onSelect={revealFile}
+            allExpanded={allFilesExpanded}
+            onToggleAll={() => {
+              // Collapse-all with every file expanded covers the editor's
+              // section whenever a target is set; expand-all never collapses.
+              if (
+                !confirmEditorCollapse(
+                  allFilesExpanded && editingTarget !== null,
+                )
+              )
+                return;
+              setExpanded(allFilesExpanded ? collapseAll() : expandAll(files));
             }}
           />
           <div className="diff-column">
@@ -539,6 +618,19 @@ export default function ReviewPage() {
                   layout={layout}
                   threads={threadsByFile.get(file.path) ?? []}
                   domId={fileDomId(i)}
+                  collapsed={!expanded.has(file.path)}
+                  onToggle={() => {
+                    // A toggle on an expanded file is a collapse; it hides
+                    // the editor when the target anchors in that file.
+                    if (
+                      !confirmEditorCollapse(
+                        expanded.has(file.path) &&
+                          editingTarget?.file === file.path,
+                      )
+                    )
+                      return;
+                    setExpanded((cur) => toggle(cur, file.path));
+                  }}
                 />
               ))
             )}

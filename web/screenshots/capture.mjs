@@ -21,6 +21,13 @@ const webDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = resolve(webDir, "../screenshots");
 const PORT = 5187;
 
+/** File sections start collapsed; captures that show diff contents open
+ * them all via the rail's toggle first. */
+const expandAllFiles = async (page) => {
+  await page.getByRole("button", { name: "expand all" }).click();
+  await page.waitForTimeout(100);
+};
+
 /**
  * Page states to capture. `actions` runs after load to put the page into a
  * specific state (toggles, editors, error paths). Add an entry whenever a
@@ -45,19 +52,41 @@ const captures = [
       await page.waitForTimeout(100);
     },
   },
-  { name: "review-full-unified", path: "/changes/11?against=base" },
+  {
+    name: "review-full-unified",
+    path: "/changes/11?against=base",
+    actions: expandAllFiles,
+  },
+  // Collapsed-by-default file sections: only the synthetic commit message
+  // starts expanded, the code files are header-only rows.
+  { name: "review-files-collapsed", path: "/changes/11?against=base" },
+  // Mixed state via a rail click: the selected file expands and is
+  // scrolled to; its collapsed neighbor stays collapsed.
+  {
+    name: "review-files-mixed",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await page.locator('.rail-item[title="src/auth/store.rs"]').click();
+      await page.waitForTimeout(300);
+    },
+  },
   // The synthetic "Commit message" file with its resolved inline thread.
   { name: "review-commit-msg", path: "/changes/11?against=base", fullPage: false },
   {
     name: "review-split",
     path: "/changes/11?against=base",
     actions: async (page) => {
+      await expandAllFiles(page);
       await page.getByRole("button", { name: "Side-by-side" }).click();
       await page.waitForTimeout(200);
     },
   },
   // Old revision selected: full diff of r1, threads at their written lines.
-  { name: "review-rev1", path: "/changes/11?revision=1" },
+  {
+    name: "review-rev1",
+    path: "/changes/11?revision=1",
+    actions: expandAllFiles,
+  },
   // Explicit interdiff picked via the base dropdown (no "since your
   // review" hint) — exercises select → URL → refetch end to end.
   {
@@ -73,6 +102,7 @@ const captures = [
     name: "review-draft-editor",
     path: "/changes/11?against=base",
     actions: async (page) => {
+      await expandAllFiles(page);
       await page
         .locator("td.code", { hasText: "self.store.revoke_family" })
         .first()
@@ -113,7 +143,11 @@ const captures = [
     },
   },
   // Rename + binary file in one diff.
-  { name: "review-binary-rename", path: "/changes/12" },
+  {
+    name: "review-binary-rename",
+    path: "/changes/12",
+    actions: expandAllFiles,
+  },
   // needs_rebase: diff endpoint refuses with 409, banner shown.
   { name: "review-needs-rebase", path: "/changes/21" },
 ];

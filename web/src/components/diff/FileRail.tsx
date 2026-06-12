@@ -7,22 +7,35 @@ export function fileDomId(index: number): string {
 }
 
 /** Left rail: every file in the diff with status letter, +/- counts and
- * comment markers. Selecting scrolls to the file section. */
+ * comment markers. Selecting expands the file section and scrolls to it;
+ * the title row toggles all sections at once (the only bulk affordance —
+ * with every file collapsed by default a long diff needs one). */
 export default function FileRail({
   files,
   threadsByFile,
   activeIndex,
   onSelect,
+  allExpanded,
+  onToggleAll,
 }: {
   files: DiffFile[];
   threadsByFile: Map<string, Thread[]>;
   activeIndex: number | null;
   onSelect: (index: number) => void;
+  allExpanded: boolean;
+  onToggleAll: () => void;
 }) {
   return (
     <aside className="file-rail">
       <div className="rail-title">
-        {files.length} file{files.length === 1 ? "" : "s"}
+        <span>
+          {files.length} file{files.length === 1 ? "" : "s"}
+        </span>
+        {files.length > 0 ? (
+          <button className="linkish rail-toggle-all" onClick={onToggleAll}>
+            {allExpanded ? "collapse all" : "expand all"}
+          </button>
+        ) : null}
       </div>
       {files.map((file, i) => {
         const threads = threadsByFile.get(file.path) ?? [];

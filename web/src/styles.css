@@ -652,12 +652,21 @@ table.list tbody tr:hover {
   padding-right: 6px;
 }
 .rail-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: var(--text-faint);
   padding: 2px 8px 6px;
+}
+.rail-toggle-all {
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
 }
 .rail-item {
   display: flex;
@@ -718,6 +727,22 @@ table.list tbody tr:hover {
   padding: 5px 10px;
   font-family: var(--mono);
   font-size: 12px;
+  cursor: pointer; /* the header toggles the section's collapse */
+}
+.file-header:hover {
+  background: var(--bg-hover);
+}
+/* A collapsed section is just its header: full radius, no inner edge. */
+.file-section.collapsed .file-header {
+  border-bottom: none;
+  border-radius: 6px;
+}
+.fchevron {
+  flex: none;
+  width: 10px;
+  font-size: 10px;
+  color: var(--text-faint);
+  user-select: none;
 }
 .file-header .fpath {
   color: var(--text);
