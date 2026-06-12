@@ -305,7 +305,7 @@ fn reconcile(
     let claimed: HashSet<usize> = matched.iter().flatten().copied().collect();
     for (ri, &ci) in regulars.iter().enumerate() {
         let commit = &commits[ci];
-        let position = ri as i64;
+        let position = i64::try_from(ri).expect("chain length fits i64");
         let fix_indices = fixups_of.get(&ci).cloned().unwrap_or_default();
         let fix_commits: Vec<&Commit> = fix_indices.iter().map(|&i| &commits[i]).collect();
         let fixup_rows: Vec<db::Fixup> = fix_indices

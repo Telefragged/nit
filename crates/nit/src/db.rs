@@ -136,7 +136,8 @@ const MIGRATIONS: &[&str] = &[
 
 fn migrate(conn: &Connection) -> Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-    for (i, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
+    let version = usize::try_from(version).context("PRAGMA user_version is negative")?;
+    for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
         conn.execute_batch(&format!(
             "BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;",
             i + 1
@@ -803,7 +804,7 @@ pub fn insert_comment(conn: &Connection, c: &NewComment, now: &str) -> Result<Co
             c.line_text,
             c.body,
             c.state,
-            c.resolved as i64,
+            i64::from(c.resolved),
             now
         ],
     )?;
@@ -845,7 +846,7 @@ pub fn delete_comment(conn: &Connection, id: i64) -> Result<()> {
 pub fn comment_set_resolved(conn: &Connection, id: i64, resolved: bool, now: &str) -> Result<()> {
     conn.execute(
         "UPDATE comments SET resolved = ?2, updated_at = ?3 WHERE id = ?1",
-        params![id, resolved as i64, now],
+        params![id, i64::from(resolved), now],
     )?;
     Ok(())
 }
@@ -954,7 +955,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, MIGRATIONS.len() as i64);
+        assert_eq!(version, i64::try_from(MIGRATIONS.len()).unwrap());
     }
 
     #[test]
@@ -966,7 +967,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, MIGRATIONS.len() as i64);
+        assert_eq!(version, i64::try_from(MIGRATIONS.len()).unwrap());
     }
 
     #[test]

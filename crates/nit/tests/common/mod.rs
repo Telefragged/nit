@@ -182,7 +182,7 @@ fn commit_full_in(
             mode: 0o100644,
             uid: 0,
             gid: 0,
-            file_size: content.len() as u32,
+            file_size: u32::try_from(content.len()).unwrap(),
             id: repo.blob(content).unwrap(),
             flags: 0,
             flags_extended: 0,

@@ -58,8 +58,8 @@ pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<types::Di
                     file.binary = true;
                 } else {
                     let (_, additions, deletions) = patch.line_stats()?;
-                    file.additions = additions as i64;
-                    file.deletions = deletions as i64;
+                    file.additions = i64::try_from(additions)?;
+                    file.deletions = i64::try_from(deletions)?;
                     file.hunks = patch_hunks(&mut patch)?;
                 }
             }
@@ -200,7 +200,8 @@ pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: i64) -> Optio
         return None;
     }
     let content = String::from_utf8_lossy(blob.content()).into_owned();
-    content.lines().nth(line as usize - 1).map(str::to_string)
+    let idx = usize::try_from(line - 1).ok()?;
+    content.lines().nth(idx).map(str::to_string)
 }
 
 #[cfg(test)]
