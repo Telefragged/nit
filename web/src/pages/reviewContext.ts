@@ -1,13 +1,32 @@
 import { createContext, useContext } from "react";
 import type { RefObject } from "react";
-import type { CommentSide } from "../api/types";
+import type { CommentRange, CommentSide } from "../api/types";
 
 /** Anchor of the draft editor currently open in the diff. */
 export interface DraftTarget {
   file: string;
   side: CommentSide;
+  /** The range's end line when a range is set. */
   line: number;
+  /** Selected-text anchor (docs/api.md "Range comments"). */
+  range?: CommentRange;
 }
+
+const sameRange = (a?: CommentRange, b?: CommentRange) =>
+  a === undefined || b === undefined
+    ? a === b
+    : a.start_line === b.start_line &&
+      a.start_char === b.start_char &&
+      a.end_line === b.end_line &&
+      a.end_char === b.end_char;
+
+/** Whole-anchor equality — a same-line target with a different range is a
+ * different target (the editor must re-anchor). */
+export const sameTarget = (a: DraftTarget, b: DraftTarget) =>
+  a.file === b.file &&
+  a.side === b.side &&
+  a.line === b.line &&
+  sameRange(a.range, b.range);
 
 export interface ReviewCtx {
   changeId: number;
@@ -17,9 +36,10 @@ export interface ReviewCtx {
   interdiff: boolean;
   editingTarget: DraftTarget | null;
   /** Guarded: moving or clearing the target unmounts the inline editor, so
-   * this confirms first while `editorDirty` is set. Same-anchor calls are
-   * no-ops (the editor stays mounted). */
-  setEditingTarget: (t: DraftTarget | null) => void;
+   * this confirms first while `editorDirty` is set, returning whether the
+   * move was applied. Same-anchor calls are no-ops (the editor stays
+   * mounted). */
+  setEditingTarget: (t: DraftTarget | null) => boolean;
   /** True while the inline draft editor holds unsaved text (kept in sync by
    * its onDirtyChange). */
   editorDirty: RefObject<boolean>;

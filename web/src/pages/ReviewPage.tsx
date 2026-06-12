@@ -34,10 +34,12 @@ import {
 import { displayPath } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
 import { activeIndexAt } from "../lib/scrollspy";
+import type { SelectionMiss } from "../lib/selection";
+import { selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
 import { ErrorPanel } from "./NotFound";
 import type { DraftTarget, ReviewCtx } from "./reviewContext";
-import { ReviewContext } from "./reviewContext";
+import { ReviewContext, sameTarget } from "./reviewContext";
 
 const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
@@ -46,6 +48,15 @@ const VERDICT_BADGE: Record<string, { cls: string; label: string }> = {
   approve: { cls: "badge-green", label: "APPROVED" },
   request_changes: { cls: "badge-red", label: "CHANGES REQUESTED" },
   comment: { cls: "badge-blue", label: "COMMENTED" },
+};
+
+/** Why `c` did nothing — several misses are policy, not user error, so
+ * they deserve words (docs/frontend.md). */
+const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
+  "mixed-sides": "selection doesn't lie on one side of the diff",
+  "old-side-interdiff": "the old side of an interdiff isn't commentable",
+  "cross-file": "selection crosses file sections",
+  "hunk-gap": "selection spans a hunk gap",
 };
 
 function buildThreads(comments: Comment[]): Thread[] {
@@ -216,6 +227,17 @@ export default function ReviewPage() {
   const [replyOpen, setReplyOpen] = useState(false);
   const queryClient = useQueryClient();
 
+  // Transient "why c did nothing" notice; a fresh object per press keeps
+  // the timeout effect retriggering on repeated identical misses.
+  const [selectionMiss, setSelectionMiss] = useState<SelectionMiss | null>(
+    null,
+  );
+  useEffect(() => {
+    if (selectionMiss === null) return undefined;
+    const timer = setTimeout(() => setSelectionMiss(null), 4000);
+    return () => clearTimeout(timer);
+  }, [selectionMiss]);
+
   // --- derive revision/diff mode (before any early return: no hooks below)
   const revisions = change?.revisions ?? [];
   const latest = revisions[revisions.length - 1];
@@ -293,20 +315,21 @@ export default function ReviewPage() {
       editingTarget,
       // Moving or clearing the target unmounts the inline CommentEditor and
       // destroys its draft, so this is a discard path: confirm while dirty.
-      // Same-anchor clicks keep the editor mounted and are no-ops.
+      // Same-anchor calls are no-ops; a move within the same file/side/line
+      // (a re-selected range) keeps the editor mounted — same React key —
+      // so nothing is discarded and no confirmation is owed.
       setEditingTarget: (t) => {
         const cur = editingTarget;
-        if (
-          t &&
-          cur &&
+        if (t && cur && sameTarget(t, cur)) return true;
+        const sameCell =
+          t !== null &&
+          cur !== null &&
           t.file === cur.file &&
           t.side === cur.side &&
-          t.line === cur.line
-        ) {
-          return;
-        }
-        if (!confirmDiscard(editorDirty.current)) return;
+          t.line === cur.line;
+        if (!sameCell && !confirmDiscard(editorDirty.current)) return false;
         setEditingTarget(t);
+        return true;
       },
       editorDirty,
     }),
@@ -333,10 +356,10 @@ export default function ReviewPage() {
   });
 
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
-  // expanded, then scrolled), n / p next/previous change, a opens the
-  // reply modal. All inert while the modal is open — it is a showModal()
-  // dialog, so it owns the keyboard (Escape arrives as its cancel event)
-  // and the page behind it is inert.
+  // expanded, then scrolled), n / p next/previous change, c comments on
+  // the selected diff text, a opens the reply modal. All inert while the
+  // modal is open — it is a showModal() dialog, so it owns the keyboard
+  // (Escape arrives as its cancel event) and the page behind it is inert.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (replyOpen) return;
@@ -360,6 +383,22 @@ export default function ReviewPage() {
         if (idx < 0) return;
         const next = live[idx + (e.key === "n" ? 1 : -1)];
         if (next) navigate(`/changes/${next.id}`);
+      } else if (e.key === "c") {
+        // Draft a comment on the selected diff text (gerrit's c) — or on
+        // the caret's line when the selection is collapsed.
+        const sel = document.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const result = selectionTarget(sel.getRangeAt(0), ctxValue.interdiff);
+        if (!result) return;
+        // preventDefault, or the keystroke lands in the editor's textarea.
+        e.preventDefault();
+        if ("miss" in result) {
+          setSelectionMiss(result);
+          return;
+        }
+        // The editor renders its own range highlight; the DOM selection
+        // would just shout over it. Keep it on a declined discard.
+        if (ctxValue.setEditingTarget(result)) sel.removeAllRanges();
       } else if (e.key === "a") {
         // preventDefault, or the keystroke's own text insertion lands in
         // the cover-message textarea the opening modal focuses.
@@ -377,6 +416,7 @@ export default function ReviewPage() {
     change,
     navigate,
     replyOpen,
+    ctxValue,
   ]);
 
   // Scroll spy: keep activeFile — the rail highlight and the [ / ] cursor —
@@ -558,6 +598,11 @@ export default function ReviewPage() {
             ) : null}
           </div>
           <div className="diffbar-toggles">
+            {selectionMiss ? (
+              <span className="selection-miss">
+                {MISS_TEXT[selectionMiss.miss]}
+              </span>
+            ) : null}
             <button
               className="linkish change-comment-btn"
               onClick={() => setChangeCommentOpen(true)}
@@ -566,11 +611,11 @@ export default function ReviewPage() {
             </button>
             <span
               className="kbd-hint"
-              title="Keyboard: [ and ] switch files, n and p switch changes, a opens the reply dialog"
+              title="Keyboard: [ and ] switch files, n and p switch changes, c comments on the selected diff text, a opens the reply dialog"
             >
               <kbd>[</kbd>
               <kbd>]</kbd> files · <kbd>n</kbd>
-              <kbd>p</kbd> changes · <kbd>a</kbd> reply
+              <kbd>p</kbd> changes · <kbd>c</kbd> comment · <kbd>a</kbd> reply
             </span>
             <span className="seg">
               <button
@@ -617,7 +662,6 @@ export default function ReviewPage() {
                     key={t.root.id}
                     thread={t}
                     changeId={changeId}
-                    draftRevision={selected}
                   />
                 ))}
                 {changeCommentOpen ? (
@@ -697,11 +741,7 @@ export default function ReviewPage() {
                             />
                           </div>
                         ) : null}
-                        <CommentThread
-                          thread={t}
-                          changeId={changeId}
-                          draftRevision={selected}
-                        />
+                        <CommentThread thread={t} changeId={changeId} />
                       </div>
                     ))}
                   </div>

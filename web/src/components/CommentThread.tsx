@@ -86,11 +86,9 @@ function CommentView({
 export default function CommentThread({
   thread,
   changeId,
-  draftRevision,
 }: {
   thread: Thread;
   changeId: number;
-  draftRevision: number;
 }) {
   const queryClient = useQueryClient();
   const [replying, setReplying] = useState(false);
@@ -104,13 +102,17 @@ export default function CommentThread({
     onSuccess: invalidate,
   });
 
+  // Replies copy the root's whole anchor — including its revision, so the
+  // copied file/line/range stay the coordinates they were written in
+  // (the server's own agent replies do the same).
   const reply = useMutation({
     mutationFn: (body: string) =>
       createDraft(changeId, {
-        revision: draftRevision,
+        revision: root.revision,
         ...(root.file !== null ? { file: root.file } : {}),
         ...(root.line !== null ? { line: root.line } : {}),
         side: root.side,
+        ...(root.range !== null ? { range: root.range } : {}),
         body,
         parent_id: root.id,
       }),

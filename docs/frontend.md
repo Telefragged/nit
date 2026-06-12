@@ -62,7 +62,15 @@ happens.
     silently when unknown), hunk separators showing skipped ranges;
   - comments: click a gutter/line → inline draft editor under that line
     (file+line+side from context; in interdiff view only new-side lines are
-    commentable). Published comments render as threads (replies via
+    commentable). Select diff text — partial within a line or across
+    lines, one side at a time (a split-view drag locks to the column it
+    starts in) — and press `c` → the editor opens under the selection's
+    last line with the range recorded (docs/api.md "Range comments");
+    `c` on a collapsed caret comments its line. When `c` cannot map the
+    selection (sides disagree, a hunk gap, the old side of an interdiff),
+    a transient notice in the diffbar says why. The selection-to-range
+    mapping lives in `lib/selection.ts` against DiffFileView's data
+    attributes. Published comments render as threads (replies via
     `parent_id`, author chrome for reviewer/agent, resolve toggle) under
     their `rendered_line`; comments with `outdated: true` group at the top
     of their file with their `line_text` excerpt; drafts get a dashed
@@ -88,7 +96,8 @@ changes requested/deletions; gray = informational (the `PARTIAL` badge is not
 a call to action — amber stays reserved for "needs reviewer").
 Compact paddings; no marketing fluff; every
 piece of chrome must earn its pixels. Keyboard shortcuts (`[`/`]` file nav,
-`n`/`p` change nav, `a` reply modal) are welcome but optional in v1.
+`n`/`p` change nav, `c` comment on selection, `a` reply modal) are welcome
+but optional in v1.
 
 ## Mock mode (UI work without a backend)
 

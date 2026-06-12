@@ -892,6 +892,14 @@ table.list tbody tr:hover {
   width: 50%;
   border-right: 1px solid var(--border);
 }
+/* While a split-view drag runs, only the side it started on is
+   selectable (DiffFileView sets sel-old/sel-new on mousedown), so the
+   selection is one column's contiguous text — the shape a comment range
+   needs (lib/selection.ts). */
+.diff-table.sel-old [data-side="new"],
+.diff-table.sel-new [data-side="old"] {
+  user-select: none;
+}
 .sign {
   display: inline-block;
   width: 14px;
@@ -936,6 +944,11 @@ td.code.del .intraline {
   background: var(--del-intraline);
   border-radius: 2px;
 }
+/* Transient "why c did nothing" notice in the diffbar. */
+.selection-miss {
+  color: var(--amber);
+  font-size: 12px;
+}
 tr.line-row.clickable:hover td.code,
 td.code.clickable:hover {
   background: var(--blue-dim);
@@ -952,6 +965,7 @@ tr.hunk-row td {
   padding: 3px 12px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+  user-select: none; /* separator chrome stays out of copied code */
 }
 .file-section tbody:first-of-type tr.hunk-row td {
   border-top: none;

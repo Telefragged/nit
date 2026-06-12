@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { createDraft } from "../../api/client";
-import type { DiffFile, Hunk, Line } from "../../api/types";
+import type { CommentSide, DiffFile, Hunk, Line } from "../../api/types";
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
@@ -20,22 +20,35 @@ function Code({
   text,
   lang,
   mark,
+  className,
 }: {
   text: string;
   lang: string | null;
   mark?: IntralineRange;
+  /** `code-text` on diff cells — the selection contract (lib/selection). */
+  className?: string;
 }) {
   const html = useMemo(() => {
     const highlighted = highlightLine(text, lang);
     return mark ? markIntraline(highlighted, mark[0], mark[1]) : highlighted;
   }, [text, lang, mark]);
   // Highlight.js escapes its input; nothing user-controlled is injected raw.
-  return <span dangerouslySetInnerHTML={{ __html: html || "​" }} />;
+  return (
+    <span
+      className={className}
+      dangerouslySetInnerHTML={{ __html: html || "​" }}
+    />
+  );
 }
 
 const anchorLine = (t: Thread) => t.root.rendered_line ?? t.root.line;
-const sameTarget = (a: DraftTarget, file: string, side: string, line: number) =>
+const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
   a.file === file && a.side === side && a.line === line;
+
+/** True clicks place line comments; mouseups that end a text selection
+ * must not (the selection is the anchor being built — lib/selection). */
+const selectionInProgress = () =>
+  document.getSelection()?.isCollapsed === false;
 
 function HunkSeparator({
   prev,
@@ -130,6 +143,7 @@ export default function DiffFileView({
         file: input.target.file,
         line: input.target.line,
         side: input.target.side,
+        range: input.target.range,
         body: input.body,
       }),
     onSuccess: () => {
@@ -142,6 +156,39 @@ export default function DiffFileView({
       });
     },
   });
+
+  /** Click handler placing a line comment, selection-aware. A click on
+   * the open editor's own line is a no-op — its rangeless target must
+   * not overwrite an anchored range; only the c shortcut re-anchors (it
+   * carries the authoritative current selection). */
+  const guardedClick = (target: DraftTarget | null) =>
+    target
+      ? () => {
+          if (selectionInProgress()) return;
+          if (
+            ctx.editingTarget &&
+            targetAt(ctx.editingTarget, target.file, target.side, target.line)
+          ) {
+            return;
+          }
+          ctx.setEditingTarget(target);
+        }
+      : undefined;
+
+  // In split layout, the side the current mouse drag started on; the
+  // other side is made unselectable (styles.css `sel-old`/`sel-new`) so a
+  // cross-column drag yields one side's text, gerrit-style. Cleared when
+  // the drag ends — user-select only gates *making* selections, so the
+  // completed one (which c consumes) survives; leaving the lock in place
+  // would silently exclude the column from selections that do not start
+  // on this table (Ctrl+A, find-and-select).
+  const [selSide, setSelSide] = useState<CommentSide | null>(null);
+  useEffect(() => {
+    if (selSide === null) return undefined;
+    const clear = () => setSelSide(null);
+    document.addEventListener("mouseup", clear);
+    return () => document.removeEventListener("mouseup", clear);
+  }, [selSide]);
 
   /** Comment anchor a click on this line produces, or null if forbidden. */
   function targetFor(line: Line): DraftTarget | null {
@@ -176,18 +223,14 @@ export default function DiffFileView({
         rows.push(
           <tr className="meta-row" key={`t-${side}-${t.root.id}`}>
             <td colSpan={colSpan}>
-              <CommentThread
-                thread={t}
-                changeId={ctx.changeId}
-                draftRevision={ctx.draftRevision}
-              />
+              <CommentThread thread={t} changeId={ctx.changeId} />
             </td>
           </tr>,
         );
       }
       if (
         ctx.editingTarget &&
-        sameTarget(ctx.editingTarget, file.path, side, no)
+        targetAt(ctx.editingTarget, file.path, side, no)
       ) {
         rows.push(
           <tr className="meta-row" key={`editor-${side}-${no}`}>
@@ -217,16 +260,21 @@ export default function DiffFileView({
         <Fragment key={li}>
           <tr
             className={`line-row ${line.kind} ${target ? "clickable" : ""}`}
-            onClick={target ? () => ctx.setEditingTarget(target) : undefined}
+            onClick={guardedClick(target)}
             title={target ? "Comment on this line" : undefined}
           >
             <td className="g">{line.old ?? ""}</td>
             <td className="g">{line.new ?? ""}</td>
-            <td className="code">
+            <td className="code" data-old={line.old} data-new={line.new}>
               <span className="sign">
                 {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}
               </span>
-              <Code text={line.text} lang={lang} mark={marks.get(line)} />
+              <Code
+                text={line.text}
+                lang={lang}
+                mark={marks.get(line)}
+                className="code-text"
+              />
             </td>
           </tr>
           {metaRows(line, 3)}
@@ -249,49 +297,45 @@ export default function DiffFileView({
           <tr className="line-row split">
             <td
               className={`g ${pair.left ? pair.left.kind : "void"}`}
-              onClick={
-                leftTarget ? () => ctx.setEditingTarget(leftTarget) : undefined
-              }
+              data-side="old"
+              onClick={guardedClick(leftTarget)}
             >
               {pair.left?.old ?? ""}
             </td>
             <td
               className={`code half ${pair.left ? pair.left.kind : "void"} ${leftTarget ? "clickable" : ""}`}
-              onClick={
-                leftTarget ? () => ctx.setEditingTarget(leftTarget) : undefined
-              }
+              data-side="old"
+              data-old={pair.left?.old}
+              onClick={guardedClick(leftTarget)}
             >
               {pair.left ? (
                 <Code
                   text={pair.left.text}
                   lang={lang}
                   mark={marks.get(pair.left)}
+                  className="code-text"
                 />
               ) : null}
             </td>
             <td
               className={`g ${pair.right ? pair.right.kind : "void"}`}
-              onClick={
-                rightTarget
-                  ? () => ctx.setEditingTarget(rightTarget)
-                  : undefined
-              }
+              data-side="new"
+              onClick={guardedClick(rightTarget)}
             >
               {pair.right?.new ?? ""}
             </td>
             <td
               className={`code half ${pair.right ? pair.right.kind : "void"} ${rightTarget ? "clickable" : ""}`}
-              onClick={
-                rightTarget
-                  ? () => ctx.setEditingTarget(rightTarget)
-                  : undefined
-              }
+              data-side="new"
+              data-new={pair.right?.new}
+              onClick={guardedClick(rightTarget)}
             >
               {pair.right ? (
                 <Code
                   text={pair.right.text}
                   lang={lang}
                   mark={marks.get(pair.right)}
+                  className="code-text"
                 />
               ) : null}
             </td>
@@ -312,6 +356,7 @@ export default function DiffFileView({
     <section
       className={`file-section ${collapsed ? "collapsed" : ""}`}
       id={domId}
+      data-diff-path={file.path}
     >
       <header
         className="file-header"
@@ -364,11 +409,7 @@ export default function DiffFileView({
                       lang={lang}
                     />
                   </div>
-                  <CommentThread
-                    thread={t}
-                    changeId={ctx.changeId}
-                    draftRevision={ctx.draftRevision}
-                  />
+                  <CommentThread thread={t} changeId={ctx.changeId} />
                 </div>
               ))}
             </div>
@@ -377,7 +418,22 @@ export default function DiffFileView({
           {file.binary ? (
             <div className="binary-note">Binary file — contents not shown</div>
           ) : (
-            <table className="diff-table">
+            <table
+              className={`diff-table ${
+                layout === "split" && selSide ? `sel-${selSide}` : ""
+              }`}
+              onMouseDown={
+                layout === "split"
+                  ? (e) =>
+                      setSelSide(
+                        ((e.target as Element)
+                          .closest("[data-side]")
+                          ?.getAttribute("data-side") ??
+                          null) as CommentSide | null,
+                      )
+                  : undefined
+              }
+            >
               {file.hunks.map((hunk, hi) => (
                 <tbody key={hi}>
                   <HunkSeparator
