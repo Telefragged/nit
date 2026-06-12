@@ -28,6 +28,31 @@ nix build                                      # → result/bin/nit
 new value) and verify `nix build`. A stale hash breaks `nix build` — and
 with it every `nix run 'git+file://…?ref=main#nit'` CLI invocation.
 
+## Formatting
+
+`nix develop -c treefmt` formats the whole tree (`nix fmt` runs the
+same thing) — config in `treefmt.toml`, formatter binaries pinned by
+the devShell (rustfmt, prettier, nixfmt, shfmt, taplo).
+`treefmt --fail-on-change` is the check form.
+
+Formatting is **per commit**, not per branch: run treefmt before every
+`git commit`, so each commit is treefmt-clean on its own, parallel
+chains never conflict on whitespace, and review interdiffs show real
+changes only. Committing or amending from a formatted tree keeps that
+invariant; a **rebase does not** — replayed commits and hand-typed
+conflict resolutions land unformatted in whichever commit they touched,
+where amending the tip cannot reach them. So after every rebase,
+re-format each rewritten commit in place:
+
+```sh
+git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' \
+  "$(git merge-base main HEAD)"    # when landing: onto main instead
+```
+
+No-op on a clean chain. Check-only form: exec
+`nix develop -c treefmt --fail-on-change` instead — it stops at the
+first unformatted commit.
+
 ## Restarting the server
 
 Rebuild (`nix build` or `cargo build`), ctrl-c the running `nit serve`
@@ -74,6 +99,8 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
 ## Commit & branch discipline
 
 - Small commits, one concern each, imperative subject, body explains _why_.
+- Every commit treefmt-clean: format before committing, re-format and
+  amend after any rebase or conflict resolution ("Formatting" above).
 - Never mix refactors with behavior changes.
 - Parallel work happens in worktrees under `.worktrees/` on `track/*`
   branches; they land on `main` via rebase + fast-forward only. No merge

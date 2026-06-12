@@ -183,7 +183,8 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
     auto-retargets to the latest revision and succeeds.
   - Otherwise stale `revision` → 409; the UI must keep the cover message
     and drafts, refetch, and re-offer submission.
-    → `{"review": Review, "published_comments": [Comment]}`
+
+  → `{"review": Review, "published_comments": [Comment]}`
 
 ## Agent endpoints
 

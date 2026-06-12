@@ -12,12 +12,17 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
    system toolchains. `nix build` must stay green.
 2. **Small, single-purpose commits.** One concern per commit; no merge
    commits — worktrees land via rebase + fast-forward (see docs/dev.md).
-3. **Cross-component JSON shapes live in docs/api.md.** Change the doc
+3. **Every commit is treefmt-clean** — `nix develop -c treefmt` before
+   each commit; after every rebase re-format each rewritten commit (not
+   just the tip), above all after resolving merge conflicts — recipe in
+   docs/dev.md "Formatting".
+4. **Cross-component JSON shapes live in docs/api.md.** Change the doc
    first, then both sides (`crates/nit/src/api/types.rs`,
    `web/src/api/types.ts`).
-4. **To see the UI, render it**: `cd web && nix develop -c npm run
-screenshots`, then Read `screenshots/*.png`.
-5. **Changes land through nit itself** — branch, then drive the review
+5. **To see the UI, render it**:
+   `cd web && nix develop -c npm run screenshots`, then Read
+   `screenshots/*.png`.
+6. **Changes land through nit itself** — branch, then drive the review
    loop with the `nit-review` skill (`.claude/skills/nit-review/SKILL.md`).
    Direct-to-main only for ad-hoc user opt-outs and the exemptions listed
    in docs/dev.md.

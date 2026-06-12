@@ -16,6 +16,12 @@ nit reviews **commits**, not branches. Make each commit one reviewable unit
   `Change-Id`.
 - **Never merge into your branch** — no `git pull` without `--rebase`. A
   merge commit in the chain fails the scan; rebase onto the base instead.
+- Keep every commit **formatter-clean** (this repo:
+  `nix develop -c treefmt`): format before each commit, and after any
+  rebase re-format every rewritten commit, not just the tip —
+  hand-resolved conflict hunks land unformatted in whichever commit
+  conflicted (recipe: docs/dev.md "Formatting"). The reviewer's
+  interdiff should show your fix, never whitespace noise.
 - Answer review feedback by **amending the reviewed commit in place**,
   keeping its Change-Id, then pushing the rewritten branch. nit tracks
   the rewrite as a new revision of the same change; the reviewer sees
@@ -33,8 +39,8 @@ nit reviews **commits**, not branches. Make each commit one reviewable unit
 ## The loop
 
 ```sh
-# while building — after EVERY completed commit (green, one concern,
-#   Change-Id'd), not once at the end:
+# while building — after EVERY completed commit (green, formatter-clean,
+#   one concern, Change-Id'd), not once at the end:
 nit push --partial            # register/refresh the chain as partial
 #   the FIRST push creates the chain — report web_url to the human now;
 #   review starts on commit one.
@@ -46,7 +52,8 @@ nit wait                      # block until the reviewer acts; prints JSON
 #   rebase), or answer with: nit reply <comment-id> [--resolve] -m "…"
 nit push                      # the rewritten commits become new revisions
 nit wait                      # …repeat until state=ready_to_merge
-# then: rebase onto <base> if it moved; merge/ff the branch
+# then: rebase onto <base> if it moved — re-formatting each replayed
+#   commit (docs/dev.md "Formatting") — and merge/ff the branch
 nit push                      # optional: next scan marks the chain merged
 ```
 
@@ -102,7 +109,8 @@ Shape: `Feedback` in docs/api.md. Decide on `state`:
   Not an error, nothing to address: keep pushing commits, or `nit ready`
   when the branch is done.
 - `ready_to_merge` — every change approved: rebase onto the base if it
-  moved, merge/ff, done. The chain leaves the dashboard on the next scan.
+  moved (re-formatting each replayed commit), merge/ff, done. The chain
+  leaves the dashboard on the next scan.
 - `waiting_for_review` — nothing actionable (the poll timed out); wait
   again.
 - `merged` / `abandoned` — the chain is closed; stop.

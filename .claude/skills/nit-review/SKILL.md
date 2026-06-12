@@ -43,7 +43,10 @@ This skill is the operational checklist for driving it from a Claude session.
 - Server: `curl -fsS http://127.0.0.1:8877/api/health`. If it is down,
   tell the user to start `nit serve` — do not start one yourself unless
   asked (the server and its database belong to the user).
-- Every commit: builds green first, one concern, and its own
+- Every commit: builds green first, treefmt-clean —
+  `nix develop -c treefmt` before each commit, and again after any
+  rebase (amend the churn in; docs/dev.md "Formatting") — one concern,
+  and its own
   `Change-Id: I<40hex>` trailer — required; a missing or duplicated
   trailer (or a pushed `fixup!`/`squash!` commit) fails the scan. **All
   trailers in one block** — a blank line between `Change-Id:` and
@@ -54,7 +57,7 @@ This skill is the operational checklist for driving it from a Claude session.
 ## The loop
 
 ```sh
-# after EVERY completed commit (green, one concern, Change-Id'd):
+# after EVERY completed commit (green, treefmt-clean, one concern, Change-Id'd):
 nit push --partial  # register/refresh the chain as partial (sticky)
 # → FIRST push: report web_url to the user now — review starts on
 #   commit one, not when the branch is done
@@ -75,6 +78,11 @@ wakes the session. Feedback arriving mid-build is handled exactly like the
     `GIT_EDITOR=true git rebase --autosquash "$(git merge-base main HEAD)"`
     — squash **before** pushing (pushed `fixup!` commits fail the scan),
     and onto the fork point, not moved main, so interdiffs stay clean.
+    Run treefmt before committing the fixup so the fix lands formatted;
+    after the autosquash — and any other rebase, doubly so one with
+    conflicts — re-format every rewritten commit with the docs/dev.md
+    "Formatting" rebase recipe (amending the tip alone misses churn in
+    earlier commits).
     Then `nit reply <comment-id> --resolve -m "what you did"`;
   - questions → `nit reply` with the answer (`--resolve` when settled);
   - Then `nit push` (the rewritten commits become new revisions) and wait
@@ -86,14 +94,17 @@ wakes the session. Feedback arriving mid-build is handled exactly like the
   scan must see the merge while the branch ref still exists, so it records
   `merged`, not `abandoned`):
   ```sh
-  git rebase main                 # only needed when main moved
+  # when main moved: rebase onto it, keeping every replayed commit
+  # treefmt-clean (docs/dev.md "Formatting")
+  git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' main
   git checkout main && git merge --ff-only <branch>
   nit push --branch <branch>      # scan flags the chain merged
   git branch -d <branch>
   ```
-  In a worktree (`.worktrees/*`): rebase there, but never `git checkout
-main` — main is checked out elsewhere. Run the merge from the primary
-  checkout: `git -C <primary-checkout> merge --ff-only <branch>`; if that
+  In a worktree (`.worktrees/*`): rebase there, but never
+  `git checkout main` — main is checked out elsewhere. Run the merge
+  from the primary checkout:
+  `git -C <primary-checkout> merge --ff-only <branch>`; if that
   checkout isn't yours to drive (parallel agents), stop at
   `ready_to_merge` and report to the coordinator.
 - **`merged` / `abandoned`** — chain is closed; stop.
