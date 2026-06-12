@@ -152,61 +152,59 @@ impl<'a> CommentRenderer<'a> {
     }
 
     pub fn render(&mut self, comment: &db::Comment) -> types::Comment {
-        let (rendered_line, outdated) = self.port(comment);
-        comment_json(comment, rendered_line, outdated)
+        let (rendered_line, rendered_range, outdated) = self.port(comment);
+        comment_json(comment, rendered_line, rendered_range, outdated)
     }
 
-    /// `(rendered_line, outdated)` for the target revision.
-    fn port(&mut self, comment: &db::Comment) -> (Option<i64>, bool) {
+    /// `(rendered_line, rendered_range, outdated)` for the target revision.
+    fn port(&mut self, comment: &db::Comment) -> PortedAnchor {
         let (Some(file), Some(line)) = (comment.file.as_deref(), comment.line) else {
-            return (None, false); // change-/file-level: never outdated
+            return (None, None, false); // change-/file-level: never outdated
         };
         if comment.revision_number == self.target {
-            return (Some(line), false);
+            return (Some(line), comment.range, false);
         }
         if file == diff::COMMIT_MSG_PATH {
             return self.port_message_anchor(comment, line);
         }
         let new_side = comment.side != "old";
         let Some(repo) = self.repo else {
-            return (None, true);
+            return (None, None, true);
         };
         let (Some(from), Some(to)) = (
             self.tree_oid(comment.revision_number, new_side),
             self.tree_oid(self.target, new_side),
         ) else {
-            return (None, true); // pruned objects
+            return (None, None, true); // pruned objects
         };
-        let ported = repo
+        let Ok((from, to)) = repo
             .find_tree(from)
             .and_then(|f| repo.find_tree(to).map(|t| (f, t)))
-            .ok()
-            .and_then(|(f, t)| diff::port_line(repo, &f, &t, file, line).ok())
-            .flatten();
-        match ported {
-            Some(l) => (Some(l), false),
-            None => (None, true),
-        }
+        else {
+            return (None, None, true);
+        };
+        ported(comment.range, line, |s, e| {
+            diff::port_span(repo, &from, &to, file, s, e)
+        })
     }
 
     /// `/COMMIT_MSG` anchors port through the two revisions' message
     /// texts, not trees (docs/api.md) — and so survive an unopenable
     /// repository. Old-side data renders outdated defensively (the
     /// message has no old side; such drafts are rejected with 400).
-    fn port_message_anchor(&mut self, comment: &db::Comment, line: i64) -> (Option<i64>, bool) {
+    fn port_message_anchor(&mut self, comment: &db::Comment, line: i64) -> PortedAnchor {
         if comment.side == "old" {
-            return (None, true);
+            return (None, None, true);
         }
         let (Some(from), Some(to)) = (
             self.message(comment.revision_number),
             self.message(self.target),
         ) else {
-            return (None, true);
+            return (None, None, true);
         };
-        match diff::port_line_in_text(&from, &to, line) {
-            Ok(Some(ported)) => (Some(ported), false),
-            _ => (None, true),
-        }
+        ported(comment.range, line, |s, e| {
+            diff::port_span_in_text(&from, &to, s, e)
+        })
     }
 
     /// The cached revision row, fetched on first use.
@@ -248,7 +246,42 @@ impl<'a> CommentRenderer<'a> {
     }
 }
 
-fn comment_json(c: &db::Comment, rendered_line: Option<i64>, outdated: bool) -> types::Comment {
+/// `(rendered_line, rendered_range, outdated)` of one ported anchor.
+type PortedAnchor = (Option<i64>, Option<types::CommentRange>, bool);
+
+/// The api.md "Range comments" porting rule, parameterized over the
+/// span-porting diff (`port` shifts an inclusive line span, `None` when
+/// a hunk touches it): a surviving range carries the rendered line with
+/// it — shifted lines, original char offsets (the spanned lines are
+/// byte-identical whenever a span ports); a touched range falls back to
+/// porting the plain line anchor; an unportable line is outdated.
+fn ported(
+    range: Option<types::CommentRange>,
+    line: i64,
+    port: impl Fn(i64, i64) -> Result<Option<(i64, i64)>>,
+) -> PortedAnchor {
+    if let Some(r) = range
+        && let Ok(Some((start, end))) = port(r.start_line, r.end_line)
+    {
+        let shifted = types::CommentRange {
+            start_line: start,
+            end_line: end,
+            ..r
+        };
+        return (Some(end), Some(shifted), false);
+    }
+    match port(line, line) {
+        Ok(Some((_, l))) => (Some(l), None, false),
+        _ => (None, None, true),
+    }
+}
+
+fn comment_json(
+    c: &db::Comment,
+    rendered_line: Option<i64>,
+    rendered_range: Option<types::CommentRange>,
+    outdated: bool,
+) -> types::Comment {
     types::Comment {
         id: c.id,
         change_id: c.change_id,
@@ -258,8 +291,10 @@ fn comment_json(c: &db::Comment, rendered_line: Option<i64>, outdated: bool) -> 
         file: c.file.clone(),
         line: c.line,
         side: c.side.clone(),
+        range: c.range,
         line_text: c.line_text.clone(),
         rendered_line,
+        rendered_range,
         outdated,
         body: c.body.clone(),
         state: c.state.clone(),
@@ -274,7 +309,7 @@ fn comment_json(c: &db::Comment, rendered_line: Option<i64>, outdated: bool) -> 
 /// responses — porting happens when the change is *viewed*).
 #[must_use]
 pub fn comment_at_own_revision(c: &db::Comment) -> types::Comment {
-    comment_json(c, c.line, false)
+    comment_json(c, c.line, c.range, false)
 }
 
 // ---------------------------------------------------------------------------

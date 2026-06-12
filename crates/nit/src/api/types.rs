@@ -184,6 +184,11 @@ pub struct Line {
 // ---------------------------------------------------------------------------
 // Comments
 
+/// Selected-text anchor of a line comment (api.md "Range comments") —
+/// the db row type is the wire shape verbatim, so it is re-exported
+/// rather than mirrored.
+pub use crate::db::CommentRange;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Comment {
     pub id: i64,
@@ -197,11 +202,16 @@ pub struct Comment {
     pub line: Option<i64>,
     /// old | new
     pub side: String,
+    /// Null: whole-line comment.
+    pub range: Option<CommentRange>,
     /// Snapshot of the anchored line.
     pub line_text: Option<String>,
     /// For the requested revision; null with `outdated: true` when the
     /// anchor cannot be ported.
     pub rendered_line: Option<i64>,
+    /// `range` ported to the requested revision; null when the spanned
+    /// region was touched (the comment falls back to its line anchor).
+    pub rendered_range: Option<CommentRange>,
     pub outdated: bool,
     pub body: String,
     /// draft | published
@@ -224,6 +234,9 @@ pub struct NewDraft {
     /// Defaults to "new".
     #[serde(default)]
     pub side: Option<String>,
+    /// Optional: requires `line`; api.md "Range comments".
+    #[serde(default)]
+    pub range: Option<CommentRange>,
     pub body: String,
     #[serde(default)]
     pub parent_id: Option<i64>,

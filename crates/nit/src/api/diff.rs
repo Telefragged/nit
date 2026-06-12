@@ -197,27 +197,12 @@ fn hunk_function_context(header: &[u8]) -> String {
     }
 }
 
-/// Port a line anchor from `old_tree` to `new_tree` (docs/api.md "Comment
-/// rendering across revisions"): `Some(shifted)` when the line lies in an
-/// unchanged region, `None` when the anchored line itself was changed or
-/// deleted (or porting is impossible) — the `outdated` case.
-///
-/// # Errors
-/// When git can't diff `file` between the trees.
-pub fn port_line(
-    repo: &Repository,
-    old_tree: &Tree,
-    new_tree: &Tree,
-    file: &str,
-    line: i64,
-) -> Result<Option<i64>> {
-    Ok(port_span(repo, old_tree, new_tree, file, line, line)?.map(|(_, end)| end))
-}
-
-/// [`port_line`] for the line span `[start, end]` (1-based, inclusive —
-/// a comment range's lines, docs/api.md "Range comments"):
-/// `Some(shifted span)` only when no hunk touches any spanned line, so
-/// the spanned text is byte-identical on both sides; `None` otherwise.
+/// Port a line-span anchor from `old_tree` to `new_tree` (docs/api.md
+/// "Comment rendering across revisions"): `[start, end]` is 1-based and
+/// inclusive — a comment range's lines, or `(line, line)` for a plain
+/// line anchor. `Some(shifted span)` only when no hunk touches any
+/// spanned line, so the spanned text is byte-identical on both sides;
+/// `None` otherwise — the `outdated` case.
 ///
 /// # Errors
 /// When git can't diff `file` between the trees.
@@ -294,18 +279,9 @@ fn port_span_through_hunks(patch: &Patch, start: i64, end: i64) -> Result<Option
     Ok(Some((start + offset, end + offset)))
 }
 
-/// [`port_line`] for [`COMMIT_MSG_PATH`] anchors: ports `line` through
+/// [`port_span`] for [`COMMIT_MSG_PATH`] anchors: ports the span through
 /// `diff(old, new)` of the two revisions' message texts (docs/api.md
 /// "Comment rendering across revisions") — same shifted/outdated rules.
-///
-/// # Errors
-/// When git can't build or read the buffer diff.
-pub fn port_line_in_text(old: &str, new: &str, line: i64) -> Result<Option<i64>> {
-    Ok(port_span_in_text(old, new, line, line)?.map(|(_, end)| end))
-}
-
-/// [`port_span`] for [`COMMIT_MSG_PATH`] anchors: the buffer-diff twin
-/// of the tree version, same rules.
 ///
 /// # Errors
 /// When git can't build or read the buffer diff.
@@ -591,36 +567,10 @@ mod tests {
     }
 
     #[test]
-    fn port_line_shifts_and_outdates() {
-        let r = Repo::new();
-        let old = lines(1..=10);
-        // Insert two lines after line 2, change line 7, delete line 9.
-        let new = old
-            .replace("line 2\n", "line 2\nins a\nins b\n")
-            .replace("line 7\n", "line seven\n")
-            .replace("line 9\n", "");
-        let t_old = r.find(r.tree(&[("a.txt", old.as_bytes())]));
-        let t_new = r.find(r.tree(&[("a.txt", new.as_bytes())]));
-        let port = |line| {
-            port_line(&r.repo, &t_old, &t_new, "a.txt", line).expect("porting should succeed")
-        };
-
-        assert_eq!(port(1), Some(1)); // above all edits
-        assert_eq!(port(2), Some(2)); // insertion is *after* line 2
-        assert_eq!(port(3), Some(5)); // shifted by the two inserted lines
-        assert_eq!(port(7), None); // the line itself changed
-        assert_eq!(port(8), Some(10)); // between change and deletion
-        assert_eq!(port(9), None); // deleted
-        assert_eq!(port(10), Some(11)); // +2 -1
-        assert_eq!(port(0), None); // nonsense anchor
-    }
-
-    #[test]
     fn port_span_shifts_and_outdates() {
         let r = Repo::new();
         let old = lines(1..=10);
-        // Insert two lines after line 2, change line 7, delete line 9 —
-        // the same edits port_line_shifts_and_outdates proves line-wise.
+        // Insert two lines after line 2, change line 7, delete line 9.
         let new = old
             .replace("line 2\n", "line 2\nins a\nins b\n")
             .replace("line 7\n", "line seven\n")
@@ -631,13 +581,21 @@ mod tests {
             port_span(&r.repo, &t_old, &t_new, "a.txt", start, end).expect("porting should succeed")
         };
 
+        // Single lines (a plain line anchor is the (line, line) span).
+        assert_eq!(port(1, 1), Some((1, 1))); // above all edits
+        assert_eq!(port(2, 2), Some((2, 2))); // insertion is *after* line 2
+        assert_eq!(port(3, 3), Some((5, 5))); // shifted by the insertions
+        assert_eq!(port(7, 7), None); // the line itself changed
+        assert_eq!(port(8, 8), Some((10, 10))); // between change and deletion
+        assert_eq!(port(9, 9), None); // deleted
+        assert_eq!(port(10, 10), Some((11, 11))); // +2 -1
+
+        // Multi-line spans.
         assert_eq!(port(1, 2), Some((1, 2))); // insertion is *after* line 2
         assert_eq!(port(1, 3), None); // insertion lands inside the span
         assert_eq!(port(3, 5), Some((5, 7))); // shifted whole
         assert_eq!(port(5, 8), None); // line 7 changed inside
-        assert_eq!(port(8, 8), Some((10, 10))); // single line == port_line
         assert_eq!(port(8, 10), None); // line 9 deleted inside
-        assert_eq!(port(10, 10), Some((11, 11))); // +2 -1
         assert_eq!(port(0, 1), None); // nonsense anchor
         assert_eq!(port(5, 3), None); // backwards span
     }
@@ -668,7 +626,7 @@ mod tests {
     }
 
     #[test]
-    fn port_line_file_level_cases() {
+    fn port_span_file_level_cases() {
         let r = Repo::new();
         let t_a = r.find(r.tree(&[("a.txt", b"x\ny\n".as_slice())]));
         let t_b = r.find(r.tree(&[("b.txt", b"x\ny\n".as_slice())]));
@@ -676,45 +634,18 @@ mod tests {
 
         // Untouched file: identity.
         assert_eq!(
-            port_line(&r.repo, &t_a, &t_a2, "a.txt", 2).expect("porting should succeed"),
-            Some(2)
+            port_span(&r.repo, &t_a, &t_a2, "a.txt", 2, 2).expect("porting should succeed"),
+            Some((2, 2))
         );
         // File deleted (rename without detection counts as deletion).
         assert_eq!(
-            port_line(&r.repo, &t_a, &t_b, "a.txt", 1).expect("porting should succeed"),
+            port_span(&r.repo, &t_a, &t_b, "a.txt", 1, 1).expect("porting should succeed"),
             None
         );
         // Anchor file absent on the old side.
         assert_eq!(
-            port_line(&r.repo, &t_b, &t_a, "a.txt", 1).expect("porting should succeed"),
+            port_span(&r.repo, &t_b, &t_a, "a.txt", 1, 1).expect("porting should succeed"),
             None
-        );
-    }
-
-    #[test]
-    fn port_line_in_text_shifts_and_outdates() {
-        let old = lines(1..=10);
-        // Insert two lines after line 2, change line 7, delete line 9 —
-        // the same cases port_line proves against trees.
-        let new = old
-            .replace("line 2\n", "line 2\nins a\nins b\n")
-            .replace("line 7\n", "line seven\n")
-            .replace("line 9\n", "");
-        let port = |line| port_line_in_text(&old, &new, line).expect("text porting should succeed");
-
-        assert_eq!(port(1), Some(1)); // above all edits
-        assert_eq!(port(2), Some(2)); // insertion is *after* line 2
-        assert_eq!(port(3), Some(5)); // shifted by the two inserted lines
-        assert_eq!(port(7), None); // the line itself changed
-        assert_eq!(port(8), Some(10)); // between change and deletion
-        assert_eq!(port(9), None); // deleted
-        assert_eq!(port(10), Some(11)); // +2 -1
-        assert_eq!(port(0), None); // nonsense anchor
-
-        // Identical texts: identity.
-        assert_eq!(
-            port_line_in_text(&old, &old, 4).expect("text porting should succeed"),
-            Some(4)
         );
     }
 

@@ -205,6 +205,162 @@ fn commit_msg_comments_port_across_reword() {
 }
 
 #[test]
+fn range_comments_port_and_fall_back() {
+    let g = GitRepo::new();
+    let v1 = "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\n";
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", v1)]);
+    g.branch("feat", c1);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let register = json!({
+        "repo_path": g.workdir().to_string_lossy(),
+        "branch": "feat",
+        "base": "main",
+    });
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+    let drafts_url = server.url(&format!("/api/changes/{change_id}/drafts"));
+
+    // Three ranges against r1: one whose span the amend leaves untouched,
+    // one whose span is touched away from the anchor line, one whose
+    // anchor line itself changes.
+    let draft = |start: i64, line: i64| {
+        let (st, c) = http_post(
+            &drafts_url,
+            &json!({"revision": 1, "file": "a.txt", "line": line, "body": "b",
+                    "range": {"start_line": start, "start_char": 1,
+                              "end_line": line, "end_char": 2}}),
+        );
+        assert_eq!(st, 200, "{c}");
+        c["id"].as_i64().unwrap()
+    };
+    let survives = draft(4, 5); // l4-l5: untouched, shifts whole
+    let falls_back = draft(2, 3); // l2 changes, anchor l3 survives
+    let outdates = draft(7, 8); // l8 (the anchor line) changes
+
+    // Amend: insert a line on top (+1 shift), touch l2 and l8.
+    let v2 = "l0\nl1\nl2x\nl3\nl4\nl5\nl6\nl7\nl8x\n";
+    let c2 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", v2)]);
+    g.branch("feat", c2);
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200);
+    assert_eq!(chain["changes"][0]["revision"], 2);
+
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+    assert_eq!(st, 200);
+    let comments = detail["comments"].as_array().unwrap();
+    let by_id = |id: i64| {
+        comments
+            .iter()
+            .find(|c| c["id"].as_i64() == Some(id))
+            .unwrap()
+    };
+
+    let c = by_id(survives);
+    assert_eq!(c["rendered_line"], 6);
+    assert_eq!(
+        c["rendered_range"],
+        json!({"start_line": 5, "start_char": 1, "end_line": 6, "end_char": 2}),
+        "untouched span shifts whole, char offsets carry over"
+    );
+    assert_eq!(c["outdated"], false);
+    assert_eq!(
+        c["range"],
+        json!({"start_line": 4, "start_char": 1, "end_line": 5, "end_char": 2}),
+        "the written range is served as-is"
+    );
+
+    let c = by_id(falls_back);
+    assert_eq!(
+        c["rendered_line"], 4,
+        "line anchor survives the touched span"
+    );
+    assert_eq!(c["rendered_range"], Value::Null);
+    assert_eq!(c["outdated"], false);
+
+    let c = by_id(outdates);
+    assert_eq!(c["rendered_line"], Value::Null);
+    assert_eq!(c["rendered_range"], Value::Null);
+    assert_eq!(c["outdated"], true);
+
+    // Served at revision 1, every anchor is where it was written.
+    let (_, at_r1) = http_get(&server.url(&format!("/api/changes/{change_id}?revision=1")));
+    let comments = at_r1["comments"].as_array().unwrap();
+    let c = comments
+        .iter()
+        .find(|c| c["id"].as_i64() == Some(survives))
+        .unwrap();
+    assert_eq!(c["rendered_line"], 5);
+    assert_eq!(c["rendered_range"], c["range"]);
+}
+
+#[test]
+fn range_draft_validation() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, chain) = http_post(
+        &server.url("/api/chains"),
+        &json!({
+            "repo_path": g.workdir().to_string_lossy(),
+            "branch": "feat",
+            "base": "main",
+        }),
+    );
+    assert_eq!(st, 200);
+    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+    let drafts_url = server.url(&format!("/api/changes/{change_id}/drafts"));
+
+    // The "Range comments" 400s of docs/api.md.
+    let cases: &[(Value, &str)] = &[
+        (
+            json!({"revision": 1, "file": "x.txt", "body": "x",
+                   "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1}}),
+            "range without line",
+        ),
+        (
+            json!({"revision": 1, "file": "x.txt", "line": 2, "body": "x",
+                   "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1}}),
+            "range ending off the anchor line",
+        ),
+        (
+            json!({"revision": 1, "file": "x.txt", "line": 1, "body": "x",
+                   "range": {"start_line": 1, "start_char": 3, "end_line": 1, "end_char": 3}}),
+            "empty range",
+        ),
+        (
+            json!({"revision": 1, "file": "x.txt", "line": 1, "body": "x",
+                   "range": {"start_line": 2, "start_char": 0, "end_line": 1, "end_char": 1}}),
+            "backwards range",
+        ),
+        (
+            json!({"revision": 1, "file": "x.txt", "line": 2, "body": "x",
+                   "range": {"start_line": 1, "start_char": 0, "end_line": 2, "end_char": 0}}),
+            "multi-line range ending before its last line's first char",
+        ),
+    ];
+    for (body, what) in cases {
+        let (st, e) = http_post(&drafts_url, body);
+        assert_eq!(st, 400, "{what}: {st} {e}");
+    }
+
+    // A well-formed range round-trips and renders at its own revision.
+    let (st, ranged) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "file": "x.txt", "line": 1, "body": "x",
+                "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1}}),
+    );
+    assert_eq!(st, 200, "{ranged}");
+    assert_eq!(
+        ranged["range"],
+        json!({"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1})
+    );
+    assert_eq!(ranged["rendered_range"], ranged["range"]);
+}
+
+#[test]
 fn request_validation() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);

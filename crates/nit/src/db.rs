@@ -151,6 +151,14 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE revisions DROP COLUMN effective_tree;
     ALTER TABLE revisions DROP COLUMN fixups;
     ",
+    // v4: optional selected-text anchor on line comments (docs/api.md
+    // "Range comments"); all four set or all NULL, range_end_line = line.
+    "
+    ALTER TABLE comments ADD COLUMN range_start_line INTEGER;
+    ALTER TABLE comments ADD COLUMN range_start_char INTEGER;
+    ALTER TABLE comments ADD COLUMN range_end_line INTEGER;
+    ALTER TABLE comments ADD COLUMN range_end_char INTEGER;
+    ",
 ];
 
 fn migrate(conn: &Connection) -> Result<()> {
@@ -276,6 +284,19 @@ pub struct Revision {
     pub created_at: String,
 }
 
+/// Selected-text anchor of a line comment (docs/api.md "Range comments"):
+/// 1-based lines on the comment's side, 0-based chars, `end_char`
+/// exclusive, `end_line` = the comment's `line`. One struct serves both
+/// the rows and the wire — `api::types` re-exports it (the JSON shape is
+/// exactly these four fields).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CommentRange {
+    pub start_line: i64,
+    pub start_char: i64,
+    pub end_line: i64,
+    pub end_char: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct Comment {
     pub id: i64,
@@ -286,6 +307,7 @@ pub struct Comment {
     pub file: Option<String>,
     pub line: Option<i64>,
     pub side: String,
+    pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub body: String,
     pub state: String,
@@ -371,7 +393,38 @@ fn revision_from_row(row: &rusqlite::Row) -> rusqlite::Result<Revision> {
     })
 }
 
+/// Reconstruct a comment's selected-text range from its four nullable
+/// columns. They are written all-or-nothing (an `Option<CommentRange>`
+/// binds all four or none — see `insert_comment`), so a row with only
+/// some populated is a corrupt invariant, not a missing range: surface it
+/// as an error rather than silently dropping the partial anchor.
+fn comment_range_from_row(row: &rusqlite::Row) -> rusqlite::Result<Option<CommentRange>> {
+    let cols = (
+        row.get::<_, Option<i64>>("range_start_line")?,
+        row.get::<_, Option<i64>>("range_start_char")?,
+        row.get::<_, Option<i64>>("range_end_line")?,
+        row.get::<_, Option<i64>>("range_end_char")?,
+    );
+    match cols {
+        (Some(start_line), Some(start_char), Some(end_line), Some(end_char)) => {
+            Ok(Some(CommentRange {
+                start_line,
+                start_char,
+                end_line,
+                end_char,
+            }))
+        }
+        (None, None, None, None) => Ok(None),
+        _ => Err(rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Integer,
+            format!("comment range columns are partially populated ({cols:?}); expected all four set or all NULL").into(),
+        )),
+    }
+}
+
 fn comment_from_row(row: &rusqlite::Row) -> rusqlite::Result<Comment> {
+    let range = comment_range_from_row(row)?;
     Ok(Comment {
         id: row.get("id")?,
         change_id: row.get("change_id")?,
@@ -381,6 +434,7 @@ fn comment_from_row(row: &rusqlite::Row) -> rusqlite::Result<Comment> {
         file: row.get("file")?,
         line: row.get("line")?,
         side: row.get("side")?,
+        range,
         line_text: row.get("line_text")?,
         body: row.get("body")?,
         state: row.get("state")?,
@@ -819,6 +873,7 @@ pub struct NewComment<'a> {
     pub file: Option<&'a str>,
     pub line: Option<i64>,
     pub side: &'a str,
+    pub range: Option<CommentRange>,
     pub line_text: Option<&'a str>,
     pub body: &'a str,
     pub state: &'a str,
@@ -831,8 +886,11 @@ pub fn insert_comment(conn: &Connection, c: &NewComment, now: &str) -> Result<Co
     conn.execute(
         "INSERT INTO comments
            (change_id, revision_number, parent_id, author, file, line, side,
-            line_text, body, state, resolved, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)",
+            range_start_line, range_start_char, range_end_line,
+            range_end_char, line_text, body, state, resolved,
+            created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                 ?14, ?15, ?16, ?16)",
         params![
             c.change_id,
             c.revision_number,
@@ -841,6 +899,10 @@ pub fn insert_comment(conn: &Connection, c: &NewComment, now: &str) -> Result<Co
             c.file,
             c.line,
             c.side,
+            c.range.map(|r| r.start_line),
+            c.range.map(|r| r.start_char),
+            c.range.map(|r| r.end_line),
+            c.range.map(|r| r.end_char),
             c.line_text,
             c.body,
             c.state,
@@ -857,6 +919,7 @@ pub fn insert_comment(conn: &Connection, c: &NewComment, now: &str) -> Result<Co
         file: c.file.map(str::to_string),
         line: c.line,
         side: c.side.to_string(),
+        range: c.range,
         line_text: c.line_text.map(str::to_string),
         body: c.body.to_string(),
         state: c.state.to_string(),
@@ -1265,6 +1328,12 @@ mod tests {
                 file: Some("src/main.rs"),
                 line: Some(14),
                 side: "new",
+                range: Some(CommentRange {
+                    start_line: 12,
+                    start_char: 4,
+                    end_line: 14,
+                    end_char: 7,
+                }),
                 line_text: Some("    let x = 1;"),
                 body: "why?",
                 state: "draft",
@@ -1274,6 +1343,14 @@ mod tests {
         )
         .expect("comment should insert");
         assert_eq!(draft.state, "draft");
+        assert_eq!(
+            get_comment(&conn, draft.id)
+                .expect("query should succeed")
+                .expect("row should exist")
+                .range,
+            draft.range,
+            "range columns round-trip"
+        );
         assert_eq!(
             comment_counts(&conn, change.id).expect("query should succeed"),
             (0, 1, 0)
@@ -1312,6 +1389,7 @@ mod tests {
                 file: Some("src/main.rs"),
                 line: Some(14),
                 side: "new",
+                range: None,
                 line_text: None,
                 body: "fixed",
                 state: "published",
@@ -1338,6 +1416,50 @@ mod tests {
             get_comment(&conn, reply.id)
                 .expect("query should succeed")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn partial_range_columns_are_an_error() {
+        let (_dir, conn) = temp_db();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
+        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
+            .expect("change should insert");
+        let now = now_rfc3339();
+
+        // insert_comment writes ranges all-or-nothing, so corrupt the row
+        // directly to exercise the invariant: only the start line is set.
+        let comment = insert_comment(
+            &conn,
+            &NewComment {
+                change_id: change.id,
+                revision_number: 1,
+                parent_id: None,
+                author: "reviewer",
+                file: Some("src/main.rs"),
+                line: Some(14),
+                side: "new",
+                range: None,
+                line_text: Some("    let x = 1;"),
+                body: "why?",
+                state: "draft",
+                resolved: false,
+            },
+            &now,
+        )
+        .expect("comment should insert");
+        conn.execute(
+            "UPDATE comments SET range_start_line = 12 WHERE id = ?1",
+            params![comment.id],
+        )
+        .expect("update should succeed");
+
+        let err = get_comment(&conn, comment.id).expect_err("partial range should error");
+        assert!(
+            err.to_string().contains("partially populated"),
+            "unexpected error: {err}"
         );
     }
 

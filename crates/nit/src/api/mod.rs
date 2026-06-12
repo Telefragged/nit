@@ -436,6 +436,7 @@ async fn create_draft(
                 "/COMMIT_MSG has no old side — comment with side \"new\"",
             ));
         }
+        let range = req.range.map(|r| validate_range(r, req.line)).transpose()?;
         // Thread under the root, wherever the draft pointed (like replies):
         // feedback scoping only walks one level below roots, so a comment
         // threaded under a reply would silently vanish from the agent's view.
@@ -471,6 +472,7 @@ async fn create_draft(
                 file: req.file.as_deref(),
                 line: req.line,
                 side,
+                range,
                 line_text: line_text.as_deref(),
                 body: &req.body,
                 state: "draft",
@@ -481,6 +483,30 @@ async fn create_draft(
         Ok(Json(views::comment_at_own_revision(&row)))
     })
     .await
+}
+
+/// The "Range comments" rules of docs/api.md: a range needs a line
+/// anchor, ends on it, and is non-empty and forward.
+fn validate_range(
+    range: types::CommentRange,
+    line: Option<i64>,
+) -> Result<types::CommentRange, Error> {
+    if line.is_none() {
+        return Err(Error::bad_request("a range requires a line anchor"));
+    }
+    if line != Some(range.end_line) {
+        return Err(Error::bad_request(
+            "range.end_line must equal the comment's line",
+        ));
+    }
+    let forward = range.start_line < range.end_line
+        || (range.start_line == range.end_line && range.start_char < range.end_char);
+    if range.start_line < 1 || range.start_char < 0 || range.end_char < 1 || !forward {
+        return Err(Error::bad_request(
+            "range must be non-empty and forward (docs/api.md \"Range comments\")",
+        ));
+    }
+    Ok(range)
 }
 
 /// Snapshot of the anchored line: the commit's tree for `new`, the
@@ -699,6 +725,7 @@ async fn create_reply(
                 file: root.file.as_deref(),
                 line: root.line,
                 side: &root.side,
+                range: root.range,
                 line_text: root.line_text.as_deref(),
                 body: &req.body,
                 state: "published",
