@@ -346,3 +346,64 @@ fn full_review_loop() {
     assert_eq!(feedback["state"], "merged");
     assert_eq!(feedback["actionable"], true);
 }
+
+#[test]
+fn partial_flag_is_sticky_and_flips_emit_events() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let mut register = json!({
+        "repo_path": g.workdir().to_string_lossy(),
+        "branch": "feat",
+        "base": "main",
+    });
+
+    // Fresh registration without partial: defaults to not-partial.
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    assert_eq!(chain["partial"], false);
+    let chain_id = chain["id"].as_i64().unwrap();
+    let cursor_of = || {
+        let (st, boot) = http_get(&server.url(&format!("/api/chains/{chain_id}/wait?cursor=0")));
+        assert_eq!(st, 200, "{boot}");
+        (boot["cursor"].as_i64().unwrap(), boot["feedback"].clone())
+    };
+    let (registered, _) = cursor_of();
+
+    // partial: true flips the flag and wakes waiters via a chain_updated
+    // event even though nothing structural changed.
+    register["partial"] = json!(true);
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    assert_eq!(chain["partial"], true);
+    let (marked, feedback) = cursor_of();
+    assert!(marked > registered, "a partial flip must emit an event");
+    assert_eq!(feedback["chain"]["partial"], true);
+
+    // Absent partial leaves the flag alone (sticky) and, with no structural
+    // difference either, emits nothing.
+    register.as_object_mut().unwrap().remove("partial");
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    assert_eq!(chain["partial"], true);
+    let (repushed, _) = cursor_of();
+    assert_eq!(repushed, marked);
+
+    // Re-sending the stored value is not a flip.
+    register["partial"] = json!(true);
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    assert_eq!(chain["partial"], true);
+    let (resent, _) = cursor_of();
+    assert_eq!(resent, marked);
+
+    // partial: false clears the flag and emits again (nit ready).
+    register["partial"] = json!(false);
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    assert_eq!(chain["partial"], false);
+    let (cleared, feedback) = cursor_of();
+    assert!(cleared > marked, "clearing partial must emit an event");
+    assert_eq!(feedback["chain"]["partial"], false);
+}

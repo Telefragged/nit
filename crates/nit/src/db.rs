@@ -141,6 +141,11 @@ const MIGRATIONS: &[&str] = &[
       created_at TEXT NOT NULL
     );
     ",
+    // v2: sticky partial flag — set/cleared only by registration
+    // (push --partial / ready), never by scans.
+    "
+    ALTER TABLE chains ADD COLUMN partial INTEGER NOT NULL DEFAULT 0;
+    ",
 ];
 
 fn migrate(conn: &Connection) -> Result<()> {
@@ -240,6 +245,7 @@ pub struct Chain {
     pub branch: String,
     pub base: String,
     pub status: ChainStatus,
+    pub partial: bool,
     pub last_scan_error: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -325,6 +331,7 @@ fn chain_from_row(row: &rusqlite::Row) -> rusqlite::Result<(Chain, String)> {
             branch: row.get("branch")?,
             base: row.get("base")?,
             status: ChainStatus::Active, // patched below
+            partial: row.get::<_, i64>("partial")? != 0,
             last_scan_error: row.get("last_scan_error")?,
             created_at: row.get("created_at")?,
             updated_at: row.get("updated_at")?,
@@ -535,6 +542,20 @@ pub fn chain_set_scan_error(
         )?;
     }
     Ok(())
+}
+
+/// Set the sticky `partial` flag; returns whether the value actually changed.
+/// Deliberately does **not** bump `updated_at` — it times the
+/// branch-missing abandon window (docs/data-model.md scan step 1).
+///
+/// # Errors
+/// When the statement fails.
+pub fn chain_set_partial(conn: &Connection, id: i64, partial: bool) -> Result<bool> {
+    let changed = conn.execute(
+        "UPDATE chains SET partial = ?2 WHERE id = ?1 AND partial != ?2",
+        params![id, i64::from(partial)],
+    )?;
+    Ok(changed > 0)
 }
 
 /// Chain row for an (already canonicalized) repo path + branch, if any —
@@ -1130,6 +1151,32 @@ mod tests {
                 .is_none()
         );
         assert_eq!(list_chains(&conn).expect("query should succeed").len(), 1);
+    }
+
+    #[test]
+    fn chain_partial_flips_without_touching_updated_at() {
+        let (_dir, conn) = temp_db();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "feat", "main").expect("chain row should upsert");
+        assert!(!chain.partial, "new chains default to not-partial");
+
+        assert!(chain_set_partial(&conn, chain.id, true).expect("partial should update"));
+        assert!(
+            !chain_set_partial(&conn, chain.id, true).expect("partial should update"),
+            "setting the same value is not a flip"
+        );
+        let row = get_chain(&conn, chain.id)
+            .expect("query should succeed")
+            .expect("row should exist");
+        assert!(row.partial);
+        assert_eq!(
+            row.updated_at, chain.updated_at,
+            "a partial flip must not disturb the abandon-window timestamp"
+        );
+
+        assert!(chain_set_partial(&conn, chain.id, false).expect("partial should update"));
+        assert!(!chain_set_partial(&conn, chain.id, false).expect("partial should update"));
     }
 
     #[test]

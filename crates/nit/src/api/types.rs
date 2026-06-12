@@ -33,6 +33,10 @@ pub struct RegisterChain {
     pub repo_path: String,
     pub branch: String,
     pub base: String,
+    /// Sticky: true marks the chain partial (`nit push --partial`), false
+    /// clears it (`nit ready`), absent leaves it unchanged.
+    #[serde(default)]
+    pub partial: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +49,8 @@ pub struct Chain {
     pub status: String,
     /// Derived — api.md state table.
     pub state: String,
+    /// Sticky; set by push --partial, cleared by ready.
+    pub partial: bool,
     pub last_scan_error: Option<String>,
     pub scan_warnings: Vec<String>,
     pub web_url: String,
@@ -289,6 +295,8 @@ pub struct FeedbackChain {
     pub branch: String,
     pub base: String,
     pub web_url: String,
+    /// Sticky; set by push --partial, cleared by ready.
+    pub partial: bool,
     pub last_scan_error: Option<String>,
     pub scan_warnings: Vec<String>,
 }

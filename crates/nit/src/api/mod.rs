@@ -172,6 +172,7 @@ async fn register_chain(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<types::RegisterChain>,
 ) -> Result<Json<types::Chain>, Error> {
+    let partial = req.partial;
     let st = state.clone();
     let chain = blocking(move || {
         let conn = st.open_db()?;
@@ -195,8 +196,69 @@ async fn register_chain(
         }
     })
     .await?;
+    // Scan before applying partial: the flip wakes /wait long-polls, which
+    // read without the chain lock. Flipping first would let a `nit ready`
+    // carrying unscanned commits wake a waiter into the window between
+    // the two commits, where the old all-approved change set reads
+    // ready_to_merge — exactly the premature-merge state partial exists to
+    // make inexpressible. Scan-then-flip is uniformly safe: waiters woken
+    // by the flip see the post-scan change set, and for push --partial
+    // the scanned-in pending commits already block ready_to_merge.
     scan_chain(&state, chain.id, true).await?; // push always rescans
+    if let Some(partial) = partial {
+        apply_partial(&state, chain.id, partial).await?;
+    }
     chain_response(state, chain.id).await
+}
+
+/// Apply the sticky `partial` flag from a registration. An actual flip is
+/// chain state the agent acts on, so it emits `chain_updated` and wakes
+/// `/wait` long-polls exactly like a scan-emitted event; setting the
+/// already-stored value does neither. Runs under the chain lock — no
+/// scan or review submission races the flip (docs/data-model.md
+/// "Concurrency").
+async fn apply_partial(state: &Arc<AppState>, chain_id: i64, partial: bool) -> Result<(), Error> {
+    let entry = state.entry(chain_id);
+    let gate = entry.gate.lock().await;
+    let st = state.clone();
+    let flipped = blocking(move || {
+        let txn = || -> anyhow::Result<bool> {
+            let mut conn = st.open_db()?;
+            let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let flipped = db::chain_set_partial(&tx, chain_id, partial)?;
+            if flipped {
+                // Deliberately no chain_touch: updated_at times the
+                // branch-missing abandon window and a partial flip is not a scan.
+                db::insert_event(
+                    &tx,
+                    chain_id,
+                    "chain_updated",
+                    &serde_json::json!({"chain_id": chain_id}),
+                    &db::now_rfc3339(),
+                )?;
+            }
+            tx.commit()?;
+            Ok(flipped)
+        };
+        // Cross-chain write contention gets the same retryable 503 the
+        // scan running next in this request returns (state.rs scan_chain),
+        // not an opaque 500.
+        txn().map_err(|err| {
+            if state::is_sqlite_busy(&err) {
+                Error::unavailable(
+                    "database is busy (another chain is being scanned) — retry shortly",
+                )
+            } else {
+                err.into()
+            }
+        })
+    })
+    .await?;
+    drop(gate);
+    if flipped {
+        entry.notify.notify_waiters();
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]

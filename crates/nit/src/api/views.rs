@@ -28,7 +28,7 @@ struct LiveChange {
     needs_rebase: bool,
 }
 
-fn derive_state(status: ChainStatus, live: &[LiveChange]) -> &'static str {
+fn derive_state(status: ChainStatus, partial: bool, live: &[LiveChange]) -> &'static str {
     match status {
         ChainStatus::Merged => "merged",
         ChainStatus::Abandoned => "abandoned",
@@ -49,6 +49,10 @@ fn derive_state(status: ChainStatus, live: &[LiveChange]) -> &'static str {
                 .any(|c| !matches!(c.status, ChangeStatus::Approved))
             {
                 "waiting_for_review"
+            } else if partial {
+                // All approved but the agent is still pushing (push
+                // --partial): merging now would be premature.
+                "agents_turn"
             } else {
                 "ready_to_merge"
             }
@@ -94,7 +98,8 @@ pub fn build_chain(
         branch: chain.branch.clone(),
         base: chain.base.clone(),
         status: chain.status.as_str().to_string(),
-        state: derive_state(chain.status, &live).to_string(),
+        state: derive_state(chain.status, chain.partial, &live).to_string(),
+        partial: chain.partial,
         last_scan_error: chain.last_scan_error.clone(),
         scan_warnings: warnings,
         web_url: format!("{public_base}/chains/{}", chain.id),
@@ -422,7 +427,7 @@ pub fn build_feedback(
             comments,
         });
     }
-    let state = derive_state(chain.status, &live);
+    let state = derive_state(chain.status, chain.partial, &live);
     Ok(types::Feedback {
         state: state.to_string(),
         actionable: actionable(state),
@@ -431,6 +436,7 @@ pub fn build_feedback(
             branch: chain.branch.clone(),
             base: chain.base.clone(),
             web_url: format!("{public_base}/chains/{}", chain.id),
+            partial: chain.partial,
             last_scan_error: chain.last_scan_error.clone(),
             scan_warnings: warnings,
         },
@@ -488,31 +494,36 @@ mod tests {
                 })
                 .collect()
         };
-        assert_eq!(derive_state(ChainStatus::Merged, &[]), "merged");
-        assert_eq!(derive_state(ChainStatus::Abandoned, &[]), "abandoned");
-        assert_eq!(derive_state(ChainStatus::Active, &[]), "agents_turn");
+        assert_eq!(derive_state(ChainStatus::Merged, false, &[]), "merged");
         assert_eq!(
-            derive_state(ChainStatus::Active, &live(&[("pending", false)])),
+            derive_state(ChainStatus::Abandoned, false, &[]),
+            "abandoned"
+        );
+        assert_eq!(derive_state(ChainStatus::Active, false, &[]), "agents_turn");
+        assert_eq!(
+            derive_state(ChainStatus::Active, false, &live(&[("pending", false)])),
             "waiting_for_review"
         );
         assert_eq!(
             derive_state(
                 ChainStatus::Active,
+                false,
                 &live(&[("approved", false), ("changes_requested", false)])
             ),
             "agents_turn"
         );
         assert_eq!(
-            derive_state(ChainStatus::Active, &live(&[("commented", false)])),
+            derive_state(ChainStatus::Active, false, &live(&[("commented", false)])),
             "agents_turn"
         );
         assert_eq!(
-            derive_state(ChainStatus::Active, &live(&[("pending", true)])),
+            derive_state(ChainStatus::Active, false, &live(&[("pending", true)])),
             "agents_turn" // needs_rebase wins over pending
         );
         assert_eq!(
             derive_state(
                 ChainStatus::Active,
+                false,
                 &live(&[("approved", false), ("approved", false)])
             ),
             "ready_to_merge"
@@ -520,6 +531,25 @@ mod tests {
         assert_eq!(
             derive_state(
                 ChainStatus::Active,
+                false,
+                &live(&[("approved", false), ("pending", false)])
+            ),
+            "waiting_for_review"
+        );
+        // partial: all approved derives agents_turn (the agent is still
+        // pushing), pending keeps waiting_for_review.
+        assert_eq!(
+            derive_state(
+                ChainStatus::Active,
+                true,
+                &live(&[("approved", false), ("approved", false)])
+            ),
+            "agents_turn"
+        );
+        assert_eq!(
+            derive_state(
+                ChainStatus::Active,
+                true,
                 &live(&[("approved", false), ("pending", false)])
             ),
             "waiting_for_review"
