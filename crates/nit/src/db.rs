@@ -1035,8 +1035,8 @@ mod tests {
     use super::*;
 
     fn temp_db() -> (tempfile::TempDir, Connection) {
-        let dir = tempfile::tempdir().unwrap();
-        let conn = open(&dir.path().join("nit.sqlite3")).unwrap();
+        let dir = tempfile::tempdir().expect("tempdir should create");
+        let conn = open(&dir.path().join("nit.sqlite3")).expect("test db should open");
         (dir, conn)
     }
 
@@ -1045,43 +1045,49 @@ mod tests {
         let (_dir, conn) = temp_db();
         let journal: String = conn
             .query_row("PRAGMA journal_mode", [], |r| r.get(0))
-            .unwrap();
+            .expect("query should succeed");
         assert_eq!(journal, "wal");
         let fk: i64 = conn
             .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
-            .unwrap();
+            .expect("query should succeed");
         assert_eq!(fk, 1);
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(version, i64::try_from(MIGRATIONS.len()).unwrap());
+            .expect("query should succeed");
+        assert_eq!(
+            version,
+            i64::try_from(MIGRATIONS.len()).expect("migration count should fit i64")
+        );
     }
 
     #[test]
     fn open_is_idempotent() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("tempdir should create");
         let path = dir.path().join("nit.sqlite3");
-        open(&path).unwrap();
-        let conn = open(&path).unwrap(); // re-running migrations is a no-op
+        open(&path).expect("test db should open");
+        let conn = open(&path).expect("test db should open"); // re-running migrations is a no-op
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(version, i64::try_from(MIGRATIONS.len()).unwrap());
+            .expect("query should succeed");
+        assert_eq!(
+            version,
+            i64::try_from(MIGRATIONS.len()).expect("migration count should fit i64")
+        );
     }
 
     #[test]
     fn data_dir_resolution() {
         assert_eq!(
-            data_dir(Some("/xdg".into()), Some("/home/u".into())).unwrap(),
+            data_dir(Some("/xdg".into()), Some("/home/u".into())).expect("data dir should resolve"),
             PathBuf::from("/xdg")
         );
         // Relative XDG_DATA_HOME is ignored per the basedir spec.
         assert_eq!(
-            data_dir(Some("rel".into()), Some("/home/u".into())).unwrap(),
+            data_dir(Some("rel".into()), Some("/home/u".into())).expect("data dir should resolve"),
             PathBuf::from("/home/u/.local/share")
         );
         assert_eq!(
-            data_dir(None, Some("/home/u".into())).unwrap(),
+            data_dir(None, Some("/home/u".into())).expect("data dir should resolve"),
             PathBuf::from("/home/u/.local/share")
         );
         assert!(data_dir(None, None).is_err());
@@ -1090,34 +1096,53 @@ mod tests {
     #[test]
     fn repo_and_chain_roundtrip() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let again = get_or_create_repo(&conn, "/tmp/r").unwrap();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let again = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
         assert_eq!(repo.id, again.id);
 
-        let chain = get_or_create_chain(&conn, repo.id, "feat/x", "main").unwrap();
+        let chain =
+            get_or_create_chain(&conn, repo.id, "feat/x", "main").expect("chain row should upsert");
         assert_eq!(chain.status, ChainStatus::Active);
         assert_eq!(chain.last_scan_error, None);
 
         // Re-registration is idempotent but updates base.
-        let chain2 = get_or_create_chain(&conn, repo.id, "feat/x", "develop").unwrap();
+        let chain2 = get_or_create_chain(&conn, repo.id, "feat/x", "develop")
+            .expect("chain row should upsert");
         assert_eq!(chain2.id, chain.id);
         assert_eq!(chain2.base, "develop");
 
-        let fetched = get_chain(&conn, chain.id).unwrap().unwrap();
+        let fetched = get_chain(&conn, chain.id)
+            .expect("query should succeed")
+            .expect("row should exist");
         assert_eq!(fetched.branch, "feat/x");
-        assert_eq!(chain_repo_path(&conn, chain.id).unwrap().unwrap(), "/tmp/r");
-        assert!(get_chain(&conn, 999).unwrap().is_none());
-        assert_eq!(list_chains(&conn).unwrap().len(), 1);
+        assert_eq!(
+            chain_repo_path(&conn, chain.id)
+                .expect("query should succeed")
+                .expect("row should exist"),
+            "/tmp/r"
+        );
+        assert!(
+            get_chain(&conn, 999)
+                .expect("query should succeed")
+                .is_none()
+        );
+        assert_eq!(list_chains(&conn).expect("query should succeed").len(), 1);
     }
 
     #[test]
     fn change_and_revision_roundtrip() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
-        let change = insert_change(&conn, chain.id, "Iabc", 0, ChangeStatus::Pending).unwrap();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
+        let change = insert_change(&conn, chain.id, "Iabc", 0, ChangeStatus::Pending)
+            .expect("change should insert");
 
-        assert!(latest_revision(&conn, change.id).unwrap().is_none());
+        assert!(
+            latest_revision(&conn, change.id)
+                .expect("query should succeed")
+                .is_none()
+        );
         let fixups = vec![Fixup {
             sha: "f".repeat(40),
             message: "fixup! subj".into(),
@@ -1134,8 +1159,10 @@ mod tests {
             "subj\n\nbody",
             &now,
         )
-        .unwrap();
-        let rev = latest_revision(&conn, change.id).unwrap().unwrap();
+        .expect("revision should insert");
+        let rev = latest_revision(&conn, change.id)
+            .expect("query should succeed")
+            .expect("row should exist");
         assert_eq!(rev.number, 1);
         assert_eq!(rev.fixups, fixups);
         assert_eq!(rev.effective_tree.as_deref(), Some("c".repeat(40).as_str()));
@@ -1157,8 +1184,9 @@ mod tests {
         );
 
         // Orphaning: position NULL + status flag, then restore.
-        change_set_position_status(&conn, change.id, None, ChangeStatus::Orphaned).unwrap();
-        let rows = changes_for_chain(&conn, chain.id).unwrap();
+        change_set_position_status(&conn, change.id, None, ChangeStatus::Orphaned)
+            .expect("change should update");
+        let rows = changes_for_chain(&conn, chain.id).expect("query should succeed");
         assert_eq!(rows[0].position, None);
         assert_eq!(rows[0].status, ChangeStatus::Orphaned);
     }
@@ -1166,21 +1194,27 @@ mod tests {
     #[test]
     fn duplicate_change_key_rejected() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
-        insert_change(&conn, chain.id, "Iabc", 0, ChangeStatus::Pending).unwrap();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
+        insert_change(&conn, chain.id, "Iabc", 0, ChangeStatus::Pending)
+            .expect("change should insert");
         assert!(insert_change(&conn, chain.id, "Iabc", 1, ChangeStatus::Pending).is_err());
     }
 
     #[test]
     fn live_changes_sort_before_orphans() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
-        let orphan = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending).unwrap();
-        change_set_position_status(&conn, orphan.id, None, ChangeStatus::Orphaned).unwrap();
-        insert_change(&conn, chain.id, "I2", 0, ChangeStatus::Pending).unwrap();
-        let rows = changes_for_chain(&conn, chain.id).unwrap();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
+        let orphan = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
+            .expect("change should insert");
+        change_set_position_status(&conn, orphan.id, None, ChangeStatus::Orphaned)
+            .expect("change should update");
+        insert_change(&conn, chain.id, "I2", 0, ChangeStatus::Pending)
+            .expect("change should insert");
+        let rows = changes_for_chain(&conn, chain.id).expect("query should succeed");
         assert_eq!(rows[0].change_key, "I2");
         assert_eq!(rows[1].change_key, "I1");
     }
@@ -1188,9 +1222,11 @@ mod tests {
     #[test]
     fn events_and_reviews() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending).unwrap();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
+        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
+            .expect("change should insert");
         let now = now_rfc3339();
 
         let e1 = insert_event(
@@ -1200,7 +1236,7 @@ mod tests {
             &serde_json::json!({}),
             &now,
         )
-        .unwrap();
+        .expect("event should insert");
         let e2 = insert_event(
             &conn,
             chain.id,
@@ -1208,19 +1244,25 @@ mod tests {
             &serde_json::json!({}),
             &now,
         )
-        .unwrap();
+        .expect("event should insert");
         assert!(e2 > e1, "event ids are the monotonic cursor");
-        assert_eq!(events_for_chain(&conn, chain.id).unwrap().len(), 2);
+        assert_eq!(
+            events_for_chain(&conn, chain.id)
+                .expect("query should succeed")
+                .len(),
+            2
+        );
 
-        insert_review(&conn, change.id, 1, "approve", "lgtm", &now).unwrap();
-        insert_review(&conn, change.id, 1, "request_changes", "wait", &now).unwrap();
+        insert_review(&conn, change.id, 1, "approve", "lgtm", &now).expect("review should insert");
+        insert_review(&conn, change.id, 1, "request_changes", "wait", &now)
+            .expect("review should insert");
         let latest = latest_review_on_revision(&conn, change.id, 1)
-            .unwrap()
-            .unwrap();
+            .expect("query should succeed")
+            .expect("row should exist");
         assert_eq!(latest.verdict, "request_changes");
         assert!(
             latest_review_on_revision(&conn, change.id, 2)
-                .unwrap()
+                .expect("query should succeed")
                 .is_none()
         );
     }
@@ -1228,9 +1270,11 @@ mod tests {
     #[test]
     fn comment_lifecycle_and_counts() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending).unwrap();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
+        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
+            .expect("change should insert");
         let now = now_rfc3339();
 
         let draft = insert_comment(
@@ -1250,23 +1294,34 @@ mod tests {
             },
             &now,
         )
-        .unwrap();
+        .expect("comment should insert");
         assert_eq!(draft.state, "draft");
-        assert_eq!(comment_counts(&conn, change.id).unwrap(), (0, 1, 0));
-
-        update_draft_body(&conn, draft.id, "why though?", &now).unwrap();
         assert_eq!(
-            get_comment(&conn, draft.id).unwrap().unwrap().body,
+            comment_counts(&conn, change.id).expect("query should succeed"),
+            (0, 1, 0)
+        );
+
+        update_draft_body(&conn, draft.id, "why though?", &now).expect("draft should update");
+        assert_eq!(
+            get_comment(&conn, draft.id)
+                .expect("query should succeed")
+                .expect("row should exist")
+                .body,
             "why though?"
         );
 
-        let review = insert_review(&conn, change.id, 1, "request_changes", "m", &now).unwrap();
-        let published = publish_drafts(&conn, change.id, review.id, &now).unwrap();
+        let review = insert_review(&conn, change.id, 1, "request_changes", "m", &now)
+            .expect("review should insert");
+        let published =
+            publish_drafts(&conn, change.id, review.id, &now).expect("drafts should publish");
         assert_eq!(published.len(), 1);
         assert_eq!(published[0].state, "published");
         assert_eq!(published[0].review_id, Some(review.id));
         // published root, unresolved
-        assert_eq!(comment_counts(&conn, change.id).unwrap(), (1, 0, 1));
+        assert_eq!(
+            comment_counts(&conn, change.id).expect("query should succeed"),
+            (1, 0, 1)
+        );
 
         // Agent reply under the root, then resolve the thread.
         let reply = insert_comment(
@@ -1286,62 +1341,94 @@ mod tests {
             },
             &now,
         )
-        .unwrap();
+        .expect("comment should insert");
         assert_eq!(reply.parent_id, Some(draft.id));
-        comment_set_resolved(&conn, draft.id, true, &now).unwrap();
-        assert_eq!(comment_counts(&conn, change.id).unwrap(), (2, 0, 0));
-        assert_eq!(comments_for_change(&conn, change.id).unwrap().len(), 2);
+        comment_set_resolved(&conn, draft.id, true, &now).expect("comment should update");
+        assert_eq!(
+            comment_counts(&conn, change.id).expect("query should succeed"),
+            (2, 0, 0)
+        );
+        assert_eq!(
+            comments_for_change(&conn, change.id)
+                .expect("query should succeed")
+                .len(),
+            2
+        );
 
-        delete_comment(&conn, reply.id).unwrap();
-        assert!(get_comment(&conn, reply.id).unwrap().is_none());
+        delete_comment(&conn, reply.id).expect("draft should delete");
+        assert!(
+            get_comment(&conn, reply.id)
+                .expect("query should succeed")
+                .is_none()
+        );
     }
 
     #[test]
     fn review_query_helpers() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending).unwrap();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
+        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
+            .expect("change should insert");
         let now = now_rfc3339();
         assert!(
             latest_review_for_change(&conn, change.id)
-                .unwrap()
+                .expect("query should succeed")
                 .is_none()
         );
-        assert_eq!(last_reviewed_revision(&conn, change.id).unwrap(), None);
+        assert_eq!(
+            last_reviewed_revision(&conn, change.id).expect("query should succeed"),
+            None
+        );
 
-        insert_review(&conn, change.id, 2, "request_changes", "a", &now).unwrap();
-        insert_review(&conn, change.id, 1, "comment", "b", &now).unwrap();
-        let latest = latest_review_for_change(&conn, change.id).unwrap().unwrap();
+        insert_review(&conn, change.id, 2, "request_changes", "a", &now)
+            .expect("review should insert");
+        insert_review(&conn, change.id, 1, "comment", "b", &now).expect("review should insert");
+        let latest = latest_review_for_change(&conn, change.id)
+            .expect("query should succeed")
+            .expect("row should exist");
         assert_eq!(latest.verdict, "comment"); // latest by id, not revision
-        assert_eq!(last_reviewed_revision(&conn, change.id).unwrap(), Some(2));
-        assert_eq!(reviews_for_change(&conn, change.id).unwrap().len(), 2);
+        assert_eq!(
+            last_reviewed_revision(&conn, change.id).expect("query should succeed"),
+            Some(2)
+        );
+        assert_eq!(
+            reviews_for_change(&conn, change.id)
+                .expect("query should succeed")
+                .len(),
+            2
+        );
     }
 
     #[test]
     fn chain_lookup_and_event_cursor() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let chain = get_or_create_chain(&conn, repo.id, "feat", "main").unwrap();
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "feat", "main").expect("chain row should upsert");
         assert_eq!(
             find_chain_by_repo_branch(&conn, "/tmp/r", "feat")
-                .unwrap()
-                .unwrap()
+                .expect("query should succeed")
+                .expect("row should exist")
                 .id,
             chain.id
         );
         assert!(
             find_chain_by_repo_branch(&conn, "/tmp/r", "other")
-                .unwrap()
+                .expect("query should succeed")
                 .is_none()
         );
         assert!(
             find_chain_by_repo_branch(&conn, "/tmp/x", "feat")
-                .unwrap()
+                .expect("query should succeed")
                 .is_none()
         );
 
-        assert_eq!(latest_event_id(&conn, chain.id).unwrap(), 0);
+        assert_eq!(
+            latest_event_id(&conn, chain.id).expect("query should succeed"),
+            0
+        );
         let now = now_rfc3339();
         let id = insert_event(
             &conn,
@@ -1350,18 +1437,33 @@ mod tests {
             &serde_json::json!({}),
             &now,
         )
-        .unwrap();
-        assert_eq!(latest_event_id(&conn, chain.id).unwrap(), id);
+        .expect("event should insert");
+        assert_eq!(
+            latest_event_id(&conn, chain.id).expect("query should succeed"),
+            id
+        );
     }
 
     #[test]
     fn change_and_revision_getters() {
         let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").unwrap();
-        let chain = get_or_create_chain(&conn, repo.id, "b", "main").unwrap();
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending).unwrap();
-        assert_eq!(get_change(&conn, change.id).unwrap().unwrap().id, change.id);
-        assert!(get_change(&conn, 999).unwrap().is_none());
+        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
+        let chain =
+            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
+        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
+            .expect("change should insert");
+        assert_eq!(
+            get_change(&conn, change.id)
+                .expect("query should succeed")
+                .expect("row should exist")
+                .id,
+            change.id
+        );
+        assert!(
+            get_change(&conn, 999)
+                .expect("query should succeed")
+                .is_none()
+        );
 
         let now = now_rfc3339();
         insert_revision(
@@ -1375,12 +1477,19 @@ mod tests {
             "subj",
             &now,
         )
-        .unwrap();
+        .expect("revision should insert");
         assert_eq!(
-            get_revision(&conn, change.id, 1).unwrap().unwrap().number,
+            get_revision(&conn, change.id, 1)
+                .expect("query should succeed")
+                .expect("row should exist")
+                .number,
             1
         );
-        assert!(get_revision(&conn, change.id, 2).unwrap().is_none());
+        assert!(
+            get_revision(&conn, change.id, 2)
+                .expect("query should succeed")
+                .is_none()
+        );
     }
 
     #[test]

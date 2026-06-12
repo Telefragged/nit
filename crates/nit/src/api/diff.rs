@@ -222,32 +222,38 @@ mod tests {
 
     impl Repo {
         fn new() -> Self {
-            let dir = tempfile::tempdir().unwrap();
+            let dir = tempfile::tempdir().expect("tempdir should create");
             let mut opts = RepositoryInitOptions::new();
             opts.initial_head("refs/heads/main");
-            let repo = Repository::init_opts(dir.path().join("r"), &opts).unwrap();
+            let repo =
+                Repository::init_opts(dir.path().join("r"), &opts).expect("test repo should init");
             Repo { _dir: dir, repo }
         }
 
         /// Build a tree from (path, content) pairs (bytes allow binary).
         fn tree(&self, files: &[(&str, &[u8])]) -> git2::Oid {
-            let mut builder = self.repo.treebuilder(None).unwrap();
+            let mut builder = self
+                .repo
+                .treebuilder(None)
+                .expect("treebuilder should create");
             for (path, content) in files {
-                let blob = self.repo.blob(content).unwrap();
-                builder.insert(path, blob, 0o100_644).unwrap();
+                let blob = self.repo.blob(content).expect("blob should write");
+                builder
+                    .insert(path, blob, 0o100_644)
+                    .expect("tree entry should insert");
             }
-            builder.write().unwrap()
+            builder.write().expect("tree should write")
         }
 
         fn find(&self, oid: git2::Oid) -> Tree<'_> {
-            self.repo.find_tree(oid).unwrap()
+            self.repo.find_tree(oid).expect("tree should exist")
         }
     }
 
     fn lines(n: std::ops::RangeInclusive<i64>) -> String {
         use std::fmt::Write;
         n.fold(String::new(), |mut s, i| {
-            writeln!(s, "line {i}").unwrap();
+            writeln!(s, "line {i}").expect("write to String is infallible");
             s
         })
     }
@@ -262,7 +268,7 @@ mod tests {
         );
         let t_old = r.tree(&[("a.txt", old.as_bytes())]);
         let t_new = r.tree(&[("a.txt", new.as_bytes())]);
-        let diff = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).unwrap();
+        let diff = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff should build");
 
         assert_eq!(diff.files.len(), 1);
         let f = &diff.files[0];
@@ -278,12 +284,20 @@ mod tests {
             (h0.old_start, h0.old_lines, h0.new_start, h0.new_lines),
             (1, 6, 1, 6)
         );
-        let del = h0.lines.iter().find(|l| l.kind == "del").unwrap();
+        let del = h0
+            .lines
+            .iter()
+            .find(|l| l.kind == "del")
+            .expect("del line should exist");
         assert_eq!(
             (del.old, del.new, del.text.as_str()),
             (Some(3), None, "line 3")
         );
-        let add = h0.lines.iter().find(|l| l.kind == "add").unwrap();
+        let add = h0
+            .lines
+            .iter()
+            .find(|l| l.kind == "add")
+            .expect("add line should exist");
         assert_eq!(
             (add.old, add.new, add.text.as_str()),
             (None, Some(3), "line three")
@@ -296,7 +310,11 @@ mod tests {
 
         let h1 = &f.hunks[1];
         assert_eq!(h1.old_start, 15); // 3 context lines above the insertion
-        let add = h1.lines.iter().find(|l| l.kind == "add").unwrap();
+        let add = h1
+            .lines
+            .iter()
+            .find(|l| l.kind == "add")
+            .expect("add line should exist");
         assert_eq!((add.new, add.text.as_str()), (Some(18), "line 17.5"));
     }
 
@@ -317,9 +335,14 @@ mod tests {
             ("keep.txt", keep.as_bytes()),
             ("new_name.txt", renamed_tweaked.as_bytes()),
         ]);
-        let diff = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).unwrap();
+        let diff = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff should build");
 
-        let by_path = |p: &str| diff.files.iter().find(|f| f.path == p).unwrap();
+        let by_path = |p: &str| {
+            diff.files
+                .iter()
+                .find(|f| f.path == p)
+                .expect("file should be in the diff")
+        };
         assert_eq!(diff.files.len(), 4); // keep.txt untouched
 
         let added = by_path("fresh.txt");
@@ -363,7 +386,9 @@ mod tests {
             .replace("line 9\n", "");
         let t_old = r.find(r.tree(&[("a.txt", old.as_bytes())]));
         let t_new = r.find(r.tree(&[("a.txt", new.as_bytes())]));
-        let port = |line| port_line(&r.repo, &t_old, &t_new, "a.txt", line).unwrap();
+        let port = |line| {
+            port_line(&r.repo, &t_old, &t_new, "a.txt", line).expect("porting should succeed")
+        };
 
         assert_eq!(port(1), Some(1)); // above all edits
         assert_eq!(port(2), Some(2)); // insertion is *after* line 2
@@ -384,13 +409,19 @@ mod tests {
 
         // Untouched file: identity.
         assert_eq!(
-            port_line(&r.repo, &t_a, &t_a2, "a.txt", 2).unwrap(),
+            port_line(&r.repo, &t_a, &t_a2, "a.txt", 2).expect("porting should succeed"),
             Some(2)
         );
         // File deleted (rename without detection counts as deletion).
-        assert_eq!(port_line(&r.repo, &t_a, &t_b, "a.txt", 1).unwrap(), None);
+        assert_eq!(
+            port_line(&r.repo, &t_a, &t_b, "a.txt", 1).expect("porting should succeed"),
+            None
+        );
         // Anchor file absent on the old side.
-        assert_eq!(port_line(&r.repo, &t_b, &t_a, "a.txt", 1).unwrap(), None);
+        assert_eq!(
+            port_line(&r.repo, &t_b, &t_a, "a.txt", 1).expect("porting should succeed"),
+            None
+        );
     }
 
     #[test]

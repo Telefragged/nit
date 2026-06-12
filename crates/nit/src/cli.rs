@@ -290,16 +290,21 @@ mod tests {
     use git2::{RepositoryInitOptions, Signature, Time};
 
     fn repo_with_head(initial_head: &str) -> (tempfile::TempDir, Repository) {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().expect("tempdir should create");
         let mut opts = RepositoryInitOptions::new();
         opts.initial_head(initial_head);
-        let repo = Repository::init_opts(dir.path(), &opts).unwrap();
-        let sig = Signature::new("t", "t@example.com", &Time::new(0, 0)).unwrap();
-        let tree_oid = repo.treebuilder(None).unwrap().write().unwrap();
+        let repo = Repository::init_opts(dir.path(), &opts).expect("test repo should init");
+        let sig =
+            Signature::new("t", "t@example.com", &Time::new(0, 0)).expect("signature should build");
+        let tree_oid = repo
+            .treebuilder(None)
+            .expect("treebuilder should create")
+            .write()
+            .expect("tree should write");
         {
-            let tree = repo.find_tree(tree_oid).unwrap();
+            let tree = repo.find_tree(tree_oid).expect("tree should exist");
             repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
-                .unwrap();
+                .expect("commit should create");
         }
         (dir, repo)
     }
@@ -307,24 +312,31 @@ mod tests {
     #[test]
     fn current_branch_from_head() {
         let (_dir, repo) = repo_with_head("refs/heads/feat/x");
-        assert_eq!(current_branch(&repo).unwrap(), "feat/x");
+        assert_eq!(
+            current_branch(&repo).expect("branch should resolve"),
+            "feat/x"
+        );
     }
 
     #[test]
     fn current_branch_rejects_detached_head() {
         let (_dir, repo) = repo_with_head("refs/heads/main");
-        let oid = repo.head().unwrap().target().unwrap();
-        repo.set_head_detached(oid).unwrap();
+        let oid = repo
+            .head()
+            .expect("HEAD should resolve")
+            .target()
+            .expect("HEAD should point at a commit");
+        repo.set_head_detached(oid).expect("detach should succeed");
         assert!(current_branch(&repo).is_err());
     }
 
     #[test]
     fn default_base_prefers_main_then_master() {
         let (_dir, repo) = repo_with_head("refs/heads/main");
-        assert_eq!(default_base(&repo).unwrap(), "main");
+        assert_eq!(default_base(&repo).expect("base should resolve"), "main");
 
         let (_dir2, repo2) = repo_with_head("refs/heads/master");
-        assert_eq!(default_base(&repo2).unwrap(), "master");
+        assert_eq!(default_base(&repo2).expect("base should resolve"), "master");
 
         let (_dir3, repo3) = repo_with_head("refs/heads/trunk");
         assert!(default_base(&repo3).is_err());

@@ -442,7 +442,7 @@ mod tests {
         let live = |spec: &[(&str, bool)]| -> Vec<LiveChange> {
             spec.iter()
                 .map(|(s, nr)| LiveChange {
-                    status: ChangeStatus::parse(s).unwrap(),
+                    status: ChangeStatus::parse(s).expect("status fixture should parse"),
                     needs_rebase: *nr,
                 })
                 .collect()

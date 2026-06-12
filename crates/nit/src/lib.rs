@@ -11,6 +11,8 @@
 //!   the `nit serve` wiring.
 //! - [`cli`] — `nit push`/`wait`/`status`/`reply`, thin clients of the API.
 
+#![deny(clippy::unwrap_used)]
+
 pub mod api;
 pub mod cli;
 pub mod db;
