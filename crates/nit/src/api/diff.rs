@@ -211,7 +211,25 @@ pub fn port_line(
     file: &str,
     line: i64,
 ) -> Result<Option<i64>> {
-    if line < 1 || old_tree.get_path(Path::new(file)).is_err() {
+    Ok(port_span(repo, old_tree, new_tree, file, line, line)?.map(|(_, end)| end))
+}
+
+/// [`port_line`] for the line span `[start, end]` (1-based, inclusive —
+/// a comment range's lines, docs/api.md "Range comments"):
+/// `Some(shifted span)` only when no hunk touches any spanned line, so
+/// the spanned text is byte-identical on both sides; `None` otherwise.
+///
+/// # Errors
+/// When git can't diff `file` between the trees.
+pub fn port_span(
+    repo: &Repository,
+    old_tree: &Tree,
+    new_tree: &Tree,
+    file: &str,
+    start: i64,
+    end: i64,
+) -> Result<Option<(i64, i64)>> {
+    if start < 1 || end < start || old_tree.get_path(Path::new(file)).is_err() {
         return Ok(None); // anchor never existed on this side
     }
     let mut opts = DiffOptions::new();
@@ -238,16 +256,17 @@ pub fn port_line(
         if patch.delta().flags().is_binary() {
             return Ok(None);
         }
-        return port_through_hunks(&patch, line);
+        return port_span_through_hunks(&patch, start, end);
     }
-    Ok(Some(line)) // file untouched between the trees
+    Ok(Some((start, end))) // file untouched between the trees
 }
 
-/// The hunk-offset walk shared by every anchor-porting path: shift `line`
-/// (an old-side line number) through `patch`'s hunks — `Some(shifted)`
-/// when the line lies in an unchanged region, `None` when a hunk touches
-/// the line itself.
-fn port_through_hunks(patch: &Patch, line: i64) -> Result<Option<i64>> {
+/// The hunk-offset walk shared by every anchor-porting path: shift the
+/// old-side line span `[start, end]` through `patch`'s hunks —
+/// `Some(shifted)` when every spanned line lies in an unchanged region,
+/// `None` when a hunk touches the span (including an insertion landing
+/// strictly inside it: the spanned text would no longer be contiguous).
+fn port_span_through_hunks(patch: &Patch, start: i64, end: i64) -> Result<Option<(i64, i64)>> {
     let mut offset = 0i64;
     for h in 0..patch.num_hunks() {
         let (hunk, _) = patch.hunk(h)?;
@@ -256,20 +275,23 @@ fn port_through_hunks(patch: &Patch, line: i64) -> Result<Option<i64>> {
         let new_lines = i64::from(hunk.new_lines());
         if old_lines == 0 {
             // Pure insertion *after* old line `old_start`.
-            if line <= old_start {
-                return Ok(Some(line + offset));
+            if end <= old_start {
+                return Ok(Some((start + offset, end + offset)));
+            }
+            if start <= old_start {
+                return Ok(None); // insertion lands inside the span
             }
         } else {
-            if line < old_start {
-                return Ok(Some(line + offset));
+            if end < old_start {
+                return Ok(Some((start + offset, end + offset)));
             }
-            if line < old_start + old_lines {
-                return Ok(None); // the anchored line itself changed
+            if start < old_start + old_lines {
+                return Ok(None); // the hunk touches a spanned line
             }
         }
         offset += new_lines - old_lines;
     }
-    Ok(Some(line + offset))
+    Ok(Some((start + offset, end + offset)))
 }
 
 /// [`port_line`] for [`COMMIT_MSG_PATH`] anchors: ports `line` through
@@ -279,13 +301,22 @@ fn port_through_hunks(patch: &Patch, line: i64) -> Result<Option<i64>> {
 /// # Errors
 /// When git can't build or read the buffer diff.
 pub fn port_line_in_text(old: &str, new: &str, line: i64) -> Result<Option<i64>> {
-    if line < 1 {
+    Ok(port_span_in_text(old, new, line, line)?.map(|(_, end)| end))
+}
+
+/// [`port_span`] for [`COMMIT_MSG_PATH`] anchors: the buffer-diff twin
+/// of the tree version, same rules.
+///
+/// # Errors
+/// When git can't build or read the buffer diff.
+pub fn port_span_in_text(old: &str, new: &str, start: i64, end: i64) -> Result<Option<(i64, i64)>> {
+    if start < 1 || end < start {
         return Ok(None); // anchor never existed
     }
     let mut opts = DiffOptions::new();
     opts.context_lines(0);
     let patch = Patch::from_buffers(old.as_bytes(), None, new.as_bytes(), None, Some(&mut opts))?;
-    port_through_hunks(&patch, line)
+    port_span_through_hunks(&patch, start, end)
 }
 
 /// Line `line` (1-based) of `text`, `None` out of range — the snapshot
@@ -582,6 +613,58 @@ mod tests {
         assert_eq!(port(9), None); // deleted
         assert_eq!(port(10), Some(11)); // +2 -1
         assert_eq!(port(0), None); // nonsense anchor
+    }
+
+    #[test]
+    fn port_span_shifts_and_outdates() {
+        let r = Repo::new();
+        let old = lines(1..=10);
+        // Insert two lines after line 2, change line 7, delete line 9 —
+        // the same edits port_line_shifts_and_outdates proves line-wise.
+        let new = old
+            .replace("line 2\n", "line 2\nins a\nins b\n")
+            .replace("line 7\n", "line seven\n")
+            .replace("line 9\n", "");
+        let t_old = r.find(r.tree(&[("a.txt", old.as_bytes())]));
+        let t_new = r.find(r.tree(&[("a.txt", new.as_bytes())]));
+        let port = |start, end| {
+            port_span(&r.repo, &t_old, &t_new, "a.txt", start, end).expect("porting should succeed")
+        };
+
+        assert_eq!(port(1, 2), Some((1, 2))); // insertion is *after* line 2
+        assert_eq!(port(1, 3), None); // insertion lands inside the span
+        assert_eq!(port(3, 5), Some((5, 7))); // shifted whole
+        assert_eq!(port(5, 8), None); // line 7 changed inside
+        assert_eq!(port(8, 8), Some((10, 10))); // single line == port_line
+        assert_eq!(port(8, 10), None); // line 9 deleted inside
+        assert_eq!(port(10, 10), Some((11, 11))); // +2 -1
+        assert_eq!(port(0, 1), None); // nonsense anchor
+        assert_eq!(port(5, 3), None); // backwards span
+    }
+
+    #[test]
+    fn port_span_in_text_matches_tree_version() {
+        let old = lines(1..=10);
+        let new = old
+            .replace("line 2\n", "line 2\nins a\nins b\n")
+            .replace("line 7\n", "line seven\n")
+            .replace("line 9\n", "");
+        let port = |start, end| {
+            port_span_in_text(&old, &new, start, end).expect("text porting should succeed")
+        };
+
+        assert_eq!(port(1, 2), Some((1, 2)));
+        assert_eq!(port(1, 3), None);
+        assert_eq!(port(3, 5), Some((5, 7)));
+        assert_eq!(port(5, 8), None);
+        assert_eq!(port(8, 10), None);
+        assert_eq!(port(10, 10), Some((11, 11)));
+
+        // Identical texts: identity.
+        assert_eq!(
+            port_span_in_text(&old, &old, 2, 4).expect("text porting should succeed"),
+            Some((2, 4))
+        );
     }
 
     #[test]
