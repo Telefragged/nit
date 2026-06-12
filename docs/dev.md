@@ -22,6 +22,12 @@ nix develop -c npm run build
 nix build                                      # → result/bin/nit
 ```
 
+`nix build` pins the web dependencies by hash: any commit that changes
+`web/package-lock.json` must also refresh `npmDepsHash` in `flake.nix`
+(`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json` prints the
+new value) and verify `nix build`. A stale hash breaks `nix build` — and
+with it every `nix run 'git+file://…?ref=main#nit'` CLI invocation.
+
 ## Restarting the server
 
 Rebuild (`nix build` or `cargo build`), ctrl-c the running `nit serve`
