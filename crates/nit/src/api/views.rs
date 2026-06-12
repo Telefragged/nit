@@ -343,7 +343,8 @@ pub fn build_feedback(
         });
 
         let latest_review = db::latest_review_for_change(conn, change.id)?;
-        let comments = feedback_comments(conn, repo, &change, latest.number, &latest_review)?;
+        let comments =
+            feedback_comments(conn, repo, &change, latest.number, latest_review.as_ref())?;
         let (_, _, unresolved) = db::comment_counts(conn, change.id)?;
         changes.push(types::FeedbackChange {
             change_id: change.id,
@@ -386,17 +387,14 @@ fn feedback_comments(
     repo: Option<&Repository>,
     change: &db::Change,
     latest_revision: i64,
-    latest_review: &Option<db::Review>,
+    latest_review: Option<&db::Review>,
 ) -> Result<Vec<types::Comment>> {
     let all = db::comments_for_change(conn, change.id)?;
     let in_scope_root = |root: &db::Comment| -> bool {
         if root.state != "published" {
             return false;
         }
-        if latest_review
-            .as_ref()
-            .is_some_and(|r| root.review_id == Some(r.id))
-        {
+        if latest_review.is_some_and(|r| root.review_id == Some(r.id)) {
             return true;
         }
         !root.resolved

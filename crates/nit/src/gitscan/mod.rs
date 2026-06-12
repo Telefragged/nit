@@ -588,6 +588,7 @@ fn revision_effective_patch_id(repo: &Repository, rev: &db::Revision) -> Option<
     fold::tree_patch_id(repo, &parent.tree().ok()?, &tree).ok()
 }
 
+#[derive(Clone, Copy)]
 struct MatchInput<'a, 'r> {
     repo: &'r Repository,
     commits: &'a [Commit<'r>],

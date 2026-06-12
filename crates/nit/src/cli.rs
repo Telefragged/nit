@@ -235,7 +235,7 @@ impl Client {
 
     fn get(&self, path: &str) -> Result<Value> {
         let url = format!("{}{path}", self.base);
-        let response = self.agent.get(&url).call().map_err(|e| self.io_err(e))?;
+        let response = self.agent.get(&url).call().map_err(|e| self.io_err(&e))?;
         Self::read(response, path)
     }
 
@@ -245,11 +245,11 @@ impl Client {
             .agent
             .post(&url)
             .send_json(body)
-            .map_err(|e| self.io_err(e))?;
+            .map_err(|e| self.io_err(&e))?;
         Self::read(response, path)
     }
 
-    fn io_err(&self, err: ureq::Error) -> anyhow::Error {
+    fn io_err(&self, err: &ureq::Error) -> anyhow::Error {
         anyhow!(
             "cannot reach the nit server at {}: {err} — is 'nit serve' running?",
             self.base
