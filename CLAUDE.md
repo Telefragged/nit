@@ -3,7 +3,8 @@
 Commit-level code review for AI coding agents: agents register a branch
 (a "chain"), a human expert reviews each commit gerrit-style (draft line
 comments, approve/request changes), agents resume on feedback and answer
-with `fixup!` commits. Product spec: `nit.md`.
+by amending the reviewed commits in place — the required `Change-Id:`
+trailer carries identity across rewrites. Product spec: `nit.md`.
 
 ## Golden rules
 

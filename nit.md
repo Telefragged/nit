@@ -9,7 +9,7 @@ The user (expert programmer) will interact with a webpage. You can decide the ar
 
 The unit for review in this case will to begin with be a single commit like it is in gerrit.
 The optimal workflow for this tool would then naturally be agents making smaller commits and presenting them to the user instead of a single branch.
-The other natural fit here is that agents, when receiving feedback on their changes, create fixup! commits targeting the commit the reviews are directed at.
+The other natural fit here is that agents, when receiving feedback on their changes, amend the commit the reviews are directed at and push the rewritten branch — a Change-Id trailer keeps each commit's identity across the rewrite.
 
 On top of this, agents might want to make multiple changes before submitting for review, so they should register their entire branch as a change, while the tool presents each commit individually.
 

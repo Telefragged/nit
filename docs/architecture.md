@@ -23,7 +23,7 @@ agent                         nit server                      reviewer (browser)
   |                             ◀── draft comments (stored) ───|
   |                             ◀── submit review (verdict) ───|
   |  ◀── feedback JSON ───────  event fires, wait returns      |
-  |  fix, commit fixup!,                                       |
+  |  fix, amend commit,                                        |
   |  nit push  ──────────────▶  new revision, status→pending   |
   |  ... repeat until approved; agent rebases/merges;          |
   |  next scan detects merge → chain leaves the dashboard      |
@@ -42,12 +42,12 @@ agent                         nit server                      reviewer (browser)
   deleted) and a failing chain never breaks the others (data-model.md
   "Concurrency").
 - **Unit of review is the commit** (a "change"), grouped in a "chain"
-  (one registered branch). Change identity survives rebases — see
-  [data-model.md](data-model.md).
-- **Fixups fold into revisions**: a `fixup!` commit becomes a new revision of
-  the change it targets (in-memory tree merge), gerrit patchset style.
-  Attachment mirrors `git rebase --autosquash` exactly; folded trees are
-  pinned against `git gc` by `refs/nit/keep/*` refs.
+  (one registered branch). The required `Change-Id:` trailer is the
+  identity — see [data-model.md](data-model.md).
+- **Amends become revisions**: rewriting a commit (same `Change-Id:`
+  trailer, new sha) makes it a new revision of its change, gerrit
+  patchset style. Revision history is pinned against `git gc` by
+  `refs/nit/keep/*` refs.
 - **Drafts live server-side** so the reviewer can move between commits and
   sessions without losing them; they publish atomically with a verdict.
 - **Events table = cursor stream** powering the `/wait` long-poll; clients

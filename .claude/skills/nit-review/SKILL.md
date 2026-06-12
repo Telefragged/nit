@@ -1,6 +1,6 @@
 ---
 name: nit-review
-description: Land changes through nit's review loop (push --partial per commit → ready → wait → fixup → ff-merge). Use as soon as the first commit on a feature branch is done — review runs alongside the build — on "push for review", or when acting on nit feedback. Exemptions: docs/dev.md.
+description: Land changes through nit's review loop (push --partial per commit → ready → wait → amend → ff-merge). Use as soon as the first commit on a feature branch is done — review runs alongside the build — on "push for review", or when acting on nit feedback. Exemptions: docs/dev.md.
 ---
 
 # nit-review — the dogfood loop
@@ -30,7 +30,7 @@ This skill is the operational checklist for driving it from a Claude session.
   an incomplete chain is fine — that is what `--partial` marks. Completed
   is not final: a planned cleanup/self-review/verification pass that may
   still amend the commit is no reason to hold the push — post-push amends
-  fold into new revisions by design.
+  become new revisions by design.
 
 ## Preconditions
 
@@ -42,9 +42,11 @@ This skill is the operational checklist for driving it from a Claude session.
 - Server: `curl -fsS http://127.0.0.1:8877/api/health`. If it is down,
   tell the user to start `nit serve` — do not start one yourself unless
   asked (the server and its database belong to the user).
-- Every commit: builds green first, one concern, and a `Change-Id: I<40hex>`
-  trailer. **All trailers in one block** — a blank line between `Change-Id:`
-  and `Co-Authored-By:` splits the block and the trailer is silently lost
+- Every commit: builds green first, one concern, and its own
+  `Change-Id: I<40hex>` trailer — required; a missing or duplicated
+  trailer (or a pushed `fixup!`/`squash!` commit) fails the scan. **All
+  trailers in one block** — a blank line between `Change-Id:` and
+  `Co-Authored-By:` splits the block and the trailer is silently lost
   (git last-paragraph rule). Generate:
   `python3 -c 'import secrets; print("I"+secrets.token_hex(20))'`.
 
@@ -67,12 +69,15 @@ wakes the session. Feedback arriving mid-build is handled exactly like the
 `feedback.state`:
 
 - **`agents_turn`** — for each change with `request_changes`/`commented`:
-  - code feedback → fix it, `git commit --fixup=<commit_sha of the change>`,
-    then `nit reply <comment-id> --resolve -m "what you did"`;
+  - code feedback → fix it by amending the commit in place, keeping its
+    Change-Id: `git commit --fixup=<commit_sha of the change>`, then
+    `GIT_EDITOR=true git rebase --autosquash "$(git merge-base main HEAD)"`
+    — squash **before** pushing (pushed `fixup!` commits fail the scan),
+    and onto the fork point, not moved main, so interdiffs stay clean.
+    Then `nit reply <comment-id> --resolve -m "what you did"`;
   - questions → `nit reply` with the answer (`--resolve` when settled);
-  - `needs_rebase: true` → a fixup conflicted; restructure the branch
-    (squash manually), push again before waiting.
-  - Then `nit push` (fixups fold into new revisions) and wait again.
+  - Then `nit push` (the rewritten commits become new revisions) and wait
+    again.
   - On a partial chain, `agents_turn` with none of the above (every pushed
     change approved) is not an error and not feedback — the reviewer is
     caught up. Keep building, or `nit ready` when the branch is done.
@@ -80,7 +85,7 @@ wakes the session. Feedback arriving mid-build is handled exactly like the
   scan must see the merge while the branch ref still exists, so it records
   `merged`, not `abandoned`):
   ```sh
-  GIT_EDITOR=true git rebase --autosquash main
+  git rebase main                 # only needed when main moved
   git checkout main && git merge --ff-only <branch>
   nit push --branch <branch>      # scan flags the chain merged
   git branch -d <branch>
@@ -113,6 +118,7 @@ reply.
   first cursor read are invisible. Always check
   `GET /api/chains/{id}/feedback` for unresolved reviewer comments *after*
   taking the cursor and *before* blocking.
-- If a push reports `scan_warnings` or a change you didn't expect (its
-  `change_key` is a commit sha, not your `I…` token), your Change-Id
-  trailer didn't parse — fix the commit message before review starts.
+- If a push fails with a Change-Id scan error (missing or duplicate
+  trailer, or a `fixup!`/`squash!` commit), fix the commit messages and
+  push again — a blank line splitting the trailer block is the usual
+  culprit for "missing".
