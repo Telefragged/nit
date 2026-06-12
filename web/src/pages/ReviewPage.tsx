@@ -27,6 +27,7 @@ import {
 } from "../lib/collapse";
 import { displayPath } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
+import { activeIndexAt } from "../lib/scrollspy";
 import { timeAgo } from "../lib/time";
 import { ErrorPanel } from "./NotFound";
 import type { DraftTarget, ReviewCtx } from "./reviewContext";
@@ -363,6 +364,44 @@ export default function ReviewPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [fileCount, activeFile, revealFile, chainChanges, change, navigate, replyOpen]);
+
+  // Scroll spy: keep activeFile — the rail highlight and the [ / ] cursor —
+  // on the file section currently under the sticky chrome. The threshold is
+  // the sections' scroll-margin-top, read from computed style so the sticky
+  // offsets live only in styles.css; it is the exact line scrollIntoView
+  // targets, so a rail click / keystroke and the spy agree on the
+  // destination file instead of fighting (+1 absorbs fractional scrolls).
+  // During smooth programmatic scrolls the highlight follows live rather
+  // than being suppressed: the spy's fixed point is the scroll target, so
+  // the sweep self-corrects on arrival with no settle bookkeeping.
+  useEffect(() => {
+    if (fileCount === 0) return;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return; // coalesce to one measurement per frame
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const sections = Array.from({ length: fileCount }, (_, i) =>
+          document.getElementById(fileDomId(i)),
+        ).filter((el) => el !== null);
+        if (sections.length === 0) return;
+        const threshold =
+          parseFloat(getComputedStyle(sections[0]!).scrollMarginTop) + 1;
+        setActiveFile(
+          activeIndexAt(
+            sections.map((el) => el.getBoundingClientRect().top),
+            threshold,
+          ),
+        );
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll(); // initialize for restored scroll positions
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, [fileCount]);
 
   const threadsByFile = useMemo(() => {
     const map = new Map<string, Thread[]>();

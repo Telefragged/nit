@@ -40,8 +40,10 @@ happens.
   - file list (left rail): path, status letter, +/- counts; selecting
     expands the file section and scrolls to it (the scroll is issued only
     after the expansion has rendered, so it lands right with other files
-    collapsed); all files render in one scroll column (diffshub style),
-    unified ⇄ side-by-side toggle persisted in localStorage;
+    collapsed); while scrolling, the rail highlights the file under the
+    sticky chrome (scroll spy) and keeps that item visible in the rail's
+    own scrollport; all files render in one scroll column (diffshub
+    style), unified ⇄ side-by-side toggle persisted in localStorage;
   - file sections are collapsible (header click toggles) and start
     collapsed — except the commit message, the entry point of a commit
     review. Collapsed files hide their inline threads; the rail's

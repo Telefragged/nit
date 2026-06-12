@@ -14,15 +14,24 @@ import ReviewPage from "./ReviewPage";
 // duplicate file-N ids) bleed into later tests.
 afterEach(cleanup);
 
-/** Every scrollIntoView call: which element, and whether that element's
+/** Every scrollIntoView call on a file section: which one, and whether its
  * diff body was already in the DOM when the call happened. The latter is
  * the regression guard for the collapse pitfall — a scroll issued before
- * the expansion commit would see (and target) the pre-reflow layout. */
+ * the expansion commit would see (and target) the pre-reflow layout.
+ * Rail items scroll separately (FileRail keeps the active item visible in
+ * the rail's own scrollport whenever activeFile moves); those nudges are
+ * counted apart so the section assertions stay exact. */
 let scrollCalls: Array<{ id: string; expandedAtCall: boolean }>;
+let railScrolls: number;
 
 beforeEach(() => {
   scrollCalls = [];
+  railScrolls = 0;
   Element.prototype.scrollIntoView = function (this: Element) {
+    if (this.classList.contains("rail-item")) {
+      railScrolls += 1;
+      return;
+    }
     scrollCalls.push({
       id: this.id,
       expandedAtCall: this.querySelector(".diff-table") !== null,
@@ -79,7 +88,9 @@ describe("collapsed-by-default file sections", () => {
     expect(isExpanded(section(1))).toBe(true);
     fireEvent.click(header);
     expect(isExpanded(section(1))).toBe(false);
+    // No section scroll, and no rail nudge — the active file never moved.
     expect(scrollCalls).toEqual([]);
+    expect(railScrolls).toBe(0);
   });
 
   it("rail click expands the target and scrolls only after the expansion is committed", async () => {
@@ -97,6 +108,8 @@ describe("collapsed-by-default file sections", () => {
     // Exactly one scroll, on the clicked file's section, and the section
     // already carried its expanded body when the call was issued.
     expect(scrollCalls).toEqual([{ id: "file-2", expandedAtCall: true }]);
+    // …plus the rail keeping the newly active item visible on its side.
+    expect(railScrolls).toBe(1);
     expect(isExpanded(section(2))).toBe(true);
     // Only the target expanded; its collapsed neighbor stayed collapsed.
     expect(isExpanded(section(1))).toBe(false);
@@ -113,6 +126,7 @@ describe("collapsed-by-default file sections", () => {
       { id: "file-0", expandedAtCall: true },
       { id: "file-1", expandedAtCall: true },
     ]);
+    expect(railScrolls).toBe(2);
     expect(isExpanded(section(1))).toBe(true);
   });
 
@@ -125,8 +139,9 @@ describe("collapsed-by-default file sections", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "collapse all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(false);
-    // Bulk toggling never scrolls.
+    // Bulk toggling never scrolls — neither sections nor the rail.
     expect(scrollCalls).toEqual([]);
+    expect(railScrolls).toBe(0);
   });
 });
 

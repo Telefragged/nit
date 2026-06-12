@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { DiffFile } from "../../api/types";
 import { displayPath, statusLetter } from "../../lib/diffview";
 import type { Thread } from "../CommentThread";
@@ -25,8 +26,19 @@ export default function FileRail({
   allExpanded: boolean;
   onToggleAll: () => void;
 }) {
+  // The rail has its own scrollport (max-height + overflow-y); when the
+  // scroll spy moves the highlight, keep it visible. block:'nearest' is a
+  // no-op while the item is already in view, so clicks don't jump the rail.
+  const railRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (activeIndex === null) return;
+    railRef.current
+      ?.querySelectorAll(".rail-item")
+      .item(activeIndex)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
   return (
-    <aside className="file-rail">
+    <aside className="file-rail" ref={railRef}>
       <div className="rail-title">
         <span>
           {files.length} file{files.length === 1 ? "" : "s"}

@@ -81,6 +81,22 @@ const captures = [
       await page.waitForTimeout(200);
     },
   },
+  // Scroll spy: scrolled into the middle of the third file, so its header
+  // is pinned under the diffbar and the rail highlights it (no click —
+  // expand-all first, or the collapsed page has nothing to scroll into).
+  {
+    name: "review-scroll-spy",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page.evaluate(() => {
+        const el = document.getElementById("file-2");
+        window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 40);
+      });
+      await page.waitForTimeout(250); // rAF measure + react re-render
+    },
+  },
   // Old revision selected: full diff of r1, threads at their written lines.
   {
     name: "review-rev1",
