@@ -4,12 +4,14 @@ import { getChain } from "../api/client";
 import type { ChangeSummary } from "../api/types";
 import { StateBadge, StatusChip } from "../components/badges";
 import { timeAgo } from "../lib/time";
+import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
 
 function ChangeRow({ change }: { change: ChangeSummary }) {
+  const rowNav = useRowNav(`/changes/${change.id}`);
   const { counts } = change;
   return (
-    <tr>
+    <tr {...rowNav}>
       <td className="pos-cell mono">
         {change.position !== null ? change.position + 1 : "—"}
       </td>

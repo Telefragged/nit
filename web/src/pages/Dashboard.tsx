@@ -1,27 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { listChains } from "../api/client";
 import type { Chain } from "../api/types";
 import { StateBadge, StatusDot } from "../components/badges";
 import { timeAgo } from "../lib/time";
+import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
 
 const basename = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
 function ChainRow({ chain }: { chain: Chain }) {
-  const navigate = useNavigate();
+  const rowNav = useRowNav(`/chains/${chain.id}`);
   return (
-    <tr
-      onClick={() => navigate(`/chains/${chain.id}`)}
-      style={{ cursor: "pointer" }}
-    >
+    <tr {...rowNav}>
       <td className="branch-cell">
         <div>
-          <Link
-            className="branch"
-            to={`/chains/${chain.id}`}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <Link className="branch" to={`/chains/${chain.id}`}>
             {chain.branch}
           </Link>
           {chain.last_scan_error ? (
@@ -44,11 +38,7 @@ function ChainRow({ chain }: { chain: Chain }) {
       <td>
         <div className="dots">
           {chain.changes.map((change) => (
-            <Link
-              key={change.id}
-              to={`/changes/${change.id}`}
-              onClick={(e) => e.stopPropagation()}
-            >
+            <Link key={change.id} to={`/changes/${change.id}`}>
               <StatusDot
                 status={change.status}
                 title={`${(change.position ?? 0) + 1}. ${change.subject} — ${change.status}`}
