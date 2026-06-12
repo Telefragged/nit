@@ -15,12 +15,16 @@ Concurrency guarantees behind these endpoints: docs/data-model.md
 ## Chains
 - `POST /api/chains` — register or refresh (idempotent; this is `nit push`)
   ```json
-  req:  {"repo_path": "/abs/path", "branch": "feat/x", "base": "main"}
+  req:  {"repo_path": "/abs/path", "branch": "feat/x", "base": "main",
+         "partial": true}
   resp: Chain (below)
   ```
   `repo_path` is canonicalized; the repo row is auto-created. 400 if the
   repo/branch/base can't be resolved at registration. A scan failure on an
   *existing* chain is not an HTTP error: it appears as `last_scan_error`.
+  `partial` is optional and sticky across pushes: `true` marks the chain
+  partial (`nit push --partial`), `false` clears it (`nit ready`),
+  absent leaves it unchanged. New chains default to not-partial.
 - `GET /api/chains?status=active` → `{"chains": [Chain]}` — dashboard.
   Runs (throttled) scans first; a chain whose scan fails is still listed
   with its previous state plus `last_scan_error`. `status` defaults to
@@ -32,6 +36,7 @@ Chain = {
   "id": 1, "repo_path": "/abs/path", "branch": "feat/x", "base": "main",
   "status": "active",            // active | merged | abandoned
   "state": "waiting_for_review", // derived — see state table below
+  "partial": false,              // sticky; set by push --partial, cleared by ready
   "last_scan_error": null,       // string when the last scan failed
   "scan_warnings": [],           // e.g. duplicate Change-Id, squash! seen
   "web_url": "http://127.0.0.1:8877/chains/1",
@@ -187,7 +192,7 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
     "state": "agents_turn",   // see state table
     "actionable": true,
     "chain": {"id": 1, "branch": "feat/x", "base": "main", "web_url": "…",
-              "last_scan_error": null, "scan_warnings": []},
+              "partial": false, "last_scan_error": null, "scan_warnings": []},
     "changes": [               // live changes, chain order
       {"change_id": 10, "change_key": "I3f2…", "subject": "…",
        "commit_sha": "…", "revision": 2, "status": "changes_requested",
@@ -213,8 +218,8 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
 | state                | meaning                                   | actionable |
 |----------------------|-------------------------------------------|------------|
 | `waiting_for_review` | reviewer's turn; nothing for the agent    | false      |
-| `agents_turn`        | request_changes/commented/needs_rebase on a latest revision, or empty chain | true |
-| `ready_to_merge`     | every live change approved (≥1)           | true       |
+| `agents_turn`        | request_changes/commented/needs_rebase on a latest revision, empty chain, or all approved while `partial` (agent still pushing — `ready_to_merge` is inexpressible while the flag is set) | true |
+| `ready_to_merge`     | every live change approved (≥1) and the chain is not `partial` | true |
 | `merged`             | chain closed: work is in the base         | true       |
 | `abandoned`          | chain closed: branch disappeared          | true       |
 

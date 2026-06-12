@@ -9,9 +9,12 @@ rows are status-flagged and every status is re-derivable by a later scan.
 
 ```sql
 repos     (id, path UNIQUE, created_at)
-chains    (id, repo_id, branch, base, status, last_scan_error,
+chains    (id, repo_id, branch, base, status, partial, last_scan_error,
            created_at, updated_at, UNIQUE(repo_id, branch))
            -- status: active | merged | abandoned   (all re-derivable)
+           -- partial: sticky more-commits-coming bool; set/cleared only by
+           --   registration (push --partial / ready), never by scans;
+           --   a flip emits chain_updated but never bumps updated_at
            -- last_scan_error: NULL or human-readable scan failure
 changes   (id, chain_id, change_key, position, status,
            UNIQUE(chain_id, change_key))
@@ -48,10 +51,11 @@ recomputed each rescan and held in memory only — they are not persisted.
 
 ## Concurrency (normative)
 
-- One **per-chain async mutex** serializes every scan of a chain *and* every
-  review submission to it. No revision insert, status flip, or 409 check
-  happens outside it.
-- Each scan / review-submit runs in **one transaction** (`BEGIN IMMEDIATE`).
+- One **per-chain async mutex** serializes every scan of a chain, every
+  review submission to it, and every registration `partial` write. No revision
+  insert, status flip, partial flip, or 409 check happens outside it.
+- Each scan / review-submit / `partial` write runs in **one transaction**
+  (`BEGIN IMMEDIATE`).
 - Scans are throttled: a scan that finished < 2s ago is not repeated; reads
   serve current DB state instead of waiting on a running scan.
 - A failed scan **never** partially reconciles: the transaction rolls back,
@@ -171,7 +175,9 @@ chain state (derived, not stored):
          any live change changes_requested | commented | needs_rebase
                                           → agents_turn
          else any live change pending     → waiting_for_review
-         else all approved (≥1 change)    → ready_to_merge
+         else all approved (≥1 change)    → agents_turn if the chain is
+                                            partial (still pushing), else
+                                            ready_to_merge
          else (no live changes)           → agents_turn   (empty chain)
 
 chain status (stored): active | merged | abandoned  — scan step 1; closed
