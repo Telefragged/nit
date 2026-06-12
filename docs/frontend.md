@@ -49,12 +49,15 @@ happens.
     their `rendered_line`; comments with `outdated: true` group at the top
     of their file with their `line_text` excerpt; drafts get a dashed
     border + `DRAFT` tag and edit/delete;
-  - review bar (sticky bottom): draft count, unresolved count,
-    cover-message input, buttons `Approve` / `Request changes` / `Comment`
-    → POST review, then navigate to the next pending change in the chain
-    (or back to the chain). On a 409 (agent pushed meanwhile): keep the
-    cover message and drafts, refetch, show "new revision landed", re-offer
-    submit.
+  - review bar (sticky bottom): draft count, unresolved count, and a
+    `Review (a)` button (shortcut `a`) opening the reply modal:
+    cover-message textarea, buttons `Approve` / `Request changes` /
+    `Comment` → POST review, then navigate to the next pending change in
+    the chain (or back to the chain). Escape / backdrop click close it
+    (confirm before discarding a typed message; drafts live server-side
+    and are kept). On a 409 (agent pushed meanwhile): the modal stays
+    open, keeps the cover message and drafts, refetches, shows "new
+    revision landed", re-offers submit.
 - 404/error states: plain message + link home. Loading: skeleton rows, no
   spinner-only screens.
 
@@ -65,7 +68,7 @@ mono font for code/shas (`ui-monospace` stack), sans for chrome. Amber =
 needs reviewer, blue = agent working, green = approved/ready, red =
 changes requested/deletions. Compact paddings; no marketing fluff; every
 piece of chrome must earn its pixels. Keyboard shortcuts (`[`/`]` file nav,
-`n`/`p` change nav) are welcome but optional in v1.
+`n`/`p` change nav, `a` reply modal) are welcome but optional in v1.
 
 ## Mock mode (UI work without a backend)
 

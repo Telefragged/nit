@@ -464,7 +464,7 @@ table.list tbody tr:hover {
 /* ---------------------------------------------------------- review page */
 
 .review-page {
-  padding-bottom: 110px;
+  padding-bottom: 56px; /* room for the fixed single-row review bar */
 }
 
 .review-header {
@@ -1058,7 +1058,7 @@ tr.meta-row td {
   margin: 6px 0 0 24px;
 }
 
-/* review bar */
+/* review bar + reply modal */
 
 .review-bar {
   position: fixed;
@@ -1070,24 +1070,76 @@ tr.meta-row td {
   border-top: 1px solid var(--border-strong);
   padding: 8px 16px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.review-conflict {
-  margin-bottom: 0;
-}
-.review-bar-controls {
-  display: flex;
-  gap: 10px;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
-.review-bar-controls .stats {
+.review-stats {
   display: flex;
   gap: 12px;
   font-size: 12px;
   white-space: nowrap;
 }
-.review-bar-controls input {
+/* Full-bleed <dialog>: it paints the dim itself and is its own backdrop,
+   so backdrop presses hit the dialog element (not the inner box). Rendered
+   in the top layer by showModal(), hence no z-index. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: rgba(1, 4, 9, 0.62);
+}
+.modal-backdrop[open] {
+  /* gate on [open] so the UA's display:none for a closed dialog holds */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-backdrop::backdrop {
+  background: transparent;
+}
+.reply-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 560px;
+  max-width: calc(100vw - 48px);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+}
+.reply-modal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.review-conflict {
+  margin-bottom: 0;
+}
+.reply-modal .banner strong {
+  flex: none; /* keep the banner label on one line in the narrow dialog */
+}
+.reply-modal textarea {
+  width: 100%;
+  min-height: 96px;
+}
+.reply-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.reply-modal-actions .spacer {
   flex: 1;
 }
 .btn-approve {

@@ -191,6 +191,7 @@ export default function ReviewPage() {
   const editorDirty = useRef(false);
   const [activeFile, setActiveFile] = useState<number | null>(null);
   const [changeCommentOpen, setChangeCommentOpen] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
   const queryClient = useQueryClient();
 
   // --- derive revision/diff mode (before any early return: no hooks below)
@@ -264,9 +265,13 @@ export default function ReviewPage() {
     },
   });
 
-  // Keyboard nav: [ / ] previous/next file, n / p next/previous change.
+  // Keyboard nav: [ / ] previous/next file, n / p next/previous change,
+  // a opens the reply modal. All inert while the modal is open — it is a
+  // showModal() dialog, so it owns the keyboard (Escape arrives as its
+  // cancel event) and the page behind it is inert.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (replyOpen) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
@@ -292,11 +297,16 @@ export default function ReviewPage() {
         if (idx < 0) return;
         const next = live[idx + (e.key === "n" ? 1 : -1)];
         if (next) navigate(`/changes/${next.id}`);
+      } else if (e.key === "a") {
+        // preventDefault, or the keystroke's own text insertion lands in
+        // the cover-message textarea the opening modal focuses.
+        e.preventDefault();
+        setReplyOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fileCount, chainChanges, change, navigate]);
+  }, [fileCount, chainChanges, change, navigate, replyOpen]);
 
   const files = diffQ.data?.files ?? [];
   const threadsByFile = useMemo(() => {
@@ -449,11 +459,11 @@ export default function ReviewPage() {
             </button>
             <span
               className="kbd-hint"
-              title="Keyboard: [ and ] switch files, n and p switch changes"
+              title="Keyboard: [ and ] switch files, n and p switch changes, a opens the reply dialog"
             >
               <kbd>[</kbd>
               <kbd>]</kbd> files · <kbd>n</kbd>
-              <kbd>p</kbd> changes
+              <kbd>p</kbd> changes · <kbd>a</kbd> reply
             </span>
             <span className="seg">
               <button
@@ -572,7 +582,13 @@ export default function ReviewPage() {
           </div>
         </div>
 
-        <ReviewBar change={change} chain={chain} selectedRevision={selected} />
+        <ReviewBar
+          change={change}
+          chain={chain}
+          selectedRevision={selected}
+          replyOpen={replyOpen}
+          onReplyOpenChange={setReplyOpen}
+        />
       </main>
     </ReviewContext.Provider>
   );

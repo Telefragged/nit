@@ -81,11 +81,28 @@ const captures = [
         .fill("Should revoke_family also bump the metrics counter?");
     },
   },
-  // Submitting against a stale revision → 409, drafts + message kept.
+  // Reply modal opened via the `a` shortcut, cover message typed. Typed
+  // key by key (not fill, which replaces content) so a shortcut keystroke
+  // leaking into the autofocused textarea would show up in the capture.
+  {
+    name: "review-modal",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await page.keyboard.press("a");
+      await page
+        .getByPlaceholder("Cover message (published with the verdict)…")
+        .pressSequentially("Nice cleanup — two nits inline, otherwise ready.");
+    },
+  },
+  // Submitting against a stale revision → 409 inside the modal, which
+  // stays open with drafts + message kept.
   {
     name: "review-409",
     path: "/changes/11?revision=1",
+    fullPage: false,
     actions: async (page) => {
+      await page.getByRole("button", { name: "Review (a)" }).click();
       await page
         .getByPlaceholder("Cover message (published with the verdict)…")
         .fill("Looks good overall, minor nits.");
@@ -170,10 +187,13 @@ async function main() {
       await page.goto(baseUrl + cap.path, { waitUntil: "networkidle" });
       if (cap.actions) await cap.actions(page);
       // Fixed elements repeat confusingly in full-page captures; pin the
-      // review bar to the end of the document instead.
-      await page.addStyleTag({
-        content: ".review-bar { position: static !important; }",
-      });
+      // review bar to the end of the document instead. Viewport captures
+      // keep it fixed so bar + modal render as they really stack.
+      if (cap.fullPage ?? true) {
+        await page.addStyleTag({
+          content: ".review-bar { position: static !important; }",
+        });
+      }
       await page.waitForTimeout(150); // settle fonts/highlighting
       const file = resolve(outDir, `${cap.name}.png`);
       await page.screenshot({ path: file, fullPage: cap.fullPage ?? true });
