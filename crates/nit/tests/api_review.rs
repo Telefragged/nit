@@ -393,8 +393,9 @@ fn request_validation() {
     );
     assert_eq!(st, 400, "{e}");
 
-    // Comments: resolving a draft is a 400; replying to a draft is a 404;
-    // resolving a reply is a 400 (root comments only).
+    // Comments: a draft is not a published comment, so resolving or replying
+    // to one is a 404; resolving a reply is a 400 (root comments only). The
+    // draft's id is stable: it becomes the published comment's id on submit.
     let (_, draft) = http_post(
         &drafts_url,
         &json!({"revision": 1, "file": "x.txt", "line": 1, "body": "root"}),
@@ -404,7 +405,7 @@ fn request_validation() {
         &server.url(&format!("/api/comments/{draft_id}/resolve")),
         &json!({}),
     );
-    assert_eq!(st, 400);
+    assert_eq!(st, 404);
     let (st, _) = http_post(
         &server.url(&format!("/api/comments/{draft_id}/replies")),
         &json!({"body": "hi"}),

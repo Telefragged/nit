@@ -5,7 +5,7 @@
 mod common;
 
 use common::{Fixture, msg};
-use nit::db::{ChainStatus, ChangeStatus};
+use nit::review::{ChainStatus, Status};
 
 fn ts(secs: i64) -> jiff::Timestamp {
     jiff::Timestamp::from_second(secs).unwrap()
@@ -13,7 +13,7 @@ fn ts(secs: i64) -> jiff::Timestamp {
 
 fn keep_ref_count(f: &Fixture) -> usize {
     f.repo
-        .references_glob(&format!("refs/nit/keep/{}/*", f.chain_id))
+        .references_glob(&format!("refs/nit/keep/{}/*", f.proj.chain_id))
         .unwrap()
         .count()
 }
@@ -29,21 +29,19 @@ fn fast_forward_merge_closes_chain() {
 
     // The agent fast-forwards main to the chain tip.
     f.branch("main", c2);
-    let outcome = f.scan();
-    assert!(outcome.updated);
-    assert_eq!(outcome.chain.status, ChainStatus::Merged);
-    assert_eq!(f.events("chain_closed"), 1);
+    assert!(!f.scan().entries.is_empty());
+    assert_eq!(f.status(), ChainStatus::Merged);
+    assert_eq!(f.appended("chain_closed"), 1);
     assert_eq!(keep_ref_count(&f), 0, "keep refs deleted on close");
 
-    // Change rows stay untouched (review history preserved).
+    // Changes stay untouched (review history preserved).
     let changes = f.changes();
     assert_eq!(changes.len(), 2);
-    assert!(changes.iter().all(|c| c.status != ChangeStatus::Orphaned));
+    assert!(changes.iter().all(|c| !c.orphaned));
 
     // Idempotent: scanning a closed chain again is a no-op.
-    let outcome = f.scan();
-    assert!(!outcome.updated);
-    assert_eq!(f.events("chain_closed"), 1);
+    assert!(f.scan().entries.is_empty());
+    assert_eq!(f.appended("chain_closed"), 1);
 }
 
 #[test]
@@ -57,8 +55,8 @@ fn merge_commit_on_main_closes_chain() {
     // True merge commit on main; feat still points at c2.
     let m = f.commit(&[f.root, c2], "Merge feat\n", &[]);
     f.branch("main", m);
-    let outcome = f.scan();
-    assert_eq!(outcome.chain.status, ChainStatus::Merged);
+    f.scan();
+    assert_eq!(f.status(), ChainStatus::Merged);
 }
 
 #[test]
@@ -68,13 +66,13 @@ fn squash_merge_of_single_change_closes_chain() {
     f.branch("feat", c1);
     f.scan();
 
-    // Squash-merge: same diff under a new commit, then the agent resets
-    // the branch onto main. The patch-id quorum recognises the content.
+    // Squash-merge: same diff under a new commit, then the agent resets the
+    // branch onto main. The patch-id quorum recognises the content.
     let s = f.commit(&[f.root], "one (squashed)\n", &[("a.txt", "a\n")]);
     f.branch("main", s);
     f.branch("feat", s);
-    let outcome = f.scan();
-    assert_eq!(outcome.chain.status, ChainStatus::Merged);
+    f.scan();
+    assert_eq!(f.status(), ChainStatus::Merged);
 }
 
 #[test]
@@ -87,11 +85,10 @@ fn reset_to_base_is_an_empty_active_chain_not_merged() {
 
     // tip == base but nothing landed in main: an agent rebuild, not a merge.
     f.branch("feat", f.root);
-    let outcome = f.scan();
-    assert_eq!(outcome.chain.status, ChainStatus::Active);
-    assert_eq!(f.events("chain_closed"), 0);
-    let changes = f.changes();
-    assert!(changes.iter().all(|c| c.status == ChangeStatus::Orphaned));
+    f.scan();
+    assert_eq!(f.status(), ChainStatus::Active);
+    assert_eq!(f.appended("chain_closed"), 0);
+    assert!(f.changes().iter().all(|c| c.orphaned));
 }
 
 #[test]
@@ -102,25 +99,18 @@ fn merged_chain_reopens_on_new_commits() {
     f.scan();
     f.branch("main", c1); // ff merge
     f.scan();
-    assert_eq!(f.chain().status, ChainStatus::Merged);
+    assert_eq!(f.status(), ChainStatus::Merged);
 
     // New work on the same branch name reopens the chain.
     let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
     f.branch("feat", c2);
-    let outcome = f.scan();
-    assert_eq!(outcome.chain.status, ChainStatus::Active);
-    assert!(outcome.updated);
+    assert!(!f.scan().entries.is_empty());
+    assert_eq!(f.status(), ChainStatus::Active);
 
     let changes = f.changes();
     assert_eq!(changes.len(), 2);
-    let one = changes.iter().find(|c| c.change_key == "I001").unwrap();
-    assert_eq!(
-        one.status,
-        ChangeStatus::Orphaned,
-        "merged work left the walk"
-    );
-    let two = changes.iter().find(|c| c.change_key == "I002").unwrap();
-    assert_eq!(two.position, Some(0));
+    assert!(f.change("I001").orphaned, "merged work left the walk");
+    assert_eq!(f.change("I002").position, Some(0));
     assert_eq!(
         keep_ref_count(&f),
         2,
@@ -137,30 +127,26 @@ fn abandoned_only_after_two_scans_ten_seconds_apart() {
     f.delete_branch("feat");
 
     // First missing observation: recorded as a scan error, chain stays.
-    let outcome = f.scan_at(ts(2_000));
-    assert_eq!(outcome.chain.status, ChainStatus::Active);
-    assert_eq!(
-        outcome.chain.last_scan_error.as_deref(),
-        Some("branch 'feat' not found")
-    );
+    f.scan_at(ts(2_000));
+    assert_eq!(f.status(), ChainStatus::Active);
+    assert_eq!(f.scan_error().as_deref(), Some("branch 'feat' not found"));
 
     // Second scan too soon: still protected (mid-rebase window).
-    let outcome = f.scan_at(ts(2_005));
-    assert_eq!(outcome.chain.status, ChainStatus::Active);
+    f.scan_at(ts(2_005));
+    assert_eq!(f.status(), ChainStatus::Active);
 
     // ≥ 10s after the *first* missing observation: abandoned.
-    let outcome = f.scan_at(ts(2_011));
-    assert_eq!(outcome.chain.status, ChainStatus::Abandoned);
-    assert_eq!(outcome.chain.last_scan_error, None);
-    assert_eq!(f.events("chain_closed"), 1);
+    f.scan_at(ts(2_011));
+    assert_eq!(f.status(), ChainStatus::Abandoned);
+    assert_eq!(f.scan_error(), None);
+    assert_eq!(f.appended("chain_closed"), 1);
     assert_eq!(keep_ref_count(&f), 0);
 
     // Further scans with the branch still gone stay quiet.
     let outcome = f.scan_at(ts(2_100));
-    assert!(!outcome.updated);
-    assert_eq!(outcome.chain.status, ChainStatus::Abandoned);
-    assert_eq!(outcome.chain.last_scan_error, None);
-    assert_eq!(f.events("chain_closed"), 1);
+    assert!(outcome.entries.is_empty());
+    assert_eq!(f.status(), ChainStatus::Abandoned);
+    assert_eq!(f.appended("chain_closed"), 1);
 }
 
 #[test]
@@ -174,21 +160,17 @@ fn branch_reappearing_resets_the_missing_window() {
     f.delete_branch("feat");
     f.scan_at(ts(2_000));
     f.branch("feat", c1);
-    let outcome = f.scan_at(ts(2_004));
-    assert_eq!(outcome.chain.status, ChainStatus::Active);
-    assert_eq!(outcome.chain.last_scan_error, None);
+    f.scan_at(ts(2_004));
+    assert_eq!(f.status(), ChainStatus::Active);
+    assert_eq!(f.scan_error(), None);
 
     // Vanishes again: the 10s window restarts from this observation.
     f.delete_branch("feat");
     f.scan_at(ts(3_000));
-    let outcome = f.scan_at(ts(3_005));
-    assert_eq!(
-        outcome.chain.status,
-        ChainStatus::Active,
-        "window restarted"
-    );
-    let outcome = f.scan_at(ts(3_011));
-    assert_eq!(outcome.chain.status, ChainStatus::Abandoned);
+    f.scan_at(ts(3_005));
+    assert_eq!(f.status(), ChainStatus::Active, "window restarted");
+    f.scan_at(ts(3_011));
+    assert_eq!(f.status(), ChainStatus::Abandoned);
 }
 
 #[test]
@@ -197,26 +179,23 @@ fn abandoned_chain_reopens_when_branch_returns() {
     let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     f.branch("feat", c1);
     f.scan_at(ts(1_000));
-    let change = f.changes().remove(0);
-    f.review(change.id, "approve");
+    f.review("I001", "approve");
 
     f.delete_branch("feat");
     f.scan_at(ts(2_000));
     f.scan_at(ts(2_011));
-    assert_eq!(f.chain().status, ChainStatus::Abandoned);
+    assert_eq!(f.status(), ChainStatus::Abandoned);
 
     f.branch("feat", c1);
-    let outcome = f.scan_at(ts(3_000));
-    assert_eq!(outcome.chain.status, ChainStatus::Active);
-    let changes = f.changes();
-    assert_eq!(changes[0].id, change.id);
+    f.scan_at(ts(3_000));
+    assert_eq!(f.status(), ChainStatus::Active);
     assert_eq!(
-        changes[0].status,
-        ChangeStatus::Approved,
+        f.change("I001").status,
+        Status::Approved,
         "review state intact"
     );
     assert_eq!(
-        f.latest_rev(change.id).number,
+        f.change("I001").latest_revision().unwrap().number,
         1,
         "same commit: no new revision"
     );
@@ -234,10 +213,9 @@ fn merged_despite_amend_context_drift() {
     f.branch("feat", c2);
     f.scan();
 
-    // The agent amends change one in place (A1 → A2), rebases change two
-    // on top, and ff-merges without an intermediate scan. Both stored
-    // diffs now differ from what landed (A2 context, not A1) — their
-    // patch-ids drifted; only the Change-Id trailers still match.
+    // The agent amends change one (A1 → A2), rebases change two on top, and
+    // ff-merges without an intermediate scan. Both stored diffs now differ
+    // from what landed; only the Change-Id trailers still match.
     let c1r = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A2\nb\nc\nd\ne\n")]);
     let c2r = f.commit(
         &[c1r],
@@ -246,7 +224,8 @@ fn merged_despite_amend_context_drift() {
     );
     f.branch("feat", c2r);
     f.branch("main", c2r);
-    assert_eq!(f.scan().chain.status, ChainStatus::Merged);
+    f.scan();
+    assert_eq!(f.status(), ChainStatus::Merged);
 }
 
 #[test]
@@ -262,13 +241,9 @@ fn orphaned_chain_still_detects_merge() {
     // Agent rebuilds from scratch: reset-to-base must NOT read as merged,
     // and orphans every change.
     f.branch("feat", b0);
-    let outcome = f.scan();
-    assert_eq!(outcome.chain.status, ChainStatus::Active);
-    assert!(
-        f.changes()
-            .iter()
-            .all(|c| c.status == ChangeStatus::Orphaned)
-    );
+    f.scan();
+    assert_eq!(f.status(), ChainStatus::Active);
+    assert!(f.changes().iter().all(|c| c.orphaned));
 
     // The work lands on main anyway (rebased elsewhere); even with every
     // change orphaned the trailer quorum must recognize the merge.
@@ -280,7 +255,8 @@ fn orphaned_chain_still_detects_merge() {
     );
     f.branch("feat", c2r);
     f.branch("main", c2r);
-    assert_eq!(f.scan().chain.status, ChainStatus::Merged);
+    f.scan();
+    assert_eq!(f.status(), ChainStatus::Merged);
 }
 
 #[test]
@@ -289,28 +265,33 @@ fn orphan_reattach_keeps_approval_carried_across_pure_rebase() {
     let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     f.branch("feat", c1);
     f.scan();
-    let change = f.changes().remove(0);
-    f.review(change.id, "approve");
+    f.review("I001", "approve");
 
-    // Pure rebase onto a moved main: revision 2, approval carried by
-    // scan rule 6 while the review row stays on revision 1.
+    // Pure rebase onto a moved main: revision 2, approval carried while the
+    // review row stays on revision 1.
     let m1 = f.commit(&[f.root], "main moves\n", &[("m.txt", "m\n")]);
     f.branch("main", m1);
     let c1r = f.commit(&[m1], &msg("one", "I001"), &[("a.txt", "a\n")]);
     f.branch("feat", c1r);
     f.scan();
-    let row = f.changes().remove(0);
-    assert_eq!(row.status, ChangeStatus::Approved);
-    assert_eq!(f.latest_rev(row.id).number, 2);
+    assert_eq!(f.change("I001").status, Status::Approved);
+    assert_eq!(f.change("I001").latest_revision().unwrap().number, 2);
 
-    // Orphan (rebuild from base) and restore the exact rebased commit:
-    // the pre-orphan status must come back as approved, not pending.
+    // Orphan (rebuild from base) and restore the exact rebased commit: the
+    // retained status must come back as approved, not pending.
     f.branch("feat", m1);
     f.scan();
-    assert_eq!(f.changes()[0].status, ChangeStatus::Orphaned);
+    assert!(f.change("I001").orphaned);
     f.branch("feat", c1r);
     f.scan();
-    let row = f.changes().remove(0);
-    assert_eq!(row.status, ChangeStatus::Approved, "approval survived");
-    assert_eq!(f.latest_rev(row.id).number, 2, "no spurious revision");
+    assert_eq!(
+        f.change("I001").status,
+        Status::Approved,
+        "approval survived"
+    );
+    assert_eq!(
+        f.change("I001").latest_revision().unwrap().number,
+        2,
+        "no spurious revision"
+    );
 }

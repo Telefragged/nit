@@ -12,9 +12,10 @@
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use git2::{Oid, Repository, RepositoryInitOptions, Signature, Time};
-use nit::db::{self, ChangeStatus};
-use nit::gitscan::{self, ScanOutcome};
-use rusqlite::Connection;
+use nit::db::ChainRow;
+use nit::gitscan::{self, ScanResult};
+use nit::review::{self, ChainStatus, ChangeProj, Entry, Projection};
+use serde_json::{Value, json};
 
 /// Strictly increasing commit timestamps so equal-content commits get
 /// distinct shas.
@@ -25,11 +26,16 @@ pub fn sig() -> Signature<'static> {
     Signature::new("Test", "test@example.com", &Time::new(t, 0)).unwrap()
 }
 
+/// A scan/fold fixture: a real git repo plus the in-memory [`Projection`]
+/// the server keeps, driven directly (no HTTP). `scan()` runs the pure
+/// `gitscan::scan`, applies its transient state, and folds its entries into
+/// the projection — the same sequence the server layer performs.
 pub struct Fixture {
     pub dir: tempfile::TempDir,
     pub repo: Repository,
-    pub conn: Connection,
-    pub chain_id: i64,
+    pub proj: Projection,
+    next_id: u64,
+    appended: Vec<String>,
     /// First commit on `main`.
     pub root: Oid,
 }
@@ -40,27 +46,29 @@ impl Fixture {
         let mut opts = RepositoryInitOptions::new();
         opts.initial_head("refs/heads/main");
         let repo = Repository::init_opts(dir.path().join("repo"), &opts).unwrap();
-        let conn = db::open(&dir.path().join("nit.sqlite3")).unwrap();
 
         let root = commit_in(&repo, &[], "init\n", &[("README", "hello\n")]);
         repo.reference("refs/heads/main", root, true, "test")
             .unwrap();
 
-        let repo_row =
-            db::get_or_create_repo(&conn, repo.path().parent().unwrap().to_str().unwrap()).unwrap();
-        let chain = db::get_or_create_chain(&conn, repo_row.id, "feat", "main").unwrap();
+        let repo_path = repo.workdir().unwrap().to_str().unwrap().to_string();
+        let chain = ChainRow {
+            id: 1,
+            repo_path,
+            branch: "feat".to_string(),
+            base: "main".to_string(),
+            created_at: "t0".to_string(),
+        };
         Fixture {
             dir,
             repo,
-            conn,
-            chain_id: chain.id,
+            proj: Projection::empty(&chain),
+            next_id: 1000,
+            appended: Vec::new(),
             root,
         }
     }
 
-    /// Create a commit (object only; point a branch at it with
-    /// [`Fixture::branch`]). `files` upserts paths at the repo root onto
-    /// the first parent's tree.
     pub fn commit(&self, parents: &[Oid], message: &str, files: &[(&str, &str)]) -> Oid {
         commit_in(&self.repo, parents, message, files)
     }
@@ -87,51 +95,79 @@ impl Fixture {
             .unwrap()
     }
 
-    pub fn scan(&mut self) -> ScanOutcome {
-        gitscan::scan(&mut self.conn, self.chain_id).unwrap()
+    /// Run a scan and apply it to the projection; returns the raw result.
+    pub fn scan(&mut self) -> ScanResult {
+        self.scan_at(jiff::Timestamp::now())
     }
 
-    pub fn scan_at(&mut self, now: jiff::Timestamp) -> ScanOutcome {
-        gitscan::scan_at(&mut self.conn, self.chain_id, now).unwrap()
-    }
-
-    pub fn changes(&self) -> Vec<db::Change> {
-        db::changes_for_chain(&self.conn, self.chain_id).unwrap()
-    }
-
-    pub fn latest_rev(&self, change_id: i64) -> db::Revision {
-        db::latest_revision(&self.conn, change_id).unwrap().unwrap()
-    }
-
-    pub fn chain(&self) -> db::Chain {
-        db::get_chain(&self.conn, self.chain_id).unwrap().unwrap()
-    }
-
-    pub fn events(&self, kind: &str) -> usize {
-        db::events_for_chain(&self.conn, self.chain_id)
-            .unwrap()
-            .iter()
-            .filter(|e| e.kind == kind)
-            .count()
-    }
-
-    /// Simulate a review submission the way the server layer will: review
-    /// row on the latest revision + change status flip.
-    pub fn review(&self, change_id: i64, verdict: &str) {
-        let rev = self.latest_rev(change_id);
-        let now = db::now_rfc3339();
-        db::insert_review(&self.conn, change_id, rev.number, verdict, "msg", &now).unwrap();
-        let status = match verdict {
-            "approve" => ChangeStatus::Approved,
-            "request_changes" => ChangeStatus::ChangesRequested,
-            _ => ChangeStatus::Commented,
+    pub fn scan_at(&mut self, now: jiff::Timestamp) -> ScanResult {
+        let mut next = self.next_id;
+        let mut alloc = || {
+            let id = next;
+            next += 1;
+            id
         };
-        let row = self
-            .changes()
-            .into_iter()
-            .find(|c| c.id == change_id)
-            .unwrap();
-        db::change_set_position_status(&self.conn, change_id, row.position, status).unwrap();
+        let result = gitscan::scan(&self.proj, now, &mut alloc);
+        self.next_id = next;
+        self.proj.last_scan_error.clone_from(&result.error);
+        self.proj
+            .branch_missing_since
+            .clone_from(&result.branch_missing_since);
+        for e in &result.entries {
+            self.fold(e.kind, e.payload.clone());
+        }
+        result
+    }
+
+    /// Live changes (chain order, orphans last).
+    pub fn changes(&self) -> Vec<&ChangeProj> {
+        self.proj.changes_ordered()
+    }
+
+    pub fn change(&self, key: &str) -> &ChangeProj {
+        self.proj
+            .change_by_key(key)
+            .unwrap_or_else(|| panic!("change {key} not found"))
+    }
+
+    pub fn status(&self) -> ChainStatus {
+        self.proj.status
+    }
+
+    pub fn state(&self) -> &'static str {
+        review::derive_state(&self.proj)
+    }
+
+    pub fn scan_error(&self) -> Option<String> {
+        self.proj.last_scan_error.clone()
+    }
+
+    /// Count of appended entries of a kind (`revisions`, `chain_closed`, …).
+    pub fn appended(&self, kind: &str) -> usize {
+        self.appended.iter().filter(|k| *k == kind).count()
+    }
+
+    /// Fold a reviewer verdict into the projection (no comments).
+    pub fn review(&mut self, key: &str, verdict: &str) {
+        let revision = self.change(key).latest_revision().map_or(1, |r| r.number);
+        let review_id = self.next_id;
+        self.next_id += 1;
+        let payload = json!({
+            "change_key": key, "review_id": review_id, "revision": revision,
+            "verdict": verdict, "message": "msg", "comments": [],
+        });
+        self.fold("review", payload);
+    }
+
+    fn fold(&mut self, kind: &str, payload: Value) {
+        let entry = Entry {
+            idx: self.proj.head,
+            kind: kind.to_string(),
+            payload,
+            created_at: format!("t{}", self.proj.head + 1),
+        };
+        review::fold(&mut self.proj, &entry).unwrap();
+        self.appended.push(kind.to_string());
     }
 }
 
@@ -363,6 +399,49 @@ fn read(mut response: ureq::http::Response<ureq::Body>) -> (u16, serde_json::Val
 
 pub fn http_get(url: &str) -> (u16, serde_json::Value) {
     read(agent().get(url).call().unwrap())
+}
+
+/// Connect to an SSE endpoint and collect up to `max` `data:` events,
+/// giving up after `idle` with no new bytes (keep-alive comments and other
+/// fields are skipped). Each event's data is parsed as JSON.
+pub fn sse_collect(url: &str, max: usize, idle: std::time::Duration) -> Vec<serde_json::Value> {
+    use std::io::BufRead;
+    let agent = ureq::config::Config::builder()
+        .http_status_as_error(false)
+        .timeout_recv_body(Some(idle))
+        .build()
+        .new_agent();
+    let resp = agent.get(url).call().unwrap();
+    let mut reader = std::io::BufReader::new(resp.into_body().into_reader());
+    let mut out = Vec::new();
+    let (mut data, mut have, mut line) = (String::new(), false, String::new());
+    loop {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => break, // EOF or idle timeout
+            Ok(_) => {}
+        }
+        let l = line.trim_end_matches(['\r', '\n']);
+        if l.is_empty() {
+            if have {
+                if let Ok(v) = serde_json::from_str(&data) {
+                    out.push(v);
+                }
+                if out.len() >= max {
+                    break;
+                }
+                data.clear();
+                have = false;
+            }
+        } else if let Some(rest) = l.strip_prefix("data:") {
+            if have {
+                data.push('\n');
+            }
+            data.push_str(rest.strip_prefix(' ').unwrap_or(rest));
+            have = true;
+        }
+    }
+    out
 }
 
 pub fn http_post(url: &str, body: &serde_json::Value) -> (u16, serde_json::Value) {

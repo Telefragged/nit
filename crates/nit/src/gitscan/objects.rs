@@ -4,8 +4,6 @@
 use anyhow::Result;
 use git2::{Commit, Oid, Repository, Tree};
 
-use crate::db;
-
 /// Patch-id of the empty diff: the sha1 of the empty string (the
 /// merged-test sentinel for trivially-matched empty diffs,
 /// docs/data-model.md "Scan algorithm").
@@ -27,7 +25,7 @@ pub fn tree_patch_id(repo: &Repository, old: &Tree, new: &Tree) -> Result<String
 ///
 /// # Errors
 /// When `commit` has no first parent or the diff fails.
-pub fn commit_patch_id(repo: &Repository, commit: &Commit) -> Result<String> {
+fn commit_patch_id(repo: &Repository, commit: &Commit) -> Result<String> {
     let parent_tree = commit.parent(0)?.tree()?;
     tree_patch_id(repo, &parent_tree, &commit.tree()?)
 }
@@ -42,7 +40,7 @@ pub fn sha_patch_id(repo: &Repository, sha: &str) -> Option<String> {
 
 /// Ref name pinning one revision's git objects against `git gc`.
 #[must_use]
-pub fn keep_ref_name(chain_id: i64, change_id: i64, revision_number: i64) -> String {
+pub fn keep_ref_name(chain_id: u64, change_id: u64, revision_number: u64) -> String {
     format!("refs/nit/keep/{chain_id}/{change_id}/{revision_number}")
 }
 
@@ -50,12 +48,18 @@ pub fn keep_ref_name(chain_id: i64, change_id: i64, revision_number: i64) -> Str
 /// commit — its parent (the diff's old side) is reachable through it.
 /// Best-effort: failures (e.g. objects already pruned) are logged, never
 /// fatal.
-pub fn ensure_keep_ref(repo: &Repository, chain_id: i64, change_id: i64, rev: &db::Revision) {
-    if let Err(err) = try_ensure_keep_ref(repo, chain_id, change_id, rev) {
+pub fn ensure_keep_ref(
+    repo: &Repository,
+    chain_id: u64,
+    change_id: u64,
+    number: u64,
+    commit_sha: &str,
+) {
+    if let Err(err) = try_ensure_keep_ref(repo, chain_id, change_id, number, commit_sha) {
         tracing::warn!(
             chain_id,
             change_id,
-            revision = rev.number,
+            revision = number,
             "cannot maintain keep ref: {err:#}"
         );
     }
@@ -63,12 +67,13 @@ pub fn ensure_keep_ref(repo: &Repository, chain_id: i64, change_id: i64, rev: &d
 
 fn try_ensure_keep_ref(
     repo: &Repository,
-    chain_id: i64,
-    change_id: i64,
-    rev: &db::Revision,
+    chain_id: u64,
+    change_id: u64,
+    number: u64,
+    commit_sha: &str,
 ) -> Result<()> {
-    let name = keep_ref_name(chain_id, change_id, rev.number);
-    let oid = Oid::from_str(&rev.commit_sha)?;
+    let name = keep_ref_name(chain_id, change_id, number);
+    let oid = Oid::from_str(commit_sha)?;
     let current = repo.find_reference(&name).ok().and_then(|r| r.target());
     if current != Some(oid) {
         // Writing the ref validates the target object exists.
@@ -79,7 +84,7 @@ fn try_ensure_keep_ref(
 
 /// Drop every keep ref of a chain — run by the scan that closes it
 /// (merged/abandoned). Best-effort.
-pub fn delete_chain_keep_refs(repo: &Repository, chain_id: i64) {
+pub fn delete_chain_keep_refs(repo: &Repository, chain_id: u64) {
     let glob = format!("refs/nit/keep/{chain_id}/*");
     let Ok(mut refs) = repo.references_glob(&glob) else {
         return;

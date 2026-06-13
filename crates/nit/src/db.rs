@@ -1,19 +1,21 @@
 //! `SQLite` persistence layer.
 //!
-//! Schema contract: `docs/data-model.md` ("Tables"). Review state only —
-//! git objects stay in the user's repos. Nothing is ever hard-deleted:
-//! rows are status-flagged and every status is re-derivable by a later
-//! scan.
+//! Schema contract: `docs/data-model.md` ("Tables"). The database stores
+//! only the append-only event `log` (plus `chains` registration identity
+//! and reviewer `drafts`); all reviewable state is the fold of the log
+//! (`crate::review`), held in memory and rebuilt by replay. Nothing in the
+//! log is ever mutated or deleted.
 //!
 //! [`open`] applies pragmas (WAL, `busy_timeout`, foreign keys ON) and runs
 //! `PRAGMA user_version` migrations. Row structs and focused query helpers
-//! live here; all multi-statement write flows (scans, review submission)
-//! are driven by callers inside a single transaction.
+//! live here; multi-statement write flows append under a caller-held
+//! transaction.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::Value;
 
 /// RFC3339 timestamp for "now" (UTC), the format stored in every
 /// `created_at`/`updated_at` column.
@@ -69,95 +71,52 @@ pub fn open(path: &Path) -> Result<Connection> {
 }
 
 const MIGRATIONS: &[&str] = &[
-    // v1: initial schema — docs/data-model.md "Tables".
+    // v1: the event-log schema — docs/data-model.md "Tables". Earlier
+    // pre-1.0 schemas (normalized changes/revisions/comments/reviews/events)
+    // are wiped: review state is re-derivable by re-pushing a branch, so the
+    // upgrade drops them and starts the log fresh.
     "
-    CREATE TABLE repos (
-      id         INTEGER PRIMARY KEY,
-      path       TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL
-    );
+    DROP TABLE IF EXISTS events;
+    DROP TABLE IF EXISTS comments;
+    DROP TABLE IF EXISTS reviews;
+    DROP TABLE IF EXISTS revisions;
+    DROP TABLE IF EXISTS changes;
+    DROP TABLE IF EXISTS chains;
+    DROP TABLE IF EXISTS repos;
     CREATE TABLE chains (
-      id              INTEGER PRIMARY KEY,
-      repo_id         INTEGER NOT NULL REFERENCES repos(id),
-      branch          TEXT NOT NULL,
-      base            TEXT NOT NULL,
-      status          TEXT NOT NULL DEFAULT 'active',
-      last_scan_error TEXT,
-      created_at      TEXT NOT NULL,
-      updated_at      TEXT NOT NULL,
-      UNIQUE (repo_id, branch)
-    );
-    CREATE TABLE changes (
       id         INTEGER PRIMARY KEY,
+      repo_path  TEXT NOT NULL,
+      branch     TEXT NOT NULL,
+      base       TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (repo_path, branch)
+    );
+    CREATE TABLE log (
       chain_id   INTEGER NOT NULL REFERENCES chains(id),
-      change_key TEXT NOT NULL,
-      position   INTEGER,            -- NULL while orphaned
-      status     TEXT NOT NULL DEFAULT 'pending',
-      UNIQUE (chain_id, change_key)
-    );
-    CREATE TABLE revisions (
-      id             INTEGER PRIMARY KEY,
-      change_id      INTEGER NOT NULL REFERENCES changes(id),
-      number         INTEGER NOT NULL, -- 1-based patchset number
-      commit_sha     TEXT NOT NULL,
-      parent_sha     TEXT NOT NULL,
-      effective_tree TEXT,             -- NULL = fold conflict
-      fixups         TEXT NOT NULL DEFAULT '[]', -- JSON [{sha, message}]
-      message        TEXT NOT NULL,
-      created_at     TEXT NOT NULL,
-      UNIQUE (change_id, number)
-    );
-    CREATE TABLE reviews (
-      id              INTEGER PRIMARY KEY,
-      change_id       INTEGER NOT NULL REFERENCES changes(id),
-      revision_number INTEGER NOT NULL,
-      verdict         TEXT NOT NULL,   -- approve | request_changes | comment
-      message         TEXT NOT NULL DEFAULT '',
-      created_at      TEXT NOT NULL
-    );
-    CREATE TABLE comments (
-      id              INTEGER PRIMARY KEY,
-      change_id       INTEGER NOT NULL REFERENCES changes(id),
-      revision_number INTEGER NOT NULL,
-      parent_id       INTEGER REFERENCES comments(id),
-      author          TEXT NOT NULL,   -- reviewer | agent
-      file            TEXT,
-      line            INTEGER,
-      side            TEXT NOT NULL DEFAULT 'new', -- old | new
-      line_text       TEXT,
-      body            TEXT NOT NULL,
-      state           TEXT NOT NULL DEFAULT 'draft', -- draft | published
-      resolved        INTEGER NOT NULL DEFAULT 0,
-      review_id       INTEGER REFERENCES reviews(id),
-      created_at      TEXT NOT NULL,
-      updated_at      TEXT NOT NULL
-    );
-    CREATE TABLE events (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT, -- monotonic cursor
-      chain_id   INTEGER NOT NULL REFERENCES chains(id),
+      idx        INTEGER NOT NULL,  -- 0-based, contiguous per chain
       kind       TEXT NOT NULL,
       payload    TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (chain_id, idx)
     );
-    ",
-    // v2: sticky partial flag — set/cleared only by registration
-    // (push --partial / ready), never by scans.
-    "
-    ALTER TABLE chains ADD COLUMN partial INTEGER NOT NULL DEFAULT 0;
-    ",
-    // v3: fixup! tracking removed — a revision's reviewed tree is its
-    // commit's own tree.
-    "
-    ALTER TABLE revisions DROP COLUMN effective_tree;
-    ALTER TABLE revisions DROP COLUMN fixups;
-    ",
-    // v4: optional selected-text anchor on line comments (docs/api.md
-    // "Range comments"); all four set or all NULL, range_end_line = line.
-    "
-    ALTER TABLE comments ADD COLUMN range_start_line INTEGER;
-    ALTER TABLE comments ADD COLUMN range_start_char INTEGER;
-    ALTER TABLE comments ADD COLUMN range_end_line INTEGER;
-    ALTER TABLE comments ADD COLUMN range_end_char INTEGER;
+    CREATE TABLE drafts (
+      id               INTEGER PRIMARY KEY,
+      chain_id         INTEGER NOT NULL REFERENCES chains(id),
+      change_key       TEXT NOT NULL,
+      revision         INTEGER NOT NULL,
+      parent_id        INTEGER,      -- published comment id (fold-assigned)
+      file             TEXT,
+      line             INTEGER,
+      side             TEXT NOT NULL DEFAULT 'new',
+      range_start_line INTEGER,
+      range_start_char INTEGER,
+      range_end_line   INTEGER,
+      range_end_char   INTEGER,
+      line_text        TEXT,
+      body             TEXT NOT NULL,
+      created_at       TEXT NOT NULL,
+      updated_at       TEXT NOT NULL
+    );
     ",
 ];
 
@@ -175,1424 +134,490 @@ fn migrate(conn: &Connection) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Enums
+// Range anchor (shared row + wire shape; docs/api.md "Range comments")
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChainStatus {
-    Active,
-    Merged,
-    Abandoned,
+/// Selected-text anchor of a line comment: 1-based lines on the comment's
+/// side, 0-based chars, `end_char` exclusive, `end_line` = the comment's
+/// `line`. `api::types` re-exports it — the JSON shape is these four
+/// fields. These are domain coordinates (always non-negative), so the
+/// shape is `u64`; the `SQLite` columns are signed, converted in
+/// [`map_draft`]/[`insert_draft`] like every other id (this is the
+/// DTO↔domain boundary).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CommentRange {
+    pub start_line: u64,
+    pub start_char: u64,
+    pub end_line: u64,
+    pub end_char: u64,
 }
 
-impl ChainStatus {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ChainStatus::Active => "active",
-            ChainStatus::Merged => "merged",
-            ChainStatus::Abandoned => "abandoned",
-        }
-    }
-
-    /// # Errors
-    /// When `s` is not a recognized status.
-    pub fn parse(s: &str) -> Result<Self> {
-        match s {
-            "active" => Ok(ChainStatus::Active),
-            "merged" => Ok(ChainStatus::Merged),
-            "abandoned" => Ok(ChainStatus::Abandoned),
-            other => Err(anyhow!("unknown chain status {other:?}")),
-        }
-    }
+/// Read a column written from a `u64` back as `u64`. Ids, indices and line
+/// numbers are stored in `SQLite`'s signed `INTEGER` (its only integer
+/// type); a stored negative would mean external corruption, surfaced as an
+/// out-of-range error, never a panic. This and [`col_u64_opt`] are the read
+/// half of the DTO↔domain boundary — `db.rs` speaks `u64`, `SQLite` `i64`.
+fn col_u64(v: i64) -> rusqlite::Result<u64> {
+    u64::try_from(v).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, v))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChangeStatus {
-    Pending,
-    Approved,
-    ChangesRequested,
-    Commented,
-    Orphaned,
-}
-
-impl ChangeStatus {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ChangeStatus::Pending => "pending",
-            ChangeStatus::Approved => "approved",
-            ChangeStatus::ChangesRequested => "changes_requested",
-            ChangeStatus::Commented => "commented",
-            ChangeStatus::Orphaned => "orphaned",
-        }
-    }
-
-    /// # Errors
-    /// When `s` is not a recognized status.
-    pub fn parse(s: &str) -> Result<Self> {
-        match s {
-            "pending" => Ok(ChangeStatus::Pending),
-            "approved" => Ok(ChangeStatus::Approved),
-            "changes_requested" => Ok(ChangeStatus::ChangesRequested),
-            "commented" => Ok(ChangeStatus::Commented),
-            "orphaned" => Ok(ChangeStatus::Orphaned),
-            other => Err(anyhow!("unknown change status {other:?}")),
-        }
-    }
+fn col_u64_opt(v: Option<i64>) -> rusqlite::Result<Option<u64>> {
+    v.map(col_u64).transpose()
 }
 
 // ---------------------------------------------------------------------------
-// Row structs
+// Chains (registration identity only)
 
 #[derive(Debug, Clone)]
-pub struct Repo {
-    pub id: i64,
-    pub path: String,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct Chain {
-    pub id: i64,
-    pub repo_id: i64,
+pub struct ChainRow {
+    pub id: u64,
+    pub repo_path: String,
     pub branch: String,
     pub base: String,
-    pub status: ChainStatus,
-    pub partial: bool,
-    pub last_scan_error: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct Change {
-    pub id: i64,
-    pub chain_id: i64,
-    pub change_key: String,
-    pub position: Option<i64>,
-    pub status: ChangeStatus,
-}
-
-#[derive(Debug, Clone)]
-pub struct Revision {
-    pub id: i64,
-    pub change_id: i64,
-    pub number: i64,
-    pub commit_sha: String,
-    pub parent_sha: String,
-    pub message: String,
     pub created_at: String,
 }
 
-/// Selected-text anchor of a line comment (docs/api.md "Range comments"):
-/// 1-based lines on the comment's side, 0-based chars, `end_char`
-/// exclusive, `end_line` = the comment's `line`. One struct serves both
-/// the rows and the wire — `api::types` re-exports it (the JSON shape is
-/// exactly these four fields).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct CommentRange {
-    pub start_line: i64,
-    pub start_char: i64,
-    pub end_line: i64,
-    pub end_char: i64,
+fn map_chain(row: &rusqlite::Row) -> rusqlite::Result<ChainRow> {
+    Ok(ChainRow {
+        id: col_u64(row.get("id")?)?,
+        repo_path: row.get("repo_path")?,
+        branch: row.get("branch")?,
+        base: row.get("base")?,
+        created_at: row.get("created_at")?,
+    })
 }
 
-#[derive(Debug, Clone)]
-pub struct Comment {
-    pub id: i64,
-    pub change_id: i64,
-    pub revision_number: i64,
-    pub parent_id: Option<i64>,
-    pub author: String,
-    pub file: Option<String>,
-    pub line: Option<i64>,
-    pub side: String,
-    pub range: Option<CommentRange>,
-    pub line_text: Option<String>,
-    pub body: String,
-    pub state: String,
-    pub resolved: bool,
-    pub review_id: Option<i64>,
-    pub created_at: String,
-    pub updated_at: String,
+/// Register or refresh a chain by `(repo_path, branch)`: insert if new,
+/// otherwise update `base` (re-registration may change it). Returns the row.
+///
+/// # Errors
+/// On a database failure.
+pub fn get_or_create_chain(
+    conn: &Connection,
+    repo_path: &str,
+    branch: &str,
+    base: &str,
+) -> Result<ChainRow> {
+    if let Some(existing) = find_chain(conn, repo_path, branch)? {
+        if existing.base != base {
+            conn.execute(
+                "UPDATE chains SET base = ?1 WHERE id = ?2",
+                params![base, i64::try_from(existing.id)?],
+            )?;
+        }
+        return get_chain(conn, existing.id)?
+            .ok_or_else(|| anyhow!("chain {} vanished", existing.id));
+    }
+    conn.execute(
+        "INSERT INTO chains (repo_path, branch, base, created_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![repo_path, branch, base, now_rfc3339()],
+    )?;
+    let id = col_u64(conn.last_insert_rowid())?;
+    get_chain(conn, id)?.ok_or_else(|| anyhow!("chain {id} vanished"))
 }
 
-#[derive(Debug, Clone)]
-pub struct Review {
-    pub id: i64,
-    pub change_id: i64,
-    pub revision_number: i64,
-    pub verdict: String,
-    pub message: String,
-    pub created_at: String,
+/// # Errors
+/// On a database failure.
+pub fn find_chain(conn: &Connection, repo_path: &str, branch: &str) -> Result<Option<ChainRow>> {
+    conn.query_row(
+        "SELECT * FROM chains WHERE repo_path = ?1 AND branch = ?2",
+        params![repo_path, branch],
+        map_chain,
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
+/// # Errors
+/// On a database failure.
+pub fn get_chain(conn: &Connection, id: u64) -> Result<Option<ChainRow>> {
+    conn.query_row(
+        "SELECT * FROM chains WHERE id = ?1",
+        params![i64::try_from(id)?],
+        map_chain,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+/// All chain rows, id-ascending (registration order).
+///
+/// # Errors
+/// On a database failure.
+pub fn all_chains(conn: &Connection) -> Result<Vec<ChainRow>> {
+    let mut stmt = conn.prepare("SELECT * FROM chains ORDER BY id")?;
+    let rows = stmt
+        .query_map([], map_chain)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Log (the append-only event log)
+
 #[derive(Debug, Clone)]
-pub struct Event {
-    pub id: i64,
-    pub chain_id: i64,
+pub struct LogRow {
+    pub idx: u64,
     pub kind: String,
     pub payload: String,
     pub created_at: String,
 }
 
-// ---------------------------------------------------------------------------
-// Row mapping
-
-fn chain_from_row(row: &rusqlite::Row) -> rusqlite::Result<(Chain, String)> {
-    let status: String = row.get("status")?;
-    Ok((
-        Chain {
-            id: row.get("id")?,
-            repo_id: row.get("repo_id")?,
-            branch: row.get("branch")?,
-            base: row.get("base")?,
-            status: ChainStatus::Active, // patched below
-            partial: row.get::<_, i64>("partial")? != 0,
-            last_scan_error: row.get("last_scan_error")?,
-            created_at: row.get("created_at")?,
-            updated_at: row.get("updated_at")?,
-        },
-        status,
-    ))
-}
-
-fn finish_chain((mut chain, status): (Chain, String)) -> Result<Chain> {
-    chain.status = ChainStatus::parse(&status)?;
-    Ok(chain)
-}
-
-fn change_from_row(row: &rusqlite::Row) -> rusqlite::Result<(Change, String)> {
-    let status: String = row.get("status")?;
-    Ok((
-        Change {
-            id: row.get("id")?,
-            chain_id: row.get("chain_id")?,
-            change_key: row.get("change_key")?,
-            position: row.get("position")?,
-            status: ChangeStatus::Pending, // patched below
-        },
-        status,
-    ))
-}
-
-fn finish_change((mut change, status): (Change, String)) -> Result<Change> {
-    change.status = ChangeStatus::parse(&status)?;
-    Ok(change)
-}
-
-fn revision_from_row(row: &rusqlite::Row) -> rusqlite::Result<Revision> {
-    Ok(Revision {
-        id: row.get("id")?,
-        change_id: row.get("change_id")?,
-        number: row.get("number")?,
-        commit_sha: row.get("commit_sha")?,
-        parent_sha: row.get("parent_sha")?,
-        message: row.get("message")?,
-        created_at: row.get("created_at")?,
+/// `head` = number of entries = idx of the next entry to append.
+///
+/// # Errors
+/// On a database failure.
+pub fn log_head(conn: &Connection, chain_id: u64) -> Result<u64> {
+    let max: Option<i64> = conn.query_row(
+        "SELECT MAX(idx) FROM log WHERE chain_id = ?1",
+        params![i64::try_from(chain_id)?],
+        |r| r.get(0),
+    )?;
+    Ok(match max {
+        Some(m) => col_u64(m)? + 1,
+        None => 0,
     })
 }
 
-/// Reconstruct a comment's selected-text range from its four nullable
-/// columns. They are written all-or-nothing (an `Option<CommentRange>`
-/// binds all four or none — see `insert_comment`), so a row with only
-/// some populated is a corrupt invariant, not a missing range: surface it
-/// as an error rather than silently dropping the partial anchor.
-fn comment_range_from_row(row: &rusqlite::Row) -> rusqlite::Result<Option<CommentRange>> {
-    let cols = (
+/// Append one entry at `idx` (must equal the current head; the caller holds
+/// the chain lock and computes it).
+///
+/// # Errors
+/// On a database failure (including a primary-key clash on `idx`).
+pub fn append_log(
+    conn: &Connection,
+    chain_id: u64,
+    idx: u64,
+    kind: &str,
+    payload: &Value,
+    created_at: &str,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO log (chain_id, idx, kind, payload, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            i64::try_from(chain_id)?,
+            i64::try_from(idx)?,
+            kind,
+            payload.to_string(),
+            created_at
+        ],
+    )?;
+    Ok(())
+}
+
+/// Entries in `[from, to)`, idx-ascending. `to = None` means through head.
+///
+/// # Errors
+/// On a database failure.
+pub fn log_entries(
+    conn: &Connection,
+    chain_id: u64,
+    from: u64,
+    to: Option<u64>,
+) -> Result<Vec<LogRow>> {
+    let map = |r: &rusqlite::Row| -> rusqlite::Result<LogRow> {
+        Ok(LogRow {
+            idx: col_u64(r.get("idx")?)?,
+            kind: r.get("kind")?,
+            payload: r.get("payload")?,
+            created_at: r.get("created_at")?,
+        })
+    };
+    let chain_id = i64::try_from(chain_id)?;
+    let from = i64::try_from(from)?;
+    // `to = None` means "through head": omit the upper bound entirely rather
+    // than fake one with a sentinel (an `idx < i64::MAX` clause would drop a
+    // hypothetical entry at i64::MAX).
+    let rows = match to {
+        Some(to) => conn
+            .prepare(
+                "SELECT idx, kind, payload, created_at FROM log
+                 WHERE chain_id = ?1 AND idx >= ?2 AND idx < ?3 ORDER BY idx",
+            )?
+            .query_map(params![chain_id, from, i64::try_from(to)?], map)?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        None => conn
+            .prepare(
+                "SELECT idx, kind, payload, created_at FROM log
+                 WHERE chain_id = ?1 AND idx >= ?2 ORDER BY idx",
+            )?
+            .query_map(params![chain_id, from], map)?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+    };
+    Ok(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Drafts (reviewer-private scratch; never enters the log)
+
+#[derive(Debug, Clone)]
+pub struct DraftRow {
+    pub id: u64,
+    pub chain_id: u64,
+    pub change_key: String,
+    pub revision: u64,
+    pub parent_id: Option<u64>,
+    pub file: Option<String>,
+    pub line: Option<u64>,
+    pub side: String,
+    pub range: Option<CommentRange>,
+    pub line_text: Option<String>,
+    pub body: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
+    let range = match (
         row.get::<_, Option<i64>>("range_start_line")?,
         row.get::<_, Option<i64>>("range_start_char")?,
         row.get::<_, Option<i64>>("range_end_line")?,
         row.get::<_, Option<i64>>("range_end_char")?,
-    );
-    match cols {
+    ) {
         (Some(start_line), Some(start_char), Some(end_line), Some(end_char)) => {
-            Ok(Some(CommentRange {
-                start_line,
-                start_char,
-                end_line,
-                end_char,
-            }))
+            Some(CommentRange {
+                start_line: col_u64(start_line)?,
+                start_char: col_u64(start_char)?,
+                end_line: col_u64(end_line)?,
+                end_char: col_u64(end_char)?,
+            })
         }
-        (None, None, None, None) => Ok(None),
-        _ => Err(rusqlite::Error::FromSqlConversionFailure(
-            0,
-            rusqlite::types::Type::Integer,
-            format!("comment range columns are partially populated ({cols:?}); expected all four set or all NULL").into(),
-        )),
-    }
-}
-
-fn comment_from_row(row: &rusqlite::Row) -> rusqlite::Result<Comment> {
-    let range = comment_range_from_row(row)?;
-    Ok(Comment {
-        id: row.get("id")?,
-        change_id: row.get("change_id")?,
-        revision_number: row.get("revision_number")?,
-        parent_id: row.get("parent_id")?,
-        author: row.get("author")?,
+        _ => None,
+    };
+    Ok(DraftRow {
+        id: col_u64(row.get("id")?)?,
+        chain_id: col_u64(row.get("chain_id")?)?,
+        change_key: row.get("change_key")?,
+        revision: col_u64(row.get("revision")?)?,
+        parent_id: col_u64_opt(row.get("parent_id")?)?,
         file: row.get("file")?,
-        line: row.get("line")?,
+        line: col_u64_opt(row.get("line")?)?,
         side: row.get("side")?,
         range,
         line_text: row.get("line_text")?,
         body: row.get("body")?,
-        state: row.get("state")?,
-        resolved: row.get::<_, i64>("resolved")? != 0,
-        review_id: row.get("review_id")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
     })
 }
 
-fn review_from_row(row: &rusqlite::Row) -> rusqlite::Result<Review> {
-    Ok(Review {
-        id: row.get("id")?,
-        change_id: row.get("change_id")?,
-        revision_number: row.get("revision_number")?,
-        verdict: row.get("verdict")?,
-        message: row.get("message")?,
-        created_at: row.get("created_at")?,
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Repos & chains
-
-/// Look up or insert the repo row for an (already canonicalized) path.
-///
-/// # Errors
-/// When the query fails.
-pub fn get_or_create_repo(conn: &Connection, path: &str) -> Result<Repo> {
-    conn.execute(
-        "INSERT OR IGNORE INTO repos (path, created_at) VALUES (?1, ?2)",
-        params![path, now_rfc3339()],
-    )?;
-    conn.query_row(
-        "SELECT id, path, created_at FROM repos WHERE path = ?1",
-        params![path],
-        |row| {
-            Ok(Repo {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                created_at: row.get(2)?,
-            })
-        },
-    )
-    .map_err(Into::into)
-}
-
-/// Look up or insert the chain for `(repo, branch)`; `base` is updated on
-/// re-registration (idempotent `nit push --base`).
-///
-/// # Errors
-/// When the query fails.
-pub fn get_or_create_chain(
-    conn: &Connection,
-    repo_id: i64,
-    branch: &str,
-    base: &str,
-) -> Result<Chain> {
-    let now = now_rfc3339();
-    conn.execute(
-        "INSERT INTO chains (repo_id, branch, base, status, created_at, updated_at)
-         VALUES (?1, ?2, ?3, 'active', ?4, ?4)
-         ON CONFLICT (repo_id, branch) DO UPDATE SET base = excluded.base",
-        params![repo_id, branch, base, now],
-    )?;
-    let row = conn.query_row(
-        "SELECT * FROM chains WHERE repo_id = ?1 AND branch = ?2",
-        params![repo_id, branch],
-        chain_from_row,
-    )?;
-    finish_chain(row)
-}
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn get_chain(conn: &Connection, id: i64) -> Result<Option<Chain>> {
-    conn.query_row(
-        "SELECT * FROM chains WHERE id = ?1",
-        params![id],
-        chain_from_row,
-    )
-    .optional()?
-    .map(finish_chain)
-    .transpose()
-}
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn list_chains(conn: &Connection) -> Result<Vec<Chain>> {
-    let mut stmt = conn.prepare("SELECT * FROM chains ORDER BY id")?;
-    let rows = stmt.query_map([], chain_from_row)?;
-    rows.map(|r| finish_chain(r?)).collect()
-}
-
-/// Repo path for a chain (joined through `repos`).
-///
-/// # Errors
-/// When the query fails.
-pub fn chain_repo_path(conn: &Connection, chain_id: i64) -> Result<Option<String>> {
-    conn.query_row(
-        "SELECT repos.path FROM chains JOIN repos ON repos.id = chains.repo_id
-         WHERE chains.id = ?1",
-        params![chain_id],
-        |row| row.get(0),
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-/// # Errors
-/// When the statement fails.
-pub fn chain_set_status(conn: &Connection, id: i64, status: ChainStatus, now: &str) -> Result<()> {
-    conn.execute(
-        "UPDATE chains SET status = ?2, updated_at = ?3 WHERE id = ?1",
-        params![id, status.as_str(), now],
-    )?;
-    Ok(())
-}
-
-/// Set or clear `last_scan_error`. `touch` controls whether `updated_at`
-/// is bumped (the abandoned-branch two-scan rule keys off the timestamp of
-/// the scan that *first* saw the ref missing).
-///
-/// # Errors
-/// When the statement fails.
-pub fn chain_set_scan_error(
-    conn: &Connection,
-    id: i64,
-    error: Option<&str>,
-    now: &str,
-    touch: bool,
-) -> Result<()> {
-    if touch {
-        conn.execute(
-            "UPDATE chains SET last_scan_error = ?2, updated_at = ?3 WHERE id = ?1",
-            params![id, error, now],
-        )?;
-    } else {
-        conn.execute(
-            "UPDATE chains SET last_scan_error = ?2 WHERE id = ?1",
-            params![id, error],
-        )?;
-    }
-    Ok(())
-}
-
-/// Set the sticky `partial` flag; returns whether the value actually changed.
-/// Deliberately does **not** bump `updated_at` — it times the
-/// branch-missing abandon window (docs/data-model.md scan step 1).
-///
-/// # Errors
-/// When the statement fails.
-pub fn chain_set_partial(conn: &Connection, id: i64, partial: bool) -> Result<bool> {
-    let changed = conn.execute(
-        "UPDATE chains SET partial = ?2 WHERE id = ?1 AND partial != ?2",
-        params![id, i64::from(partial)],
-    )?;
-    Ok(changed > 0)
-}
-
-/// Chain row for an (already canonicalized) repo path + branch, if any —
-/// without creating anything. CLI clients resolve their chain this way.
-///
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn find_chain_by_repo_branch(
-    conn: &Connection,
-    repo_path: &str,
-    branch: &str,
-) -> Result<Option<Chain>> {
-    conn.query_row(
-        "SELECT chains.* FROM chains JOIN repos ON repos.id = chains.repo_id
-         WHERE repos.path = ?1 AND chains.branch = ?2",
-        params![repo_path, branch],
-        chain_from_row,
-    )
-    .optional()?
-    .map(finish_chain)
-    .transpose()
-}
-
-/// # Errors
-/// When the statement fails.
-pub fn chain_touch(conn: &Connection, id: i64, now: &str) -> Result<()> {
-    conn.execute(
-        "UPDATE chains SET updated_at = ?2 WHERE id = ?1",
-        params![id, now],
-    )?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Changes
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn get_change(conn: &Connection, id: i64) -> Result<Option<Change>> {
-    conn.query_row(
-        "SELECT * FROM changes WHERE id = ?1",
-        params![id],
-        change_from_row,
-    )
-    .optional()?
-    .map(finish_change)
-    .transpose()
-}
-
-/// All changes of a chain: live ones first in `position` order, orphaned
-/// ones last (by id).
-///
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn changes_for_chain(conn: &Connection, chain_id: i64) -> Result<Vec<Change>> {
-    let mut stmt = conn.prepare(
-        "SELECT * FROM changes WHERE chain_id = ?1
-         ORDER BY position IS NULL, position, id",
-    )?;
-    let rows = stmt.query_map(params![chain_id], change_from_row)?;
-    rows.map(|r| finish_change(r?)).collect()
-}
-
-/// # Errors
-/// When the insert fails.
-pub fn insert_change(
-    conn: &Connection,
-    chain_id: i64,
-    change_key: &str,
-    position: i64,
-    status: ChangeStatus,
-) -> Result<Change> {
-    conn.execute(
-        "INSERT INTO changes (chain_id, change_key, position, status)
-         VALUES (?1, ?2, ?3, ?4)",
-        params![chain_id, change_key, position, status.as_str()],
-    )?;
-    Ok(Change {
-        id: conn.last_insert_rowid(),
-        chain_id,
-        change_key: change_key.to_string(),
-        position: Some(position),
-        status,
-    })
-}
-
-/// # Errors
-/// When the statement fails.
-pub fn change_set_position_status(
-    conn: &Connection,
-    id: i64,
-    position: Option<i64>,
-    status: ChangeStatus,
-) -> Result<()> {
-    conn.execute(
-        "UPDATE changes SET position = ?2, status = ?3 WHERE id = ?1",
-        params![id, position, status.as_str()],
-    )?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Revisions
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn revisions_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Revision>> {
-    let mut stmt = conn.prepare("SELECT * FROM revisions WHERE change_id = ?1 ORDER BY number")?;
-    let rows = stmt.query_map(params![change_id], revision_from_row)?;
-    Ok(rows.collect::<rusqlite::Result<_>>()?)
-}
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn get_revision(conn: &Connection, change_id: i64, number: i64) -> Result<Option<Revision>> {
-    Ok(conn
-        .query_row(
-            "SELECT * FROM revisions WHERE change_id = ?1 AND number = ?2",
-            params![change_id, number],
-            revision_from_row,
-        )
-        .optional()?)
-}
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn latest_revision(conn: &Connection, change_id: i64) -> Result<Option<Revision>> {
-    Ok(conn
-        .query_row(
-            "SELECT * FROM revisions WHERE change_id = ?1
-             ORDER BY number DESC LIMIT 1",
-            params![change_id],
-            revision_from_row,
-        )
-        .optional()?)
-}
-
-/// # Errors
-/// When the insert fails.
-pub fn insert_revision(
-    conn: &Connection,
-    change_id: i64,
-    number: i64,
-    commit_sha: &str,
-    parent_sha: &str,
-    message: &str,
-    now: &str,
-) -> Result<Revision> {
-    conn.execute(
-        "INSERT INTO revisions
-           (change_id, number, commit_sha, parent_sha, message, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![change_id, number, commit_sha, parent_sha, message, now],
-    )?;
-    Ok(Revision {
-        id: conn.last_insert_rowid(),
-        change_id,
-        number,
-        commit_sha: commit_sha.to_string(),
-        parent_sha: parent_sha.to_string(),
-        message: message.to_string(),
-        created_at: now.to_string(),
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Reviews
-
-/// # Errors
-/// When the insert fails.
-pub fn insert_review(
-    conn: &Connection,
-    change_id: i64,
-    revision_number: i64,
-    verdict: &str,
-    message: &str,
-    now: &str,
-) -> Result<Review> {
-    conn.execute(
-        "INSERT INTO reviews (change_id, revision_number, verdict, message, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![change_id, revision_number, verdict, message, now],
-    )?;
-    Ok(Review {
-        id: conn.last_insert_rowid(),
-        change_id,
-        revision_number,
-        verdict: verdict.to_string(),
-        message: message.to_string(),
-        created_at: now.to_string(),
-    })
-}
-
-/// The most recent review on a given revision of a change, if any. Used to
-/// re-derive a change's pre-orphan status (docs/data-model.md: statuses are
-/// re-derivable).
-///
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn latest_review_on_revision(
-    conn: &Connection,
-    change_id: i64,
-    revision_number: i64,
-) -> Result<Option<Review>> {
-    conn.query_row(
-        "SELECT * FROM reviews WHERE change_id = ?1 AND revision_number = ?2
-         ORDER BY id DESC LIMIT 1",
-        params![change_id, revision_number],
-        review_from_row,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn reviews_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Review>> {
-    let mut stmt = conn.prepare("SELECT * FROM reviews WHERE change_id = ?1 ORDER BY id")?;
-    let rows = stmt.query_map(params![change_id], review_from_row)?;
-    rows.map(|r| r.map_err(Into::into)).collect()
-}
-
-/// The change's most recent review across all revisions (feedback scope).
-///
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn latest_review_for_change(conn: &Connection, change_id: i64) -> Result<Option<Review>> {
-    conn.query_row(
-        "SELECT * FROM reviews WHERE change_id = ?1 ORDER BY id DESC LIMIT 1",
-        params![change_id],
-        review_from_row,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-/// Max revision number carrying a review (`last_reviewed_revision`).
-///
-/// # Errors
-/// When the query fails.
-pub fn last_reviewed_revision(conn: &Connection, change_id: i64) -> Result<Option<i64>> {
-    conn.query_row(
-        "SELECT MAX(revision_number) FROM reviews WHERE change_id = ?1",
-        params![change_id],
-        |row| row.get(0),
-    )
-    .map_err(Into::into)
-}
-
-// ---------------------------------------------------------------------------
-// Comments
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn get_comment(conn: &Connection, id: i64) -> Result<Option<Comment>> {
-    conn.query_row(
-        "SELECT * FROM comments WHERE id = ?1",
-        params![id],
-        comment_from_row,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn comments_for_change(conn: &Connection, change_id: i64) -> Result<Vec<Comment>> {
-    let mut stmt = conn.prepare("SELECT * FROM comments WHERE change_id = ?1 ORDER BY id")?;
-    let rows = stmt.query_map(params![change_id], comment_from_row)?;
-    rows.map(|r| r.map_err(Into::into)).collect()
-}
-
-pub struct NewComment<'a> {
-    pub change_id: i64,
-    pub revision_number: i64,
-    pub parent_id: Option<i64>,
-    pub author: &'a str,
+pub struct NewDraft<'a> {
+    pub chain_id: u64,
+    pub change_key: &'a str,
+    pub revision: u64,
+    pub parent_id: Option<u64>,
     pub file: Option<&'a str>,
-    pub line: Option<i64>,
+    pub line: Option<u64>,
     pub side: &'a str,
     pub range: Option<CommentRange>,
     pub line_text: Option<&'a str>,
     pub body: &'a str,
-    pub state: &'a str,
-    pub resolved: bool,
 }
 
+/// Insert a draft with a caller-allocated `id` (from the server's global
+/// fold-id counter, so a draft's id stays stable when it later publishes
+/// into a `review` entry — and never collides with any other id).
+///
 /// # Errors
-/// When the insert fails.
-pub fn insert_comment(conn: &Connection, c: &NewComment, now: &str) -> Result<Comment> {
+/// On a database failure.
+pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
+    let (rsl, rsc, rel, rec) = match d.range {
+        Some(r) => (
+            Some(i64::try_from(r.start_line)?),
+            Some(i64::try_from(r.start_char)?),
+            Some(i64::try_from(r.end_line)?),
+            Some(i64::try_from(r.end_char)?),
+        ),
+        None => (None, None, None, None),
+    };
+    let parent_id = d.parent_id.map(i64::try_from).transpose()?;
+    let line = d.line.map(i64::try_from).transpose()?;
     conn.execute(
-        "INSERT INTO comments
-           (change_id, revision_number, parent_id, author, file, line, side,
-            range_start_line, range_start_char, range_end_line,
-            range_end_char, line_text, body, state, resolved,
-            created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                 ?14, ?15, ?16, ?16)",
+        "INSERT INTO drafts (id, chain_id, change_key, revision, parent_id, file, line, side,
+            range_start_line, range_start_char, range_end_line, range_end_char,
+            line_text, body, created_at, updated_at)
+         VALUES (?15, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14)",
         params![
-            c.change_id,
-            c.revision_number,
-            c.parent_id,
-            c.author,
-            c.file,
-            c.line,
-            c.side,
-            c.range.map(|r| r.start_line),
-            c.range.map(|r| r.start_char),
-            c.range.map(|r| r.end_line),
-            c.range.map(|r| r.end_char),
-            c.line_text,
-            c.body,
-            c.state,
-            i64::from(c.resolved),
-            now
+            i64::try_from(d.chain_id)?,
+            d.change_key,
+            i64::try_from(d.revision)?,
+            parent_id,
+            d.file,
+            line,
+            d.side,
+            rsl,
+            rsc,
+            rel,
+            rec,
+            d.line_text,
+            d.body,
+            now,
+            i64::try_from(id)?,
         ],
     )?;
-    Ok(Comment {
-        id: conn.last_insert_rowid(),
-        change_id: c.change_id,
-        revision_number: c.revision_number,
-        parent_id: c.parent_id,
-        author: c.author.to_string(),
-        file: c.file.map(str::to_string),
-        line: c.line,
-        side: c.side.to_string(),
-        range: c.range,
-        line_text: c.line_text.map(str::to_string),
-        body: c.body.to_string(),
-        state: c.state.to_string(),
-        resolved: c.resolved,
-        review_id: None,
-        created_at: now.to_string(),
-        updated_at: now.to_string(),
+    get_draft(conn, id)?.ok_or_else(|| anyhow!("draft {id} vanished"))
+}
+
+/// The maximum draft id, for seeding the global id counter on startup.
+///
+/// # Errors
+/// On a database failure.
+pub fn max_draft_id(conn: &Connection) -> Result<u64> {
+    let max: Option<i64> = conn.query_row("SELECT MAX(id) FROM drafts", [], |r| r.get(0))?;
+    Ok(match max {
+        Some(m) => col_u64(m)?,
+        None => 0,
     })
 }
 
 /// # Errors
-/// When the statement fails.
-pub fn update_draft_body(conn: &Connection, id: i64, body: &str, now: &str) -> Result<()> {
+/// On a database failure.
+pub fn get_draft(conn: &Connection, id: u64) -> Result<Option<DraftRow>> {
+    conn.query_row(
+        "SELECT * FROM drafts WHERE id = ?1",
+        params![i64::try_from(id)?],
+        map_draft,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+/// # Errors
+/// On a database failure.
+pub fn update_draft_body(conn: &Connection, id: u64, body: &str, now: &str) -> Result<()> {
     conn.execute(
-        "UPDATE comments SET body = ?2, updated_at = ?3 WHERE id = ?1",
-        params![id, body, now],
+        "UPDATE drafts SET body = ?1, updated_at = ?2 WHERE id = ?3",
+        params![body, now, i64::try_from(id)?],
     )?;
     Ok(())
 }
 
-/// Hard-delete a draft (the one deliberate exception to "nothing is ever
-/// hard-deleted": unpublished drafts are reviewer-private scratch state,
-/// `DELETE /api/drafts/{id}`).
-///
 /// # Errors
-/// When the statement fails.
-pub fn delete_comment(conn: &Connection, id: i64) -> Result<()> {
-    conn.execute("DELETE FROM comments WHERE id = ?1", params![id])?;
-    Ok(())
-}
-
-/// # Errors
-/// When the statement fails.
-pub fn comment_set_resolved(conn: &Connection, id: i64, resolved: bool, now: &str) -> Result<()> {
+/// On a database failure.
+pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
     conn.execute(
-        "UPDATE comments SET resolved = ?2, updated_at = ?3 WHERE id = ?1",
-        params![id, i64::from(resolved), now],
+        "DELETE FROM drafts WHERE id = ?1",
+        params![i64::try_from(id)?],
     )?;
     Ok(())
 }
 
-/// Publish every draft on a change under a freshly created review
-/// (review submission). Returns the published rows.
+/// Drafts for one change, id-ascending.
 ///
 /// # Errors
-/// When any statement in the publish flow fails.
-pub fn publish_drafts(
+/// On a database failure.
+pub fn drafts_for_change(
     conn: &Connection,
-    change_id: i64,
-    review_id: i64,
-    now: &str,
-) -> Result<Vec<Comment>> {
-    conn.execute(
-        "UPDATE comments SET state = 'published', review_id = ?2, updated_at = ?3
-         WHERE change_id = ?1 AND state = 'draft'",
-        params![change_id, review_id, now],
-    )?;
+    chain_id: u64,
+    change_key: &str,
+) -> Result<Vec<DraftRow>> {
     let mut stmt =
-        conn.prepare("SELECT * FROM comments WHERE change_id = ?1 AND review_id = ?2 ORDER BY id")?;
-    let rows = stmt.query_map(params![change_id, review_id], comment_from_row)?;
-    rows.map(|r| r.map_err(Into::into)).collect()
+        conn.prepare("SELECT * FROM drafts WHERE chain_id = ?1 AND change_key = ?2 ORDER BY id")?;
+    let rows = stmt
+        .query_map(params![i64::try_from(chain_id)?, change_key], map_draft)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
 
-/// Per-change comment tallies for `ChangeSummary.counts`: published
-/// comments (incl. replies), drafts, and unresolved published root threads.
+/// Delete every draft of one change (called when its drafts publish).
 ///
 /// # Errors
-/// When the tally queries fail.
-pub fn comment_counts(conn: &Connection, change_id: i64) -> Result<(i64, i64, i64)> {
-    conn.query_row(
-        "SELECT
-           COUNT(*) FILTER (WHERE state = 'published'),
-           COUNT(*) FILTER (WHERE state = 'draft'),
-           COUNT(*) FILTER (WHERE state = 'published' AND parent_id IS NULL
-                              AND resolved = 0)
-         FROM comments WHERE change_id = ?1",
-        params![change_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )
-    .map_err(Into::into)
-}
-
-// ---------------------------------------------------------------------------
-// Events
-
-/// # Errors
-/// When the insert fails.
-pub fn insert_event(
-    conn: &Connection,
-    chain_id: i64,
-    kind: &str,
-    payload: &serde_json::Value,
-    now: &str,
-) -> Result<i64> {
+/// On a database failure.
+pub fn delete_drafts_for_change(conn: &Connection, chain_id: u64, change_key: &str) -> Result<()> {
     conn.execute(
-        "INSERT INTO events (chain_id, kind, payload, created_at)
-         VALUES (?1, ?2, ?3, ?4)",
-        params![chain_id, kind, payload.to_string(), now],
+        "DELETE FROM drafts WHERE chain_id = ?1 AND change_key = ?2",
+        params![i64::try_from(chain_id)?, change_key],
     )?;
-    Ok(conn.last_insert_rowid())
-}
-
-/// Latest event id for a chain (0 when none) — the `/wait` cursor.
-///
-/// # Errors
-/// When the query fails.
-pub fn latest_event_id(conn: &Connection, chain_id: i64) -> Result<i64> {
-    conn.query_row(
-        "SELECT COALESCE(MAX(id), 0) FROM events WHERE chain_id = ?1",
-        params![chain_id],
-        |row| row.get(0),
-    )
-    .map_err(Into::into)
-}
-
-/// # Errors
-/// When the query fails or a stored row doesn't decode.
-pub fn events_for_chain(conn: &Connection, chain_id: i64) -> Result<Vec<Event>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, chain_id, kind, payload, created_at
-         FROM events WHERE chain_id = ?1 ORDER BY id",
-    )?;
-    let rows = stmt.query_map(params![chain_id], |row| {
-        Ok(Event {
-            id: row.get(0)?,
-            chain_id: row.get(1)?,
-            kind: row.get(2)?,
-            payload: row.get(3)?,
-            created_at: row.get(4)?,
-        })
-    })?;
-    rows.map(|r| r.map_err(Into::into)).collect()
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn temp_db() -> (tempfile::TempDir, Connection) {
-        let dir = tempfile::tempdir().expect("tempdir should create");
-        let conn = open(&dir.path().join("nit.sqlite3")).expect("test db should open");
-        (dir, conn)
+    fn mem() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        conn.pragma_update(None, "foreign_keys", "ON").expect("fk");
+        migrate(&conn).expect("migrate");
+        conn
     }
 
     #[test]
-    fn open_applies_pragmas_and_migrations() {
-        let (_dir, conn) = temp_db();
-        let journal: String = conn
-            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
-            .expect("query should succeed");
-        assert_eq!(journal, "wal");
-        let fk: i64 = conn
-            .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
-            .expect("query should succeed");
-        assert_eq!(fk, 1);
-        let version: i64 = conn
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
-            .expect("query should succeed");
-        assert_eq!(
-            version,
-            i64::try_from(MIGRATIONS.len()).expect("migration count should fit i64")
-        );
+    fn chain_upsert_is_idempotent_and_updates_base() {
+        let conn = mem();
+        let a = get_or_create_chain(&conn, "/r", "feat", "main").expect("create");
+        let b = get_or_create_chain(&conn, "/r", "feat", "develop").expect("upsert");
+        assert_eq!(a.id, b.id);
+        assert_eq!(b.base, "develop");
     }
 
     #[test]
-    fn open_is_idempotent() {
-        let dir = tempfile::tempdir().expect("tempdir should create");
-        let path = dir.path().join("nit.sqlite3");
-        open(&path).expect("test db should open");
-        let conn = open(&path).expect("test db should open"); // re-running migrations is a no-op
-        let version: i64 = conn
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
-            .expect("query should succeed");
-        assert_eq!(
-            version,
-            i64::try_from(MIGRATIONS.len()).expect("migration count should fit i64")
-        );
-    }
-
-    #[test]
-    fn data_dir_resolution() {
-        assert_eq!(
-            data_dir(Some("/xdg".into()), Some("/home/u".into())).expect("data dir should resolve"),
-            PathBuf::from("/xdg")
-        );
-        // Relative XDG_DATA_HOME is ignored per the basedir spec.
-        assert_eq!(
-            data_dir(Some("rel".into()), Some("/home/u".into())).expect("data dir should resolve"),
-            PathBuf::from("/home/u/.local/share")
-        );
-        assert_eq!(
-            data_dir(None, Some("/home/u".into())).expect("data dir should resolve"),
-            PathBuf::from("/home/u/.local/share")
-        );
-        assert!(data_dir(None, None).is_err());
-    }
-
-    #[test]
-    fn repo_and_chain_roundtrip() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let again = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        assert_eq!(repo.id, again.id);
-
-        let chain =
-            get_or_create_chain(&conn, repo.id, "feat/x", "main").expect("chain row should upsert");
-        assert_eq!(chain.status, ChainStatus::Active);
-        assert_eq!(chain.last_scan_error, None);
-
-        // Re-registration is idempotent but updates base.
-        let chain2 = get_or_create_chain(&conn, repo.id, "feat/x", "develop")
-            .expect("chain row should upsert");
-        assert_eq!(chain2.id, chain.id);
-        assert_eq!(chain2.base, "develop");
-
-        let fetched = get_chain(&conn, chain.id)
-            .expect("query should succeed")
-            .expect("row should exist");
-        assert_eq!(fetched.branch, "feat/x");
-        assert_eq!(
-            chain_repo_path(&conn, chain.id)
-                .expect("query should succeed")
-                .expect("row should exist"),
-            "/tmp/r"
-        );
-        assert!(
-            get_chain(&conn, 999)
-                .expect("query should succeed")
-                .is_none()
-        );
-        assert_eq!(list_chains(&conn).expect("query should succeed").len(), 1);
-    }
-
-    #[test]
-    fn chain_partial_flips_without_touching_updated_at() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "feat", "main").expect("chain row should upsert");
-        assert!(!chain.partial, "new chains default to not-partial");
-
-        assert!(chain_set_partial(&conn, chain.id, true).expect("partial should update"));
-        assert!(
-            !chain_set_partial(&conn, chain.id, true).expect("partial should update"),
-            "setting the same value is not a flip"
-        );
-        let row = get_chain(&conn, chain.id)
-            .expect("query should succeed")
-            .expect("row should exist");
-        assert!(row.partial);
-        assert_eq!(
-            row.updated_at, chain.updated_at,
-            "a partial flip must not disturb the abandon-window timestamp"
-        );
-
-        assert!(chain_set_partial(&conn, chain.id, false).expect("partial should update"));
-        assert!(!chain_set_partial(&conn, chain.id, false).expect("partial should update"));
-    }
-
-    #[test]
-    fn change_and_revision_roundtrip() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
-        let change = insert_change(&conn, chain.id, "Iabc", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-
-        assert!(
-            latest_revision(&conn, change.id)
-                .expect("query should succeed")
-                .is_none()
-        );
-        let now = now_rfc3339();
-        insert_revision(
+    fn log_append_and_head() {
+        let conn = mem();
+        let c = get_or_create_chain(&conn, "/r", "feat", "main").expect("create");
+        assert_eq!(log_head(&conn, c.id).expect("head"), 0);
+        append_log(
             &conn,
-            change.id,
+            c.id,
+            0,
+            "partial",
+            &serde_json::json!({"partial": true}),
+            "t0",
+        )
+        .expect("append");
+        append_log(
+            &conn,
+            c.id,
             1,
-            &"a".repeat(40),
-            &"b".repeat(40),
-            "subj\n\nbody",
-            &now,
+            "resolve",
+            &serde_json::json!({"comment_id": 1}),
+            "t1",
         )
-        .expect("revision should insert");
-        let rev = latest_revision(&conn, change.id)
-            .expect("query should succeed")
-            .expect("row should exist");
-        assert_eq!(rev.number, 1);
-        assert_eq!(rev.commit_sha, "a".repeat(40));
-
-        // UNIQUE(change_id, number)
-        assert!(
-            insert_revision(
-                &conn,
-                change.id,
-                1,
-                &"a".repeat(40),
-                &"b".repeat(40),
-                "x",
-                &now,
-            )
-            .is_err()
-        );
-
-        // Orphaning: position NULL + status flag, then restore.
-        change_set_position_status(&conn, change.id, None, ChangeStatus::Orphaned)
-            .expect("change should update");
-        let rows = changes_for_chain(&conn, chain.id).expect("query should succeed");
-        assert_eq!(rows[0].position, None);
-        assert_eq!(rows[0].status, ChangeStatus::Orphaned);
+        .expect("append");
+        assert_eq!(log_head(&conn, c.id).expect("head"), 2);
+        let entries = log_entries(&conn, c.id, 0, None).expect("entries");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].kind, "partial");
+        assert_eq!(entries[1].idx, 1);
+        let tail = log_entries(&conn, c.id, 1, None).expect("tail");
+        assert_eq!(tail.len(), 1);
+        assert_eq!(tail[0].kind, "resolve");
     }
 
     #[test]
-    fn duplicate_change_key_rejected() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
-        insert_change(&conn, chain.id, "Iabc", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-        assert!(insert_change(&conn, chain.id, "Iabc", 1, ChangeStatus::Pending).is_err());
-    }
-
-    #[test]
-    fn live_changes_sort_before_orphans() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
-        let orphan = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-        change_set_position_status(&conn, orphan.id, None, ChangeStatus::Orphaned)
-            .expect("change should update");
-        insert_change(&conn, chain.id, "I2", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-        let rows = changes_for_chain(&conn, chain.id).expect("query should succeed");
-        assert_eq!(rows[0].change_key, "I2");
-        assert_eq!(rows[1].change_key, "I1");
-    }
-
-    #[test]
-    fn events_and_reviews() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-        let now = now_rfc3339();
-
-        let e1 = insert_event(
+    fn draft_lifecycle() {
+        let conn = mem();
+        let c = get_or_create_chain(&conn, "/r", "feat", "main").expect("create");
+        let d = insert_draft(
             &conn,
-            chain.id,
-            "chain_updated",
-            &serde_json::json!({}),
-            &now,
-        )
-        .expect("event should insert");
-        let e2 = insert_event(
-            &conn,
-            chain.id,
-            "chain_closed",
-            &serde_json::json!({}),
-            &now,
-        )
-        .expect("event should insert");
-        assert!(e2 > e1, "event ids are the monotonic cursor");
-        assert_eq!(
-            events_for_chain(&conn, chain.id)
-                .expect("query should succeed")
-                .len(),
-            2
-        );
-
-        insert_review(&conn, change.id, 1, "approve", "lgtm", &now).expect("review should insert");
-        insert_review(&conn, change.id, 1, "request_changes", "wait", &now)
-            .expect("review should insert");
-        let latest = latest_review_on_revision(&conn, change.id, 1)
-            .expect("query should succeed")
-            .expect("row should exist");
-        assert_eq!(latest.verdict, "request_changes");
-        assert!(
-            latest_review_on_revision(&conn, change.id, 2)
-                .expect("query should succeed")
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn comment_lifecycle_and_counts() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-        let now = now_rfc3339();
-
-        let draft = insert_comment(
-            &conn,
-            &NewComment {
-                change_id: change.id,
-                revision_number: 1,
+            7,
+            &NewDraft {
+                chain_id: c.id,
+                change_key: "I1",
+                revision: 1,
                 parent_id: None,
-                author: "reviewer",
                 file: Some("src/main.rs"),
-                line: Some(14),
-                side: "new",
-                range: Some(CommentRange {
-                    start_line: 12,
-                    start_char: 4,
-                    end_line: 14,
-                    end_char: 7,
-                }),
-                line_text: Some("    let x = 1;"),
-                body: "why?",
-                state: "draft",
-                resolved: false,
-            },
-            &now,
-        )
-        .expect("comment should insert");
-        assert_eq!(draft.state, "draft");
-        assert_eq!(
-            get_comment(&conn, draft.id)
-                .expect("query should succeed")
-                .expect("row should exist")
-                .range,
-            draft.range,
-            "range columns round-trip"
-        );
-        assert_eq!(
-            comment_counts(&conn, change.id).expect("query should succeed"),
-            (0, 1, 0)
-        );
-
-        update_draft_body(&conn, draft.id, "why though?", &now).expect("draft should update");
-        assert_eq!(
-            get_comment(&conn, draft.id)
-                .expect("query should succeed")
-                .expect("row should exist")
-                .body,
-            "why though?"
-        );
-
-        let review = insert_review(&conn, change.id, 1, "request_changes", "m", &now)
-            .expect("review should insert");
-        let published =
-            publish_drafts(&conn, change.id, review.id, &now).expect("drafts should publish");
-        assert_eq!(published.len(), 1);
-        assert_eq!(published[0].state, "published");
-        assert_eq!(published[0].review_id, Some(review.id));
-        // published root, unresolved
-        assert_eq!(
-            comment_counts(&conn, change.id).expect("query should succeed"),
-            (1, 0, 1)
-        );
-
-        // Agent reply under the root, then resolve the thread.
-        let reply = insert_comment(
-            &conn,
-            &NewComment {
-                change_id: change.id,
-                revision_number: 1,
-                parent_id: Some(draft.id),
-                author: "agent",
-                file: Some("src/main.rs"),
-                line: Some(14),
+                line: Some(3),
                 side: "new",
                 range: None,
-                line_text: None,
-                body: "fixed",
-                state: "published",
-                resolved: false,
+                line_text: Some("fn main"),
+                body: "look",
             },
-            &now,
+            "t0",
         )
-        .expect("comment should insert");
-        assert_eq!(reply.parent_id, Some(draft.id));
-        comment_set_resolved(&conn, draft.id, true, &now).expect("comment should update");
+        .expect("insert");
+        assert_eq!(drafts_for_change(&conn, c.id, "I1").expect("list").len(), 1);
+        update_draft_body(&conn, d.id, "look again", "t1").expect("edit");
         assert_eq!(
-            comment_counts(&conn, change.id).expect("query should succeed"),
-            (2, 0, 0)
+            get_draft(&conn, d.id).expect("get").expect("some").body,
+            "look again"
         );
-        assert_eq!(
-            comments_for_change(&conn, change.id)
-                .expect("query should succeed")
-                .len(),
-            2
-        );
-
-        delete_comment(&conn, reply.id).expect("draft should delete");
+        delete_drafts_for_change(&conn, c.id, "I1").expect("drain");
         assert!(
-            get_comment(&conn, reply.id)
-                .expect("query should succeed")
-                .is_none()
+            drafts_for_change(&conn, c.id, "I1")
+                .expect("list")
+                .is_empty()
         );
-    }
-
-    #[test]
-    fn partial_range_columns_are_an_error() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-        let now = now_rfc3339();
-
-        // insert_comment writes ranges all-or-nothing, so corrupt the row
-        // directly to exercise the invariant: only the start line is set.
-        let comment = insert_comment(
-            &conn,
-            &NewComment {
-                change_id: change.id,
-                revision_number: 1,
-                parent_id: None,
-                author: "reviewer",
-                file: Some("src/main.rs"),
-                line: Some(14),
-                side: "new",
-                range: None,
-                line_text: Some("    let x = 1;"),
-                body: "why?",
-                state: "draft",
-                resolved: false,
-            },
-            &now,
-        )
-        .expect("comment should insert");
-        conn.execute(
-            "UPDATE comments SET range_start_line = 12 WHERE id = ?1",
-            params![comment.id],
-        )
-        .expect("update should succeed");
-
-        let err = get_comment(&conn, comment.id).expect_err("partial range should error");
-        assert!(
-            err.to_string().contains("partially populated"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
-    fn review_query_helpers() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-        let now = now_rfc3339();
-        assert!(
-            latest_review_for_change(&conn, change.id)
-                .expect("query should succeed")
-                .is_none()
-        );
-        assert_eq!(
-            last_reviewed_revision(&conn, change.id).expect("query should succeed"),
-            None
-        );
-
-        insert_review(&conn, change.id, 2, "request_changes", "a", &now)
-            .expect("review should insert");
-        insert_review(&conn, change.id, 1, "comment", "b", &now).expect("review should insert");
-        let latest = latest_review_for_change(&conn, change.id)
-            .expect("query should succeed")
-            .expect("row should exist");
-        assert_eq!(latest.verdict, "comment"); // latest by id, not revision
-        assert_eq!(
-            last_reviewed_revision(&conn, change.id).expect("query should succeed"),
-            Some(2)
-        );
-        assert_eq!(
-            reviews_for_change(&conn, change.id)
-                .expect("query should succeed")
-                .len(),
-            2
-        );
-    }
-
-    #[test]
-    fn chain_lookup_and_event_cursor() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "feat", "main").expect("chain row should upsert");
-        assert_eq!(
-            find_chain_by_repo_branch(&conn, "/tmp/r", "feat")
-                .expect("query should succeed")
-                .expect("row should exist")
-                .id,
-            chain.id
-        );
-        assert!(
-            find_chain_by_repo_branch(&conn, "/tmp/r", "other")
-                .expect("query should succeed")
-                .is_none()
-        );
-        assert!(
-            find_chain_by_repo_branch(&conn, "/tmp/x", "feat")
-                .expect("query should succeed")
-                .is_none()
-        );
-
-        assert_eq!(
-            latest_event_id(&conn, chain.id).expect("query should succeed"),
-            0
-        );
-        let now = now_rfc3339();
-        let id = insert_event(
-            &conn,
-            chain.id,
-            "chain_updated",
-            &serde_json::json!({}),
-            &now,
-        )
-        .expect("event should insert");
-        assert_eq!(
-            latest_event_id(&conn, chain.id).expect("query should succeed"),
-            id
-        );
-    }
-
-    #[test]
-    fn change_and_revision_getters() {
-        let (_dir, conn) = temp_db();
-        let repo = get_or_create_repo(&conn, "/tmp/r").expect("repo row should upsert");
-        let chain =
-            get_or_create_chain(&conn, repo.id, "b", "main").expect("chain row should upsert");
-        let change = insert_change(&conn, chain.id, "I1", 0, ChangeStatus::Pending)
-            .expect("change should insert");
-        assert_eq!(
-            get_change(&conn, change.id)
-                .expect("query should succeed")
-                .expect("row should exist")
-                .id,
-            change.id
-        );
-        assert!(
-            get_change(&conn, 999)
-                .expect("query should succeed")
-                .is_none()
-        );
-
-        let now = now_rfc3339();
-        insert_revision(
-            &conn,
-            change.id,
-            1,
-            &"a".repeat(40),
-            &"b".repeat(40),
-            "subj",
-            &now,
-        )
-        .expect("revision should insert");
-        assert_eq!(
-            get_revision(&conn, change.id, 1)
-                .expect("query should succeed")
-                .expect("row should exist")
-                .number,
-            1
-        );
-        assert!(
-            get_revision(&conn, change.id, 2)
-                .expect("query should succeed")
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn now_rfc3339_shape() {
-        let now = now_rfc3339();
-        assert!(jiff::Timestamp::strptime("%FT%T%.f%:z", &now).is_ok() || now.ends_with('Z'));
     }
 }

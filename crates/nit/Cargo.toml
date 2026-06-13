@@ -10,8 +10,10 @@ workspace = true
 
 [dependencies]
 anyhow = "1"
+async-broadcast = "0.7"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
 git2 = { version = "0.20", default-features = false }
 jiff = "0.2"
 rusqlite = "0.37"

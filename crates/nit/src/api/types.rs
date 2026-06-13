@@ -41,7 +41,7 @@ pub struct RegisterChain {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chain {
-    pub id: i64,
+    pub id: u64,
     pub repo_path: String,
     pub branch: String,
     pub base: String,
@@ -66,17 +66,17 @@ pub struct ChainList {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeSummary {
-    pub id: i64,
+    pub id: u64,
     /// Null while orphaned.
-    pub position: Option<i64>,
+    pub position: Option<u64>,
     pub change_key: String,
     pub subject: String,
     /// pending | approved | `changes_requested` | commented | orphaned
     pub status: String,
     /// Latest revision number.
-    pub revision: i64,
+    pub revision: u64,
     /// Max revision with a review; null if none.
-    pub last_reviewed_revision: Option<i64>,
+    pub last_reviewed_revision: Option<u64>,
     pub commit_sha: String,
     pub short_sha: String,
     pub counts: ChangeCounts,
@@ -84,10 +84,10 @@ pub struct ChangeSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeCounts {
-    pub revisions: i64,
-    pub published_comments: i64,
-    pub drafts: i64,
-    pub unresolved: i64,
+    pub revisions: u64,
+    pub published_comments: u64,
+    pub drafts: u64,
+    pub unresolved: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -96,13 +96,13 @@ pub struct ChangeCounts {
 /// `GET /api/changes/{id}` response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeDetail {
-    pub id: i64,
-    pub chain_id: i64,
+    pub id: u64,
+    pub chain_id: u64,
     pub change_key: String,
-    pub position: Option<i64>,
+    pub position: Option<u64>,
     pub status: String,
     pub subject: String,
-    pub last_reviewed_revision: Option<i64>,
+    pub last_reviewed_revision: Option<u64>,
     /// Ascending.
     pub revisions: Vec<Revision>,
     /// Published + drafts, all revisions; anchors verbatim (the client
@@ -113,7 +113,7 @@ pub struct ChangeDetail {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Revision {
-    pub number: i64,
+    pub number: u64,
     pub commit_sha: String,
     pub short_sha: String,
     pub parent_sha: String,
@@ -124,8 +124,8 @@ pub struct Revision {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Review {
-    pub id: i64,
-    pub revision: i64,
+    pub id: u64,
+    pub revision: u64,
     /// approve | `request_changes` | comment
     pub verdict: String,
     /// Cover message.
@@ -151,18 +151,18 @@ pub struct DiffFile {
     /// added | deleted | modified | renamed
     pub status: String,
     pub binary: bool,
-    pub additions: i64,
-    pub deletions: i64,
+    pub additions: u64,
+    pub deletions: u64,
     /// Empty when binary.
     pub hunks: Vec<Hunk>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hunk {
-    pub old_start: i64,
-    pub old_lines: i64,
-    pub new_start: i64,
-    pub new_lines: i64,
+    pub old_start: u64,
+    pub old_lines: u64,
+    pub new_start: u64,
+    pub new_lines: u64,
     pub header: String,
     pub lines: Vec<Line>,
 }
@@ -173,10 +173,10 @@ pub struct Line {
     pub kind: String,
     /// Old line number; absent for add.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub old: Option<i64>,
+    pub old: Option<u64>,
     /// New line number; absent for del.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub new: Option<i64>,
+    pub new: Option<u64>,
     /// Without trailing newline.
     pub text: String,
 }
@@ -191,15 +191,15 @@ pub use crate::db::CommentRange;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Comment {
-    pub id: i64,
-    pub change_id: i64,
+    pub id: u64,
+    pub change_id: u64,
     /// The revision the comment is pinned to.
-    pub revision: i64,
-    pub parent_id: Option<i64>,
+    pub revision: u64,
+    pub parent_id: Option<u64>,
     /// reviewer | agent
     pub author: String,
     pub file: Option<String>,
-    pub line: Option<i64>,
+    pub line: Option<u64>,
     /// old | new — `new` is `revision`'s commit tree, `old` its parent
     /// tree (docs/api.md "Comment placement").
     pub side: String,
@@ -211,7 +211,7 @@ pub struct Comment {
     /// draft | published
     pub state: String,
     pub resolved: bool,
-    pub review_id: Option<i64>,
+    pub review_id: Option<u64>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -219,12 +219,12 @@ pub struct Comment {
 /// `POST /api/changes/{id}/drafts` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewDraft {
-    pub revision: i64,
+    pub revision: u64,
     /// Optional: change-/file-level comments omit file/line.
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]
-    pub line: Option<i64>,
+    pub line: Option<u64>,
     /// Defaults to "new".
     #[serde(default)]
     pub side: Option<String>,
@@ -233,7 +233,7 @@ pub struct NewDraft {
     pub range: Option<CommentRange>,
     pub body: String,
     #[serde(default)]
-    pub parent_id: Option<i64>,
+    pub parent_id: Option<u64>,
 }
 
 /// `PATCH /api/drafts/{id}` request.
@@ -248,7 +248,7 @@ pub struct EditDraft {
 /// `POST /api/changes/{id}/reviews` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitReview {
-    pub revision: i64,
+    pub revision: u64,
     /// approve | `request_changes` | comment
     pub verdict: String,
     #[serde(default)]
@@ -286,7 +286,7 @@ pub struct Feedback {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedbackChain {
-    pub id: i64,
+    pub id: u64,
     pub branch: String,
     pub base: String,
     pub web_url: String,
@@ -297,14 +297,14 @@ pub struct FeedbackChain {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedbackChange {
-    pub change_id: i64,
+    pub change_id: u64,
     pub change_key: String,
     pub subject: String,
     pub commit_sha: String,
     /// Latest revision number.
-    pub revision: i64,
+    pub revision: u64,
     pub status: String,
-    pub unresolved: i64,
+    pub unresolved: u64,
     /// Latest review, null if none.
     pub review: Option<FeedbackReview>,
     /// That review's comments only, plus still-unresolved threads from
@@ -316,13 +316,27 @@ pub struct FeedbackChange {
 pub struct FeedbackReview {
     pub verdict: String,
     pub message: String,
-    pub revision: i64,
+    pub revision: u64,
 }
 
-/// `GET /api/chains/{id}/wait` response.
+/// One entry in a chain's log (docs/api.md `LogEntry`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WaitResponse {
-    /// Latest event id for this chain; re-poll with it.
-    pub cursor: i64,
-    pub feedback: Feedback,
+pub struct LogEntry {
+    /// 0-based position in the chain's log.
+    pub idx: u64,
+    /// revisions | review | reply | resolve | partial | `chain_closed`
+    pub kind: String,
+    pub created_at: String,
+    /// Kind-specific; shapes in data-model.md "Payloads".
+    pub payload: serde_json::Value,
+}
+
+/// `GET /api/chains/{id}/log` response. The `/events` stream emits bare
+/// `LogEntry` values (one per SSE event), not a wrapper — the agent-side
+/// `head`/feedback view is assembled by the client (`nit wait`) from the
+/// stream plus `…/feedback`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogResponse {
+    pub head: u64,
+    pub entries: Vec<LogEntry>,
 }

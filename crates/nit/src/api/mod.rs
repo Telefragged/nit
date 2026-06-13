@@ -1,12 +1,12 @@
 //! HTTP API: every endpoint of `docs/api.md` (the contract), axum 0.8.
 //!
-//! - [`types`] — the wire-shape mirror of docs/api.md (golden rule 3).
+//! - [`types`] — the wire-shape mirror of docs/api.md (golden rule 4).
 //! - [`diff`] — diff JSON rendering and line-text snapshots.
-//! - [`views`] — db rows → wire shapes (chain state derivation included).
-//! - [`state`] — per-chain locks, scan throttle/orchestration, errors.
+//! - [`views`] — the fold (`crate::review`) + drafts → wire shapes.
+//! - [`state`] — the in-memory fold, per-chain locks, append/scan, errors.
 //!
-//! All rusqlite/git2 work runs in `spawn_blocking`; scans and review
-//! submissions to one chain serialize through its async mutex
+//! All rusqlite/git2 work runs in `spawn_blocking`; every appender to one
+//! chain serializes through its gate and folds in lock-step
 //! (docs/data-model.md "Concurrency").
 
 pub mod diff;
@@ -14,6 +14,7 @@ pub mod state;
 pub mod types;
 pub mod views;
 
+use std::convert::Infallible;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,13 +24,15 @@ use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::{get, patch, post};
+use futures_util::StreamExt;
 use git2::{Oid, Repository};
-use rusqlite::{Connection, TransactionBehavior};
 use serde::Deserialize;
 
-use crate::db::{self, ChangeStatus};
+use crate::db;
 use crate::gitscan;
+use crate::review::{self, Entry, Projection, PublishedComment, ReplyItem};
 
 pub use state::{AppJson, AppPath, AppQuery, AppState, Error, blocking, scan_chain};
 
@@ -40,7 +43,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/chains", post(register_chain).get(list_chains))
         .route("/api/chains/{id}", get(get_chain))
         .route("/api/chains/{id}/feedback", get(get_feedback))
-        .route("/api/chains/{id}/wait", get(wait_chain))
+        .route("/api/chains/{id}/events", get(events_chain))
+        .route("/api/chains/{id}/log", get(log_chain))
         .route("/api/changes/{id}", get(get_change_detail))
         .route("/api/changes/{id}/revisions/{n}/diff", get(revision_diff))
         .route("/api/changes/{id}/drafts", post(create_draft))
@@ -52,11 +56,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-/// Full application: `/api` plus the built web UI (`--web-dist` /
-/// `$NIT_WEB_DIST`) with an `index.html` SPA fallback for client-side
-/// routes. Without a web dist the server is API-only. Unknown `/api/*`
-/// paths must stay JSON 404s (api.md "Everything under /api, JSON
-/// in/out") — they never fall through to the SPA.
+/// Full application: `/api` plus the built web UI with an `index.html` SPA
+/// fallback. Unknown `/api/*` paths stay JSON 404s.
 pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
     let api = router(state).method_not_allowed_fallback(|| async {
         Error {
@@ -88,10 +89,9 @@ pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
 }
 
 /// Serve `app` on an already-bound listener until `shutdown` resolves.
-/// `public_base` (every `web_url`) comes from the listener's local addr.
 ///
 /// # Errors
-/// When accepting connections on `listener` fails.
+/// When the database can't be loaded or accepting connections fails.
 pub async fn serve_on(
     listener: tokio::net::TcpListener,
     db_path: PathBuf,
@@ -99,12 +99,8 @@ pub async fn serve_on(
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
-    let state = AppState::new(db_path, format!("http://{addr}"));
-    state.open_db()?; // fail fast: create/migrate before accepting requests
+    let state = AppState::load(db_path, format!("http://{addr}"))?;
     tracing::info!("listening on http://{addr}");
-    // Flip the state's shutdown watch the moment graceful shutdown
-    // begins: axum waits for in-flight requests, so without it a parked
-    // /wait long-poll would hold ctrl-c hostage for its full timeout.
     let st = state.clone();
     let shutdown = async move {
         shutdown.await;
@@ -117,37 +113,42 @@ pub async fn serve_on(
 }
 
 // ---------------------------------------------------------------------------
-// Shared loaders (blocking context)
+// Routing helpers (id → chain), all reading the in-memory fold
 
-fn load_chain(conn: &Connection, id: i64) -> Result<db::Chain, Error> {
-    db::get_chain(conn, id)?.ok_or_else(|| Error::not_found(format!("chain {id} not found")))
+/// The chain entry owning `change_id`, plus its chain id.
+fn entry_of_change(
+    state: &Arc<AppState>,
+    change_id: u64,
+) -> Result<(Arc<state::ChainEntry>, u64), Error> {
+    for id in state.chain_ids() {
+        if let Some(entry) = state.chain_entry(id)
+            && entry.read().change_by_id(change_id).is_some()
+        {
+            return Ok((entry, id));
+        }
+    }
+    Err(Error::not_found(format!("change {change_id} not found")))
 }
 
-fn load_change(conn: &Connection, id: i64) -> Result<db::Change, Error> {
-    db::get_change(conn, id)?.ok_or_else(|| Error::not_found(format!("change {id} not found")))
+/// The chain entry owning the published comment `comment_id`.
+fn entry_of_comment(
+    state: &Arc<AppState>,
+    comment_id: u64,
+) -> Result<(Arc<state::ChainEntry>, u64), Error> {
+    for id in state.chain_ids() {
+        if let Some(entry) = state.chain_entry(id)
+            && entry.read().root_comment(comment_id).is_some()
+        {
+            return Ok((entry, id));
+        }
+    }
+    Err(Error::not_found(format!("comment {comment_id} not found")))
 }
 
-fn load_comment(conn: &Connection, id: i64) -> Result<db::Comment, Error> {
-    db::get_comment(conn, id)?.ok_or_else(|| Error::not_found(format!("comment {id} not found")))
-}
-
-/// Open a chain's repository. `None` is tolerated where a missing repo
-/// can be absorbed — `create_draft` skips the `line_text` snapshot,
-/// `submit_review`'s pure-rebase retarget check fails closed. The diff
-/// endpoint instead treats `None` as a hard error.
-fn open_repo(conn: &Connection, chain_id: i64) -> Option<Repository> {
-    let path = db::chain_repo_path(conn, chain_id).ok().flatten()?;
-    Repository::open(path).ok()
-}
-
-/// Build the full Chain JSON for responses from current db state.
-async fn chain_response(state: Arc<AppState>, chain_id: i64) -> Result<Json<types::Chain>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
-        let chain = load_chain(&conn, chain_id)?;
-        Ok(Json(views::build_chain(&conn, &state.public_base, &chain)?))
-    })
-    .await
+fn entry_or_404(state: &Arc<AppState>, chain_id: u64) -> Result<Arc<state::ChainEntry>, Error> {
+    state
+        .chain_entry(chain_id)
+        .ok_or_else(|| Error::not_found(format!("chain {chain_id} not found")))
 }
 
 // ---------------------------------------------------------------------------
@@ -169,91 +170,76 @@ async fn register_chain(
 ) -> Result<Json<types::Chain>, Error> {
     let partial = req.partial;
     let st = state.clone();
-    let chain = blocking(move || {
+    let chain_id = blocking(move || {
         let conn = st.open_db()?;
-        // An *existing* chain re-registers even when git is mid-rebase:
-        // scan failures then surface as last_scan_error, not HTTP errors.
         let canonical = std::fs::canonicalize(&req.repo_path).map_err(|e| {
             Error::bad_request(format!("cannot resolve repo path {}: {e}", req.repo_path))
         })?;
         let canonical = canonical
             .to_str()
             .ok_or_else(|| Error::bad_request("repo path is not valid UTF-8"))?;
-        match db::find_chain_by_repo_branch(&conn, canonical, &req.branch)? {
-            Some(existing) => Ok(db::get_or_create_chain(
-                &conn,
-                existing.repo_id,
-                &req.branch,
-                &req.base,
-            )?),
-            None => gitscan::register(&conn, FsPath::new(&req.repo_path), &req.branch, &req.base)
-                .map_err(|e| Error::bad_request(format!("{e:#}"))),
+        // A *new* chain validates (the 400 case); an existing one re-registers
+        // even mid-rebase, surfacing failures as last_scan_error.
+        if db::find_chain(&conn, canonical, &req.branch)?.is_none() {
+            gitscan::validate_registration(FsPath::new(canonical), &req.branch, &req.base)
+                .map_err(|e| Error::bad_request(format!("{e:#}")))?;
         }
+        let chain = db::get_or_create_chain(&conn, canonical, &req.branch, &req.base)?;
+        st.ensure_entry(&conn, &chain)?;
+        Ok(chain.id)
     })
     .await?;
-    // Scan before applying partial: the flip wakes /wait long-polls, which
-    // read without the chain lock. Flipping first would let a `nit ready`
-    // carrying unscanned commits wake a waiter into the window between
-    // the two commits, where the old all-approved change set reads
-    // ready_to_merge — exactly the premature-merge state partial exists to
-    // make inexpressible. Scan-then-flip is uniformly safe: waiters woken
-    // by the flip see the post-scan change set, and for push --partial
-    // the scanned-in pending commits already block ready_to_merge.
-    scan_chain(&state, chain.id, true).await?; // push always rescans
+    // Scan before applying partial (state.rs scan_then_flip rationale): a
+    // `nit ready` carrying unscanned commits must not let a waiter read the
+    // old all-approved set as ready_to_merge.
+    scan_chain(&state, chain_id, true).await?;
     if let Some(partial) = partial {
-        apply_partial(&state, chain.id, partial).await?;
+        apply_partial(&state, chain_id, partial).await?;
     }
-    chain_response(state, chain.id).await
+    chain_response(state, chain_id).await
 }
 
-/// Apply the sticky `partial` flag from a registration. An actual flip is
-/// chain state the agent acts on, so it emits `chain_updated` and wakes
-/// `/wait` long-polls exactly like a scan-emitted event; setting the
-/// already-stored value does neither. Runs under the chain lock — no
-/// scan or review submission races the flip (docs/data-model.md
-/// "Concurrency").
-async fn apply_partial(state: &Arc<AppState>, chain_id: i64, partial: bool) -> Result<(), Error> {
-    let entry = state.entry(chain_id);
-    let gate = entry.gate.lock().await;
+/// Apply the sticky `partial` flag: append a `partial` entry only on an
+/// actual flip. Runs under the chain lock.
+async fn apply_partial(state: &Arc<AppState>, chain_id: u64, partial: bool) -> Result<(), Error> {
+    let entry = entry_or_404(state, chain_id)?;
+    let guard = entry.gate.lock().await;
     let st = state.clone();
-    let flipped = blocking(move || {
-        let txn = || -> anyhow::Result<bool> {
-            let mut conn = st.open_db()?;
-            let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            let flipped = db::chain_set_partial(&tx, chain_id, partial)?;
-            if flipped {
-                // Deliberately no chain_touch: updated_at times the
-                // branch-missing abandon window and a partial flip is not a scan.
-                db::insert_event(
-                    &tx,
-                    chain_id,
-                    "chain_updated",
-                    &serde_json::json!({"chain_id": chain_id}),
-                    &db::now_rfc3339(),
-                )?;
-            }
-            tx.commit()?;
-            Ok(flipped)
-        };
-        // Cross-chain write contention gets the same retryable 503 the
-        // scan running next in this request returns (state.rs scan_chain),
-        // not an opaque 500.
-        txn().map_err(|err| {
-            if state::is_sqlite_busy(&err) {
-                Error::unavailable(
-                    "database is busy (another chain is being scanned) — retry shortly",
-                )
-            } else {
-                err.into()
-            }
-        })
+    let e2 = entry.clone();
+    blocking(move || -> Result<(), Error> {
+        if e2.read().partial == partial {
+            return Ok(()); // no flip, no entry
+        }
+        let mut conn = st.open_db()?;
+        let news = vec![(
+            "partial".to_string(),
+            serde_json::json!({ "partial": partial }),
+        )];
+        state::commit_entries(&mut conn, &e2, chain_id, news).map_err(map_busy)?;
+        Ok(())
     })
     .await?;
-    drop(gate);
-    if flipped {
-        entry.notify.notify_waiters();
-    }
+    drop(guard);
     Ok(())
+}
+
+fn map_busy(err: anyhow::Error) -> Error {
+    if state::is_sqlite_busy(&err) {
+        Error::unavailable("database is busy (another chain is being scanned) — retry shortly")
+    } else {
+        err.into()
+    }
+}
+
+/// Build the Chain JSON for a chain from its current fold.
+async fn chain_response(state: Arc<AppState>, chain_id: u64) -> Result<Json<types::Chain>, Error> {
+    let entry = entry_or_404(&state, chain_id)?;
+    blocking(move || {
+        let conn = state.open_db()?;
+        let proj = entry.read();
+        Ok(Json(views::build_chain(&conn, &state.public_base, &proj)?))
+    })
+    .await
 }
 
 #[derive(Deserialize)]
@@ -275,14 +261,7 @@ async fn list_chains(
         }
     };
 
-    let st = state.clone();
-    let ids: Vec<i64> = blocking(move || {
-        let conn = st.open_db()?;
-        Ok(db::list_chains(&conn)?.iter().map(|c| c.id).collect())
-    })
-    .await?;
-    // Throttled scan per chain; failures are isolated into each chain's
-    // last_scan_error and must not affect listing the others.
+    let ids = state.chain_ids();
     for id in &ids {
         scan_chain(&state, *id, false).await?;
     }
@@ -291,13 +270,14 @@ async fn list_chains(
         let conn = state.open_db()?;
         let mut chains = Vec::new();
         for id in ids {
-            let Some(chain) = db::get_chain(&conn, id)? else {
+            let Some(entry) = state.chain_entry(id) else {
                 continue;
             };
-            if !include_closed && chain.status != db::ChainStatus::Active {
+            let proj = entry.read();
+            if !include_closed && proj.status != review::ChainStatus::Active {
                 continue;
             }
-            chains.push(views::build_chain(&conn, &state.public_base, &chain)?);
+            chains.push(views::build_chain(&conn, &state.public_base, &proj)?);
         }
         Ok(Json(types::ChainList { chains }))
     })
@@ -306,14 +286,9 @@ async fn list_chains(
 
 async fn get_chain(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
 ) -> Result<Json<types::Chain>, Error> {
-    let st = state.clone();
-    blocking(move || {
-        let conn = st.open_db()?;
-        load_chain(&conn, id).map(|_| ())
-    })
-    .await?;
+    entry_or_404(&state, id)?;
     scan_chain(&state, id, false).await?;
     chain_response(state, id).await
 }
@@ -323,66 +298,92 @@ async fn get_chain(
 
 async fn get_change_detail(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
+    let (entry, chain_id) = entry_of_change(&state, id)?;
     blocking(move || {
         let conn = state.open_db()?;
-        let change = load_change(&conn, id)?;
-        Ok(Json(views::build_change_detail(&conn, &change)?))
+        let proj = entry.read();
+        let change = proj
+            .change_by_id(id)
+            .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
+        Ok(Json(views::build_change_detail(&conn, chain_id, change)?))
     })
     .await
 }
 
 #[derive(Deserialize)]
 struct DiffQuery {
-    against: Option<i64>,
+    against: Option<u64>,
 }
 
 async fn revision_diff(
     State(state): State<Arc<AppState>>,
-    AppPath((id, n)): AppPath<(i64, i64)>,
+    AppPath((id, n)): AppPath<(u64, u64)>,
     AppQuery(q): AppQuery<DiffQuery>,
 ) -> Result<Json<types::Diff>, Error> {
+    let (entry, _) = entry_of_change(&state, id)?;
     blocking(move || {
-        let conn = state.open_db()?;
-        let change = load_change(&conn, id)?;
-        let rev = db::get_revision(&conn, change.id, n)?
-            .ok_or_else(|| Error::not_found(format!("revision {n} not found")))?;
-        let repo = open_repo(&conn, change.chain_id)
-            .ok_or_else(|| Error::internal("cannot open the chain's repository"))?;
-        let new_tree = revision_tree(&repo, &rev)?;
-        // Interdiffs also diff the two revisions' commit messages; vs
-        // parent the message has no old side (against_message: None).
-        let (old_tree, against_message) = match q.against {
+        // Pull the revision shas + messages out of the fold, then drop the
+        // lock before touching git.
+        let (repo_path, new_sha, new_msg, parent_sha, against): (
+            String,
+            String,
+            String,
+            String,
+            Option<(String, String)>,
+        ) = {
+            let proj = entry.read();
+            let change = proj
+                .change_by_id(id)
+                .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
+            let rev = change
+                .revision(n)
+                .ok_or_else(|| Error::not_found(format!("revision {n} not found")))?;
+            let against = match q.against {
+                None => None,
+                Some(m) => {
+                    let a = change
+                        .revision(m)
+                        .ok_or_else(|| Error::not_found(format!("revision {m} not found")))?;
+                    Some((a.commit_sha.clone(), a.message.clone()))
+                }
+            };
+            (
+                proj.repo_path.clone(),
+                rev.commit_sha.clone(),
+                rev.message.clone(),
+                rev.parent_sha.clone(),
+                against,
+            )
+        };
+        let repo = Repository::open(&repo_path)
+            .map_err(|e| Error::internal(format!("cannot open the chain's repository: {e}")))?;
+        let new_tree = commit_tree(&repo, &new_sha)?;
+        let (old_tree, against_message) = match against {
             None => {
                 let parent = repo
-                    .find_commit(parse_oid(&rev.parent_sha)?)
+                    .find_commit(parse_oid(&parent_sha)?)
                     .map_err(|e| Error::internal(format!("parent commit missing: {e}")))?;
                 let tree = parent
                     .tree()
                     .map_err(|e| Error::internal(format!("parent tree missing: {e}")))?;
                 (tree, None)
             }
-            Some(m) => {
-                let against = db::get_revision(&conn, change.id, m)?
-                    .ok_or_else(|| Error::not_found(format!("revision {m} not found")))?;
-                (revision_tree(&repo, &against)?, Some(against.message))
-            }
+            Some((sha, msg)) => (commit_tree(&repo, &sha)?, Some(msg)),
         };
         let mut wire = diff::diff_trees(&repo, &old_tree, &new_tree)?;
         wire.files.insert(
             0,
-            diff::commit_msg_file(against_message.as_deref(), &rev.message)?,
+            diff::commit_msg_file(against_message.as_deref(), &new_msg)?,
         );
         Ok(Json(wire))
     })
     .await
 }
 
-/// A revision's reviewed tree: its commit's own tree.
-fn revision_tree<'r>(repo: &'r Repository, rev: &db::Revision) -> Result<git2::Tree<'r>, Error> {
-    diff::commit_tree(repo, &rev.commit_sha)
-        .ok_or_else(|| Error::internal(format!("revision {} tree missing", rev.number)))
+fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Result<git2::Tree<'r>, Error> {
+    diff::commit_tree(repo, sha).ok_or_else(|| Error::internal(format!("tree for {sha} missing")))
 }
 
 fn parse_oid(sha: &str) -> Result<Oid, Error> {
@@ -394,13 +395,18 @@ fn parse_oid(sha: &str) -> Result<Oid, Error> {
 
 async fn create_draft(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::NewDraft>,
 ) -> Result<Json<types::Comment>, Error> {
+    let (entry, chain_id) = entry_of_change(&state, id)?;
     blocking(move || {
         let conn = state.open_db()?;
-        let change = load_change(&conn, id)?;
-        let rev = db::get_revision(&conn, change.id, req.revision)?
+        let proj = entry.read();
+        let change = proj
+            .change_by_id(id)
+            .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
+        let rev = change
+            .revision(req.revision)
             .ok_or_else(|| Error::bad_request(format!("revision {} not found", req.revision)))?;
         let side = req.side.as_deref().unwrap_or("new");
         if side != "new" && side != "old" {
@@ -417,20 +423,17 @@ async fn create_draft(
             ));
         }
         let range = req.range.map(|r| validate_range(r, req.line)).transpose()?;
-        // Thread under the root, wherever the draft pointed (like replies):
-        // feedback scoping only walks one level below roots, so a comment
-        // threaded under a reply would silently vanish from the agent's view.
+        // Thread under the published root (feedback scoping only walks one
+        // level below roots).
         let parent_id = match req.parent_id {
-            Some(parent_id) => {
-                let parent = load_comment(&conn, parent_id)?;
-                if parent.change_id != change.id {
+            Some(pid) => {
+                let root = proj
+                    .root_comment(pid)
+                    .ok_or_else(|| Error::bad_request("parent comment not found on this chain"))?;
+                if root.change_id != id {
                     return Err(Error::bad_request(
                         "parent comment belongs to a different change",
                     ));
-                }
-                let mut root = parent;
-                while let Some(up) = root.parent_id {
-                    root = load_comment(&conn, up)?;
                 }
                 Some(root.id)
             }
@@ -438,38 +441,50 @@ async fn create_draft(
         };
         let line_text = match (req.file.as_deref(), req.line) {
             (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&rev.message, line),
-            (Some(file), Some(line)) => open_repo(&conn, change.chain_id)
-                .and_then(|repo| anchor_line_text(&repo, &rev, side, file, line)),
+            (Some(file), Some(line)) => {
+                let sha = if side == "old" {
+                    &rev.parent_sha
+                } else {
+                    &rev.commit_sha
+                };
+                Repository::open(&proj.repo_path).ok().and_then(|repo| {
+                    diff::commit_tree(&repo, sha)
+                        .and_then(|t| diff::line_text(&repo, &t, file, line))
+                })
+            }
             _ => None,
         };
-        let row = db::insert_comment(
+        let change_key = change.change_key.clone();
+        drop(proj);
+        // A draft's id comes from the global counter so it stays stable when
+        // it later publishes into a `review` entry (it becomes that comment).
+        let draft_id = state.alloc_id();
+        let row = db::insert_draft(
             &conn,
-            &db::NewComment {
-                change_id: change.id,
-                revision_number: rev.number,
+            draft_id,
+            &db::NewDraft {
+                chain_id,
+                change_key: &change_key,
+                revision: req.revision,
                 parent_id,
-                author: "reviewer",
                 file: req.file.as_deref(),
                 line: req.line,
                 side,
                 range,
                 line_text: line_text.as_deref(),
                 body: &req.body,
-                state: "draft",
-                resolved: false,
             },
             &db::now_rfc3339(),
         )?;
-        Ok(Json(views::comment_view(&row)))
+        Ok(Json(views::draft_view(&row, id)))
     })
     .await
 }
 
-/// The "Range comments" rules of docs/api.md: a range needs a line
-/// anchor, ends on it, and is non-empty and forward.
+/// The "Range comments" rules of docs/api.md.
 fn validate_range(
     range: types::CommentRange,
-    line: Option<i64>,
+    line: Option<u64>,
 ) -> Result<types::CommentRange, Error> {
     if line.is_none() {
         return Err(Error::bad_request("a range requires a line anchor"));
@@ -481,7 +496,9 @@ fn validate_range(
     }
     let forward = range.start_line < range.end_line
         || (range.start_line == range.end_line && range.start_char < range.end_char);
-    if range.start_line < 1 || range.start_char < 0 || range.end_char < 1 || !forward {
+    // Lines are 1-based and `end_char` is exclusive, so both must be ≥ 1;
+    // `start_char` is 0-based and unsigned, so its lower bound is implicit.
+    if range.start_line < 1 || range.end_char < 1 || !forward {
         return Err(Error::bad_request(
             "range must be non-empty and forward (docs/api.md \"Range comments\")",
         ));
@@ -489,55 +506,45 @@ fn validate_range(
     Ok(range)
 }
 
-/// Snapshot of the anchored line: the commit's tree for `new`, the
-/// parent commit's tree for `old` (deleted lines live there).
-fn anchor_line_text(
-    repo: &Repository,
-    rev: &db::Revision,
-    side: &str,
-    file: &str,
-    line: i64,
-) -> Option<String> {
-    let sha = if side == "old" {
-        &rev.parent_sha
-    } else {
-        &rev.commit_sha
-    };
-    diff::line_text(repo, &diff::commit_tree(repo, sha)?, file, line)
-}
-
 async fn edit_draft(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::EditDraft>,
 ) -> Result<Json<types::Comment>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
-        let comment = load_comment(&conn, id)?;
-        if comment.state != "draft" {
-            return Err(Error::not_found(format!("draft {id} not found")));
-        }
+        let draft = db::get_draft(&conn, id)?
+            .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
         db::update_draft_body(&conn, id, &req.body, &db::now_rfc3339())?;
-        let comment = load_comment(&conn, id)?;
-        Ok(Json(views::comment_view(&comment)))
+        let updated = db::get_draft(&conn, id)?
+            .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
+        let change_id = change_id_for_draft(&state, &draft);
+        Ok(Json(views::draft_view(&updated, change_id)))
     })
     .await
 }
 
 async fn delete_draft(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
 ) -> Result<StatusCode, Error> {
     blocking(move || {
         let conn = state.open_db()?;
-        let comment = load_comment(&conn, id)?;
-        if comment.state != "draft" {
+        if db::get_draft(&conn, id)?.is_none() {
             return Err(Error::not_found(format!("draft {id} not found")));
         }
-        db::delete_comment(&conn, id)?;
+        db::delete_draft(&conn, id)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await
+}
+
+/// The fold-id of the change a draft belongs to (for the wire `change_id`).
+fn change_id_for_draft(state: &Arc<AppState>, draft: &db::DraftRow) -> u64 {
+    state
+        .chain_entry(draft.chain_id)
+        .and_then(|e| e.read().change_by_key(&draft.change_key).map(|c| c.id))
+        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -545,131 +552,216 @@ async fn delete_draft(
 
 async fn resolve_comment(
     state: State<Arc<AppState>>,
-    path: AppPath<i64>,
+    path: AppPath<u64>,
 ) -> Result<Json<types::Comment>, Error> {
     set_resolved(state, path, true).await
 }
 
 async fn unresolve_comment(
     state: State<Arc<AppState>>,
-    path: AppPath<i64>,
+    path: AppPath<u64>,
 ) -> Result<Json<types::Comment>, Error> {
     set_resolved(state, path, false).await
 }
 
 async fn set_resolved(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
     resolved: bool,
 ) -> Result<Json<types::Comment>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
-        let comment = load_comment(&conn, id)?;
-        if comment.parent_id.is_some() {
-            return Err(Error::bad_request(
-                "only root comments carry thread resolution",
-            ));
-        }
-        if comment.state != "published" {
-            return Err(Error::bad_request("cannot resolve an unpublished draft"));
-        }
-        db::comment_set_resolved(&conn, id, resolved, &db::now_rfc3339())?;
-        let comment = load_comment(&conn, id)?;
-        Ok(Json(views::comment_view(&comment)))
+    let (entry, chain_id) = entry_of_comment(&state, id)?;
+    let guard = entry.gate.lock().await;
+    let st = state.clone();
+    let e2 = entry.clone();
+    let resp = blocking(move || -> Result<Json<types::Comment>, Error> {
+        let root_id = {
+            let proj = e2.read();
+            let root = proj
+                .root_comment(id)
+                .ok_or_else(|| Error::not_found(format!("comment {id} not found")))?;
+            if root.id != id {
+                return Err(Error::bad_request(
+                    "only root comments carry thread resolution",
+                ));
+            }
+            root.id
+        };
+        let mut conn = st.open_db()?;
+        let news = vec![(
+            "resolve".to_string(),
+            serde_json::json!({ "comment_id": root_id, "resolved": resolved }),
+        )];
+        state::commit_entries(&mut conn, &e2, chain_id, news).map_err(map_busy)?;
+        let proj = e2.read();
+        let root = proj
+            .root_comment(root_id)
+            .ok_or_else(|| Error::internal("comment vanished after resolve"))?;
+        Ok(Json(views::comment_view(root)))
     })
-    .await
+    .await?;
+    drop(guard);
+    Ok(resp)
 }
 
 // ---------------------------------------------------------------------------
 // Reviews
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one atomic flow: resolve target, drain drafts, probe-fold, append, fold, respond"
+)]
 async fn submit_review(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::SubmitReview>,
 ) -> Result<Json<types::SubmitReviewResponse>, Error> {
-    let status = match req.verdict.as_str() {
-        "approve" => ChangeStatus::Approved,
-        "request_changes" => ChangeStatus::ChangesRequested,
-        "comment" => ChangeStatus::Commented,
-        other => {
-            return Err(Error::bad_request(format!(
-                "verdict must be approve | request_changes | comment, got {other:?}"
-            )));
-        }
-    };
-
-    let st = state.clone();
-    let chain_id = blocking(move || {
-        let conn = st.open_db()?;
-        Ok(load_change(&conn, id)?.chain_id)
-    })
-    .await?;
-
-    // The chain lock: no revision insert (scan) or 409 check happens
-    // concurrently with this submission.
-    let entry = state.entry(chain_id);
-    let gate = entry.gate.lock().await;
-    let st = state.clone();
-    let result = blocking(move || {
-        let mut conn = st.open_db()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let change = load_change(&tx, id)?;
-        if change.position.is_none() {
-            return Err(Error::conflict(
-                "change is orphaned (its commit left the branch) — wait for it to re-attach",
-            ));
-        }
-        let latest = db::latest_revision(&tx, change.id)?
-            .ok_or_else(|| Error::internal(format!("change {id} has no revisions")))?;
-
-        let target = if req.revision == latest.number {
-            latest.number
-        } else {
-            let reviewed = db::get_revision(&tx, change.id, req.revision)?.ok_or_else(|| {
-                Error::bad_request(format!("revision {} not found", req.revision))
-            })?;
-            // Pure rebase (patch-id-equal, same message): auto-retarget.
-            let retargets = open_repo(&tx, change.chain_id)
-                .is_some_and(|repo| gitscan::pure_rebase_equivalent(&repo, &reviewed, &latest));
-            if !retargets {
-                return Err(Error::conflict(format!(
-                    "revision {} is no longer the latest (revision {} landed) — refetch and resubmit",
-                    req.revision, latest.number
-                )));
-            }
-            latest.number
-        };
-
-        let now = db::now_rfc3339();
-        let review = db::insert_review(&tx, change.id, target, &req.verdict, &req.message, &now)?;
-        let published = db::publish_drafts(&tx, change.id, review.id, &now)?;
-        db::change_set_position_status(&tx, change.id, change.position, status)?;
-        db::insert_event(
-            &tx,
-            change.chain_id,
-            "review_submitted",
-            &serde_json::json!({
-                "chain_id": change.chain_id,
-                "change_id": change.id,
-                "review_id": review.id,
-                "verdict": req.verdict,
-            }),
-            &now,
-        )?;
-        db::chain_touch(&tx, change.chain_id, &now)?;
-        tx.commit().map_err(anyhow::Error::from)?;
-        Ok(Json(types::SubmitReviewResponse {
-            review: views::review_json(&review),
-            published_comments: published.iter().map(views::comment_view).collect(),
-        }))
-    })
-    .await;
-    drop(gate);
-    if result.is_ok() {
-        entry.notify.notify_waiters();
+    if !matches!(
+        req.verdict.as_str(),
+        "approve" | "request_changes" | "comment"
+    ) {
+        return Err(Error::bad_request(format!(
+            "verdict must be approve | request_changes | comment, got {:?}",
+            req.verdict
+        )));
     }
-    result
+    let (entry, chain_id) = entry_of_change(&state, id)?;
+    let guard = entry.gate.lock().await;
+    let st = state.clone();
+    let e2 = entry.clone();
+    let resp = blocking(move || -> Result<Json<types::SubmitReviewResponse>, Error> {
+        let mut conn = st.open_db()?;
+            // Resolve the target revision + drain drafts under the read lock.
+            let (change_key, target, comments, review_id) = {
+                let proj = e2.read();
+                let change = proj
+                    .change_by_id(id)
+                    .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
+                if change.orphaned {
+                    return Err(Error::conflict(
+                        "change is orphaned (its commit left the branch) — wait for it to re-attach",
+                    ));
+                }
+                let latest = change
+                    .latest_revision()
+                    .ok_or_else(|| Error::internal(format!("change {id} has no revisions")))?;
+                let target = resolve_target(&proj, change, latest, req.revision)?;
+                let review_id = st.alloc_id();
+                let drafts = db::drafts_for_change(&conn, chain_id, &change.change_key)?;
+                let comments: Vec<PublishedComment> = drafts
+                    .iter()
+                    .map(|d| PublishedComment {
+                        id: d.id, // preserved: a published comment keeps its draft id
+                        revision: Some(d.revision),
+                        parent_id: d.parent_id,
+                        file: d.file.clone(),
+                        line: d.line,
+                        side: d.side.clone(),
+                        range: d.range,
+                        line_text: d.line_text.clone(),
+                        body: d.body.clone(),
+                    })
+                    .collect();
+                (change.change_key.clone(), target, comments, review_id)
+            };
+
+            let payload = serde_json::to_value(review::ReviewPayload {
+                change_key: change_key.clone(),
+                review_id,
+                revision: target,
+                verdict: req.verdict.clone(),
+                message: req.message.clone(),
+                comments,
+            })
+            .map_err(anyhow::Error::from)?;
+            // Drain drafts + append the review entry atomically. Validate the
+            // fold on a probe copy first, so a bad payload aborts before any
+            // write — the log never gets ahead of the projection
+            // (state::commit_entries rationale).
+            let now = db::now_rfc3339();
+            let start = e2.read().head;
+            let parsed = Entry {
+                idx: start,
+                kind: "review".to_string(),
+                payload,
+                created_at: now,
+            };
+            {
+                let mut probe = e2.read().clone();
+                review::fold(&mut probe, &parsed)?;
+            }
+            let tx = conn
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                .map_err(anyhow::Error::from)?;
+            db::delete_drafts_for_change(&tx, chain_id, &change_key).map_err(map_busy)?;
+            db::append_log(&tx, chain_id, start, "review", &parsed.payload, &parsed.created_at)
+                .map_err(map_busy)?;
+            tx.commit().map_err(anyhow::Error::from)?;
+
+            {
+                let mut proj = e2.proj.write().expect("projection lock poisoned");
+                review::fold(&mut proj, &parsed).expect("fold validated before commit");
+            }
+            // Publish the appended review on the live `/events` feed (after
+            // the durable commit + fold, as in state::commit_entries).
+            e2.publish(views::log_entry_view(&parsed));
+            // Build the response from the folded state.
+            let proj = e2.read();
+            let change = proj
+                .change_by_id(id)
+                .ok_or_else(|| Error::internal("change vanished after review"))?;
+            let review = change
+                .reviews
+                .iter()
+                .find(|r| r.id == review_id)
+                .ok_or_else(|| Error::internal("review vanished after fold"))?;
+            let published_comments: Vec<types::Comment> = change
+                .comments
+                .iter()
+                .filter(|c| c.review_id == Some(review_id))
+                .map(views::comment_view)
+                .collect();
+            Ok(Json(types::SubmitReviewResponse {
+                review: views::review_json(review),
+                published_comments,
+            }))
+        })
+        .await?;
+    drop(guard);
+    Ok(resp)
+}
+
+/// The revision a review applies to: the requested one when latest, else the
+/// latest if the requested is a pure-rebase ancestor (auto-retarget), else a
+/// 409.
+fn resolve_target(
+    proj: &Projection,
+    change: &review::ChangeProj,
+    latest: &review::RevisionProj,
+    requested: u64,
+) -> Result<u64, Error> {
+    if requested == latest.number {
+        return Ok(latest.number);
+    }
+    let reviewed = change
+        .revision(requested)
+        .ok_or_else(|| Error::bad_request(format!("revision {requested} not found")))?;
+    let retargets = Repository::open(&proj.repo_path).is_ok_and(|repo| {
+        gitscan::pure_rebase(
+            &repo,
+            &reviewed.commit_sha,
+            &reviewed.message,
+            &latest.commit_sha,
+            &latest.message,
+        )
+    });
+    if retargets {
+        Ok(latest.number)
+    } else {
+        Err(Error::conflict(format!(
+            "revision {requested} is no longer the latest (revision {} landed) — refetch and resubmit",
+            latest.number
+        )))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -677,147 +769,196 @@ async fn submit_review(
 
 async fn create_reply(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::NewReply>,
 ) -> Result<Json<types::Comment>, Error> {
+    let (entry, chain_id) = entry_of_comment(&state, id)?;
+    let guard = entry.gate.lock().await;
     let st = state.clone();
-    let (chain_id, reply) = blocking(move || {
+    let e2 = entry.clone();
+    let resp = blocking(move || -> Result<Json<types::Comment>, Error> {
+        let reply_id = st.alloc_id();
+        let root_id = {
+            let proj = e2.read();
+            let root = proj
+                .root_comment(id)
+                .ok_or_else(|| Error::not_found(format!("comment {id} not found")))?;
+            root.id
+        };
+        let payload = serde_json::to_value(review::ReplyPayload {
+            replies: vec![ReplyItem {
+                id: reply_id,
+                comment_id: root_id,
+                body: req.body.clone(),
+                resolve: req.resolve,
+            }],
+        })
+        .map_err(anyhow::Error::from)?;
         let mut conn = st.open_db()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let comment = load_comment(&tx, id)?;
-        if comment.state != "published" {
-            return Err(Error::not_found(format!("comment {id} not found")));
-        }
-        // Thread under the root, wherever the reply pointed.
-        let mut root = comment;
-        while let Some(parent_id) = root.parent_id {
-            root = load_comment(&tx, parent_id)?;
-        }
-        let change = load_change(&tx, root.change_id)?;
-        let now = db::now_rfc3339();
-        let reply = db::insert_comment(
-            &tx,
-            &db::NewComment {
-                change_id: root.change_id,
-                revision_number: root.revision_number,
-                parent_id: Some(root.id),
-                author: "agent",
-                file: root.file.as_deref(),
-                line: root.line,
-                side: &root.side,
-                range: root.range,
-                line_text: root.line_text.as_deref(),
-                body: &req.body,
-                state: "published",
-                resolved: false,
-            },
-            &now,
-        )?;
-        if req.resolve {
-            db::comment_set_resolved(&tx, root.id, true, &now)?;
-        }
-        db::insert_event(
-            &tx,
-            change.chain_id,
-            "comment_replied",
-            &serde_json::json!({
-                "chain_id": change.chain_id,
-                "change_id": change.id,
-                "comment_id": reply.id,
-            }),
-            &now,
-        )?;
-        db::chain_touch(&tx, change.chain_id, &now)?;
-        tx.commit().map_err(anyhow::Error::from)?;
-        Ok((change.chain_id, Json(views::comment_view(&reply))))
+        state::commit_entries(
+            &mut conn,
+            &e2,
+            chain_id,
+            vec![("reply".to_string(), payload)],
+        )
+        .map_err(map_busy)?;
+        let proj = e2.read();
+        let reply = proj
+            .comment_by_id(reply_id)
+            .ok_or_else(|| Error::internal("reply vanished after fold"))?;
+        Ok(Json(views::comment_view(reply)))
     })
     .await?;
-    state.entry(chain_id).notify.notify_waiters();
-    Ok(reply)
+    drop(guard);
+    Ok(resp)
 }
 
 async fn get_feedback(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
+    AppPath(id): AppPath<u64>,
 ) -> Result<Json<types::Feedback>, Error> {
-    feedback_response(state, id).await
+    let entry = entry_or_404(&state, id)?;
+    feedback_for(&state, &entry).await
 }
 
-async fn feedback_response(
-    state: Arc<AppState>,
-    chain_id: i64,
+async fn feedback_for(
+    state: &Arc<AppState>,
+    entry: &Arc<state::ChainEntry>,
 ) -> Result<Json<types::Feedback>, Error> {
+    let st = state.clone();
+    let e2 = entry.clone();
     blocking(move || {
-        let conn = state.open_db()?;
-        let chain = load_chain(&conn, chain_id)?;
-        Ok(Json(views::build_feedback(
-            &conn,
-            &state.public_base,
-            &chain,
-        )?))
+        let proj = e2.read();
+        Ok(Json(views::build_feedback(&st.public_base, &proj)))
     })
     .await
 }
 
 #[derive(Deserialize)]
-struct WaitQuery {
-    cursor: Option<i64>,
-    timeout: Option<u64>,
+struct EventsQuery {
+    cursor: Option<u64>,
 }
 
-/// Long-poll: block until an event with id > cursor exists for this chain
-/// (or timeout — default 55s, max 120), then return the latest cursor and
-/// a feedback snapshot. `cursor=0` returns the current snapshot
-/// immediately.
-async fn wait_chain(
+/// Server-Sent Events stream of a chain's log from `cursor` onward
+/// (docs/api.md "events"). On connect it replays every entry already past
+/// `cursor` as individual `data: LogEntry` events, then streams each new
+/// entry as it is appended; keep-alive comments hold the connection open
+/// while the chain is quiet. The server makes **no** wake/relevance
+/// judgement — it emits the raw log and leaves "which events matter" to the
+/// client (docs/data-model.md "Wake rule"). The stream ends on graceful
+/// shutdown or client disconnect.
+async fn events_chain(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<i64>,
-    AppQuery(q): AppQuery<WaitQuery>,
-) -> Result<Json<types::WaitResponse>, Error> {
-    let cursor = q.cursor.unwrap_or(0);
-    let timeout = q.timeout.unwrap_or(55).min(120);
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout);
-    let entry = state.entry(id);
-    let mut shutdown = state.shutdown_watch();
-
-    loop {
-        // Arm the wakeup *before* checking the db so an event landing
-        // between check and sleep cannot be missed.
-        let notified = entry.notify.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
-
-        let st = state.clone();
-        let latest = blocking(move || {
-            let conn = st.open_db()?;
-            load_chain(&conn, id)?;
-            Ok(db::latest_event_id(&conn, id)?)
-        })
-        .await?;
-
-        if cursor == 0 || latest > cursor {
-            break;
-        }
-        tokio::select! {
-            () = &mut notified => {}
-            () = tokio::time::sleep_until(deadline) => break,
-            // Graceful shutdown: hand back the unchanged snapshot now
-            // instead of holding shutdown open for the poll timeout.
-            // wait_for checks the current value first, so a poll admitted
-            // just after the flip still exits immediately.
-            _ = shutdown.wait_for(|&stopping| stopping) => break,
-        }
-    }
+    AppPath(id): AppPath<u64>,
+    AppQuery(q): AppQuery<EventsQuery>,
+) -> Result<impl IntoResponse, Error> {
+    let start = q.cursor.unwrap_or(0);
+    let chain = entry_or_404(&state, id)?;
+    // Subscribe *before* reading the backlog: every entry appended past this
+    // point lands on the channel, every earlier one is already in the log, so
+    // the two together miss nothing. The overlap — an entry that is both in
+    // the backlog and still buffered on the channel — is filtered out below by
+    // the `idx` watermark, so each entry surfaces exactly once.
+    let live = chain.subscribe();
 
     let st = state.clone();
-    let latest = blocking(move || {
+    let backlog = blocking(move || {
         let conn = st.open_db()?;
-        Ok(db::latest_event_id(&conn, id)?)
+        load_log(&conn, id, start, None)
     })
     .await?;
-    let Json(feedback) = feedback_response(state, id).await?;
-    Ok(Json(types::WaitResponse {
-        cursor: latest,
-        feedback,
-    }))
+    let watermark = backlog.last().map_or(start, |e| e.idx + 1);
+
+    let backlog = futures_util::stream::iter(
+        backlog
+            .into_iter()
+            .map(|e| Ok::<Event, Infallible>(sse_event(&e))),
+    );
+    // Drive `recv()` directly (not the `Stream` impl, which swallows overflow):
+    // an `Err` means the channel closed or this subscriber lagged past the
+    // buffer, so we end the stream and let the client reconnect + re-read the
+    // gap from the log.
+    let live = futures_util::stream::unfold(live, |mut rx| async move {
+        rx.recv().await.ok().map(|entry| (entry, rx))
+    })
+    .filter(move |entry| std::future::ready(entry.idx >= watermark))
+    .map(|entry| Ok::<Event, Infallible>(sse_event(&entry)));
+
+    let mut shutdown = state.shutdown_watch();
+    let stream = backlog.chain(live).take_until(async move {
+        let _ = shutdown.wait_for(|&stopping| stopping).await;
+    });
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(10))))
+}
+
+/// Render a log entry as an SSE `data:` event, degrading to a comment frame
+/// if it somehow fails to serialize (rather than tearing down the stream).
+fn sse_event(entry: &types::LogEntry) -> Event {
+    Event::default()
+        .json_data(entry)
+        .unwrap_or_else(|_| Event::default().comment("unserializable entry"))
+}
+
+#[derive(Deserialize)]
+struct LogQuery {
+    from: Option<u64>,
+    to: Option<u64>,
+}
+
+/// Read-only log slice `[from, to)` (docs/api.md "log"). `from` defaults to
+/// `0`, `to` to the head. References past the dataset are an error, not a
+/// silent clamp: a closed `to` beyond `head`, or an open `from` beyond
+/// `head`, is a 400. A valid range that happens to select nothing (an open
+/// `from == head`) returns an empty list.
+async fn log_chain(
+    State(state): State<Arc<AppState>>,
+    AppPath(id): AppPath<u64>,
+    AppQuery(q): AppQuery<LogQuery>,
+) -> Result<Json<types::LogResponse>, Error> {
+    let entry = entry_or_404(&state, id)?;
+    blocking(move || {
+        let conn = state.open_db()?;
+        let head = entry.read().head;
+        let from = q.from.unwrap_or(0);
+        let to = match q.to {
+            Some(to) if to <= from => {
+                return Err(Error::bad_request(format!(
+                    "empty or reversed range [{from}, {to}): the end must exceed the start"
+                )));
+            }
+            Some(to) if to > head => {
+                return Err(Error::bad_request(format!(
+                    "requested entries up to {to} but the log has {head} (valid indices 0..{head})"
+                )));
+            }
+            Some(to) => to,
+            None if from > head => {
+                return Err(Error::bad_request(format!(
+                    "index {from} is past the log head {head} (valid indices 0..{head})"
+                )));
+            }
+            None => head,
+        };
+        let entries = load_log(&conn, id, from, Some(to))?;
+        Ok(Json(types::LogResponse { head, entries }))
+    })
+    .await
+}
+
+/// Load + render log entries `[from, to)`.
+fn load_log(
+    conn: &rusqlite::Connection,
+    chain_id: u64,
+    from: u64,
+    to: Option<u64>,
+) -> Result<Vec<types::LogEntry>, Error> {
+    if to.is_some_and(|to| to <= from) {
+        return Ok(Vec::new());
+    }
+    let rows = db::log_entries(conn, chain_id, from, to)?;
+    rows.iter()
+        .map(|row| Ok(views::log_entry_view(&Entry::from_row(row)?)))
+        .collect::<anyhow::Result<Vec<_>>>()
+        .map_err(Into::into)
 }

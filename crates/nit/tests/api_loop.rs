@@ -1,11 +1,11 @@
 //! The full review loop over real HTTP against a real repo:
-//! push → drafts → review (unblocks /wait) → reply → amend push (new
+//! push → drafts → review (streamed on /events) → reply → amend push (new
 //! revisions + comment porting) → interdiff → stale-review 409 →
 //! approvals → merge detection. docs/api.md end to end.
 
 mod common;
 
-use common::{GitRepo, TestServer, http_delete, http_get, http_patch, http_post, msg};
+use common::{GitRepo, TestServer, http_delete, http_get, http_patch, http_post, msg, sse_collect};
 use serde_json::{Value, json};
 
 fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
@@ -134,18 +134,20 @@ fn full_review_loop() {
     let (_, chain_now) = http_get(&server.url(&format!("/api/chains/{chain_id}")));
     assert_eq!(chain_now["changes"][0]["counts"]["drafts"], 2);
 
-    // --- /wait unblocks on review submission -------------------------------
-    let (st, boot) = http_get(&server.url(&format!("/api/chains/{chain_id}/wait?cursor=0")));
-    assert_eq!(st, 200);
-    let cursor = boot["cursor"].as_i64().unwrap();
-    assert!(cursor > 0, "push scan must have emitted an event");
-    assert_eq!(boot["feedback"]["state"], "waiting_for_review");
-    assert_eq!(boot["feedback"]["actionable"], false);
+    // --- the review streams on /events, the fold flips to agents_turn ------
+    let (_, boot) = http_get(&server.url(&format!("/api/chains/{chain_id}/feedback")));
+    assert_eq!(boot["state"], "waiting_for_review");
+    assert_eq!(boot["actionable"], false);
+    let (_, log) = http_get(&server.url(&format!("/api/chains/{chain_id}/log")));
+    let cursor = log["head"].as_i64().unwrap();
+    assert!(cursor > 0, "push scan must have appended a revisions entry");
 
-    let wait_url = server.url(&format!(
-        "/api/chains/{chain_id}/wait?cursor={cursor}&timeout=30"
-    ));
-    let waiter = std::thread::spawn(move || http_get(&wait_url));
+    // Park an SSE reader caught up at head, then submit a review; the review
+    // entry must stream to it (the server emits every entry — relevance is
+    // the client's call).
+    let events_url = server.url(&format!("/api/chains/{chain_id}/events?cursor={cursor}"));
+    let reader =
+        std::thread::spawn(move || sse_collect(&events_url, 1, std::time::Duration::from_secs(5)));
     std::thread::sleep(std::time::Duration::from_millis(300));
 
     let (st, submitted) = http_post(
@@ -165,10 +167,12 @@ fn full_review_loop() {
             .all(|c| c["review_id"].as_i64() == Some(review_id))
     );
 
-    let (st, woke) = waiter.join().unwrap();
-    assert_eq!(st, 200);
-    assert!(woke["cursor"].as_i64().unwrap() > cursor);
-    let feedback = &woke["feedback"];
+    let streamed = reader.join().unwrap();
+    assert_eq!(streamed.len(), 1, "{streamed:?}");
+    assert_eq!(streamed[0]["kind"], "review");
+    assert_eq!(streamed[0]["idx"].as_i64(), Some(cursor));
+
+    let (_, feedback) = http_get(&server.url(&format!("/api/chains/{chain_id}/feedback")));
     assert_eq!(feedback["state"], "agents_turn");
     assert_eq!(feedback["actionable"], true);
     let fb_change = &feedback["changes"][0];
@@ -346,7 +350,7 @@ fn full_review_loop() {
 }
 
 #[test]
-fn partial_flag_is_sticky_and_flips_emit_events() {
+fn partial_flag_is_sticky_and_flips_append_entries() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -363,14 +367,15 @@ fn partial_flag_is_sticky_and_flips_emit_events() {
     assert_eq!(chain["partial"], false);
     let chain_id = chain["id"].as_i64().unwrap();
     let cursor_of = || {
-        let (st, boot) = http_get(&server.url(&format!("/api/chains/{chain_id}/wait?cursor=0")));
-        assert_eq!(st, 200, "{boot}");
-        (boot["cursor"].as_i64().unwrap(), boot["feedback"].clone())
+        let (st, log) = http_get(&server.url(&format!("/api/chains/{chain_id}/log")));
+        assert_eq!(st, 200, "{log}");
+        let (_, feedback) = http_get(&server.url(&format!("/api/chains/{chain_id}/feedback")));
+        (log["head"].as_i64().unwrap(), feedback)
     };
     let (registered, _) = cursor_of();
 
-    // partial: true flips the flag and wakes waiters via a chain_updated
-    // event even though nothing structural changed.
+    // partial: true flips the flag and appends a `partial` entry even though
+    // nothing structural changed.
     register["partial"] = json!(true);
     let (st, chain) = http_post(&server.url("/api/chains"), &register);
     assert_eq!(st, 200, "{chain}");

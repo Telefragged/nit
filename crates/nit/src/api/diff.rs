@@ -74,8 +74,8 @@ pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<types::Di
                     file.binary = true;
                 } else {
                     let (_, additions, deletions) = patch.line_stats()?;
-                    file.additions = i64::try_from(additions)?;
-                    file.deletions = i64::try_from(deletions)?;
+                    file.additions = u64::try_from(additions)?;
+                    file.deletions = u64::try_from(deletions)?;
                     file.hunks = patch_hunks(&mut patch)?;
                 }
             }
@@ -113,16 +113,16 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<types::Hunk>> {
             let text = String::from_utf8_lossy(line.content());
             lines.push(types::Line {
                 kind: kind.to_string(),
-                old: line.old_lineno().map(i64::from),
-                new: line.new_lineno().map(i64::from),
+                old: line.old_lineno().map(u64::from),
+                new: line.new_lineno().map(u64::from),
                 text: text.strip_suffix('\n').unwrap_or(&text).to_string(),
             });
         }
         hunks.push(types::Hunk {
-            old_start: i64::from(hunk.old_start()),
-            old_lines: i64::from(hunk.old_lines()),
-            new_start: i64::from(hunk.new_start()),
-            new_lines: i64::from(hunk.new_lines()),
+            old_start: u64::from(hunk.old_start()),
+            old_lines: u64::from(hunk.old_lines()),
+            new_start: u64::from(hunk.new_start()),
+            new_lines: u64::from(hunk.new_lines()),
             header: hunk_function_context(hunk.header()),
             lines,
         });
@@ -156,7 +156,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
             .lines()
             .enumerate()
             .map(|(i, text)| {
-                let n = i64::try_from(i)? + 1;
+                let n = u64::try_from(i)? + 1;
                 Ok(types::Line {
                     kind: "context".to_string(),
                     old: Some(n),
@@ -165,7 +165,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
                 })
             })
             .collect::<Result<_>>()?;
-        let count = i64::try_from(lines.len())?;
+        let count = u64::try_from(lines.len())?;
         hunks.push(types::Hunk {
             old_start: 1,
             old_lines: count,
@@ -180,8 +180,8 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
         old_path: None,
         status: if old.is_some() { "modified" } else { "added" }.to_string(),
         binary: false,
-        additions: i64::try_from(additions)?,
-        deletions: i64::try_from(deletions)?,
+        additions: u64::try_from(additions)?,
+        deletions: u64::try_from(deletions)?,
         hunks,
     })
 }
@@ -200,7 +200,7 @@ fn hunk_function_context(header: &[u8]) -> String {
 /// primitive behind `comments.line_text`, applied to commit messages
 /// ([`COMMIT_MSG_PATH`] drafts) and tree files ([`line_text`]) alike.
 #[must_use]
-pub fn nth_line(text: &str, line: i64) -> Option<String> {
+pub fn nth_line(text: &str, line: u64) -> Option<String> {
     if line < 1 {
         return None;
     }
@@ -212,7 +212,7 @@ pub fn nth_line(text: &str, line: i64) -> Option<String> {
 /// `comments.line_text`. `None` when the path/line/encoding make that
 /// impossible.
 #[must_use]
-pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: i64) -> Option<String> {
+pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: u64) -> Option<String> {
     let entry = tree.get_path(Path::new(file)).ok()?;
     let blob = repo.find_blob(entry.id()).ok()?;
     if blob.is_binary() {
@@ -261,7 +261,7 @@ mod tests {
         }
     }
 
-    fn lines(n: std::ops::RangeInclusive<i64>) -> String {
+    fn lines(n: std::ops::RangeInclusive<u64>) -> String {
         use std::fmt::Write;
         n.fold(String::new(), |mut s, i| {
             writeln!(s, "line {i}").expect("write to String is infallible");
@@ -391,7 +391,7 @@ mod tests {
             (h.old_start, h.old_lines, h.new_start, h.new_lines),
             (0, 0, 1, 5)
         );
-        let texts: Vec<(&str, Option<i64>, Option<i64>, &str)> = h
+        let texts: Vec<(&str, Option<u64>, Option<u64>, &str)> = h
             .lines
             .iter()
             .map(|l| (l.kind.as_str(), l.old, l.new, l.text.as_str()))
@@ -423,7 +423,7 @@ mod tests {
             .find(|l| l.kind == "del")
             .expect("del line should exist");
         assert_eq!((del.old, del.text.as_str()), (Some(3), "Old body."));
-        let adds: Vec<(&str, Option<i64>)> = f.hunks[0]
+        let adds: Vec<(&str, Option<u64>)> = f.hunks[0]
             .lines
             .iter()
             .filter(|l| l.kind == "add")
@@ -475,7 +475,6 @@ mod tests {
         assert_eq!(nth_line(msg, 3).as_deref(), Some("body"));
         assert_eq!(nth_line(msg, 4), None);
         assert_eq!(nth_line(msg, 0), None);
-        assert_eq!(nth_line(msg, -1), None);
     }
 
     #[test]

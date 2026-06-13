@@ -31,10 +31,12 @@ fn push_wait_status_reply_loop() {
     assert_eq!(feedback["state"], "waiting_for_review");
     assert_eq!(feedback["actionable"], false);
 
-    // wait --timeout 1: not actionable, returns the snapshot after ~1s.
-    let (ok, feedback, stderr) = nit(&server, &g, &["wait", "--timeout", "1"]);
+    // wait 0: returns immediately with the entries since the start and the
+    // current (not-actionable) state — cursor 0 is behind head, so it does
+    // not block.
+    let (ok, resp, stderr) = nit(&server, &g, &["wait", "0"]);
     assert!(ok, "{stderr}");
-    assert_eq!(feedback["state"], "waiting_for_review");
+    assert_eq!(resp["feedback"]["state"], "waiting_for_review");
 
     // Reviewer acts (over HTTP, as the browser would).
     let (st, draft) = http_post(
@@ -49,13 +51,13 @@ fn push_wait_status_reply_loop() {
     );
     assert_eq!(st, 200);
 
-    // wait now returns immediately with the actionable feedback.
-    let (ok, feedback, stderr) = nit(&server, &g, &["wait"]);
+    // wait 0 now returns the new entries with the actionable feedback.
+    let (ok, resp, stderr) = nit(&server, &g, &["wait", "0"]);
     assert!(ok, "{stderr}");
-    assert_eq!(feedback["state"], "agents_turn");
-    assert_eq!(feedback["actionable"], true);
+    assert_eq!(resp["feedback"]["state"], "agents_turn");
+    assert_eq!(resp["feedback"]["actionable"], true);
     assert_eq!(
-        feedback["changes"][0]["comments"][0]["id"].as_i64(),
+        resp["feedback"]["changes"][0]["comments"][0]["id"].as_i64(),
         Some(comment_id)
     );
 

@@ -1,14 +1,16 @@
-//! Git scan engine: reconciles a registered branch (`base..tip`) with the
-//! review database — docs/data-model.md "Scan algorithm" is the contract.
+//! Git scan engine: reconciles a registered branch (`base..tip`) with a
+//! chain's [`Projection`] — docs/data-model.md "Scan algorithm" is the
+//! contract.
 //!
-//! [`scan`] runs the whole algorithm in one `BEGIN IMMEDIATE` transaction
-//! under a caller-provided exclusive context (the per-chain lock lives in
-//! the server layer). A failing scan never partially reconciles: the
-//! transaction rolls back and the failure is recorded in
-//! `chains.last_scan_error` while previous state stays served.
+//! [`scan`] is pure with respect to the database: it reads the current
+//! projection plus the repo and returns a [`ScanResult`] — the entries to
+//! append (a `revisions` and/or `chain_closed`), the transient
+//! `last_scan_error`, and the branch-missing timer. The caller (the server
+//! layer) appends under the chain lock. A failing scan returns no entries,
+//! so it never partially reconciles. Keep refs (GC safety) are maintained
+//! here as an idempotent side effect.
 //!
-//! - [`identity`] — `Change-Id:` trailer extraction, the
-//!   required-Change-Id validation, and commit subject extraction.
+//! - [`identity`] — `Change-Id:` trailer extraction and validation.
 //! - [`objects`] — patch-ids and GC-safety keep refs.
 
 pub mod identity;
@@ -18,60 +20,71 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
 use git2::{BranchType, Commit, ErrorCode, Oid, Repository, Sort};
-use rusqlite::{Connection, TransactionBehavior};
 
-use crate::db::{self, ChainStatus, ChangeStatus};
+use crate::review::{
+    AddedRevision, ChainStatus, ChangeProj, LivePos, Projection, RevisionsPayload,
+};
 
 /// Documented scan error for chains containing merge commits.
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
-/// What one scan did.
+/// An entry the scan wants appended.
 #[derive(Debug)]
-pub struct ScanOutcome {
-    /// The chain row after the scan (post-reconcile or with
-    /// `last_scan_error` set).
-    pub chain: db::Chain,
-    /// Whether the scan made a net structural difference (and emitted a
-    /// `chain_updated`/`chain_closed` event).
-    pub updated: bool,
+pub struct NewEntry {
+    pub kind: &'static str,
+    pub payload: serde_json::Value,
 }
 
-/// A scan-level failure: rolls the transaction back and is recorded in
-/// `chains.last_scan_error`, never propagated as a hard error.
-#[derive(Debug, thiserror::Error)]
-enum ScanAbort {
-    #[error("{0}")]
-    Failed(String),
-    /// The branch ref is missing — recorded like a failure, but the
-    /// timestamp of its first observation drives the two-scan abandoned
-    /// rule, so `updated_at` must not be re-bumped on repeats.
-    #[error("{0}")]
-    BranchMissing(String),
+/// The result of one scan. The caller appends `entries` (in order) and sets
+/// the transient `error` / `branch_missing_since` on the projection.
+#[derive(Debug)]
+pub struct ScanResult {
+    pub entries: Vec<NewEntry>,
+    pub error: Option<String>,
+    pub branch_missing_since: Option<String>,
 }
 
-fn fail(msg: String) -> anyhow::Error {
-    anyhow::Error::new(ScanAbort::Failed(msg))
+impl ScanResult {
+    fn nothing() -> ScanResult {
+        ScanResult {
+            entries: Vec::new(),
+            error: None,
+            branch_missing_since: None,
+        }
+    }
+
+    fn failed(msg: String) -> ScanResult {
+        ScanResult {
+            entries: Vec::new(),
+            error: Some(msg),
+            branch_missing_since: None,
+        }
+    }
+
+    fn closed(status: &'static str) -> ScanResult {
+        ScanResult {
+            entries: vec![NewEntry {
+                kind: "chain_closed",
+                payload: serde_json::json!({ "status": status }),
+            }],
+            error: None,
+            branch_missing_since: None,
+        }
+    }
 }
 
-/// Register (or refresh) a chain: canonicalize the repo path, auto-create
-/// the repo row, upsert the chain (idempotent; re-registration updates
-/// `base`). Does not scan.
+/// Validate a registration: the repo opens and base/branch both resolve.
+/// Only enforced when creating a *new* chain — an existing chain
+/// re-registers even mid-rebase (the failure then surfaces as
+/// `last_scan_error`).
 ///
 /// # Errors
-/// When the repo can't be opened or branch/base don't resolve — the 400
-/// case of `POST /api/chains`.
-pub fn register(
-    conn: &Connection,
-    repo_path: &std::path::Path,
-    branch: &str,
-    base: &str,
-) -> Result<db::Chain> {
-    let canonical = std::fs::canonicalize(repo_path)
-        .map_err(|e| anyhow!("cannot resolve repo path {}: {e}", repo_path.display()))?;
-    let repo = Repository::open(&canonical).map_err(|e| {
+/// The 400 case of `POST /api/chains`.
+pub fn validate_registration(repo_path: &std::path::Path, branch: &str, base: &str) -> Result<()> {
+    let repo = Repository::open(repo_path).map_err(|e| {
         anyhow!(
             "cannot open repository {}: {}",
-            canonical.display(),
+            repo_path.display(),
             e.message()
         )
     })?;
@@ -80,390 +93,312 @@ pub fn register(
         .map_err(|e| anyhow!("cannot resolve base '{base}': {}", e.message()))?;
     repo.find_branch(branch, BranchType::Local)
         .map_err(|e| anyhow!("cannot resolve branch '{branch}': {}", e.message()))?;
-    let canonical = canonical
-        .to_str()
-        .ok_or_else(|| anyhow!("repo path is not valid UTF-8"))?;
-    let repo_row = db::get_or_create_repo(conn, canonical)?;
-    db::get_or_create_chain(conn, repo_row.id, branch, base)
+    Ok(())
 }
 
-/// Scan a chain: walk `base..tip` and reconcile the database. The caller
-/// must hold the chain's exclusive lock.
+/// Scan a chain against its projection. `alloc` mints fresh fold-assigned
+/// ids for newly-seen changes. Never mutates the database; git ref keep
+/// maintenance is the only side effect.
 ///
-/// # Errors
-/// Only infrastructure problems (unknown chain, broken database) —
-/// git-level failures are recorded in `last_scan_error` on the returned
-/// chain instead.
-pub fn scan(conn: &mut Connection, chain_id: i64) -> Result<ScanOutcome> {
-    scan_at(conn, chain_id, jiff::Timestamp::now())
-}
-
-/// [`scan`] with an injectable clock — the abandoned-branch rule compares
-/// `now` against the previous scan's timestamp. Tests use this; everyone
-/// else wants [`scan`].
-///
-/// # Errors
-/// See [`scan`].
-pub fn scan_at(conn: &mut Connection, chain_id: i64, now: jiff::Timestamp) -> Result<ScanOutcome> {
-    let chain =
-        db::get_chain(conn, chain_id)?.ok_or_else(|| anyhow!("chain {chain_id} not found"))?;
-    let repo_path = db::chain_repo_path(conn, chain_id)?
-        .ok_or_else(|| anyhow!("chain {chain_id}: repo row missing"))?;
-    let now_str = now.to_string();
-
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    match reconcile(&tx, &repo_path, &chain, now) {
-        Ok(updated) => {
-            if chain.last_scan_error.is_some() {
-                db::chain_set_scan_error(&tx, chain_id, None, &now_str, true)?;
-            }
-            tx.commit()?;
-            let chain = db::get_chain(conn, chain_id)?
-                .ok_or_else(|| anyhow!("chain {chain_id} vanished"))?;
-            Ok(ScanOutcome { chain, updated })
-        }
-        Err(err) => {
-            drop(tx); // rollback — a failed scan never partially reconciles
-            if err.downcast_ref::<rusqlite::Error>().is_some() {
-                return Err(err); // the db itself is broken; don't try to record
-            }
-            let (msg, touch) = match err.downcast_ref::<ScanAbort>() {
-                Some(ScanAbort::BranchMissing(m)) => {
-                    // Keep updated_at of the scan that first saw it missing.
-                    let repeat = chain.last_scan_error.as_deref() == Some(m.as_str());
-                    (m.clone(), !repeat)
-                }
-                Some(ScanAbort::Failed(m)) => (m.clone(), true),
-                None => (format!("scan failed: {err:#}"), true),
-            };
-            db::chain_set_scan_error(conn, chain_id, Some(&msg), &now_str, touch)?;
-            let chain = db::get_chain(conn, chain_id)?
-                .ok_or_else(|| anyhow!("chain {chain_id} vanished"))?;
-            Ok(ScanOutcome {
-                chain,
-                updated: false,
-            })
-        }
-    }
-}
-
+/// # Panics
+/// When the chain length does not fit `u64` (a chain that long is
+/// unreachable in practice).
 #[expect(
     clippy::too_many_lines,
-    reason = "transaction script for the documented scan algorithm; \
-              splitting the steps apart would obscure the contract"
+    reason = "the documented scan algorithm reads as one linear pass; \
+              splitting its steps apart would obscure the contract"
 )]
-fn reconcile(
-    tx: &Connection,
-    repo_path: &str,
-    chain: &db::Chain,
-    now: jiff::Timestamp,
-) -> Result<bool> {
-    let now_str = now.to_string();
-    let repo = Repository::open(repo_path).map_err(|e| {
-        fail(format!(
-            "cannot open repository {repo_path}: {}",
-            e.message()
-        ))
-    })?;
-
-    // Step 1: resolve base and tip.
-    let base_commit = repo
-        .revparse_single(&chain.base)
-        .and_then(|o| o.peel_to_commit())
-        .map_err(|e| {
-            fail(format!(
-                "cannot resolve base '{}': {}",
-                chain.base,
-                e.message()
-            ))
-        })?;
-
-    let tip = match repo.find_branch(&chain.branch, BranchType::Local) {
-        Ok(branch) => branch.get().peel_to_commit().map_err(|e| {
-            fail(format!(
-                "cannot resolve branch '{}': {}",
-                chain.branch,
-                e.message()
-            ))
-        })?,
-        Err(e) if e.code() == ErrorCode::NotFound => {
-            return missing_branch(tx, &repo, chain, now);
-        }
+pub fn scan(proj: &Projection, now: jiff::Timestamp, alloc: &mut dyn FnMut() -> u64) -> ScanResult {
+    let repo = match Repository::open(&proj.repo_path) {
+        Ok(r) => r,
         Err(e) => {
-            return Err(fail(format!(
-                "cannot resolve branch '{}': {}",
-                chain.branch,
+            return ScanResult::failed(format!(
+                "cannot open repository {}: {}",
+                proj.repo_path,
                 e.message()
-            )));
+            ));
         }
     };
 
-    // Step 2 (walk) happens early because closed chains only reopen when
-    // the branch is alive *with commits*. Merge/root commits abort here.
-    let commits = walk_chain(&repo, base_commit.id(), tip.id())?;
-
-    if chain.status != ChainStatus::Active {
-        if commits.is_empty() {
-            return Ok(false);
+    // Step 1: resolve base and tip.
+    let base_commit = match repo
+        .revparse_single(&proj.base)
+        .and_then(|o| o.peel_to_commit())
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return ScanResult::failed(format!(
+                "cannot resolve base '{}': {}",
+                proj.base,
+                e.message()
+            ));
         }
-        db::chain_set_status(tx, chain.id, ChainStatus::Active, &now_str)?;
-    }
-    let mut updated = chain.status != ChainStatus::Active; // reopened
+    };
 
-    // Step 1, merged test: tip ancestor-or-equal of base (⇔ empty walk)
-    // plus the patch-id quorum. tip == base *without* the quorum is just an
-    // empty active chain.
-    if chain.status == ChainStatus::Active && commits.is_empty() {
+    let tip = match repo.find_branch(&proj.branch, BranchType::Local) {
+        Ok(branch) => match branch.get().peel_to_commit() {
+            Ok(c) => c,
+            Err(e) => {
+                return ScanResult::failed(format!(
+                    "cannot resolve branch '{}': {}",
+                    proj.branch,
+                    e.message()
+                ));
+            }
+        },
+        Err(e) if e.code() == ErrorCode::NotFound => return missing_branch(proj, now),
+        Err(e) => {
+            return ScanResult::failed(format!(
+                "cannot resolve branch '{}': {}",
+                proj.branch,
+                e.message()
+            ));
+        }
+    };
+
+    // Step 2 (walk) happens early: closed chains only reopen when the branch
+    // is alive *with commits*. Merge/root commits abort here.
+    let commits = match walk_chain(&repo, base_commit.id(), tip.id()) {
+        Ok(c) => c,
+        Err(msg) => return ScanResult::failed(msg),
+    };
+
+    // Merged test: tip ancestor-or-equal of base (⇔ empty walk) plus the
+    // patch-id quorum. tip == base *without* the quorum is just an empty
+    // active chain.
+    if proj.status == ChainStatus::Active && commits.is_empty() {
         let tip_in_base = tip.id() == base_commit.id()
             || repo
                 .graph_descendant_of(base_commit.id(), tip.id())
                 .unwrap_or(false);
-        if tip_in_base && merged_quorum(tx, &repo, chain, &base_commit)? {
-            close_chain(tx, &repo, chain, ChainStatus::Merged, &now_str)?;
-            return Ok(true);
+        if tip_in_base && merged_quorum(&repo, proj, &base_commit) {
+            objects::delete_chain_keep_refs(&repo, proj.chain_id);
+            return ScanResult::closed("merged");
         }
+    }
+
+    // A closed (merged/abandoned) chain whose walk is empty stays closed: an
+    // empty walk must not orphan its retained changes (it only reopens with
+    // live commits, handled below).
+    if commits.is_empty() && proj.status != ChainStatus::Active {
+        return ScanResult::nothing();
     }
 
     let messages: Vec<String> = commits
         .iter()
         .map(|c| String::from_utf8_lossy(c.message_bytes()).into_owned())
         .collect();
-    let shas: Vec<String> = commits.iter().map(|c| c.id().to_string()).collect();
-
-    // Step 2, identity validation: every commit carries its own Change-Id
-    // trailer (and is not a fixup!/squash! commit) or the scan aborts.
-    let short_shas: Vec<String> = shas.iter().map(|s| s[..12].to_string()).collect();
-    let keys = identity::require_keys(&messages, &short_shas).map_err(fail)?;
-
-    // Step 3: match commits to change rows — the Change-Id key is the
-    // identity (docs/data-model.md "Change identity").
-    let existing = db::changes_for_chain(tx, chain.id)?; // live by position, orphans last
-    let row_by_key: HashMap<&str, usize> = existing
+    let short_shas: Vec<String> = commits
         .iter()
-        .enumerate()
-        .map(|(ei, row)| (row.change_key.as_str(), ei))
-        .collect();
-    let matched: Vec<Option<usize>> = keys
-        .iter()
-        .map(|key| row_by_key.get(key.as_str()).copied())
+        .map(|c| c.id().to_string()[..12].to_string())
         .collect();
 
-    // Step 4: per live change, insert a new revision when the commit moved.
-    let claimed: HashSet<usize> = matched.iter().flatten().copied().collect();
+    // Step 2, identity validation.
+    let keys = match identity::require_keys(&messages, &short_shas) {
+        Ok(k) => k,
+        Err(msg) => return ScanResult::failed(msg),
+    };
+
+    // Step 3: build the live set and the added revisions.
+    let mut live = Vec::with_capacity(commits.len());
+    let mut added = Vec::new();
     for (i, commit) in commits.iter().enumerate() {
-        let sha = shas[i].as_str();
-        let position = i64::try_from(i).expect("chain length fits i64");
+        let key = &keys[i];
+        let sha = commit.id().to_string();
+        let position = u64::try_from(i).expect("chain length fits u64");
+        let existing = proj.change_by_key(key);
+        let change_id = existing.map_or_else(&mut *alloc, |c| c.id);
+        live.push(LivePos {
+            change_key: key.clone(),
+            change_id,
+            position,
+        });
 
-        let (change_id, stored_position, stored_status, mut status, is_new) = if let Some(ei) =
-            matched[i]
-        {
-            let row = &existing[ei];
-            let status = if row.status == ChangeStatus::Orphaned {
-                // Re-attachment: status returns to its pre-orphan value,
-                // re-derived from the review history.
-                pre_orphan_status(tx, &repo, row.id)?
-            } else {
-                row.status
-            };
-            (row.id, row.position, row.status, status, false)
-        } else {
-            let row = db::insert_change(tx, chain.id, &keys[i], position, ChangeStatus::Pending)?;
-            updated = true;
-            (
-                row.id,
-                Some(position),
-                ChangeStatus::Pending,
-                ChangeStatus::Pending,
-                true,
-            )
+        let latest = existing.and_then(ChangeProj::latest_revision);
+        if latest.is_some_and(|r| r.commit_sha == sha) {
+            continue; // unchanged commit, no new revision
+        }
+        let parent_sha = match commit.parent_id(0) {
+            Ok(o) => o.to_string(),
+            Err(e) => return ScanResult::failed(format!("commit {sha} has no parent: {e}")),
         };
-
-        let latest = db::latest_revision(tx, change_id)?;
-        let same_state = latest.as_ref().is_some_and(|l| l.commit_sha == sha);
-        if !same_state {
-            let number = latest.as_ref().map_or(1, |l| l.number + 1);
-            let parent_sha = commit.parent_id(0)?.to_string();
-            let new_rev = db::insert_revision(
-                tx,
-                change_id,
-                number,
-                sha,
-                &parent_sha,
-                &messages[i],
-                &now_str,
-            )?;
-            updated = true;
-            // Rule 4 status effect: pure rebase keeps status; anything
-            // else means the reviewer must look again.
-            let pure = latest
-                .as_ref()
-                .is_some_and(|l| pure_rebase_equivalent(&repo, l, &new_rev));
-            if !pure {
-                status = ChangeStatus::Pending;
-            }
-        }
-
-        if !is_new && (stored_position != Some(position) || stored_status != status) {
-            db::change_set_position_status(tx, change_id, Some(position), status)?;
-            updated = true;
-        }
+        let resets_status = match latest {
+            Some(old) => !pure_rebase(&repo, &old.commit_sha, &old.message, &sha, &messages[i]),
+            None => true,
+        };
+        added.push(AddedRevision {
+            change_key: key.clone(),
+            number: latest.map_or(1, |r| r.number + 1),
+            commit_sha: sha,
+            parent_sha,
+            message: messages[i].clone(),
+            resets_status,
+        });
     }
 
-    // Step 3, orphaning: live rows whose commit matched nothing. Never
-    // deleted — comments, drafts and reviews stay.
-    for (ei, row) in existing.iter().enumerate() {
-        if !claimed.contains(&ei) && row.status != ChangeStatus::Orphaned {
-            db::change_set_position_status(tx, row.id, None, ChangeStatus::Orphaned)?;
-            updated = true;
-        }
+    // A reopened (merged/abandoned) chain with live commits must re-emit even
+    // when the structure is unchanged, so the fold flips it back to active.
+    let reopen = proj.status != ChainStatus::Active && !commits.is_empty();
+    let new_live: Vec<(&str, u64)> = live
+        .iter()
+        .map(|l| (l.change_key.as_str(), l.position))
+        .collect();
+    let current_live: Vec<(&str, u64)> = proj
+        .changes_ordered()
+        .iter()
+        .filter(|c| !c.orphaned)
+        .map(|c| (c.change_key.as_str(), c.position.unwrap_or(0)))
+        .collect();
+    if added.is_empty() && new_live == current_live && !reopen {
+        return ScanResult::nothing(); // no structural change; clears any prior error
     }
 
-    // GC safety: keep refs for every revision.
-    for row in db::changes_for_chain(tx, chain.id)? {
-        for rev in db::revisions_for_change(tx, row.id)? {
-            objects::ensure_keep_ref(&repo, chain.id, row.id, &rev);
-        }
-    }
+    maintain_keep_refs(&repo, proj, &live, &added);
 
-    // Step 5: net structural difference → one chain_updated event.
-    if updated {
-        db::insert_event(
-            tx,
-            chain.id,
-            "chain_updated",
-            &serde_json::json!({"chain_id": chain.id}),
-            &now_str,
-        )?;
-        db::chain_touch(tx, chain.id, &now_str)?;
+    ScanResult {
+        entries: vec![NewEntry {
+            kind: "revisions",
+            payload: serde_json::to_value(RevisionsPayload { live, added })
+                .unwrap_or_else(|_| serde_json::json!({})),
+        }],
+        error: None,
+        branch_missing_since: None,
     }
-    Ok(updated)
 }
 
-/// Walk `base..tip` oldest-first. Any merge commit aborts the scan with
-/// the documented error; so does a root commit (the diff/identity model
-/// needs a first parent everywhere).
-fn walk_chain(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>> {
-    let mut walk = repo.revwalk()?;
-    walk.push(tip)?;
-    walk.hide(base)?;
-    walk.set_sorting(Sort::TOPOLOGICAL | Sort::REVERSE)?;
+/// Keep refs for every revision (live and orphan) so history stays
+/// renderable — idempotent (docs/data-model.md "GC safety").
+fn maintain_keep_refs(
+    repo: &Repository,
+    proj: &Projection,
+    live: &[LivePos],
+    added: &[AddedRevision],
+) {
+    let id_of: HashMap<&str, u64> = live
+        .iter()
+        .map(|l| (l.change_key.as_str(), l.change_id))
+        .collect();
+    for change in &proj.changes {
+        for rev in &change.revisions {
+            objects::ensure_keep_ref(repo, proj.chain_id, change.id, rev.number, &rev.commit_sha);
+        }
+    }
+    // Every added revision's key is also in `live` (scan pushes both
+    // together), so id_of is exhaustive over added keys.
+    for a in added {
+        if let Some(&change_id) = id_of.get(a.change_key.as_str()) {
+            objects::ensure_keep_ref(repo, proj.chain_id, change_id, a.number, &a.commit_sha);
+        }
+    }
+}
+
+/// The branch ref is gone. Closed chains stay closed quietly; an active
+/// chain is only abandoned after the ref is missing on two consecutive
+/// scans ≥ 10s apart (mid-rebase protection).
+fn missing_branch(proj: &Projection, now: jiff::Timestamp) -> ScanResult {
+    if proj.status != ChainStatus::Active {
+        return ScanResult::nothing();
+    }
+    let marker = format!("branch '{}' not found", proj.branch);
+    match proj
+        .branch_missing_since
+        .as_deref()
+        .and_then(|s| s.parse::<jiff::Timestamp>().ok())
+    {
+        Some(prev) if now.as_second() - prev.as_second() >= 10 => {
+            let mut res = ScanResult::closed("abandoned");
+            // delete_chain_keep_refs needs the repo; the branch is gone but
+            // the repo opens — best effort via the caller's next scan.
+            if let Ok(repo) = Repository::open(&proj.repo_path) {
+                objects::delete_chain_keep_refs(&repo, proj.chain_id);
+            }
+            res.branch_missing_since = None;
+            res
+        }
+        Some(prev) => ScanResult {
+            entries: Vec::new(),
+            error: Some(marker),
+            branch_missing_since: Some(prev.to_string()),
+        },
+        None => ScanResult {
+            entries: Vec::new(),
+            error: Some(marker),
+            branch_missing_since: Some(now.to_string()),
+        },
+    }
+}
+
+/// Walk `base..tip` oldest-first. Any merge commit aborts the scan with the
+/// documented error; so does a root commit (the diff/identity model needs a
+/// first parent everywhere). Returns the abort message on `Err`.
+fn walk_chain(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>, String> {
+    let mut walk = repo.revwalk().map_err(|e| e.to_string())?;
+    walk.push(tip).map_err(|e| e.to_string())?;
+    walk.hide(base).map_err(|e| e.to_string())?;
+    walk.set_sorting(Sort::TOPOLOGICAL | Sort::REVERSE)
+        .map_err(|e| e.to_string())?;
     let mut commits = Vec::new();
     for oid in walk {
-        let commit = repo.find_commit(oid?)?;
+        let oid = oid.map_err(|e| e.to_string())?;
+        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
         match commit.parent_count() {
             0 => {
-                return Err(fail(
+                return Err(
                     "chain contains a root commit — the base must be an ancestor of the branch"
                         .to_string(),
-                ));
+                );
             }
             1 => {}
-            _ => return Err(fail(MERGE_COMMIT_ERROR.to_string())),
+            _ => return Err(MERGE_COMMIT_ERROR.to_string()),
         }
         commits.push(commit);
     }
     Ok(commits)
 }
 
-/// The branch ref is gone. Closed chains stay closed quietly; an active
-/// chain is only abandoned after the ref is missing on two consecutive
-/// scans ≥ 10s apart (mid-rebase protection) — otherwise the missing ref
-/// is recorded like a scan failure.
-fn missing_branch(
-    tx: &Connection,
-    repo: &Repository,
-    chain: &db::Chain,
-    now: jiff::Timestamp,
-) -> Result<bool> {
-    if chain.status != ChainStatus::Active {
-        return Ok(false);
-    }
-    let marker = format!("branch '{}' not found", chain.branch);
-    if chain.last_scan_error.as_deref() == Some(marker.as_str())
-        && let Ok(prev) = chain.updated_at.parse::<jiff::Timestamp>()
-        && now.as_second() - prev.as_second() >= 10
-    {
-        close_chain(tx, repo, chain, ChainStatus::Abandoned, &now.to_string())?;
-        return Ok(true);
-    }
-    Err(anyhow::Error::new(ScanAbort::BranchMissing(marker)))
-}
-
-fn close_chain(
-    tx: &Connection,
-    repo: &Repository,
-    chain: &db::Chain,
-    status: ChainStatus,
-    now_str: &str,
-) -> Result<()> {
-    db::chain_set_status(tx, chain.id, status, now_str)?;
-    db::chain_set_scan_error(tx, chain.id, None, now_str, false)?;
-    db::insert_event(
-        tx,
-        chain.id,
-        "chain_closed",
-        &serde_json::json!({"chain_id": chain.id, "status": status.as_str()}),
-        now_str,
-    )?;
-    objects::delete_chain_keep_refs(repo, chain.id);
-    Ok(())
-}
-
-/// Merged quorum (step 1): every live non-empty change's patch-id must
-/// appear in `fork..base`, where fork is the chain's recorded fork point
-/// (the first live change's parent). At least one non-empty live change
-/// must vote, else `tip == base` is just an empty active chain. Anything
-/// unverifiable counts against merging.
-fn merged_quorum(
-    tx: &Connection,
-    repo: &Repository,
-    chain: &db::Chain,
-    base: &Commit,
-) -> Result<bool> {
-    let rows = db::changes_for_chain(tx, chain.id)?;
-    let mut candidates: Vec<(String, db::Revision)> = Vec::new();
-    for row in &rows {
-        if row.position.is_none() {
+/// Merged quorum: every live non-empty change's patch-id (or Change-Id
+/// trailer) must appear in `fork..base`, where fork is the chain's recorded
+/// fork point (the first live change's latest revision's parent). At least
+/// one real match required. Anything unverifiable counts against merging.
+fn merged_quorum(repo: &Repository, proj: &Projection, base: &Commit) -> bool {
+    // Candidates: live changes' latest revisions; if none (an earlier failed
+    // quorum orphaned everything), fall back to the orphans.
+    let mut candidates: Vec<(&str, &str, &str)> = Vec::new(); // (key, commit_sha, parent_sha)
+    for change in proj.changes_ordered() {
+        if change.orphaned {
             continue;
         }
-        match db::latest_revision(tx, row.id)? {
-            Some(rev) => candidates.push((row.change_key.clone(), rev)),
-            None => return Ok(false),
+        match change.latest_revision() {
+            Some(rev) => candidates.push((&change.change_key, &rev.commit_sha, &rev.parent_sha)),
+            None => return false,
         }
     }
-    // A quorum that failed on the first post-merge scan (e.g. patch-id
-    // context drift, see below) orphans every change; later scans must
-    // still be able to recognize the merge from the orphans. Safe against
-    // reset-to-base rebuilds: those match neither trailers nor patch-ids.
     if candidates.is_empty() {
-        for row in &rows {
-            if let Some(rev) = db::latest_revision(tx, row.id)? {
-                candidates.push((row.change_key.clone(), rev));
+        for change in &proj.changes {
+            if let Some(rev) = change.latest_revision() {
+                candidates.push((&change.change_key, &rev.commit_sha, &rev.parent_sha));
             }
         }
     }
-    let Some((_, first)) = candidates.first() else {
-        return Ok(false);
+    let Some((_, _, fork_sha)) = candidates.first() else {
+        return false;
     };
-    let Ok(fork) = Oid::from_str(&first.parent_sha) else {
-        return Ok(false);
+    let Ok(fork) = Oid::from_str(fork_sha) else {
+        return false;
     };
 
-    // Patch-ids and Change-Id trailers of base-side commits in fork..base
-    // (first-parent diffs; merge commits don't carry a meaningful single
-    // patch-id, but their trailers still count).
     let mut base_patch_ids: HashSet<String> = HashSet::new();
     let mut base_trailers: HashSet<String> = HashSet::new();
     let Ok(mut walk) = repo.revwalk() else {
-        return Ok(false);
+        return false;
     };
     if walk.push(base.id()).is_err() || walk.hide(fork).is_err() {
-        return Ok(false);
+        return false;
     }
     for oid in walk {
-        let Ok(oid) = oid else { return Ok(false) };
+        let Ok(oid) = oid else { return false };
         let Ok(commit) = repo.find_commit(oid) else {
-            return Ok(false);
+            return false;
         };
         if let Some(trailer) =
             identity::change_id_trailer(&String::from_utf8_lossy(commit.message_bytes()))
@@ -479,82 +414,38 @@ fn merged_quorum(
         }
     }
 
-    // A change matches by Change-Id trailer first (immune to the patch-id
-    // context drift that rewriting a *neighboring* change causes), then by
-    // patch-id. Empty diffs are trivially matched but don't count toward
-    // the quorum.
     let mut any_matched = false;
-    for (key, rev) in &candidates {
-        if base_trailers.contains(key) {
+    for (key, commit_sha, _) in &candidates {
+        if base_trailers.contains(*key) {
             any_matched = true;
             continue;
         }
-        match objects::sha_patch_id(repo, &rev.commit_sha) {
+        match objects::sha_patch_id(repo, commit_sha) {
             Some(pid) if pid == objects::EMPTY_PATCH_ID => {}
             Some(pid) if base_patch_ids.contains(&pid) => any_matched = true,
-            // Unverifiable (pruned objects) or unmatched.
-            _ => return Ok(false),
+            _ => return false, // unverifiable or unmatched
         }
     }
-    Ok(any_matched)
+    any_matched
 }
 
-/// True when two revisions differ only by a rebase: a patch-id-equal
-/// commit with an unchanged commit message (rule 4; the same predicate is
-/// behind review auto-retargeting in api.md). Messages compare for exact
-/// equality — they are reviewable as `/COMMIT_MSG`, so a reword must put
-/// the change back in front of the reviewer; true rebases replay them
-/// verbatim. Unverifiable objects make it false — the reviewer looks
-/// again.
+/// True when a revision differs from the previous one only by a rebase: a
+/// patch-id-equal commit with an unchanged message (the predicate behind
+/// review auto-retargeting in api.md). Unverifiable objects make it false.
 #[must_use]
-pub fn pure_rebase_equivalent(repo: &Repository, old: &db::Revision, new: &db::Revision) -> bool {
-    if old.message != new.message {
+pub fn pure_rebase(
+    repo: &Repository,
+    old_sha: &str,
+    old_msg: &str,
+    new_sha: &str,
+    new_msg: &str,
+) -> bool {
+    if old_msg != new_msg {
         return false;
     }
-    old.commit_sha == new.commit_sha
+    old_sha == new_sha
         || matches!(
-            (
-                objects::sha_patch_id(repo, &old.commit_sha),
-                objects::sha_patch_id(repo, &new.commit_sha),
-            ),
+            (objects::sha_patch_id(repo, old_sha), objects::sha_patch_id(repo, new_sha)),
             (Some(x), Some(y)) if x == y
         )
-}
-
-/// A change's pre-orphan status, re-derived from review history — exactly
-/// what the status machine would have produced: a review counts if it sits
-/// on the latest revision *or* on any older revision connected to it by an
-/// unbroken run of pure rebases (rule 4 keeps status across those, and the
-/// review row stays on the old revision number).
-fn pre_orphan_status(tx: &Connection, repo: &Repository, change_id: i64) -> Result<ChangeStatus> {
-    let revisions = db::revisions_for_change(tx, change_id)?; // ascending
-    let Some(latest) = revisions.last() else {
-        return Ok(ChangeStatus::Pending);
-    };
-    let mut eligible = vec![latest.number];
-    let mut newer = latest;
-    for older in revisions.iter().rev().skip(1) {
-        if !pure_rebase_equivalent(repo, older, newer) {
-            break;
-        }
-        eligible.push(older.number);
-        newer = older;
-    }
-    let mut best: Option<db::Review> = None;
-    for number in eligible {
-        if let Some(review) = db::latest_review_on_revision(tx, change_id, number)?
-            && best.as_ref().is_none_or(|b| review.id > b.id)
-        {
-            best = Some(review);
-        }
-    }
-    Ok(match best {
-        Some(review) => match review.verdict.as_str() {
-            "approve" => ChangeStatus::Approved,
-            "request_changes" => ChangeStatus::ChangesRequested,
-            "comment" => ChangeStatus::Commented,
-            _ => ChangeStatus::Pending,
-        },
-        None => ChangeStatus::Pending,
-    })
 }

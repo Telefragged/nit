@@ -1,5 +1,5 @@
-//! `nit wait` across a server restart: the parked long-poll returns
-//! promptly on shutdown, the CLI retries through the outage instead of
+//! `nit wait` across a server restart: the parked `/events` stream ends
+//! promptly on shutdown, the CLI reconnects through the outage instead of
 //! dying, and the persisted event cursor resumes on the restarted
 //! server — covering classification, backoff, cursor validity and
 //! stdout purity in one pass (docs/agent-workflow.md).
@@ -26,10 +26,11 @@ fn wait_survives_a_server_restart() {
     assert!(ok, "{stderr}");
     let change_id = chain["changes"][0]["id"].as_i64().unwrap();
 
-    // Park the real binary on `nit wait` (--timeout 30 is the hang guard)
-    // and give it time to resolve the chain and enter the long-poll.
+    // Park the real binary on `nit wait` and give it time to resolve the
+    // chain and connect the event stream. The push left one entry (head 1),
+    // so cursor 1 is caught up and blocks until the review below wakes it.
     let mut child = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(["wait", "--timeout", "30"])
+        .args(["wait", "1"])
         .current_dir(g.workdir())
         .env("NIT_SERVER", &server.base)
         .stdout(Stdio::piped())
@@ -38,8 +39,8 @@ fn wait_survives_a_server_restart() {
         .unwrap();
     std::thread::sleep(Duration::from_millis(800));
 
-    // Shutdown must be prompt end-to-end: the parked poll returns early
-    // instead of holding the drop for its full poll timeout.
+    // Shutdown must be prompt end-to-end: the parked stream ends on the
+    // shutdown signal instead of holding the drop open.
     let dropping = Instant::now();
     drop(server);
     let dropped_in = dropping.elapsed();
@@ -64,9 +65,9 @@ fn wait_survives_a_server_restart() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
-    let feedback: serde_json::Value =
+    let resp: serde_json::Value =
         serde_json::from_str(stdout.trim()).expect("stdout must stay pure JSON");
-    assert_eq!(feedback["state"], "agents_turn", "{feedback}");
-    assert_eq!(feedback["actionable"], true);
+    assert_eq!(resp["feedback"]["state"], "agents_turn", "{resp}");
+    assert_eq!(resp["feedback"]["actionable"], true);
     assert!(stderr.contains("retrying"), "{stderr}");
 }

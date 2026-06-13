@@ -25,8 +25,10 @@ enum Cmd {
     Push(cli::PushArgs),
     /// Mark the chain complete: clear the partial flag and refresh (idempotent)
     Ready(cli::ReadyArgs),
-    /// Block until the reviewer acts; prints the feedback JSON
+    /// Block until log entries land beyond the cursor; prints {head, entries, feedback}
     Wait(cli::WaitArgs),
+    /// Print specific log entries by index/range without moving the cursor
+    Log(cli::LogArgs),
     /// Print the current feedback JSON without blocking
     Status(cli::StatusArgs),
     /// Reply to a review comment as the agent
@@ -46,6 +48,7 @@ fn main() -> Result<()> {
         Cmd::Push(args) => cli::push(args),
         Cmd::Ready(args) => cli::ready(args),
         Cmd::Wait(args) => cli::wait(args),
+        Cmd::Log(args) => cli::log(args),
         Cmd::Status(args) => cli::status(args),
         Cmd::Reply(args) => cli::reply(args),
     }

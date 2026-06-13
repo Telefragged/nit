@@ -3,6 +3,7 @@
 //! (docs/agent-workflow.md). They print API JSON to stdout and decide
 //! purely on the documented shapes; all review logic lives server-side.
 
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -11,9 +12,6 @@ use git2::Repository;
 use serde_json::{Value, json};
 
 pub const DEFAULT_SERVER: &str = "http://127.0.0.1:8877";
-
-/// Per-poll server timeout for `nit wait` (api.md default).
-const POLL_TIMEOUT_SECS: u64 = 55;
 
 fn server_url(flag: Option<String>) -> String {
     flag.or_else(|| std::env::var("NIT_SERVER").ok())
@@ -55,9 +53,26 @@ pub struct ReadyArgs {
 
 #[derive(clap::Args)]
 pub struct WaitArgs {
-    /// Give up after this many seconds (default: wait forever)
+    /// 0-based cursor: the count of log entries already consumed (start at 0,
+    /// then pass the `head` of each result; docs/agent-workflow.md)
+    pub cursor: u64,
+    /// Print a one-line digest per entry instead of full payloads
     #[arg(long)]
-    pub timeout: Option<u64>,
+    pub oneline: bool,
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
+    #[arg(long)]
+    pub server: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct LogArgs {
+    /// Entry indices or half-open ranges: `3`, `5..9`, `5..` (through head),
+    /// `..9`, `..` (all). Several are concatenated in order, e.g. `1 4..6`.
+    #[arg(required = true)]
+    pub ranges: Vec<String>,
+    /// Print a one-line digest per entry instead of full payloads
+    #[arg(long)]
+    pub oneline: bool,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -73,7 +88,7 @@ pub struct StatusArgs {
 #[derive(clap::Args)]
 pub struct ReplyArgs {
     /// Id of the comment to reply to
-    pub comment_id: i64,
+    pub comment_id: u64,
     /// Reply text
     #[arg(short = 'm', long = "message")]
     pub message: String,
@@ -149,49 +164,286 @@ fn register(
     Ok(())
 }
 
-/// Block until the chain state is actionable (or `--timeout` expires),
-/// then print the Feedback JSON. Decides purely on
-/// `feedback.state`/`actionable`, never on raw events. Rides out server
-/// restarts: transport failures are retried with backoff (one stderr
-/// notice per outage) because the wait cursor is persisted server-side.
+/// Consume the chain's `/events` SSE stream from the agent-owned `cursor`
+/// and block until something the agent should act on lands, then print
+/// `{head, entries, feedback}`. There is no timeout — the agent calls this
+/// only when it has nothing else to do, and it blocks until the reviewer
+/// acts. The wake rule lives here, not on the server (docs/data-model.md):
+/// every event wakes **except** a reviewer approve with no comments that
+/// does not complete the chain — those are accumulated and handed back with
+/// the next waking event, never dropped. The agent advances its cursor to
+/// the returned `head`; it never learns the cursor from a mutating call, so
+/// an interleaved reviewer entry can't be skipped (docs/agent-workflow.md).
+/// Rides out server restarts: the stream reconnects at the current cursor.
 ///
 /// # Errors
-/// When the server returns an error or malformed response, and when
-/// `--timeout` expires while the server is unreachable (a fresh snapshot
-/// cannot be fetched; a plain expiry prints the snapshot and exits 0).
+/// When the server returns an error or a malformed response.
 pub fn wait(args: WaitArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    // Computed first: --timeout also bounds the resolve phase.
-    let deadline = args
-        .timeout
-        .map(|secs| Instant::now() + Duration::from_secs(secs));
-    let retry = Retry::UntilUp { deadline };
+    let retry = Retry::UntilUp { deadline: None };
     let chain_id = resolve_chain(&client, retry)?;
+    let mut cursor = args.cursor;
+    // Accumulated since `cursor` — so a return carries the complete run,
+    // including any non-waking approves we read past.
+    let mut entries: Vec<Value> = Vec::new();
 
-    // Bootstrap: cursor=0 returns the current snapshot immediately.
-    let mut resp = client.get_retry(&format!("/api/chains/{chain_id}/wait?cursor=0"), retry)?;
-    loop {
-        let feedback = resp
-            .get("feedback")
-            .cloned()
-            .ok_or_else(|| anyhow!("malformed wait response: {resp}"))?;
-        let actionable = feedback["actionable"].as_bool().unwrap_or(false);
-        let expired = deadline.is_some_and(|d| Instant::now() >= d);
-        if actionable || expired {
-            print_json(&feedback)?;
-            return Ok(());
-        }
-        let mut poll = POLL_TIMEOUT_SECS;
-        if let Some(d) = deadline {
-            let remaining = d.saturating_duration_since(Instant::now()).as_secs();
-            poll = poll.min(remaining.max(1));
-        }
-        let cursor = resp["cursor"].as_i64().unwrap_or(0);
-        resp = client.get_retry(
-            &format!("/api/chains/{chain_id}/wait?cursor={cursor}&timeout={poll}"),
+    'reconnect: loop {
+        let mut stream = client.get_stream(
+            &format!("/api/chains/{chain_id}/events?cursor={cursor}"),
             retry,
         )?;
+        loop {
+            // End of stream (graceful shutdown) or a severed connection:
+            // reconnect at the cursor we have reached.
+            let Ok(Some(data)) = next_sse_data(&mut stream) else {
+                continue 'reconnect;
+            };
+            // A malformed frame is a protocol violation the server never
+            // emits; fail loudly rather than silently drop the event.
+            let entry: Value = serde_json::from_str(&data)
+                .with_context(|| format!("malformed event from the server: {data:?}"))?;
+            cursor = entry["idx"].as_u64().map_or(cursor, |i| i + 1);
+            entries.push(entry.clone());
+
+            // A pure approve wakes only when it *completes* the chain, so we
+            // need the resulting state for that case (and only that case);
+            // every other event wakes unconditionally.
+            let feedback = if is_pure_approve(&entry) {
+                Some(client.get(&format!("/api/chains/{chain_id}/feedback"))?)
+            } else {
+                None
+            };
+            let state = feedback
+                .as_ref()
+                .and_then(|fb| fb["state"].as_str())
+                .unwrap_or("");
+            if event_wakes(&entry, state) {
+                let feedback = match feedback {
+                    Some(fb) => fb,
+                    None => client.get(&format!("/api/chains/{chain_id}/feedback"))?,
+                };
+                let resp = json!({"head": cursor, "entries": entries, "feedback": feedback});
+                print_wait(&resp, args.oneline)?;
+                return Ok(());
+            }
+            // A non-completing pure approve: keep it accumulated and keep
+            // reading — it never surfaces a parked wait on its own.
+        }
     }
+}
+
+/// Whether one streamed event should end a parked `nit wait`, given the
+/// chain's resulting `feedback.state`. Every event wakes **except** a
+/// reviewer approve with no comments that did not complete the chain (left
+/// it short of `ready_to_merge`) — those accumulate silently until a waking
+/// event arrives. `state` is only consulted for that suppressed case.
+fn event_wakes(entry: &Value, state: &str) -> bool {
+    !is_pure_approve(entry) || state == "ready_to_merge"
+}
+
+/// A reviewer `approve` with no comments — the only event kind that can be
+/// suppressed (see [`event_wakes`]).
+fn is_pure_approve(entry: &Value) -> bool {
+    entry["kind"] == "review"
+        && entry["payload"]["verdict"] == "approve"
+        && entry["payload"]["comments"]
+            .as_array()
+            .is_none_or(Vec::is_empty)
+}
+
+/// Read the next SSE `data:` event from `reader`, joining multi-line data.
+/// Returns `Ok(None)` at end of stream (the server closed). Keep-alive
+/// comment lines (`:`) and non-`data` fields are skipped.
+fn next_sse_data<R: BufRead>(reader: &mut R) -> std::io::Result<Option<String>> {
+    let mut data = String::new();
+    let mut have = false;
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            return Ok(None);
+        }
+        let l = line.trim_end_matches(['\r', '\n']);
+        if l.is_empty() {
+            if have {
+                return Ok(Some(data));
+            }
+            continue;
+        }
+        if let Some(rest) = l.strip_prefix("data:") {
+            if have {
+                data.push('\n');
+            }
+            data.push_str(rest.strip_prefix(' ').unwrap_or(rest));
+            have = true;
+        }
+    }
+}
+
+/// Print specific log entries by index/range without moving any cursor.
+///
+/// # Errors
+/// When a range is malformed or the server can't be reached.
+pub fn log(args: LogArgs) -> Result<()> {
+    let client = Client::new(server_url(args.server));
+    let chain_id = resolve_chain(&client, Retry::No)?;
+    let mut entries: Vec<Value> = Vec::new();
+    let mut head = 0;
+    for spec in &args.ranges {
+        // Each token is fetched independently and concatenated in order,
+        // duplicates kept — `nit log 1..3 1..3` returns 1,2,1,2.
+        let url = match LogRange::parse(spec)?.query() {
+            (from, Some(to)) => format!("/api/chains/{chain_id}/log?from={from}&to={to}"),
+            (from, None) => format!("/api/chains/{chain_id}/log?from={from}"),
+        };
+        let resp = client.get(&url)?;
+        head = resp["head"].as_u64().unwrap_or(head);
+        if let Some(arr) = resp["entries"].as_array() {
+            entries.extend(arr.iter().cloned());
+        }
+    }
+    if args.oneline {
+        println!("head={head}");
+        print_oneline_entries(&entries);
+    } else {
+        print_json(&json!({"head": head, "entries": entries}))?;
+    }
+    Ok(())
+}
+
+/// A parsed `nit log` selector, half-open and unsigned. Built only via
+/// [`LogRange::parse`], which rejects reverse/empty ranges — so a `Closed`
+/// always has `to > from`, and an illegal range can't be constructed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogRange {
+    /// `A..` / `..` — `[from, head)`, through the current head.
+    Open { from: u64 },
+    /// `A` / `A..B` / `..B` — `[from, to)` with `to > from`.
+    Closed { from: u64, to: u64 },
+}
+
+impl LogRange {
+    /// Parse one `nit log` token: `A` (the single entry `A`), `A..B`, `A..`,
+    /// `..B`, or `..` (all half-open). An empty side defaults to `0` (start)
+    /// or "through head" (end).
+    fn parse(spec: &str) -> Result<LogRange> {
+        let num = |s: &str| -> Result<u64> {
+            s.trim()
+                .parse::<u64>()
+                .with_context(|| format!("bad index {:?}", s.trim()))
+        };
+        let Some((a, b)) = spec.split_once("..") else {
+            // A bare index `A` selects exactly `[A, A+1)`.
+            let from = num(spec)?;
+            let to = from
+                .checked_add(1)
+                .ok_or_else(|| anyhow!("index {from} too large"))?;
+            return Ok(LogRange::Closed { from, to });
+        };
+        let from = if a.trim().is_empty() { 0 } else { num(a)? };
+        if b.trim().is_empty() {
+            return Ok(LogRange::Open { from });
+        }
+        let to = num(b)?;
+        if to <= from {
+            bail!("empty or reversed range {spec:?}: the end must be greater than the start");
+        }
+        Ok(LogRange::Closed { from, to })
+    }
+
+    /// The `from`/`to` query params for `/log` (`to = None` ⇒ open through
+    /// head).
+    fn query(self) -> (u64, Option<u64>) {
+        match self {
+            LogRange::Open { from } => (from, None),
+            LogRange::Closed { from, to } => (from, Some(to)),
+        }
+    }
+}
+
+fn print_wait(resp: &Value, oneline: bool) -> Result<()> {
+    if !oneline {
+        return print_json(resp);
+    }
+    let head = resp["head"].as_u64().unwrap_or(0);
+    let state = resp["feedback"]["state"].as_str().unwrap_or("?");
+    println!("head={head} state={state}");
+    if let Some(arr) = resp["entries"].as_array() {
+        print_oneline_entries(arr);
+    }
+    Ok(())
+}
+
+fn print_oneline_entries(entries: &[Value]) {
+    for e in entries {
+        let idx = e["idx"]
+            .as_u64()
+            .map_or_else(|| "?".to_string(), |i| i.to_string());
+        let kind = e["kind"].as_str().unwrap_or("?");
+        println!("{idx}\t{kind}\t{}", entry_summary(e));
+    }
+}
+
+/// One-line digest of a log entry for `--oneline`. This is a CLI display
+/// concern: the server ships only the raw entry (idx/kind/payload), and the
+/// digest is derived here on demand, so its wording can change freely
+/// without an API change (docs/api.md `LogEntry`).
+fn entry_summary(entry: &Value) -> String {
+    let p = &entry["payload"];
+    match entry["kind"].as_str().unwrap_or("?") {
+        "revisions" => {
+            let added = p["added"].as_array().map_or(&[][..], Vec::as_slice);
+            if added.is_empty() {
+                let live = p["live"].as_array().map_or(0, Vec::len);
+                format!("scan: {live} live change(s)")
+            } else {
+                let keys: Vec<String> = added
+                    .iter()
+                    .map(|a| {
+                        format!(
+                            "{} r{}",
+                            short_key(a["change_key"].as_str().unwrap_or("")),
+                            a["number"].as_u64().unwrap_or(0)
+                        )
+                    })
+                    .collect();
+                format!("push: {}", keys.join(", "))
+            }
+        }
+        "review" => format!(
+            "reviewer {} {} r{} ({} comment(s))",
+            p["verdict"].as_str().unwrap_or("?"),
+            short_key(p["change_key"].as_str().unwrap_or("")),
+            p["revision"].as_u64().unwrap_or(0),
+            p["comments"].as_array().map_or(0, Vec::len)
+        ),
+        "reply" => format!(
+            "agent replied to {} comment(s)",
+            p["replies"].as_array().map_or(0, Vec::len)
+        ),
+        "resolve" => {
+            let verb = if p["resolved"].as_bool().unwrap_or(true) {
+                "resolved"
+            } else {
+                "unresolved"
+            };
+            format!("reviewer {verb} a thread")
+        }
+        "partial" => format!(
+            "chain marked {}",
+            if p["partial"].as_bool().unwrap_or(false) {
+                "partial"
+            } else {
+                "ready"
+            }
+        ),
+        "chain_closed" => format!("chain {}", p["status"].as_str().unwrap_or("closed")),
+        other => format!("{other} entry"),
+    }
+}
+
+fn short_key(key: &str) -> String {
+    key.chars().take(9).collect()
 }
 
 /// Print the current Feedback JSON without blocking.
@@ -260,7 +512,7 @@ fn default_base(repo: &Repository) -> Result<String> {
 /// `GET /api/chains?status=all` (the server stores canonicalized paths).
 /// `retry` covers only that GET — repo discovery and "branch not
 /// registered" stay fatal.
-fn resolve_chain(client: &Client, retry: Retry) -> Result<i64> {
+fn resolve_chain(client: &Client, retry: Retry) -> Result<u64> {
     let (root, repo) = discover_repo()?;
     let branch = current_branch(&repo)?;
     let canonical = std::fs::canonicalize(&root)
@@ -274,7 +526,7 @@ fn resolve_chain(client: &Client, retry: Retry) -> Result<i64> {
         .find(|c| {
             c["repo_path"].as_str() == canonical.to_str() && c["branch"].as_str() == Some(&branch)
         })
-        .and_then(|c| c["id"].as_i64())
+        .and_then(|c| c["id"].as_u64())
         .ok_or_else(|| {
             anyhow!("branch '{branch}' is not registered with nit — run 'nit push' first")
         })
@@ -412,6 +664,32 @@ impl Client {
             .map_err(|e| e.into_error(&self.base))
     }
 
+    /// Open a streaming GET for the SSE `/events` endpoint. Retries the
+    /// *connect* with backoff while the server is unreachable (`Retry::No`
+    /// fails fast); the returned reader then streams the body. One stderr
+    /// notice per outage, matching [`Client::get_retry`].
+    fn get_stream(&self, path: &str, retry: Retry) -> Result<impl BufRead + use<>> {
+        let url = format!("{}{path}", self.base);
+        let mut attempt: u32 = 0;
+        loop {
+            let cause = match self.agent.get(&url).call() {
+                Ok(resp) => return Ok(BufReader::new(resp.into_body().into_reader())),
+                Err(e) => match classify(e, path) {
+                    fatal @ CallError::Fatal(_) => return Err(fatal.into_error(&self.base)),
+                    CallError::Unreachable(cause) => cause,
+                },
+            };
+            if !matches!(retry, Retry::UntilUp { .. }) {
+                return Err(CallError::Unreachable(cause).into_error(&self.base));
+            }
+            if attempt == 0 {
+                eprintln!("nit: server unreachable ({cause}); retrying…");
+            }
+            std::thread::sleep(retry_delay(attempt));
+            attempt += 1;
+        }
+    }
+
     fn get_raw(&self, path: &str) -> Result<Value, CallError> {
         let url = format!("{}{path}", self.base);
         let response = self.agent.get(&url).call().map_err(|e| classify(e, path))?;
@@ -480,6 +758,71 @@ mod tests {
             current_branch(&repo).expect("branch should resolve"),
             "feat/x"
         );
+    }
+
+    #[test]
+    fn log_range_forms_and_rejections() {
+        let ok = |s: &str| LogRange::parse(s).expect("range should parse");
+        assert_eq!(ok("3"), LogRange::Closed { from: 3, to: 4 });
+        assert_eq!(ok("3..6"), LogRange::Closed { from: 3, to: 6 });
+        assert_eq!(ok("3.."), LogRange::Open { from: 3 });
+        assert_eq!(ok("..6"), LogRange::Closed { from: 0, to: 6 });
+        assert_eq!(ok(".."), LogRange::Open { from: 0 });
+        // Reverse / empty closed ranges are rejected, not silently emptied.
+        assert!(LogRange::parse("6..6").is_err());
+        assert!(LogRange::parse("6..3").is_err());
+        // A bare u64::MAX overflows the +1: a clean error, not a panic.
+        assert!(LogRange::parse(&format!("{}", u64::MAX)).is_err());
+        // Negatives never parse as an unsigned index.
+        assert!(LogRange::parse("-1").is_err());
+        assert!(LogRange::parse("notanumber").is_err());
+    }
+
+    #[test]
+    fn event_wakes_only_on_completing_pure_approve() {
+        let approve = |comments: Value| json!({"kind": "review", "payload": {"verdict": "approve", "comments": comments}});
+        // A pure approve wakes only when it completes the chain — NOT on a
+        // merely-actionable state (e.g. all-approved-while-partial is
+        // `agents_turn`, not `ready_to_merge`).
+        assert!(!event_wakes(&approve(json!([])), "agents_turn"));
+        assert!(!event_wakes(&approve(json!([])), "waiting_for_review"));
+        assert!(event_wakes(&approve(json!([])), "ready_to_merge"));
+        // An approve with comments wakes regardless of state.
+        assert!(event_wakes(
+            &approve(json!([{"body": "nit"}])),
+            "agents_turn"
+        ));
+        // Every non-(pure-approve) event wakes unconditionally.
+        let request =
+            json!({"kind": "review", "payload": {"verdict": "request_changes", "comments": []}});
+        assert!(event_wakes(&request, "agents_turn"));
+        assert!(event_wakes(
+            &json!({"kind": "revisions", "payload": {}}),
+            "waiting_for_review"
+        ));
+        assert!(event_wakes(
+            &json!({"kind": "reply", "payload": {}}),
+            "waiting_for_review"
+        ));
+    }
+
+    #[test]
+    fn entry_summary_digests_each_kind() {
+        let push = json!({"kind": "revisions", "payload":
+            {"live": [{}], "added": [{"change_key": "I0123456789abc", "number": 2}]}});
+        assert_eq!(entry_summary(&push), "push: I01234567 r2");
+        let scan = json!({"kind": "revisions", "payload": {"live": [{}, {}], "added": []}});
+        assert_eq!(entry_summary(&scan), "scan: 2 live change(s)");
+        let review = json!({"kind": "review", "payload":
+            {"verdict": "request_changes", "change_key": "I0123456789", "revision": 2, "comments": [{}, {}]}});
+        assert_eq!(
+            entry_summary(&review),
+            "reviewer request_changes I01234567 r2 (2 comment(s))"
+        );
+        let resolve = json!({"kind": "resolve", "payload": {"resolved": false}});
+        assert_eq!(entry_summary(&resolve), "reviewer unresolved a thread");
+        let closed = json!({"kind": "chain_closed", "payload": {"status": "merged"}});
+        assert_eq!(entry_summary(&closed), "chain merged");
     }
 
     #[test]
