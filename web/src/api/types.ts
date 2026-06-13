@@ -296,9 +296,27 @@ export interface FeedbackReview {
   revision: number;
 }
 
-export interface WaitResponse {
-  cursor: number;
-  feedback: Feedback;
+/** One entry in a chain's log (docs/api.md `LogEntry`). */
+export interface LogEntry {
+  /** 0-based position in the chain's log. */
+  idx: number;
+  /** revisions | review | reply | resolve | partial | chain_closed */
+  kind: string;
+  created_at: string;
+  /** Kind-specific; shapes in data-model.md "Payloads". */
+  payload: unknown;
+}
+
+/**
+ * The agent-side `/events` stream (`GET /api/chains/{id}/events?cursor=`)
+ * emits bare `LogEntry` values, one per SSE event — there is no wrapper
+ * response. `nit wait` assembles the `head`/feedback view client-side.
+ */
+
+/** `GET /api/chains/{id}/log` response. */
+export interface LogResponse {
+  head: number;
+  entries: LogEntry[];
 }
 
 // ---------------------------------------------------------------------------
