@@ -123,9 +123,10 @@ Shape: `Feedback` in docs/api.md. Decide on `state`:
 - `merged` / `abandoned` — the chain is closed; stop.
 
 Comments in feedback are scoped to each change's **latest review**, plus
-any still-unresolved threads from earlier reviews. `outdated: true` means
-the code under the comment has changed since (its `line_text` shows what
-was commented on). `side: "old"` anchors to a deleted line.
+any still-unresolved threads from earlier reviews. Each comment is pinned
+to the `revision` it was written on; its `line_text` shows the exact line
+it was commented on, and `side: "old"` anchors to a line in that
+revision's parent tree (a deleted/pre-change line).
 
 Comments with `file: "/COMMIT_MSG"` target the **commit message** (line
 numbers are 1-based message lines). Answer them by rewording the commit

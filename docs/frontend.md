@@ -32,8 +32,10 @@ happens.
     subject, unresolved count, status chip per change) in normal flow,
     pushing the content below down; navigating to another change closes it;
   - diff range: Gerrit-style dropdown pair in the diffbar, `Base|rM → rN`.
-    The right select is the revision under review — it drives `?revision=`
-    (default latest) and the revision new comments anchor to. The left
+    The right select is the revision under review — the diff's TO/new
+    column and the revision new comments anchor to, tracked in the
+    `revision` URL param (it drives the `/revisions/{n}/diff` path, not a
+    comment-rendering query). The left
     select drives `?against=`: `base` is an explicit full diff vs parent,
     an earlier `rM` an interdiff `rM → rN` (later revisions shown
     disabled). Default when `last_reviewed_revision` exists and is behind:
@@ -60,24 +62,29 @@ happens.
   - diff: monospace, full-width gutters with old/new line numbers, add/del
     coloring, per-line syntax highlighting (language from extension; skip
     silently when unknown), hunk separators showing skipped ranges;
-  - comments: click a gutter/line → inline draft editor under that line
-    (file+line+side from context; in interdiff view only new-side lines are
-    commentable). Select diff text — partial within a line or across
-    lines, one side at a time (a split-view drag locks to the column it
-    starts in) — and press `c` → the editor opens under the selection's
-    last line with the range recorded (docs/api.md "Range comments");
-    `c` on a collapsed caret comments its line. When `c` cannot map the
-    selection (sides disagree, a hunk gap, the old side of an interdiff),
-    a transient notice in the diffbar says why. The selection-to-range
-    mapping lives in `lib/selection.ts` against DiffFileView's data
-    attributes. Ranged threads tint their selected text amber in the
-    diff (ported per revision — `rendered_range`); the open editor's
-    pending selection tints brighter. Published comments render as
-    threads (replies via
-    `parent_id`, author chrome for reviewer/agent, resolve toggle) under
-    their `rendered_line`; comments with `outdated: true` group at the top
-    of their file with their `line_text` excerpt; drafts get a dashed
-    border + `DRAFT` tag and edit/delete;
+  - comments: select diff text — partial within a line or across lines,
+    one side at a time (a split-view drag locks to the column it starts
+    in) — and press `c` → the editor opens under the selection's last
+    line with the range recorded (docs/api.md "Range comments"); `c` on a
+    collapsed caret comments its line. Either column is commentable: the
+    new column anchors to the selected revision; the old column anchors to
+    its parent (base) or, in an interdiff, to the FROM revision's own side
+    (`lib/comments.ts` maps the column to the stored `(revision, side)`).
+    When `c` cannot map the selection (sides disagree, a hunk gap, a
+    cross-file sweep), a transient notice in the diffbar says why. The
+    selection-to-range mapping lives in `lib/selection.ts` against
+    DiffFileView's data attributes. Comments place by the **diff range**
+    (docs/api.md "Comment placement"): a comment shows only when its
+    `(revision, side)` is one of the two displayed sides — new-side
+    threads under the right/new column, old-side under the left/old column
+    (in side-by-side), and not at all when its revision is neither FROM nor
+    TO. Ranged threads tint their selected text amber on the matching
+    column; the open editor's pending selection tints brighter. Published
+    comments render as threads (replies via `parent_id`, author chrome for
+    reviewer/agent, resolve toggle) under their anchored line; a comment on
+    a displayed side but outside the rendered hunks groups at the top of
+    its file with its `line_text` excerpt; drafts get a dashed border +
+    `DRAFT` tag and edit/delete;
   - review bar (sticky bottom): draft count, unresolved count, and a
     `Review (a)` button (shortcut `a`) opening the reply modal:
     cover-message textarea, buttons `Approve` / `Request changes` /

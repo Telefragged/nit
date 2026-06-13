@@ -29,7 +29,11 @@ comments  (id, change_id, revision_number, parent_id, author, file, line,
            range_end_char, line_text, body, state, resolved, review_id,
            created_at, updated_at)
            -- author: reviewer | agent;  state: draft | published
-           -- side: old | new;  line_text: snapshot of the anchored line
+           -- side: old | new — a comment is pinned to its
+           --   (revision_number, side): new = that revision's commit tree,
+           --   old = its parent tree. The UI shows it only in a diff whose
+           --   range displays that tree, at its stored line, never ported
+           --   (api.md "Comment placement").  line_text: snapshot
            -- range_*: optional selected-text anchor (api.md "Range
            --   comments"); all four set or all NULL; range_end_line = line
            -- parent_id: reply threading; resolved: thread-level bool

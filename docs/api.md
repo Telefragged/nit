@@ -63,8 +63,9 @@ ChangeSummary = {
 
 ## Changes
 
-- `GET /api/changes/{id}?revision={n}` — `revision` defaults to latest and
-  controls comment rendering (below).
+- `GET /api/changes/{id}` — the change with every revision and every
+  comment; each comment carries its own anchor verbatim (no `revision`
+  query — placement is the client's job, see "Comment placement").
   ```json
   {
     "id": 10, "chain_id": 1, "change_key": "I3f2…", "position": 0,
@@ -119,40 +120,54 @@ never collide with a real file.
   `deletions` count message lines like any text file.
 
 Line comments on `/COMMIT_MSG` use `side: "new"` only; old-side drafts
-are rejected with 400. No UI state can produce one — vs parent the
-message renders all-`add` (no old-side lines exist), and the `modified`
-presentation only occurs in interdiffs, where old-side commenting is
-unsupported for every file in v1 (see drafts below) — so the 400 only
-guards raw API clients. Anchors port across revisions by diffing the two
-revisions' message texts, not trees (see "Comment rendering across
-revisions").
+are rejected with 400. No UI state can produce one: vs parent the message
+renders all-`add` (no old-side lines to select), and the old column of an
+interdiff `m → n` shows message(m) — selecting there anchors a `new`-side
+comment on revision `m` (the same mapping code uses, see drafts below) —
+so a `/COMMIT_MSG` `side: "old"` anchor never arises; the 400 only guards
+raw API clients.
 
-### Comment rendering across revisions
+### Comment placement
 
-Comments are anchored where they were written (`revision`, `file`, `line`,
-`side`, an optional `range`, plus a `line_text` snapshot). When the change is served at
-`?revision=n`, the server ports each comment's anchor through
-`diff(tree(comment.revision), tree(n))` per file. For
-`/COMMIT_MSG` anchors the server ports through
-`diff(message(comment.revision), message(n))` instead — same
-shifted/outdated rules:
+A line comment is anchored where it was written: a `revision`, a `side`,
+a `line`, an optional `range`, and a `line_text` snapshot. The two sides
+name trees of that revision:
 
-- line lies in an unchanged region → `rendered_line` = shifted line number;
-- the anchored line itself was changed/deleted (or porting is impossible) →
-  `rendered_line: null, outdated: true` — the UI shows it with `line_text`
-  in an "outdated" group per file.
+- `side: "new"` → the line lives in the commit tree of `revision`;
+- `side: "old"` → it lives in that revision's **parent** tree — the
+  "before" of the revision's vs-parent diff, where deleted/old lines are.
+
+A diff is always a range `FROM → TO`: `TO` is a revision `rN` (the right
+select), `FROM` is `base` (its parent) or an earlier `rM` (the left
+select, an interdiff). A comment shows **only when its `(revision, side)`
+names one of the two displayed trees**, at its stored `line` — comments
+are pinned to their patchset, never ported onto another revision:
+
+| anchor      | shows when                    | side  |
+| ----------- | ----------------------------- | ----- |
+| `(rN, new)` | `TO == rN`                    | right |
+| `(rN, old)` | `TO == rN` and `FROM == base` | left  |
+| `(rM, new)` | `FROM == rM` (interdiff)      | left  |
+
+A comment whose revision is neither `FROM` nor `TO` is **not shown in
+that diff** (select its revision to see it). The old column of an
+interdiff `rM → rN` shows `rM`'s own tree, so a comment made on `rM`'s
+`new` side is what renders there on the left — there is no separate
+"old" anchor for an interdiff. The `range` and `line` are served exactly
+as written and read directly against the matching column.
+
+A shown comment whose `line` lies outside the diff's rendered hunks (its
+tree is displayed, but the line is in an unchanged region no hunk reaches)
+groups per file with its `line_text` excerpt instead of rendering inline.
 
 ```json
 Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
            "author": "reviewer",         // reviewer | agent
            "file": "src/main.rs",        // null: change-level comment
            "line": 14,                   // null: file-/change-level
-           "side": "new",
+           "side": "new",                // old | new (trees above)
            "range": CommentRange,        // null: whole-line comment
            "line_text": "    let x = parse(input);",  // null without line
-           "rendered_line": 14,          // for the requested revision
-           "rendered_range": CommentRange,  // ported; null when not portable
-           "outdated": false,
            "body": "…", "state": "draft",   // draft | published
            "resolved": false,
            "review_id": null, "created_at": "…", "updated_at": "…"}
@@ -179,12 +194,10 @@ CommentRange = {"start_line": 12, "start_char": 4,
 - Char offsets are not validated against file contents (the repo may not
   even be readable at draft time); the UI clamps when rendering.
 
-`rendered_range` ports with the same diff as `rendered_line`: the range
-shifts onto the requested revision only when no hunk touches
-`[start_line, end_line]` — untouched lines are byte-identical, so the
-char offsets carry over. When the region was touched, `rendered_range`
-is null and the comment falls back to its line anchor (`rendered_line`,
-which may itself still port or go outdated).
+A range is shown on whichever diff column its `(revision, side)` maps to
+("Comment placement"), read directly against that column's line text — it
+is never ported, because a comment only renders where its own tree is the
+one displayed.
 
 ## Comments (drafts → published) — reviewer side
 
@@ -194,8 +207,11 @@ which may itself still port or go outdated).
   `"new"`. `range` optional: requires a `line` and must satisfy the
   "Range comments" rules, else 400. `file` may be the reserved
   `/COMMIT_MSG` (commit-message comments; `side` must be `"new"`, else
-  400). In interdiff view the UI may only attach comments to the _new_
-  side; old-side interdiff commenting is unsupported in v1.
+  400). Both columns of a diff are commentable: a new-column anchor stores
+  `(revision = TO, side = "new")`; an old-column anchor stores
+  `(revision = TO, side = "old")` against `base`, or `(revision = FROM,
+side = "new")` in an interdiff (its old column is the FROM revision's own
+  tree). The UI does this mapping; the endpoint just stores what it is sent.
 - `PATCH /api/drafts/{id}` — `{"body": "…"}` → Comment. 404 unless draft.
 - `DELETE /api/drafts/{id}` → 204. 404 unless draft.
 - `POST /api/comments/{id}/resolve` / `…/unresolve` → Comment (root
