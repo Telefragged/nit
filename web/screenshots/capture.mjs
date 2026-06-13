@@ -166,7 +166,7 @@ const captures = [
       // longer comments; selecting text — collapsed here — then c is the
       // only path).
       await page.evaluate(() => {
-        const code = [...document.querySelectorAll("td.code .code-text")].find(
+        const code = [...document.querySelectorAll(".code .code-text")].find(
           (t) => t.textContent.includes("self.store.revoke_family"),
         );
         const range = document.createRange();
@@ -199,7 +199,7 @@ const captures = [
     actions: async (page) => {
       await expandAllFiles(page);
       await page.evaluate(() => {
-        const texts = [...document.querySelectorAll("td.code .code-text")];
+        const texts = [...document.querySelectorAll(".code .code-text")];
         const cell = (needle) =>
           texts.find((t) => t.textContent.includes(needle));
         // hljs splits lines into token spans; find the text node (and

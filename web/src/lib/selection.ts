@@ -1,7 +1,7 @@
 // Maps a DOM selection inside a diff to a draft target with a comment
 // range (docs/api.md "Range comments"), gerrit-style. The DOM contract is
 // rendered by DiffFileView: every file section carries `data-diff-path`,
-// every commentable code cell is a `td.code` with `data-old`/`data-new`
+// every commentable code cell is a `.code` with `data-old`/`data-new`
 // line-number attributes (whichever sides exist for that cell), and the
 // line's text — sign and gutters excluded — lives inside a `.code-text`
 // span within the cell.
@@ -22,7 +22,7 @@ function intersects(range: Range, node: Node): boolean {
 }
 
 const cellOf = (node: Node): HTMLElement | null =>
-  (node instanceof Element ? node : node.parentElement)?.closest("td.code") ??
+  (node instanceof Element ? node : node.parentElement)?.closest(".code") ??
   null;
 
 /** The code-text span of a cell — null also for an *empty* line, whose
@@ -65,10 +65,10 @@ function sweptCells(range: Range): HTMLElement[] {
   const node = range.commonAncestorContainer;
   const root = node instanceof Element ? node : node.parentElement;
   if (!root) return [];
-  const within = root.closest("td.code");
+  const within = root.closest(".code");
   const candidates = within
     ? [within]
-    : Array.from(root.querySelectorAll("td.code"));
+    : Array.from(root.querySelectorAll(".code"));
   return candidates.filter((c): c is HTMLElement => intersects(range, c));
 }
 

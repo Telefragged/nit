@@ -34,7 +34,7 @@ beforeEach(() => {
     }
     scrollCalls.push({
       id: this.id,
-      expandedAtCall: this.querySelector(".diff-table") !== null,
+      expandedAtCall: this.querySelector(".diff-grid") !== null,
     });
   };
 });
@@ -71,11 +71,11 @@ describe("collapsed-by-default file sections", () => {
     await railItem("src/auth/store.rs");
 
     expect(isExpanded(section(0))).toBe(true); // /COMMIT_MSG
-    expect(section(0).querySelector(".diff-table")).not.toBeNull();
+    expect(section(0).querySelector(".diff-grid")).not.toBeNull();
     for (const i of [1, 2, 3]) {
       expect(isExpanded(section(i))).toBe(false);
       // aria matches reality: no diff body rendered while collapsed.
-      expect(section(i).querySelector(".diff-table")).toBeNull();
+      expect(section(i).querySelector(".diff-grid")).toBeNull();
     }
   });
 

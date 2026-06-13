@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, type MouseEvent as ReactMouseEvent, useMemo } from "react";
 import { createDraft } from "../../api/client";
 import type {
   CommentRange,
@@ -77,28 +77,18 @@ const anchorLine = (t: Thread) => t.root.rendered_line ?? t.root.line;
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
   a.file === file && a.side === side && a.line === line;
 
-function HunkSeparator({
-  prev,
-  hunk,
-  colSpan,
-}: {
-  prev: Hunk | undefined;
-  hunk: Hunk;
-  colSpan: number;
-}) {
+function HunkSeparator({ prev, hunk }: { prev: Hunk | undefined; hunk: Hunk }) {
   const skipped = skippedBefore(prev, hunk);
   return (
-    <tr className="hunk-row">
-      <td colSpan={colSpan}>
-        <span className="hunk-skip">
-          {skipped > 0 ? `⋯ ${skipped} unchanged lines` : "⋯"}
-        </span>
-        <span className="hunk-header">
-          @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},
-          {hunk.new_lines} @@ {hunk.header}
-        </span>
-      </td>
-    </tr>
+    <div className="hunk-row">
+      <span className="hunk-skip">
+        {skipped > 0 ? `⋯ ${skipped} unchanged lines` : "⋯"}
+      </span>
+      <span className="hunk-header">
+        @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines}{" "}
+        @@ {hunk.header}
+      </span>
+    </div>
   );
 }
 
@@ -184,20 +174,29 @@ export default function DiffFileView({
     },
   });
 
-  // In split layout, the side the current mouse drag started on; the
-  // other side is made unselectable (styles.css `sel-old`/`sel-new`) so a
-  // cross-column drag yields one side's text, gerrit-style. Cleared when
-  // the drag ends — user-select only gates *making* selections, so the
-  // completed one (which c consumes) survives; leaving the lock in place
-  // would silently exclude the column from selections that do not start
-  // on this table (Ctrl+A, find-and-select).
-  const [selSide, setSelSide] = useState<CommentSide | null>(null);
-  useEffect(() => {
-    if (selSide === null) return undefined;
-    const clear = () => setSelSide(null);
-    document.addEventListener("mouseup", clear);
-    return () => document.removeEventListener("mouseup", clear);
-  }, [selSide]);
+  // Split layout only: while a drag is in flight, lock selection to the
+  // side it started on (styles.css `sel-old`/`sel-new` make the other
+  // column unselectable) so a cross-column drag yields one side's
+  // contiguous text — the shape a comment range needs. Done imperatively
+  // on the grid node, not via React state: a state change on mousedown
+  // re-renders mid-gesture and drops the nascent selection, and the lock
+  // would land too late to keep the drag on one side. Cleared on mouseup —
+  // user-select only gates *making* a selection, so the finished one
+  // (which c consumes) survives, and selections not started here (Ctrl+A,
+  // find-and-select) are never constrained.
+  const lockSelectionSide = (e: ReactMouseEvent) => {
+    const side = (e.target as Element)
+      .closest("[data-side]")
+      ?.getAttribute("data-side");
+    if (side !== "old" && side !== "new") return;
+    const grid = e.currentTarget as HTMLElement;
+    grid.classList.add(`sel-${side}`);
+    document.addEventListener(
+      "mouseup",
+      () => grid.classList.remove("sel-old", "sel-new"),
+      { once: true },
+    );
+  };
 
   // Selected-text ranges to tint: every inline thread's ported range,
   // plus the open editor's pending selection — its "what am I commenting
@@ -243,7 +242,7 @@ export default function DiffFileView({
 
   /** Thread/editor rows attached under a diff line. A context line owns
    * anchors on both sides; add/del lines own exactly one. */
-  function metaRows(line: Line, colSpan: number) {
+  function metaRows(line: Line) {
     const rows = [];
     const sides: Array<["old" | "new", number | undefined]> =
       line.kind === "context"
@@ -258,11 +257,9 @@ export default function DiffFileView({
       if (no === undefined) continue;
       for (const t of inline.get(`${side}:${no}`) ?? []) {
         rows.push(
-          <tr className="meta-row" key={`t-${side}-${t.root.id}`}>
-            <td colSpan={colSpan}>
-              <CommentThread thread={t} changeId={ctx.changeId} />
-            </td>
-          </tr>,
+          <div className="meta-row" key={`t-${side}-${t.root.id}`}>
+            <CommentThread thread={t} changeId={ctx.changeId} />
+          </div>,
         );
       }
       if (
@@ -270,20 +267,18 @@ export default function DiffFileView({
         targetAt(ctx.editingTarget, file.path, side, no)
       ) {
         rows.push(
-          <tr className="meta-row" key={`editor-${side}-${no}`}>
-            <td colSpan={colSpan}>
-              <CommentEditor
-                saving={create.isPending}
-                onSave={(body) =>
-                  create.mutate({ target: ctx.editingTarget!, body })
-                }
-                onCancel={() => ctx.setEditingTarget(null)}
-                onDirtyChange={(dirty) => {
-                  ctx.editorDirty.current = dirty;
-                }}
-              />
-            </td>
-          </tr>,
+          <div className="meta-row" key={`editor-${side}-${no}`}>
+            <CommentEditor
+              saving={create.isPending}
+              onSave={(body) =>
+                create.mutate({ target: ctx.editingTarget!, body })
+              }
+              onCancel={() => ctx.setEditingTarget(null)}
+              onDirtyChange={(dirty) => {
+                ctx.editorDirty.current = dirty;
+              }}
+            />
+          </div>,
         );
       }
     }
@@ -293,10 +288,14 @@ export default function DiffFileView({
   function unifiedRows(hunk: Hunk) {
     return hunk.lines.map((line, li) => (
       <Fragment key={li}>
-        <tr className={`line-row ${line.kind}`}>
-          <td className="g">{line.old ?? ""}</td>
-          <td className="g">{line.new ?? ""}</td>
-          <td className="code" data-old={line.old} data-new={line.new}>
+        <div className="line-row">
+          <span className={`g ${line.kind}`}>{line.old ?? ""}</span>
+          <span className={`g ${line.kind}`}>{line.new ?? ""}</span>
+          <span
+            className={`code ${line.kind}`}
+            data-old={line.old}
+            data-new={line.new}
+          >
             <span className="sign">
               {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}
             </span>
@@ -307,69 +306,55 @@ export default function DiffFileView({
               rangeMarks={cellRangeMarks(line, ["old", "new"])}
               className="code-text"
             />
-          </td>
-        </tr>
-        {metaRows(line, 3)}
+          </span>
+        </div>
+        {metaRows(line)}
       </Fragment>
     ));
+  }
+
+  /** One side of a split row: its gutter + code-half spans. The code cell
+   * carries only data-{side} (never both) so lib/selection's sideOf
+   * resolves a one-column drag to this side. */
+  function sideCell(line: Line | null, side: "old" | "new") {
+    return (
+      <>
+        <span className={`g ${line ? line.kind : "void"}`} data-side={side}>
+          {line?.[side] ?? ""}
+        </span>
+        <span
+          className={`code half ${line ? line.kind : "void"}`}
+          data-side={side}
+          data-old={side === "old" ? line?.old : undefined}
+          data-new={side === "new" ? line?.new : undefined}
+        >
+          {line ? (
+            <Code
+              text={line.text}
+              lang={lang}
+              mark={marks.get(line)}
+              rangeMarks={cellRangeMarks(line, [side])}
+              className="code-text"
+            />
+          ) : null}
+        </span>
+      </>
+    );
   }
 
   function splitRows(hunk: Hunk) {
     return pairLines(hunk.lines).map((pair, pi) => (
       <Fragment key={pi}>
-        <tr className="line-row split">
-          <td
-            className={`g ${pair.left ? pair.left.kind : "void"}`}
-            data-side="old"
-          >
-            {pair.left?.old ?? ""}
-          </td>
-          <td
-            className={`code half ${pair.left ? pair.left.kind : "void"}`}
-            data-side="old"
-            data-old={pair.left?.old}
-          >
-            {pair.left ? (
-              <Code
-                text={pair.left.text}
-                lang={lang}
-                mark={marks.get(pair.left)}
-                rangeMarks={cellRangeMarks(pair.left, ["old"])}
-                className="code-text"
-              />
-            ) : null}
-          </td>
-          <td
-            className={`g ${pair.right ? pair.right.kind : "void"}`}
-            data-side="new"
-          >
-            {pair.right?.new ?? ""}
-          </td>
-          <td
-            className={`code half ${pair.right ? pair.right.kind : "void"}`}
-            data-side="new"
-            data-new={pair.right?.new}
-          >
-            {pair.right ? (
-              <Code
-                text={pair.right.text}
-                lang={lang}
-                mark={marks.get(pair.right)}
-                rangeMarks={cellRangeMarks(pair.right, ["new"])}
-                className="code-text"
-              />
-            ) : null}
-          </td>
-        </tr>
-        {pair.left && pair.left.kind !== "context"
-          ? metaRows(pair.left, 4)
-          : null}
-        {pair.right ? metaRows(pair.right, 4) : null}
+        <div className="line-row">
+          {sideCell(pair.left, "old")}
+          {sideCell(pair.right, "new")}
+        </div>
+        {pair.left && pair.left.kind !== "context" ? metaRows(pair.left) : null}
+        {pair.right ? metaRows(pair.right) : null}
       </Fragment>
     ));
   }
 
-  const colSpan = layout === "unified" ? 3 : 4;
   const letter = statusLetter(file);
 
   return (
@@ -438,33 +423,19 @@ export default function DiffFileView({
           {file.binary ? (
             <div className="binary-note">Binary file — contents not shown</div>
           ) : (
-            <table
-              className={`diff-table ${
-                layout === "split" && selSide ? `sel-${selSide}` : ""
+            <div
+              className={`diff-grid ${
+                layout === "split" ? "diff-grid-split" : "diff-grid-unified"
               }`}
-              onMouseDown={
-                layout === "split"
-                  ? (e) =>
-                      setSelSide(
-                        ((e.target as Element)
-                          .closest("[data-side]")
-                          ?.getAttribute("data-side") ??
-                          null) as CommentSide | null,
-                      )
-                  : undefined
-              }
+              onMouseDown={layout === "split" ? lockSelectionSide : undefined}
             >
               {file.hunks.map((hunk, hi) => (
-                <tbody key={hi}>
-                  <HunkSeparator
-                    prev={file.hunks[hi - 1]}
-                    hunk={hunk}
-                    colSpan={colSpan}
-                  />
+                <Fragment key={hi}>
+                  <HunkSeparator prev={file.hunks[hi - 1]} hunk={hunk} />
                   {layout === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
-                </tbody>
+                </Fragment>
               ))}
-            </table>
+            </div>
           )}
         </>
       )}

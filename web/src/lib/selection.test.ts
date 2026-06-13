@@ -1,6 +1,8 @@
 // selectionTarget: DOM selections → comment-range draft targets. The DOM
 // built here mirrors DiffFileView's contract exactly (section data attr,
-// td.code with data-old/data-new, .sign + .code-text spans).
+// .code cell with data-old/data-new, .sign + .code-text spans). The diff
+// is a CSS grid of divs/spans, not a table — jsdom does no layout, so only
+// the element structure, classes and data attributes matter here.
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { selectionTarget } from "./selection";
@@ -16,32 +18,41 @@ function unifiedCell(r: RowSpec): string {
     (r.old !== undefined ? ` data-old="${r.old}"` : "") +
     (r.new !== undefined ? ` data-new="${r.new}"` : "");
   return (
-    `<tr class="line-row"><td class="g">${r.old ?? ""}</td>` +
-    `<td class="g">${r.new ?? ""}</td>` +
-    `<td class="code"${attrs}><span class="sign">+</span>` +
-    `<span class="code-text">${r.text}</span></td></tr>`
+    `<div class="line-row"><span class="g">${r.old ?? ""}</span>` +
+    `<span class="g">${r.new ?? ""}</span>` +
+    `<span class="code"${attrs}><span class="sign">+</span>` +
+    `<span class="code-text">${r.text}</span></span></div>`
   );
+}
+
+/** The file-section shell both layouts share; `rows` is the pre-joined
+ * inner row HTML. */
+function mountSection(
+  path: string,
+  gridClass: string,
+  rows: string,
+): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "file-section";
+  section.setAttribute("data-diff-path", path);
+  section.innerHTML = `<div class="diff-grid ${gridClass}">${rows}</div>`;
+  document.body.appendChild(section);
+  return section;
 }
 
 /** One file section in unified layout; `hunks` are row groups separated by
  * hunk rows, like real diffs. */
 function mountUnified(hunks: RowSpec[][], path = "src/a.rs"): HTMLElement {
-  const section = document.createElement("section");
-  section.className = "file-section";
-  section.setAttribute("data-diff-path", path);
-  section.innerHTML =
-    `<table class="diff-table">` +
+  return mountSection(
+    path,
+    "diff-grid-unified",
     hunks
       .map(
         (rows) =>
-          `<tbody><tr class="hunk-row"><td colspan="3">@@</td></tr>` +
-          rows.map(unifiedCell).join("") +
-          `</tbody>`,
+          `<div class="hunk-row">@@</div>` + rows.map(unifiedCell).join(""),
       )
-      .join("") +
-    `</table>`;
-  document.body.appendChild(section);
-  return section;
+      .join(""),
+  );
 }
 
 /** The text node carrying row `i`'s code (document order across hunks). */
@@ -217,44 +228,39 @@ function splitRow(
     lineAttr: string,
     cell: { text: string } | null,
   ) =>
-    `<td class="code half" data-side="${sideAttr}"${lineAttr}>` +
+    `<span class="code half" data-side="${sideAttr}"${lineAttr}>` +
     (cell ? `<span class="code-text">${cell.text}</span>` : "") +
-    `</td>`;
+    `</span>`;
   return (
-    `<tr class="line-row split">` +
-    `<td class="g" data-side="old">${left?.old ?? ""}</td>` +
+    `<div class="line-row">` +
+    `<span class="g" data-side="old">${left?.old ?? ""}</span>` +
     code("old", left ? ` data-old="${left.old}"` : "", left) +
-    `<td class="g" data-side="new">${right?.new ?? ""}</td>` +
+    `<span class="g" data-side="new">${right?.new ?? ""}</span>` +
     code("new", right ? ` data-new="${right.new}"` : "", right) +
-    `</tr>`
+    `</div>`
   );
 }
 
 describe("selectionTarget, split layout", () => {
   function mountSplit(): HTMLElement {
-    const section = document.createElement("section");
-    section.className = "file-section";
-    section.setAttribute("data-diff-path", "src/b.rs");
-    section.innerHTML =
-      `<table class="diff-table">` +
-      `<tbody>` +
+    return mountSection(
+      "src/b.rs",
+      "diff-grid-split",
       splitRow(
         { old: 20, text: "left twenty" },
         { new: 30, text: "right thirty" },
       ) +
-      splitRow(null, { new: 31, text: "right thirty one" }) +
-      splitRow(
-        { old: 21, text: "left twenty one" },
-        { new: 32, text: "right thirty two" },
-      ) +
-      `</tbody></table>`;
-    document.body.appendChild(section);
-    return section;
+        splitRow(null, { new: 31, text: "right thirty one" }) +
+        splitRow(
+          { old: 21, text: "left twenty one" },
+          { new: 32, text: "right thirty two" },
+        ),
+    );
   }
 
   /** Code text node of column `side`, visual row `i`. */
   function colText(section: HTMLElement, side: string, i: number): Text {
-    const cells = section.querySelectorAll(`td.code[data-side="${side}"]`);
+    const cells = section.querySelectorAll(`.code[data-side="${side}"]`);
     return cells[i]!.querySelector(".code-text")!.firstChild as Text;
   }
 

@@ -855,22 +855,37 @@ table.list tbody tr:hover {
   text-align: center;
 }
 
-/* diff tables */
+/* diff grid — a CSS grid, not a table. Table-mode selection is
+   cell-quantized: a mouse drag snaps to whole cells and bleeds across
+   columns, so a partial or single-side selection is impossible. Laid out
+   with grid + subgrid the diff selects like normal text, which is what
+   lib/selection.ts maps to a comment range. */
 
-.diff-table {
-  width: 100%;
-  border-collapse: collapse;
+.diff-grid {
+  display: grid;
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.5;
 }
-.diff-table td {
-  padding: 0;
-  vertical-align: top;
+.diff-grid-unified {
+  grid-template-columns:
+    minmax(44px, max-content) minmax(44px, max-content)
+    minmax(0, 1fr);
 }
-.diff-table td.g {
-  width: 1%;
-  min-width: 44px;
+.diff-grid-split {
+  grid-template-columns:
+    minmax(44px, max-content) minmax(0, 1fr)
+    minmax(44px, max-content) minmax(0, 1fr);
+}
+/* Each row spans all columns and re-exposes them through subgrid, so every
+   row's cells share one set of column tracks — the alignment the table
+   gave, without the table. */
+.line-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+.line-row .g {
   padding: 0 8px;
   text-align: right;
   color: var(--text-faint);
@@ -878,26 +893,28 @@ table.list tbody tr:hover {
   border-right: 1px solid var(--border);
   white-space: nowrap;
 }
-.diff-table td.code {
+.line-row .code {
   white-space: pre-wrap;
   /* Break long lines at word boundaries when possible (never mid-token
      unless unavoidable), and give wrapped continuations a hanging indent
-     so they read as continuations, not as fresh source lines. */
+     so they read as continuations, not as fresh source lines. min-width:0
+     lets the 1fr track shrink below content so wrapping actually happens. */
   overflow-wrap: anywhere;
   padding: 0 10px 0 24px;
   text-indent: -20px;
-  width: auto;
+  min-width: 0;
 }
-.diff-table td.code.half {
-  width: 50%;
+.line-row .code.half {
   border-right: 1px solid var(--border);
 }
-/* While a split-view drag runs, only the side it started on is
-   selectable (DiffFileView sets sel-old/sel-new on mousedown), so the
-   selection is one column's contiguous text — the shape a comment range
-   needs (lib/selection.ts). */
-.diff-table.sel-old [data-side="new"],
-.diff-table.sel-new [data-side="old"] {
+/* While a split-view drag runs, only the side it started on is selectable
+   (DiffFileView sets sel-old/sel-new on mousedown), so a cross-column drag
+   yields one column's contiguous text — the shape a comment range needs.
+   Off the table this lock is honored: user-select: none excludes a column
+   from the selection instead of being overridden by table-cell
+   selection. */
+.diff-grid.sel-old [data-side="new"],
+.diff-grid.sel-new [data-side="old"] {
   user-select: none;
 }
 .sign {
@@ -907,40 +924,34 @@ table.list tbody tr:hover {
   color: var(--text-faint);
   user-select: none;
 }
-tr.add .sign {
+.code.add .sign {
   color: var(--green);
 }
-tr.del .sign {
+.code.del .sign {
   color: var(--red);
 }
-tr.add td.code,
-td.code.add {
+.code.add {
   background: var(--add-bg);
 }
-tr.add td.g,
-td.g.add {
+.g.add {
   background: var(--add-gutter);
 }
-tr.del td.code,
-td.code.del {
+.code.del {
   background: var(--del-bg);
 }
-tr.del td.g,
-td.g.del {
+.g.del {
   background: var(--del-gutter);
 }
-td.code.void,
-td.g.void {
+.code.void,
+.g.void {
   background: var(--bg-inset);
 }
 /* Intraline (word-level) emphasis inside modified line pairs. */
-tr.add td.code .intraline,
-td.code.add .intraline {
+.code.add .intraline {
   background: var(--add-intraline);
   border-radius: 2px;
 }
-tr.del td.code .intraline,
-td.code.del .intraline {
+.code.del .intraline {
   background: var(--del-intraline);
   border-radius: 2px;
 }
@@ -962,7 +973,8 @@ td.code.del .intraline {
   font-size: 12px;
 }
 
-tr.hunk-row td {
+.hunk-row {
+  grid-column: 1 / -1;
   background: rgba(88, 166, 255, 0.05);
   color: var(--text-faint);
   font-size: 11px;
@@ -971,7 +983,7 @@ tr.hunk-row td {
   border-bottom: 1px solid var(--border);
   user-select: none; /* separator chrome stays out of copied code */
 }
-.file-section tbody:first-of-type tr.hunk-row td {
+.diff-grid > .hunk-row:first-child {
   border-top: none;
 }
 .hunk-skip {
@@ -983,7 +995,8 @@ tr.hunk-row td {
   opacity: 0.75;
 }
 
-tr.meta-row td {
+.meta-row {
+  grid-column: 1 / -1;
   background: var(--bg-inset);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
