@@ -89,15 +89,30 @@ const captures = [
       await page.waitForTimeout(300);
     },
   },
-  // The synthetic "Commit message" file with its resolved inline thread.
+  // The synthetic "Commit message" file with its resolved inline thread —
+  // the thread is pinned to r1, so it shows in the r1 → r2 interdiff (its
+  // line 5 is a context line there), not in the base → r2 diff.
   {
     name: "review-commit-msg",
-    path: "/changes/11?against=base",
+    path: "/changes/11",
     fullPage: false,
   },
+  // Side-by-side, base → r2: new-side drafts sit under the right column,
+  // the old-side draft under the left (docs/api.md "Comment placement").
   {
     name: "review-split",
     path: "/changes/11?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page.getByRole("button", { name: "Side-by-side" }).click();
+      await page.waitForTimeout(200);
+    },
+  },
+  // Side-by-side interdiff r1 → r2: comments pinned to r1 land under the
+  // left column (FROM revision's content), drafts on r2 under the right.
+  {
+    name: "review-split-interdiff",
+    path: "/changes/11",
     actions: async (page) => {
       await expandAllFiles(page);
       await page.getByRole("button", { name: "Side-by-side" }).click();
@@ -183,12 +198,13 @@ const captures = [
         .fill("Should revoke_family also bump the metrics counter?");
     },
   },
-  // Published range threads: the multi-line selection on rotate.rs and
-  // the partial-line one on the commit message render tinted
-  // (docs/api.md "Range comments").
+  // Published range threads: the multi-line selection on rotate.rs and the
+  // partial-line one on the commit message. They are pinned to r1, so the
+  // r1 → r2 interdiff renders them tinted on the left column (docs/api.md
+  // "Range comments" / "Comment placement").
   {
     name: "review-range-comments",
-    path: "/changes/11?against=base",
+    path: "/changes/11",
     actions: expandAllFiles,
   },
   // Selecting diff text and pressing c: the inline editor opens on the

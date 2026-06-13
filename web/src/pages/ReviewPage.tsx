@@ -31,6 +31,7 @@ import {
   expandAll,
   toggle,
 } from "../lib/collapse";
+import { commentPlacement } from "../lib/comments";
 import { displayPath } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
 import { activeIndexAt } from "../lib/scrollspy";
@@ -206,8 +207,8 @@ export default function ReviewPage() {
     : undefined;
 
   const changeQ = useQuery({
-    queryKey: ["change", changeId, revisionParam ?? "latest"],
-    queryFn: () => getChange(changeId, revisionParam),
+    queryKey: ["change", changeId],
+    queryFn: () => getChange(changeId),
   });
   const change = changeQ.data;
 
@@ -310,8 +311,8 @@ export default function ReviewPage() {
   const ctxValue: ReviewCtx = useMemo(
     () => ({
       changeId,
-      draftRevision: selected,
-      interdiff: against !== undefined,
+      selected,
+      against,
       editingTarget,
       // Moving or clearing the target unmounts the inline CommentEditor and
       // destroys its draft, so this is a discard path: confirm while dirty.
@@ -388,7 +389,10 @@ export default function ReviewPage() {
         // the caret's line when the selection is collapsed.
         const sel = document.getSelection();
         if (!sel || sel.rangeCount === 0) return;
-        const result = selectionTarget(sel.getRangeAt(0), ctxValue.interdiff);
+        const result = selectionTarget(
+          sel.getRangeAt(0),
+          ctxValue.against !== undefined,
+        );
         if (!result) return;
         // preventDefault, or the keystroke lands in the editor's textarea.
         e.preventDefault();
@@ -457,10 +461,20 @@ export default function ReviewPage() {
     };
   }, [fileCount]);
 
+  // File threads shown in the current diff range: a line comment whose
+  // (revision, side) is one of the displayed columns, or a file-level
+  // comment (no column to filter by). Everything pinned to another
+  // revision drops out — of the diff, the rail counts, and the orphan
+  // group alike (docs/api.md "Comment placement").
   const threadsByFile = useMemo(() => {
     const map = new Map<string, Thread[]>();
     for (const t of threads) {
       if (t.root.file === null) continue;
+      if (
+        t.root.line !== null &&
+        commentPlacement(t.root, selected, against) === null
+      )
+        continue;
       const file = files.find(
         (f) => f.path === t.root.file || f.old_path === t.root.file,
       );
@@ -470,7 +484,7 @@ export default function ReviewPage() {
       map.set(key, list);
     }
     return map;
-  }, [threads, files]);
+  }, [threads, files, selected, against]);
 
   // --- early returns ---------------------------------------------------
   if (changeQ.isError) {
@@ -526,7 +540,15 @@ export default function ReviewPage() {
   // Right writes ?revision; a still-valid numeric base is preserved (the
   // dropdowns are independent coordinates, as in Gerrit), an invalid one
   // resets to Base, an explicit "base" is kept.
-  const onLeft = (v: string) => updateParams({ against: v });
+  // An open editor's anchor is its *visual* column, which a range switch
+  // would silently re-map to a different (revision, side) at save time
+  // (lib/comments draftAnchor). Confirm-and-clear it first — the same
+  // discard guard collapse uses — instead of re-anchoring behind the user.
+  const switchRange = (patch: Record<string, string | null>) => {
+    if (editingTarget && !confirmEditorCollapse(true)) return;
+    updateParams(patch);
+  };
+  const onLeft = (v: string) => switchRange({ against: v });
   const onRight = (n: number) => {
     const patch: Record<string, string | null> = { revision: String(n) };
     if (
@@ -536,7 +558,7 @@ export default function ReviewPage() {
         undefined
     )
       patch.against = null; // numeric base not valid for the viewed rev
-    updateParams(patch);
+    switchRange(patch);
   };
 
   const setLayoutPersist = (l: Layout) => {

@@ -1,5 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Fragment, type MouseEvent as ReactMouseEvent, useMemo } from "react";
+import {
+  Fragment,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useMemo,
+} from "react";
 import { createDraft } from "../../api/client";
 import type {
   CommentRange,
@@ -8,12 +13,14 @@ import type {
   Hunk,
   Line,
 } from "../../api/types";
+import { commentPlacement, draftAnchor } from "../../lib/comments";
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
   intralineMarks,
   pairLines,
   rangeSliceOnLine,
+  type RowPair,
   skippedBefore,
   statusLetter,
 } from "../../lib/diffview";
@@ -73,7 +80,6 @@ function Code({
   );
 }
 
-const anchorLine = (t: Thread) => t.root.rendered_line ?? t.root.line;
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
   a.file === file && a.side === side && a.line === line;
 
@@ -92,10 +98,12 @@ function HunkSeparator({ prev, hunk }: { prev: Hunk | undefined; hunk: Hunk }) {
   );
 }
 
-/** One file section: header, outdated/unanchored threads, hunks with inline
- * threads and the draft editor. Collapsible: when collapsed only the header
- * row renders (inline threads included — the rail's counts still signal
- * them); the header click toggles. */
+/** One file section: header, off-hunk/file-level threads, hunks with inline
+ * threads and the draft editor. Threads place by the diff range — new-side
+ * under the right column, old-side under the left (docs/api.md "Comment
+ * placement"). Collapsible: when collapsed only the header row renders
+ * (inline threads included — the rail's counts still signal them); the
+ * header click toggles. */
 export default function DiffFileView({
   file,
   layout,
@@ -139,30 +147,44 @@ export default function DiffFileView({
     return set;
   }, [file]);
 
+  // Bucket each thread by where its anchor lands in the current diff range
+  // (docs/api.md "Comment placement"). A thread pinned to a revision that
+  // is neither FROM nor TO is dropped — it is not part of this diff.
+  // File-level comments (no line) have no column; they group at the top.
   const topThreads: Thread[] = [];
   const inline = new Map<string, Thread[]>();
   for (const t of threads) {
-    const line = anchorLine(t);
-    const key = `${t.root.side}:${line}`;
-    if (t.root.outdated || line === null || !present.has(key)) {
+    if (t.root.line === null) {
       topThreads.push(t);
-    } else {
+      continue;
+    }
+    const p = commentPlacement(t.root, ctx.selected, ctx.against);
+    if (!p) continue;
+    const key = `${p.side}:${p.line}`;
+    if (present.has(key)) {
       const list = inline.get(key) ?? [];
       list.push(t);
       inline.set(key, list);
+    } else {
+      topThreads.push(t);
     }
   }
 
   const create = useMutation({
-    mutationFn: (input: { target: DraftTarget; body: string }) =>
-      createDraft(ctx.changeId, {
-        revision: ctx.draftRevision,
+    mutationFn: (input: { target: DraftTarget; body: string }) => {
+      // The visual column maps back to a stored (revision, side): the new
+      // column is the selected revision; the old column is its parent
+      // (base) or, in an interdiff, the FROM revision's own side.
+      const anchor = draftAnchor(input.target.side, ctx.selected, ctx.against);
+      return createDraft(ctx.changeId, {
+        revision: anchor.revision,
         file: input.target.file,
         line: input.target.line,
-        side: input.target.side,
+        side: anchor.side,
         range: input.target.range,
         body: input.body,
-      }),
+      });
+    },
     onSuccess: () => {
       // The body was saved, not discarded: clear dirtiness before the
       // guarded setter closes the editor so it doesn't prompt.
@@ -198,9 +220,9 @@ export default function DiffFileView({
     );
   };
 
-  // Selected-text ranges to tint: every inline thread's ported range,
-  // plus the open editor's pending selection — its "what am I commenting
-  // on" feedback once the DOM selection is dismissed.
+  // Selected-text ranges to tint: every placed thread's range painted on
+  // the column it lands in, plus the open editor's pending selection — its
+  // "what am I commenting on" feedback once the DOM selection is dismissed.
   const rangePaints = useMemo(() => {
     const paints: {
       side: CommentSide;
@@ -208,20 +230,16 @@ export default function DiffFileView({
       active: boolean;
     }[] = [];
     for (const t of threads) {
-      if (!t.root.outdated && t.root.rendered_range) {
-        paints.push({
-          side: t.root.side,
-          range: t.root.rendered_range,
-          active: false,
-        });
-      }
+      if (!t.root.range) continue;
+      const p = commentPlacement(t.root, ctx.selected, ctx.against);
+      if (p) paints.push({ side: p.side, range: t.root.range, active: false });
     }
     const et = ctx.editingTarget;
     if (et?.range && et.file === file.path) {
       paints.push({ side: et.side, range: et.range, active: true });
     }
     return paints;
-  }, [threads, ctx.editingTarget, file.path]);
+  }, [threads, ctx.editingTarget, ctx.selected, ctx.against, file.path]);
 
   /** The comment-range tints falling on `line`'s text in a cell showing
    * the given sides (unified cells show both; split cells one). */
@@ -240,49 +258,61 @@ export default function DiffFileView({
     return marks.length > 0 ? marks : undefined;
   }
 
-  /** Thread/editor rows attached under a diff line. A context line owns
-   * anchors on both sides; add/del lines own exactly one. */
-  function metaRows(line: Line) {
-    const rows = [];
-    const sides: Array<["old" | "new", number | undefined]> =
-      line.kind === "context"
-        ? [
-            ["old", line.old],
-            ["new", line.new],
-          ]
-        : line.kind === "del"
-          ? [["old", line.old]]
-          : [["new", line.new]];
-    for (const [side, no] of sides) {
-      if (no === undefined) continue;
-      for (const t of inline.get(`${side}:${no}`) ?? []) {
-        rows.push(
-          <div className="meta-row" key={`t-${side}-${t.root.id}`}>
-            <CommentThread thread={t} changeId={ctx.changeId} />
-          </div>,
-        );
-      }
-      if (
-        ctx.editingTarget &&
-        targetAt(ctx.editingTarget, file.path, side, no)
-      ) {
-        rows.push(
-          <div className="meta-row" key={`editor-${side}-${no}`}>
-            <CommentEditor
-              saving={create.isPending}
-              onSave={(body) =>
-                create.mutate({ target: ctx.editingTarget!, body })
-              }
-              onCancel={() => ctx.setEditingTarget(null)}
-              onDirtyChange={(dirty) => {
-                ctx.editorDirty.current = dirty;
-              }}
-            />
-          </div>,
-        );
-      }
+  /** The thread + editor items anchored at one (side, line) cell — bare,
+   * so unified and split can lay them out differently. */
+  function metaItems(side: "old" | "new", no: number | undefined): ReactNode[] {
+    if (no === undefined) return [];
+    const items: ReactNode[] = [];
+    for (const t of inline.get(`${side}:${no}`) ?? []) {
+      items.push(
+        <div className="meta-item" key={`t-${side}-${t.root.id}`}>
+          <CommentThread thread={t} changeId={ctx.changeId} />
+        </div>,
+      );
     }
-    return rows;
+    if (ctx.editingTarget && targetAt(ctx.editingTarget, file.path, side, no)) {
+      items.push(
+        <div className="meta-item" key={`editor-${side}-${no}`}>
+          <CommentEditor
+            saving={create.isPending}
+            onSave={(body) =>
+              create.mutate({ target: ctx.editingTarget!, body })
+            }
+            onCancel={() => ctx.setEditingTarget(null)}
+            onDirtyChange={(dirty) => {
+              ctx.editorDirty.current = dirty;
+            }}
+          />
+        </div>,
+      );
+    }
+    return items;
+  }
+
+  /** Unified meta row: a line owns both sides (context) or one (add/del);
+   * all its items stack in one full-width row below it. */
+  function unifiedMeta(line: Line): ReactNode {
+    const items =
+      line.kind === "context"
+        ? [...metaItems("old", line.old), ...metaItems("new", line.new)]
+        : line.kind === "del"
+          ? metaItems("old", line.old)
+          : metaItems("new", line.new);
+    return items.length > 0 ? <div className="meta-row">{items}</div> : null;
+  }
+
+  /** Split meta row: old-side items go under the left column, new-side
+   * under the right — each pinned to that side (docs/api.md placement). */
+  function splitMeta(pair: RowPair): ReactNode {
+    const left = metaItems("old", pair.left?.old);
+    const right = metaItems("new", pair.right?.new);
+    if (left.length === 0 && right.length === 0) return null;
+    return (
+      <div className="meta-row meta-split">
+        <div className="meta-col meta-col-old">{left}</div>
+        <div className="meta-col meta-col-new">{right}</div>
+      </div>
+    );
   }
 
   function unifiedRows(hunk: Hunk) {
@@ -308,7 +338,7 @@ export default function DiffFileView({
             />
           </span>
         </div>
-        {metaRows(line)}
+        {unifiedMeta(line)}
       </Fragment>
     ));
   }
@@ -349,8 +379,7 @@ export default function DiffFileView({
           {sideCell(pair.left, "old")}
           {sideCell(pair.right, "new")}
         </div>
-        {pair.left && pair.left.kind !== "context" ? metaRows(pair.left) : null}
-        {pair.right ? metaRows(pair.right) : null}
+        {splitMeta(pair)}
       </Fragment>
     ));
   }
@@ -397,18 +426,19 @@ export default function DiffFileView({
         <>
           {topThreads.length > 0 ? (
             <div className="outdated-group">
-              <div className="outdated-title">
-                Comments not anchored in this diff
-              </div>
+              <div className="outdated-title">Comments not on a shown line</div>
               {topThreads.map((t) => (
                 <div className="outdated-item" key={t.root.id}>
                   <div className="line-excerpt">
-                    {t.root.outdated ? (
-                      <span className="badge badge-amber outdated-tag">
-                        OUTDATED
-                      </span>
-                    ) : null}
-                    <span className="excerpt-line">r{t.root.revision}</span>
+                    <span className="excerpt-line">
+                      r{t.root.revision}
+                      {/* Label the column it renders under (placement side),
+                          not the raw stored side — an interdiff-left thread
+                          is stored "new" on the FROM revision. */}
+                      {t.root.line !== null
+                        ? ` · ${commentPlacement(t.root, ctx.selected, ctx.against)?.side ?? t.root.side}`
+                        : ""}
+                    </span>
                     <Code
                       text={t.root.line_text ?? "(file comment)"}
                       lang={lang}

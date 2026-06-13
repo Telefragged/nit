@@ -72,13 +72,8 @@ export const getChain = (id: number) => request<Chain>("GET", `/chains/${id}`);
 // ---------------------------------------------------------------------------
 // Changes
 
-export const getChange = (id: number, revision?: number) =>
-  request<ChangeDetail>(
-    "GET",
-    revision === undefined
-      ? `/changes/${id}`
-      : `/changes/${id}?revision=${revision}`,
-  );
+export const getChange = (id: number) =>
+  request<ChangeDetail>("GET", `/changes/${id}`);
 
 export const getDiff = (changeId: number, revision: number, against?: number) =>
   request<Diff>(

@@ -6,10 +6,12 @@
 // Coverage on purpose:
 //   chain 1  waiting_for_review — 3 changes; change 11 has 2 revisions
 //            (amended in place, interdiff available), a resolved thread,
-//            an unresolved thread, an outdated comment, 2 drafts, plus a
-//            resolved thread on its commit message (/COMMIT_MSG) and a
-//            reworded r2 message so the interdiff carries a real message
-//            diff; change 12's diff has a rename and a binary file.
+//            an unresolved thread, a thread on a line r2 rewrote (all
+//            pinned to r1, so they land on the left of the r1 → r2
+//            interdiff), 2 drafts, plus a resolved thread on its commit
+//            message (/COMMIT_MSG) and a reworded r2 message so the
+//            interdiff carries a real message diff; change 12's diff has a
+//            rename and a binary file.
 //   chain 2  agents_turn — a changes_requested change, mid-push (partial),
 //            plus a Change-Id-validation scan error.
 //   chain 3  ready_to_merge — single approved change.
@@ -145,16 +147,6 @@ interface CommentRecord {
   review_id: number | null;
   created_at: string;
   updated_at: string;
-  /**
-   * Where this anchor lands when the change is served at another revision
-   * (the real server ports anchors through the interdiff). Missing entry =
-   * unchanged region, same line number and range. A present entry without
-   * `range` renders the range as not portable (rendered_range: null).
-   */
-  renderAt: Record<
-    number,
-    { line: number | null; outdated: boolean; range?: CommentRange }
-  >;
 }
 
 const diffKey = (revision: number, against?: number) =>
@@ -1147,7 +1139,8 @@ const changes: ChangeRecord[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Comments (drafts + published, with cross-revision render maps)
+// Comments (drafts + published; anchors served verbatim — the client
+// places them by diff range, docs/api.md "Comment placement")
 
 const comments: CommentRecord[] = [
   // change 10 — a change-level remark, published with the approval.
@@ -1167,7 +1160,6 @@ const comments: CommentRecord[] = [
     review_id: 4,
     created_at: ago(22 * 60),
     updated_at: ago(22 * 60),
-    renderAt: {},
   },
   // change 11 — resolved thread (anchor survives the amend, line shifts).
   {
@@ -1188,7 +1180,6 @@ const comments: CommentRecord[] = [
     review_id: 5,
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
-    renderAt: { 2: { line: 30, outdated: false } },
   },
   {
     id: 72,
@@ -1208,7 +1199,6 @@ const comments: CommentRecord[] = [
     review_id: null,
     created_at: ago(110),
     updated_at: ago(110),
-    renderAt: { 2: { line: 30, outdated: false } },
   },
   // change 11 — unresolved thread on store.rs.
   {
@@ -1229,7 +1219,6 @@ const comments: CommentRecord[] = [
     review_id: 5,
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
-    renderAt: { 2: { line: 58, outdated: false } },
   },
   {
     id: 74,
@@ -1250,7 +1239,6 @@ const comments: CommentRecord[] = [
     review_id: null,
     created_at: ago(105),
     updated_at: ago(105),
-    renderAt: { 2: { line: 58, outdated: false } },
   },
   // change 11 — unresolved range thread: the selection spans the
   // generate/mark pair (partial first line through mid last line) and
@@ -1274,15 +1262,9 @@ const comments: CommentRecord[] = [
     review_id: 5,
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
-    renderAt: {
-      2: {
-        line: 31,
-        outdated: false,
-        range: { start_line: 30, start_char: 8, end_line: 31, end_char: 50 },
-      },
-    },
   },
-  // change 11 — outdated thread: the anchored line was rewritten in r2.
+  // change 11 — resolved thread on a line rewritten in r2; it stays pinned
+  // to r1 and shows on the left of the r1 → r2 interdiff.
   {
     id: 75,
     change_id: 11,
@@ -1301,7 +1283,6 @@ const comments: CommentRecord[] = [
     review_id: 5,
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
-    renderAt: { 2: { line: null, outdated: true } },
   },
   {
     id: 76,
@@ -1321,7 +1302,6 @@ const comments: CommentRecord[] = [
     review_id: null,
     created_at: ago(100),
     updated_at: ago(100),
-    renderAt: { 2: { line: null, outdated: true } },
   },
   // change 11 — resolved thread on the commit message: the r2 reword
   // answers it; the anchored line survives unchanged (no shift needed).
@@ -1345,13 +1325,6 @@ const comments: CommentRecord[] = [
     review_id: 5,
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
-    renderAt: {
-      2: {
-        line: 5,
-        outdated: false,
-        range: { start_line: 5, start_char: 7, end_line: 5, end_char: 40 },
-      },
-    },
   },
   {
     id: 78,
@@ -1373,9 +1346,10 @@ const comments: CommentRecord[] = [
     review_id: null,
     created_at: ago(96),
     updated_at: ago(96),
-    renderAt: { 2: { line: 5, outdated: false } },
   },
-  // change 11 — two drafts on revision 2.
+  // change 11 — drafts on revision 2: two on the new side, plus one on the
+  // old (red) side — a remark on the pre-change code, which the old column
+  // of the base → r2 diff is for (docs/api.md "Comment placement").
   {
     id: 100,
     change_id: 11,
@@ -1394,7 +1368,6 @@ const comments: CommentRecord[] = [
     created_at: ago(30),
     updated_at: ago(30),
     // The anchored line does not exist in revision 1's tree.
-    renderAt: { 1: { line: null, outdated: true } },
   },
   {
     id: 101,
@@ -1413,7 +1386,25 @@ const comments: CommentRecord[] = [
     created_at: ago(25),
     updated_at: ago(25),
     // tests/rotation.rs does not exist at revision 1.
-    renderAt: { 1: { line: null, outdated: true } },
+  },
+  {
+    id: 102,
+    change_id: 11,
+    revision: 2,
+    parent_id: null,
+    author: "reviewer",
+    file: "src/auth/rotate.rs",
+    line: 20,
+    side: "old",
+    line_text: "    pub fn rotate(&self, presented: &str) -> Token {",
+    body:
+      "The old signature returned Token directly; every caller now has to " +
+      "handle the Result — make sure none silently unwraps it.",
+    state: "draft",
+    resolved: false,
+    review_id: null,
+    created_at: ago(22),
+    updated_at: ago(22),
   },
   // change 20 — two unresolved threads from the request_changes review.
   {
@@ -1432,7 +1423,6 @@ const comments: CommentRecord[] = [
     review_id: 6,
     created_at: ago(3 * 60),
     updated_at: ago(3 * 60),
-    renderAt: {},
   },
   {
     id: 81,
@@ -1450,7 +1440,6 @@ const comments: CommentRecord[] = [
     review_id: 6,
     created_at: ago(3 * 60),
     updated_at: ago(3 * 60),
-    renderAt: {},
   },
 ];
 
@@ -1527,25 +1516,13 @@ function chainView(chain: ChainRecord): Chain {
   };
 }
 
-/** Port a comment's anchor to the requested revision (docs/api.md). */
-function renderComment(c: CommentRecord, atRevision: number): Comment {
-  const range = c.range ?? null;
-  let rendered_line = c.line;
-  let rendered_range = range;
-  let outdated = false;
-  if (atRevision !== c.revision) {
-    const ported = c.renderAt[atRevision];
-    if (ported) {
-      rendered_line = ported.line;
-      rendered_range = ported.range ?? null;
-      outdated = ported.outdated;
-    }
-  }
-  const { renderAt: _renderAt, ...rest } = c;
-  return { ...rest, range, rendered_line, rendered_range, outdated };
+/** A comment record → its wire shape; anchors are served verbatim (the
+ * client places them by diff range, docs/api.md "Comment placement"). */
+function renderComment(c: CommentRecord): Comment {
+  return { ...c, range: c.range ?? null };
 }
 
-function changeDetail(c: ChangeRecord, atRevision: number): ChangeDetail {
+function changeDetail(c: ChangeRecord): ChangeDetail {
   return {
     id: c.id,
     chain_id: c.chain_id,
@@ -1555,9 +1532,7 @@ function changeDetail(c: ChangeRecord, atRevision: number): ChangeDetail {
     subject: c.subject,
     last_reviewed_revision: c.last_reviewed_revision,
     revisions: c.revisions,
-    comments: comments
-      .filter((x) => x.change_id === c.id)
-      .map((x) => renderComment(x, atRevision)),
+    comments: comments.filter((x) => x.change_id === c.id).map(renderComment),
     reviews: c.reviews,
   };
 }
@@ -1624,13 +1599,7 @@ export async function mockRequest(
   }
 
   if ((m = /^\/changes\/(\d+)$/.exec(p)) && method === "GET") {
-    const c = getChange(Number(m[1]));
-    const latest = c.revisions[c.revisions.length - 1]!.number;
-    const revision = q.has("revision") ? Number(q.get("revision")) : latest;
-    if (!c.revisions.some((r) => r.number === revision)) {
-      throw new ApiError(404, `revision ${revision} not found`);
-    }
-    return changeDetail(c, revision);
+    return changeDetail(getChange(Number(m[1])));
   }
 
   if (
@@ -1669,10 +1638,9 @@ export async function mockRequest(
       review_id: null,
       created_at: now,
       updated_at: now,
-      renderAt: {},
     };
     comments.push(record);
-    return renderComment(record, req.revision);
+    return renderComment(record);
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "PATCH") {
@@ -1682,7 +1650,7 @@ export async function mockRequest(
     if (!c) notFound(`draft ${m[1]}`);
     c!.body = (body as { body: string }).body;
     c!.updated_at = new Date().toISOString();
-    return renderComment(c!, c!.revision);
+    return renderComment(c!);
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "DELETE") {
@@ -1708,7 +1676,7 @@ export async function mockRequest(
         x.updated_at = new Date().toISOString();
       }
     }
-    return renderComment(c!, c!.revision);
+    return renderComment(c!);
   }
 
   if ((m = /^\/changes\/(\d+)\/reviews$/.exec(p)) && method === "POST") {
@@ -1738,7 +1706,7 @@ export async function mockRequest(
         x.state = "published";
         x.review_id = review.id;
         x.updated_at = now;
-        published.push(renderComment(x, req.revision));
+        published.push(renderComment(x));
       }
     }
     const statusByVerdict: Record<Verdict, ChangeStatus> = {

@@ -196,23 +196,19 @@ export interface CommentRange {
 export interface Comment {
   id: number;
   change_id: number;
-  /** Revision the comment was written against. */
+  /** The revision the comment is pinned to. */
   revision: number;
   parent_id: number | null;
   author: CommentAuthor;
   file: string | null;
   line: number | null;
+  /** `new` is `revision`'s commit tree, `old` its parent tree
+   * (docs/api.md "Comment placement"). */
   side: CommentSide;
   /** Null: whole-line comment. */
   range: CommentRange | null;
   /** Snapshot of the anchored line. */
   line_text: string | null;
-  /** Anchor ported to the requested revision; null when outdated. */
-  rendered_line: number | null;
-  /** `range` ported to the requested revision; null when the spanned
-   * region was touched (the comment falls back to its line anchor). */
-  rendered_range: CommentRange | null;
-  outdated: boolean;
   body: string;
   state: CommentState;
   resolved: boolean;

@@ -30,10 +30,12 @@ export const sameTarget = (a: DraftTarget, b: DraftTarget) =>
 
 export interface ReviewCtx {
   changeId: number;
-  /** Revision new drafts anchor to (the "new" side of the current diff). */
-  draftRevision: number;
-  /** Interdiff view: only new-side lines are commentable (docs/api.md). */
-  interdiff: boolean;
+  /** The TO revision (right select) — the diff's new column. New-column
+   * drafts anchor here, and comments place against this range
+   * (docs/api.md "Comment placement"). */
+  selected: number;
+  /** The FROM side: undefined = base, else the interdiff's left revision. */
+  against: number | undefined;
   editingTarget: DraftTarget | null;
   /** Guarded: moving or clearing the target unmounts the inline editor, so
    * this confirms first while `editorDirty` is set, returning whether the
