@@ -118,7 +118,7 @@ fn reword_blocks_stale_review_retarget() {
 }
 
 #[test]
-fn commit_msg_comments_port_across_reword() {
+fn commit_msg_comments_stay_pinned() {
     let g = GitRepo::new();
     let a_txt = "a1\na2\n";
     // Message lines: 1 subject, 2 blank, 3/4 body, 5 blank, 6 trailer.
@@ -159,8 +159,9 @@ fn commit_msg_comments_port_across_reword() {
     );
     assert_eq!(st, 200);
 
-    // Reword: the subject line changes (outdates its anchor), a line is
-    // inserted above "Second body line." (shifts its anchor 4 → 5).
+    // Reword: the subject changes and a line is inserted above "Second
+    // body line." — in the old porting model this shifted one anchor and
+    // outdated the other. Now both comments simply stay pinned to r1.
     let c1b = g.commit(
         &[g.root],
         "core: add a, explained\n\nFirst body line.\nAn inserted line.\nSecond body line.\n\n\
@@ -181,31 +182,22 @@ fn commit_msg_comments_port_across_reword() {
             .find(|c| c["id"].as_i64() == Some(id))
             .unwrap()
     };
+    // Both anchors are exactly where they were written, on revision 1, with
+    // no ported fields on the wire (the client places by diff range).
     let body = by_id(on_body_id);
-    assert_eq!(body["rendered_line"], 5, "unchanged region shifts");
-    assert_eq!(body["outdated"], false);
+    assert_eq!(body["revision"], 1);
+    assert_eq!(body["line"], 4);
+    assert_eq!(body["line_text"], "Second body line.");
+    assert!(body.get("rendered_line").is_none());
+    assert!(body.get("outdated").is_none());
     let subject = by_id(on_subject_id);
-    assert_eq!(subject["rendered_line"], Value::Null);
-    assert_eq!(subject["outdated"], true, "edited line goes outdated");
+    assert_eq!(subject["revision"], 1);
+    assert_eq!(subject["line"], 1);
     assert_eq!(subject["line_text"], "core: add a");
-
-    // Served at revision 1, both anchors are where they were written.
-    let (_, at_r1) = http_get(&server.url(&format!("/api/changes/{change_id}?revision=1")));
-    let comments = at_r1["comments"].as_array().unwrap();
-    let find = |id: i64| {
-        comments
-            .iter()
-            .find(|c| c["id"].as_i64() == Some(id))
-            .unwrap()
-    };
-    assert_eq!(find(on_body_id)["rendered_line"], 4);
-    assert_eq!(find(on_body_id)["outdated"], false);
-    assert_eq!(find(on_subject_id)["rendered_line"], 1);
-    assert_eq!(find(on_subject_id)["outdated"], false);
 }
 
 #[test]
-fn range_comments_port_and_fall_back() {
+fn range_comments_served_verbatim() {
     let g = GitRepo::new();
     let v1 = "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\n";
     let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", v1)]);
@@ -222,9 +214,7 @@ fn range_comments_port_and_fall_back() {
     let change_id = chain["changes"][0]["id"].as_i64().unwrap();
     let drafts_url = server.url(&format!("/api/changes/{change_id}/drafts"));
 
-    // Three ranges against r1: one whose span the amend leaves untouched,
-    // one whose span is touched away from the anchor line, one whose
-    // anchor line itself changes.
+    // Three ranges against r1, of different shapes.
     let draft = |start: i64, line: i64| {
         let (st, c) = http_post(
             &drafts_url,
@@ -235,11 +225,9 @@ fn range_comments_port_and_fall_back() {
         assert_eq!(st, 200, "{c}");
         c["id"].as_i64().unwrap()
     };
-    let survives = draft(4, 5); // l4-l5: untouched, shifts whole
-    let falls_back = draft(2, 3); // l2 changes, anchor l3 survives
-    let outdates = draft(7, 8); // l8 (the anchor line) changes
+    let spans = [(4, 5), (2, 3), (7, 8)].map(|(s, l)| (draft(s, l), s, l));
 
-    // Amend: insert a line on top (+1 shift), touch l2 and l8.
+    // Amend the file heavily — insert a line on top, touch l2 and l8.
     let v2 = "l0\nl1\nl2x\nl3\nl4\nl5\nl6\nl7\nl8x\n";
     let c2 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", v2)]);
     g.branch("feat", c2);
@@ -257,42 +245,20 @@ fn range_comments_port_and_fall_back() {
             .unwrap()
     };
 
-    let c = by_id(survives);
-    assert_eq!(c["rendered_line"], 6);
-    assert_eq!(
-        c["rendered_range"],
-        json!({"start_line": 5, "start_char": 1, "end_line": 6, "end_char": 2}),
-        "untouched span shifts whole, char offsets carry over"
-    );
-    assert_eq!(c["outdated"], false);
-    assert_eq!(
-        c["range"],
-        json!({"start_line": 4, "start_char": 1, "end_line": 5, "end_char": 2}),
-        "the written range is served as-is"
-    );
-
-    let c = by_id(falls_back);
-    assert_eq!(
-        c["rendered_line"], 4,
-        "line anchor survives the touched span"
-    );
-    assert_eq!(c["rendered_range"], Value::Null);
-    assert_eq!(c["outdated"], false);
-
-    let c = by_id(outdates);
-    assert_eq!(c["rendered_line"], Value::Null);
-    assert_eq!(c["rendered_range"], Value::Null);
-    assert_eq!(c["outdated"], true);
-
-    // Served at revision 1, every anchor is where it was written.
-    let (_, at_r1) = http_get(&server.url(&format!("/api/changes/{change_id}?revision=1")));
-    let comments = at_r1["comments"].as_array().unwrap();
-    let c = comments
-        .iter()
-        .find(|c| c["id"].as_i64() == Some(survives))
-        .unwrap();
-    assert_eq!(c["rendered_line"], 5);
-    assert_eq!(c["rendered_range"], c["range"]);
+    // Whatever the amend did, every range is served exactly as written and
+    // pinned to r1 — no rendered_range, nothing ported onto r2.
+    for (id, start, line) in spans {
+        let c = by_id(id);
+        assert_eq!(c["revision"], 1);
+        assert_eq!(c["line"], line);
+        assert_eq!(
+            c["range"],
+            json!({"start_line": start, "start_char": 1, "end_line": line, "end_char": 2}),
+            "the written range is served as-is"
+        );
+        assert!(c.get("rendered_range").is_none());
+        assert!(c.get("outdated").is_none());
+    }
 }
 
 #[test]
@@ -357,7 +323,6 @@ fn range_draft_validation() {
         ranged["range"],
         json!({"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1})
     );
-    assert_eq!(ranged["rendered_range"], ranged["range"]);
 }
 
 #[test]
@@ -414,7 +379,7 @@ fn request_validation() {
     );
     assert_eq!(st, 200, "{msg_draft}");
     assert_eq!(msg_draft["line_text"], "core: x");
-    assert_eq!(msg_draft["rendered_line"], 1);
+    assert_eq!(msg_draft["line"], 1);
 
     // Reviews: bad verdict, unknown revision.
     let (st, e) = http_post(
@@ -508,4 +473,47 @@ fn review_rejected_on_orphaned_change() {
     );
     assert_eq!(st, 409, "reviewing an orphaned change must fail: {body}");
     assert!(body["error"].as_str().unwrap().contains("orphaned"));
+}
+
+#[test]
+fn old_side_draft_snapshots_the_parent_tree() {
+    // The old column of a base diff is the change's parent tree; a
+    // side: "old" draft snapshots that tree, not the commit's own
+    // (docs/api.md "Comment placement").
+    let g = GitRepo::new();
+    let seed = g.commit(&[g.root], "seed\n", &[("f.txt", "old1\nold2\nold3\n")]);
+    g.branch("main", seed);
+    let c1 = g.commit(
+        &[seed],
+        &msg("edit f", "Ie"),
+        &[("f.txt", "old1\nNEW2\nold3\n")],
+    );
+    g.branch("feat", c1);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let register = json!({
+        "repo_path": g.workdir().to_string_lossy(),
+        "branch": "feat",
+        "base": "main",
+    });
+    let (st, chain) = http_post(&server.url("/api/chains"), &register);
+    assert_eq!(st, 200, "{chain}");
+    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+    let drafts_url = server.url(&format!("/api/changes/{change_id}/drafts"));
+
+    // Line 2 old-side is the parent's "old2", not the commit's "NEW2".
+    let (st, old) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "file": "f.txt", "line": 2, "side": "old", "body": "was?"}),
+    );
+    assert_eq!(st, 200, "{old}");
+    assert_eq!(old["side"], "old");
+    assert_eq!(old["line_text"], "old2");
+
+    // The new side of the same line snapshots the commit's content.
+    let (_, new) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "file": "f.txt", "line": 2, "side": "new", "body": "now"}),
+    );
+    assert_eq!(new["line_text"], "NEW2");
 }

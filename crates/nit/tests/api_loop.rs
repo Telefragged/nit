@@ -100,8 +100,12 @@ fn full_review_loop() {
     assert_eq!(draft_a["author"], "reviewer");
     assert_eq!(draft_a["side"], "new");
     assert_eq!(draft_a["line_text"], "L3");
-    assert_eq!(draft_a["rendered_line"], 3);
-    assert_eq!(draft_a["outdated"], false);
+    assert_eq!(draft_a["revision"], 1);
+    assert_eq!(draft_a["line"], 3);
+    assert!(
+        draft_a.get("rendered_line").is_none(),
+        "comments carry no ported fields"
+    );
     let draft_a_id = draft_a["id"].as_i64().unwrap();
 
     let (st, draft_b) = http_post(
@@ -198,10 +202,11 @@ fn full_review_loop() {
         3
     );
 
-    // --- amend push: new revisions + comment porting ------------------------
+    // --- amend push: new revisions, comments stay pinned --------------------
     // The agent amends change one in place (same Change-Id) and rebases
-    // change two on top. L0 inserted on top (shifts L10 to 11), L3 itself
-    // rewritten (outdates draft A's anchor).
+    // change two on top. L0 inserted on top, L3 itself rewritten — none of
+    // which moves the published comments: each stays pinned to revision 1,
+    // shown only in a diff whose range displays r1 (docs/api.md placement).
     let lib_v2 = format!("L0\n{}", lib_v1.replace("L3\n", "L3 changed\n"));
     let c1b = g.commit(
         &[g.root],
@@ -239,25 +244,19 @@ fn full_review_loop() {
             .find(|c| c["id"].as_i64() == Some(id))
             .unwrap()
     };
+    // Both published comments keep the revision-1 anchor they were written
+    // on — the server ports nothing onto revision 2, and the wire carries
+    // no rendered_line/outdated for the client to misread.
     let a = by_id(draft_a_id);
-    assert_eq!(a["rendered_line"], Value::Null);
-    assert_eq!(a["outdated"], true);
+    assert_eq!(a["revision"], 1);
+    assert_eq!(a["line"], 3);
+    assert_eq!(a["side"], "new");
     assert_eq!(a["line_text"], "L3", "snapshot shows what was commented on");
+    assert!(a.get("rendered_line").is_none());
+    assert!(a.get("outdated").is_none());
     let b = by_id(draft_b_id);
-    assert_eq!(b["rendered_line"], 11);
-    assert_eq!(b["outdated"], false);
-
-    // Served at revision 1, the anchors are exactly where they were written.
-    let (_, at_r1) = http_get(&server.url(&format!("/api/changes/{change1}?revision=1")));
-    let comments = at_r1["comments"].as_array().unwrap();
-    let a = comments
-        .iter()
-        .find(|c| c["id"].as_i64() == Some(draft_a_id))
-        .unwrap();
-    assert_eq!(a["rendered_line"], 3);
-    assert_eq!(a["outdated"], false);
-    let (st, _) = http_get(&server.url(&format!("/api/changes/{change1}?revision=9")));
-    assert_eq!(st, 404);
+    assert_eq!(b["revision"], 1);
+    assert_eq!(b["line"], 10);
 
     // --- diff + interdiff ---------------------------------------------------
     // /COMMIT_MSG leads every diff response: all-add vs parent.

@@ -1,7 +1,7 @@
 //! HTTP API: every endpoint of `docs/api.md` (the contract), axum 0.8.
 //!
 //! - [`types`] — the wire-shape mirror of docs/api.md (golden rule 3).
-//! - [`diff`] — diff JSON rendering and comment-anchor porting.
+//! - [`diff`] — diff JSON rendering and line-text snapshots.
 //! - [`views`] — db rows → wire shapes (chain state derivation included).
 //! - [`state`] — per-chain locks, scan throttle/orchestration, errors.
 //!
@@ -131,8 +131,10 @@ fn load_comment(conn: &Connection, id: i64) -> Result<db::Comment, Error> {
     db::get_comment(conn, id)?.ok_or_else(|| Error::not_found(format!("comment {id} not found")))
 }
 
-/// Open a chain's repository; `None` degrades reads (comments render as
-/// outdated) instead of failing whole responses.
+/// Open a chain's repository. `None` is tolerated where a missing repo
+/// can be absorbed — `create_draft` skips the `line_text` snapshot,
+/// `submit_review`'s pure-rebase retarget check fails closed. The diff
+/// endpoint instead treats `None` as a hard error.
 fn open_repo(conn: &Connection, chain_id: i64) -> Option<Repository> {
     let path = db::chain_repo_path(conn, chain_id).ok().flatten()?;
     Repository::open(path).ok()
@@ -319,36 +321,14 @@ async fn get_chain(
 // ---------------------------------------------------------------------------
 // Changes
 
-#[derive(Deserialize)]
-struct ChangeQuery {
-    revision: Option<i64>,
-}
-
 async fn get_change_detail(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<i64>,
-    AppQuery(q): AppQuery<ChangeQuery>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
         let change = load_change(&conn, id)?;
-        let latest = db::latest_revision(&conn, change.id)?
-            .ok_or_else(|| Error::internal(format!("change {id} has no revisions")))?;
-        let requested = match q.revision {
-            None => latest.number,
-            Some(n) => {
-                db::get_revision(&conn, change.id, n)?
-                    .ok_or_else(|| Error::not_found(format!("revision {n} not found")))?
-                    .number
-            }
-        };
-        let repo = open_repo(&conn, change.chain_id);
-        Ok(Json(views::build_change_detail(
-            &conn,
-            repo.as_ref(),
-            &change,
-            requested,
-        )?))
+        Ok(Json(views::build_change_detail(&conn, &change)?))
     })
     .await
 }
@@ -480,7 +460,7 @@ async fn create_draft(
             },
             &db::now_rfc3339(),
         )?;
-        Ok(Json(views::comment_at_own_revision(&row)))
+        Ok(Json(views::comment_view(&row)))
     })
     .await
 }
@@ -539,7 +519,7 @@ async fn edit_draft(
         }
         db::update_draft_body(&conn, id, &req.body, &db::now_rfc3339())?;
         let comment = load_comment(&conn, id)?;
-        Ok(Json(views::comment_at_own_revision(&comment)))
+        Ok(Json(views::comment_view(&comment)))
     })
     .await
 }
@@ -595,7 +575,7 @@ async fn set_resolved(
         }
         db::comment_set_resolved(&conn, id, resolved, &db::now_rfc3339())?;
         let comment = load_comment(&conn, id)?;
-        Ok(Json(views::comment_at_own_revision(&comment)))
+        Ok(Json(views::comment_view(&comment)))
     })
     .await
 }
@@ -681,7 +661,7 @@ async fn submit_review(
         tx.commit().map_err(anyhow::Error::from)?;
         Ok(Json(types::SubmitReviewResponse {
             review: views::review_json(&review),
-            published_comments: published.iter().map(views::comment_at_own_revision).collect(),
+            published_comments: published.iter().map(views::comment_view).collect(),
         }))
     })
     .await;
@@ -749,10 +729,7 @@ async fn create_reply(
         )?;
         db::chain_touch(&tx, change.chain_id, &now)?;
         tx.commit().map_err(anyhow::Error::from)?;
-        Ok((
-            change.chain_id,
-            Json(views::comment_at_own_revision(&reply)),
-        ))
+        Ok((change.chain_id, Json(views::comment_view(&reply))))
     })
     .await?;
     state.entry(chain_id).notify.notify_waiters();
@@ -773,10 +750,8 @@ async fn feedback_response(
     blocking(move || {
         let conn = state.open_db()?;
         let chain = load_chain(&conn, chain_id)?;
-        let repo = open_repo(&conn, chain_id);
         Ok(Json(views::build_feedback(
             &conn,
-            repo.as_ref(),
             &state.public_base,
             &chain,
         )?))

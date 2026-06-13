@@ -93,7 +93,7 @@ pub struct ChangeCounts {
 // ---------------------------------------------------------------------------
 // Changes
 
-/// `GET /api/changes/{id}?revision={n}` response.
+/// `GET /api/changes/{id}` response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeDetail {
     pub id: i64,
@@ -105,8 +105,8 @@ pub struct ChangeDetail {
     pub last_reviewed_revision: Option<i64>,
     /// Ascending.
     pub revisions: Vec<Revision>,
-    /// Published + drafts, all revisions; rendered for the requested
-    /// revision (`rendered_line` / `outdated`).
+    /// Published + drafts, all revisions; anchors verbatim (the client
+    /// places them by diff range, docs/api.md "Comment placement").
     pub comments: Vec<Comment>,
     pub reviews: Vec<Review>,
 }
@@ -193,26 +193,20 @@ pub use crate::db::CommentRange;
 pub struct Comment {
     pub id: i64,
     pub change_id: i64,
-    /// The revision the comment was written against.
+    /// The revision the comment is pinned to.
     pub revision: i64,
     pub parent_id: Option<i64>,
     /// reviewer | agent
     pub author: String,
     pub file: Option<String>,
     pub line: Option<i64>,
-    /// old | new
+    /// old | new — `new` is `revision`'s commit tree, `old` its parent
+    /// tree (docs/api.md "Comment placement").
     pub side: String,
     /// Null: whole-line comment.
     pub range: Option<CommentRange>,
     /// Snapshot of the anchored line.
     pub line_text: Option<String>,
-    /// For the requested revision; null with `outdated: true` when the
-    /// anchor cannot be ported.
-    pub rendered_line: Option<i64>,
-    /// `range` ported to the requested revision; null when the spanned
-    /// region was touched (the comment falls back to its line anchor).
-    pub rendered_range: Option<CommentRange>,
-    pub outdated: bool,
     pub body: String,
     /// draft | published
     pub state: String,
