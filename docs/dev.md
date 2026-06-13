@@ -56,7 +56,7 @@ first unformatted commit.
 ## Restarting the server
 
 Rebuild (`nix build` or `cargo build`), ctrl-c the running `nit serve`
-(in-flight `/wait` long-polls return immediately, so shutdown is prompt),
+(in-flight `/events` streams end on the shutdown signal, so shutdown is prompt),
 then start it again with the same `--db`. Parked `nit wait`s are
 unaffected: each prints one stderr notice, retries with backoff (1–10s)
 until the server is back, and resumes the same sqlite-persisted cursor —
