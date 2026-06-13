@@ -75,20 +75,33 @@ is already broken. An unpushed commit is invisible to the reviewer.
 ## The loop
 
 ```sh
+cursor=0            # 0-based: the count of log entries you've consumed
 # after EVERY completed commit (green, treefmt-clean, one concern, Change-Id'd):
 nit push --partial  # register/refresh the chain as partial (sticky)
 # → FIRST push: report web_url to the user now — review starts on
 #   commit one, not when the branch is done
 # after the LAST commit:
 nit ready           # clears partial; the chain can now reach ready_to_merge
-nit wait            # blocks; prints Feedback JSON on wake
+nit wait $cursor    # blocks until entries land beyond $cursor; prints JSON
 ```
 
-After `nit ready`, run `nit wait` as a background Bash task so the review
-wakes the session. Feedback arriving mid-build is handled exactly like the
-`agents_turn` branch below, folded into the next incremental push
-(`nit status` shows it without blocking). On wake, branch on
-`feedback.state`:
+**A running `nit wait` is mandatory — never finish a turn with the chain
+open and no wait parked on it.** The loop does not end at `nit ready` or at
+a `nit push`; it ends when the chain closes (`merged`/`abandoned`). The
+moment you `nit ready` (or push the last revision), start `nit wait $cursor`
+as a **background Bash task** and keep one running until the chain closes —
+a `ready`/pushed chain with no wait on it is a dropped review, as broken as
+an unpushed commit. Re-arm it after every push and reply.
+
+`nit wait $cursor` returns `{head, entries, state, …}`. **Advance the
+cursor only from that result** (`cursor=<head>`); `push`/`reply` return no
+index at all (just a `Chain`/`Comment`, no `head`), so the cursor can only
+ever come from `wait`/`log`. That is what guarantees a reviewer comment
+landing between two of your own pushes is never skipped. After every push/reply, the next
+`nit wait $cursor` returns immediately (your own just-appended entries);
+process, advance, wait again until it actually blocks. Skim with
+`nit wait --oneline $cursor`; inspect specific entries without moving the
+cursor via `nit log <ranges>`. Branch on `state`:
 
 - **`agents_turn`** — for each change with `request_changes`/`commented`:
   - code feedback → fix it by amending the commit in place, keeping its
@@ -126,28 +139,27 @@ wakes the session. Feedback arriving mid-build is handled exactly like the
   checkout isn't yours to drive (parallel agents), stop at
   `ready_to_merge` and report to the coordinator.
 - **`merged` / `abandoned`** — chain is closed; stop.
-- **`waiting_for_review`** — poll timeout; wait again.
+- **`waiting_for_review`** — nothing actionable: `nit wait` woke on your
+  own just-pushed entries. Advance the cursor and wait again.
 
 Never submit a review verdict yourself (`POST /api/changes/*/reviews` is
-the human's side). The agent surface is push / ready / wait / status /
-reply.
+the human's side). The agent surface is push / ready / wait / log /
+status / reply.
 
-## Wait pitfalls (learned in production)
+## Notes
 
-- `nit wait` before `nit ready` on a partial chain whose pushed changes are all
-  approved returns immediately, forever — all-approved-while-partial is
-  `agents_turn` (actionable, "reviewer caught up"). Do not spin: keep
-  building; wait only after `nit ready`.
-- A comment-only verdict leaves the change `commented` (actionable) until a
-  **new revision** lands. If you answered with replies alone — no code
-  change — `nit wait` returns immediately, forever. Do not spin: report to
-  the user and stop, or wait edge-triggered on the raw endpoint
-  (`GET /api/chains/{id}/wait?cursor=<last>&timeout=55`, looping while the
-  cursor is unchanged).
-- Edge-triggered waiting has a bootstrap race: events landing before your
-  first cursor read are invisible. Always check
-  `GET /api/chains/{id}/feedback` for unresolved reviewer comments _after_
-  taking the cursor and _before_ blocking.
+- The cursor is yours to track (start `0`, advance to each `wait`/`log`
+  `head`). Re-waiting right after a push returns immediately with your own
+  `revisions` entry — that is expected; keep advancing until `wait`
+  blocks. A comment-only verdict you answer with replies alone does **not**
+  re-spin: your reply is just another entry, and the next `wait` blocks.
+- **The review conversation lives in nit, not this session.** When you
+  have a question or a design choice for the reviewer, ask it with
+  `nit reply <comment-id> -m "…"` on the thread (leave it unresolved),
+  re-arm `nit wait`, and carry on — never block the human session on the
+  answer. Your terminal is the channel only when the user prompts you
+  there directly (docs/agent-workflow.md "Where the conversation
+  happens").
 - If a push fails with a Change-Id scan error (missing or duplicate
   trailer, or a `fixup!`/`squash!` commit), fix the commit messages and
   push again — a blank line splitting the trailer block is the usual
