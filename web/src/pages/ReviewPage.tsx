@@ -55,7 +55,6 @@ const VERDICT_BADGE: Record<string, { cls: string; label: string }> = {
  * they deserve words (docs/frontend.md). */
 const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
   "mixed-sides": "selection doesn't lie on one side of the diff",
-  "old-side-interdiff": "the old side of an interdiff isn't commentable",
   "cross-file": "selection crosses file sections",
   "hunk-gap": "selection spans a hunk gap",
 };
@@ -389,10 +388,7 @@ export default function ReviewPage() {
         // the caret's line when the selection is collapsed.
         const sel = document.getSelection();
         if (!sel || sel.rangeCount === 0) return;
-        const result = selectionTarget(
-          sel.getRangeAt(0),
-          ctxValue.against !== undefined,
-        );
+        const result = selectionTarget(sel.getRangeAt(0));
         if (!result) return;
         // preventDefault, or the keystroke lands in the editor's textarea.
         e.preventDefault();

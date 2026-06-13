@@ -244,6 +244,37 @@ const captures = [
         .fill("This whole reuse branch deserves its own unit test.");
     },
   },
+  // Commenting on the OLD column of an interdiff: r1 → r2 side-by-side, a
+  // caret on the pre-change signature (left column) + c opens the editor
+  // there. Previously blocked ("old side of an interdiff isn't
+  // commentable"); now it anchors a new-side comment on r1 (lib/comments).
+  {
+    name: "review-old-side-draft",
+    path: "/changes/11",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page.getByRole("button", { name: "Side-by-side" }).click();
+      await page.waitForTimeout(200);
+      await page.evaluate(() => {
+        const oldCell = [
+          ...document.querySelectorAll('.code[data-side="old"] .code-text'),
+        ].find((t) => t.textContent.includes("pub fn rotate"));
+        const range = document.createRange();
+        range.selectNodeContents(oldCell);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+      await page.keyboard.press("c");
+      await page.waitForSelector("textarea");
+      await page
+        .locator("textarea")
+        .fill(
+          "The pre-change signature returned Token directly — flag old callers.",
+        );
+    },
+  },
   // Reply modal opened via the `a` shortcut, cover message typed. Typed
   // key by key (not fill, which replaces content) so a shortcut keystroke
   // leaking into the autofocused textarea would show up in the capture.

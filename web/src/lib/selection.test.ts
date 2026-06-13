@@ -88,7 +88,7 @@ describe("selectionTarget, unified layout", () => {
   it("maps a partial single-line selection", () => {
     const s = mountUnified([ROWS]);
     const t = textNode(s, 1);
-    expect(selectionTarget(rangeOf(t, 2, t, 7), false)).toEqual({
+    expect(selectionTarget(rangeOf(t, 2, t, 7))).toEqual({
       file: "src/a.rs",
       side: "new",
       line: 13,
@@ -99,7 +99,7 @@ describe("selectionTarget, unified layout", () => {
   it("maps a context-to-add selection to the new side", () => {
     const s = mountUnified([ROWS]);
     const r = rangeOf(textNode(s, 0), 6, textNode(s, 1), 5);
-    expect(selectionTarget(r, false)).toEqual({
+    expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "new",
       line: 13,
@@ -107,31 +107,30 @@ describe("selectionTarget, unified layout", () => {
     });
   });
 
-  it("maps a del-to-context selection to the old side, unless interdiff", () => {
+  it("maps a del-to-context selection to the old side", () => {
     const s = mountUnified([ROWS]);
-    const make = () => rangeOf(textNode(s, 3), 0, textNode(s, 4), 4);
-    expect(selectionTarget(make(), false)).toEqual({
+    const r = rangeOf(textNode(s, 3), 0, textNode(s, 4), 4);
+    // The old side is commentable everywhere now — the caller maps it to a
+    // stored (revision, side) for the range it was drawn in (lib/comments).
+    expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "old",
       line: 12,
       range: { start_line: 11, start_char: 0, end_line: 12, end_char: 4 },
-    });
-    expect(selectionTarget(make(), true)).toEqual({
-      miss: "old-side-interdiff",
     });
   });
 
   it("rejects an add-to-del selection (no side owns the text)", () => {
     const s = mountUnified([ROWS]);
     const r = rangeOf(textNode(s, 2), 0, textNode(s, 3), 4);
-    expect(selectionTarget(r, false)).toEqual({ miss: "mixed-sides" });
+    expect(selectionTarget(r)).toEqual({ miss: "mixed-sides" });
   });
 
   it("ends a selection reaching a line's first char on the previous line", () => {
     const s = mountUnified([ROWS]);
     // Triple-click shape: ends at offset 0 of the next row's text.
     const r = rangeOf(textNode(s, 1), 0, textNode(s, 2), 0);
-    expect(selectionTarget(r, false)).toEqual({
+    expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "new",
       line: 13,
@@ -147,7 +146,7 @@ describe("selectionTarget, unified layout", () => {
   it("degrades a collapsed selection to a plain line comment", () => {
     const s = mountUnified([ROWS]);
     const t = textNode(s, 2);
-    expect(selectionTarget(rangeOf(t, 3, t, 3), false)).toEqual({
+    expect(selectionTarget(rangeOf(t, 3, t, 3))).toEqual({
       file: "src/a.rs",
       side: "new",
       line: 14,
@@ -158,7 +157,7 @@ describe("selectionTarget, unified layout", () => {
     const s = mountUnified([ROWS]);
     const sign = s.querySelectorAll(".sign")[1]!.firstChild as Text;
     const r = rangeOf(sign, 0, textNode(s, 1), 5);
-    expect(selectionTarget(r, false)).toEqual({
+    expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "new",
       line: 13,
@@ -172,7 +171,7 @@ describe("selectionTarget, unified layout", () => {
       [{ new: 20, text: "second hunk" }],
     ]);
     const r = rangeOf(textNode(s, 0), 0, textNode(s, 1), 4);
-    expect(selectionTarget(r, false)).toEqual({ miss: "hunk-gap" });
+    expect(selectionTarget(r)).toEqual({ miss: "hunk-gap" });
   });
 
   it("is silent for a selection outside any diff", () => {
@@ -180,7 +179,7 @@ describe("selectionTarget, unified layout", () => {
     div.textContent = "not a diff";
     document.body.appendChild(div);
     const t = div.firstChild as Text;
-    expect(selectionTarget(rangeOf(t, 0, t, 5), false)).toBeNull();
+    expect(selectionTarget(rangeOf(t, 0, t, 5))).toBeNull();
   });
 
   it("walks past empty lines when the selection ends at a line start", () => {
@@ -195,7 +194,7 @@ describe("selectionTarget, unified layout", () => {
       ],
     ]);
     const r = rangeOf(textNode(s, 0), 0, textNode(s, 2), 0);
-    expect(selectionTarget(r, false)).toEqual({
+    expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "new",
       line: 13,
@@ -211,7 +210,7 @@ describe("selectionTarget, unified layout", () => {
   it("degrades an empty-line-only selection to a plain line comment", () => {
     const s = mountUnified([[{ new: 14, text: "​" }]]);
     const t = textNode(s, 0);
-    expect(selectionTarget(rangeOf(t, 0, t, 1), false)).toEqual({
+    expect(selectionTarget(rangeOf(t, 0, t, 1))).toEqual({
       file: "src/a.rs",
       side: "new",
       line: 14,
@@ -269,7 +268,7 @@ describe("selectionTarget, split layout", () => {
     // The DOM range sweeps the left cells in between; they are not part
     // of the new side's text and must be dropped, not treated as mixed.
     const r = rangeOf(colText(s, "new", 0), 2, colText(s, "new", 2), 5);
-    expect(selectionTarget(r, false)).toEqual({
+    expect(selectionTarget(r)).toEqual({
       file: "src/b.rs",
       side: "new",
       line: 32,
@@ -280,7 +279,7 @@ describe("selectionTarget, split layout", () => {
   it("maps a left-column drag across a void row (old side stays contiguous)", () => {
     const s = mountSplit();
     const r = rangeOf(colText(s, "old", 0), 1, colText(s, "old", 2), 4);
-    expect(selectionTarget(r, false)).toEqual({
+    expect(selectionTarget(r)).toEqual({
       file: "src/b.rs",
       side: "old",
       line: 21,
@@ -291,6 +290,6 @@ describe("selectionTarget, split layout", () => {
   it("rejects a drag between the two columns", () => {
     const s = mountSplit();
     const r = rangeOf(colText(s, "old", 0), 1, colText(s, "new", 2), 4);
-    expect(selectionTarget(r, false)).toEqual({ miss: "mixed-sides" });
+    expect(selectionTarget(r)).toEqual({ miss: "mixed-sides" });
   });
 });

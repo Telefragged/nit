@@ -89,26 +89,28 @@ function sideOf(first: HTMLElement, last: HTMLElement): CommentSide | null {
  * user by the `c` handler. Selections with no commentable cells at all
  * (outside the diff) return null instead and stay silent. */
 export interface SelectionMiss {
-  miss: "mixed-sides" | "old-side-interdiff" | "cross-file" | "hunk-gap";
+  miss: "mixed-sides" | "cross-file" | "hunk-gap";
 }
 
 /**
  * The draft target a selection produces; a [`SelectionMiss`] when the
  * selection touches the diff but maps to no commentable range (sides
- * that disagree, lines that are not consecutive on the chosen side, the
- * old side of an interdiff, a sweep across file sections); null when it
- * has nothing to do with the diff.
+ * that disagree, lines that are not consecutive on the chosen side, a
+ * sweep across file sections); null when it has nothing to do with the
+ * diff.
  *
- * In split view the swept DOM region covers both columns; cells of the
- * other side are dropped, so a one-column drag (styles.css `sel-old`/
- * `sel-new` enforce this) maps to that column's contiguous lines. A
- * collapsed selection inside a single cell degrades to a plain line
- * comment on that cell — gerrit's `c`-on-a-line. A selection ending
- * before a line's first character ends on the previous line.
+ * Either column is commentable: the old column reports `side: "old"`, the
+ * new column `side: "new"`; the caller maps that to a stored
+ * (revision, side) for the current diff range (lib/comments). In split
+ * view the swept DOM region covers both columns; cells of the other side
+ * are dropped, so a one-column drag (styles.css `sel-old`/`sel-new`
+ * enforce this) maps to that column's contiguous lines. A collapsed
+ * selection inside a single cell degrades to a plain line comment on that
+ * cell — gerrit's `c`-on-a-line. A selection ending before a line's first
+ * character ends on the previous line.
  */
 export function selectionTarget(
   range: Range,
-  interdiff: boolean,
 ): DraftTarget | SelectionMiss | null {
   const swept = sweptCells(range);
   if (swept.length === 0) return null;
@@ -117,9 +119,6 @@ export function selectionTarget(
 
   const side = sideOf(startCell, endCell);
   if (side === null) return { miss: "mixed-sides" };
-  if (side === "old" && interdiff) {
-    return { miss: "old-side-interdiff" }; // docs/api.md: new side only
-  }
 
   const cells = swept.filter((c) => c.dataset[side] !== undefined);
   if (cells.length === 0) return null;
