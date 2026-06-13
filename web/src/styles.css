@@ -961,14 +961,6 @@ td.code.del .intraline {
   color: var(--amber);
   font-size: 12px;
 }
-tr.line-row.clickable:hover td.code,
-td.code.clickable:hover {
-  background: var(--blue-dim);
-  cursor: pointer;
-}
-tr.line-row.clickable:hover td.g {
-  color: var(--blue);
-}
 
 tr.hunk-row td {
   background: rgba(88, 166, 255, 0.05);

@@ -154,12 +154,21 @@ describe("collapse with an open dirty comment editor", () => {
   });
 
   /** Expand rotate.rs (file-1), open the inline draft editor on its first
-   * commentable line and type into it, leaving the draft dirty. */
+   * commentable line and type into it, leaving the draft dirty. The editor
+   * opens the only way there is now: a caret in a line's code text, then
+   * the c shortcut (clicking a line no longer comments — see lib/selection). */
   async function openDirtyEditor() {
     renderReview();
     await railItem("src/auth/store.rs");
     fireEvent.click(section(1).querySelector(".file-header")!);
-    fireEvent.click(section(1).querySelector(".line-row.clickable")!);
+    const code = section(1).querySelector(".code-text")!;
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    range.collapse(true);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    fireEvent.keyDown(window, { key: "c" });
     fireEvent.change(section(1).querySelector("textarea")!, {
       target: { value: "half-typed nit" },
     });

@@ -77,11 +77,6 @@ const anchorLine = (t: Thread) => t.root.rendered_line ?? t.root.line;
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
   a.file === file && a.side === side && a.line === line;
 
-/** True clicks place line comments; mouseups that end a text selection
- * must not (the selection is the anchor being built — lib/selection). */
-const selectionInProgress = () =>
-  document.getSelection()?.isCollapsed === false;
-
 function HunkSeparator({
   prev,
   hunk,
@@ -189,24 +184,6 @@ export default function DiffFileView({
     },
   });
 
-  /** Click handler placing a line comment, selection-aware. A click on
-   * the open editor's own line is a no-op — its rangeless target must
-   * not overwrite an anchored range; only the c shortcut re-anchors (it
-   * carries the authoritative current selection). */
-  const guardedClick = (target: DraftTarget | null) =>
-    target
-      ? () => {
-          if (selectionInProgress()) return;
-          if (
-            ctx.editingTarget &&
-            targetAt(ctx.editingTarget, target.file, target.side, target.line)
-          ) {
-            return;
-          }
-          ctx.setEditingTarget(target);
-        }
-      : undefined;
-
   // In split layout, the side the current mouse drag started on; the
   // other side is made unselectable (styles.css `sel-old`/`sel-new`) so a
   // cross-column drag yields one side's text, gerrit-style. Cleared when
@@ -264,20 +241,6 @@ export default function DiffFileView({
     return marks.length > 0 ? marks : undefined;
   }
 
-  /** Comment anchor a click on this line produces, or null if forbidden. */
-  function targetFor(line: Line): DraftTarget | null {
-    if (
-      line.kind === "del" ||
-      (line.kind === "context" && line.new === undefined)
-    ) {
-      if (ctx.interdiff) return null; // old side of an interdiff: unsupported
-      if (line.old === undefined) return null;
-      return { file: file.path, side: "old", line: line.old };
-    }
-    if (line.new === undefined) return null;
-    return { file: file.path, side: "new", line: line.new };
-  }
-
   /** Thread/editor rows attached under a diff line. A context line owns
    * anchors on both sides; add/del lines own exactly one. */
   function metaRows(line: Line, colSpan: number) {
@@ -328,102 +291,82 @@ export default function DiffFileView({
   }
 
   function unifiedRows(hunk: Hunk) {
-    return hunk.lines.map((line, li) => {
-      const target = targetFor(line);
-      return (
-        <Fragment key={li}>
-          <tr
-            className={`line-row ${line.kind} ${target ? "clickable" : ""}`}
-            onClick={guardedClick(target)}
-            title={target ? "Comment on this line" : undefined}
-          >
-            <td className="g">{line.old ?? ""}</td>
-            <td className="g">{line.new ?? ""}</td>
-            <td className="code" data-old={line.old} data-new={line.new}>
-              <span className="sign">
-                {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}
-              </span>
-              <Code
-                text={line.text}
-                lang={lang}
-                mark={marks.get(line)}
-                rangeMarks={cellRangeMarks(line, ["old", "new"])}
-                className="code-text"
-              />
-            </td>
-          </tr>
-          {metaRows(line, 3)}
-        </Fragment>
-      );
-    });
+    return hunk.lines.map((line, li) => (
+      <Fragment key={li}>
+        <tr className={`line-row ${line.kind}`}>
+          <td className="g">{line.old ?? ""}</td>
+          <td className="g">{line.new ?? ""}</td>
+          <td className="code" data-old={line.old} data-new={line.new}>
+            <span className="sign">
+              {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}
+            </span>
+            <Code
+              text={line.text}
+              lang={lang}
+              mark={marks.get(line)}
+              rangeMarks={cellRangeMarks(line, ["old", "new"])}
+              className="code-text"
+            />
+          </td>
+        </tr>
+        {metaRows(line, 3)}
+      </Fragment>
+    ));
   }
 
   function splitRows(hunk: Hunk) {
-    return pairLines(hunk.lines).map((pair, pi) => {
-      const leftTarget = pair.left
-        ? targetFor({ ...pair.left, new: undefined })
-        : null;
-      const rightTarget =
-        pair.right && pair.right.new !== undefined
-          ? { file: file.path, side: "new" as const, line: pair.right.new }
-          : null;
-      return (
-        <Fragment key={pi}>
-          <tr className="line-row split">
-            <td
-              className={`g ${pair.left ? pair.left.kind : "void"}`}
-              data-side="old"
-              onClick={guardedClick(leftTarget)}
-            >
-              {pair.left?.old ?? ""}
-            </td>
-            <td
-              className={`code half ${pair.left ? pair.left.kind : "void"} ${leftTarget ? "clickable" : ""}`}
-              data-side="old"
-              data-old={pair.left?.old}
-              onClick={guardedClick(leftTarget)}
-            >
-              {pair.left ? (
-                <Code
-                  text={pair.left.text}
-                  lang={lang}
-                  mark={marks.get(pair.left)}
-                  rangeMarks={cellRangeMarks(pair.left, ["old"])}
-                  className="code-text"
-                />
-              ) : null}
-            </td>
-            <td
-              className={`g ${pair.right ? pair.right.kind : "void"}`}
-              data-side="new"
-              onClick={guardedClick(rightTarget)}
-            >
-              {pair.right?.new ?? ""}
-            </td>
-            <td
-              className={`code half ${pair.right ? pair.right.kind : "void"} ${rightTarget ? "clickable" : ""}`}
-              data-side="new"
-              data-new={pair.right?.new}
-              onClick={guardedClick(rightTarget)}
-            >
-              {pair.right ? (
-                <Code
-                  text={pair.right.text}
-                  lang={lang}
-                  mark={marks.get(pair.right)}
-                  rangeMarks={cellRangeMarks(pair.right, ["new"])}
-                  className="code-text"
-                />
-              ) : null}
-            </td>
-          </tr>
-          {pair.left && pair.left.kind !== "context"
-            ? metaRows(pair.left, 4)
-            : null}
-          {pair.right ? metaRows(pair.right, 4) : null}
-        </Fragment>
-      );
-    });
+    return pairLines(hunk.lines).map((pair, pi) => (
+      <Fragment key={pi}>
+        <tr className="line-row split">
+          <td
+            className={`g ${pair.left ? pair.left.kind : "void"}`}
+            data-side="old"
+          >
+            {pair.left?.old ?? ""}
+          </td>
+          <td
+            className={`code half ${pair.left ? pair.left.kind : "void"}`}
+            data-side="old"
+            data-old={pair.left?.old}
+          >
+            {pair.left ? (
+              <Code
+                text={pair.left.text}
+                lang={lang}
+                mark={marks.get(pair.left)}
+                rangeMarks={cellRangeMarks(pair.left, ["old"])}
+                className="code-text"
+              />
+            ) : null}
+          </td>
+          <td
+            className={`g ${pair.right ? pair.right.kind : "void"}`}
+            data-side="new"
+          >
+            {pair.right?.new ?? ""}
+          </td>
+          <td
+            className={`code half ${pair.right ? pair.right.kind : "void"}`}
+            data-side="new"
+            data-new={pair.right?.new}
+          >
+            {pair.right ? (
+              <Code
+                text={pair.right.text}
+                lang={lang}
+                mark={marks.get(pair.right)}
+                rangeMarks={cellRangeMarks(pair.right, ["new"])}
+                className="code-text"
+              />
+            ) : null}
+          </td>
+        </tr>
+        {pair.left && pair.left.kind !== "context"
+          ? metaRows(pair.left, 4)
+          : null}
+        {pair.right ? metaRows(pair.right, 4) : null}
+      </Fragment>
+    ));
   }
 
   const colSpan = layout === "unified" ? 3 : 4;

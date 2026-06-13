@@ -162,10 +162,21 @@ const captures = [
     path: "/changes/11?against=base",
     actions: async (page) => {
       await expandAllFiles(page);
-      await page
-        .locator("td.code", { hasText: "self.store.revoke_family" })
-        .first()
-        .click();
+      // Caret on a line + c → plain line-comment editor (clicking a line no
+      // longer comments; selecting text — collapsed here — then c is the
+      // only path).
+      await page.evaluate(() => {
+        const code = [...document.querySelectorAll("td.code .code-text")].find(
+          (t) => t.textContent.includes("self.store.revoke_family"),
+        );
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+      await page.keyboard.press("c");
       await page.waitForSelector("textarea");
       await page
         .locator("textarea")

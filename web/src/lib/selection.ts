@@ -72,9 +72,9 @@ function sweptCells(range: Range): HTMLElement[] {
   return candidates.filter((c): c is HTMLElement => intersects(range, c));
 }
 
-/** The side both boundary cells can express, preferring "new" (the side a
- * plain click would comment on). Null when the boundaries disagree — the
- * selected text is not contiguous on either side. */
+/** The side both boundary cells can express, preferring "new" (the
+ * post-change side). Null when the boundaries disagree — the selected
+ * text is not contiguous on either side. */
 function sideOf(first: HTMLElement, last: HTMLElement): CommentSide | null {
   if (first.dataset["new"] !== undefined && last.dataset["new"] !== undefined) {
     return "new";
