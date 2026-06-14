@@ -19,6 +19,6 @@ export function useAutosize(
     // box-sizing is border-box, but scrollHeight excludes the border, so
     // add it back (offsetHeight − clientHeight is the top+bottom border).
     el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
-    // ref is a stable useRef object, so value is the only trigger.
-  }, [value]);
+    // ref identity is stable, so value changes are what actually retrigger.
+  }, [ref, value]);
 }

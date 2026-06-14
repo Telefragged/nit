@@ -1,5 +1,4 @@
 import { createContext, useContext } from "react";
-import type { RefObject } from "react";
 import type { CommentRange, CommentSide } from "../api/types";
 
 /** Anchor of the draft editor currently open in the diff. */
@@ -42,9 +41,10 @@ export interface ReviewCtx {
    * move was applied. Same-anchor calls are no-ops (the editor stays
    * mounted). */
   setEditingTarget: (t: DraftTarget | null) => boolean;
-  /** True while the inline draft editor holds unsaved text (kept in sync by
-   * its onDirtyChange). */
-  editorDirty: RefObject<boolean>;
+  /** Record whether the inline draft editor holds unsaved text (the editor
+   * reports it via onDirtyChange). The provider owns the backing ref, so the
+   * mutation lives where the ref is constructed. */
+  setEditorDirty: (dirty: boolean) => void;
 }
 
 export const ReviewContext = createContext<ReviewCtx | null>(null);

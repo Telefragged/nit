@@ -70,9 +70,6 @@ export default tseslint.config(
       ],
 
       // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
-      "react-hooks/set-state-in-effect": "off", // 2
-      "react-hooks/immutability": "off", // 1
-      "react-hooks/exhaustive-deps": "off", // 1
       "jsx-a11y/click-events-have-key-events": "off", // 2
       "jsx-a11y/no-static-element-interactions": "off", // 2
       "jsx-a11y/no-autofocus": "off", // 1

@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   Link,
   useNavigate,
@@ -303,8 +304,6 @@ export default function ReviewPage() {
   // or base); only the commit message starts expanded (lib/collapse.ts).
   const [expanded, setExpanded] =
     useState<ReadonlySet<string>>(defaultExpanded);
-  // File index whose reveal still owes a scroll — see the layout effect.
-  const [pendingScroll, setPendingScroll] = useState<number | null>(null);
   const diffIdentity = `${changeId}:${selected}:${against ?? "base"}`;
   const [shownDiff, setShownDiff] = useState(diffIdentity);
   if (shownDiff !== diffIdentity) {
@@ -312,35 +311,27 @@ export default function ReviewPage() {
     // render that switches diffs, so stale expansion never paints.
     setShownDiff(diffIdentity);
     setExpanded(defaultExpanded());
-    setPendingScroll(null);
   }
 
-  /** Reveal a file: activate + expand it, then scroll once the expansion
-   * is in the DOM. Shared by rail clicks and the [ / ] keys. */
+  /** Reveal a file: activate + expand it, then scroll to it. The expansion
+   * is committed with flushSync first, because scrollIntoView positions
+   * against the layout at call time and expanding a section reflows
+   * everything below it — scrolling before the commit would target the
+   * pre-expansion position and land wrong. Shared by rail clicks and the
+   * [ / ] keys (both event handlers, where flushSync is safe). */
   const revealFile = useCallback(
     (index: number) => {
-      setActiveFile(index);
       const path = files[index]?.path;
-      if (path !== undefined) setExpanded((cur) => expand(cur, path));
-      setPendingScroll(index);
+      flushSync(() => {
+        setActiveFile(index);
+        if (path !== undefined) setExpanded((cur) => expand(cur, path));
+      });
+      document
+        .getElementById(fileDomId(index))
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
     [files],
   );
-
-  // The scroll half of revealFile. The pitfall this ordering guards:
-  // scrollIntoView positions against the layout at call time, and
-  // expanding a section reflows everything below it — with files above
-  // the target collapsed, a scroll issued in the event handler itself
-  // would target the pre-expansion position and land wrong. This layout
-  // effect runs only after React commits the expanded section, so the
-  // position scrollIntoView computes is the final one.
-  useLayoutEffect(() => {
-    if (pendingScroll === null) return;
-    document
-      .getElementById(fileDomId(pendingScroll))
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setPendingScroll(null);
-  }, [pendingScroll]);
 
   const ctxValue: ReviewCtx = useMemo(
     () => ({
@@ -366,7 +357,9 @@ export default function ReviewPage() {
         setEditingTarget(t);
         return true;
       },
-      editorDirty,
+      setEditorDirty: (dirty: boolean) => {
+        editorDirty.current = dirty;
+      },
     }),
     [changeId, selected, against, editingTarget],
   );

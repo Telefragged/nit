@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Chain } from "../api/types";
 import { StatusChip, StatusDot } from "./badges";
@@ -20,9 +20,13 @@ export default function ChainStrip({
   const [open, setOpen] = useState(false);
 
   // Close the panel when navigation lands on another change (n/p included).
-  useEffect(() => {
+  // Adjust during render, not in an effect, so the panel never paints open
+  // for the new change.
+  const [seenId, setSeenId] = useState(currentId);
+  if (seenId !== currentId) {
+    setSeenId(currentId);
     setOpen(false);
-  }, [currentId]);
+  }
 
   if (!chain) return null;
 
