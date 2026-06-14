@@ -288,9 +288,11 @@ advance it — so an entry that lands between two of its own actions can't
 be skipped (docs/agent-workflow.md).
 
 - `POST /api/comments/{id}/replies` —
-  `req: {"body": "…", "resolve": true}` → Comment (author=agent, published
-  immediately, threaded under the root comment; `resolve` marks the thread
-  resolved). Appends a one-element `reply` log entry. Used by `nit reply`.
+  `req: {"body": "…", "resolved": true}` → Comment (author=agent, published
+  immediately, threaded under the root comment). `resolved` is the
+  thread-resolution decision: `true` resolves, `false` reopens, omitted
+  leaves it unchanged. Appends a one-element `reply` log entry. Used by
+  `nit reply` (`--resolve` / `--unresolve`).
 - `GET /api/chains/{id}/feedback` → Feedback (current fold, no blocking):
   ```json
   Feedback = {

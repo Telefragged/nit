@@ -99,6 +99,9 @@ pub struct ReplyArgs {
     /// Mark the thread resolved
     #[arg(long)]
     pub resolve: bool,
+    /// Reopen the thread (mark it unresolved)
+    #[arg(long, conflicts_with = "resolve")]
+    pub unresolve: bool,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -444,14 +447,6 @@ fn entry_summary(entry: &Value) -> String {
             "agent replied to {} comment(s)",
             p["replies"].as_array().map_or(0, Vec::len)
         ),
-        "resolve" => {
-            let verb = if p["resolved"].as_bool().unwrap_or(true) {
-                "resolved"
-            } else {
-                "unresolved"
-            };
-            format!("reviewer {verb} a thread")
-        }
         "partial" => format!(
             "chain marked {}",
             if p["partial"].as_bool().unwrap_or(false) {
@@ -481,15 +476,23 @@ pub fn status(args: StatusArgs) -> Result<()> {
     print_json(&feedback)
 }
 
-/// Threaded reply as the agent; `--resolve` closes the thread.
+/// Threaded reply as the agent; `--resolve` closes the thread, `--unresolve`
+/// reopens it (neither leaves its resolution unchanged).
 ///
 /// # Errors
 /// When the server can't be reached or the comment id is unknown.
 pub fn reply(args: ReplyArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
+    let resolved = if args.resolve {
+        Some(true)
+    } else if args.unresolve {
+        Some(false)
+    } else {
+        None
+    };
     let comment = client.post(
         &format!("/api/comments/{}/replies", args.comment_id),
-        &json!({"body": args.message, "resolve": args.resolve}),
+        &json!({"body": args.message, "resolved": resolved}),
     )?;
     print_json(&comment)
 }
@@ -842,8 +845,8 @@ mod tests {
             entry_summary(&review),
             "reviewer request_changes I01234567 r2 (2 comment(s))"
         );
-        let resolve = json!({"kind": "resolve", "payload": {"resolved": false}});
-        assert_eq!(entry_summary(&resolve), "reviewer unresolved a thread");
+        let reply = json!({"kind": "reply", "payload": {"replies": [{}]}});
+        assert_eq!(entry_summary(&reply), "agent replied to 1 comment(s)");
         let closed = json!({"kind": "chain_closed", "payload": {"status": "merged"}});
         assert_eq!(entry_summary(&closed), "chain merged");
     }

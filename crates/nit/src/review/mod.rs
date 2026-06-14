@@ -137,7 +137,10 @@ pub struct ReplyItem {
     pub id: u64,
     pub comment_id: u64,
     pub body: String,
-    pub resolve: bool,
+    /// Thread-resolution decision: `Some(true)` resolves, `Some(false)`
+    /// reopens, `None` leaves the thread unchanged.
+    #[serde(default)]
+    pub resolved: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -522,11 +525,8 @@ fn fold_reply(proj: &mut Projection, p: &ReplyPayload, now: &str) {
         let root_id = root.id;
         let change = &mut proj.changes[change_idx];
         change.comments.push(new);
-        if r.resolve
-            && let Some(root) = change.comments.iter_mut().find(|c| c.id == root_id)
-        {
-            root.resolved = true;
-            root.updated_at = now.to_string();
+        if let Some(state) = r.resolved {
+            set_thread_resolved(change, root_id, state, now);
         }
     }
 }

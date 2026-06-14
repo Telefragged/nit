@@ -191,7 +191,7 @@ fn full_review_loop() {
     // --- agent replies and resolves one thread -----------------------------
     let (st, reply) = http_post(
         &server.url(&format!("/api/comments/{draft_a_id}/replies")),
-        &json!({"body": "renamed in r2", "resolve": true}),
+        &json!({"body": "renamed in r2", "resolved": true}),
     );
     assert_eq!(st, 200, "{reply}");
     assert_eq!(reply["author"], "agent");

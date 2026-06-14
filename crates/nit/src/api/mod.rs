@@ -742,7 +742,7 @@ async fn create_reply(
                 id: reply_id,
                 comment_id: root_id,
                 body: req.body.clone(),
-                resolve: req.resolve,
+                resolved: req.resolved,
             }],
         })
         .map_err(anyhow::Error::from)?;

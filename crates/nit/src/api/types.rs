@@ -275,9 +275,10 @@ pub struct SubmitReviewResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewReply {
     pub body: String,
-    /// Marks the thread resolved.
+    /// Thread-resolution decision: `Some(true)` resolves, `Some(false)`
+    /// reopens, `None` leaves the thread unchanged.
     #[serde(default)]
-    pub resolve: bool,
+    pub resolved: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

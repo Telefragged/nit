@@ -226,6 +226,65 @@ fn review_comments_carry_drafted_resolution() {
 }
 
 #[test]
+fn reply_resolved_field_toggles_thread() {
+    let mut p = Projection::empty(&chain_row());
+    fold(&mut p, &push_one("Iaaa", 10, 1, "a1")).expect("push");
+    fold(
+        &mut p,
+        &entry(
+            1,
+            "review",
+            serde_json::json!({"change_key": "Iaaa", "review_id": 20, "revision": 1,
+                "verdict": "request_changes", "message": "fix",
+                "comments": [{"id": 30, "parent_id": null, "file": "m.rs", "line": 2,
+                    "side": "new", "range": null, "line_text": "x", "body": "why"}]}),
+        ),
+    )
+    .expect("review");
+
+    // A reply with `resolved: true` resolves the thread; the reply is
+    // threaded under the root as the agent, inheriting the root's anchor.
+    fold(
+        &mut p,
+        &entry(
+            2,
+            "reply",
+            serde_json::json!({"replies": [{"id": 31, "comment_id": 30, "body": "done", "resolved": true}]}),
+        ),
+    )
+    .expect("resolve reply");
+    assert!(p.comment_by_id(30).expect("root").resolved);
+    let reply = p.comment_by_id(31).expect("reply");
+    assert_eq!(reply.parent_id, Some(30));
+    assert_eq!(reply.author, "agent");
+    assert_eq!(reply.file.as_deref(), Some("m.rs"), "reply inherits anchor");
+
+    // A later reply with `resolved: false` reopens it.
+    fold(
+        &mut p,
+        &entry(
+            3,
+            "reply",
+            serde_json::json!({"replies": [{"id": 32, "comment_id": 30, "body": "actually…", "resolved": false}]}),
+        ),
+    )
+    .expect("reopen reply");
+    assert!(!p.comment_by_id(30).expect("root").resolved);
+
+    // A plain reply (no decision) leaves the state unchanged.
+    fold(
+        &mut p,
+        &entry(
+            4,
+            "reply",
+            serde_json::json!({"replies": [{"id": 33, "comment_id": 30, "body": "ok"}]}),
+        ),
+    )
+    .expect("plain reply");
+    assert!(!p.comment_by_id(30).expect("root").resolved);
+}
+
+#[test]
 fn published_comment_keeps_its_authored_revision() {
     let mut p = Projection::empty(&chain_row());
     fold(&mut p, &push_one("Iaaa", 10, 1, "a1")).expect("push");

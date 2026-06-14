@@ -156,10 +156,11 @@ invisible work.
   surfaced that you want the full detail on.
 - `nit status` — current Feedback JSON without blocking (no entries, no
   cursor).
-- `nit reply <comment-id> [--resolve] -m "text"` — threaded reply as the
-  agent; `--resolve` closes the thread (do this for addressed comments —
-  the reviewer sees unresolved counts). Appends a `reply` entry; returns
-  no cursor.
+- `nit reply <comment-id> [--resolve | --unresolve] -m "text"` — threaded
+  reply as the agent; `--resolve` closes the thread (do this for addressed
+  comments — the reviewer sees unresolved counts), `--unresolve` reopens
+  it, neither leaves it unchanged. Appends a `reply` entry; returns no
+  cursor.
 
 ## Where the conversation happens
 

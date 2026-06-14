@@ -106,8 +106,9 @@ other.
   ]                                    // empty-body + resolved = resolution only
 }
 
-// reply — agent replies, modelled as a list (one element today)
-{"replies": [{"id": 12, "comment_id": 7, "body": "done", "resolve": true}]}
+// reply — agent replies, modelled as a list (one element today). `resolved`
+// is the thread decision (true=resolve, false=reopen, null/absent=unchanged).
+{"replies": [{"id": 12, "comment_id": 7, "body": "done", "resolved": true}]}
 
 // partial — sticky more-commits-coming flag
 {"partial": true}
@@ -135,7 +136,8 @@ Replaying a chain's log in order yields its state. Each kind's effect:
   status to the verdict (`approve`→approved,
   `request_changes`→changes_requested, `comment`→commented).
 - **`reply`** — append each reply as a published comment under its
-  `comment_id`; if `resolve`, mark that root thread resolved.
+  `comment_id`; apply its `resolved` decision to that root thread
+  (`true`→resolved, `false`→reopened, absent→unchanged).
 - **`partial`** — set the chain's partial flag.
 - **`chain_closed`** — set the chain's status (merged/abandoned).
 
