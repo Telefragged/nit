@@ -12,11 +12,7 @@
 export default {
   extends: ["stylelint-config-standard"],
   rules: {
-    "alpha-value-notation": null, // 25
-    "color-function-notation": null, // 25
-    "color-function-alias-notation": null, // 25
     "no-descending-specificity": null, // 7
     "selector-class-pattern": null, // 7
-    "value-keyword-case": null, // 5
   },
 };

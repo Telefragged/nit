@@ -15,22 +15,22 @@
   --green: #3fb950;
   --red: #f85149;
   --gray: #6e7681;
-  --amber-dim: rgba(210, 153, 34, 0.15);
-  --blue-dim: rgba(88, 166, 255, 0.13);
-  --green-dim: rgba(63, 185, 80, 0.14);
-  --red-dim: rgba(248, 81, 73, 0.13);
-  --gray-dim: rgba(110, 118, 129, 0.16);
-  --add-bg: rgba(63, 185, 80, 0.1);
-  --add-gutter: rgba(63, 185, 80, 0.18);
-  --add-intraline: rgba(63, 185, 80, 0.3);
-  --del-bg: rgba(248, 81, 73, 0.09);
-  --del-gutter: rgba(248, 81, 73, 0.16);
-  --del-intraline: rgba(248, 81, 73, 0.28);
+  --amber-dim: rgb(210 153 34 / 15%);
+  --blue-dim: rgb(88 166 255 / 13%);
+  --green-dim: rgb(63 185 80 / 14%);
+  --red-dim: rgb(248 81 73 / 13%);
+  --gray-dim: rgb(110 118 129 / 16%);
+  --add-bg: rgb(63 185 80 / 10%);
+  --add-gutter: rgb(63 185 80 / 18%);
+  --add-intraline: rgb(63 185 80 / 30%);
+  --del-bg: rgb(248 81 73 / 9%);
+  --del-gutter: rgb(248 81 73 / 16%);
+  --del-intraline: rgb(248 81 73 / 28%);
   --mono:
-    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
+    ui-monospace, "SF Mono", "JetBrains Mono", menlo, consolas,
     "Liberation Mono", monospace;
   --sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+    -apple-system, blinkmacsystemfont, "Segoe UI", inter, roboto,
     "Helvetica Neue", sans-serif;
 }
 
@@ -439,19 +439,19 @@ table.list tbody tr:hover {
 }
 
 .banner-error {
-  border-color: rgba(248, 81, 73, 0.4);
+  border-color: rgb(248 81 73 / 40%);
   background: var(--red-dim);
   color: var(--red);
 }
 
 .banner-warn {
-  border-color: rgba(210, 153, 34, 0.4);
+  border-color: rgb(210 153 34 / 40%);
   background: var(--amber-dim);
   color: var(--amber);
 }
 
 .banner-info {
-  border-color: rgba(88, 166, 255, 0.4);
+  border-color: rgb(88 166 255 / 40%);
   background: var(--blue-dim);
   color: var(--blue);
 }
@@ -498,7 +498,7 @@ table.list tbody tr:hover {
 }
 
 .error-panel {
-  border: 1px solid rgba(248, 81, 73, 0.4);
+  border: 1px solid rgb(248 81 73 / 40%);
   background: var(--red-dim);
   border-radius: 6px;
   padding: 14px 16px;
@@ -1105,12 +1105,12 @@ table.list tbody tr:hover {
    overlapping ranges nest and the rgba stacks darker. The dotted rule
    points at the thread below the range's last line. */
 .code-text .comment-range {
-  background: rgba(210, 153, 34, 0.18);
-  border-bottom: 1px dotted rgba(210, 153, 34, 0.7);
+  background: rgb(210 153 34 / 18%);
+  border-bottom: 1px dotted rgb(210 153 34 / 70%);
 }
 
 .code-text .comment-range-active {
-  background: rgba(210, 153, 34, 0.32);
+  background: rgb(210 153 34 / 32%);
   border-bottom-style: solid;
 }
 
@@ -1122,7 +1122,7 @@ table.list tbody tr:hover {
 
 .hunk-row {
   grid-column: 1 / -1;
-  background: rgba(88, 166, 255, 0.05);
+  background: rgb(88 166 255 / 5%);
   color: var(--text-faint);
   font-size: 11px;
   padding: 3px 12px;
@@ -1195,7 +1195,7 @@ table.list tbody tr:hover {
 
 .thread-draft {
   border-style: dashed;
-  border-color: rgba(210, 153, 34, 0.55);
+  border-color: rgb(210 153 34 / 55%);
 }
 
 .thread-resolved {
@@ -1336,7 +1336,7 @@ table.list tbody tr:hover {
 }
 
 .btn-primary {
-  border-color: rgba(88, 166, 255, 0.55);
+  border-color: rgb(88 166 255 / 55%);
   color: var(--blue);
 }
 
@@ -1459,7 +1459,7 @@ table.list tbody tr:hover {
   border: 0;
   padding: 0;
   color: inherit;
-  background: rgba(1, 4, 9, 0.62);
+  background: rgb(1 4 9 / 62%);
 }
 
 .modal-backdrop[open] {
@@ -1483,7 +1483,7 @@ table.list tbody tr:hover {
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 12px 14px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 60%);
 }
 
 .reply-modal-head {
@@ -1523,7 +1523,7 @@ table.list tbody tr:hover {
 }
 
 .btn-approve {
-  border-color: rgba(63, 185, 80, 0.55);
+  border-color: rgb(63 185 80 / 55%);
   color: var(--green);
 }
 
@@ -1532,7 +1532,7 @@ table.list tbody tr:hover {
 }
 
 .btn-request {
-  border-color: rgba(248, 81, 73, 0.55);
+  border-color: rgb(248 81 73 / 55%);
   color: var(--red);
 }
 
