@@ -31,7 +31,11 @@ import {
   expandAll,
   toggle,
 } from "../lib/collapse";
-import { commentPlacement } from "../lib/comments";
+import {
+  commentCountLabel,
+  commentPlacement,
+  threadCountByRevision,
+} from "../lib/comments";
 import { displayPath } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
 import { activeIndexAt } from "../lib/scrollspy";
@@ -100,20 +104,29 @@ function deriveDiffBase(
 }
 
 /** Gerrit-style diff range: [Base|rM] → [rN]. Left picks the diff base,
- * right the revision under review. */
+ * right the revision under review. Each rN option is tagged with its own
+ * comment-thread count (`counts`) so the reviewer sees where discussion
+ * sits before switching — native <option> takes plain text only, so it
+ * reads "r2 · 3 comments", not the styled label the file headers use. */
 function DiffRangeSelect({
   revisions,
   selected,
   against,
+  counts,
   onLeft,
   onRight,
 }: {
   revisions: Revision[];
   selected: number;
   against: number | undefined;
+  counts: Map<number, number>;
   onLeft: (v: string) => void;
   onRight: (n: number) => void;
 }) {
+  const label = (r: Revision) => {
+    const n = counts.get(r.number) ?? 0;
+    return n > 0 ? `r${r.number} · ${commentCountLabel(n)}` : `r${r.number}`;
+  };
   return (
     <>
       <select
@@ -130,7 +143,7 @@ function DiffRangeSelect({
             value={String(r.number)}
             disabled={r.number >= selected}
           >
-            r{r.number}
+            {label(r)}
           </option>
         ))}
       </select>
@@ -144,7 +157,7 @@ function DiffRangeSelect({
       >
         {revisions.map((r) => (
           <option key={r.number} value={String(r.number)}>
-            r{r.number}
+            {label(r)}
           </option>
         ))}
       </select>
@@ -338,6 +351,13 @@ export default function ReviewPage() {
 
   const threads = useMemo(
     () => buildThreads(change?.comments ?? []),
+    [change?.comments],
+  );
+
+  // Per-revision thread totals for the diff-range dropdowns (not filtered
+  // by the shown range — each revision's own count).
+  const revisionCommentCounts = useMemo(
+    () => threadCountByRevision(change?.comments ?? []),
     [change?.comments],
   );
 
@@ -608,6 +628,7 @@ export default function ReviewPage() {
               revisions={revisions}
               selected={selected}
               against={against}
+              counts={revisionCommentCounts}
               onLeft={onLeft}
               onRight={onRight}
             />

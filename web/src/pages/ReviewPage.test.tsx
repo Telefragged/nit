@@ -221,3 +221,28 @@ describe("collapse with an open dirty comment editor", () => {
     expect(confirm).toHaveBeenCalledTimes(2);
   });
 });
+
+// Each revision option is tagged with its own comment-thread count, so the
+// reviewer sees where discussion sits before switching the diff range.
+describe("comment counts in the diff-range dropdowns", () => {
+  it("tags each revision option with its thread count", async () => {
+    renderReview(); // full r2 diff; the counts are range-independent anyway
+    await railItem("src/auth/store.rs");
+
+    // change 11: r1 carries 5 root threads, r2 the 3 drafts on it. Replies
+    // ride with their thread and are not counted separately.
+    const revSelect = screen.getByLabelText("Revision") as HTMLSelectElement;
+    expect(Array.from(revSelect.options).map((o) => o.textContent)).toEqual([
+      "r1 · 5 comments",
+      "r2 · 3 comments",
+    ]);
+
+    // The base picker counts the same way; its extra "Base" option has none.
+    const baseSelect = screen.getByLabelText("Diff base") as HTMLSelectElement;
+    expect(Array.from(baseSelect.options).map((o) => o.textContent)).toEqual([
+      "Base",
+      "r1 · 5 comments",
+      "r2 · 3 comments",
+    ]);
+  });
+});

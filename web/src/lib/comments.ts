@@ -3,7 +3,7 @@
 // to. Pure and side-effect-free (docs/api.md "Comment placement"), so the
 // rules are unit-tested without a DOM.
 
-import type { CommentSide } from "../api/types";
+import type { Comment, CommentSide } from "../api/types";
 
 /** A line comment's anchor: the revision and side it is pinned to. */
 export interface CommentAnchor {
@@ -61,4 +61,30 @@ export function draftAnchor(
   if (column === "new") return { revision: selected, side: "new" };
   if (against === undefined) return { revision: selected, side: "old" };
   return { revision: against, side: "new" };
+}
+
+/**
+ * How many comment threads are anchored to each revision, for the revision
+ * dropdowns. Counts roots only (a reply rides with its thread) and both
+ * published comments and the reviewer's drafts — the dropdown answers
+ * "which revisions carry discussion", and an in-progress draft is
+ * discussion too. Keyed by revision number; revisions with none are absent
+ * (read with `?? 0`). Not range-filtered: this is each revision's own
+ * total, unlike the per-file header count which follows the shown diff.
+ */
+export function threadCountByRevision(
+  comments: readonly Comment[],
+): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const c of comments) {
+    if (c.parent_id !== null) continue;
+    counts.set(c.revision, (counts.get(c.revision) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** "1 comment" / "3 comments" — the count label the revision dropdowns and
+ * the file headers share, so the wording stays in one place. */
+export function commentCountLabel(n: number): string {
+  return `${n} comment${n === 1 ? "" : "s"}`;
 }

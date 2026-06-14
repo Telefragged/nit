@@ -1,9 +1,40 @@
 import { describe, expect, it } from "vitest";
+import type { Comment } from "../api/types";
 import type { CommentAnchor } from "./comments";
-import { commentPlacement, draftAnchor } from "./comments";
+import {
+  commentCountLabel,
+  commentPlacement,
+  draftAnchor,
+  threadCountByRevision,
+} from "./comments";
 
 const anchor = (revision: number, side: "old" | "new", line: number | null) =>
   ({ revision, side, line }) satisfies CommentAnchor;
+
+/** Minimal comment for the counting tests — only revision/parent_id matter. */
+const comment = (
+  id: number,
+  revision: number,
+  parent_id: number | null = null,
+  state: "draft" | "published" = "published",
+): Comment => ({
+  id,
+  change_id: 1,
+  revision,
+  parent_id,
+  author: "reviewer",
+  file: "src/main.rs",
+  line: 1,
+  side: "new",
+  range: null,
+  line_text: null,
+  body: "",
+  state,
+  resolved: false,
+  review_id: null,
+  created_at: "",
+  updated_at: "",
+});
 
 describe("commentPlacement", () => {
   // Base diff (FROM = base): r2's new side is the right column, its old
@@ -92,5 +123,42 @@ describe("draftAnchor", () => {
         expect(placed).toEqual({ side: column, line: 12 });
       }
     }
+  });
+});
+
+describe("threadCountByRevision", () => {
+  it("counts roots per revision, ignoring replies", () => {
+    const counts = threadCountByRevision([
+      comment(1, 1),
+      comment(2, 1),
+      comment(3, 1, 1), // reply to comment 1 — rides with its thread
+      comment(4, 2),
+    ]);
+    expect(counts.get(1)).toBe(2);
+    expect(counts.get(2)).toBe(1);
+    // A revision with no threads is absent (callers read with `?? 0`).
+    expect(counts.get(3)).toBeUndefined();
+  });
+
+  it("counts a reviewer's drafts alongside published comments", () => {
+    const counts = threadCountByRevision([
+      comment(1, 2, null, "published"),
+      comment(2, 2, null, "draft"),
+    ]);
+    expect(counts.get(2)).toBe(2);
+  });
+
+  it("is empty for no comments", () => {
+    expect(threadCountByRevision([]).size).toBe(0);
+  });
+});
+
+describe("commentCountLabel", () => {
+  it("singularizes one comment", () => {
+    expect(commentCountLabel(1)).toBe("1 comment");
+  });
+  it("pluralizes everything else", () => {
+    expect(commentCountLabel(0)).toBe("0 comments");
+    expect(commentCountLabel(3)).toBe("3 comments");
   });
 });

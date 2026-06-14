@@ -40,7 +40,11 @@ happens.
     an earlier `rM` an interdiff `rM → rN` (later revisions shown
     disabled). Default when `last_reviewed_revision` exists and is behind:
     the interdiff `last_reviewed → latest` with a "changes since your
-    review" hint; otherwise Base → latest;
+    review" hint; otherwise Base → latest. Each `rN` option is tagged with
+    that revision's own comment-thread count (`r2 · 3 comments`, plain text
+    — native `<option>`s carry no markup), so discussion is visible before
+    switching range; the count includes the reviewer's drafts and folds
+    replies into their thread;
   - the diff column and file rail start with a synthetic "Commit message"
     file (`/COMMIT_MSG`, docs/api.md), commentable like code — the full
     message lives there, not in the header;
