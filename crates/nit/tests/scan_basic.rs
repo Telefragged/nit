@@ -4,7 +4,6 @@
 mod common;
 
 use common::{Fixture, msg};
-use nit::db;
 use nit::gitscan::{self, MERGE_COMMIT_ERROR};
 use nit::review::Status;
 
@@ -225,18 +224,6 @@ fn register_validates_resolvable_refs() {
             .is_err()
     );
     assert!(gitscan::validate_registration(workdir, "feat", "main").is_ok());
-}
-
-#[test]
-fn chain_registration_is_idempotent_and_moves_base() {
-    let dir = tempfile::tempdir().unwrap();
-    let conn = db::open(&dir.path().join("nit.sqlite3")).unwrap();
-    let a = db::get_or_create_chain(&conn, "/repo", "feat", "main").unwrap();
-    let b = db::get_or_create_chain(&conn, "/repo", "feat", "main").unwrap();
-    assert_eq!(a.id, b.id, "idempotent re-registration");
-    let moved = db::get_or_create_chain(&conn, "/repo", "feat", "HEAD").unwrap();
-    assert_eq!(moved.id, a.id);
-    assert_eq!(moved.base, "HEAD");
 }
 
 #[test]

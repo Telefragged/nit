@@ -565,6 +565,11 @@ mod tests {
     fn chain_upsert_is_idempotent_and_updates_base() {
         let conn = mem();
         let a = get_or_create_chain(&conn, "/r", "feat", "main").expect("create");
+        // Re-registering with identical args returns the same chain, never a
+        // duplicate row.
+        let again = get_or_create_chain(&conn, "/r", "feat", "main").expect("re-register");
+        assert_eq!(a.id, again.id);
+        // A moved base updates the existing row in place.
         let b = get_or_create_chain(&conn, "/r", "feat", "develop").expect("upsert");
         assert_eq!(a.id, b.id);
         assert_eq!(b.base, "develop");
