@@ -13,7 +13,7 @@ import type { DraftTarget } from "../pages/reviewContext";
  * the same code: overlap is strict (touching at a boundary is not
  * intersecting). */
 function intersects(range: Range, node: Node): boolean {
-  const r = node.ownerDocument!.createRange();
+  const r = (node.ownerDocument ?? document).createRange();
   r.selectNode(node);
   return (
     range.compareBoundaryPoints(Range.END_TO_START, r) < 0 &&

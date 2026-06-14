@@ -278,12 +278,13 @@ export default function DiffFileView({
       );
     }
     if (ctx.editingTarget && targetAt(ctx.editingTarget, file.path, side, no)) {
+      const target = ctx.editingTarget;
       items.push(
         <div className="meta-item" key={`editor-${side}-${no}`}>
           <CommentEditor
             saving={create.isPending}
             onSave={(body) => {
-              create.mutate({ target: ctx.editingTarget!, body });
+              create.mutate({ target, body });
             }}
             onCancel={() => ctx.setEditingTarget(null)}
             onDirtyChange={(dirty) => {

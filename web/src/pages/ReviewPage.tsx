@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -238,8 +243,7 @@ export default function ReviewPage() {
 
   const chainQ = useQuery({
     queryKey: ["chain", change?.chain_id],
-    queryFn: () => getChain(change!.chain_id),
-    enabled: change !== undefined,
+    queryFn: change ? () => getChain(change.chain_id) : skipToken,
   });
 
   const [layout, setLayout] = useState<Layout>(() =>
@@ -415,7 +419,7 @@ export default function ReviewPage() {
         if (!chainChanges || !change || change.position === null) return;
         const live = chainChanges
           .filter((c) => c.position !== null)
-          .sort((a, b) => a.position! - b.position!);
+          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
         const idx = live.findIndex((c) => c.id === change.id);
         if (idx < 0) return;
         const next = live[idx + (e.key === "n" ? 1 : -1)];

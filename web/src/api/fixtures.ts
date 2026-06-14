@@ -1512,7 +1512,11 @@ function chainView(chain: ChainRecord): Chain {
     created_at: chain.created_at,
     updated_at: chain.updated_at,
     changes: chain.change_ids
-      .map((id) => changes.find((c) => c.id === id)!)
+      .map((id) => {
+        const c = changes.find((x) => x.id === id);
+        if (!c) throw new Error(`unknown change ${id}`);
+        return c;
+      })
       .map(changeSummary),
   };
 }
@@ -1594,9 +1598,10 @@ export async function mockRequest(
   }
 
   if ((m = /^\/chains\/(\d+)$/.exec(p)) && method === "GET") {
-    const chain = chains.find((c) => c.id === Number(m![1]));
-    if (!chain) notFound(`chain ${m[1] ?? ""}`);
-    return chainView(chain!);
+    const id = Number(m[1]);
+    const chain = chains.find((c) => c.id === id);
+    if (!chain) return notFound(`chain ${m[1] ?? ""}`);
+    return chainView(chain);
   }
 
   if ((m = /^\/changes\/(\d+)$/.exec(p)) && method === "GET") {
@@ -1645,21 +1650,19 @@ export async function mockRequest(
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "PATCH") {
-    const c = comments.find(
-      (x) => x.id === Number(m![1]) && x.state === "draft",
-    );
-    if (!c) notFound(`draft ${m[1] ?? ""}`);
+    const id = Number(m[1]);
+    const c = comments.find((x) => x.id === id && x.state === "draft");
+    if (!c) return notFound(`draft ${m[1] ?? ""}`);
     const req = body as { body: string; resolved?: boolean };
-    c!.body = req.body;
-    if (req.resolved !== undefined) c!.resolved = req.resolved;
-    c!.updated_at = new Date().toISOString();
-    return renderComment(c!);
+    c.body = req.body;
+    if (req.resolved !== undefined) c.resolved = req.resolved;
+    c.updated_at = new Date().toISOString();
+    return renderComment(c);
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "DELETE") {
-    const i = comments.findIndex(
-      (x) => x.id === Number(m![1]) && x.state === "draft",
-    );
+    const id = Number(m[1]);
+    const i = comments.findIndex((x) => x.id === id && x.state === "draft");
     if (i < 0) notFound(`draft ${m[1] ?? ""}`);
     comments.splice(i, 1);
     return undefined;

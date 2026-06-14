@@ -266,7 +266,9 @@ describe("selectionTarget, split layout", () => {
     const cells = section.querySelectorAll(`.code[data-side="${side}"]`);
     const cell = cells[i];
     if (!cell) throw new Error(`no ${side} cell at row ${i}`);
-    return cell.querySelector(".code-text")!.firstChild as Text;
+    const code = cell.querySelector(".code-text");
+    if (!code) throw new Error(`no .code-text in ${side} cell ${i}`);
+    return code.firstChild as Text;
   }
 
   it("maps a right-column drag across an intervening left column", () => {

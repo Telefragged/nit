@@ -54,11 +54,14 @@ function renderReview(url = "/changes/11?against=base") {
   );
 }
 
-const section = (i: number): HTMLElement => {
-  const el = document.getElementById(`file-${i}`);
-  expect(el).not.toBeNull();
-  return el!;
-};
+/** A queried node that must exist for the test to make sense. */
+function must<T>(value: T | null | undefined, what: string): T {
+  if (value == null) throw new Error(`expected ${what}`);
+  return value;
+}
+
+const section = (i: number): HTMLElement =>
+  must(document.getElementById(`file-${i}`), `#file-${i}`);
 const isExpanded = (el: HTMLElement): boolean =>
   el.querySelector(".file-header")?.getAttribute("aria-expanded") === "true";
 
@@ -83,7 +86,10 @@ describe("collapsed-by-default file sections", () => {
     renderReview();
     await railItem("src/auth/store.rs");
 
-    const header = section(1).querySelector(".file-header")!;
+    const header = must(
+      section(1).querySelector(".file-header"),
+      ".file-header",
+    );
     fireEvent.click(header);
     expect(isExpanded(section(1))).toBe(true);
     fireEvent.click(header);
@@ -160,16 +166,18 @@ describe("collapse with an open dirty comment editor", () => {
   async function openDirtyEditor() {
     renderReview();
     await railItem("src/auth/store.rs");
-    fireEvent.click(section(1).querySelector(".file-header")!);
-    const code = section(1).querySelector(".code-text")!;
+    fireEvent.click(
+      must(section(1).querySelector(".file-header"), ".file-header"),
+    );
+    const code = must(section(1).querySelector(".code-text"), ".code-text");
     const range = document.createRange();
     range.selectNodeContents(code);
     range.collapse(true);
-    const sel = window.getSelection()!;
+    const sel = must(window.getSelection(), "selection");
     sel.removeAllRanges();
     sel.addRange(range);
     fireEvent.keyDown(window, { key: "c" });
-    fireEvent.change(section(1).querySelector("textarea")!, {
+    fireEvent.change(must(section(1).querySelector("textarea"), "textarea"), {
       target: { value: "half-typed nit" },
     });
   }
@@ -178,7 +186,9 @@ describe("collapse with an open dirty comment editor", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await openDirtyEditor();
 
-    fireEvent.click(section(1).querySelector(".file-header")!);
+    fireEvent.click(
+      must(section(1).querySelector(".file-header"), ".file-header"),
+    );
 
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(isExpanded(section(1))).toBe(true);
@@ -189,12 +199,16 @@ describe("collapse with an open dirty comment editor", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     await openDirtyEditor();
 
-    fireEvent.click(section(1).querySelector(".file-header")!);
+    fireEvent.click(
+      must(section(1).querySelector(".file-header"), ".file-header"),
+    );
 
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(isExpanded(section(1))).toBe(false);
     // Re-expanding must not resurrect an empty editor at the stale anchor.
-    fireEvent.click(section(1).querySelector(".file-header")!);
+    fireEvent.click(
+      must(section(1).querySelector(".file-header"), ".file-header"),
+    );
     expect(isExpanded(section(1))).toBe(true);
     expect(section(1).querySelector("textarea")).toBeNull();
   });

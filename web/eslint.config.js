@@ -70,7 +70,6 @@ export default tseslint.config(
       ],
 
       // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
-      "@typescript-eslint/no-non-null-assertion": "off", // 55
       "react-refresh/only-export-components": "off", // 3 (override above)
       "react-hooks/set-state-in-effect": "off", // 2
       "react-hooks/immutability": "off", // 1
