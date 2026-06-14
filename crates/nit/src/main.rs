@@ -27,7 +27,7 @@ enum Cmd {
     Ready(cli::ReadyArgs),
     /// Block until log entries land beyond the cursor; prints {head, entries, feedback}
     Wait(cli::WaitArgs),
-    /// Print specific log entries by index/range without moving the cursor
+    /// Print log entries by index/range, or stream them live with --follow
     Log(cli::LogArgs),
     /// Print the current feedback JSON without blocking
     Status(cli::StatusArgs),

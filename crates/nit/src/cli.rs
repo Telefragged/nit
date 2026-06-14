@@ -77,6 +77,7 @@ pub struct WaitArgs {
 pub struct LogArgs {
     /// Entry indices or half-open ranges: `3`, `5..9`, `5..` (through head),
     /// `..9`, `..` (all). Several are concatenated in order, e.g. `1 4..6`.
+    /// With --follow, a single open cursor instead: `0`, `5..`, or `..`.
     #[arg(required = true)]
     pub ranges: Vec<String>,
     /// Chain to read, by id; overrides the cwd's repo+branch lookup. Lets
@@ -86,6 +87,12 @@ pub struct LogArgs {
     /// Print a one-line digest per entry instead of full payloads
     #[arg(long)]
     pub oneline: bool,
+    /// Follow the log: replay entries from the cursor, then stream each new
+    /// one as it lands — a cooperative monitor. Unlike `nit wait` it applies
+    /// no wake rule: every entry is relayed raw for the agent to triage.
+    /// Takes a single open cursor; rides out restarts; runs until stopped.
+    #[arg(long)]
+    pub follow: bool,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -313,9 +320,9 @@ fn next_sse_data<R: BufRead>(reader: &mut R) -> std::io::Result<Option<String>> 
     }
 }
 
-/// Print specific log entries by index/range without moving any cursor.
-/// `--chain` names the chain directly; otherwise it is resolved from the
-/// cwd's repo + branch.
+/// Print specific log entries by index/range without moving any cursor, or
+/// with `--follow` stream the log live (see [`follow`]). `--chain` names the
+/// chain directly; otherwise it is resolved from the cwd's repo + branch.
 ///
 /// # Errors
 /// When a range is malformed or the server can't be reached.
@@ -325,6 +332,12 @@ pub fn log(args: LogArgs) -> Result<()> {
         Some(id) => id,
         None => resolve_chain(&client, Retry::No)?,
     };
+    if args.follow {
+        let [spec] = args.ranges.as_slice() else {
+            bail!("--follow takes a single starting cursor (e.g. `0`, `5..`, or `..`)");
+        };
+        return follow(&client, chain_id, follow_cursor(spec)?, args.oneline);
+    }
     let mut entries: Vec<Value> = Vec::new();
     let mut head = 0;
     for spec in &args.ranges {
@@ -347,6 +360,74 @@ pub fn log(args: LogArgs) -> Result<()> {
         print_json(&json!({"head": head, "entries": entries}))?;
     }
     Ok(())
+}
+
+/// Follow the chain's log as a cooperative monitor: replay the backlog
+/// `[cursor, head)`, then print each new entry as it is appended, until the
+/// process is stopped. Unlike `nit wait`, it applies no wake rule — every
+/// entry is relayed raw, so the agent decides what to act on now versus
+/// queue. Rides out server restarts: on stream end it reconnects at the
+/// cursor it has advanced to, and the `/events` backlog replay covers the
+/// gap so nothing is dropped or doubled.
+///
+/// # Errors
+/// When connecting to the stream fails fatally (a transient outage retries)
+/// or stdout can't be written.
+fn follow(client: &Client, chain_id: u64, mut cursor: u64, oneline: bool) -> Result<()> {
+    let retry = Retry::UntilUp { deadline: None };
+    loop {
+        let mut stream = client.get_stream(
+            &format!("/api/chains/{chain_id}/events?cursor={cursor}"),
+            retry,
+        )?;
+        while let Ok(Some(data)) = next_sse_data(&mut stream) {
+            let Ok(entry) = serde_json::from_str::<Value>(&data) else {
+                continue; // skip a frame we can't parse; keep following
+            };
+            if let Some(idx) = entry["idx"].as_u64() {
+                cursor = idx + 1; // advance so a reconnect resumes past it
+            }
+            print_follow_entry(&entry, oneline)?;
+        }
+        // Stream ended (graceful shutdown) or severed: reconnect at the
+        // advanced cursor.
+    }
+}
+
+/// Print one streamed entry. `println!` flushes through its trailing newline
+/// (Rust's `Stdout` is always a `LineWriter`, pipe or TTY alike), so a monitor
+/// sees each entry the instant it lands.
+fn print_follow_entry(entry: &Value, oneline: bool) -> Result<()> {
+    if oneline {
+        print_oneline_entries(std::slice::from_ref(entry));
+        Ok(())
+    } else {
+        print_json(entry)
+    }
+}
+
+/// Parse the single positional under `--follow` into a starting cursor: a
+/// bare `N` or `N..` follows from `N`, `..` from `0`. A bounded `N..M` is
+/// rejected — following a closed range is contradictory.
+fn follow_cursor(spec: &str) -> Result<u64> {
+    let spec = spec.trim();
+    let Some((from, end)) = spec.split_once("..") else {
+        // A bare index is the cursor itself (cf. `nit wait <cursor>`).
+        return spec
+            .parse::<u64>()
+            .with_context(|| format!("bad cursor {spec:?}"));
+    };
+    if !end.trim().is_empty() {
+        bail!(
+            "--follow needs an open cursor (`N`, `N..`, or `..`), not the bounded range {spec:?}"
+        );
+    }
+    let from = from.trim();
+    if from.is_empty() {
+        return Ok(0);
+    }
+    from.parse::<u64>()
+        .with_context(|| format!("bad cursor {from:?}"))
 }
 
 /// A parsed `nit log` selector, half-open and unsigned. Built only via
@@ -805,6 +886,21 @@ mod tests {
         // Negatives never parse as an unsigned index.
         assert!(LogRange::parse("-1").is_err());
         assert!(LogRange::parse("notanumber").is_err());
+    }
+
+    #[test]
+    fn follow_cursor_forms_and_rejections() {
+        let ok = |s: &str| follow_cursor(s).expect("cursor should parse");
+        assert_eq!(ok("0"), 0);
+        assert_eq!(ok("5"), 5);
+        assert_eq!(ok("5.."), 5);
+        assert_eq!(ok(".."), 0);
+        // A bounded range can't be followed — there's no end to a stream.
+        assert!(follow_cursor("5..9").is_err());
+        assert!(follow_cursor("..9").is_err());
+        // Garbage and negatives never parse as a cursor.
+        assert!(follow_cursor("-1").is_err());
+        assert!(follow_cursor("nope").is_err());
     }
 
     #[test]

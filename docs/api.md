@@ -312,7 +312,7 @@ be skipped (docs/agent-workflow.md).
   ```
 - `GET /api/chains/{id}/events?cursor={c}` — a **Server-Sent Events**
   stream of the chain's log from `cursor` onward (the source behind
-  `nit wait`). `cursor` is the agent's 0-based offset (optional, defaults to
+  `nit wait` and `nit log --follow`). `cursor` is the agent's 0-based offset (optional, defaults to
   `0` = from the start; an agent always passes its tracked cursor). On
   connect the server immediately replays every entry already
   past `cursor` (the "missed" backlog), then streams each new entry as it is
@@ -323,8 +323,8 @@ be skipped (docs/agent-workflow.md).
   ```
   The stream is **raw**: the server emits every entry and makes no
   relevance judgement. Deciding which events matter — the **wake rule** — is
-  the client's job (data-model.md), so one endpoint serves both `nit wait`
-  and a future event-driven UI. There is no timeout and no server-side
+  the client's job (data-model.md), so one endpoint serves `nit wait`,
+  `nit log --follow`, and a future event-driven UI. There is no timeout and no server-side
   filtering; the stream ends only on graceful shutdown or client
   disconnect, and a client resumes by reconnecting with its advanced
   `cursor` (nothing is skipped — the backlog replay covers the gap). The
