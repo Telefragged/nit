@@ -74,6 +74,8 @@ const add = (nw: number, text: string): Line => ({
   text,
 });
 const del = (old: number, text: string): Line => ({ kind: "del", old, text });
+/** Mark a line as rebase drift (docs/api.md "Rebase-aware interdiffs"). */
+const drift = (line: Line): Line => ({ ...line, drift: true });
 
 /** The /COMMIT_MSG entry of a vs-parent diff: the whole message, all-add. */
 function msgFile(message: string): DiffFile {
@@ -719,6 +721,43 @@ const change11: ChangeRecord = {
                 add(14, "    let err = rotator.rotate(&seeded).unwrap_err();"),
                 add(15, "    assert_eq!(err, RotateError::ReuseDetected);"),
                 add(16, "}"),
+              ],
+            },
+          ],
+        },
+        // A rebase landed in this file: the agent's real edit (lookup, line
+        // 16) sits beside base movement (insert's signature, line 19) that
+        // the rebase pulled in. The drift renders contained and grey and is
+        // excluded from the counts (additions/deletions are the real edit
+        // only) — docs/api.md "Rebase-aware interdiffs".
+        {
+          path: "src/auth/store.rs",
+          status: "modified",
+          binary: false,
+          additions: 1,
+          deletions: 1,
+          hunks: [
+            {
+              old_start: 14,
+              old_lines: 8,
+              new_start: 14,
+              new_lines: 8,
+              header: "impl TokenStore",
+              lines: [
+                ctx(14, 14, "impl TokenStore {"),
+                ctx(
+                  15,
+                  15,
+                  "    pub fn lookup(&self, raw: &str) -> Option<&Entry> {",
+                ),
+                del(16, "        self.by_raw.get(raw)"),
+                add(16, "        self.by_raw.get(raw.trim())"),
+                ctx(17, 17, "    }"),
+                ctx(18, 18, ""),
+                drift(del(19, "    pub fn insert(&mut self, e: Entry) {")),
+                drift(add(19, "    pub fn insert(&mut self, entry: Entry) {")),
+                ctx(20, 20, "        self.dirty = true;"),
+                ctx(21, 21, "    }"),
               ],
             },
           ],

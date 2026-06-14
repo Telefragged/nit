@@ -184,6 +184,24 @@ const captures = [
       await page.waitForTimeout(200);
     },
   },
+  // Rebase drift contained: in the r1 → r2 interdiff, src/auth/store.rs
+  // carries the agent's real edit (green/red) beside grey, uncounted lines
+  // a rebase pulled in — the file count is the real edit only (docs/api.md
+  // "Rebase-aware interdiffs").
+  {
+    name: "review-drift",
+    path: "/changes/11",
+    fullPage: false,
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page.evaluate(() => {
+        document
+          .querySelector('[data-diff-path="src/auth/store.rs"]')
+          ?.scrollIntoView({ block: "center" });
+      });
+      await page.waitForTimeout(200);
+    },
+  },
   // Scroll spy: scrolled into the middle of the third file, so its header
   // is pinned under the diffbar and the rail highlights it (no click —
   // expand-all first, or the collapsed page has nothing to scroll into).

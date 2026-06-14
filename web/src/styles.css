@@ -26,6 +26,8 @@
   --del-bg: rgb(248 81 73 / 9%);
   --del-gutter: rgb(248 81 73 / 16%);
   --del-intraline: rgb(248 81 73 / 28%);
+  --drift-bg: rgb(110 118 129 / 13%);
+  --drift-gutter: rgb(110 118 129 / 22%);
   --mono:
     ui-monospace, "SF Mono", "JetBrains Mono", menlo, consolas,
     "Liberation Mono", monospace;
@@ -1103,6 +1105,29 @@ table.list tbody tr:hover {
   background: var(--bg-inset);
 }
 
+/* Rebase drift: lines changed by the base moving, not the agent
+   (docs/api.md "Rebase-aware interdiffs"). Tinted neutral grey so they read
+   as background movement — distinct from the agent's green/red edits — and
+   dimmed, since they do not count toward the diff. The triple class beats
+   the .code.add / .code.del background above. */
+.code.add.drift,
+.code.del.drift {
+  background: var(--drift-bg);
+}
+
+.g.add.drift,
+.g.del.drift {
+  background: var(--drift-gutter);
+}
+
+.code.drift .code-text {
+  opacity: 0.6;
+}
+
+.code.drift .sign {
+  color: var(--text-faint);
+}
+
 /* Intraline (word-level) emphasis inside modified line pairs. */
 .code.add .intraline {
   background: var(--add-intraline);
@@ -1112,6 +1137,12 @@ table.list tbody tr:hover {
 .code.del .intraline {
   background: var(--del-intraline);
   border-radius: 2px;
+}
+
+/* Drift lines stay uniformly grey — neutralise the add/del intraline tint
+   (this rule follows them, so equal specificity resolves in its favour). */
+.code.drift .intraline {
+  background: var(--gray-dim);
 }
 
 /* Commented text ranges (docs/api.md "Range comments"). Amber = needs

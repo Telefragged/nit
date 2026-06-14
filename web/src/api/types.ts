@@ -170,6 +170,9 @@ export interface Line {
   old?: number;
   /** New line number; absent for del. */
   new?: number;
+  /** Changed by a rebase, not the agent (docs/api.md "Rebase-aware
+   * interdiffs"). Absent (not false) on non-rebased diffs. */
+  drift?: boolean;
   /** Without trailing newline. */
   text: string;
 }

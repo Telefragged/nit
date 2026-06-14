@@ -88,6 +88,10 @@ function Code({
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
   a.file === file && a.side === side && a.line === line;
 
+/** Class suffix marking a rebase-drift line (docs/api.md "Rebase-aware
+ * interdiffs"), so its gutter and code cell render contained. */
+const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
+
 function HunkSeparator({ prev, hunk }: { prev: Hunk | undefined; hunk: Hunk }) {
   const skipped = skippedBefore(prev, hunk);
   return (
@@ -327,10 +331,14 @@ export default function DiffFileView({
     return hunk.lines.map((line, li) => (
       <Fragment key={li}>
         <div className="line-row">
-          <span className={`g ${line.kind}`}>{line.old ?? ""}</span>
-          <span className={`g ${line.kind}`}>{line.new ?? ""}</span>
+          <span className={`g ${line.kind}${driftClass(line)}`}>
+            {line.old ?? ""}
+          </span>
+          <span className={`g ${line.kind}${driftClass(line)}`}>
+            {line.new ?? ""}
+          </span>
           <span
-            className={`code ${line.kind}`}
+            className={`code ${line.kind}${driftClass(line)}`}
             data-old={line.old}
             data-new={line.new}
           >
@@ -357,11 +365,14 @@ export default function DiffFileView({
   function sideCell(line: Line | null, side: "old" | "new") {
     return (
       <>
-        <span className={`g ${line ? line.kind : "void"}`} data-side={side}>
+        <span
+          className={`g ${line ? line.kind : "void"}${driftClass(line)}`}
+          data-side={side}
+        >
           {line?.[side] ?? ""}
         </span>
         <span
-          className={`code half ${line ? line.kind : "void"}`}
+          className={`code half ${line ? line.kind : "void"}${driftClass(line)}`}
           data-side={side}
           data-old={side === "old" ? line?.old : undefined}
           data-new={side === "new" ? line?.new : undefined}
