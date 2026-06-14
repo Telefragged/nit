@@ -77,22 +77,37 @@ is already broken. An unpushed commit is invisible to the reviewer.
 
 ```sh
 cursor=0            # 0-based: the count of log entries you've consumed
+repo=$(pwd); branch=$(git branch --show-current)   # push/ready need both
 # after EVERY completed commit (green, treefmt-clean, one concern, Change-Id'd):
-nit push --partial  # register/refresh the chain as partial (sticky)
+nit push --partial --repo "$repo" --branch "$branch"  # register/refresh, partial
 # → FIRST push: report web_url to the user now — review starts on
 #   commit one, not when the branch is done
 # after the LAST commit:
-nit ready           # clears partial; the chain can now reach approved
+nit ready --repo "$repo" --branch "$branch"   # clears partial; reach approved
 nit wait $cursor    # blocks until entries land beyond $cursor; prints JSON
 ```
 
-**A running `nit wait` is mandatory — never finish a turn with the chain
-open and no wait parked on it.** The loop does not end at `nit ready` or at
-a `nit push`; it ends when the chain closes (`merged`/`abandoned`). The
-moment you `nit ready` (or push the last revision), start `nit wait $cursor`
-as a **background Bash task** and keep one running until the chain closes —
-a `ready`/pushed chain with no wait on it is a dropped review, as broken as
-an unpushed commit. Re-arm it after every push and reply.
+`--repo`/`--branch` are required — push has no cwd fallback (a stray push
+from the wrong checkout would fork a duplicate chain). **Prefer the
+follow-monitor**: Claude Code can relay a background process, so run
+`nit log --follow --oneline $cursor` as a background Bash task instead of
+polling `nit wait` — it streams each entry as it lands and you triage it
+(act on follow-ups now, queue unrelated comments). Keep `--oneline`: one
+parseable line per entry, not the token-heavy multi-line full JSON. It
+relays every entry
+raw (no wake rule) and advances no cursor — track the last `idx` and
+resume with `nit log --follow <idx+1>..`. `nit wait` is the fallback when a
+monitor is not available (docs/agent-workflow.md "Following the log
+instead of waiting").
+
+**A running watcher is mandatory — never finish a turn with the chain open
+and nothing watching it.** The loop does not end at `nit ready` or at a
+`nit push`; it ends when the chain closes (`merged`/`abandoned`). The
+moment you `nit ready` (or push the last revision), a `nit log --follow` or
+`nit wait $cursor` must be running as a **background Bash task** and stay up
+until the chain closes — a `ready`/pushed chain with no watcher is a
+dropped review, as broken as an unpushed commit. Re-arm `nit wait` after
+every push and reply; a follow monitor stays up on its own.
 
 `nit wait $cursor` returns `{head, entries, state, …}`. **Advance the
 cursor only from that result** (`cursor=<head>`); `push`/`reply` return no

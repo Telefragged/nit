@@ -162,7 +162,7 @@ is a fast-forward-only merge to `main` (no merge commits — golden rule 2):
 # treefmt-clean ("Formatting" above)
 git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' main
 git checkout main && git merge --ff-only <branch>
-nit push --branch <branch>      # scan flags the chain merged
+nit push --repo <worktree> --branch <branch>   # scan flags the chain merged
 git branch -d <branch>
 ```
 

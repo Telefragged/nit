@@ -83,13 +83,14 @@ The only thing that delays a push is the commit itself not being done.
 
 ```sh
 cursor=0
+repo=$(pwd); branch=$(git branch --show-current)   # push needs both explicitly
 # while building — after EVERY completed commit (green, formatter-clean,
 #   one concern, Change-Id'd), not once at the end:
-nit push --partial            # register/refresh the chain as partial
+nit push --partial --repo "$repo" --branch "$branch"   # register/refresh, partial
 #   the FIRST push creates the chain — report web_url to the human now;
 #   review starts on commit one.
-nit ready                     # last commit done: clears partial, refreshes —
-                              #   the chain can now reach approved
+nit ready --repo "$repo" --branch "$branch"   # last commit done: clears partial,
+                              #   refreshes — the chain can now reach approved
 
 # then drive the cursor loop until the chain closes:
 resp=$(nit wait $cursor)      # blocks until entries land beyond $cursor
@@ -98,25 +99,59 @@ cursor=<resp.head>            # advance over everything you just received
 #   for each `review` entry: fix → amend the commit it targets (local
 #     fixup! + autosquash onto the fork point), or answer with
 #     nit reply <comment-id> [--resolve] -m "…"
-nit push                      # the rewritten commits become new revisions
+nit push --repo "$repo" --branch "$branch"   # rewritten commits = new revisions
 # …then loop: nit wait $cursor again (returns your own entries first),
 #   advance, until state=approved or the chain closes
 # then run the project's approve action (commonly: rebase onto <base> if
 #   it moved, re-formatting each replayed commit, then fast-forward it)
-nit push                      # optional: next scan appends chain_closed{merged}
+nit push --repo "$repo" --branch "$branch"   # next scan appends chain_closed{merged}
 ```
 
-**Running `nit wait` is mandatory, not the optional tail of the loop.**
+A harness with a cooperative monitor can replace the `nit wait` loop with
+a `nit log --follow` tail — see "Following the log instead of waiting".
+
+**Watching the chain is mandatory, not the optional tail of the loop.**
 `nit ready` is never the last thing you do: the instant it returns, a
-`nit wait <cursor>` must be running — as a background task — and must stay
-running until the chain reaches `approved`, `merged`, or
-`abandoned`. A chain left `ready` (or pushed) with no wait parked on it is
-a dropped review: the reviewer's feedback lands and nothing ever reacts to
-it. Treat "ready/pushed without a wait" as a broken loop, exactly like an
-unpushed commit. Re-arm the wait after every push and reply; when it
-returns non-actionable (it woke on your own just-pushed entries), advance
-the cursor and wait again. The turn is not over while the chain is open —
-it is over when the chain closes.
+watcher — a `nit wait <cursor>` or a `nit log --follow` monitor — must be
+running as a background task, and must stay running until the chain
+reaches `approved`, `merged`, or `abandoned`. A chain left `ready`
+(or pushed) with nothing watching it is a dropped review: the reviewer's
+feedback lands and nothing ever reacts to it. Treat "ready/pushed with no
+watcher" as a broken loop, exactly like an unpushed commit. With `nit
+wait`, re-arm it after every push and reply; when it returns non-actionable
+(it woke on your own just-pushed entries), advance the cursor and wait
+again. The turn is not over while the chain is open — it is over when the
+chain closes.
+
+### Following the log instead of waiting
+
+`nit wait` blocks for one wake, then returns — it suits a harness that can
+only do one thing at a time. If yours has a **cooperative monitor** that
+relays a background process's output as it arrives (e.g. Claude Code),
+follow the log instead of polling `wait`:
+
+```sh
+git checkout -b "$branch"
+nit push --partial --repo "$(pwd)" --branch "$branch"   # an empty branch is fine:
+#   registers the chain so review can start the moment the first commit lands
+nit log --follow --oneline 0 &      # background monitor, from cursor 0
+# build commits, nit push --partial after each (the monitor relays your own
+#   `revisions` entries too); when you run dry, just stop and let the monitor
+#   sit — it relays the reviewer's entries as they land.
+```
+
+**Use `--oneline` for a monitor** (as above): each entry is one parseable
+line, whereas the default full-JSON payload is multi-line and token-heavy —
+both a parsing hazard and noise a monitor relays on every entry. Reach for
+the full payload only when inspecting a specific entry (via `nit log`).
+
+`nit log --follow` relays **every** entry raw — it applies no wake rule,
+so you triage each as it arrives: a comment on the change you are mid-fix
+on, act now; comments on a different change, queue them. It advances no
+cursor for you — track the last `idx` you handled and resume after a
+restart with `nit log --follow <idx+1>..`. `nit wait` stays the right tool
+for a harness without a monitor; the cursor and "watch until the chain
+closes" rules above apply to both.
 
 The push duty is **per branch, owned by whoever builds it**. In
 multi-agent setups (an orchestrator fanning out workers, one
@@ -130,15 +165,19 @@ pass (cleanup, self-review, verification) is no reason to hold the
 first push back. From the reviewer's seat, an unpushed branch is
 invisible work.
 
-- `nit push [--partial] [--base <ref>] [--branch <name>] [--server <url>]`
-  — defaults: branch = current HEAD branch, base = `main` (falls back to
-  `master`), server = `$NIT_SERVER` or `http://127.0.0.1:8877`. Prints the
-  chain JSON including `web_url` — tell the human where to review. Exit
-  ≠ 0 on scan errors; re-running is always safe (idempotent). `--partial`
-  marks the chain partial: review can start, merging cannot. Sticky — a
-  plain push never clears it. Returns no cursor (see "The cursor").
-- `nit ready [--base <ref>] [--branch <name>] [--server <url>]` — same
-  defaults; clears the partial flag and refreshes (idempotent).
+- `nit push --repo <path> --branch <name> [--partial] [--base <ref>] [--server <url>]`
+  — `--repo` and `--branch` are **required**: a chain's identity is that
+  pair, and there is no cwd fallback (deriving the path from the cwd
+  silently forks a duplicate chain when run from the wrong checkout).
+  Defaults: base = `main`, server = `$NIT_SERVER` or
+  `http://127.0.0.1:8877`. Prints the chain JSON including `web_url` — tell
+  the human where to review. Exit ≠ 0 on scan errors; re-running is always
+  safe (idempotent). `--partial` marks the chain partial: review can start,
+  merging cannot. Sticky — a plain push never clears it. Returns no cursor
+  (see "The cursor").
+- `nit ready --repo <path> --branch <name> [--base <ref>] [--server <url>]`
+  — same required args and defaults; clears the partial flag and refreshes
+  (idempotent).
 - `nit wait <cursor> [--oneline]` — consume the chain's `events` stream
   from the 0-based `cursor` and block until something you should act on
   lands, then print `{head, entries, state, …}` (Feedback fields plus
@@ -148,12 +187,20 @@ invisible work.
   immediately when you are already behind `head`. Survives server restarts:
   the stream reconnects through the outage with backoff (a single stderr
   notice per outage; stdout stays pure JSON).
-- `nit log <ranges> [--oneline] [--server <url>]` — print specific log
-  entries without touching your cursor: a bare index (`3`), a half-open
-  range (`3..6`), an open end (`3..`, `..6`, `..` for all), or several at
-  once (concatenated in order, duplicates kept). A reversed/empty range or
-  one reaching past the log is an error. For inspecting entries a `wait`
+- `nit log <ranges> [--oneline] [--chain <id>] [--server <url>]` — print
+  specific log entries without touching your cursor: a bare index (`3`), a
+  half-open range (`3..6`), an open end (`3..`, `..6`, `..` for all), or
+  several at once (concatenated in order, duplicates kept). A reversed/empty
+  range or one reaching past the log is an error. `--chain <id>` reads any
+  chain directly (no git repo needed). For inspecting entries a `wait`
   surfaced that you want the full detail on.
+- `nit log --follow <cursor> [--oneline] [--chain <id>] [--server <url>]` —
+  a live tail for cooperative monitors (see "Following the log instead of
+  waiting"): replays `[cursor, head)` then streams each new entry as it
+  lands, relaying every one raw (no wake rule — you triage). `<cursor>` is
+  a single open form (`0`, `5..`, or `..`). Prefer `--oneline` in a monitor
+  — one parseable line per entry, not the multi-line, token-heavy full JSON.
+  Rides out server restarts; runs until stopped.
 - `nit status` — current Feedback JSON without blocking (no entries, no
   cursor).
 - `nit reply <comment-id> [--resolve | --unresolve] -m "text"` — threaded
