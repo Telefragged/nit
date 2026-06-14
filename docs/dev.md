@@ -117,9 +117,6 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
   rebase/merge recipe). Tear it down after landing:
   `git worktree remove .worktrees/<slug>` then `git branch -d track/<slug>`.
 
-- End commit messages with `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
-  when Claude wrote them.
-
 ## Landing changes — the nit review loop
 
 This repo dogfoods itself: finished work is pushed as a nit chain and
