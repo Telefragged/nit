@@ -28,6 +28,12 @@ nit wait             # block until the reviewer acts; prints feedback JSON
 # all approved → merge; chain disappears
 ```
 
+With a cooperative monitor, tail instead of blocking on `nit wait`:
+
+```sh
+nit log --follow --reviewer-only   # stream reviewer activity as it lands
+```
+
 Details for agents: [docs/agent-workflow.md](docs/agent-workflow.md).
 
 ## Hacking
