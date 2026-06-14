@@ -1595,7 +1595,7 @@ export async function mockRequest(
 
   if ((m = /^\/chains\/(\d+)$/.exec(p)) && method === "GET") {
     const chain = chains.find((c) => c.id === Number(m![1]));
-    if (!chain) notFound(`chain ${m[1]}`);
+    if (!chain) notFound(`chain ${m[1] ?? ""}`);
     return chainView(chain!);
   }
 
@@ -1648,7 +1648,7 @@ export async function mockRequest(
     const c = comments.find(
       (x) => x.id === Number(m![1]) && x.state === "draft",
     );
-    if (!c) notFound(`draft ${m[1]}`);
+    if (!c) notFound(`draft ${m[1] ?? ""}`);
     const req = body as { body: string; resolved?: boolean };
     c!.body = req.body;
     if (req.resolved !== undefined) c!.resolved = req.resolved;
@@ -1660,7 +1660,7 @@ export async function mockRequest(
     const i = comments.findIndex(
       (x) => x.id === Number(m![1]) && x.state === "draft",
     );
-    if (i < 0) notFound(`draft ${m[1]}`);
+    if (i < 0) notFound(`draft ${m[1] ?? ""}`);
     comments.splice(i, 1);
     return undefined;
   }

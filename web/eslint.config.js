@@ -59,8 +59,17 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
 
+      // strictTypeChecked's restrict-template-expressions rejects every
+      // non-string interpolation, numbers included. Allow numbers back: a
+      // number coerces to its decimal string predictably, so `${count}` is
+      // clear — whereas objects ("[object Object]") and nullish
+      // ("undefined"), the rule's real targets, stay rejected.
+      "@typescript-eslint/restrict-template-expressions": [
+        "error",
+        { allowNumber: true },
+      ],
+
       // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
-      "@typescript-eslint/restrict-template-expressions": "off", // 68
       "@typescript-eslint/no-non-null-assertion": "off", // 55
       "react-refresh/only-export-components": "off", // 3 (override above)
       "react-hooks/set-state-in-effect": "off", // 2
