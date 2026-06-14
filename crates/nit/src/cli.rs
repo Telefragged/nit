@@ -168,17 +168,26 @@ fn register(
     Ok(())
 }
 
-/// Consume the chain's `/events` SSE stream from the agent-owned `cursor`
-/// and block until something the agent should act on lands, then print
-/// `{head, entries, feedback}`. There is no timeout — the agent calls this
-/// only when it has nothing else to do, and it blocks until the reviewer
-/// acts. The wake rule lives here, not on the server (docs/data-model.md):
-/// every event wakes **except** a reviewer approve with no comments that
-/// does not complete the chain — those are accumulated and handed back with
-/// the next waking event, never dropped. The agent advances its cursor to
-/// the returned `head`; it never learns the cursor from a mutating call, so
-/// an interleaved reviewer entry can't be skipped (docs/agent-workflow.md).
-/// Rides out server restarts: the stream reconnects at the current cursor.
+/// Block until the chain's log holds something the agent should act on past
+/// `cursor`, then print `{head, entries, feedback}`. There is no timeout —
+/// the agent calls this only when it has nothing else to do.
+///
+/// Each pass **drains the whole backlog `[cursor, head)` from the log in one
+/// read** (the log is the source of truth) and applies the wake rule to that
+/// run: every entry wakes **except** a reviewer approve with no comments that
+/// does not complete the chain. Those non-waking approves stay in the run and
+/// are handed back with the next waking entry, never dropped. When the whole
+/// run is non-waking (or empty), `/events` serves purely as a doorbell —
+/// block until the head advances — then re-drain. Reading the run from the
+/// log rather than returning the first streamed frame is what makes a single
+/// `wait` surface *every* entry since the cursor, not just the first
+/// (docs/agent-workflow.md "The cursor"). The wake rule lives here, not on
+/// the server (docs/data-model.md).
+///
+/// The agent advances its cursor to the returned `head`; it never learns the
+/// cursor from a mutating call, so an interleaved reviewer entry can't be
+/// skipped (docs/agent-workflow.md). Rides out server restarts: both the log
+/// read and the doorbell reconnect at the current cursor.
 ///
 /// # Errors
 /// When the server returns an error or a malformed response.
@@ -187,52 +196,57 @@ pub fn wait(args: WaitArgs) -> Result<()> {
     let retry = Retry::UntilUp { deadline: None };
     let chain_id = resolve_chain(&client, retry)?;
     let mut cursor = args.cursor;
-    // Accumulated since `cursor` — so a return carries the complete run,
-    // including any non-waking approves we read past.
+    // Accumulated across drains since `cursor`, so a return carries the
+    // complete run — including any non-waking approves we read past.
     let mut entries: Vec<Value> = Vec::new();
 
-    'reconnect: loop {
-        let mut stream = client.get_stream(
-            &format!("/api/chains/{chain_id}/events?cursor={cursor}"),
-            retry,
-        )?;
-        loop {
-            // End of stream (graceful shutdown) or a severed connection:
-            // reconnect at the cursor we have reached.
-            let Ok(Some(data)) = next_sse_data(&mut stream) else {
-                continue 'reconnect;
-            };
-            // A malformed frame is a protocol violation the server never
-            // emits; fail loudly rather than silently drop the event.
-            let entry: Value = serde_json::from_str(&data)
-                .with_context(|| format!("malformed event from the server: {data:?}"))?;
-            cursor = entry["idx"].as_u64().map_or(cursor, |i| i + 1);
-            entries.push(entry.clone());
+    loop {
+        // Drain the whole backlog [cursor, head) in one read; the event
+        // stream below is only a wake-up, the log is what we return.
+        let log = client.get_retry(&format!("/api/chains/{chain_id}/log?from={cursor}"), retry)?;
+        if let Some(arr) = log["entries"].as_array() {
+            entries.extend(arr.iter().cloned());
+        }
+        cursor = log["head"].as_u64().unwrap_or(cursor);
 
-            // A pure approve wakes only when it *completes* the chain, so we
-            // need the resulting state for that case (and only that case);
-            // every other event wakes unconditionally.
-            let feedback = if is_pure_approve(&entry) {
-                Some(client.get(&format!("/api/chains/{chain_id}/feedback"))?)
-            } else {
-                None
-            };
-            let state = feedback
-                .as_ref()
-                .and_then(|fb| fb["state"].as_str())
-                .unwrap_or("");
-            if event_wakes(&entry, state) {
-                let feedback = match feedback {
-                    Some(fb) => fb,
-                    None => client.get(&format!("/api/chains/{chain_id}/feedback"))?,
-                };
+        // Wake if any entry in the run wakes given the resulting state (a pure
+        // approve wakes only when it completes the chain). Feedback is both
+        // that wake input and part of the response.
+        if !entries.is_empty() {
+            let feedback = client.get(&format!("/api/chains/{chain_id}/feedback"))?;
+            let state = feedback["state"].as_str().unwrap_or("");
+            if entries.iter().any(|e| event_wakes(e, state)) {
                 let resp = json!({"head": cursor, "entries": entries, "feedback": feedback});
                 print_wait(&resp, args.oneline)?;
                 return Ok(());
             }
-            // A non-completing pure approve: keep it accumulated and keep
-            // reading — it never surfaces a parked wait on its own.
         }
+
+        // Nothing actionable yet (empty, or only non-completing pure
+        // approves): block until the head advances, then loop to re-drain.
+        wait_for_entry(&client, chain_id, cursor, retry)?;
+    }
+}
+
+/// Block until the chain's log advances past `cursor`, riding out server
+/// restarts. The `/events` stream is consumed only as a doorbell — the caller
+/// re-reads the new entries from `/log` — so this returns on the first real
+/// frame (keep-alive comments are skipped); end-of-stream or a severed
+/// connection just reconnects at `cursor`.
+///
+/// # Errors
+/// When connecting to the stream fails fatally (a transient outage retries).
+fn wait_for_entry(client: &Client, chain_id: u64, cursor: u64, retry: Retry) -> Result<()> {
+    loop {
+        let mut stream = client.get_stream(
+            &format!("/api/chains/{chain_id}/events?cursor={cursor}"),
+            retry,
+        )?;
+        if let Ok(Some(_)) = next_sse_data(&mut stream) {
+            return Ok(()); // an entry landed — go re-drain the log
+        }
+        // Stream ended (graceful shutdown) or severed before any entry:
+        // reconnect at the same cursor.
     }
 }
 

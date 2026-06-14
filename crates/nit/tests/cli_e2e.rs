@@ -31,12 +31,15 @@ fn push_wait_status_reply_loop() {
     assert_eq!(feedback["state"], "waiting_for_review");
     assert_eq!(feedback["actionable"], false);
 
-    // wait 0: returns immediately with the entries since the start and the
-    // current (not-actionable) state — cursor 0 is behind head, so it does
-    // not block.
+    // wait 0: returns immediately with the whole backlog since the start and
+    // the current (not-actionable) state — cursor 0 is behind head, so it
+    // does not block.
     let (ok, resp, stderr) = nit(&server, &g, &["wait", "0"]);
     assert!(ok, "{stderr}");
     assert_eq!(resp["feedback"]["state"], "waiting_for_review");
+    assert_eq!(resp["head"], 1, "{resp}");
+    assert_eq!(resp["entries"].as_array().unwrap().len(), 1, "{resp}");
+    assert_eq!(resp["entries"][0]["kind"], "revisions");
 
     // Reviewer acts (over HTTP, as the browser would).
     let (st, draft) = http_post(
@@ -51,11 +54,24 @@ fn push_wait_status_reply_loop() {
     );
     assert_eq!(st, 200);
 
-    // wait 0 now returns the new entries with the actionable feedback.
+    // wait 0 now returns the WHOLE run since the cursor — the initial
+    // `revisions` push *and* the reviewer's `review` — not just the first
+    // entry, with the actionable feedback.
     let (ok, resp, stderr) = nit(&server, &g, &["wait", "0"]);
     assert!(ok, "{stderr}");
     assert_eq!(resp["feedback"]["state"], "agents_turn");
     assert_eq!(resp["feedback"]["actionable"], true);
+    assert_eq!(resp["head"], 2, "{resp}");
+    let entries = resp["entries"].as_array().unwrap();
+    assert_eq!(
+        entries.len(),
+        2,
+        "wait must drain the whole backlog: {resp}"
+    );
+    assert_eq!(entries[0]["kind"], "revisions");
+    assert_eq!(entries[0]["idx"], 0);
+    assert_eq!(entries[1]["kind"], "review");
+    assert_eq!(entries[1]["idx"], 1);
     assert_eq!(
         resp["feedback"]["changes"][0]["comments"][0]["id"].as_i64(),
         Some(comment_id)
@@ -170,4 +186,41 @@ fn cli_errors_are_human_readable() {
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("run 'nit push' first"), "{stderr}");
+}
+
+// A new revision of an existing change (amend → new sha, same Change-Id) is a
+// fresh `revisions` entry; one `nit wait` from behind it must surface it, not
+// stop at an earlier entry. Regression: `wait` used to return only the first
+// waking frame, leaving later entries — the new revision among them — stuck in
+// the backlog until a subsequent wait.
+#[test]
+fn wait_surfaces_a_new_revision_behind_an_earlier_entry() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    // push r1 of change Ia -> revisions@0
+    let (ok, _c, stderr) = nit(&server, &g, &["push"]);
+    assert!(ok, "{stderr}");
+    // amend (same Change-Id Ia, new content -> new sha) = r2; push -> revisions@1
+    let c1b = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nB\n")]);
+    g.branch("feat", c1b);
+    let (ok, _c, stderr) = nit(&server, &g, &["push"]);
+    assert!(ok, "{stderr}");
+
+    // One wait from cursor 0 returns the whole run, the new revision included.
+    let (ok, resp, stderr) = nit(&server, &g, &["wait", "0"]);
+    assert!(ok, "{stderr}");
+    assert_eq!(resp["head"], 2, "{resp}");
+    let entries = resp["entries"].as_array().unwrap();
+    assert_eq!(
+        entries.len(),
+        2,
+        "wait must drain the whole backlog: {resp}"
+    );
+    assert_eq!(entries[1]["idx"], 1);
+    assert_eq!(entries[1]["payload"]["added"][0]["number"], 2);
+    assert_eq!(entries[1]["payload"]["added"][0]["change_key"], "Ia");
 }
