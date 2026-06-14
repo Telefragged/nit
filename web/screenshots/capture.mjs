@@ -97,6 +97,33 @@ const captures = [
     path: "/changes/11",
     fullPage: false,
   },
+  // The resolve editor: Reply on the resolved commit-message thread opens the
+  // box with the gerrit-style Resolved checkbox (defaulting to the thread's
+  // state) beside Cancel / Save draft.
+  {
+    name: "review-resolve-editor",
+    path: "/changes/11",
+    fullPage: false,
+    actions: async (page) => {
+      await page.getByRole("button", { name: "Reply" }).first().click();
+      await page.waitForSelector(".resolve-check");
+    },
+  },
+  // Drafted thread resolution (docs/api.md "Thread resolution"): Reopen the
+  // resolved commit-message thread, then save the resolution-only draft. The
+  // editor's Resolved checkbox, the pending OPEN badge with its "· unsaved"
+  // hint, and the "Reopening this thread" draft are all visible.
+  {
+    name: "review-resolve-drafted",
+    path: "/changes/11",
+    fullPage: false,
+    actions: async (page) => {
+      await page.getByRole("button", { name: "Reopen" }).first().click();
+      await page.waitForSelector(".resolve-check");
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await page.waitForSelector(".comment-resolution-only");
+    },
+  },
   // Side-by-side, base → r2: new-side drafts sit under the right column,
   // the old-side draft under the left (docs/api.md "Comment placement").
   {

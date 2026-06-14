@@ -88,3 +88,36 @@ export function threadCountByRevision(
 export function commentCountLabel(n: number): string {
   return `${n} comment${n === 1 ? "" : "s"}`;
 }
+
+/**
+ * A thread's resolution as it *would* be after the reviewer's pending drafts
+ * publish (docs/api.md "Thread resolution"): the newest draft in the thread
+ * carries the staged decision, so it wins over the published root's state;
+ * with no drafts, the published root's `resolved` stands. `root` and
+ * `replies` are one thread (root included so a draft-only thread works).
+ */
+export function pendingResolved(root: Comment, replies: Comment[]): boolean {
+  const staged = [root, ...replies]
+    .filter((c) => c.state === "draft")
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .at(-1);
+  return staged ? staged.resolved : root.resolved;
+}
+
+/**
+ * How many of a change's threads are unresolved once pending drafts apply —
+ * the reviewer-side count shown in the review bar (the server's published
+ * count is separate). Counts roots (published or draft) by
+ * {@link pendingResolved}.
+ */
+export function pendingUnresolvedCount(comments: readonly Comment[]): number {
+  return comments
+    .filter((c) => c.parent_id === null)
+    .filter(
+      (root) =>
+        !pendingResolved(
+          root,
+          comments.filter((c) => c.parent_id === root.id),
+        ),
+    ).length;
+}

@@ -211,6 +211,9 @@ export interface Comment {
   line_text: string | null;
   body: string;
   state: CommentState;
+  /** Thread resolution (docs/api.md "Thread resolution"): on a published
+   * root the thread's current state, on a published reply always false, on
+   * a draft the decision staged on its resolve checkbox. */
   resolved: boolean;
   review_id: number | null;
   created_at: string;
@@ -229,10 +232,15 @@ export interface CreateDraftRequest {
   range?: CommentRange;
   body: string;
   parent_id?: number | null;
+  /** Staged thread-resolution decision (docs/api.md "Thread resolution"); a
+   * reply draft may stage one with an empty body. */
+  resolved?: boolean;
 }
 
 export interface UpdateDraftRequest {
   body: string;
+  /** Re-stage the resolution decision. */
+  resolved?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +262,9 @@ export interface SubmitReviewResponse {
 
 export interface ReplyRequest {
   body: string;
-  resolve: boolean;
+  /** Thread-resolution decision: true resolves, false reopens, omitted
+   * leaves it unchanged. */
+  resolved?: boolean;
 }
 
 export interface Feedback {
@@ -300,7 +310,7 @@ export interface FeedbackReview {
 export interface LogEntry {
   /** 0-based position in the chain's log. */
   idx: number;
-  /** revisions | review | reply | resolve | partial | chain_closed */
+  /** revisions | review | reply | partial | chain_closed */
   kind: string;
   created_at: string;
   /** Kind-specific; shapes in data-model.md "Payloads". */

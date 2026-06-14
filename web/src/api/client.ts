@@ -12,6 +12,7 @@ import type {
   Health,
   SubmitReviewRequest,
   SubmitReviewResponse,
+  UpdateDraftRequest,
 } from "./types";
 
 export class ApiError extends Error {
@@ -89,17 +90,11 @@ export const getDiff = (changeId: number, revision: number, against?: number) =>
 export const createDraft = (changeId: number, draft: CreateDraftRequest) =>
   request<Comment>("POST", `/changes/${changeId}/drafts`, draft);
 
-export const updateDraft = (id: number, body: string) =>
-  request<Comment>("PATCH", `/drafts/${id}`, { body });
+export const updateDraft = (id: number, req: UpdateDraftRequest) =>
+  request<Comment>("PATCH", `/drafts/${id}`, req);
 
 export const deleteDraft = (id: number) =>
   request<void>("DELETE", `/drafts/${id}`);
-
-export const resolveComment = (id: number) =>
-  request<Comment>("POST", `/comments/${id}/resolve`);
-
-export const unresolveComment = (id: number) =>
-  request<Comment>("POST", `/comments/${id}/unresolve`);
 
 // ---------------------------------------------------------------------------
 // Reviews

@@ -90,11 +90,18 @@ happens.
     TO. Ranged threads tint their selected text amber on the matching
     column; the open editor's pending selection tints brighter. Published
     comments render as threads (replies via `parent_id`, author chrome for
-    reviewer/agent, resolve toggle) under their anchored line; a comment on
+    reviewer/agent) under their anchored line; a comment on
     a displayed side but outside the rendered hunks groups at the top of
     its file with its `line_text` excerpt; drafts get a dashed border +
-    `DRAFT` tag and edit/delete;
-  - review bar (sticky bottom): draft count, unresolved count, and a
+    `DRAFT` tag and edit/delete. Thread resolution is **drafted**, gerrit-style
+    (docs/api.md "Thread resolution"): Reply / Resolve / Reopen all open the
+    editor with a `Resolved` checkbox (default: the thread's current state,
+    checked, unchecked respectively), saving a draft reply — empty body
+    allowed when only the checkbox changed (it renders "Resolving/Reopening
+    this thread"). The badge shows the **pending** state with a `· unsaved`
+    hint, applied to the thread when the review submits;
+  - review bar (sticky bottom): draft count, unresolved count (pending —
+    counting the resolve decisions still staged in drafts), and a
     `Review (a)` button (shortcut `a`) opening the reply modal:
     cover-message textarea, buttons `Approve` / `Request changes` /
     `Comment` → POST review, then navigate to the next pending change in

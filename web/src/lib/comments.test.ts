@@ -5,6 +5,8 @@ import {
   commentCountLabel,
   commentPlacement,
   draftAnchor,
+  pendingResolved,
+  pendingUnresolvedCount,
   threadCountByRevision,
 } from "./comments";
 
@@ -150,6 +152,89 @@ describe("threadCountByRevision", () => {
 
   it("is empty for no comments", () => {
     expect(threadCountByRevision([]).size).toBe(0);
+  });
+});
+
+/** A comment with explicit resolution fields for the pending-state tests. */
+const c = (over: Partial<Comment> & { id: number }): Comment => ({
+  ...comment(over.id, over.revision ?? 1, over.parent_id ?? null, over.state),
+  created_at: "2026-01-01T00:00:00Z",
+  ...over,
+});
+
+describe("pendingResolved", () => {
+  it("uses the published root when there are no drafts", () => {
+    expect(pendingResolved(c({ id: 1, resolved: true }), [])).toBe(true);
+    expect(pendingResolved(c({ id: 1, resolved: false }), [])).toBe(false);
+  });
+
+  it("lets a draft reply override the published root", () => {
+    const root = c({ id: 1, resolved: false, created_at: "t0" });
+    const reply = c({
+      id: 2,
+      parent_id: 1,
+      state: "draft",
+      resolved: true,
+      created_at: "t1",
+    });
+    expect(pendingResolved(root, [reply])).toBe(true);
+  });
+
+  it("takes the newest draft when several stage decisions", () => {
+    const root = c({ id: 1, resolved: false, created_at: "t0" });
+    const r1 = c({
+      id: 2,
+      parent_id: 1,
+      state: "draft",
+      resolved: true,
+      created_at: "t1",
+    });
+    const r2 = c({
+      id: 3,
+      parent_id: 1,
+      state: "draft",
+      resolved: false,
+      created_at: "t2",
+    });
+    expect(pendingResolved(root, [r1, r2])).toBe(false);
+  });
+
+  it("reads a draft-only thread's own decision", () => {
+    expect(
+      pendingResolved(c({ id: 1, state: "draft", resolved: true }), []),
+    ).toBe(true);
+  });
+});
+
+describe("pendingUnresolvedCount", () => {
+  it("counts threads open once pending drafts apply", () => {
+    const comments = [
+      // published resolved root + a draft reply reopening it → unresolved
+      c({ id: 1, resolved: true, created_at: "t0" }),
+      c({
+        id: 2,
+        parent_id: 1,
+        state: "draft",
+        resolved: false,
+        created_at: "t1",
+      }),
+      // published unresolved root + a draft reply resolving it → resolved
+      c({ id: 3, resolved: false, created_at: "t0" }),
+      c({
+        id: 4,
+        parent_id: 3,
+        state: "draft",
+        resolved: true,
+        created_at: "t1",
+      }),
+      // a plain unresolved published thread → unresolved
+      c({ id: 5, resolved: false }),
+    ];
+    expect(pendingUnresolvedCount(comments)).toBe(2);
+  });
+
+  it("is zero with no comments", () => {
+    expect(pendingUnresolvedCount([])).toBe(0);
   });
 });
 

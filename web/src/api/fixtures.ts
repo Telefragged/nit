@@ -1634,7 +1634,7 @@ export async function mockRequest(
       line_text: snapshotLineText(c, req.revision, req.file, req.line, side),
       body: req.body,
       state: "draft",
-      resolved: false,
+      resolved: req.resolved ?? false,
       review_id: null,
       created_at: now,
       updated_at: now,
@@ -1648,7 +1648,9 @@ export async function mockRequest(
       (x) => x.id === Number(m![1]) && x.state === "draft",
     );
     if (!c) notFound(`draft ${m[1]}`);
-    c!.body = (body as { body: string }).body;
+    const req = body as { body: string; resolved?: boolean };
+    c!.body = req.body;
+    if (req.resolved !== undefined) c!.resolved = req.resolved;
     c!.updated_at = new Date().toISOString();
     return renderComment(c!);
   }
@@ -1660,23 +1662,6 @@ export async function mockRequest(
     if (i < 0) notFound(`draft ${m[1]}`);
     comments.splice(i, 1);
     return undefined;
-  }
-
-  if (
-    (m = /^\/comments\/(\d+)\/(resolve|unresolve)$/.exec(p)) &&
-    method === "POST"
-  ) {
-    const c = comments.find((x) => x.id === Number(m![1]));
-    if (!c || c.parent_id !== null) notFound(`root comment ${m[1]}`);
-    const resolved = m[2] === "resolve";
-    // Thread-level bool: mirror onto replies so every view agrees.
-    for (const x of comments) {
-      if (x.id === c!.id || x.parent_id === c!.id) {
-        x.resolved = resolved;
-        x.updated_at = new Date().toISOString();
-      }
-    }
-    return renderComment(c!);
   }
 
   if ((m = /^\/changes\/(\d+)\/reviews$/.exec(p)) && method === "POST") {
@@ -1701,13 +1686,30 @@ export async function mockRequest(
     };
     c.reviews.push(review);
     const published: Comment[] = [];
-    for (const x of comments) {
-      if (x.change_id === c.id && x.state === "draft") {
-        x.state = "published";
-        x.review_id = review.id;
-        x.updated_at = now;
-        published.push(renderComment(x));
+    // Drain drafts in creation order, applying each staged resolution to its
+    // thread root (last wins); an empty-body draft resolves without becoming
+    // a comment (docs/api.md "Thread resolution").
+    const drafts = comments
+      .filter((x) => x.change_id === c.id && x.state === "draft")
+      .sort((a, b) => a.id - b.id);
+    for (const d of drafts) {
+      // Apply the staged resolution to the thread root (read before the reply
+      // reset below) — last draft in creation order wins.
+      const root = comments.find((x) => x.id === (d.parent_id ?? d.id));
+      if (root) {
+        root.resolved = d.resolved;
+        root.updated_at = now;
       }
+      if (d.body.trim() === "") {
+        comments.splice(comments.indexOf(d), 1);
+        continue;
+      }
+      d.state = "published";
+      d.review_id = review.id;
+      d.updated_at = now;
+      // A reply's own resolved is false; the thread's state lives on its root.
+      if (d.parent_id !== null) d.resolved = false;
+      published.push(renderComment(d));
     }
     const statusByVerdict: Record<Verdict, ChangeStatus> = {
       approve: "approved",

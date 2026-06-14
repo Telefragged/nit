@@ -1,13 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import {
-  createDraft,
-  deleteDraft,
-  resolveComment,
-  unresolveComment,
-  updateDraft,
-} from "../api/client";
+import { createDraft, deleteDraft, updateDraft } from "../api/client";
 import type { Comment } from "../api/types";
+import { pendingResolved } from "../lib/comments";
 import { timeAgo } from "../lib/time";
 import CommentEditor from "./CommentEditor";
 
@@ -29,7 +24,8 @@ function CommentView({
     queryClient.invalidateQueries({ queryKey: ["change", changeId] });
 
   const update = useMutation({
-    mutationFn: (body: string) => updateDraft(comment.id, body),
+    mutationFn: (vars: { body: string; resolved?: boolean }) =>
+      updateDraft(comment.id, vars),
     onSuccess: () => {
       setEditing(false);
       void invalidate();
@@ -41,6 +37,12 @@ function CommentView({
   });
 
   const isDraft = comment.state === "draft";
+  // A reply draft carries a resolve decision; offer the checkbox when editing
+  // it. A root/new-comment draft has none (docs/api.md "Thread resolution").
+  const editResolved =
+    comment.parent_id !== null ? comment.resolved : undefined;
+  // An empty-body draft stages a resolution only — render the intent.
+  const resolutionOnly = isDraft && comment.body.trim().length === 0;
 
   return (
     <div className={`comment ${isDraft ? "comment-draft" : ""}`}>
@@ -68,10 +70,15 @@ function CommentView({
       {editing ? (
         <CommentEditor
           initial={comment.body}
+          initialResolved={editResolved}
           saving={update.isPending}
-          onSave={(body) => update.mutate(body)}
+          onSave={(body, resolved) => update.mutate({ body, resolved })}
           onCancel={() => setEditing(false)}
         />
+      ) : resolutionOnly ? (
+        <div className="comment-body comment-resolution-only">
+          {comment.resolved ? "Resolving this thread" : "Reopening this thread"}
+        </div>
       ) : (
         <div className="comment-body">{comment.body}</div>
       )}
@@ -79,9 +86,16 @@ function CommentView({
   );
 }
 
+/** The draft editor a thread opens: `resolved` is the resolve-checkbox
+ * default (reply keeps the thread's state, resolve/reopen flips it), and
+ * `isReply` only picks the placeholder (docs/api.md "Thread resolution"). */
+type ThreadEditor = { isReply: boolean; resolved: boolean };
+
 /**
- * A comment thread: root + replies, resolve toggle (root, reviewer-side),
- * reply-as-draft. Draft members get dashed chrome via .comment-draft.
+ * A comment thread: root + replies, with reply / resolve / reopen actions
+ * that each open the editor with the resolve checkbox pre-set. The decision
+ * is staged on a draft reply and applied when the review publishes; the badge
+ * shows the pending state. Draft members get dashed chrome via .comment-draft.
  */
 export default function CommentThread({
   thread,
@@ -91,33 +105,32 @@ export default function CommentThread({
   changeId: number;
 }) {
   const queryClient = useQueryClient();
-  const [replying, setReplying] = useState(false);
+  const [editor, setEditor] = useState<ThreadEditor | null>(null);
   const { root, replies } = thread;
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["change", changeId] });
 
-  const toggleResolve = useMutation({
-    mutationFn: () =>
-      root.resolved ? unresolveComment(root.id) : resolveComment(root.id),
-    onSuccess: invalidate,
-  });
+  // The thread's resolution as it will be after pending drafts publish.
+  const resolved = pendingResolved(root, replies);
+  const pending = resolved !== root.resolved;
 
-  // Replies copy the root's whole anchor — including its revision, so the
-  // copied file/line/range stay the coordinates they were written in
-  // (the server's own agent replies do the same).
-  const reply = useMutation({
-    mutationFn: (body: string) =>
+  // Reply / resolve / reopen all stage a draft reply that copies the root's
+  // whole anchor — including its revision, so the copied file/line/range stay
+  // the coordinates they were written in (the server's agent replies match).
+  const stage = useMutation({
+    mutationFn: (vars: { body: string; resolved?: boolean }) =>
       createDraft(changeId, {
         revision: root.revision,
         ...(root.file !== null ? { file: root.file } : {}),
         ...(root.line !== null ? { line: root.line } : {}),
         side: root.side,
         ...(root.range !== null ? { range: root.range } : {}),
-        body,
+        body: vars.body,
         parent_id: root.id,
+        ...(vars.resolved !== undefined ? { resolved: vars.resolved } : {}),
       }),
     onSuccess: () => {
-      setReplying(false);
+      setEditor(null);
       void invalidate();
     },
   });
@@ -127,41 +140,52 @@ export default function CommentThread({
   return (
     <div
       className={`thread ${isDraftThread ? "thread-draft" : ""} ${
-        root.resolved ? "thread-resolved" : ""
+        resolved ? "thread-resolved" : ""
       }`}
     >
       <CommentView comment={root} changeId={changeId} />
       {replies.map((r) => (
         <CommentView key={r.id} comment={r} changeId={changeId} />
       ))}
-      {replying ? (
+      {editor ? (
         <CommentEditor
-          placeholder="Reply…"
-          saving={reply.isPending}
-          onSave={(body) => reply.mutate(body)}
-          onCancel={() => setReplying(false)}
+          placeholder={editor.isReply ? "Reply…" : "Comment (optional)…"}
+          initialResolved={editor.resolved}
+          resolvedFrom={resolved}
+          saving={stage.isPending}
+          onSave={(body, res) => stage.mutate({ body, resolved: res })}
+          onCancel={() => setEditor(null)}
         />
       ) : null}
       {!isDraftThread ? (
         <div className="thread-actions">
-          {root.resolved ? (
-            <span className="badge badge-green">RESOLVED</span>
-          ) : (
-            <span className="badge badge-amber">OPEN</span>
-          )}
-          <span className="spacer" />
-          {!replying ? (
-            <button className="linkish" onClick={() => setReplying(true)}>
-              Reply
-            </button>
+          <span className={`badge ${resolved ? "badge-green" : "badge-amber"}`}>
+            {resolved ? "RESOLVED" : "OPEN"}
+          </span>
+          {pending ? (
+            <span className="dim" title="applies when you submit the review">
+              · unsaved
+            </span>
           ) : null}
-          <button
-            className="linkish"
-            onClick={() => toggleResolve.mutate()}
-            disabled={toggleResolve.isPending}
-          >
-            {root.resolved ? "Reopen" : "Resolve"}
-          </button>
+          <span className="spacer" />
+          {editor === null ? (
+            <>
+              <button
+                className="linkish"
+                onClick={() => setEditor({ isReply: true, resolved })}
+              >
+                Reply
+              </button>
+              <button
+                className="linkish"
+                onClick={() =>
+                  setEditor({ isReply: false, resolved: !resolved })
+                }
+              >
+                {resolved ? "Reopen" : "Resolve"}
+              </button>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

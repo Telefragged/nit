@@ -1151,8 +1151,31 @@ table.list tbody tr:hover {
 .editor-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
   justify-content: flex-end;
   margin-top: 6px;
+}
+.editor-actions .spacer {
+  flex: 1;
+}
+/* gerrit-style resolve checkbox beside the editor's buttons */
+.resolve-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.resolve-check input {
+  cursor: pointer;
+}
+/* an empty-body draft that only stages a resolve/reopen */
+.comment-resolution-only {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-dim);
 }
 .btn-primary {
   border-color: rgba(88, 166, 255, 0.55);

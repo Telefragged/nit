@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, submitReview } from "../api/client";
 import type { Chain, ChangeDetail, Verdict } from "../api/types";
+import { pendingUnresolvedCount } from "../lib/comments";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "./CommentEditor";
 
@@ -37,9 +38,9 @@ export default function ReviewBar({
   useAutosize(textareaRef, message);
 
   const drafts = change.comments.filter((c) => c.state === "draft").length;
-  const unresolved = change.comments.filter(
-    (c) => c.state === "published" && c.parent_id === null && !c.resolved,
-  ).length;
+  // Pending: counts threads that would stay open once the staged drafts
+  // publish, so the reviewer sees the effect of their resolve decisions.
+  const unresolved = pendingUnresolvedCount(change.comments);
 
   const submit = useMutation({
     mutationFn: (verdict: Verdict) =>
