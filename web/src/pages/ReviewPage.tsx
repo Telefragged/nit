@@ -28,11 +28,11 @@ import type {
 } from "../api/types";
 import { StatusChip } from "../components/badges";
 import ChainStrip from "../components/ChainStrip";
-import CommentEditor, { confirmDiscard } from "../components/CommentEditor";
+import CommentEditor from "../components/CommentEditor";
 import type { Thread } from "../components/CommentThread";
 import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
-import FileRail, { fileDomId } from "../components/diff/FileRail";
+import FileRail from "../components/diff/FileRail";
 import ReviewBar from "../components/ReviewBar";
 import {
   allExpanded,
@@ -47,7 +47,8 @@ import {
   commentPlacement,
   threadCountByRevision,
 } from "../lib/comments";
-import { displayPath } from "../lib/diffview";
+import { confirmDiscard } from "../lib/confirmDiscard";
+import { displayPath, fileDomId } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
 import { activeIndexAt } from "../lib/scrollspy";
 import type { SelectionMiss } from "../lib/selection";

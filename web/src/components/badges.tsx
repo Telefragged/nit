@@ -43,7 +43,7 @@ const STATUS_LABEL: Record<ChangeStatus, string> = {
   orphaned: "ORPHANED",
 };
 
-export const STATUS_COLOR: Record<ChangeStatus, string> = {
+const STATUS_COLOR: Record<ChangeStatus, string> = {
   pending: "amber",
   approved: "green",
   changes_requested: "red",

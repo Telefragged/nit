@@ -5,7 +5,7 @@ import { ApiError, submitReview } from "../api/client";
 import type { Chain, ChangeDetail, Verdict } from "../api/types";
 import { pendingUnresolvedCount } from "../lib/comments";
 import { useAutosize } from "../lib/useAutosize";
-import { confirmDiscard } from "./CommentEditor";
+import { confirmDiscard } from "../lib/confirmDiscard";
 
 /**
  * Slim sticky bottom bar (counts + a Review button) and the gerrit-style

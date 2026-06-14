@@ -70,7 +70,6 @@ export default tseslint.config(
       ],
 
       // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
-      "react-refresh/only-export-components": "off", // 3 (override above)
       "react-hooks/set-state-in-effect": "off", // 2
       "react-hooks/immutability": "off", // 1
       "react-hooks/exhaustive-deps": "off", // 1

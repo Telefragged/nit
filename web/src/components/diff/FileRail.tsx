@@ -3,10 +3,6 @@ import type { DiffFile } from "../../api/types";
 import { diffTotals, displayPath, statusLetter } from "../../lib/diffview";
 import type { Thread } from "../CommentThread";
 
-export function fileDomId(index: number): string {
-  return `file-${index}`;
-}
-
 /** Left rail: every file in the diff with status letter, +/- counts and
  * comment markers. Selecting expands the file section and scrolls to it.
  * The title row totals the diff (count and +/- sums, /COMMIT_MSG excluded

@@ -9,6 +9,12 @@ export function displayPath(path: string): string {
   return path === COMMIT_MSG_PATH ? "Commit message" : path;
 }
 
+/** DOM id of a file section, by its index in the diff. The scrollspy and
+ * rail navigation use it to find and scroll sections. */
+export function fileDomId(index: number): string {
+  return `file-${index}`;
+}
+
 const STATUS_LETTER: Record<DiffFile["status"], string> = {
   added: "A",
   deleted: "D",
