@@ -402,7 +402,15 @@ export default function DiffFileView({
     >
       <header
         className="file-header"
+        role="button"
+        tabIndex={0}
         onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
         aria-expanded={!collapsed}
         title={collapsed ? "Expand file" : "Collapse file"}
       >

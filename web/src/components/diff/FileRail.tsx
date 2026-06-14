@@ -65,8 +65,16 @@ export default function FileRail({
           <div
             key={file.path}
             className={`rail-item ${i === activeIndex ? "active" : ""}`}
+            role="button"
+            tabIndex={0}
             onClick={() => {
               onSelect(i);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(i);
+              }
             }}
             title={
               file.old_path

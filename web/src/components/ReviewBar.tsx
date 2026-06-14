@@ -136,6 +136,11 @@ export default function ReviewBar({
         </button>
       </div>
       {replyOpen ? (
+        // The native modal dialog is its own full-bleed backdrop; the
+        // mousedown below dismisses on a backdrop press. Escape is the
+        // keyboard equivalent (onCancel), so the interaction is reachable
+        // without a pointer — but jsx-a11y can't see that cross-handler.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- keyboard dismiss is onCancel (Escape)
         <dialog
           ref={dialogRef}
           className="modal-backdrop"

@@ -27,6 +27,11 @@ import globals from "globals";
 export default tseslint.config(
   { ignores: ["dist/**", "node_modules/**", "**/*.tsbuildinfo"] },
 
+  // An inline `eslint-disable` is a debt with a reason, never free: a
+  // stale one (the rule no longer fires) is itself an error — the
+  // `#[expect]` model from the Rust side.
+  { linterOptions: { reportUnusedDisableDirectives: "error" } },
+
   // ── TypeScript / React sources — type-aware, strictest presets ──
   {
     files: ["**/*.{ts,tsx,mjs}"],
@@ -70,10 +75,6 @@ export default tseslint.config(
       ],
 
       // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
-      "jsx-a11y/click-events-have-key-events": "off", // 2
-      "jsx-a11y/no-static-element-interactions": "off", // 2
-      "jsx-a11y/no-autofocus": "off", // 1
-      "jsx-a11y/no-noninteractive-element-interactions": "off", // 1
     },
   },
 

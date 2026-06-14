@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { useAutosize } from "../lib/useAutosize";
 
@@ -41,6 +41,11 @@ export default function CommentEditor({
   const [body, setBody] = useState(initial);
   const [resolved, setResolved] = useState(initialResolved ?? false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Focus on open — the editor mounts when the user opens it — the
+  // accessible alternative to the autoFocus attribute.
+  useLayoutEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
 
   const showResolve = initialResolved !== undefined;
   const resolveChanges =
@@ -74,7 +79,6 @@ export default function CommentEditor({
     <div className="editor">
       <textarea
         ref={textareaRef}
-        autoFocus
         value={body}
         placeholder={placeholder}
         onChange={(e) => {
