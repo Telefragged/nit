@@ -64,8 +64,6 @@ export default tseslint.config(
       "@typescript-eslint/no-non-null-assertion": "off", // 55
       "@typescript-eslint/no-unnecessary-condition": "off", // 12
       "@typescript-eslint/no-floating-promises": "off", // 5
-      "@typescript-eslint/no-invalid-void-type": "off", // 1
-      "@typescript-eslint/no-dynamic-delete": "off", // 1
       "react-refresh/only-export-components": "off", // 3 (override above)
       "react-hooks/set-state-in-effect": "off", // 2
       "react-hooks/immutability": "off", // 1

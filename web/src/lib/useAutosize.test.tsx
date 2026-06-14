@@ -21,7 +21,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  for (const key of keys) delete HTMLTextAreaElement.prototype[key];
+  for (const key of keys)
+    Reflect.deleteProperty(HTMLTextAreaElement.prototype, key);
 });
 
 function Harness({ value }: { value: string }) {

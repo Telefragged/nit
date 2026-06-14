@@ -27,7 +27,7 @@ export class ApiError extends Error {
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
-async function request<T>(
+async function request<T = void>(
   method: Method,
   path: string,
   body?: unknown,
@@ -93,8 +93,7 @@ export const createDraft = (changeId: number, draft: CreateDraftRequest) =>
 export const updateDraft = (id: number, req: UpdateDraftRequest) =>
   request<Comment>("PATCH", `/drafts/${id}`, req);
 
-export const deleteDraft = (id: number) =>
-  request<void>("DELETE", `/drafts/${id}`);
+export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 
 // ---------------------------------------------------------------------------
 // Reviews
