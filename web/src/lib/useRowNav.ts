@@ -12,7 +12,7 @@ export function useRowNav(to: string) {
   return {
     onClick: (e: MouseEvent) => {
       if (e.target instanceof Element && e.target.closest("a")) return;
-      navigate(to);
+      void navigate(to);
     },
     style: { cursor: "pointer" } as const,
   };

@@ -65,11 +65,11 @@ export default function ReviewBar({
           c.position > change.position,
       );
       if (next) {
-        navigate(`/changes/${next.id}`);
+        void navigate(`/changes/${next.id}`);
       } else if (chain) {
-        navigate(`/chains/${chain.id}`);
+        void navigate(`/chains/${chain.id}`);
       } else {
-        navigate("/");
+        void navigate("/");
       }
     },
     onError: (err) => {

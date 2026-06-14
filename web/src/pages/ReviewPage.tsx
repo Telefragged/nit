@@ -413,7 +413,7 @@ export default function ReviewPage() {
         const idx = live.findIndex((c) => c.id === change.id);
         if (idx < 0) return;
         const next = live[idx + (e.key === "n" ? 1 : -1)];
-        if (next) navigate(`/changes/${next.id}`);
+        if (next) void navigate(`/changes/${next.id}`);
       } else if (e.key === "c") {
         // Draft a comment on the selected diff text (gerrit's c) — or on
         // the caret's line when the selection is collapsed.
