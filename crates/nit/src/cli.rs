@@ -93,6 +93,14 @@ pub struct LogArgs {
     /// Takes a single open cursor; rides out restarts; runs until stopped.
     #[arg(long)]
     pub follow: bool,
+    /// With --follow, relay only entries worth acting on, applying `nit wait`'s
+    /// wake rule: drop the agent's own entries (`revisions`, `reply`, `partial`)
+    /// and a comment-less approve that leaves the chain short of `approved`.
+    /// Each relayed line is only a doorbell: re-read the gap from the index you
+    /// last consumed from `nit log` (`nit log <cursor>..`), not the idx the
+    /// doorbell printed, since the entries before it were suppressed.
+    #[arg(long, requires = "follow")]
+    pub reviewer_only: bool,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -340,7 +348,13 @@ pub fn log(args: LogArgs) -> Result<()> {
         let [spec] = args.ranges.as_slice() else {
             bail!("--follow takes a single starting cursor (e.g. `0`, `5..`, or `..`)");
         };
-        return follow(&client, chain_id, follow_cursor(spec)?, args.oneline);
+        return follow(
+            &client,
+            chain_id,
+            follow_cursor(spec)?,
+            args.oneline,
+            args.reviewer_only,
+        );
     }
     let mut entries: Vec<Value> = Vec::new();
     let mut head = 0;
@@ -374,10 +388,23 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// cursor it has advanced to, and the `/events` backlog replay covers the
 /// gap so nothing is dropped or doubled.
 ///
+/// With `reviewer_only`, the agent's own entries are dropped and the
+/// reviewer's are filtered by `nit wait`'s wake rule (see
+/// [`reviewer_only_relays`]) — so a monitor wakes only on activity it should
+/// act on, not on the agent's echoes nor on a comment-less approve that
+/// leaves the chain short of `approved`. The cursor still advances over
+/// every entry, suppressed or not, so a reconnect resumes correctly.
+///
 /// # Errors
 /// When connecting to the stream fails fatally (a transient outage retries)
 /// or stdout can't be written.
-fn follow(client: &Client, chain_id: u64, mut cursor: u64, oneline: bool) -> Result<()> {
+fn follow(
+    client: &Client,
+    chain_id: u64,
+    mut cursor: u64,
+    oneline: bool,
+    reviewer_only: bool,
+) -> Result<()> {
     let retry = Retry::UntilUp { deadline: None };
     loop {
         let mut stream = client.get_stream(
@@ -391,11 +418,51 @@ fn follow(client: &Client, chain_id: u64, mut cursor: u64, oneline: bool) -> Res
             if let Some(idx) = entry["idx"].as_u64() {
                 cursor = idx + 1; // advance so a reconnect resumes past it
             }
+            // Cursor advanced above first, so suppressed entries are still
+            // skipped on reconnect — never replayed.
+            if reviewer_only && !reviewer_only_relays(client, chain_id, &entry) {
+                continue;
+            }
             print_follow_entry(&entry, oneline)?;
         }
         // Stream ended (graceful shutdown) or severed: reconnect at the
         // advanced cursor.
     }
+}
+
+/// Whether `--reviewer-only` relays this streamed entry to the monitor.
+/// Drops the agent's own echoes ([`is_agent_echo`]); for everything else it
+/// applies the same wake rule as `nit wait` ([`event_wakes`]), so a
+/// comment-less approve is relayed only when it completes the chain. That
+/// one case is state-dependent, so it costs a feedback fetch — and only
+/// then; on a fetch error it relays, never swallowing a reviewer event.
+fn reviewer_only_relays(client: &Client, chain_id: u64, entry: &Value) -> bool {
+    if is_agent_echo(entry) {
+        return false;
+    }
+    if !is_pure_approve(entry) {
+        return true; // every other reviewer entry wakes unconditionally
+    }
+    client
+        .get(&format!("/api/chains/{chain_id}/feedback"))
+        .ok()
+        .and_then(|f| f["state"].as_str().map(|s| event_wakes(entry, s)))
+        .unwrap_or(true)
+}
+
+/// A log entry that echoes the agent's own action: a `reply`, a `partial`
+/// flip, or a `revisions` — the structural delta of a scan, which in the
+/// monitor loop is overwhelmingly the agent's own push (a rescan can append
+/// one too, so it is an echo only by heavy convention). `nit log --follow
+/// --reviewer-only` suppresses these (see [`reviewer_only_relays`]).
+/// Unrecognized kinds are *not* treated as echoes (fail open) — a future
+/// entry kind is relayed, never silently hidden, so the agent is always
+/// woken to re-read the log.
+fn is_agent_echo(entry: &Value) -> bool {
+    matches!(
+        entry["kind"].as_str(),
+        Some("revisions" | "reply" | "partial")
+    )
 }
 
 /// Print one streamed entry. `println!` flushes through its trailing newline
@@ -970,6 +1037,21 @@ mod tests {
             &json!({"kind": "reply", "payload": {}}),
             "waiting_for_review"
         ));
+    }
+
+    #[test]
+    fn agent_echoes_are_the_agents_own_writes() {
+        let echo = |kind: &str| is_agent_echo(&json!({"kind": kind, "payload": {}}));
+        // The agent's own writes — suppressed by --reviewer-only.
+        assert!(echo("revisions")); // a scan's delta — overwhelmingly its push
+        assert!(echo("reply")); // its nit reply
+        assert!(echo("partial")); // its push --partial / ready flip
+        // Reviewer activity and chain closure always reach the monitor.
+        assert!(!echo("review"));
+        assert!(!echo("chain_closed"));
+        // Unrecognized kinds fail open — relayed, never silently hidden.
+        assert!(!echo("some_future_kind"));
+        assert!(!is_agent_echo(&json!({"payload": {}}))); // missing kind
     }
 
     #[test]
