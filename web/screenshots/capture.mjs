@@ -108,6 +108,44 @@ const captures = [
       await page.waitForTimeout(200);
     },
   },
+  // Side-by-side with an old-column selection: only the left (selected)
+  // side highlights. The interleaved subgrid makes the selection's DOM
+  // range sweep the right column's cells too, but ReviewPage's
+  // data-sel-side tag blanks their ::selection so the right stays unpainted.
+  {
+    name: "review-split-selection",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page.getByRole("button", { name: "Side-by-side" }).click();
+      await page.waitForTimeout(200);
+      await page.evaluate(() => {
+        // Select three consecutive old-side context lines within one file
+        // (context lines have aligned text on both columns, so a stray
+        // right-side highlight would be obvious).
+        for (const grid of document.querySelectorAll(".diff-grid-split")) {
+          const olds = [
+            ...grid.querySelectorAll(
+              '.code.context[data-side="old"] .code-text',
+            ),
+          ].filter((t) => t.textContent.trim().length > 3);
+          if (olds.length < 3) continue;
+          const range = document.createRange();
+          // hljs splits a line into token spans; anchor on the code-text
+          // element boundaries rather than a single text node.
+          range.setStart(olds[0], 0);
+          range.setEnd(olds[2], olds[2].childNodes.length);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          olds[0].scrollIntoView({ block: "center" });
+          return;
+        }
+      });
+      await page.waitForTimeout(150);
+    },
+  },
   // Side-by-side interdiff r1 → r2: comments pinned to r1 land under the
   // left column (FROM revision's content), drafts on r2 under the right.
   {

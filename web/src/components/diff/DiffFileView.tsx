@@ -34,6 +34,7 @@ import {
   markIntraline,
   markTextRange,
 } from "../../lib/highlight";
+import { selectionAnchorSide } from "../../lib/selection";
 import type { DraftTarget } from "../../pages/reviewContext";
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
@@ -201,20 +202,20 @@ export default function DiffFileView({
   });
 
   // Split layout only: while a drag is in flight, lock selection to the
-  // side it started on (styles.css `sel-old`/`sel-new` make the other
-  // column unselectable) so a cross-column drag yields one side's
-  // contiguous text — the shape a comment range needs. Done imperatively
-  // on the grid node, not via React state: a state change on mousedown
-  // re-renders mid-gesture and drops the nascent selection, and the lock
-  // would land too late to keep the drag on one side. Cleared on mouseup —
-  // user-select only gates *making* a selection, so the finished one
-  // (which c consumes) survives, and selections not started here (Ctrl+A,
-  // find-and-select) are never constrained.
+  // side it started on (styles.css `sel-old`/`sel-new` set the other column
+  // user-select: none) so a cross-column drag yields one side's contiguous
+  // text — the shape a comment range needs. This bounds the *captured* text
+  // in engines that honor user-select across a spanning selection; the
+  // cross-column *paint* is handled separately and unconditionally by the
+  // diff column's data-sel-side ::selection rule (ReviewPage). Done
+  // imperatively on the grid node, not via React state: a state change on
+  // mousedown re-renders mid-gesture and drops the nascent selection, and
+  // the lock would land too late to keep the drag on one side. Cleared on
+  // mouseup so the finished selection (which c consumes) survives and later
+  // selections (Ctrl+A, find-and-select) are never constrained.
   const lockSelectionSide = (e: ReactMouseEvent) => {
-    const side = (e.target as Element)
-      .closest("[data-side]")
-      ?.getAttribute("data-side");
-    if (side !== "old" && side !== "new") return;
+    const side = selectionAnchorSide(e.target as Node);
+    if (side === null) return;
     const grid = e.currentTarget as HTMLElement;
     grid.classList.add(`sel-${side}`);
     document.addEventListener(

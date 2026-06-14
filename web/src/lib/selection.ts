@@ -93,6 +93,23 @@ export interface SelectionMiss {
 }
 
 /**
+ * Which split-view column a live selection visually belongs to — the side
+ * of the cell its anchor (where the drag began) sits in. `null` when the
+ * anchor is outside a split cell: a unified diff (cells carry no
+ * `data-side`), a collapsed caret, or a sweep that started off the diff (a
+ * select-all). ReviewPage mirrors this onto the diff column so the CSS can
+ * blank the *other* column's selection paint — the interleaved subgrid
+ * makes a one-side range sweep both columns' cells, but only the dragged
+ * side should highlight.
+ */
+export function selectionAnchorSide(anchor: Node | null): CommentSide | null {
+  const el =
+    anchor instanceof Element ? anchor : (anchor?.parentElement ?? null);
+  const side = el?.closest("[data-side]")?.getAttribute("data-side");
+  return side === "old" || side === "new" ? side : null;
+}
+
+/**
  * The draft target a selection produces; a [`SelectionMiss`] when the
  * selection touches the diff but maps to no commentable range (sides
  * that disagree, lines that are not consecutive on the chosen side, a
@@ -103,8 +120,9 @@ export interface SelectionMiss {
  * new column `side: "new"`; the caller maps that to a stored
  * (revision, side) for the current diff range (lib/comments). In split
  * view the swept DOM region covers both columns; cells of the other side
- * are dropped, so a one-column drag (styles.css `sel-old`/`sel-new`
- * enforce this) maps to that column's contiguous lines. A collapsed
+ * are dropped here, so a one-column drag (which styles.css `sel-old`/
+ * `sel-new` also bias toward where the engine honors user-select) maps to
+ * that column's contiguous lines. A collapsed
  * selection inside a single cell degrades to a plain line comment on that
  * cell — gerrit's `c`-on-a-line. A selection ending before a line's first
  * character ends on the previous line.

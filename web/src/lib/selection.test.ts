@@ -5,7 +5,7 @@
 // the element structure, classes and data attributes matter here.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { selectionTarget } from "./selection";
+import { selectionAnchorSide, selectionTarget } from "./selection";
 
 interface RowSpec {
   old?: number;
@@ -291,5 +291,32 @@ describe("selectionTarget, split layout", () => {
     const s = mountSplit();
     const r = rangeOf(colText(s, "old", 0), 1, colText(s, "new", 2), 4);
     expect(selectionTarget(r)).toEqual({ miss: "mixed-sides" });
+  });
+
+  describe("selectionAnchorSide", () => {
+    it("reads the side of the cell the anchor sits in", () => {
+      const s = mountSplit();
+      expect(selectionAnchorSide(colText(s, "old", 0))).toBe("old");
+      expect(selectionAnchorSide(colText(s, "new", 1))).toBe("new");
+    });
+
+    it("follows the anchor even when the focus is on the other column", () => {
+      // The bug this guards: a left-column drag whose DOM range sweeps into
+      // the right column still belongs to the side it started on, so the
+      // right column's paint must be suppressed (anchor = where it started).
+      const s = mountSplit();
+      expect(selectionAnchorSide(colText(s, "old", 0))).toBe("old");
+    });
+
+    it("is null off the split cells (unified view, blank anchor)", () => {
+      const s = mountUnified([ROWS]);
+      // Unified cells carry data-old/data-new but no data-side column tag.
+      expect(selectionAnchorSide(textNode(s, 0))).toBeNull();
+      expect(selectionAnchorSide(null)).toBeNull();
+      const loose = document.createElement("div");
+      loose.textContent = "elsewhere";
+      document.body.appendChild(loose);
+      expect(selectionAnchorSide(loose.firstChild)).toBeNull();
+    });
   });
 });

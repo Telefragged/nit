@@ -911,15 +911,33 @@ table.list tbody tr:hover {
 .line-row .code.half {
   border-right: 1px solid var(--border);
 }
-/* While a split-view drag runs, only the side it started on is selectable
-   (DiffFileView sets sel-old/sel-new on mousedown), so a cross-column drag
-   yields one column's contiguous text — the shape a comment range needs.
-   Off the table this lock is honored: user-select: none excludes a column
-   from the selection instead of being overridden by table-cell
-   selection. */
+/* While a split-view drag runs, mark the side it did not start on
+   user-select: none (DiffFileView sets sel-old/sel-new on mousedown). In
+   engines that honor user-select across a spanning selection this keeps a
+   cross-column drag's captured text to one column — the shape a comment
+   range needs. Blink ignores it for the paint (and largely for the text),
+   so the visual highlight is suppressed separately by the data-sel-side
+   rule below. */
 .diff-grid.sel-old [data-side="new"],
 .diff-grid.sel-new [data-side="old"] {
   user-select: none;
+}
+/* A split selection belongs to one column, but the interleaved subgrid
+   makes its DOM range sweep the other column's cells in document order, so
+   the browser paints them too. ReviewPage tags the diff column with the
+   anchor's side; blank the opposite column's selection — its code/gutter
+   cells (data-side) and its inline-comment column (meta-col-*) alike — so
+   only the dragged side highlights. (user-select: none above governs which
+   text is captured, not whether the paint shows.) The descendant ::selection
+   is what bites: the selected text lives in nested hljs token / comment
+   spans, not as direct children of the column element. */
+.diff-column[data-sel-side="old"]
+  :is([data-side="new"], .meta-col-new)
+  ::selection,
+.diff-column[data-sel-side="new"]
+  :is([data-side="old"], .meta-col-old)
+  ::selection {
+  background: transparent;
 }
 .sign {
   display: inline-block;

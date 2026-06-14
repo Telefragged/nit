@@ -40,7 +40,7 @@ import { displayPath } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
 import { activeIndexAt } from "../lib/scrollspy";
 import type { SelectionMiss } from "../lib/selection";
-import { selectionTarget } from "../lib/selection";
+import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
 import { ErrorPanel } from "./NotFound";
 import type { DraftTarget, ReviewCtx } from "./reviewContext";
@@ -235,6 +235,7 @@ export default function ReviewPage() {
   );
   const [editingTarget, setEditingTarget] = useState<DraftTarget | null>(null);
   const editorDirty = useRef(false);
+  const diffColumnRef = useRef<HTMLDivElement>(null);
   const [activeFile, setActiveFile] = useState<number | null>(null);
   const [changeCommentOpen, setChangeCommentOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
@@ -438,6 +439,32 @@ export default function ReviewPage() {
     replyOpen,
     ctxValue,
   ]);
+
+  // Side-by-side selection paint: tag the diff column with the side the
+  // current selection's anchor sits in, so styles.css can blank the other
+  // column's ::selection. The interleaved subgrid makes a one-column drag's
+  // DOM range sweep the other column's cells too — without this they light
+  // up even though they are not part of the selected text. Cleared when the
+  // selection collapses or leaves the diff (unified diffs have no
+  // data-side, so the attribute never gets set there).
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const col = diffColumnRef.current;
+      if (!col) return;
+      const sel = document.getSelection();
+      const side =
+        sel && !sel.isCollapsed ? selectionAnchorSide(sel.anchorNode) : null;
+      // selectionchange fires continuously through a drag; only touch the
+      // attribute (and the style recalc it triggers across the diff) when
+      // the side actually flips.
+      if (side === col.getAttribute("data-sel-side")) return;
+      if (side) col.setAttribute("data-sel-side", side);
+      else col.removeAttribute("data-sel-side");
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () =>
+      document.removeEventListener("selectionchange", onSelectionChange);
+  }, []);
 
   // Scroll spy: keep activeFile — the rail highlight and the [ / ] cursor —
   // on the file section currently under the sticky chrome. The threshold is
@@ -692,7 +719,7 @@ export default function ReviewPage() {
               setExpanded(allFilesExpanded ? collapseAll() : expandAll(files));
             }}
           />
-          <div className="diff-column">
+          <div className="diff-column" ref={diffColumnRef}>
             {changeLevelThreads.length > 0 || changeCommentOpen ? (
               <section className="change-threads">
                 <div className="outdated-title">Change discussion</div>
