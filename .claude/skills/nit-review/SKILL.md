@@ -5,8 +5,9 @@ description: Land changes through nit's review loop (push --partial per commit �
 
 # nit-review — the dogfood loop
 
-This repo reviews itself with nit. Protocol reference: `docs/agent-workflow.md`.
-This skill is the operational checklist for driving it from a Claude session.
+The project this skill is installed in reviews its own changes with nit.
+Protocol reference: `docs/agent-workflow.md`. This skill is the
+operational checklist for driving it from a Claude session.
 
 ## Cadence — the rule to get right before anything else
 
