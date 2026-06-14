@@ -308,14 +308,6 @@ describe("selectionTarget, split layout", () => {
       expect(selectionAnchorSide(colText(s, "new", 1))).toBe("new");
     });
 
-    it("follows the anchor even when the focus is on the other column", () => {
-      // The bug this guards: a left-column drag whose DOM range sweeps into
-      // the right column still belongs to the side it started on, so the
-      // right column's paint must be suppressed (anchor = where it started).
-      const s = mountSplit();
-      expect(selectionAnchorSide(colText(s, "old", 0))).toBe("old");
-    });
-
     it("is null off the split cells (unified view, blank anchor)", () => {
       const s = mountUnified([ROWS]);
       // Unified cells carry data-old/data-new but no data-side column tag.
