@@ -123,8 +123,7 @@ cursor via `nit log <ranges>`. Branch on `state`:
   - code feedback → fix it by amending the commit in place, keeping its
     Change-Id: `git commit --fixup=<commit_sha of the change>`, then
     `GIT_EDITOR=true git rebase --autosquash "$(git merge-base main HEAD)"`
-    — squash **before** pushing (pushed `fixup!` commits fail the scan),
-    and onto the fork point, not moved main, so interdiffs stay clean.
+    — squash **before** pushing (pushed `fixup!` commits fail the scan).
     Run treefmt before committing the fixup so the fix lands formatted;
     after the autosquash — and any other rebase, doubly so one with
     conflicts — re-format every rewritten commit with the docs/dev.md

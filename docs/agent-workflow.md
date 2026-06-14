@@ -30,11 +30,6 @@ nit reviews **commits**, not branches. Make each commit one reviewable unit
   them before pushing — the scan rejects them (git ≥ 2.44):
   `GIT_EDITOR=true git rebase --autosquash <fork-point>`
   (fallback: `GIT_SEQUENCE_EDITOR=: GIT_EDITOR=true git rebase -i --autosquash <fork-point>`).
-- Rewrite onto your chain's **fork point**
-  (`$(git merge-base <base> HEAD)`), not the moved base: rebasing
-  mid-review drags unrelated base drift into every interdiff. Rebase onto
-  the base itself only when you actually need to — landing, or a real
-  conflict.
 
 ## The cursor — how `nit wait` works
 
