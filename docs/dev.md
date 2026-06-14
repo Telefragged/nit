@@ -138,7 +138,7 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
 
   Commit there, drive the nit review loop from that worktree, and land via
   rebase + fast-forward only — never a merge commit anywhere (the
-  `ready_to_merge` step in the `nit-review` skill has the exact
+  `approved` step in the `nit-review` skill has the exact
   rebase/merge recipe). Tear it down after landing:
   `git worktree remove .worktrees/<slug>` then `git branch -d track/<slug>`.
 

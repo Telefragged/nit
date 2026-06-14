@@ -256,10 +256,10 @@ fn wait_for_entry(client: &Client, chain_id: u64, cursor: u64, retry: Retry) -> 
 /// Whether one streamed event should end a parked `nit wait`, given the
 /// chain's resulting `feedback.state`. Every event wakes **except** a
 /// reviewer approve with no comments that did not complete the chain (left
-/// it short of `ready_to_merge`) — those accumulate silently until a waking
+/// it short of `approved`) — those accumulate silently until a waking
 /// event arrives. `state` is only consulted for that suppressed case.
 fn event_wakes(entry: &Value, state: &str) -> bool {
-    !is_pure_approve(entry) || state == "ready_to_merge"
+    !is_pure_approve(entry) || state == "approved"
 }
 
 /// A reviewer `approve` with no comments — the only event kind that can be
@@ -809,10 +809,10 @@ mod tests {
         let approve = |comments: Value| json!({"kind": "review", "payload": {"verdict": "approve", "comments": comments}});
         // A pure approve wakes only when it completes the chain — NOT on a
         // merely-actionable state (e.g. all-approved-while-partial is
-        // `agents_turn`, not `ready_to_merge`).
+        // `agents_turn`, not `approved`).
         assert!(!event_wakes(&approve(json!([])), "agents_turn"));
         assert!(!event_wakes(&approve(json!([])), "waiting_for_review"));
-        assert!(event_wakes(&approve(json!([])), "ready_to_merge"));
+        assert!(event_wakes(&approve(json!([])), "approved"));
         // An approve with comments wakes regardless of state.
         assert!(event_wakes(
             &approve(json!([{"body": "nit"}])),

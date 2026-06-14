@@ -63,7 +63,7 @@ fn review_auto_retargets_after_pure_rebase() {
     assert_eq!(submitted["review"]["revision"], 2);
 
     let (_, feedback) = http_get(&server.url(&format!("/api/chains/{chain_id}/feedback")));
-    assert_eq!(feedback["state"], "ready_to_merge");
+    assert_eq!(feedback["state"], "approved");
     assert_eq!(feedback["changes"][0]["status"], "approved");
     // The latest review (approve) has no comments, but the unresolved
     // thread from the earlier review stays in feedback scope.

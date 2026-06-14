@@ -355,7 +355,7 @@ fn partial_and_closed_drive_state() {
         &entry(3, "partial", serde_json::json!({"partial": false})),
     )
     .expect("ready");
-    assert_eq!(derive_state(&p), "ready_to_merge");
+    assert_eq!(derive_state(&p), "approved");
     fold(
         &mut p,
         &entry(4, "chain_closed", serde_json::json!({"status": "merged"})),

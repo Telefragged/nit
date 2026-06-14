@@ -89,7 +89,7 @@ nit push --partial            # register/refresh the chain as partial
 #   the FIRST push creates the chain — report web_url to the human now;
 #   review starts on commit one.
 nit ready                     # last commit done: clears partial, refreshes —
-                              #   the chain can now reach ready_to_merge
+                              #   the chain can now reach approved
 
 # then drive the cursor loop until the chain closes:
 resp=$(nit wait $cursor)      # blocks until entries land beyond $cursor
@@ -100,7 +100,7 @@ cursor=<resp.head>            # advance over everything you just received
 #     nit reply <comment-id> [--resolve] -m "…"
 nit push                      # the rewritten commits become new revisions
 # …then loop: nit wait $cursor again (returns your own entries first),
-#   advance, until state=ready_to_merge or the chain closes
+#   advance, until state=approved or the chain closes
 # then: rebase onto <base> if it moved — re-formatting each replayed
 #   commit (docs/dev.md "Formatting") — and merge/ff the branch
 nit push                      # optional: next scan appends chain_closed{merged}
@@ -109,7 +109,7 @@ nit push                      # optional: next scan appends chain_closed{merged}
 **Running `nit wait` is mandatory, not the optional tail of the loop.**
 `nit ready` is never the last thing you do: the instant it returns, a
 `nit wait <cursor>` must be running — as a background task — and must stay
-running until the chain reaches `ready_to_merge`, `merged`, or
+running until the chain reaches `approved`, `merged`, or
 `abandoned`. A chain left `ready` (or pushed) with no wait parked on it is
 a dropped review: the reviewer's feedback lands and nothing ever reacts to
 it. Treat "ready/pushed without a wait" as a broken loop, exactly like an
@@ -191,7 +191,7 @@ durable record of why the change ended up the way it did.
   just means every pushed change is approved — the reviewer is caught up.
   Not an error, nothing to address: keep pushing commits, or `nit ready`
   when the branch is done.
-- `ready_to_merge` — every change approved: rebase onto the base if it
+- `approved` — every change approved: rebase onto the base if it
   moved (re-formatting each replayed commit), merge/ff, done. The chain
   leaves the dashboard on the next scan.
 - `waiting_for_review` — nothing actionable (it woke on your own

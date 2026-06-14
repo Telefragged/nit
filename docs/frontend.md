@@ -12,7 +12,7 @@ happens.
 ## Pages
 
 - `/` **Dashboard** — table of active chains: branch, repo basename, state
-  badge (`WAITING FOR REVIEW` amber / `AGENT'S TURN` blue / `READY TO MERGE`
+  badge (`WAITING FOR REVIEW` amber / `AGENT'S TURN` blue / `APPROVED`
   green) plus a gray `PARTIAL` badge while the agent is still pushing
   (`chain.partial`), per-change status dots in chain order (click-through),
   updated time. Chains gone (merged/abandoned) disappear. Poll via

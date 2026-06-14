@@ -141,7 +141,7 @@ fn partial_push_blocks_merge_until_ready() {
     );
     assert_eq!(st, 200);
 
-    // All approved but still partial: agents_turn, never ready_to_merge.
+    // All approved but still partial: agents_turn, never approved.
     let (ok, feedback, stderr) = nit(&server, &g, &["status"]);
     assert!(ok, "{stderr}");
     assert_eq!(feedback["state"], "agents_turn");
@@ -151,7 +151,7 @@ fn partial_push_blocks_merge_until_ready() {
     let (ok, chain, stderr) = nit(&server, &g, &["ready"]);
     assert!(ok, "{stderr}");
     assert_eq!(chain["partial"], false);
-    assert_eq!(chain["state"], "ready_to_merge");
+    assert_eq!(chain["state"], "approved");
 }
 
 #[test]

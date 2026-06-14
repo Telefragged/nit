@@ -310,7 +310,7 @@ fn full_review_loop() {
             .contains("no longer the latest")
     );
 
-    // --- approve everything → ready_to_merge --------------------------------
+    // --- approve everything → approved --------------------------------
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change1}/reviews")),
         &json!({"revision": 2, "verdict": "approve", "message": "lgtm"}),
@@ -326,7 +326,7 @@ fn full_review_loop() {
     assert_eq!(retargeted["review"]["revision"], 2);
 
     let (_, feedback) = http_get(&server.url(&format!("/api/chains/{chain_id}/feedback")));
-    assert_eq!(feedback["state"], "ready_to_merge");
+    assert_eq!(feedback["state"], "approved");
     assert_eq!(feedback["actionable"], true);
 
     // --- ff-merge → chain leaves the dashboard -------------------------------

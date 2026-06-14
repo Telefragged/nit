@@ -6,7 +6,7 @@ import type { ChainState, ChangeStatus } from "../api/types";
 const STATE_LABEL: Record<ChainState, string> = {
   waiting_for_review: "WAITING FOR REVIEW",
   agents_turn: "AGENT'S TURN",
-  ready_to_merge: "READY TO MERGE",
+  approved: "APPROVED",
   merged: "MERGED",
   abandoned: "ABANDONED",
 };
@@ -14,7 +14,7 @@ const STATE_LABEL: Record<ChainState, string> = {
 const STATE_COLOR: Record<ChainState, string> = {
   waiting_for_review: "amber",
   agents_turn: "blue",
-  ready_to_merge: "green",
+  approved: "green",
   merged: "gray",
   abandoned: "gray",
 };

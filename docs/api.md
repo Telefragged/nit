@@ -354,13 +354,13 @@ without an API change and each client renders entries however it likes.
 
 ### State table (normative)
 
-| state                | meaning                                                                                                                                                                      | actionable |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `waiting_for_review` | reviewer's turn; nothing for the agent                                                                                                                                       | false      |
-| `agents_turn`        | request_changes/commented on a latest revision, empty chain, or all approved while `partial` (agent still pushing — `ready_to_merge` is inexpressible while the flag is set) | true       |
-| `ready_to_merge`     | every live change approved (≥1) and the chain is not `partial`                                                                                                               | true       |
-| `merged`             | chain closed: work is in the base                                                                                                                                            | true       |
-| `abandoned`          | chain closed: branch disappeared                                                                                                                                             | true       |
+| state                | meaning                                                                                                                                                                | actionable |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `waiting_for_review` | reviewer's turn; nothing for the agent                                                                                                                                 | false      |
+| `agents_turn`        | request_changes/commented on a latest revision, empty chain, or all approved while `partial` (agent still pushing — `approved` is inexpressible while the flag is set) | true       |
+| `approved`           | every live change approved (≥1) and the chain is not `partial`                                                                                                         | true       |
+| `merged`             | chain closed: work is in the base                                                                                                                                      | true       |
+| `abandoned`          | chain closed: branch disappeared                                                                                                                                       | true       |
 
 `actionable` ≡ `state != waiting_for_review`. `state` is informational on
 a `nit wait` return — the agent acts on the `entries` it received and the

@@ -189,7 +189,7 @@ async fn register_chain(
     .await?;
     // Scan before applying partial (state.rs scan_then_flip rationale): a
     // `nit ready` carrying unscanned commits must not let a waiter read the
-    // old all-approved set as ready_to_merge.
+    // old all-approved set as approved.
     scan_chain(&state, chain_id, true).await?;
     if let Some(partial) = partial {
         apply_partial(&state, chain_id, partial).await?;

@@ -19,7 +19,7 @@ export type ChainStatus = "active" | "merged" | "abandoned";
 export type ChainState =
   | "waiting_for_review"
   | "agents_turn"
-  | "ready_to_merge"
+  | "approved"
   | "merged"
   | "abandoned";
 

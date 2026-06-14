@@ -81,7 +81,7 @@ nit push --partial  # register/refresh the chain as partial (sticky)
 # → FIRST push: report web_url to the user now — review starts on
 #   commit one, not when the branch is done
 # after the LAST commit:
-nit ready           # clears partial; the chain can now reach ready_to_merge
+nit ready           # clears partial; the chain can now reach approved
 nit wait $cursor    # blocks until entries land beyond $cursor; prints JSON
 ```
 
@@ -121,7 +121,7 @@ cursor via `nit log <ranges>`. Branch on `state`:
   - On a partial chain, `agents_turn` with none of the above (every pushed
     change approved) is not an error and not feedback — the reviewer is
     caught up. Keep building, or `nit ready` when the branch is done.
-- **`ready_to_merge`** — every change approved. Land it (order matters —
+- **`approved`** — every change approved. Land it (order matters —
   scan must see the merge while the branch ref still exists, so it records
   `merged`, not `abandoned`):
   ```sh
@@ -137,7 +137,7 @@ cursor via `nit log <ranges>`. Branch on `state`:
   from the primary checkout:
   `git -C <primary-checkout> merge --ff-only <branch>`; if that
   checkout isn't yours to drive (parallel agents), stop at
-  `ready_to_merge` and report to the coordinator.
+  `approved` and report to the coordinator.
 - **`merged` / `abandoned`** — chain is closed; stop.
 - **`waiting_for_review`** — nothing actionable: `nit wait` woke on your
   own just-pushed entries. Advance the cursor and wait again.

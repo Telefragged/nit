@@ -616,7 +616,7 @@ pub fn derive_state(proj: &Projection) -> &'static str {
             } else if proj.partial {
                 "agents_turn"
             } else {
-                "ready_to_merge"
+                "approved"
             }
         }
     }

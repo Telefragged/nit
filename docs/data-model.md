@@ -222,13 +222,13 @@ own `reply`/push (it skims those with `--oneline`). There is exactly
 **one** suppressed case:
 
 > a `review` with verdict `approve`, **no comments**, that does **not**
-> complete the chain (does not reach `ready_to_merge`).
+> complete the chain (does not reach `approved`).
 
 A reviewer working through a chain approving change after change should
 not wake the agent each time, so `nit wait` does not return on a
 non-completing pure-approve. It is **not dropped**: the client accumulates
 it and hands it back with the next event that does wake (an approve that
-_completes_ the chain leaves the chain actionable — `ready_to_merge` — and
+_completes_ the chain leaves the chain actionable — `approved` — and
 wakes). `nit wait` recognises completion via the chain's
 `feedback.actionable`; a fresh `nit wait`/`nit log` from a later cursor
 still sees the suppressed entry. Because there is no timeout, a suppressed
@@ -247,7 +247,7 @@ chain state (derived from the live changes):
   any live change changes_requested|commented → agents_turn
   else any live change pending                → waiting_for_review
   else all approved (≥1)                      → agents_turn if partial
-                                                (still pushing), else ready_to_merge
+                                                (still pushing), else approved
   else (no live changes)                      → agents_turn   (empty chain)
 ```
 

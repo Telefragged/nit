@@ -14,7 +14,7 @@
 //            rename and a binary file.
 //   chain 2  agents_turn — a changes_requested change, mid-push (partial),
 //            plus a Change-Id-validation scan error.
-//   chain 3  ready_to_merge — single approved change.
+//   chain 3  approved — single approved change.
 //   chain 4  merged — only visible via ?status=all.
 //
 // Every stored diff leads with the synthetic /COMMIT_MSG file, like the
@@ -928,7 +928,7 @@ const change20: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// Chain 3 — chore/dedupe-ci-cache (ready_to_merge)
+// Chain 3 — chore/dedupe-ci-cache (approved)
 
 const c30r1 = sha(301);
 
@@ -1466,9 +1466,9 @@ function chainState(chain: ChainRecord): ChainState {
   }
   if (live.some((c) => c.status === "pending")) return "waiting_for_review";
   if (live.length > 0 && live.every((c) => c.status === "approved")) {
-    // All approved while partial is agents_turn, never ready_to_merge — the
+    // All approved while partial is agents_turn, never approved — the
     // agent is still pushing (api.md state table).
-    return chain.partial ? "agents_turn" : "ready_to_merge";
+    return chain.partial ? "agents_turn" : "approved";
   }
   return "agents_turn"; // empty chain
 }
