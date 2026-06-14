@@ -151,6 +151,11 @@ Never submit a review verdict yourself (`POST /api/changes/*/reviews` is
 the human's side). The agent surface is push / ready / wait / log /
 status / reply.
 
+Read rolled-up state through these verbs — `nit status` (`--oneline` to
+skim where the chain stands) and the `wait`/`log` `--oneline` digests —
+not by curling the HTTP API and hand-parsing JSON; reach for the raw API
+only when the CLI genuinely lacks the data you need.
+
 ## Notes
 
 - The cursor is yours to track (start `0`, advance to each `wait`/`log`
