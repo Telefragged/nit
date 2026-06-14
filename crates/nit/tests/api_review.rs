@@ -393,52 +393,84 @@ fn request_validation() {
     );
     assert_eq!(st, 400, "{e}");
 
-    // Comments: a draft is not a published comment, so resolving or replying
-    // to one is a 404; resolving a reply is a 400 (root comments only). The
-    // draft's id is stable: it becomes the published comment's id on submit.
+    // A draft is not a published comment, so replying to one is a 404.
     let (_, draft) = http_post(
         &drafts_url,
         &json!({"revision": 1, "file": "x.txt", "line": 1, "body": "root"}),
     );
     let draft_id = draft["id"].as_i64().unwrap();
     let (st, _) = http_post(
-        &server.url(&format!("/api/comments/{draft_id}/resolve")),
-        &json!({}),
-    );
-    assert_eq!(st, 404);
-    let (st, _) = http_post(
         &server.url(&format!("/api/comments/{draft_id}/replies")),
         &json!({"body": "hi"}),
     );
     assert_eq!(st, 404);
 
+    // An empty body is rejected unless the draft stages a resolution.
+    let (st, e) = http_post(&drafts_url, &json!({"revision": 1, "body": ""}));
+    assert_eq!(st, 400, "{e}");
+}
+
+/// Thread resolution is drafted (docs/api.md "Thread resolution"): a draft
+/// carries the resolve decision, applied to its thread only on publish. An
+/// empty-body draft that only stages a resolution adds no comment.
+#[test]
+fn drafted_thread_resolution() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, chain) = http_post(
+        &server.url("/api/chains"),
+        &json!({"repo_path": g.workdir().to_string_lossy(), "branch": "feat", "base": "main"}),
+    );
+    assert_eq!(st, 200, "{chain}");
+    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+    let drafts_url = server.url(&format!("/api/changes/{change_id}/drafts"));
+    let reviews_url = server.url(&format!("/api/changes/{change_id}/reviews"));
+
+    // Publish a root comment (its draft id carries over to the published one).
+    let (_, draft) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "file": "x.txt", "line": 1, "body": "why?"}),
+    );
+    let root_id = draft["id"].as_i64().unwrap();
     let (st, _) = http_post(&reviews_url, &json!({"revision": 1, "verdict": "comment"}));
     assert_eq!(st, 200);
-    let (st, reply) = http_post(
-        &server.url(&format!("/api/comments/{draft_id}/replies")),
-        &json!({"body": "answer"}),
-    );
-    assert_eq!(st, 200);
-    let reply_id = reply["id"].as_i64().unwrap();
-    let (st, e) = http_post(
-        &server.url(&format!("/api/comments/{reply_id}/resolve")),
-        &json!({}),
-    );
-    assert_eq!(st, 400, "{e}");
 
-    // Resolve/unresolve roundtrip on the published root.
-    let (st, resolved) = http_post(
-        &server.url(&format!("/api/comments/{draft_id}/resolve")),
-        &json!({}),
+    let resolved_of = |id: i64| -> bool {
+        let (_, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+        let comments = detail["comments"].as_array().unwrap().clone();
+        // No empty-body resolution draft ever materializes as a comment.
+        assert!(comments.iter().all(|c| c["body"].as_str() != Some("")));
+        comments
+            .iter()
+            .find(|c| c["id"].as_i64() == Some(id))
+            .unwrap()["resolved"]
+            .as_bool()
+            .unwrap()
+    };
+    assert!(!resolved_of(root_id), "new thread starts unresolved");
+
+    // Resolve: an empty-body reply staging resolved=true, then publish.
+    let (st, res_draft) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "parent_id": root_id, "body": "", "resolved": true}),
+    );
+    assert_eq!(st, 200, "{res_draft}");
+    assert_eq!(res_draft["resolved"], true);
+    let (st, _) = http_post(&reviews_url, &json!({"revision": 1, "verdict": "comment"}));
+    assert_eq!(st, 200);
+    assert!(resolved_of(root_id), "drafted resolve applied on publish");
+
+    // Reopen: stage resolved=false, then publish.
+    let (st, _) = http_post(
+        &drafts_url,
+        &json!({"revision": 1, "parent_id": root_id, "body": "", "resolved": false}),
     );
     assert_eq!(st, 200);
-    assert_eq!(resolved["resolved"], true);
-    let (st, unresolved) = http_post(
-        &server.url(&format!("/api/comments/{draft_id}/unresolve")),
-        &json!({}),
-    );
+    let (st, _) = http_post(&reviews_url, &json!({"revision": 1, "verdict": "comment"}));
     assert_eq!(st, 200);
-    assert_eq!(unresolved["resolved"], false);
+    assert!(!resolved_of(root_id), "drafted reopen applied on publish");
 }
 
 #[test]

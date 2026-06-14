@@ -137,7 +137,9 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Comment {
         line_text: d.line_text.clone(),
         body: d.body.clone(),
         state: "draft".to_string(),
-        resolved: false,
+        // For a draft, `resolved` is the decision staged on its checkbox —
+        // the client reads it to show the thread's pending state.
+        resolved: d.resolved.unwrap_or(false),
         review_id: None,
         created_at: d.created_at.clone(),
         updated_at: d.updated_at.clone(),

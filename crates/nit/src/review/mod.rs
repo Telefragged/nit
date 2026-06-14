@@ -119,6 +119,12 @@ pub struct PublishedComment {
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub body: String,
+    /// The thread-resolution decision this comment carries when published
+    /// (`Some(true/false)` = resolve/reopen, `None` = no decision). Applied
+    /// to the comment's thread; an empty `body` carries only this. `None` on
+    /// entries that predate drafted resolution (docs/api.md).
+    #[serde(default)]
+    pub resolved: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,12 +138,6 @@ pub struct ReplyItem {
     pub comment_id: u64,
     pub body: String,
     pub resolve: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResolvePayload {
-    pub comment_id: u64,
-    pub resolved: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,7 +379,6 @@ pub fn fold(proj: &mut Projection, entry: &Entry) -> Result<()> {
         "revisions" => fold_revisions(proj, &entry.parse()?, &entry.created_at),
         "review" => fold_review(proj, &entry.parse()?, &entry.created_at),
         "reply" => fold_reply(proj, &entry.parse()?, &entry.created_at),
-        "resolve" => fold_resolve(proj, &entry.parse()?, &entry.created_at),
         "partial" => proj.partial = entry.parse::<PartialPayload>()?.partial,
         "chain_closed" => {
             proj.status = match entry.parse::<ChainClosedPayload>()?.status.as_str() {
@@ -455,28 +454,45 @@ fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
         created_at: now.to_string(),
     });
     for c in &p.comments {
-        change.comments.push(CommentProj {
-            id: c.id,
-            change_id,
-            // A comment stays pinned to the revision it was authored on
-            // (a draft on an older patchset / interdiff old side), not the
-            // review's target.
-            revision: c.revision.unwrap_or(p.revision),
-            parent_id: c.parent_id,
-            author: "reviewer".to_string(),
-            file: c.file.clone(),
-            line: c.line,
-            side: c.side.clone(),
-            range: c.range,
-            line_text: c.line_text.clone(),
-            body: c.body.clone(),
-            resolved: false,
-            review_id: Some(p.review_id),
-            created_at: now.to_string(),
-            updated_at: now.to_string(),
-        });
+        // An empty-body draft carries only a staged resolution: it updates
+        // its thread without materializing as a comment (docs/data-model.md).
+        if !c.body.trim().is_empty() {
+            change.comments.push(CommentProj {
+                id: c.id,
+                change_id,
+                // A comment stays pinned to the revision it was authored on
+                // (a draft on an older patchset / interdiff old side), not the
+                // review's target.
+                revision: c.revision.unwrap_or(p.revision),
+                parent_id: c.parent_id,
+                author: "reviewer".to_string(),
+                file: c.file.clone(),
+                line: c.line,
+                side: c.side.clone(),
+                range: c.range,
+                line_text: c.line_text.clone(),
+                body: c.body.clone(),
+                resolved: false,
+                review_id: Some(p.review_id),
+                created_at: now.to_string(),
+                updated_at: now.to_string(),
+            });
+        }
+        // Apply the comment's staged resolution to its thread's root, in
+        // payload order — the thread ends at the last decision.
+        if let Some(state) = c.resolved {
+            set_thread_resolved(change, c.parent_id.unwrap_or(c.id), state, now);
+        }
     }
     change.status = Status::from_verdict(&p.verdict);
+}
+
+/// Set a thread's resolution by its root id (a no-op if the root is absent).
+fn set_thread_resolved(change: &mut ChangeProj, root_id: u64, resolved: bool, now: &str) {
+    if let Some(root) = change.comments.iter_mut().find(|c| c.id == root_id) {
+        root.resolved = resolved;
+        root.updated_at = now.to_string();
+    }
 }
 
 fn fold_reply(proj: &mut Projection, p: &ReplyPayload, now: &str) {
@@ -510,20 +526,6 @@ fn fold_reply(proj: &mut Projection, p: &ReplyPayload, now: &str) {
             && let Some(root) = change.comments.iter_mut().find(|c| c.id == root_id)
         {
             root.resolved = true;
-            root.updated_at = now.to_string();
-        }
-    }
-}
-
-fn fold_resolve(proj: &mut Projection, p: &ResolvePayload, now: &str) {
-    if let Some((change_idx, root)) = locate_root(proj, p.comment_id) {
-        let root_id = root.id;
-        if let Some(root) = proj.changes[change_idx]
-            .comments
-            .iter_mut()
-            .find(|c| c.id == root_id)
-        {
-            root.resolved = p.resolved;
             root.updated_at = now.to_string();
         }
     }

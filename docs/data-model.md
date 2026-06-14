@@ -29,14 +29,16 @@ log     (chain_id, idx, kind, payload, created_at,
 
 drafts  (id, chain_id, change_key, revision, parent_id, file, line, side,
          range_start_line, range_start_char, range_end_line, range_end_char,
-         line_text, body, created_at, updated_at)
+         line_text, body, resolved, created_at, updated_at)
         -- reviewer-private scratch: unpublished line comments. Mutable
         -- (PATCH/DELETE) and NOT part of any chain's history — drafts never
         -- enter the log. Publishing a review drains a change's drafts into one
         -- `review` entry and deletes the rows. parent_id references a published
         -- comment id (fold-assigned, see below). side: old | new. range_*: all
         -- four set or all NULL, range_end_line = line (docs/api.md "Range
-        -- comments").
+        -- comments"). resolved: the staged thread-resolution decision (NULL =
+        -- none; docs/api.md "Thread resolution"), applied when the draft
+        -- publishes.
 ```
 
 That is the whole schema. There are no `changes`, `revisions`,
@@ -48,14 +50,13 @@ that is folded state.
 An entry is `(chain_id, idx, kind, payload, created_at)`. `idx` is
 0-based and contiguous, so a cursor is just an offset: an agent that has
 consumed entries `[0, c)` reconnects the `events` stream with `c` and
-receives `[c, head)` then the live tail (docs/api.md "events"). Six kinds:
+receives `[c, head)` then the live tail (docs/api.md "events"). Five kinds:
 
 | kind           | appended by                                   |
 | -------------- | --------------------------------------------- |
 | `revisions`    | a scan that changed structure (push/rescan)   |
 | `review`       | reviewer submits a verdict (`POST …/reviews`) |
 | `reply`        | agent replies to comments (`nit reply`)       |
-| `resolve`      | reviewer toggles thread resolution            |
 | `partial`      | `nit push --partial` / `nit ready` flips it   |
 | `chain_closed` | a scan finds the chain merged/abandoned       |
 
@@ -65,7 +66,7 @@ not a property of the log (see "Wake rule").
 
 ### Identity within the log
 
-Comments need stable ids so later `reply`/`resolve` entries can reference
+Comments need stable ids so later `reply` entries can reference
 them. The server allocates a comment id from a per-chain counter **at
 append time** and writes it into the payload; replay trusts the stored
 ids and resumes the counter at `max(seen) + 1`. Ids are therefore opaque
@@ -100,15 +101,13 @@ other.
   "comments": [                        // the published drafts, parents before children
     {"id": 7, "parent_id": null, "revision": 2, "file": "src/main.rs",
      "line": 14, "side": "new", "range": null, "line_text": "    let x = …",
-     "body": "…"}                      // revision = the draft's own patchset
-  ]
+     "body": "…",                      // revision = the draft's own patchset
+     "resolved": true}                 // staged thread decision; null = none.
+  ]                                    // empty-body + resolved = resolution only
 }
 
 // reply — agent replies, modelled as a list (one element today)
 {"replies": [{"id": 12, "comment_id": 7, "body": "done", "resolve": true}]}
-
-// resolve — reviewer toggles a thread
-{"comment_id": 7, "resolved": true}
 
 // partial — sticky more-commits-coming flag
 {"partial": true}
@@ -128,13 +127,15 @@ Replaying a chain's log in order yields its state. Each kind's effect:
   **orphaned** (`position = null`, comments/reviews kept, underlying
   status retained); a previously-orphaned change present in `live` is
   reattached, its retained status exposed again.
-- **`review`** — allocate the listed comments as published comments;
-  record the review (verdict + message + reviewed revision); set the
-  change's status to the verdict (`approve`→approved,
+- **`review`** — allocate the listed comments as published comments
+  (skipping any with an empty body, which carry only a resolution); for
+  each comment with a non-null `resolved`, set its thread's root to that
+  state (payload order, so the thread ends at the last decision); record
+  the review (verdict + message + reviewed revision); set the change's
+  status to the verdict (`approve`→approved,
   `request_changes`→changes_requested, `comment`→commented).
 - **`reply`** — append each reply as a published comment under its
   `comment_id`; if `resolve`, mark that root thread resolved.
-- **`resolve`** — set the root thread's `resolved`.
 - **`partial`** — set the chain's partial flag.
 - **`chain_closed`** — set the chain's status (merged/abandoned).
 
@@ -214,7 +215,7 @@ The server does **not** decide relevance: it streams every entry on
 `nit wait` (or, later, an event-driven UI) reads the stream and decides
 which entries should end a parked wait. The default is **wake** — every
 event ends the wait, so the agent reacts to a `request_changes`,
-`comment`, `resolve`, `revisions`, `partial`, `chain_closed`, and even its
+`comment`, `revisions`, `partial`, `chain_closed`, and even its
 own `reply`/push (it skims those with `--oneline`). There is exactly
 **one** suppressed case:
 
@@ -253,7 +254,7 @@ The full actionable/feedback contract lives in [api.md](api.md).
 ## Concurrency (normative)
 
 - One **per-chain async mutex** serializes every scan, review submission,
-  reply, resolve, and partial flip — i.e. every appender. Under that lock
+  reply, and partial flip — i.e. every appender. Under that lock
   the batch is fold-validated on a throwaway copy, the log rows are inserted
   in one `BEGIN IMMEDIATE` transaction, the live fold is updated, and only
   then is each entry published on the chain's broadcast channel (the feed

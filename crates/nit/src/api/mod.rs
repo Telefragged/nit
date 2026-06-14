@@ -50,8 +50,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/changes/{id}/drafts", post(create_draft))
         .route("/api/changes/{id}/reviews", post(submit_review))
         .route("/api/drafts/{id}", patch(edit_draft).delete(delete_draft))
-        .route("/api/comments/{id}/resolve", post(resolve_comment))
-        .route("/api/comments/{id}/unresolve", post(unresolve_comment))
         .route("/api/comments/{id}/replies", post(create_reply))
         .with_state(state)
 }
@@ -417,6 +415,14 @@ async fn create_draft(
         if req.line.is_some() && req.file.is_none() {
             return Err(Error::bad_request("a line anchor requires a file"));
         }
+        // An empty body is allowed only when the draft stages a resolution
+        // (a reply that just resolves/reopens — docs/api.md "Thread
+        // resolution"); otherwise the draft would carry nothing.
+        if req.body.trim().is_empty() && req.resolved.is_none() {
+            return Err(Error::bad_request(
+                "a draft needs a body or a resolution decision",
+            ));
+        }
         if req.file.as_deref() == Some(diff::COMMIT_MSG_PATH) && side == "old" {
             return Err(Error::bad_request(
                 "/COMMIT_MSG has no old side — comment with side \"new\"",
@@ -473,6 +479,7 @@ async fn create_draft(
                 range,
                 line_text: line_text.as_deref(),
                 body: &req.body,
+                resolved: req.resolved,
             },
             &db::now_rfc3339(),
         )?;
@@ -515,7 +522,7 @@ async fn edit_draft(
         let conn = state.open_db()?;
         let draft = db::get_draft(&conn, id)?
             .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
-        db::update_draft_body(&conn, id, &req.body, &db::now_rfc3339())?;
+        db::update_draft(&conn, id, &req.body, req.resolved, &db::now_rfc3339())?;
         let updated = db::get_draft(&conn, id)?
             .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
         let change_id = change_id_for_draft(&state, &draft);
@@ -545,62 +552,6 @@ fn change_id_for_draft(state: &Arc<AppState>, draft: &db::DraftRow) -> u64 {
         .chain_entry(draft.chain_id)
         .and_then(|e| e.read().change_by_key(&draft.change_key).map(|c| c.id))
         .unwrap_or(0)
-}
-
-// ---------------------------------------------------------------------------
-// Thread resolution (reviewer side)
-
-async fn resolve_comment(
-    state: State<Arc<AppState>>,
-    path: AppPath<u64>,
-) -> Result<Json<types::Comment>, Error> {
-    set_resolved(state, path, true).await
-}
-
-async fn unresolve_comment(
-    state: State<Arc<AppState>>,
-    path: AppPath<u64>,
-) -> Result<Json<types::Comment>, Error> {
-    set_resolved(state, path, false).await
-}
-
-async fn set_resolved(
-    State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
-    resolved: bool,
-) -> Result<Json<types::Comment>, Error> {
-    let (entry, chain_id) = entry_of_comment(&state, id)?;
-    let guard = entry.gate.lock().await;
-    let st = state.clone();
-    let e2 = entry.clone();
-    let resp = blocking(move || -> Result<Json<types::Comment>, Error> {
-        let root_id = {
-            let proj = e2.read();
-            let root = proj
-                .root_comment(id)
-                .ok_or_else(|| Error::not_found(format!("comment {id} not found")))?;
-            if root.id != id {
-                return Err(Error::bad_request(
-                    "only root comments carry thread resolution",
-                ));
-            }
-            root.id
-        };
-        let mut conn = st.open_db()?;
-        let news = vec![(
-            "resolve".to_string(),
-            serde_json::json!({ "comment_id": root_id, "resolved": resolved }),
-        )];
-        state::commit_entries(&mut conn, &e2, chain_id, news).map_err(map_busy)?;
-        let proj = e2.read();
-        let root = proj
-            .root_comment(root_id)
-            .ok_or_else(|| Error::internal("comment vanished after resolve"))?;
-        Ok(Json(views::comment_view(root)))
-    })
-    .await?;
-    drop(guard);
-    Ok(resp)
 }
 
 // ---------------------------------------------------------------------------
@@ -659,6 +610,7 @@ async fn submit_review(
                         range: d.range,
                         line_text: d.line_text.clone(),
                         body: d.body.clone(),
+                        resolved: d.resolved,
                     })
                     .collect();
                 (change.change_key.clone(), target, comments, review_id)

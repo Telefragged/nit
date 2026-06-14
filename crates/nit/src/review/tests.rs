@@ -179,56 +179,50 @@ fn orphan_retains_status_then_reattaches() {
 }
 
 #[test]
-fn review_comments_then_reply_and_resolve() {
+fn review_comments_carry_drafted_resolution() {
     let mut p = Projection::empty(&chain_row());
     fold(&mut p, &push_one("Iaaa", 10, 1, "a1")).expect("push");
+    // A review whose root comment is staged resolved: it publishes already
+    // resolved (the reviewer checked the box at draft time).
     fold(
         &mut p,
         &entry(
             1,
             "review",
             serde_json::json!({"change_key": "Iaaa", "review_id": 20, "revision": 1,
-                "verdict": "request_changes", "message": "fix",
+                "verdict": "comment", "message": "",
                 "comments": [{"id": 30, "parent_id": null, "file": "m.rs", "line": 2,
-                    "side": "new", "range": null, "line_text": "x", "body": "why"}]}),
+                    "side": "new", "range": null, "line_text": "x", "body": "nit",
+                    "resolved": true}]}),
         ),
     )
     .expect("review");
     let a = p.change_by_key("Iaaa").expect("a");
     assert_eq!(a.comments.len(), 1);
-    assert_eq!(a.reviews.len(), 1);
-    assert!(!a.comments[0].resolved);
+    assert!(
+        a.comments[0].resolved,
+        "staged resolution applies on publish"
+    );
+    assert_eq!(a.unresolved_roots(), 0);
 
-    // Agent replies and resolves the thread.
+    // A later review reopens the thread with an empty-body resolution-only
+    // reply: it changes thread state without materializing a comment.
     fold(
         &mut p,
         &entry(
             2,
-            "reply",
-            serde_json::json!({"replies": [{"id": 31, "comment_id": 30, "body": "done", "resolve": true}]}),
+            "review",
+            serde_json::json!({"change_key": "Iaaa", "review_id": 21, "revision": 1,
+                "verdict": "comment", "message": "",
+                "comments": [{"id": 31, "parent_id": 30, "side": "new", "body": "",
+                    "resolved": false}]}),
         ),
     )
-    .expect("reply");
+    .expect("reopen review");
     let a = p.change_by_key("Iaaa").expect("a");
-    assert_eq!(a.comments.len(), 2);
-    let root = a.comments.iter().find(|c| c.id == 30).expect("root");
-    assert!(root.resolved);
-    let reply = a.comments.iter().find(|c| c.id == 31).expect("reply");
-    assert_eq!(reply.parent_id, Some(30));
-    assert_eq!(reply.author, "agent");
-    assert_eq!(reply.file.as_deref(), Some("m.rs"), "reply inherits anchor");
-
-    // Reviewer unresolves.
-    fold(
-        &mut p,
-        &entry(
-            3,
-            "resolve",
-            serde_json::json!({"comment_id": 30, "resolved": false}),
-        ),
-    )
-    .expect("resolve");
-    assert!(!p.change_by_key("Iaaa").expect("a").comments[0].resolved);
+    assert_eq!(a.comments.len(), 1, "empty-body resolution adds no comment");
+    assert!(!a.comments[0].resolved, "thread reopened");
+    assert_eq!(a.unresolved_roots(), 1);
 }
 
 #[test]

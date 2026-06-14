@@ -177,9 +177,16 @@ Comment = {"id": 7, "change_id": 10, "revision": 2, "parent_id": null,
            "range": CommentRange,        // null: whole-line comment
            "line_text": "    let x = parse(input);",  // null without line
            "body": "…", "state": "draft",   // draft | published
-           "resolved": false,
+           "resolved": false,               // thread resolution (see below)
            "review_id": null, "created_at": "…", "updated_at": "…"}
 ```
+
+`resolved` carries the thread's resolution, but reads differently per
+comment: on a **published root** it is the thread's current state; on a
+**published reply** it is always `false` (a thread's state lives on its
+root); on a **draft** it is the resolution the reviewer has staged on that
+comment's resolve checkbox, applied to the thread only when the draft
+publishes (see "Thread resolution" below).
 
 A published comment's `id`, `parent_id`, and `review_id` are fold-assigned
 ids from the log; a draft's `id` is its row id in the `drafts` table.
@@ -217,38 +224,60 @@ the log. Submitting a review drains a change's drafts into one `review`
 log entry and deletes the rows (docs/data-model.md).
 
 - `POST /api/changes/{id}/drafts` →
-  `req: {"revision": 2, "file": "src/main.rs", "line": 14, "side": "new", "range": CommentRange, "body": "…", "parent_id": null}`
+  `req: {"revision": 2, "file": "src/main.rs", "line": 14, "side": "new", "range": CommentRange, "body": "…", "parent_id": null, "resolved": false}`
   → Comment. `file`/`line` optional (change-/file-level). `side` defaults
   `"new"`. `range` optional: requires a `line` and must satisfy the
   "Range comments" rules, else 400. `file` may be the reserved
   `/COMMIT_MSG` (commit-message comments; `side` must be `"new"`, else
   400). `parent_id` references a published comment id (reply draft).
+  `resolved` optional (default unset): the thread-resolution decision
+  staged on this draft (see "Thread resolution"). A reply draft may carry
+  an empty `body` when it stages a resolution change alone.
   Both columns of a diff are commentable: a new-column anchor stores
   `(revision = TO, side = "new")`; an old-column anchor stores
   `(revision = TO, side = "old")` against `base`, or `(revision = FROM,
 side = "new")` in an interdiff (its old column is the FROM revision's own
   tree). The UI does this mapping; the endpoint just stores what it is sent.
-- `PATCH /api/drafts/{id}` — `{"body": "…"}` → Comment. 404 unless draft.
+- `PATCH /api/drafts/{id}` — `{"body": "…", "resolved": false}` → Comment.
+  `resolved` optional. 404 unless draft.
 - `DELETE /api/drafts/{id}` → 204. 404 unless draft.
-- `POST /api/comments/{id}/resolve` / `…/unresolve` → Comment (root
-  published comments only; reviewer toggling thread resolution). Appends a
-  `resolve` entry.
+
+### Thread resolution
+
+A thread's resolved/unresolved state is **drafted, never immediate**
+(gerrit-style): the reviewer stages it on a draft's resolve checkbox and it
+takes effect when the review publishes. There is no resolve/unresolve
+endpoint. The reply, resolve and reopen actions all save a draft (a reply
+draft under the published root) carrying `resolved`; "reopen" stages
+`false`, "resolve" `true`, a plain reply the thread's current state.
+
+When the review publishes ("Reviews" below), each published comment carries
+its staged `resolved` (`null` = no decision), applied to its thread in
+payload order — so a thread ends at the **last** decision among the
+published comments (data-model.md "The fold"). An empty-body draft that
+only stages a resolution change applies its decision without adding a
+visible comment. The agent stages resolution the same way through replies
+(`nit reply --resolve` / `--unresolve`, below).
 
 ## Reviews
 
 - `POST /api/changes/{id}/reviews` —
   `req: {"revision": 2, "verdict": "approve" | "request_changes" | "comment", "message": "…"}`
-  Under the chain lock: drains the change's drafts, appends one `review`
-  log entry (verdict + cover message + the published comments), folds it
-  (change status → the verdict's), and emits it on the `/events` stream —
-  no server-side relevance judgement (docs/data-model.md "Wake rule").
+  Under the chain lock: drains the change's drafts (their staged `resolved`
+  decisions included), appends one `review` log entry (verdict + cover
+  message + the published comments), folds it (change status → the
+  verdict's; each thread's resolution → its last decision), and emits it on
+  the `/events` stream — no server-side relevance judgement
+  (docs/data-model.md "Wake rule").
   - If `revision` is no longer latest but the latest is **patch-id-equal
     with an unchanged commit message** (pure rebase), the review
     auto-retargets to the latest revision and succeeds.
   - Otherwise stale `revision` → 409; the UI must keep the cover message
     and drafts, refetch, and re-offer submission.
 
-  → `{"review": Review, "published_comments": [Comment]}`
+  → `{"review": Review, "published_comments": [Comment]}` —
+  `published_comments` omits any empty-body resolution-only draft (it
+  changes a thread's state without becoming a comment).
 
 ## Agent endpoints
 
@@ -310,7 +339,7 @@ be skipped (docs/agent-workflow.md).
 ```json
 LogEntry = {
   "idx": 5,                 // 0-based position in the chain's log
-  "kind": "review",         // revisions | review | reply | resolve | partial | chain_closed
+  "kind": "review",         // revisions | review | reply | partial | chain_closed
   "created_at": "…",
   "payload": { … }          // kind-specific; shapes in data-model.md "Payloads"
 }

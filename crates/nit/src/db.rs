@@ -118,6 +118,10 @@ const MIGRATIONS: &[&str] = &[
       updated_at       TEXT NOT NULL
     );
     ",
+    // v2: thread resolution is now drafted (docs/api.md "Thread resolution").
+    // A draft carries the resolve-checkbox decision it stages on its thread;
+    // NULL means no decision. Pre-existing scratch drafts predate the column.
+    "ALTER TABLE drafts ADD COLUMN resolved INTEGER;",
 ];
 
 fn migrate(conn: &Connection) -> Result<()> {
@@ -364,6 +368,9 @@ pub struct DraftRow {
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub body: String,
+    /// Staged thread-resolution decision; `None` = none (docs/api.md
+    /// "Thread resolution"). Stored as the `resolved` INTEGER column.
+    pub resolved: Option<bool>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -397,6 +404,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
         range,
         line_text: row.get("line_text")?,
         body: row.get("body")?,
+        resolved: row.get::<_, Option<i64>>("resolved")?.map(|v| v != 0),
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
     })
@@ -413,6 +421,7 @@ pub struct NewDraft<'a> {
     pub range: Option<CommentRange>,
     pub line_text: Option<&'a str>,
     pub body: &'a str,
+    pub resolved: Option<bool>,
 }
 
 /// Insert a draft with a caller-allocated `id` (from the server's global
@@ -436,8 +445,8 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
     conn.execute(
         "INSERT INTO drafts (id, chain_id, change_key, revision, parent_id, file, line, side,
             range_start_line, range_start_char, range_end_line, range_end_char,
-            line_text, body, created_at, updated_at)
-         VALUES (?15, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14)",
+            line_text, body, resolved, created_at, updated_at)
+         VALUES (?15, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?16, ?14, ?14)",
         params![
             i64::try_from(d.chain_id)?,
             d.change_key,
@@ -454,6 +463,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
             d.body,
             now,
             i64::try_from(id)?,
+            d.resolved.map(i64::from),
         ],
     )?;
     get_draft(conn, id)?.ok_or_else(|| anyhow!("draft {id} vanished"))
@@ -483,12 +493,20 @@ pub fn get_draft(conn: &Connection, id: u64) -> Result<Option<DraftRow>> {
     .map_err(Into::into)
 }
 
+/// Update a draft's body and its staged resolution decision.
+///
 /// # Errors
 /// On a database failure.
-pub fn update_draft_body(conn: &Connection, id: u64, body: &str, now: &str) -> Result<()> {
+pub fn update_draft(
+    conn: &Connection,
+    id: u64,
+    body: &str,
+    resolved: Option<bool>,
+    now: &str,
+) -> Result<()> {
     conn.execute(
-        "UPDATE drafts SET body = ?1, updated_at = ?2 WHERE id = ?3",
-        params![body, now, i64::try_from(id)?],
+        "UPDATE drafts SET body = ?1, resolved = ?4, updated_at = ?2 WHERE id = ?3",
+        params![body, now, i64::try_from(id)?, resolved.map(i64::from)],
     )?;
     Ok(())
 }
@@ -570,8 +588,8 @@ mod tests {
             &conn,
             c.id,
             1,
-            "resolve",
-            &serde_json::json!({"comment_id": 1}),
+            "reply",
+            &serde_json::json!({"replies": []}),
             "t1",
         )
         .expect("append");
@@ -582,7 +600,7 @@ mod tests {
         assert_eq!(entries[1].idx, 1);
         let tail = log_entries(&conn, c.id, 1, None).expect("tail");
         assert_eq!(tail.len(), 1);
-        assert_eq!(tail[0].kind, "resolve");
+        assert_eq!(tail[0].kind, "reply");
     }
 
     #[test]
@@ -603,16 +621,16 @@ mod tests {
                 range: None,
                 line_text: Some("fn main"),
                 body: "look",
+                resolved: None,
             },
             "t0",
         )
         .expect("insert");
         assert_eq!(drafts_for_change(&conn, c.id, "I1").expect("list").len(), 1);
-        update_draft_body(&conn, d.id, "look again", "t1").expect("edit");
-        assert_eq!(
-            get_draft(&conn, d.id).expect("get").expect("some").body,
-            "look again"
-        );
+        update_draft(&conn, d.id, "look again", Some(true), "t1").expect("edit");
+        let edited = get_draft(&conn, d.id).expect("get").expect("some");
+        assert_eq!(edited.body, "look again");
+        assert_eq!(edited.resolved, Some(true));
         delete_drafts_for_change(&conn, c.id, "I1").expect("drain");
         assert!(
             drafts_for_change(&conn, c.id, "I1")

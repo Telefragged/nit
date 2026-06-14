@@ -234,12 +234,19 @@ pub struct NewDraft {
     pub body: String,
     #[serde(default)]
     pub parent_id: Option<u64>,
+    /// Staged thread-resolution decision (api.md "Thread resolution"); a
+    /// reply draft may stage one with an empty body.
+    #[serde(default)]
+    pub resolved: Option<bool>,
 }
 
 /// `PATCH /api/drafts/{id}` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditDraft {
     pub body: String,
+    /// Re-stage the resolution decision (api.md "Thread resolution").
+    #[serde(default)]
+    pub resolved: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +331,7 @@ pub struct FeedbackReview {
 pub struct LogEntry {
     /// 0-based position in the chain's log.
     pub idx: u64,
-    /// revisions | review | reply | resolve | partial | `chain_closed`
+    /// revisions | review | reply | partial | `chain_closed`
     pub kind: String,
     pub created_at: String,
     /// Kind-specific; shapes in data-model.md "Payloads".

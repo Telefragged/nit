@@ -67,10 +67,10 @@ Inspect specific entries without moving your cursor with
 `nit log <ranges>` (e.g. `nit log 3`, `nit log 3..6`, half-open).
 
 Each entry has a `kind` (docs/data-model.md): `review` (a reviewer
-verdict — act on it), `chain_closed` (merged/abandoned — stop), and the
-ones you caused (`revisions` from your push, `reply`, `partial`) or
-reviewer bookkeeping (`resolve`). You act on the reviewer's entries and on
-the rolled-up `state` the response carries.
+verdict, carrying any thread-resolution changes too — act on it),
+`chain_closed` (merged/abandoned — stop), and the ones you caused
+(`revisions` from your push, `reply`, `partial`). You act on the
+reviewer's entries and on the rolled-up `state` the response carries.
 
 ## The loop
 
