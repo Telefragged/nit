@@ -76,10 +76,10 @@ function sweptCells(range: Range): HTMLElement[] {
  * post-change side). Null when the boundaries disagree — the selected
  * text is not contiguous on either side. */
 function sideOf(first: HTMLElement, last: HTMLElement): CommentSide | null {
-  if (first.dataset["new"] !== undefined && last.dataset["new"] !== undefined) {
+  if (first.dataset.new !== undefined && last.dataset.new !== undefined) {
     return "new";
   }
-  if (first.dataset["old"] !== undefined && last.dataset["old"] !== undefined) {
+  if (first.dataset.old !== undefined && last.dataset.old !== undefined) {
     return "old";
   }
   return null;

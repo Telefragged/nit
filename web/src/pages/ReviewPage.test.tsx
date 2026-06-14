@@ -21,7 +21,7 @@ afterEach(cleanup);
  * Rail items scroll separately (FileRail keeps the active item visible in
  * the rail's own scrollport whenever activeFile moves); those nudges are
  * counted apart so the section assertions stay exact. */
-let scrollCalls: Array<{ id: string; expandedAtCall: boolean }>;
+let scrollCalls: { id: string; expandedAtCall: boolean }[];
 let railScrolls: number;
 
 beforeEach(() => {

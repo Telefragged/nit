@@ -100,7 +100,10 @@ function CommentView({
 /** The draft editor a thread opens: `resolved` is the resolve-checkbox
  * default (reply keeps the thread's state, resolve/reopen flips it), and
  * `isReply` only picks the placeholder (docs/api.md "Thread resolution"). */
-type ThreadEditor = { isReply: boolean; resolved: boolean };
+interface ThreadEditor {
+  isReply: boolean;
+  resolved: boolean;
+}
 
 /**
  * A comment thread: root + replies, with reply / resolve / reopen actions
