@@ -378,6 +378,23 @@ pub fn nit(
     (out.status.success(), value, stderr)
 }
 
+/// `nit push` / `nit ready` with the repo path and branch passed
+/// explicitly — they have no cwd fallback. `cmd` is `"push"` or `"ready"`;
+/// `extra` carries flags like `--partial`.
+pub fn nit_register(
+    server: &TestServer,
+    repo: &GitRepo,
+    cmd: &str,
+    branch: &str,
+    extra: &[&str],
+) -> (bool, serde_json::Value, String) {
+    let workdir = repo.workdir();
+    let workdir = workdir.to_str().expect("workdir path is valid UTF-8");
+    let mut args = vec![cmd, "--repo", workdir, "--branch", branch];
+    args.extend_from_slice(extra);
+    nit(server, repo, &args)
+}
+
 fn agent() -> ureq::Agent {
     // Non-2xx responses must come back as (status, body), not errors.
     ureq::config::Config::builder()

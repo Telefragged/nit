@@ -9,7 +9,7 @@ mod common;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use common::{GitRepo, TestServer, http_post, msg, nit};
+use common::{GitRepo, TestServer, http_post, msg, nit_register};
 use serde_json::json;
 
 #[test]
@@ -22,7 +22,7 @@ fn wait_survives_a_server_restart() {
     let server = TestServer::start(db.clone(), None);
     let addr = server.addr;
 
-    let (ok, chain, stderr) = nit(&server, &g, &["push"]);
+    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
     let change_id = chain["changes"][0]["id"].as_i64().unwrap();
 

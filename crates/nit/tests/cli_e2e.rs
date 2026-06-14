@@ -6,7 +6,7 @@ mod common;
 
 use std::process::Command;
 
-use common::{GitRepo, TestServer, http_post, msg, nit};
+use common::{GitRepo, TestServer, http_post, msg, nit, nit_register};
 use serde_json::{Value, json};
 
 #[test]
@@ -17,8 +17,8 @@ fn push_wait_status_reply_loop() {
     g.repo.set_head("refs/heads/feat").unwrap(); // the agent's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // push: repo root + branch from cwd, base defaults to main.
-    let (ok, chain, stderr) = nit(&server, &g, &["push"]);
+    // push: repo + branch passed explicitly, base defaults to main.
+    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
     assert_eq!(chain["branch"], "feat");
     assert_eq!(chain["base"], "main");
@@ -101,7 +101,7 @@ fn push_wait_status_reply_loop() {
     let side = g.commit(&[g.root], "side\n", &[("s.txt", "s\n")]);
     let merge = g.commit(&[c1, side], "merge side\n", &[]);
     g.branch("feat", merge);
-    let (ok, chain, stderr) = nit(&server, &g, &["push"]);
+    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(!ok, "merge commits must fail the push");
     assert!(
         chain["last_scan_error"]
@@ -114,7 +114,7 @@ fn push_wait_status_reply_loop() {
 
     // Recovery is plain re-push after the agent rebases.
     g.branch("feat", c1);
-    let (ok, chain, stderr) = nit(&server, &g, &["push"]);
+    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
     assert_eq!(chain["last_scan_error"], Value::Null);
 }
@@ -128,7 +128,7 @@ fn partial_push_blocks_merge_until_ready() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
     // push --partial: chain registers partial, review can start.
-    let (ok, chain, stderr) = nit(&server, &g, &["push", "--partial"]);
+    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &["--partial"]);
     assert!(ok, "{stderr}");
     assert_eq!(chain["partial"], true);
     assert_eq!(chain["state"], "waiting_for_review");
@@ -148,7 +148,7 @@ fn partial_push_blocks_merge_until_ready() {
     assert_eq!(feedback["chain"]["partial"], true);
 
     // ready clears the flag; the approved chain becomes mergeable.
-    let (ok, chain, stderr) = nit(&server, &g, &["ready"]);
+    let (ok, chain, stderr) = nit_register(&server, &g, "ready", "feat", &[]);
     assert!(ok, "{stderr}");
     assert_eq!(chain["partial"], false);
     assert_eq!(chain["state"], "approved");
@@ -161,12 +161,20 @@ fn cli_errors_are_human_readable() {
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
 
-    // No server listening.
+    // No server listening: a well-formed push (repo path resolves) still
+    // reaches the HTTP layer and reports the unreachable server.
     let dead = TestServer::start(g.dir.path().join("dead.sqlite3"), None);
     let base = dead.base.clone();
     drop(dead);
+    let workdir = g.workdir();
     let out = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(["push"])
+        .args([
+            "push",
+            "--repo",
+            workdir.to_str().unwrap(),
+            "--branch",
+            "feat",
+        ])
         .current_dir(g.workdir())
         .env("NIT_SERVER", &base)
         .output()
@@ -188,6 +196,30 @@ fn cli_errors_are_human_readable() {
     assert!(stderr.contains("run 'nit push' first"), "{stderr}");
 }
 
+// push has no cwd fallback: repo and branch are required, so being inside a
+// git checkout is not enough — clap rejects the call before any HTTP, which
+// is what stops a stray push from forking a duplicate chain off the wrong
+// path.
+#[test]
+fn push_requires_repo_and_branch() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let out = Command::new(env!("CARGO_BIN_EXE_nit"))
+        .args(["push"])
+        .current_dir(g.workdir())
+        .env("NIT_SERVER", &server.base)
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "bare push must not fall back to cwd");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("--repo"), "{stderr}");
+    assert!(stderr.contains("--branch"), "{stderr}");
+}
+
 // A new revision of an existing change (amend → new sha, same Change-Id) is a
 // fresh `revisions` entry; one `nit wait` from behind it must surface it, not
 // stop at an earlier entry. Regression: `wait` used to return only the first
@@ -202,12 +234,12 @@ fn wait_surfaces_a_new_revision_behind_an_earlier_entry() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
     // push r1 of change Ia -> revisions@0
-    let (ok, _c, stderr) = nit(&server, &g, &["push"]);
+    let (ok, _c, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
     // amend (same Change-Id Ia, new content -> new sha) = r2; push -> revisions@1
     let c1b = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nB\n")]);
     g.branch("feat", c1b);
-    let (ok, _c, stderr) = nit(&server, &g, &["push"]);
+    let (ok, _c, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
 
     // One wait from cursor 0 returns the whole run, the new revision included.

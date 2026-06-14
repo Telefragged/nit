@@ -21,7 +21,7 @@ struct Args {
 enum Cmd {
     /// Run the review server and web UI
     Serve(server::ServeArgs),
-    /// Register/refresh the current branch for review (idempotent)
+    /// Register/refresh a branch (--repo/--branch) for review (idempotent)
     Push(cli::PushArgs),
     /// Mark the chain complete: clear the partial flag and refresh (idempotent)
     Ready(cli::ReadyArgs),

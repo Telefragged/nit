@@ -4,7 +4,7 @@
 //! purely on the documented shapes; all review logic lives server-side.
 
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -23,12 +23,18 @@ fn server_url(flag: Option<String>) -> String {
 
 #[derive(clap::Args)]
 pub struct PushArgs {
-    /// Base ref to review against (default: main, falling back to master)
+    /// Worktree of the branch to register. Required — there is no cwd
+    /// fallback: a chain's identity is this path + `--branch`, so deriving
+    /// the path from the cwd silently forks a duplicate chain when run from
+    /// the wrong checkout. A relative path resolves against the current dir.
     #[arg(long)]
-    pub base: Option<String>,
-    /// Branch to register (default: the current HEAD branch)
+    pub repo: PathBuf,
+    /// Branch to register
     #[arg(long)]
-    pub branch: Option<String>,
+    pub branch: String,
+    /// Base ref to review against
+    #[arg(long, default_value = "main")]
+    pub base: String,
     /// Mark the chain partial: review can start, merging
     /// cannot; sticky until `nit ready`
     #[arg(long)]
@@ -40,12 +46,15 @@ pub struct PushArgs {
 
 #[derive(clap::Args)]
 pub struct ReadyArgs {
-    /// Base ref to review against (default: main, falling back to master)
+    /// Worktree of the branch to mark ready (required; see `nit push`)
     #[arg(long)]
-    pub base: Option<String>,
-    /// Branch to register (default: the current HEAD branch)
+    pub repo: PathBuf,
+    /// Branch to mark ready
     #[arg(long)]
-    pub branch: Option<String>,
+    pub branch: String,
+    /// Base ref to review against
+    #[arg(long, default_value = "main")]
+    pub base: String,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -110,18 +119,19 @@ pub struct ReplyArgs {
 // ---------------------------------------------------------------------------
 // Commands
 
-/// Register/refresh the current branch as a chain; idempotent.
+/// Register/refresh `--branch` of `--repo` as a chain; idempotent.
 /// `--partial` marks the chain partial; without it the sticky flag is left
 /// untouched (never cleared by a plain push).
 ///
 /// # Errors
-/// When the repo or server is unreachable, and when the scan failed —
-/// the chain JSON still prints first so the agent sees
-/// `last_scan_error` and `web_url`.
+/// When the repo path can't be resolved or the server is unreachable, and
+/// when the scan failed — the chain JSON still prints first so the agent
+/// sees `last_scan_error` and `web_url`.
 pub fn push(args: PushArgs) -> Result<()> {
     register(
-        args.base,
-        args.branch,
+        &args.repo,
+        &args.branch,
+        &args.base,
         args.server,
         args.partial.then_some(true),
     )
@@ -133,30 +143,32 @@ pub fn push(args: PushArgs) -> Result<()> {
 /// # Errors
 /// Same as [`push`].
 pub fn ready(args: ReadyArgs) -> Result<()> {
-    register(args.base, args.branch, args.server, Some(false))
+    register(
+        &args.repo,
+        &args.branch,
+        &args.base,
+        args.server,
+        Some(false),
+    )
 }
 
 /// Shared push/ready core: register/refresh the chain via
 /// `POST /api/chains`, sending `partial` only when an override is given
-/// (absent leaves the server's sticky flag unchanged).
+/// (absent leaves the server's sticky flag unchanged). The repo path is
+/// canonicalized client-side so a relative `--repo` resolves against the
+/// caller's cwd, not the server's.
 fn register(
-    base: Option<String>,
-    branch: Option<String>,
+    repo: &Path,
+    branch: &str,
+    base: &str,
     server: Option<String>,
     partial: Option<bool>,
 ) -> Result<()> {
-    let (root, repo) = discover_repo()?;
-    let branch = match branch {
-        Some(b) => b,
-        None => current_branch(&repo)?,
-    };
-    let base = match base {
-        Some(b) => b,
-        None => default_base(&repo)?,
-    };
+    let repo = std::fs::canonicalize(repo)
+        .with_context(|| format!("cannot resolve repo path {}", repo.display()))?;
     let client = Client::new(server_url(server));
     let mut body = json!({
-        "repo_path": root.to_string_lossy(),
+        "repo_path": repo.to_string_lossy(),
         "branch": branch,
         "base": base,
     });
@@ -503,7 +515,7 @@ fn print_json(value: &Value) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Repo introspection (cwd → repo root, branch, base)
+// Repo introspection (cwd → repo root + branch, for chain resolution)
 
 fn discover_repo() -> Result<(PathBuf, Repository)> {
     let repo = Repository::discover(".")
@@ -523,15 +535,6 @@ fn current_branch(repo: &Repository) -> Result<String> {
     head.shorthand()
         .map(str::to_string)
         .ok_or_else(|| anyhow!("branch name is not valid UTF-8"))
-}
-
-fn default_base(repo: &Repository) -> Result<String> {
-    for candidate in ["main", "master"] {
-        if repo.revparse_single(candidate).is_ok() {
-            return Ok(candidate.to_string());
-        }
-    }
-    bail!("neither 'main' nor 'master' exists — pass --base");
 }
 
 /// The registered chain for the cwd's repo + branch, via
@@ -861,18 +864,6 @@ mod tests {
             .expect("HEAD should point at a commit");
         repo.set_head_detached(oid).expect("detach should succeed");
         assert!(current_branch(&repo).is_err());
-    }
-
-    #[test]
-    fn default_base_prefers_main_then_master() {
-        let (_dir, repo) = repo_with_head("refs/heads/main");
-        assert_eq!(default_base(&repo).expect("base should resolve"), "main");
-
-        let (_dir2, repo2) = repo_with_head("refs/heads/master");
-        assert_eq!(default_base(&repo2).expect("base should resolve"), "master");
-
-        let (_dir3, repo3) = repo_with_head("refs/heads/trunk");
-        assert!(default_base(&repo3).is_err());
     }
 
     #[test]

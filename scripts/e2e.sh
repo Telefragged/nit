@@ -65,7 +65,7 @@ done
 curl -sf $SERVER/api/health >/dev/null || fail "server did not come up"
 
 say "agent: push --partial registers the chain as partial"
-CHAIN=$("$NIT" push --partial --server $SERVER)
+CHAIN=$("$NIT" push --partial --repo "$REPO" --branch feat/demo --server $SERVER)
 jqe "$CHAIN" .state waiting_for_review
 jqe "$CHAIN" .partial true
 jqe "$CHAIN" '.changes | length' 2
@@ -91,7 +91,7 @@ say "agent: reply --resolve, fix with a fixup!, push"
 "$NIT" reply "$COMMENT_ID" --resolve -m "switched to an f-string" --server $SERVER >/dev/null
 sed -i 's/print("hello " + name)/print(f"hello {name}")/' greet.py
 git add . && git commit -q --fixup="$(git rev-parse HEAD~1)"
-CHAIN=$("$NIT" push --server $SERVER)
+CHAIN=$("$NIT" push --repo "$REPO" --branch feat/demo --server $SERVER)
 jqe "$CHAIN" .partial true # plain push leaves the sticky flag alone
 jqe "$CHAIN" '.changes[0].revision' 2
 jqe "$CHAIN" '.changes[0].status' pending
@@ -117,7 +117,7 @@ jqe "$FB" .state agents_turn
 jqe "$FB" .chain.partial true
 
 say "agent: ready clears partial; state is ready_to_merge"
-CHAIN=$("$NIT" ready --server $SERVER)
+CHAIN=$("$NIT" ready --repo "$REPO" --branch feat/demo --server $SERVER)
 jqe "$CHAIN" .partial false
 jqe "$CHAIN" .state ready_to_merge
 FB=$("$NIT" status --server $SERVER)

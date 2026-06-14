@@ -81,9 +81,9 @@ for _ in $(seq 50); do
   sleep 0.1
 done
 
-"$NIT" push --server $SERVER --branch feat/retry-policy >/dev/null
-B=$("$NIT" push --server $SERVER --branch fix/log-rotation)
-C=$("$NIT" push --server $SERVER --branch chore/pin-toolchain)
+"$NIT" push --server $SERVER --repo "$TMP/repo" --branch feat/retry-policy >/dev/null
+B=$("$NIT" push --server $SERVER --repo "$TMP/repo" --branch fix/log-rotation)
+C=$("$NIT" push --server $SERVER --repo "$TMP/repo" --branch chore/pin-toolchain)
 
 # Chain B: two draft comments + request_changes.
 BCH=$(jq -r '.changes[0].id' <<<"$B")
