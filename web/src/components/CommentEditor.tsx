@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAutosize } from "../lib/useAutosize";
 
 /** Single confirmation point for every path that throws away editor text.
  * Returns true when discarding is OK: nothing dirty, or the user agreed.
@@ -31,8 +32,11 @@ export default function CommentEditor({
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [body, setBody] = useState(initial);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const canSave = body.trim().length > 0 && !saving;
   const dirty = body.trim().length > 0 && body.trim() !== initial.trim();
+
+  useAutosize(textareaRef, body);
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -48,6 +52,7 @@ export default function CommentEditor({
   return (
     <div className="editor">
       <textarea
+        ref={textareaRef}
         autoFocus
         value={body}
         placeholder={placeholder}

@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, submitReview } from "../api/client";
 import type { Chain, ChangeDetail, Verdict } from "../api/types";
+import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "./CommentEditor";
 
 /**
@@ -32,6 +33,8 @@ export default function ReviewBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  useAutosize(textareaRef, message);
 
   const drafts = change.comments.filter((c) => c.state === "draft").length;
   const unresolved = change.comments.filter(

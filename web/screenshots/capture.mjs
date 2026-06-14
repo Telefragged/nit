@@ -198,6 +198,38 @@ const captures = [
         .fill("Should revoke_family also bump the metrics counter?");
     },
   },
+  // Autosize: the inline editor grows to fit a multi-line draft instead of
+  // scrolling inside its default min-height box (useAutosize).
+  {
+    name: "review-autosize-editor",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page.evaluate(() => {
+        const code = [...document.querySelectorAll(".code .code-text")].find(
+          (t) => t.textContent.includes("self.store.revoke_family"),
+        );
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+      await page.keyboard.press("c");
+      await page.waitForSelector("textarea");
+      await page
+        .locator("textarea")
+        .fill(
+          "Walk the family-revocation path here:\n" +
+            "1. lookup() returns the presented token's row;\n" +
+            "2. reuse flips the whole family to revoked in one statement;\n" +
+            "3. every descendant token stops validating;\n" +
+            "4. the metrics counter should bump too.\n" +
+            "The editor grew to fit all of this — no inner scrollbar.",
+        );
+    },
+  },
   // Published range threads: the multi-line selection on rotate.rs and the
   // partial-line one on the commit message. They are pinned to r1, so the
   // r1 → r2 interdiff renders them tinted on the left column (docs/api.md

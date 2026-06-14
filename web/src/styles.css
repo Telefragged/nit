@@ -1120,6 +1120,11 @@ table.list tbody tr:hover {
 .editor textarea {
   width: 100%;
   min-height: 64px;
+  /* useAutosize fits the height to the content, so manual resize is
+     redundant; cap very long bodies with a scroll instead of an endless box. */
+  resize: none;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 .editor-actions {
   display: flex;
@@ -1277,6 +1282,10 @@ table.list tbody tr:hover {
 .reply-modal textarea {
   width: 100%;
   min-height: 96px;
+  /* autosizes like the inline editor (see .editor textarea). */
+  resize: none;
+  max-height: 50vh;
+  overflow-y: auto;
 }
 .reply-modal-actions {
   display: flex;
