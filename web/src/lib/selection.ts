@@ -35,7 +35,7 @@ function codeTextOf(cell: Element): Element | null {
 }
 
 const cellTextLength = (cell: Element): number =>
-  codeTextOf(cell)?.textContent?.length ?? 0;
+  codeTextOf(cell)?.textContent.length ?? 0;
 
 /** Char offset of a boundary point within `cell`'s code text. Points
  * outside the `.code-text` span (the sign, the cell itself) clamp to the

@@ -34,10 +34,11 @@ export default function FileRail({
   const railRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (activeIndex === null) return;
+    // Index access (not .item(), which the DOM lib types non-null) so an
+    // out-of-range active index reads undefined and the scroll is skipped.
     railRef.current
       ?.querySelectorAll(".rail-item")
-      .item(activeIndex)
-      ?.scrollIntoView({ block: "nearest" });
+      [activeIndex]?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
   const totals = diffTotals(files);
   return (

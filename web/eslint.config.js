@@ -62,7 +62,6 @@ export default tseslint.config(
       // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
       "@typescript-eslint/restrict-template-expressions": "off", // 68
       "@typescript-eslint/no-non-null-assertion": "off", // 55
-      "@typescript-eslint/no-unnecessary-condition": "off", // 12 (pending: 11/12 are index-access guards — see noUncheckedIndexedAccess decision)
       "react-refresh/only-export-components": "off", // 3 (override above)
       "react-hooks/set-state-in-effect": "off", // 2
       "react-hooks/immutability": "off", // 1
