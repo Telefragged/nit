@@ -70,6 +70,10 @@ pub struct LogArgs {
     /// `..9`, `..` (all). Several are concatenated in order, e.g. `1 4..6`.
     #[arg(required = true)]
     pub ranges: Vec<String>,
+    /// Chain to read, by id; overrides the cwd's repo+branch lookup. Lets
+    /// you inspect any chain's log from anywhere (no git repo required).
+    #[arg(long)]
+    pub chain: Option<u64>,
     /// Print a one-line digest per entry instead of full payloads
     #[arg(long)]
     pub oneline: bool,
@@ -281,12 +285,17 @@ fn next_sse_data<R: BufRead>(reader: &mut R) -> std::io::Result<Option<String>> 
 }
 
 /// Print specific log entries by index/range without moving any cursor.
+/// `--chain` names the chain directly; otherwise it is resolved from the
+/// cwd's repo + branch.
 ///
 /// # Errors
 /// When a range is malformed or the server can't be reached.
 pub fn log(args: LogArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    let chain_id = resolve_chain(&client, Retry::No)?;
+    let chain_id = match args.chain {
+        Some(id) => id,
+        None => resolve_chain(&client, Retry::No)?,
+    };
     let mut entries: Vec<Value> = Vec::new();
     let mut head = 0;
     for spec in &args.ranges {
