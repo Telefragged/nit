@@ -177,6 +177,11 @@ pub struct Line {
     /// New line number; absent for del.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub new: Option<u64>,
+    /// Changed by a rebase, not the agent (docs/api.md "Rebase-aware
+    /// interdiffs"). Omitted on the wire when false, so non-rebased diffs
+    /// are byte-for-byte unaffected.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub drift: bool,
     /// Without trailing newline.
     pub text: String,
 }

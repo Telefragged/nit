@@ -10,6 +10,7 @@
 //! (docs/data-model.md "Concurrency").
 
 pub mod diff;
+pub mod rebase;
 pub mod state;
 pub mod types;
 pub mod views;
@@ -315,6 +316,15 @@ struct DiffQuery {
     against: Option<u64>,
 }
 
+/// Revision `m` of an interdiff (the `against` side), read from the fold:
+/// its commit, message, and parent — the parent so a rebase
+/// (`parent(m) != parent(n)`) can be detected and contained.
+struct AgainstRev {
+    commit_sha: String,
+    message: String,
+    parent_sha: String,
+}
+
 async fn revision_diff(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(u64, u64)>,
@@ -324,12 +334,14 @@ async fn revision_diff(
     blocking(move || {
         // Pull the revision shas + messages out of the fold, then drop the
         // lock before touching git.
+        // For an interdiff, `against` also carries parent(m) so a rebase
+        // (parent(m) != parent(n)) can be detected and contained.
         let (repo_path, new_sha, new_msg, parent_sha, against): (
             String,
             String,
             String,
             String,
-            Option<(String, String)>,
+            Option<AgainstRev>,
         ) = {
             let proj = entry.read();
             let change = proj
@@ -344,7 +356,11 @@ async fn revision_diff(
                     let a = change
                         .revision(m)
                         .ok_or_else(|| Error::not_found(format!("revision {m} not found")))?;
-                    Some((a.commit_sha.clone(), a.message.clone()))
+                    Some(AgainstRev {
+                        commit_sha: a.commit_sha.clone(),
+                        message: a.message.clone(),
+                        parent_sha: a.parent_sha.clone(),
+                    })
                 }
             };
             (
@@ -358,7 +374,9 @@ async fn revision_diff(
         let repo = Repository::open(&repo_path)
             .map_err(|e| Error::internal(format!("cannot open the chain's repository: {e}")))?;
         let new_tree = commit_tree(&repo, &new_sha)?;
-        let (old_tree, against_message) = match against {
+        // The interdiff's old side (= revision m) and its parent, kept for
+        // drift detection after the plain diff is rendered.
+        let (old_tree, against_message, against_rev) = match against {
             None => {
                 let parent = repo
                     .find_commit(parse_oid(&parent_sha)?)
@@ -366,15 +384,28 @@ async fn revision_diff(
                 let tree = parent
                     .tree()
                     .map_err(|e| Error::internal(format!("parent tree missing: {e}")))?;
-                (tree, None)
+                (tree, None, None)
             }
-            Some((sha, msg)) => (commit_tree(&repo, &sha)?, Some(msg)),
+            Some(a) => (
+                commit_tree(&repo, &a.commit_sha)?,
+                Some(a.message),
+                Some((a.commit_sha, a.parent_sha)),
+            ),
         };
         let mut wire = diff::diff_trees(&repo, &old_tree, &new_tree)?;
         wire.files.insert(
             0,
             diff::commit_msg_file(against_message.as_deref(), &new_msg)?,
         );
+        // Contain rebase drift only when the interdiff's two revisions have
+        // different parents (docs/api.md "Rebase-aware interdiffs").
+        if let Some((m_sha, parent_m)) = against_rev
+            && parent_m != parent_sha
+            && let Err(e) =
+                rebase::tag_drift(&repo, &mut wire, &m_sha, &parent_m, &new_sha, &parent_sha)
+        {
+            tracing::warn!("rebase-aware interdiff tagging failed; serving plain interdiff: {e:#}");
+        }
         Ok(Json(wire))
     })
     .await

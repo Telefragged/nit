@@ -115,6 +115,7 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<types::Hunk>> {
                 kind: kind.to_string(),
                 old: line.old_lineno().map(u64::from),
                 new: line.new_lineno().map(u64::from),
+                drift: false,
                 text: text.strip_suffix('\n').unwrap_or(&text).to_string(),
             });
         }
@@ -161,6 +162,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
                     kind: "context".to_string(),
                     old: Some(n),
                     new: Some(n),
+                    drift: false,
                     text: text.to_string(),
                 })
             })
