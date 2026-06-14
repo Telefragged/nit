@@ -1,6 +1,6 @@
 ---
 name: nit-review
-description: Land changes through nit's review loop (push --partial per commit → ready → wait → amend → ff-merge). Use as soon as the first commit on a feature branch is done — review runs alongside the build — on "push for review", or when acting on nit feedback. Exemptions: docs/dev.md.
+description: Land changes through nit's review loop (push --partial per commit → ready → wait → amend → approve action). Use as soon as the first commit on a feature branch is done — review runs alongside the build — on "push for review", or when acting on nit feedback. Exemptions: docs/dev.md.
 ---
 
 # nit-review — the dogfood loop
@@ -43,8 +43,8 @@ is already broken. An unpushed commit is invisible to the reviewer.
 - The change matches a "Review exemptions" entry in `docs/dev.md`, or the
   user opts this change out ("skip nit", "land directly"). Skipping nit
   skips the _review_, not the branch discipline: finish the work on its
-  branch/worktree and ff-merge to `main` exactly where the loop's merge
-  step would have run.
+  branch/worktree and run the approve action (recipe: docs/dev.md "The
+  approve action") exactly where the loop would have.
 - The current _commit_ is mid-flight. Push only completed, green commits;
   an incomplete chain is fine — that is what `--partial` marks. Completed
   is not final: a planned cleanup/self-review/verification pass that may
@@ -121,23 +121,13 @@ cursor via `nit log <ranges>`. Branch on `state`:
   - On a partial chain, `agents_turn` with none of the above (every pushed
     change approved) is not an error and not feedback — the reviewer is
     caught up. Keep building, or `nit ready` when the branch is done.
-- **`approved`** — every change approved. Land it (order matters —
-  scan must see the merge while the branch ref still exists, so it records
-  `merged`, not `abandoned`):
-  ```sh
-  # when main moved: rebase onto it, keeping every replayed commit
-  # treefmt-clean (docs/dev.md "Formatting")
-  git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' main
-  git checkout main && git merge --ff-only <branch>
-  nit push --branch <branch>      # scan flags the chain merged
-  git branch -d <branch>
-  ```
-  In a worktree (`.worktrees/*`): rebase there, but never
-  `git checkout main` — main is checked out elsewhere. Run the merge
-  from the primary checkout:
-  `git -C <primary-checkout> merge --ff-only <branch>`; if that
-  checkout isn't yours to drive (parallel agents), stop at
-  `approved` and report to the coordinator.
+- **`approved`** — every change approved. nit's job ends here; what to do
+  with an approved chain is **the project's approve action**, not part of
+  the loop — run it as the project defines it (recipe: docs/dev.md "The
+  approve action", covering the rebase, ordering, and the worktree
+  caveat). If the landing isn't yours to drive (main lives in another
+  checkout a coordinator owns), stop at `approved` and report to the
+  coordinator.
 - **`merged` / `abandoned`** — chain is closed; stop.
 - **`waiting_for_review`** — nothing actionable: `nit wait` woke on your
   own just-pushed entries. Advance the cursor and wait again.

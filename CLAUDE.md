@@ -11,7 +11,8 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
 1. **All dev runs in the nix devShell** — `nix develop -c <cmd>`. Never use
    system toolchains. `nix build` must stay green.
 2. **Small, single-purpose commits.** One concern per commit; no merge
-   commits — worktrees land via rebase + fast-forward (see docs/dev.md).
+   commits — an approved chain lands via this repo's approve action, a
+   rebase + fast-forward only (docs/dev.md "The approve action").
 3. **Every commit is treefmt-clean** — `nix develop -c treefmt` before
    each commit; after every rebase re-format each rewritten commit (not
    just the tip), above all after resolving merge conflicts — recipe in

@@ -137,17 +137,43 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
   ```
 
   Commit there, drive the nit review loop from that worktree, and land via
-  rebase + fast-forward only — never a merge commit anywhere (the
-  `approved` step in the `nit-review` skill has the exact
-  rebase/merge recipe). Tear it down after landing:
-  `git worktree remove .worktrees/<slug>` then `git branch -d track/<slug>`.
+  the approve action — rebase + fast-forward only, never a merge commit
+  anywhere (recipe: "The approve action" below). Tear it down after
+  landing: `git worktree remove .worktrees/<slug>` then
+  `git branch -d track/<slug>`.
 
 ## Landing changes — the nit review loop
 
 This repo dogfoods itself: finished work is pushed as a nit chain and
-reviewed by a human before it ff-merges to `main`. Agents drive the loop
-with the `nit-review` skill (`.claude/skills/nit-review/SKILL.md`); the
-underlying protocol is `docs/agent-workflow.md`.
+reviewed by a human before the approve action lands it on `main`. Agents
+drive the loop with the `nit-review` skill
+(`.claude/skills/nit-review/SKILL.md`); the underlying protocol is
+`docs/agent-workflow.md`.
+
+### The approve action
+
+nit derives the `approved` state (every live change approved, chain not
+`partial`) but does **not** prescribe what landing it means — that is the
+**approve action**, defined per project. For this repo the approve action
+is a fast-forward-only merge to `main` (no merge commits — golden rule 2):
+
+```sh
+# when main moved: rebase onto it, keeping every replayed commit
+# treefmt-clean ("Formatting" above)
+git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' main
+git checkout main && git merge --ff-only <branch>
+nit push --branch <branch>      # scan flags the chain merged
+git branch -d <branch>
+```
+
+Order matters: the scan must see the merge while the branch ref still
+exists, so it records `merged`, not `abandoned`.
+
+In a worktree (`.worktrees/*`): rebase there, but never `git checkout
+main` — main is checked out in the primary worktree. Run the merge from
+that checkout: `git -C <primary-checkout> merge --ff-only <branch>`. If
+that checkout isn't yours to drive (parallel agents), stop at `approved`
+and report to the coordinator.
 
 ### Review exemptions
 

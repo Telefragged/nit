@@ -101,8 +101,8 @@ cursor=<resp.head>            # advance over everything you just received
 nit push                      # the rewritten commits become new revisions
 # …then loop: nit wait $cursor again (returns your own entries first),
 #   advance, until state=approved or the chain closes
-# then: rebase onto <base> if it moved — re-formatting each replayed
-#   commit (docs/dev.md "Formatting") — and merge/ff the branch
+# then run the project's approve action (commonly: rebase onto <base> if
+#   it moved, re-formatting each replayed commit, then fast-forward it)
 nit push                      # optional: next scan appends chain_closed{merged}
 ```
 
@@ -191,9 +191,12 @@ durable record of why the change ended up the way it did.
   just means every pushed change is approved — the reviewer is caught up.
   Not an error, nothing to address: keep pushing commits, or `nit ready`
   when the branch is done.
-- `approved` — every change approved: rebase onto the base if it
-  moved (re-formatting each replayed commit), merge/ff, done. The chain
-  leaves the dashboard on the next scan.
+- `approved` — every change approved. Run the project's **approve
+  action**: nit derives the state but does not prescribe what landing it
+  means — each project defines that (commonly: rebase onto the base if it
+  moved, re-formatting each replayed commit, then fast-forward the
+  branch). The chain leaves the dashboard once the action lands the work
+  and the next scan sees it.
 - `waiting_for_review` — nothing actionable (it woke on your own
   just-pushed entries); wait again.
 - `merged` / `abandoned` — the chain is closed; stop.
