@@ -59,10 +59,15 @@ happens.
     style), unified ⇄ side-by-side toggle persisted in localStorage;
   - file sections are collapsible (header click toggles) and start
     collapsed — except the commit message, the entry point of a commit
-    review. Collapsed files hide their inline threads; the rail's
-    draft/comment counts still signal them. The rail title carries an
-    expand-all ⇄ collapse-all toggle; `[`/`]` file nav reveals like a
-    rail click. Collapse state resets per diff (change/revision/base);
+    review. The file header carries an `N comments` tally beside its +/-
+    counts: the threads visible for that file in the shown range (placement
+    rules above — a thread pinned to a hidden revision is not counted), so
+    the example `M bla.rs +32 −16 3 comments` omits a comment on a revision
+    neither side displays. Collapsed files hide their inline threads; that
+    header tally and the rail's draft/comment counts still signal them. The
+    rail title carries an expand-all ⇄ collapse-all toggle; `[`/`]` file nav
+    reveals like a rail click. Collapse state resets per diff
+    (change/revision/base);
   - diff: monospace, full-width gutters with old/new line numbers, add/del
     coloring, per-line syntax highlighting (language from extension; skip
     silently when unknown), hunk separators showing skipped ranges;

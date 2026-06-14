@@ -13,7 +13,11 @@ import type {
   Hunk,
   Line,
 } from "../../api/types";
-import { commentPlacement, draftAnchor } from "../../lib/comments";
+import {
+  commentCountLabel,
+  commentPlacement,
+  draftAnchor,
+} from "../../lib/comments";
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
@@ -420,6 +424,12 @@ export default function DiffFileView({
             <span className="minus">−{file.deletions}</span>
           </span>
         )}
+        {/* Threads visible in the current range for this file: the `threads`
+            prop is already range-filtered (docs/api.md "Comment placement"),
+            so a thread pinned to a hidden revision is not counted. */}
+        {threads.length > 0 ? (
+          <span className="fcomments">{commentCountLabel(threads.length)}</span>
+        ) : null}
       </header>
 
       {collapsed ? null : (

@@ -816,6 +816,10 @@ table.list tbody tr:hover {
 .fcounts {
   font-size: 11.5px;
 }
+.fcomments {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
 .fstat {
   width: 16px;
   text-align: center;
