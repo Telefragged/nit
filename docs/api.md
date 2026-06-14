@@ -372,7 +372,9 @@ be skipped (docs/agent-workflow.md).
   The stream is **raw**: the server emits every entry and makes no
   relevance judgement. Deciding which events matter — the **wake rule** — is
   the client's job (data-model.md), so one endpoint serves `nit wait`,
-  `nit log --follow`, and a future event-driven UI. There is no timeout and no server-side
+  `nit log --follow` (and its `--reviewer-only` filter, which mutes the
+  agent's own entries client-side), and a future event-driven UI. There is
+  no timeout and no server-side
   filtering; the stream ends only on graceful shutdown or client
   disconnect, and a client resumes by reconnecting with its advanced
   `cursor` (nothing is skipped — the backlog replay covers the gap). The

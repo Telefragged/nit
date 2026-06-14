@@ -90,14 +90,20 @@ nit wait $cursor    # blocks until entries land beyond $cursor; prints JSON
 `--repo`/`--branch` are required — push has no cwd fallback (a stray push
 from the wrong checkout would fork a duplicate chain). **Prefer the
 follow-monitor**: Claude Code can relay a background process, so run
-`nit log --follow --oneline $cursor` as a background Bash task instead of
-polling `nit wait` — it streams each entry as it lands and you triage it
-(act on follow-ups now, queue unrelated comments). Keep `--oneline`: one
-parseable line per entry, not the token-heavy multi-line full JSON. It
-relays every entry
-raw (no wake rule) and advances no cursor — track the last `idx` and
-resume with `nit log --follow <idx+1>..`. `nit wait` is the fallback when a
-monitor is not available (docs/agent-workflow.md "Following the log
+`nit log --follow --oneline --reviewer-only $cursor` as a background Bash
+task instead of polling `nit wait` — it streams each entry as it lands and
+you triage it (act on follow-ups now, queue unrelated comments). Keep
+`--oneline`: one parseable line per entry, not the token-heavy multi-line
+full JSON. `--reviewer-only` mutes your own echoes (`revisions`, `reply`,
+`partial`) and otherwise applies `nit wait`'s wake rule — it wakes on the
+reviewer and chain closure, but not on a comment-less approve that leaves
+the chain short of `approved`. Each relayed line is still just a doorbell:
+re-read the gap with
+`nit log $cursor..` from your last-consumed index, act on all of it, then
+advance `$cursor`, never on the one printed entry alone. Track the index
+you **consumed from `nit log`**, not the one the monitor printed; resume
+after a restart with `nit log --follow --reviewer-only $cursor`. `nit wait` is the fallback when
+a monitor is not available (docs/agent-workflow.md "Following the log
 instead of waiting").
 
 **A running watcher is mandatory — never finish a turn with the chain open

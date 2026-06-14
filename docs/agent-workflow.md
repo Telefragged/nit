@@ -129,10 +129,9 @@ follow the log instead of polling `wait`:
 git checkout -b "$branch"
 nit push --partial --repo "$(pwd)" --branch "$branch"   # an empty branch is fine:
 #   registers the chain so review can start the moment the first commit lands
-nit log --follow --oneline 0 &      # background monitor, from cursor 0
-# build commits, nit push --partial after each (the monitor relays your own
-#   `revisions` entries too); when you run dry, just stop and let the monitor
-#   sit — it relays the reviewer's entries as they land.
+nit log --follow --oneline --reviewer-only 0 &   # background monitor, cursor 0
+# build commits, nit push --partial after each; when you run dry, just stop
+#   and let the monitor sit — it wakes you only when it's your turn.
 ```
 
 **Use `--oneline` for a monitor** (as above): each entry is one parseable
@@ -140,13 +139,39 @@ line, whereas the default full-JSON payload is multi-line and token-heavy —
 both a parsing hazard and noise a monitor relays on every entry. Reach for
 the full payload only when inspecting a specific entry (via `nit log`).
 
-`nit log --follow` relays **every** entry raw — it applies no wake rule,
-so you triage each as it arrives: a comment on the change you are mid-fix
-on, act now; comments on a different change, queue them. It advances no
-cursor for you — track the last `idx` you handled and resume after a
-restart with `nit log --follow <idx+1>..`. `nit wait` stays the right tool
-for a harness without a monitor; the cursor and "watch until the chain
-closes" rules above apply to both.
+A bare `nit log --follow` relays **every** entry raw — no wake rule — so
+you triage each as it arrives: a comment on the change you are mid-fix on,
+act now; comments on a different change, queue them. It advances no cursor
+for you — track the index you last consumed (the `head` of your last read)
+and resume after a restart with `nit log --follow <cursor>..`. `nit wait`
+stays the right tool for a harness without a monitor; the cursor and "watch
+until the chain closes" rules above apply to both.
+
+**`--reviewer-only` mutes your own echoes.** Left to itself the monitor
+relays your own `revisions` (the scan after your push), `reply`, and
+`partial` entries straight back at you — echoes of writes you already made.
+`--reviewer-only` drops those and otherwise applies the **same wake rule as
+`nit wait`**: it wakes you on the reviewer's `review` entries and on chain
+closure (`chain_closed`), but holds back a comment-less approve that leaves
+the chain short of `approved` (the reviewer ticking off one change of many
+is not yet your turn) — exactly as `nit wait` would. Other entry kinds,
+including any added later, are relayed unchanged. A relayed line is then
+only a **doorbell** — it tells you the reviewer did _something_, not the
+whole of what landed. Because the entries between the
+index you last **consumed** and it were suppressed, **always re-read the
+gap before acting**: `nit log <cursor>..` (`--oneline` to skim), handle
+everything in it, then advance your cursor to its `head`. Never act on the
+single relayed entry alone, and track the index you consumed from
+`nit log`, not the idx the monitor printed.
+
+The suppression is a heuristic on `kind`: anything it mutes is your own
+push / reply / partial, which the next reviewer event makes you re-read
+past — seen late, never lost. The one case it cannot surface on its own is
+a scan with no reviewer event behind it — chiefly a rescan that reopens a
+closed chain (`revisions` is appended by any scan that changes structure,
+not only your push). So keep the standing rule: watch until the chain
+actually closes, and if you have been idle a while, re-read the full log
+rather than trusting the quiet.
 
 The push duty is **per branch, owned by whoever builds it**. In
 multi-agent setups (an orchestrator fanning out workers, one
@@ -189,12 +214,16 @@ invisible work.
   range or one reaching past the log is an error. `--chain <id>` reads any
   chain directly (no git repo needed). For inspecting entries a `wait`
   surfaced that you want the full detail on.
-- `nit log --follow <cursor> [--oneline] [--chain <id>] [--server <url>]` —
-  a live tail for cooperative monitors (see "Following the log instead of
+- `nit log --follow <cursor> [--oneline] [--reviewer-only] [--chain <id>] [--server <url>]`
+  — a live tail for cooperative monitors (see "Following the log instead of
   waiting"): replays `[cursor, head)` then streams each new entry as it
   lands, relaying every one raw (no wake rule — you triage). `<cursor>` is
   a single open form (`0`, `5..`, or `..`). Prefer `--oneline` in a monitor
   — one parseable line per entry, not the multi-line, token-heavy full JSON.
+  `--reviewer-only` suppresses your own entries (`revisions`, `reply`,
+  `partial`), waking the monitor on the reviewer and on chain closure;
+  treat each relayed line as a doorbell and re-read the gap from the index
+  you last consumed (`nit log <cursor>..`), not the idx it printed.
   Rides out server restarts; runs until stopped.
 - `nit status [--oneline]` — current Feedback JSON without blocking (no
   entries, no cursor). `--oneline` prints a compact one-line-per-change
