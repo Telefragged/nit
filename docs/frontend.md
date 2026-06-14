@@ -25,12 +25,6 @@ happens.
   `last_scan_error` shows as a banner. Click → change view.
 - `/changes/:id` **Review** (the core) —
   - header: subject, chain breadcrumb, base info;
-  - chain strip: inline at the right end of the header's meta line
-    (commit/parent/age) — one status dot per change in chain order (the
-    current change ringed, siblings click through; same dot pattern as the
-    dashboard) and an `N/M ▾` toggle. Expanding lists the chain (position,
-    subject, unresolved count, status chip per change) in normal flow,
-    pushing the content below down; navigating to another change closes it;
   - diff range: Gerrit-style dropdown pair in the diffbar, `Base|rM → rN`.
     The right select is the revision under review — the diff's TO/new
     column and the revision new comments anchor to, tracked in the
@@ -48,15 +42,26 @@ happens.
   - the diff column and file rail start with a synthetic "Commit message"
     file (`/COMMIT_MSG`, docs/api.md), commentable like code — the full
     message lives there, not in the header;
-  - file list (left rail): titled with the diff totals — file count and
-    summed +/- counts, both excluding `/COMMIT_MSG` (the message is not a
-    file); then per file: path, status letter, +/- counts; selecting
-    expands the file section and scrolls to it (the scroll is issued only
-    after the expansion has rendered, so it lands right with other files
-    collapsed); while scrolling, the rail highlights the file under the
-    sticky chrome (scroll spy) and keeps that item visible in the rail's
-    own scrollport; all files render in one scroll column (diffshub
+  - sidebar (left): a sticky, viewport-height-bounded column holding the
+    file list and, below it, the chain nav. The two split that height —
+    the file list takes what's left and scrolls, the chain nav caps its
+    own list and scrolls — so a long diff or a long chain never pushes the
+    other off-screen;
+  - file list (top of the sidebar): titled with the diff totals — file
+    count and summed +/- counts, both excluding `/COMMIT_MSG` (the message
+    is not a file); then per file: path, status letter, +/- counts;
+    selecting expands the file section and scrolls to it (the scroll is
+    issued only after the expansion has rendered, so it lands right with
+    other files collapsed); while scrolling, the rail highlights the file
+    under the sticky chrome (scroll spy) and keeps that item visible in the
+    rail's own scrollport; all files render in one scroll column (diffshub
     style), unified ⇄ side-by-side toggle persisted in localStorage;
+  - chain nav (below the file list): one row per change in chain order —
+    status dot, position, subject, unresolved count — the current change
+    highlighted, siblings linking through. A disclosure header (the
+    `chain` label and the change's position over the count) collapses the
+    list to give the file list above more room; the list scrolls within
+    its height cap when the chain itself is long;
   - file sections are collapsible (header click toggles) and start
     collapsed — except the commit message, the entry point of a commit
     review. The file header carries an `N comments` tally beside its +/-

@@ -592,90 +592,6 @@ table.list tbody tr:hover {
   flex: none;
 }
 
-/* chain strip — inline chain context at the right end of the meta line:
-   status dots plus an N/M toggle. The expanded panel is a normal-flow
-   block that wraps onto its own meta-line row and pushes the content
-   below it down — no sticky chrome, no overlay. */
-
-.chain-strip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.chain-strip .dots .current {
-  display: flex;
-  padding: 3px 0;
-}
-
-.chain-strip .dots .current .dot {
-  outline: 1px solid var(--text);
-  outline-offset: 2px;
-}
-
-.chain-strip-toggle {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 11px;
-  padding: 2px 4px;
-}
-
-.chain-strip-toggle:hover:not(:disabled) {
-  background: none;
-  border: none;
-  color: var(--text);
-}
-
-/* Expanded chain: full-width flex item — flex-wrap on .meta-line puts it
-   on its own row below the meta fields. (No max-width: clamping the
-   hypothetical main size would let it fit back onto the meta row.) */
-.chain-strip-panel {
-  flex-basis: 100%;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 4px;
-}
-
-.chain-panel-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 12px;
-}
-
-.chain-panel-row:hover {
-  background: var(--bg-hover);
-  text-decoration: none;
-}
-
-.chain-panel-row.current {
-  background: var(--blue-dim);
-}
-
-.chain-panel-row .pos {
-  width: 16px;
-  text-align: right;
-  flex: none;
-}
-
-.chain-panel-row .subj {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chain-panel-row .unresolved-count {
-  flex: none;
-  font-size: 11px;
-}
-
 /* diffbar */
 
 .diffbar {
@@ -764,7 +680,7 @@ table.list tbody tr:hover {
   font-weight: 600;
 }
 
-/* layout: rail + diff column */
+/* layout: sidebar (file list + chain nav) + diff column */
 
 .review-layout {
   display: flex;
@@ -773,12 +689,23 @@ table.list tbody tr:hover {
   gap: 14px;
 }
 
-.file-rail {
+/* The sidebar is the one sticky, height-bounded column; the file list and
+   the chain nav stack inside it and split that height. The file list takes
+   what's left after the chain nav and scrolls; the chain nav caps its own
+   list and scrolls — so neither can push the other off-screen. */
+.review-sidebar {
   width: 270px;
   flex: none;
   position: sticky;
   top: 78px;
   max-height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+}
+
+.file-rail {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 6px;
 }
@@ -842,6 +769,93 @@ table.list tbody tr:hover {
 .rail-counts {
   font-size: 10.5px;
   white-space: nowrap;
+}
+
+/* chain nav — the chain's changes stacked under the file list (ChainNav.tsx).
+   The disclosure header collapses the list to give the files above more
+   room; the list caps its own height and scrolls, so a long chain can't
+   crowd the files out. Rows echo the file rail's metrics so the two read
+   as one column. */
+.chain-nav {
+  flex: none;
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.chain-nav-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 8px 6px;
+  background: none;
+  border: none;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-faint);
+}
+
+.chain-nav-title:hover:not(:disabled) {
+  background: none;
+  color: var(--text-dim);
+}
+
+.chain-nav-title .fchevron {
+  font-size: 9px;
+}
+
+.chain-nav-pos {
+  margin-left: auto;
+  letter-spacing: 0;
+}
+
+.chain-nav-list {
+  max-height: 33vh;
+  overflow-y: auto;
+}
+
+.chain-nav-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.chain-nav-row:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.chain-nav-row.current {
+  background: var(--blue-dim);
+  color: var(--text);
+}
+
+.chain-nav-row .pos {
+  width: 12px;
+  flex: none;
+  text-align: right;
+}
+
+.chain-nav-row .subj {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chain-nav-row .unresolved-count {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--amber);
 }
 
 .diff-column {

@@ -28,7 +28,7 @@ import type {
   Verdict,
 } from "../api/types";
 import { StatusChip } from "../components/badges";
-import ChainStrip from "../components/ChainStrip";
+import ChainNav from "../components/ChainNav";
 import CommentEditor from "../components/CommentEditor";
 import type { Thread } from "../components/CommentThread";
 import CommentThread from "../components/CommentThread";
@@ -664,7 +664,6 @@ export default function ReviewPage() {
               </span>
             </span>
             <span className="dim">{timeAgo(selectedRev.created_at)}</span>
-            <ChainStrip chain={chain} currentId={changeId} />
           </div>
           <ReviewsStrip change={change} />
         </div>
@@ -727,24 +726,29 @@ export default function ReviewPage() {
         </div>
 
         <div className="review-layout">
-          <FileRail
-            files={files}
-            threadsByFile={threadsByFile}
-            activeIndex={activeFile}
-            onSelect={revealFile}
-            allExpanded={allFilesExpanded}
-            onToggleAll={() => {
-              // Collapse-all with every file expanded covers the editor's
-              // section whenever a target is set; expand-all never collapses.
-              if (
-                !confirmEditorCollapse(
-                  allFilesExpanded && editingTarget !== null,
+          <aside className="review-sidebar">
+            <FileRail
+              files={files}
+              threadsByFile={threadsByFile}
+              activeIndex={activeFile}
+              onSelect={revealFile}
+              allExpanded={allFilesExpanded}
+              onToggleAll={() => {
+                // Collapse-all with every file expanded covers the editor's
+                // section whenever a target is set; expand-all never collapses.
+                if (
+                  !confirmEditorCollapse(
+                    allFilesExpanded && editingTarget !== null,
+                  )
                 )
-              )
-                return;
-              setExpanded(allFilesExpanded ? collapseAll() : expandAll(files));
-            }}
-          />
+                  return;
+                setExpanded(
+                  allFilesExpanded ? collapseAll() : expandAll(files),
+                );
+              }}
+            />
+            <ChainNav chain={chain} currentId={changeId} />
+          </aside>
           <div className="diff-column" ref={diffColumnRef}>
             {changeLevelThreads.length > 0 || changeCommentOpen ? (
               <section className="change-threads">

@@ -53,22 +53,22 @@ const captures = [
       await page.waitForTimeout(100);
     },
   },
-  // Chain strip collapsed: status dots (current ringed) and the N/M toggle
-  // inline at the right end of the header's meta line.
+  // Chain nav expanded (default): the chain's changes stacked under the
+  // file list in the sidebar, the current change highlighted.
   {
-    name: "review-chain-strip",
+    name: "review-chain-nav",
     path: "/changes/11?against=base",
     fullPage: false,
   },
-  // Chain strip expanded: the panel lists the whole chain in normal flow
-  // on its own meta-line row, pushing the content below it down.
+  // Chain nav collapsed: the disclosure header alone, the file list above
+  // reclaiming the freed height.
   {
-    name: "review-chain-expanded",
-    path: "/changes/11",
+    name: "review-chain-collapsed",
+    path: "/changes/11?against=base",
     fullPage: false,
     actions: async (page) => {
-      await page.locator(".chain-strip-toggle").click();
-      await page.waitForSelector(".chain-strip-panel");
+      await page.locator(".chain-nav-title").click();
+      await page.waitForTimeout(100);
     },
   },
   {

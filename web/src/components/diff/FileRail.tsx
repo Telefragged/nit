@@ -27,7 +27,7 @@ export default function FileRail({
   // The rail has its own scrollport (max-height + overflow-y); when the
   // scroll spy moves the highlight, keep it visible. block:'nearest' is a
   // no-op while the item is already in view, so clicks don't jump the rail.
-  const railRef = useRef<HTMLElement>(null);
+  const railRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (activeIndex === null) return;
     // Index access (not .item(), which the DOM lib types non-null) so an
@@ -38,7 +38,7 @@ export default function FileRail({
   }, [activeIndex]);
   const totals = diffTotals(files);
   return (
-    <aside className="file-rail" ref={railRef}>
+    <div className="file-rail" ref={railRef}>
       <div className="rail-title">
         <span>
           {totals.count} file{totals.count === 1 ? "" : "s"}
@@ -108,6 +108,6 @@ export default function FileRail({
           </div>
         );
       })}
-    </aside>
+    </div>
   );
 }
