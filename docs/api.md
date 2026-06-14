@@ -109,6 +109,8 @@ Hunk = {"old_start": 1, "old_lines": 5, "new_start": 1, "new_lines": 7,
 Line = {"kind": "context",      // context | add | del
         "old": 1,               // old line number; absent for add
         "new": 1,               // new line number; absent for del
+        "drift": false,         // changed by a rebase, not the agent (omitted
+                                // when false; see "Rebase-aware interdiffs")
         "text": "fn main() {"}  // without trailing newline
 ```
 
@@ -134,6 +136,52 @@ interdiff `m → n` shows message(m) — selecting there anchors a `new`-side
 comment on revision `m` (the same mapping code uses, see drafts below) —
 so a `/COMMIT_MSG` `side: "old"` anchor never arises; the 400 only guards
 raw API clients.
+
+### Rebase-aware interdiffs
+
+An interdiff `m → n` is `tree(m) → tree(n)`, and a change is reviewed
+against its parent. When revisions `m` and `n` have **different parents**
+— the branch base moved, or an earlier change in the chain got a new
+revision (which rewrites every later change) — the difference between the
+two parents is mechanically folded into the interdiff alongside the agent's
+real edits. nit detects that **drift** and contains it (gerrit's
+"due to rebase" mechanism), so the reviewer is not shown base movement they
+did not make and may have reviewed elsewhere.
+
+A diff against parent (no `against`), an interdiff whose two revisions share
+a parent, and a `/COMMIT_MSG` file are never drift-processed — they are
+byte-for-byte the plain diff. When `parent(m) != parent(n)`, each non-binary
+code file is classified:
+
+- **Detection.** The base movement is found by diffing the two parents
+  (`parent(m) → parent(n)`) and projecting those edits into `m`/`n` line
+  coordinates through the change's own delta at each revision
+  (`parent(m) → tree(m)` and `parent(n) → tree(n)`), so a base edit is
+  recognised wherever the agent's own edits shifted it. Lines the agent also
+  touched are clipped out, so a line the agent edited — including one it
+  removed in a later revision the base did not touch — shows as a real
+  change, not drift. The matching is **line-level**, with two limitations
+  matching gerrit's (intraline/move detection is out of scope): on runs of
+  identical lines some base movement can show as a real change (the safe
+  direction); and when the base _reorders_ a line the agent also deletes, the
+  agent's deletion can be tagged drift (the diff can't tell a base move from a
+  base delete at line granularity).
+- **`drift: true`** marks each line attributable to the base movement. The
+  reviewer's UI tints these distinctly; they are otherwise ordinary lines.
+- **Counts exclude drift.** A file's `additions`/`deletions` count only
+  non-drift `add`/`del` lines.
+- **Region selection follows the agent's real delta, not the drift.** A
+  hunk is shown because it carries a real edit; drift lines render only
+  where they fall inside such a hunk (contained, never stripped). A hunk
+  that is **entirely** drift is omitted, and a file whose edits are **all**
+  drift drops out of the file list entirely (so a pure rebase of a change
+  collapses to just its `/COMMIT_MSG`).
+- **Renamed/copied files are not drift-processed** (their blobs live under
+  different paths across the four trees); their edits all render as real.
+
+So for a plain (same-parent) interdiff the bytes are unchanged; for a
+rebased one the reviewer sees their own change's real delta, with any base
+drift that happens to land in it tinted and uncounted.
 
 ### Comment placement
 
