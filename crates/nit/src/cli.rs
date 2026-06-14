@@ -100,6 +100,10 @@ pub struct LogArgs {
 
 #[derive(clap::Args)]
 pub struct StatusArgs {
+    /// Print a compact one-line-per-change digest of the rolled-up state
+    /// instead of the full Feedback JSON
+    #[arg(long)]
+    pub oneline: bool,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -557,7 +561,8 @@ fn short_key(key: &str) -> String {
     key.chars().take(9).collect()
 }
 
-/// Print the current Feedback JSON without blocking.
+/// Print the current Feedback JSON without blocking, or with `--oneline` a
+/// compact one-line-per-change digest of it.
 ///
 /// # Errors
 /// When the server can't be reached or no chain matches the current
@@ -566,7 +571,43 @@ pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
     let chain_id = resolve_chain(&client, Retry::No)?;
     let feedback = client.get(&format!("/api/chains/{chain_id}/feedback"))?;
-    print_json(&feedback)
+    if args.oneline {
+        print!("{}", feedback_oneline(&feedback));
+        Ok(())
+    } else {
+        print_json(&feedback)
+    }
+}
+
+/// Compact one-line-per-change digest of a Feedback payload for
+/// `nit status --oneline`. Like `wait`/`log --oneline`, this is a CLI
+/// display concern derived from the existing JSON — it touches no wire
+/// shape (docs/api.md). A `state=…` header carries the rolled-up chain
+/// state, then one tab-separated line per live change in chain order:
+/// `position  change_key(short)  status  rN  Nu  subject`, where `Nu` is
+/// the unresolved-thread count (0-based position, this project's
+/// convention).
+fn feedback_oneline(feedback: &Value) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+    let inf = "write to String is infallible";
+    writeln!(out, "state={}", feedback["state"].as_str().unwrap_or("?")).expect(inf);
+    let changes = feedback["changes"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice);
+    for (position, c) in changes.iter().enumerate() {
+        writeln!(
+            out,
+            "{position}\t{}\t{}\tr{}\t{}u\t{}",
+            short_key(c["change_key"].as_str().unwrap_or("")),
+            c["status"].as_str().unwrap_or("?"),
+            c["revision"].as_u64().unwrap_or(0),
+            c["unresolved"].as_u64().unwrap_or(0),
+            c["subject"].as_str().unwrap_or(""),
+        )
+        .expect(inf);
+    }
+    out
 }
 
 /// Threaded reply as the agent; `--resolve` closes the thread, `--unresolve`
@@ -948,6 +989,32 @@ mod tests {
         assert_eq!(entry_summary(&reply), "agent replied to 1 comment(s)");
         let closed = json!({"kind": "chain_closed", "payload": {"status": "merged"}});
         assert_eq!(entry_summary(&closed), "chain merged");
+    }
+
+    #[test]
+    fn feedback_oneline_digests_each_change() {
+        let feedback = json!({
+            "state": "agents_turn",
+            "changes": [
+                {"change_key": "I0123456789abc", "status": "changes_requested",
+                 "revision": 2, "unresolved": 3, "subject": "server: add health endpoint"},
+                {"change_key": "Iabcdef0123456", "status": "approved",
+                 "revision": 1, "unresolved": 0, "subject": "web: render the diff"},
+            ]
+        });
+        assert_eq!(
+            feedback_oneline(&feedback),
+            "state=agents_turn\n\
+             0\tI01234567\tchanges_requested\tr2\t3u\tserver: add health endpoint\n\
+             1\tIabcdef01\tapproved\tr1\t0u\tweb: render the diff\n"
+        );
+    }
+
+    #[test]
+    fn feedback_oneline_handles_an_empty_chain() {
+        // An empty chain (no live changes) still prints the state header.
+        let feedback = json!({"state": "agents_turn", "changes": []});
+        assert_eq!(feedback_oneline(&feedback), "state=agents_turn\n");
     }
 
     #[test]

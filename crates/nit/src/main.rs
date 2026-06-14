@@ -29,7 +29,7 @@ enum Cmd {
     Wait(cli::WaitArgs),
     /// Print log entries by index/range, or stream them live with --follow
     Log(cli::LogArgs),
-    /// Print the current feedback JSON without blocking
+    /// Print the current feedback JSON without blocking (--oneline for a digest)
     Status(cli::StatusArgs),
     /// Reply to a review comment as the agent
     Reply(cli::ReplyArgs),

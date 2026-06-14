@@ -196,8 +196,11 @@ invisible work.
   a single open form (`0`, `5..`, or `..`). Prefer `--oneline` in a monitor
   — one parseable line per entry, not the multi-line, token-heavy full JSON.
   Rides out server restarts; runs until stopped.
-- `nit status` — current Feedback JSON without blocking (no entries, no
-  cursor).
+- `nit status [--oneline]` — current Feedback JSON without blocking (no
+  entries, no cursor). `--oneline` prints a compact one-line-per-change
+  digest instead — a `state=` header plus one line per change
+  (`position change_key status rN Nu subject`) — to skim where the chain
+  stands without parsing JSON.
 - `nit reply <comment-id> [--resolve | --unresolve] -m "text"` — threaded
   reply as the agent; `--resolve` closes the thread (do this for addressed
   comments — the reviewer sees unresolved counts), `--unresolve` reopens
