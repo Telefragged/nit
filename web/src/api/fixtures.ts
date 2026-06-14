@@ -1475,7 +1475,7 @@ function chainState(chain: ChainRecord): ChainState {
 
 function changeSummary(c: ChangeRecord): ChangeSummary {
   const own = comments.filter((x) => x.change_id === c.id);
-  const latest = c.revisions[c.revisions.length - 1]!;
+  const latest = c.revisions[c.revisions.length - 1];
   return {
     id: c.id,
     position: c.position,
@@ -1667,7 +1667,7 @@ export async function mockRequest(
   if ((m = /^\/changes\/(\d+)\/reviews$/.exec(p)) && method === "POST") {
     const c = getChange(Number(m[1]));
     const req = body as SubmitReviewRequest;
-    const latest = c.revisions[c.revisions.length - 1]!.number;
+    const latest = c.revisions[c.revisions.length - 1].number;
     if (req.revision !== latest) {
       // The pure-rebase auto-retarget path can't occur in fixtures; any
       // stale revision is a real conflict here.

@@ -132,8 +132,8 @@ export function selectionTarget(
 ): DraftTarget | SelectionMiss | null {
   const swept = sweptCells(range);
   if (swept.length === 0) return null;
-  const startCell = cellOf(range.startContainer) ?? swept[0]!;
-  const endCell = cellOf(range.endContainer) ?? swept[swept.length - 1]!;
+  const startCell = cellOf(range.startContainer) ?? swept[0];
+  const endCell = cellOf(range.endContainer) ?? swept[swept.length - 1];
 
   const side = sideOf(startCell, endCell);
   if (side === null) return { miss: "mixed-sides" };
@@ -141,10 +141,10 @@ export function selectionTarget(
   const cells = swept.filter((c) => c.dataset[side] !== undefined);
   if (cells.length === 0) return null;
 
-  const section = cells[0]!.closest("section[data-diff-path]");
+  const section = cells[0].closest("section[data-diff-path]");
   const path = section?.getAttribute("data-diff-path");
   if (!path) return null;
-  if (cells[cells.length - 1]!.closest("section") !== section) {
+  if (cells[cells.length - 1].closest("section") !== section) {
     return { miss: "cross-file" };
   }
 
@@ -155,22 +155,22 @@ export function selectionTarget(
   let endChar =
     endCell === cells[cells.length - 1]
       ? boundaryChar(endCell, range.endContainer, range.endOffset)
-      : cellTextLength(cells[cells.length - 1]!);
+      : cellTextLength(cells[cells.length - 1]);
 
   // A selection reaching a line but owning none of its text ends on the
   // previous line (triple-click and drag-past-end both land here).
   while (cells.length > 1 && endChar === 0) {
     cells.pop();
-    endChar = cellTextLength(cells[cells.length - 1]!);
+    endChar = cellTextLength(cells[cells.length - 1]);
   }
 
   const lines = cells.map((c) => Number(c.dataset[side]));
   if (lines.some((n) => !Number.isInteger(n) || n < 1)) return null;
   for (let i = 1; i < lines.length; i++) {
-    if (lines[i] !== lines[i - 1]! + 1) return { miss: "hunk-gap" };
+    if (lines[i] !== lines[i - 1] + 1) return { miss: "hunk-gap" };
   }
 
-  const line = lines[lines.length - 1]!;
+  const line = lines[lines.length - 1];
   if (cells.length === 1) {
     startChar = Math.min(startChar, endChar);
     if (startChar === endChar) {
@@ -182,7 +182,7 @@ export function selectionTarget(
     side,
     line,
     range: {
-      start_line: lines[0]!,
+      start_line: lines[0],
       start_char: startChar,
       end_line: line,
       end_char: endChar,

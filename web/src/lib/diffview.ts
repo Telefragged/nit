@@ -58,7 +58,7 @@ export function pairLines(lines: Line[]): RowPair[] {
   const rows: RowPair[] = [];
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i]!;
+    const line = lines[i];
     if (line.kind === "context") {
       rows.push({ left: line, right: line });
       i++;
@@ -66,12 +66,12 @@ export function pairLines(lines: Line[]): RowPair[] {
     }
     const dels: Line[] = [];
     const adds: Line[] = [];
-    while (i < lines.length && lines[i]!.kind === "del") {
-      dels.push(lines[i]!);
+    while (i < lines.length && lines[i].kind === "del") {
+      dels.push(lines[i]);
       i++;
     }
-    while (i < lines.length && lines[i]!.kind === "add") {
-      adds.push(lines[i]!);
+    while (i < lines.length && lines[i].kind === "add") {
+      adds.push(lines[i]);
       i++;
     }
     const n = Math.max(dels.length, adds.length);
@@ -95,27 +95,27 @@ export function intralineMarks(lines: Line[]): Map<Line, IntralineRange> {
   const marks = new Map<Line, IntralineRange>();
   let i = 0;
   while (i < lines.length) {
-    if (lines[i]!.kind === "context") {
+    if (lines[i].kind === "context") {
       i++;
       continue;
     }
     const dels: Line[] = [];
     const adds: Line[] = [];
-    while (i < lines.length && lines[i]!.kind === "del") {
-      dels.push(lines[i]!);
+    while (i < lines.length && lines[i].kind === "del") {
+      dels.push(lines[i]);
       i++;
     }
-    while (i < lines.length && lines[i]!.kind === "add") {
-      adds.push(lines[i]!);
+    while (i < lines.length && lines[i].kind === "add") {
+      adds.push(lines[i]);
       i++;
     }
     const n = Math.min(dels.length, adds.length);
     for (let k = 0; k < n; k++) {
-      const pair = intralineDiff(dels[k]!.text, adds[k]!.text);
+      const pair = intralineDiff(dels[k].text, adds[k].text);
       if (!pair) continue;
       const [delRange, addRange] = pair;
-      if (delRange[0] < delRange[1]) marks.set(dels[k]!, delRange);
-      if (addRange[0] < addRange[1]) marks.set(adds[k]!, addRange);
+      if (delRange[0] < delRange[1]) marks.set(dels[k], delRange);
+      if (addRange[0] < addRange[1]) marks.set(adds[k], addRange);
     }
   }
   return marks;

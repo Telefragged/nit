@@ -167,7 +167,7 @@ function DiffRangeSelect({
 
 /** One published review line; long cover messages get a more/less toggle. */
 function ReviewItem({ review }: { review: Review }) {
-  const badge = VERDICT_BADGE[review.verdict]!;
+  const badge = VERDICT_BADGE[review.verdict];
   const [expanded, setExpanded] = useState(false);
   const [truncated, setTruncated] = useState(false);
   const msgRef = useRef<HTMLSpanElement>(null);
@@ -487,7 +487,7 @@ export default function ReviewPage() {
         ).filter((el) => el !== null);
         if (sections.length === 0) return;
         const threshold =
-          parseFloat(getComputedStyle(sections[0]!).scrollMarginTop) + 1;
+          parseFloat(getComputedStyle(sections[0]).scrollMarginTop) + 1;
         setActiveFile(
           activeIndexAt(
             sections.map((el) => el.getBoundingClientRect().top),

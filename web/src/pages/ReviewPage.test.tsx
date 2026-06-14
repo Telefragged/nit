@@ -231,14 +231,14 @@ describe("comment counts in the diff-range dropdowns", () => {
 
     // change 11: r1 carries 5 root threads, r2 the 3 drafts on it. Replies
     // ride with their thread and are not counted separately.
-    const revSelect = screen.getByLabelText("Revision") as HTMLSelectElement;
+    const revSelect = screen.getByLabelText<HTMLSelectElement>("Revision");
     expect(Array.from(revSelect.options).map((o) => o.textContent)).toEqual([
       "r1 · 5 comments",
       "r2 · 3 comments",
     ]);
 
     // The base picker counts the same way; its extra "Base" option has none.
-    const baseSelect = screen.getByLabelText("Diff base") as HTMLSelectElement;
+    const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");
     expect(Array.from(baseSelect.options).map((o) => o.textContent)).toEqual([
       "Base",
       "r1 · 5 comments",

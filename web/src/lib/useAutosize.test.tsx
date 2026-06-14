@@ -39,9 +39,7 @@ describe("useAutosize", () => {
       clientHeight: 44,
     });
     render(<Harness value="line one\nline two" />);
-    expect(
-      (screen.getByRole("textbox") as HTMLTextAreaElement).style.height,
-    ).toBe("126px");
+    expect(screen.getByRole("textbox").style.height).toBe("126px");
   });
 
   it("grows when the value gains a line", () => {
@@ -53,8 +51,6 @@ describe("useAutosize", () => {
     const { rerender } = render(<Harness value="one line" />);
     Object.assign(metrics, { scrollHeight: 200 });
     rerender(<Harness value="one line\nplus another" />);
-    expect(
-      (screen.getByRole("textbox") as HTMLTextAreaElement).style.height,
-    ).toBe("206px");
+    expect(screen.getByRole("textbox").style.height).toBe("206px");
   });
 });
