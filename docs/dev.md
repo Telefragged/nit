@@ -16,6 +16,7 @@ nix develop -c cargo fmt
 nix develop -c npm run dev                     # live UI w/ real backend
 nix develop -c bash -c 'VITE_MOCK=1 npm run dev'   # UI with canned fixtures
 nix develop -c npm run check                   # tsc
+nix develop -c npm run lint                     # eslint (strict, type-aware)
 nix develop -c npm run build
 
 # full production artifact
@@ -52,6 +53,24 @@ git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit 
 No-op on a clean chain. Check-only form: exec
 `nix develop -c treefmt --fail-on-change` instead — it stops at the
 first unformatted commit.
+
+## Linting
+
+`nix develop -c npm run lint` (in `web/`) runs ESLint — strict,
+type-aware rules (typescript-eslint strict + stylistic, react/hooks,
+jsx-a11y, @html-eslint) — the frontend counterpart to `clippy::pedantic`
+on the backend. It must stay green, same as clippy. Formatting is **not**
+its job: `eslint-config-prettier` defers every whitespace rule to
+prettier (run via treefmt), so the two never fight.
+
+Config is `web/eslint.config.js`. Disables come in exactly two kinds:
+formatter-owned (permanent — prettier's territory) and a burn-down
+allow-list (temporary — rules the strict presets enable that the code
+doesn't satisfy yet, each silenced with its remaining count). The
+allow-list only shrinks: a new agent's first output is held to every
+rule not on it, and the list is whittled to empty over time. Re-enabling
+a rule means removing its line **and** fixing the code in the same
+commit, never relaxing it back.
 
 ## Restarting the server
 
