@@ -89,12 +89,18 @@ nit wait $cursor    # blocks until entries land beyond $cursor; prints JSON
 
 `--repo`/`--branch` are required — push has no cwd fallback (a stray push
 from the wrong checkout would fork a duplicate chain). **Prefer the
-follow-monitor**: Claude Code can relay a background process, so run
-`nit log --follow --oneline --reviewer-only $cursor` as a background Bash
-task instead of polling `nit wait` — it streams each entry as it lands and
-you triage it (act on follow-ups now, queue unrelated comments). Keep
-`--oneline`: one parseable line per entry, not the token-heavy multi-line
-full JSON. `--reviewer-only` mutes your own echoes (`revisions`, `reply`,
+follow-monitor**: run `nit log --follow --oneline --reviewer-only $cursor`
+under the **Monitor tool** (`persistent: true`) instead of polling
+`nit wait` — Monitor turns each relayed line into a notification, so you
+triage entries as they land (act on follow-ups now, queue unrelated
+comments). **Use the Monitor tool, _not_ `Bash` with `run_in_background`
+for the follow-monitor**: a background Bash command only notifies you when
+it _exits_, and `nit log --follow` never exits on its own, so a
+background-Bash follow streams into a file that nothing ever wakes you to
+read — the exact trap that looks like a working watcher but is a dropped
+review. (`nit wait`, which _does_ exit on each wake, is the one that belongs
+in a background Bash task — see below.) Keep `--oneline`: one parseable line
+per entry, not the token-heavy multi-line full JSON. `--reviewer-only` mutes your own echoes (`revisions`, `reply`,
 `partial`) and otherwise applies `nit wait`'s wake rule — it wakes on the
 reviewer and chain closure, but not on a comment-less approve that leaves
 the chain short of `approved`. Each relayed line is still just a doorbell:
@@ -109,11 +115,14 @@ instead of waiting").
 **A running watcher is mandatory — never finish a turn with the chain open
 and nothing watching it.** The loop does not end at `nit ready` or at a
 `nit push`; it ends when the chain closes (`merged`/`abandoned`). The
-moment you `nit ready` (or push the last revision), a `nit log --follow` or
-`nit wait $cursor` must be running as a **background Bash task** and stay up
-until the chain closes — a `ready`/pushed chain with no watcher is a
-dropped review, as broken as an unpushed commit. Re-arm `nit wait` after
-every push and reply; a follow monitor stays up on its own.
+moment you `nit ready` (or push the last revision), a watcher must be
+running and stay up until the chain closes — either a `nit log --follow`
+under the **Monitor tool** (`persistent: true`; the preferred form above)
+or, as the fallback, `nit wait $cursor` as a **background Bash task** (it
+exits on each wake, which re-invokes you). A `ready`/pushed chain with no
+watcher is a dropped review, as broken as an unpushed commit. Re-arm
+`nit wait` after every push and reply; a Monitor follow stays up on its own
+(stop it with TaskStop once the chain closes).
 
 `nit wait $cursor` returns `{head, entries, state, …}`. **Advance the
 cursor only from that result** (`cursor=<head>`); `push`/`reply` return no

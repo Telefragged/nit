@@ -122,8 +122,8 @@ chain closes.
 
 `nit wait` blocks for one wake, then returns — it suits a harness that can
 only do one thing at a time. If yours has a **cooperative monitor** that
-relays a background process's output as it arrives (e.g. Claude Code),
-follow the log instead of polling `wait`:
+relays a background process's output **line by line as it arrives** (e.g.
+Claude Code), follow the log instead of polling `wait`:
 
 ```sh
 git checkout -b "$branch"
@@ -138,6 +138,12 @@ nit log --follow --oneline --reviewer-only 0 &   # background monitor, cursor 0
 line, whereas the default full-JSON payload is multi-line and token-heavy —
 both a parsing hazard and noise a monitor relays on every entry. Reach for
 the full payload only when inspecting a specific entry (via `nit log`).
+
+The monitor must wake you **on each relayed line**, not only when the
+background process exits — `nit log --follow` never exits on its own, so any
+"notify me when this command finishes" mechanism will sit silent forever.
+Wire it to whatever your harness uses for live per-line relay; the
+project's `nit-review` skill names the concrete tool for this repo.
 
 A bare `nit log --follow` relays **every** entry raw — no wake rule — so
 you triage each as it arrives: a comment on the change you are mid-fix on,
