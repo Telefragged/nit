@@ -60,7 +60,7 @@
           pname = "nit-web";
           version = "0.1.0";
           src = ./web;
-          npmDepsHash = "sha256-vxdQfrgE+5vmitVuv+JJ+Ux5aVmJqDf6tjsW9AdROlU=";
+          npmDepsHash = "sha256-DUUz79xX9cTDY/DV7eSfSTJ04YV565pS9/Cc4Zbevh0=";
           installPhase = ''
             runHook preInstall
             cp -r dist $out
