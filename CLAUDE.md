@@ -22,7 +22,9 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
 5. **To see the UI, render it**:
    `cd web && nix develop -c npm run screenshots`, then Read
    `screenshots/*.png`.
-6. **Changes land through nit itself** — branch, then drive the review
+6. **Changes land through nit itself** — start in a worktree
+   (`.worktrees/<slug>` on a `track/<slug>` branch; the default for all
+   work, not just parallel — recipe in docs/dev.md), then drive the review
    loop with the `nit-review` skill (`.claude/skills/nit-review/SKILL.md`).
    Direct-to-main only for ad-hoc user opt-outs and the exemptions listed
    in docs/dev.md.

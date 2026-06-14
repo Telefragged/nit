@@ -102,9 +102,21 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
 - Every commit treefmt-clean: format before committing, re-format and
   amend after any rebase or conflict resolution ("Formatting" above).
 - Never mix refactors with behavior changes.
-- Parallel work happens in worktrees under `.worktrees/` on `track/*`
-  branches; they land on `main` via rebase + fast-forward only. No merge
-  commits anywhere.
+- **Every change starts in its own worktree** under `.worktrees/` on a
+  `track/*` branch — the default for solo work, not just parallel work, so
+  the main checkout stays on `main` and chains never serialize on a shared
+  branch. Create one with:
+
+  ```sh
+  git worktree add .worktrees/<slug> -b track/<slug> main
+  ```
+
+  Commit there, drive the nit review loop from that worktree, and land via
+  rebase + fast-forward only — never a merge commit anywhere (the
+  `ready_to_merge` step in the `nit-review` skill has the exact
+  rebase/merge recipe). Tear it down after landing:
+  `git worktree remove .worktrees/<slug>` then `git branch -d track/<slug>`.
+
 - End commit messages with `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
   when Claude wrote them.
 
