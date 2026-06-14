@@ -14,7 +14,13 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { createDraft, getChain, getChange, getDiff } from "../api/client";
-import type { ChangeDetail, Comment, Review, Revision } from "../api/types";
+import type {
+  ChangeDetail,
+  Comment,
+  Review,
+  Revision,
+  Verdict,
+} from "../api/types";
 import { StatusChip } from "../components/badges";
 import ChainStrip from "../components/ChainStrip";
 import CommentEditor, { confirmDiscard } from "../components/CommentEditor";
@@ -49,7 +55,7 @@ import { ReviewContext, sameTarget } from "./reviewContext";
 const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
 
-const VERDICT_BADGE: Record<string, { cls: string; label: string }> = {
+const VERDICT_BADGE: Record<Verdict, { cls: string; label: string }> = {
   approve: { cls: "badge-green", label: "APPROVED" },
   request_changes: { cls: "badge-red", label: "CHANGES REQUESTED" },
   comment: { cls: "badge-blue", label: "COMMENTED" },
@@ -498,9 +504,10 @@ export default function ReviewPage() {
         const sections = Array.from({ length: fileCount }, (_, i) =>
           document.getElementById(fileDomId(i)),
         ).filter((el) => el !== null);
-        if (sections.length === 0) return;
+        const first = sections[0];
+        if (!first) return;
         const threshold =
-          parseFloat(getComputedStyle(sections[0]).scrollMarginTop) + 1;
+          parseFloat(getComputedStyle(first).scrollMarginTop) + 1;
         setActiveFile(
           activeIndexAt(
             sections.map((el) => el.getBoundingClientRect().top),

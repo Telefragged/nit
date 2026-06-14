@@ -57,7 +57,9 @@ function mountUnified(hunks: RowSpec[][], path = "src/a.rs"): HTMLElement {
 
 /** The text node carrying row `i`'s code (document order across hunks). */
 function textNode(section: HTMLElement, i: number): Text {
-  return section.querySelectorAll(".code-text")[i].firstChild as Text;
+  const cell = section.querySelectorAll(".code-text")[i];
+  if (!cell) throw new Error(`no .code-text at row ${i}`);
+  return cell.firstChild as Text;
 }
 
 function rangeOf(
@@ -155,7 +157,9 @@ describe("selectionTarget, unified layout", () => {
 
   it("clamps a boundary in the sign span to the line start", () => {
     const s = mountUnified([ROWS]);
-    const sign = s.querySelectorAll(".sign")[1].firstChild as Text;
+    const signCell = s.querySelectorAll(".sign")[1];
+    if (!signCell) throw new Error("no second .sign cell");
+    const sign = signCell.firstChild as Text;
     const r = rangeOf(sign, 0, textNode(s, 1), 5);
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
@@ -260,7 +264,9 @@ describe("selectionTarget, split layout", () => {
   /** Code text node of column `side`, visual row `i`. */
   function colText(section: HTMLElement, side: string, i: number): Text {
     const cells = section.querySelectorAll(`.code[data-side="${side}"]`);
-    return cells[i].querySelector(".code-text")!.firstChild as Text;
+    const cell = cells[i];
+    if (!cell) throw new Error(`no ${side} cell at row ${i}`);
+    return cell.querySelector(".code-text")!.firstChild as Text;
   }
 
   it("maps a right-column drag across an intervening left column", () => {

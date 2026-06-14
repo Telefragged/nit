@@ -131,46 +131,57 @@ export function selectionTarget(
   range: Range,
 ): DraftTarget | SelectionMiss | null {
   const swept = sweptCells(range);
-  if (swept.length === 0) return null;
-  const startCell = cellOf(range.startContainer) ?? swept[0];
-  const endCell = cellOf(range.endContainer) ?? swept[swept.length - 1];
+  const firstSwept = swept[0];
+  const lastSwept = swept[swept.length - 1];
+  if (firstSwept === undefined || lastSwept === undefined) return null;
+  const startCell = cellOf(range.startContainer) ?? firstSwept;
+  const endCell = cellOf(range.endContainer) ?? lastSwept;
 
   const side = sideOf(startCell, endCell);
   if (side === null) return { miss: "mixed-sides" };
 
   const cells = swept.filter((c) => c.dataset[side] !== undefined);
-  if (cells.length === 0) return null;
+  const firstCell = cells[0];
+  const lastCell = cells[cells.length - 1];
+  if (firstCell === undefined || lastCell === undefined) return null;
 
-  const section = cells[0].closest("section[data-diff-path]");
+  const section = firstCell.closest("section[data-diff-path]");
   const path = section?.getAttribute("data-diff-path");
   if (!path) return null;
-  if (cells[cells.length - 1].closest("section") !== section) {
+  if (lastCell.closest("section") !== section) {
     return { miss: "cross-file" };
   }
 
   let startChar =
-    startCell === cells[0]
+    startCell === firstCell
       ? boundaryChar(startCell, range.startContainer, range.startOffset)
       : 0;
   let endChar =
-    endCell === cells[cells.length - 1]
+    endCell === lastCell
       ? boundaryChar(endCell, range.endContainer, range.endOffset)
-      : cellTextLength(cells[cells.length - 1]);
+      : cellTextLength(lastCell);
 
   // A selection reaching a line but owning none of its text ends on the
   // previous line (triple-click and drag-past-end both land here).
   while (cells.length > 1 && endChar === 0) {
     cells.pop();
-    endChar = cellTextLength(cells[cells.length - 1]);
+    const prev = cells[cells.length - 1];
+    if (prev === undefined) break;
+    endChar = cellTextLength(prev);
   }
 
   const lines = cells.map((c) => Number(c.dataset[side]));
   if (lines.some((n) => !Number.isInteger(n) || n < 1)) return null;
   for (let i = 1; i < lines.length; i++) {
-    if (lines[i] !== lines[i - 1] + 1) return { miss: "hunk-gap" };
+    const prev = lines[i - 1];
+    const cur = lines[i];
+    if (prev === undefined || cur === undefined) continue;
+    if (cur !== prev + 1) return { miss: "hunk-gap" };
   }
 
+  const startLine = lines[0];
   const line = lines[lines.length - 1];
+  if (startLine === undefined || line === undefined) return null;
   if (cells.length === 1) {
     startChar = Math.min(startChar, endChar);
     if (startChar === endChar) {
@@ -182,7 +193,7 @@ export function selectionTarget(
     side,
     line,
     range: {
-      start_line: lines[0],
+      start_line: startLine,
       start_char: startChar,
       end_line: line,
       end_char: endChar,

@@ -59,6 +59,7 @@ export function pairLines(lines: Line[]): RowPair[] {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
+    if (line === undefined) break;
     if (line.kind === "context") {
       rows.push({ left: line, right: line });
       i++;
@@ -66,12 +67,16 @@ export function pairLines(lines: Line[]): RowPair[] {
     }
     const dels: Line[] = [];
     const adds: Line[] = [];
-    while (i < lines.length && lines[i].kind === "del") {
-      dels.push(lines[i]);
+    while (i < lines.length) {
+      const l = lines[i];
+      if (l?.kind !== "del") break;
+      dels.push(l);
       i++;
     }
-    while (i < lines.length && lines[i].kind === "add") {
-      adds.push(lines[i]);
+    while (i < lines.length) {
+      const l = lines[i];
+      if (l?.kind !== "add") break;
+      adds.push(l);
       i++;
     }
     const n = Math.max(dels.length, adds.length);
@@ -95,27 +100,36 @@ export function intralineMarks(lines: Line[]): Map<Line, IntralineRange> {
   const marks = new Map<Line, IntralineRange>();
   let i = 0;
   while (i < lines.length) {
-    if (lines[i].kind === "context") {
+    const line = lines[i];
+    if (line === undefined) break;
+    if (line.kind === "context") {
       i++;
       continue;
     }
     const dels: Line[] = [];
     const adds: Line[] = [];
-    while (i < lines.length && lines[i].kind === "del") {
-      dels.push(lines[i]);
+    while (i < lines.length) {
+      const l = lines[i];
+      if (l?.kind !== "del") break;
+      dels.push(l);
       i++;
     }
-    while (i < lines.length && lines[i].kind === "add") {
-      adds.push(lines[i]);
+    while (i < lines.length) {
+      const l = lines[i];
+      if (l?.kind !== "add") break;
+      adds.push(l);
       i++;
     }
     const n = Math.min(dels.length, adds.length);
     for (let k = 0; k < n; k++) {
-      const pair = intralineDiff(dels[k].text, adds[k].text);
+      const del = dels[k];
+      const add = adds[k];
+      if (del === undefined || add === undefined) break;
+      const pair = intralineDiff(del.text, add.text);
       if (!pair) continue;
       const [delRange, addRange] = pair;
-      if (delRange[0] < delRange[1]) marks.set(dels[k], delRange);
-      if (addRange[0] < addRange[1]) marks.set(adds[k], addRange);
+      if (delRange[0] < delRange[1]) marks.set(del, delRange);
+      if (addRange[0] < addRange[1]) marks.set(add, addRange);
     }
   }
   return marks;
