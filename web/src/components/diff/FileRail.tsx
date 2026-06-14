@@ -68,7 +68,9 @@ export default function FileRail({
           <div
             key={file.path}
             className={`rail-item ${i === activeIndex ? "active" : ""}`}
-            onClick={() => onSelect(i)}
+            onClick={() => {
+              onSelect(i);
+            }}
             title={
               file.old_path
                 ? `${file.old_path} → ${file.path}`

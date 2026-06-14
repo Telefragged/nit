@@ -20,7 +20,9 @@ export default function ChainStrip({
   const [open, setOpen] = useState(false);
 
   // Close the panel when navigation lands on another change (n/p included).
-  useEffect(() => setOpen(false), [currentId]);
+  useEffect(() => {
+    setOpen(false);
+  }, [currentId]);
 
   if (!chain) return null;
 
@@ -51,7 +53,9 @@ export default function ChainStrip({
           className="chain-strip-toggle mono"
           aria-expanded={open}
           title={open ? "Collapse the chain list" : "Expand the chain list"}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            setOpen((v) => !v);
+          }}
         >
           {posLabel} {open ? "▴" : "▾"}
         </button>

@@ -83,7 +83,9 @@ export default function CommentEditor({
         autoFocus
         value={body}
         placeholder={placeholder}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={(e) => {
+          setBody(e.target.value);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Escape") requestCancel();
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
@@ -95,7 +97,9 @@ export default function CommentEditor({
             <input
               type="checkbox"
               checked={resolved}
-              onChange={(e) => setResolved(e.target.checked)}
+              onChange={(e) => {
+                setResolved(e.target.checked);
+              }}
             />
             Resolved
           </label>

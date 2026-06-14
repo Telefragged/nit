@@ -126,7 +126,12 @@ export default function ReviewBar({
     <>
       <div className="review-bar">
         {stats}
-        <button className="btn-primary" onClick={() => onReplyOpenChange(true)}>
+        <button
+          className="btn-primary"
+          onClick={() => {
+            onReplyOpenChange(true);
+          }}
+        >
           Review (a)
         </button>
       </div>
@@ -150,7 +155,9 @@ export default function ReviewBar({
           // The browser can still force-close (close-watcher rules let a
           // repeated Escape bypass cancel); sync state so the bar button
           // can reopen — the typed message is kept.
-          onClose={() => onReplyOpenChange(false)}
+          onClose={() => {
+            onReplyOpenChange(false);
+          }}
         >
           <div className="reply-modal">
             <div className="reply-modal-head">
@@ -180,7 +187,9 @@ export default function ReviewBar({
               ref={textareaRef}
               placeholder="Cover message (published with the verdict)…"
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+              }}
             />
             <div className="reply-modal-actions">
               <button onClick={requestClose} disabled={submit.isPending}>
@@ -190,20 +199,26 @@ export default function ReviewBar({
               <button
                 className="btn-approve"
                 disabled={submit.isPending}
-                onClick={() => submit.mutate("approve")}
+                onClick={() => {
+                  submit.mutate("approve");
+                }}
               >
                 Approve
               </button>
               <button
                 className="btn-request"
                 disabled={submit.isPending}
-                onClick={() => submit.mutate("request_changes")}
+                onClick={() => {
+                  submit.mutate("request_changes");
+                }}
               >
                 Request changes
               </button>
               <button
                 disabled={submit.isPending}
-                onClick={() => submit.mutate("comment")}
+                onClick={() => {
+                  submit.mutate("comment");
+                }}
               >
                 Comment
               </button>

@@ -220,7 +220,9 @@ export default function DiffFileView({
     grid.classList.add(`sel-${side}`);
     document.addEventListener(
       "mouseup",
-      () => grid.classList.remove("sel-old", "sel-new"),
+      () => {
+        grid.classList.remove("sel-old", "sel-new");
+      },
       { once: true },
     );
   };
@@ -280,9 +282,9 @@ export default function DiffFileView({
         <div className="meta-item" key={`editor-${side}-${no}`}>
           <CommentEditor
             saving={create.isPending}
-            onSave={(body) =>
-              create.mutate({ target: ctx.editingTarget!, body })
-            }
+            onSave={(body) => {
+              create.mutate({ target: ctx.editingTarget!, body });
+            }}
             onCancel={() => ctx.setEditingTarget(null)}
             onDirtyChange={(dirty) => {
               ctx.editorDirty.current = dirty;

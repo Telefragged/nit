@@ -134,7 +134,9 @@ function DiffRangeSelect({
         aria-label="Diff base"
         title="Base = parent commit; rM = interdiff against revision M"
         value={against === undefined ? "base" : String(against)}
-        onChange={(e) => onLeft(e.target.value)}
+        onChange={(e) => {
+          onLeft(e.target.value);
+        }}
       >
         <option value="base">Base</option>
         {revisions.map((r) => (
@@ -153,7 +155,9 @@ function DiffRangeSelect({
         aria-label="Revision"
         title="Revision (patchset) under review"
         value={String(selected)}
-        onChange={(e) => onRight(Number(e.target.value))}
+        onChange={(e) => {
+          onRight(Number(e.target.value));
+        }}
       >
         {revisions.map((r) => (
           <option key={r.number} value={String(r.number)}>
@@ -188,7 +192,9 @@ function ReviewItem({ review }: { review: Review }) {
       {truncated || expanded ? (
         <button
           className="linkish review-more"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => {
+            setExpanded((v) => !v);
+          }}
         >
           {expanded ? "less" : "more"}
         </button>
@@ -248,8 +254,12 @@ export default function ReviewPage() {
   );
   useEffect(() => {
     if (selectionMiss === null) return undefined;
-    const timer = setTimeout(() => setSelectionMiss(null), 4000);
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => {
+      setSelectionMiss(null);
+    }, 4000);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [selectionMiss]);
 
   // --- derive revision/diff mode (before any early return: no hooks below)
@@ -428,7 +438,9 @@ export default function ReviewPage() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
   }, [
     fileCount,
     activeFile,
@@ -462,8 +474,9 @@ export default function ReviewPage() {
       else col.removeAttribute("data-sel-side");
     };
     document.addEventListener("selectionchange", onSelectionChange);
-    return () =>
+    return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
+    };
   }, []);
 
   // Scroll spy: keep activeFile — the rail highlight and the [ / ] cursor —
@@ -591,7 +604,9 @@ export default function ReviewPage() {
     if (editingTarget && !confirmEditorCollapse(true)) return;
     updateParams(patch);
   };
-  const onLeft = (v: string) => switchRange({ against: v });
+  const onLeft = (v: string) => {
+    switchRange({ against: v });
+  };
   const onRight = (n: number) => {
     const patch: Record<string, string | null> = { revision: String(n) };
     if (
@@ -671,7 +686,9 @@ export default function ReviewPage() {
             ) : null}
             <button
               className="linkish change-comment-btn"
-              onClick={() => setChangeCommentOpen(true)}
+              onClick={() => {
+                setChangeCommentOpen(true);
+              }}
             >
               + change comment
             </button>
@@ -686,13 +703,17 @@ export default function ReviewPage() {
             <span className="seg">
               <button
                 className={layout === "unified" ? "active" : ""}
-                onClick={() => setLayoutPersist("unified")}
+                onClick={() => {
+                  setLayoutPersist("unified");
+                }}
               >
                 Unified
               </button>
               <button
                 className={layout === "split" ? "active" : ""}
-                onClick={() => setLayoutPersist("split")}
+                onClick={() => {
+                  setLayoutPersist("split");
+                }}
               >
                 Side-by-side
               </button>
@@ -734,8 +755,12 @@ export default function ReviewPage() {
                   <CommentEditor
                     placeholder="Comment on the whole change…"
                     saving={createChangeComment.isPending}
-                    onSave={(body) => createChangeComment.mutate(body)}
-                    onCancel={() => setChangeCommentOpen(false)}
+                    onSave={(body) => {
+                      createChangeComment.mutate(body);
+                    }}
+                    onCancel={() => {
+                      setChangeCommentOpen(false);
+                    }}
                   />
                 ) : null}
               </section>

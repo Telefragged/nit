@@ -54,12 +54,19 @@ function CommentView({
         <span className="comment-time">{timeAgo(comment.created_at)}</span>
         {isDraft && !editing ? (
           <span className="comment-tools">
-            <button className="linkish" onClick={() => setEditing(true)}>
+            <button
+              className="linkish"
+              onClick={() => {
+                setEditing(true);
+              }}
+            >
               Edit
             </button>
             <button
               className="linkish linkish-danger"
-              onClick={() => remove.mutate()}
+              onClick={() => {
+                remove.mutate();
+              }}
               disabled={remove.isPending}
             >
               Delete
@@ -72,8 +79,12 @@ function CommentView({
           initial={comment.body}
           initialResolved={editResolved}
           saving={update.isPending}
-          onSave={(body, resolved) => update.mutate({ body, resolved })}
-          onCancel={() => setEditing(false)}
+          onSave={(body, resolved) => {
+            update.mutate({ body, resolved });
+          }}
+          onCancel={() => {
+            setEditing(false);
+          }}
         />
       ) : resolutionOnly ? (
         <div className="comment-body comment-resolution-only">
@@ -153,8 +164,12 @@ export default function CommentThread({
           initialResolved={editor.resolved}
           resolvedFrom={resolved}
           saving={stage.isPending}
-          onSave={(body, res) => stage.mutate({ body, resolved: res })}
-          onCancel={() => setEditor(null)}
+          onSave={(body, res) => {
+            stage.mutate({ body, resolved: res });
+          }}
+          onCancel={() => {
+            setEditor(null);
+          }}
         />
       ) : null}
       {!isDraftThread ? (
@@ -172,15 +187,17 @@ export default function CommentThread({
             <>
               <button
                 className="linkish"
-                onClick={() => setEditor({ isReply: true, resolved })}
+                onClick={() => {
+                  setEditor({ isReply: true, resolved });
+                }}
               >
                 Reply
               </button>
               <button
                 className="linkish"
-                onClick={() =>
-                  setEditor({ isReply: false, resolved: !resolved })
-                }
+                onClick={() => {
+                  setEditor({ isReply: false, resolved: !resolved });
+                }}
               >
                 {resolved ? "Reopen" : "Resolve"}
               </button>

@@ -62,7 +62,6 @@ export default tseslint.config(
       // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
       "@typescript-eslint/restrict-template-expressions": "off", // 68
       "@typescript-eslint/no-non-null-assertion": "off", // 55
-      "@typescript-eslint/no-confusing-void-expression": "off", // 34
       "@typescript-eslint/no-unnecessary-condition": "off", // 12
       "@typescript-eslint/no-floating-promises": "off", // 5
       "@typescript-eslint/dot-notation": "off", // 4
