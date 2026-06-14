@@ -12,14 +12,11 @@
 export default {
   extends: ["stylelint-config-standard"],
   rules: {
-    "rule-empty-line-before": null, // 188
     "alpha-value-notation": null, // 25
     "color-function-notation": null, // 25
     "color-function-alias-notation": null, // 25
-    "comment-empty-line-before": null, // 17
     "no-descending-specificity": null, // 7
     "selector-class-pattern": null, // 7
     "value-keyword-case": null, // 5
-    "custom-property-empty-line-before": null, // 4
   },
 };
