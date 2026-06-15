@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use git2::{Oid, Repository, RepositoryInitOptions, Signature, Time};
 use nit::db::ChainRow;
-use nit::enums::LogKind;
+use nit::enums::{ChainState, LogKind};
 use nit::gitscan::{self, ScanResult};
 use nit::review::{self, ChainStatus, ChangeProj, Entry, Projection};
 use serde_json::{Value, json};
@@ -136,7 +136,7 @@ impl Fixture {
         self.proj.status
     }
 
-    pub fn state(&self) -> &'static str {
+    pub fn state(&self) -> ChainState {
         review::derive_state(&self.proj)
     }
 

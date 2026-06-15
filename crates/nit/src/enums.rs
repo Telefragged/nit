@@ -121,6 +121,51 @@ pub enum Verdict {
     Comment,
 }
 
+/// A change's wire status (docs/api.md state table). The fold keeps the
+/// retained [`Status`](crate::review::Status) plus a separate orphaned flag
+/// and collapses them into this for the wire ([`ChangeProj::wire_status`]).
+///
+/// [`ChangeProj::wire_status`]: crate::review::ChangeProj::wire_status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChangeStatus {
+    Pending,
+    Approved,
+    ChangesRequested,
+    Commented,
+    Orphaned,
+}
+
+/// A chain's derived, actionable state (docs/api.md state table). Computed
+/// from the live changes by [`derive_state`](crate::review::derive_state);
+/// it is informational on the wire, never stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChainState {
+    WaitingForReview,
+    AgentsTurn,
+    Approved,
+    Merged,
+    Abandoned,
+}
+
+impl ChainState {
+    /// Whether the agent has something to act on (`!= waiting_for_review`).
+    #[must_use]
+    pub fn actionable(self) -> bool {
+        self != ChainState::WaitingForReview
+    }
+}
+
+/// How a chain closed — the two terminal [`ChainStatus`] values, as the
+/// `chain_closed` log payload carries them (docs/data-model.md "Payloads").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClosedStatus {
+    Merged,
+    Abandoned,
+}
+
 /// `DiffFile.status` — how a file changed between the two diffed trees
 /// (docs/api.md "Diff").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

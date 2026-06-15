@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 use git2::{BranchType, Commit, ErrorCode, Oid, Repository, Sort};
 
-use crate::enums::LogKind;
+use crate::enums::{ClosedStatus, LogKind};
 use crate::review::{
     AddedRevision, ChainStatus, ChangeProj, LivePos, Projection, RevisionsPayload,
 };
@@ -62,7 +62,7 @@ impl ScanResult {
         }
     }
 
-    fn closed(status: &'static str) -> ScanResult {
+    fn closed(status: ClosedStatus) -> ScanResult {
         ScanResult {
             entries: vec![NewEntry {
                 kind: LogKind::ChainClosed,
@@ -174,7 +174,7 @@ pub fn scan(proj: &Projection, now: jiff::Timestamp, alloc: &mut dyn FnMut() -> 
                 .unwrap_or(false);
         if tip_in_base && merged_quorum(&repo, proj, &base_commit) {
             objects::delete_chain_keep_refs(&repo, proj.chain_id);
-            return ScanResult::closed("merged");
+            return ScanResult::closed(ClosedStatus::Merged);
         }
     }
 
@@ -307,7 +307,7 @@ fn missing_branch(proj: &Projection, now: jiff::Timestamp) -> ScanResult {
         .and_then(|s| s.parse::<jiff::Timestamp>().ok())
     {
         Some(prev) if now.as_second() - prev.as_second() >= 10 => {
-            let mut res = ScanResult::closed("abandoned");
+            let mut res = ScanResult::closed(ClosedStatus::Abandoned);
             // delete_chain_keep_refs needs the repo; the branch is gone but
             // the repo opens — best effort via the caller's next scan.
             if let Ok(repo) = Repository::open(&proj.git_dir) {

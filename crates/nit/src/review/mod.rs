@@ -13,50 +13,38 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{self, CommentRange};
-use crate::enums::{Author, LogKind, Side, Verdict};
+use crate::enums::{Author, ChainState, ChangeStatus, ClosedStatus, LogKind, Side, Verdict};
 
 // ---------------------------------------------------------------------------
 // Enums
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A chain's lifecycle status — also the wire `Chain.status` (docs/api.md).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ChainStatus {
     Active,
     Merged,
     Abandoned,
 }
 
-impl ChainStatus {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ChainStatus::Active => "active",
-            ChainStatus::Merged => "merged",
-            ChainStatus::Abandoned => "abandoned",
+impl From<ClosedStatus> for ChainStatus {
+    fn from(closed: ClosedStatus) -> ChainStatus {
+        match closed {
+            ClosedStatus::Merged => ChainStatus::Merged,
+            ClosedStatus::Abandoned => ChainStatus::Abandoned,
         }
     }
 }
 
 /// A change's retained review status — never `orphaned` (that is the
-/// separate [`ChangeProj::orphaned`] flag; the wire status is "orphaned"
-/// while it is set).
+/// separate [`ChangeProj::orphaned`] flag; the wire [`ChangeStatus`] is
+/// `orphaned` while it is set).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Pending,
     Approved,
     ChangesRequested,
     Commented,
-}
-
-impl Status {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Status::Pending => "pending",
-            Status::Approved => "approved",
-            Status::ChangesRequested => "changes_requested",
-            Status::Commented => "commented",
-        }
-    }
 }
 
 impl From<Verdict> for Status {
@@ -66,6 +54,19 @@ impl From<Verdict> for Status {
             Verdict::Approve => Status::Approved,
             Verdict::RequestChanges => Status::ChangesRequested,
             Verdict::Comment => Status::Commented,
+        }
+    }
+}
+
+impl From<Status> for ChangeStatus {
+    /// The wire status of a non-orphaned change (orphaned is handled by
+    /// [`ChangeProj::wire_status`]).
+    fn from(status: Status) -> ChangeStatus {
+        match status {
+            Status::Pending => ChangeStatus::Pending,
+            Status::Approved => ChangeStatus::Approved,
+            Status::ChangesRequested => ChangeStatus::ChangesRequested,
+            Status::Commented => ChangeStatus::Commented,
         }
     }
 }
@@ -157,7 +158,7 @@ pub struct PartialPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainClosedPayload {
-    pub status: String, // merged | abandoned
+    pub status: ClosedStatus,
 }
 
 // ---------------------------------------------------------------------------
@@ -265,14 +266,13 @@ impl ChangeProj {
         self.revisions.last()
     }
 
-    /// The wire status string: "orphaned" while orphaned, else the
-    /// retained status.
+    /// The wire status: `orphaned` while orphaned, else the retained status.
     #[must_use]
-    pub fn status_str(&self) -> &'static str {
+    pub fn wire_status(&self) -> ChangeStatus {
         if self.orphaned {
-            "orphaned"
+            ChangeStatus::Orphaned
         } else {
-            self.status.as_str()
+            self.status.into()
         }
     }
 
@@ -395,10 +395,7 @@ pub fn fold(proj: &mut Projection, entry: &Entry) -> Result<()> {
         LogKind::Comment => fold_comment(proj, &entry.parse()?, &entry.created_at),
         LogKind::Partial => proj.partial = entry.parse::<PartialPayload>()?.partial,
         LogKind::ChainClosed => {
-            proj.status = match entry.parse::<ChainClosedPayload>()?.status.as_str() {
-                "abandoned" => ChainStatus::Abandoned,
-                _ => ChainStatus::Merged,
-            };
+            proj.status = entry.parse::<ChainClosedPayload>()?.status.into();
         }
     }
     proj.head = entry.idx + 1;
@@ -605,34 +602,29 @@ pub fn max_assigned_id(rows: &[db::LogRow]) -> Result<u64> {
 
 /// Derived chain state (docs/data-model.md "Derived chain state").
 #[must_use]
-pub fn derive_state(proj: &Projection) -> &'static str {
+pub fn derive_state(proj: &Projection) -> ChainState {
     match proj.status {
-        ChainStatus::Merged => "merged",
-        ChainStatus::Abandoned => "abandoned",
+        ChainStatus::Merged => ChainState::Merged,
+        ChainStatus::Abandoned => ChainState::Abandoned,
         ChainStatus::Active => {
             let live: Vec<&ChangeProj> = proj.changes.iter().filter(|c| !c.orphaned).collect();
             if live.is_empty() {
-                return "agents_turn"; // empty chain
+                return ChainState::AgentsTurn; // empty chain
             }
             if live
                 .iter()
                 .any(|c| matches!(c.status, Status::ChangesRequested | Status::Commented))
             {
-                "agents_turn"
+                ChainState::AgentsTurn
             } else if live.iter().any(|c| c.status != Status::Approved) {
-                "waiting_for_review"
+                ChainState::WaitingForReview
             } else if proj.partial {
-                "agents_turn"
+                ChainState::AgentsTurn
             } else {
-                "approved"
+                ChainState::Approved
             }
         }
     }
-}
-
-#[must_use]
-pub fn actionable(state: &str) -> bool {
-    state != "waiting_for_review"
 }
 
 #[cfg(test)]

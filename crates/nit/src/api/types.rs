@@ -10,7 +10,10 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use crate::enums::{Author, FileStatus, LineKind, LogKind, Side, Verdict};
+pub use crate::enums::{
+    Author, ChainState, ChangeStatus, FileStatus, LineKind, LogKind, Side, Verdict,
+};
+pub use crate::review::ChainStatus;
 
 // ---------------------------------------------------------------------------
 // Health
@@ -77,10 +80,9 @@ pub struct Chain {
     pub git_dir: String,
     pub branch: String,
     pub base: String,
-    /// active | merged | abandoned
-    pub status: String,
+    pub status: ChainStatus,
     /// Derived — api.md state table.
-    pub state: String,
+    pub state: ChainState,
     /// Sticky; set by push --partial, cleared by ready.
     pub partial: bool,
     pub last_scan_error: Option<String>,
@@ -103,8 +105,7 @@ pub struct ChangeSummary {
     pub position: Option<u64>,
     pub change_key: String,
     pub subject: String,
-    /// pending | approved | `changes_requested` | commented | orphaned
-    pub status: String,
+    pub status: ChangeStatus,
     /// Latest revision number.
     pub revision: u64,
     /// Max revision with a review; null if none.
@@ -134,7 +135,7 @@ pub struct ChangeDetail {
     pub chain_id: u64,
     pub change_key: String,
     pub position: Option<u64>,
-    pub status: String,
+    pub status: ChangeStatus,
     pub subject: String,
     pub last_reviewed_revision: Option<u64>,
     /// Ascending.
@@ -374,7 +375,7 @@ pub struct NewComment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Feedback {
     /// See the api.md state table.
-    pub state: String,
+    pub state: ChainState,
     /// ≡ state != `waiting_for_review`
     pub actionable: bool,
     pub chain: FeedbackChain,
@@ -401,7 +402,7 @@ pub struct FeedbackChange {
     pub commit_sha: String,
     /// Latest revision number.
     pub revision: u64,
-    pub status: String,
+    pub status: ChangeStatus,
     pub unresolved: u64,
     /// Latest review, null if none.
     pub review: Option<FeedbackReview>,

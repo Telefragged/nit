@@ -40,8 +40,8 @@ pub fn build_chain(
         git_dir: proj.git_dir.clone(),
         branch: proj.branch.clone(),
         base: proj.base.clone(),
-        status: proj.status.as_str().to_string(),
-        state: review::derive_state(proj).to_string(),
+        status: proj.status,
+        state: review::derive_state(proj),
         partial: proj.partial,
         last_scan_error: proj.last_scan_error.clone(),
         web_url: format!("{public_base}/chains/{}", proj.chain_id),
@@ -65,7 +65,7 @@ fn change_summary(
         position: change.position,
         change_key: change.change_key.clone(),
         subject: subject_of(&latest.message),
-        status: change.status_str().to_string(),
+        status: change.wire_status(),
         revision: latest.number,
         last_reviewed_revision: change.last_reviewed_revision(),
         commit_sha: latest.commit_sha.clone(),
@@ -183,7 +183,7 @@ pub fn build_change_detail(
         chain_id,
         change_key: change.change_key.clone(),
         position: change.position,
-        status: change.status_str().to_string(),
+        status: change.wire_status(),
         subject,
         last_reviewed_revision: change.last_reviewed_revision(),
         revisions,
@@ -254,7 +254,7 @@ pub fn build_feedback(public_base: &str, proj: &Projection) -> types::Feedback {
             subject: subject_of(&latest.message),
             commit_sha: latest.commit_sha.clone(),
             revision: latest.number,
-            status: change.status_str().to_string(),
+            status: change.wire_status(),
             unresolved: u64::try_from(change.unresolved_threads()).unwrap_or(u64::MAX),
             review: change.latest_review().map(|r| types::FeedbackReview {
                 verdict: r.verdict,
@@ -266,8 +266,8 @@ pub fn build_feedback(public_base: &str, proj: &Projection) -> types::Feedback {
     }
     let state = review::derive_state(proj);
     types::Feedback {
-        state: state.to_string(),
-        actionable: review::actionable(state),
+        state,
+        actionable: state.actionable(),
         chain: types::FeedbackChain {
             id: proj.chain_id,
             branch: proj.branch.clone(),

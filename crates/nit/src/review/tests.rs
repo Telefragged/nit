@@ -53,7 +53,7 @@ fn push_creates_changes_then_amend_adds_revision() {
     assert_eq!(p.head, 1);
     assert_eq!(p.change_by_key("Iaaa").expect("a").id, 10);
     assert_eq!(p.change_by_key("Iaaa").expect("a").revisions.len(), 1);
-    assert_eq!(derive_state(&p), "waiting_for_review");
+    assert_eq!(derive_state(&p), ChainState::WaitingForReview);
 
     // Approve Iaaa, then amend it (non-pure) → status resets to pending.
     fold(
@@ -159,7 +159,7 @@ fn orphan_retains_status_then_reattaches() {
     .expect("orphan");
     let a = p.change_by_key("Iaaa").expect("a");
     assert!(a.orphaned);
-    assert_eq!(a.status_str(), "orphaned");
+    assert_eq!(a.wire_status(), ChangeStatus::Orphaned);
     assert_eq!(a.status, Status::ChangesRequested, "status retained");
     // Reattach (same sha → no new revision) exposes the retained status.
     fold(
@@ -176,7 +176,7 @@ fn orphan_retains_status_then_reattaches() {
     .expect("reattach");
     let a = p.change_by_key("Iaaa").expect("a");
     assert!(!a.orphaned);
-    assert_eq!(a.status_str(), "changes_requested");
+    assert_eq!(a.wire_status(), ChangeStatus::ChangesRequested);
 }
 
 #[test]
@@ -402,19 +402,23 @@ fn partial_and_closed_drive_state() {
         ),
     )
     .expect("approve");
-    assert_eq!(derive_state(&p), "agents_turn", "all approved but partial");
+    assert_eq!(
+        derive_state(&p),
+        ChainState::AgentsTurn,
+        "all approved but partial"
+    );
     fold(
         &mut p,
         &entry(3, "partial", serde_json::json!({"partial": false})),
     )
     .expect("ready");
-    assert_eq!(derive_state(&p), "approved");
+    assert_eq!(derive_state(&p), ChainState::Approved);
     fold(
         &mut p,
         &entry(4, "chain_closed", serde_json::json!({"status": "merged"})),
     )
     .expect("closed");
-    assert_eq!(derive_state(&p), "merged");
+    assert_eq!(derive_state(&p), ChainState::Merged);
 }
 
 #[test]
