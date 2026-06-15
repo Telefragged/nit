@@ -102,9 +102,13 @@ nit wait $cursor    # blocks until entries land beyond $cursor; prints JSON
 ```
 
 `--repo`/`--branch` are required — push has no cwd fallback (a stray push
-from the wrong checkout would fork a duplicate chain). **Prefer the
-follow-monitor**: run `nit log --follow --oneline --reviewer-only $cursor`
-under the **Monitor tool** (`persistent: true`) instead of polling
+from the wrong checkout would fork a duplicate chain). `nit log` selects
+its chain differently: by `--chain <id>`, or absent it the cwd's
+repo+branch — it does **not** accept `--repo`/`--branch`. Pass `--chain
+<id>` for a monitor, whose long-lived command can't rely on an ambient
+cwd. **Prefer the follow-monitor**: run
+`nit log --follow --oneline --reviewer-only --chain <id> $cursor` under
+the **Monitor tool** (`persistent: true`) instead of polling
 `nit wait` — Monitor turns each relayed line into a notification, so you
 triage entries as they land (act on follow-ups now, queue unrelated
 comments). **Use the Monitor tool, _not_ `Bash` with `run_in_background`
@@ -122,7 +126,7 @@ re-read the gap with
 `nit log $cursor..` from your last-consumed index, act on all of it, then
 advance `$cursor`, never on the one printed entry alone. Track the index
 you **consumed from `nit log`**, not the one the monitor printed; resume
-after a restart with `nit log --follow --reviewer-only $cursor`. `nit wait` is the fallback when
+after a restart with `nit log --follow --reviewer-only --chain <id> $cursor`. `nit wait` is the fallback when
 a monitor is not available (docs/agent-workflow.md "Following the log
 instead of waiting").
 
