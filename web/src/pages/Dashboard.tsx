@@ -93,7 +93,10 @@ export default function Dashboard() {
     <main className="page">
       <h1 className="mono">{gitDir ? repoPath(gitDir) : "Repository"}</h1>
       <p className="subtitle">
-        <Link to="/">← Repositories</Link> · active review chains in this repo.
+        <Link to="/" className="mono">
+          ← Repositories
+        </Link>{" "}
+        · active review chains in this repo.
       </p>
       {query.isError ? (
         <ErrorPanel error={query.error} />
