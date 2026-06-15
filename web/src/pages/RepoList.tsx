@@ -49,7 +49,7 @@ export default function RepoList() {
 
   return (
     <main className="page">
-      <h1>Repositories</h1>
+      <h1 className="mono">Repositories</h1>
       <p className="subtitle">
         Registered repositories — open one to review its chains.
       </p>
