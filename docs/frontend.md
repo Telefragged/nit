@@ -48,11 +48,20 @@ happens.
     file (`/COMMIT_MSG`, docs/api.md), commentable like code — the full
     message lives there, not in the header;
   - sidebar (left): a sticky, viewport-height-bounded column holding the
-    file list and, below it, the chain nav. The two split that height —
-    the file list takes what's left and scrolls, the chain nav caps its
-    own list and scrolls — so a long diff or a long chain never pushes the
-    other off-screen;
-  - file list (top of the sidebar): titled with the diff totals — file
+    chain nav and, below it, the file list. The two split that height —
+    the chain nav leads at a fixed position and caps its own list, the file
+    list takes what's left and scrolls — so a long diff or a long chain
+    never pushes the other off-screen. The chain nav leads (rather than
+    trailing the file list) so its rows hold a fixed position when you
+    switch changes: the file list, whose length varies per change, is the
+    part that reflows;
+  - chain nav (top of the sidebar): one row per change in chain order —
+    status dot, position, subject, unresolved count — the current change
+    highlighted, siblings linking through. A disclosure header (the
+    `chain` label and the change's position over the count) collapses the
+    list to give the file list below more room; the list scrolls within
+    its height cap when the chain itself is long;
+  - file list (below the chain nav): titled with the diff totals — file
     count and summed +/- counts, both excluding `/COMMIT_MSG` (the message
     is not a file); then per file: path, status letter, +/- counts;
     selecting expands the file section and scrolls to it (the scroll is
@@ -61,12 +70,6 @@ happens.
     under the sticky chrome (scroll spy) and keeps that item visible in the
     rail's own scrollport; all files render in one scroll column (diffshub
     style), unified ⇄ side-by-side toggle persisted in localStorage;
-  - chain nav (below the file list): one row per change in chain order —
-    status dot, position, subject, unresolved count — the current change
-    highlighted, siblings linking through. A disclosure header (the
-    `chain` label and the change's position over the count) collapses the
-    list to give the file list above more room; the list scrolls within
-    its height cap when the chain itself is long;
   - file sections are collapsible (header click toggles) and start
     collapsed — except the commit message, the entry point of a commit
     review. The file header carries an `N comments` tally beside its +/-

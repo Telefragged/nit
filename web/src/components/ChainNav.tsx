@@ -4,12 +4,15 @@ import type { Chain } from "../api/types";
 import { StatusDot } from "./badges";
 
 /**
- * Chain navigation in the review sidebar, below the file list: one row per
+ * Chain navigation in the review sidebar, above the file list: one row per
  * change (status dot, position, subject, unresolved count), the current one
- * highlighted and siblings linking through. A disclosure header collapses
- * the list to reclaim sidebar height for a long file list; the list scrolls
- * within its own height cap when the chain itself is long (styles.css). The
- * row layout mirrors the file rail's, so the two stacked lists read as one.
+ * highlighted and siblings linking through. Sitting on top fixes its
+ * position so the rows stay put when you click between changes — the file
+ * list below is the part whose length varies per change, so it (not the
+ * chain) absorbs the reflow. A disclosure header collapses the list to give
+ * the file list below more room; the list scrolls within its own height cap
+ * when the chain itself is long (styles.css). The row layout mirrors the
+ * file rail's, so the two stacked lists read as one.
  */
 export default function ChainNav({
   chain,

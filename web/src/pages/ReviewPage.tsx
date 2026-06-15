@@ -727,6 +727,7 @@ export default function ReviewPage() {
 
         <div className="review-layout">
           <aside className="review-sidebar">
+            <ChainNav chain={chain} currentId={changeId} />
             <FileRail
               files={files}
               threadsByFile={threadsByFile}
@@ -747,7 +748,6 @@ export default function ReviewPage() {
                 );
               }}
             />
-            <ChainNav chain={chain} currentId={changeId} />
           </aside>
           <div className="diff-column" ref={diffColumnRef}>
             {changeLevelThreads.length > 0 || changeCommentOpen ? (
