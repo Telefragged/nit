@@ -1,14 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { listChains } from "../api/client";
+import { Link, useParams } from "react-router-dom";
+import { listChains, listRepos } from "../api/client";
 import type { Chain } from "../api/types";
 import { StateBadge, StatusDot, PartialBadge } from "../components/badges";
+import { repoPath } from "../lib/repo";
 import { timeAgo } from "../lib/time";
 import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
-
-const basename = (path: string) =>
-  path.split("/").filter(Boolean).pop() ?? path;
 
 function ChainRow({ chain }: { chain: Chain }) {
   const rowNav = useRowNav(`/chains/${chain.id}`);
@@ -25,9 +23,7 @@ function ChainRow({ chain }: { chain: Chain }) {
             </span>
           ) : null}
         </div>
-        <div className="repo">
-          {basename(chain.git_dir.replace(/\/?\.git$/, ""))} → {chain.base}
-        </div>
+        <div className="repo">base {chain.base}</div>
       </td>
       <td>
         <div className="badge-group">
@@ -77,17 +73,27 @@ function SkeletonRows() {
 }
 
 export default function Dashboard() {
+  const { repoId } = useParams();
+  const id = Number(repoId);
+  const reposQuery = useQuery({
+    queryKey: ["repos"],
+    queryFn: listRepos,
+    refetchInterval: 5_000,
+  });
   const query = useQuery({
-    queryKey: ["chains", "active"],
-    queryFn: () => listChains("active"),
+    queryKey: ["chains", "active", id],
+    queryFn: () => listChains("active", id),
     refetchInterval: 5_000,
   });
 
+  const repo = reposQuery.data?.repos.find((r) => r.id === id);
+  const gitDir = repo?.git_dir ?? query.data?.chains[0]?.git_dir;
+
   return (
     <main className="page">
-      <h1>Chains</h1>
+      <h1 className="mono">{gitDir ? repoPath(gitDir) : "Repository"}</h1>
       <p className="subtitle">
-        Active review chains — one row per registered branch.
+        <Link to="/">← Repositories</Link> · active review chains in this repo.
       </p>
       {query.isError ? (
         <ErrorPanel error={query.error} />
@@ -108,8 +114,8 @@ export default function Dashboard() {
               <tr>
                 <td colSpan={4}>
                   <div className="empty-state" style={{ border: "none" }}>
-                    No active chains. Run <code>nit push</code> from a repo to
-                    register one.
+                    No active chains in this repo. Run <code>nit push</code>{" "}
+                    from it to register one.
                   </div>
                 </td>
               </tr>

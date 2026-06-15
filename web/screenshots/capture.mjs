@@ -34,7 +34,10 @@ const expandAllFiles = async (page) => {
  * page or significant state is added.
  */
 const captures = [
-  { name: "dashboard", path: "/" },
+  // Main page: the repo registry, one row per repository.
+  { name: "repos", path: "/" },
+  // A repo's chain list (the old dashboard, now scoped to /repos/:id).
+  { name: "dashboard", path: "/repos/2" },
   { name: "chain-waiting", path: "/chains/1" },
   // Chain 2 is partial (push --partial) and carries a scan error: covers the
   // PARTIAL badge and the validation-error banner in the chain header here

@@ -11,12 +11,17 @@ happens.
 
 ## Pages
 
-- `/` **Dashboard** — table of active chains: branch, repo basename, state
-  badge (`WAITING FOR REVIEW` amber / `AGENT'S TURN` blue / `APPROVED`
+- `/` **Repos** (main page) — table of registered repositories: the
+  git-common-dir path (its identity _and_ its name — no separate name field)
+  and an active-chain count. Click a repo to open its chains. Poll via
+  react-query `refetchInterval: 5000`.
+- `/repos/:id` **Dashboard** — the repo-scoped chain list: branch, base,
+  state badge (`WAITING FOR REVIEW` amber / `AGENT'S TURN` blue / `APPROVED`
   green) plus a gray `PARTIAL` badge while the agent is still pushing
   (`chain.partial`), per-change status dots in chain order (click-through),
-  updated time. Chains gone (merged/abandoned) disappear. Poll via
-  react-query `refetchInterval: 5000`.
+  updated time. The header shows the repo path with a link back to the repo
+  list. Chains gone (merged/abandoned) disappear. Poll via react-query
+  `refetchInterval: 5000`.
 - `/chains/:id` **Chain** — header: branch, state badge, the gray `PARTIAL`
   badge while `partial`. Ordered commit list: position, subject, status
   chip, revision count, comment/draft/unresolved counts, an "updated since
