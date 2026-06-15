@@ -343,13 +343,10 @@ fn request_validation() {
     let drafts_url = server.url(&format!("/api/changes/{change_id}/drafts"));
     let reviews_url = server.url(&format!("/api/changes/{change_id}/reviews"));
 
-    // Drafts.
+    // Drafts. (`side` is a `Side` enum, so a bad value is a type error, not a
+    // runtime one — the malformed-body -> 400 mapping is covered once below.)
     let cases: &[(Value, &str)] = &[
         (json!({"revision": 9, "body": "x"}), "unknown revision"),
-        (
-            json!({"revision": 1, "file": "x.txt", "line": 1, "side": "sideways", "body": "x"}),
-            "bad side",
-        ),
         (
             json!({"revision": 1, "line": 3, "body": "x"}),
             "line without file",
@@ -380,12 +377,15 @@ fn request_validation() {
     assert_eq!(msg_draft["line_text"], "core: x");
     assert_eq!(msg_draft["line"], 1);
 
-    // Reviews: bad verdict, unknown revision.
+    // An unknown `verdict` value can't deserialize (verdict is a Verdict
+    // enum), so this pins that AppJson maps a malformed body to a 400, not
+    // axum's default 422.
     let (st, e) = http_post(
         &reviews_url,
         &json!({"revision": 1, "verdict": "maybe", "message": ""}),
     );
     assert_eq!(st, 400, "{e}");
+    // Unknown revision: a runtime check (the body deserializes fine).
     let (st, e) = http_post(
         &reviews_url,
         &json!({"revision": 9, "verdict": "approve", "message": ""}),
