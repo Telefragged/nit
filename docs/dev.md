@@ -98,6 +98,39 @@ gets a reasoned inline disable instead (ESLint's
 `reportUnusedDisableDirectives` flags it when stale — the `#[expect]`
 model), never a silent permanent allow.
 
+## Type discipline — let the types make illegal states unrepresentable
+
+Lean on the type system; do not push validation that a type could do into
+runtime checks or convention. Two standing rules:
+
+- **A closed set of values is an `enum`, never a `String`.** Every field
+  that can only be one of a fixed list (sides, verdicts, statuses, kinds,
+  authors, …) is a serde enum, not a string. The Rust home for these is
+  `crates/nit/src/enums.rs`; the TS mirror is the union types in
+  `web/src/api/types.ts`. A `#[serde(rename_all = "snake_case")]` (or
+  per-variant `rename`) reproduces the wire spelling, so swapping a
+  `String` for the enum is **not** a wire change — the JSON in `docs/api.md`
+  is unchanged. The payoff is exhaustive `match`es (no `_ =>`
+  fallthrough), no `as_str`/`from_str` round-tripping inside the server,
+  and automatic rejection of an unknown value at deserialize time (a 400
+  through `AppJson`) instead of a bad string flowing deeper. The one place
+  a string is still acceptable is the storage boundary — a `TEXT` column or
+  the dispatch on a not-yet-parsed log row — and it is converted to the
+  enum immediately (`db::col_side`, `Entry::from_row`).
+
+- **Absence is not a state — model it.** When a cluster of `Option` fields
+  has only a few legal combinations, encode the combinations as an enum so
+  the illegal ones are unrepresentable, rather than leaving the invariants
+  to a doc comment. A thread's location is `review::Anchor`
+  (`Change | File | Line { … }`), not five independent `Option`s where a
+  `range` without a `line` or a `line` without a `file` could be built.
+
+Both rules bind **review and simplification passes too** (the agents in a
+two-pronged review included): a new stringly-typed enumerated field, or a
+new bag of `Option`s standing in for an enum, is a finding to fix, never
+the accepted baseline — and a reviewer agent is told so explicitly when it
+is spawned.
+
 ## Restarting the server
 
 Rebuild (`nix build` or `cargo build`), ctrl-c the running `nit serve`
