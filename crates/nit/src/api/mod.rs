@@ -34,7 +34,7 @@ use serde::Deserialize;
 
 use crate::db;
 use crate::gitscan;
-use crate::review::{self, Entry, Projection, PublishedComment, ReplyItem};
+use crate::review::{self, CommentInput, Entry, Projection};
 
 pub use state::{AppJson, AppPath, AppQuery, AppState, Error, blocking, scan_chain};
 
@@ -52,9 +52,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/changes/{id}", get(get_change_detail))
         .route("/api/changes/{id}/revisions/{n}/diff", get(revision_diff))
         .route("/api/changes/{id}/drafts", post(create_draft))
+        .route("/api/changes/{id}/comments", post(create_comment))
         .route("/api/changes/{id}/reviews", post(submit_review))
         .route("/api/drafts/{id}", patch(edit_draft).delete(delete_draft))
-        .route("/api/comments/{id}/replies", post(create_reply))
         .with_state(state)
 }
 
@@ -130,21 +130,6 @@ fn entry_of_change(
         }
     }
     Err(Error::not_found(format!("change {change_id} not found")))
-}
-
-/// The chain entry owning the published comment `comment_id`.
-fn entry_of_comment(
-    state: &Arc<AppState>,
-    comment_id: u64,
-) -> Result<(Arc<state::ChainEntry>, u64), Error> {
-    for id in state.chain_ids() {
-        if let Some(entry) = state.chain_entry(id)
-            && entry.read().root_comment(comment_id).is_some()
-        {
-            return Ok((entry, id));
-        }
-    }
-    Err(Error::not_found(format!("comment {comment_id} not found")))
 }
 
 fn entry_or_404(state: &Arc<AppState>, chain_id: u64) -> Result<Arc<state::ChainEntry>, Error> {
@@ -542,7 +527,7 @@ async fn create_draft(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::NewDraft>,
-) -> Result<Json<types::Comment>, Error> {
+) -> Result<Json<types::Draft>, Error> {
     let (entry, chain_id) = entry_of_change(&state, id)?;
     blocking(move || {
         let conn = state.open_db()?;
@@ -553,64 +538,34 @@ async fn create_draft(
         let rev = change
             .revision(req.revision)
             .ok_or_else(|| Error::bad_request(format!("revision {} not found", req.revision)))?;
-        let side = req.side.as_deref().unwrap_or("new");
-        if side != "new" && side != "old" {
-            return Err(Error::bad_request(format!(
-                "side must be \"new\" or \"old\", got {side:?}"
-            )));
-        }
-        if req.line.is_some() && req.file.is_none() {
-            return Err(Error::bad_request("a line anchor requires a file"));
-        }
-        // An empty body is allowed only when the draft stages a resolution
-        // (a reply that just resolves/reopens — docs/api.md "Thread
-        // resolution"); otherwise the draft would carry nothing.
-        if req.body.trim().is_empty() && req.resolved.is_none() {
+        let (side, range) = validate_anchor(
+            req.side.as_deref(),
+            req.file.as_deref(),
+            req.line,
+            req.range,
+        )?;
+        // An empty body is allowed only for a reply that stages a resolution
+        // (docs/api.md "Thread resolution"); a new thread always needs a body,
+        // and a resolution with no thread_id resolves nothing.
+        let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
+        if req.body.trim().is_empty() && !resolution_only {
             return Err(Error::bad_request(
-                "a draft needs a body or a resolution decision",
+                "a draft needs a body, or a thread_id with a resolution decision",
             ));
         }
-        if req.file.as_deref() == Some(diff::COMMIT_MSG_PATH) && side == "old" {
-            return Err(Error::bad_request(
-                "/COMMIT_MSG has no old side — comment with side \"new\"",
-            ));
-        }
-        let range = req.range.map(|r| validate_range(r, req.line)).transpose()?;
-        // Thread under the published root (feedback scoping only walks one
-        // level below roots).
-        let parent_id = match req.parent_id {
-            Some(pid) => {
-                let root = proj
-                    .root_comment(pid)
-                    .ok_or_else(|| Error::bad_request("parent comment not found on this chain"))?;
-                if root.change_id != id {
-                    return Err(Error::bad_request(
-                        "parent comment belongs to a different change",
-                    ));
+        // A reply draft references a thread on this change.
+        let thread_id = match req.thread_id {
+            Some(tid) => {
+                if change.thread(tid).is_none() {
+                    return Err(Error::bad_request("thread not found on this change"));
                 }
-                Some(root.id)
+                Some(tid)
             }
             None => None,
         };
-        let line_text = match (req.file.as_deref(), req.line) {
-            (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&rev.message, line),
-            (Some(file), Some(line)) => {
-                let sha = if side == "old" {
-                    &rev.parent_sha
-                } else {
-                    &rev.commit_sha
-                };
-                Repository::open(&proj.git_dir).ok().and_then(|repo| {
-                    diff::commit_tree(&repo, sha)
-                        .and_then(|t| diff::line_text(&repo, &t, file, line))
-                })
-            }
-            _ => None,
-        };
+        let line_text = snapshot_line_text(&proj.git_dir, rev, req.file.as_deref(), req.line, side);
         let change_key = change.change_key.clone();
         drop(proj);
-        // A draft's id comes from the global counter so it stays stable when
-        // it later publishes into a `review` entry (it becomes that comment).
         let draft_id = state.alloc_id();
         let row = db::insert_draft(
             &conn,
@@ -619,7 +574,7 @@ async fn create_draft(
                 chain_id,
                 change_key: &change_key,
                 revision: req.revision,
-                parent_id,
+                thread_id,
                 file: req.file.as_deref(),
                 line: req.line,
                 side,
@@ -660,19 +615,73 @@ fn validate_range(
     Ok(range)
 }
 
+/// Validate a new thread's anchor, shared by reviewer drafts and agent
+/// comments: resolve the `side` (default `"new"`), require a `file` behind any
+/// `line`, reject a `/COMMIT_MSG` old-side anchor, and apply the "Range
+/// comments" rules. Returns the resolved side and validated range.
+fn validate_anchor<'a>(
+    side: Option<&'a str>,
+    file: Option<&str>,
+    line: Option<u64>,
+    range: Option<types::CommentRange>,
+) -> Result<(&'a str, Option<types::CommentRange>), Error> {
+    let side = side.unwrap_or("new");
+    if side != "new" && side != "old" {
+        return Err(Error::bad_request(format!(
+            "side must be \"new\" or \"old\", got {side:?}"
+        )));
+    }
+    if line.is_some() && file.is_none() {
+        return Err(Error::bad_request("a line anchor requires a file"));
+    }
+    if file == Some(diff::COMMIT_MSG_PATH) && side == "old" {
+        return Err(Error::bad_request(
+            "/COMMIT_MSG has no old side — comment with side \"new\"",
+        ));
+    }
+    let range = range.map(|r| validate_range(r, line)).transpose()?;
+    Ok((side, range))
+}
+
+/// Snapshot the anchored line's text for a new thread: the message line for
+/// `/COMMIT_MSG`, else the file's line in the revision's commit (`new` side) or
+/// parent (`old` side) tree. `None` for a file-/change-level anchor, or when
+/// the repo or line can't be read (the repo may be mid-rebase at draft time —
+/// best-effort).
+fn snapshot_line_text(
+    git_dir: &str,
+    rev: &review::RevisionProj,
+    file: Option<&str>,
+    line: Option<u64>,
+    side: &str,
+) -> Option<String> {
+    match (file, line) {
+        (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&rev.message, line),
+        (Some(file), Some(line)) => {
+            let sha = if side == "old" {
+                &rev.parent_sha
+            } else {
+                &rev.commit_sha
+            };
+            Repository::open(git_dir).ok().and_then(|repo| {
+                diff::commit_tree(&repo, sha).and_then(|t| diff::line_text(&repo, &t, file, line))
+            })
+        }
+        _ => None,
+    }
+}
+
 async fn edit_draft(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::EditDraft>,
-) -> Result<Json<types::Comment>, Error> {
+) -> Result<Json<types::Draft>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
-        let draft = db::get_draft(&conn, id)?
-            .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
         db::update_draft(&conn, id, &req.body, req.resolved, &db::now_rfc3339())?;
         let updated = db::get_draft(&conn, id)?
             .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
-        let change_id = change_id_for_draft(&state, &draft);
+        let change_id = change_id_for_draft(&state, &updated);
         Ok(Json(views::draft_view(&updated, change_id)))
     })
     .await
@@ -745,12 +754,11 @@ async fn submit_review(
                 let target = resolve_target(&proj, change, latest, req.revision)?;
                 let review_id = st.alloc_id();
                 let drafts = db::drafts_for_change(&conn, chain_id, &change.change_key)?;
-                let comments: Vec<PublishedComment> = drafts
+                let comments: Vec<CommentInput> = drafts
                     .iter()
-                    .map(|d| PublishedComment {
-                        id: d.id, // preserved: a published comment keeps its draft id
+                    .map(|d| CommentInput {
+                        thread_id: d.thread_id,
                         revision: Some(d.revision),
-                        parent_id: d.parent_id,
                         file: d.file.clone(),
                         line: d.line,
                         side: d.side.clone(),
@@ -762,6 +770,9 @@ async fn submit_review(
                     .collect();
                 (change.change_key.clone(), target, comments, review_id)
             };
+            // The threads this review continues (replies) — new threads it
+            // opens are picked up by the minted-id range below.
+            let reply_thread_ids: Vec<u64> = comments.iter().filter_map(|c| c.thread_id).collect();
 
             let payload = serde_json::to_value(review::ReviewPayload {
                 change_key: change_key.clone(),
@@ -796,6 +807,9 @@ async fn submit_review(
                 .map_err(map_busy)?;
             tx.commit().map_err(anyhow::Error::from)?;
 
+            // The threads this review opens get ids from here up (the fold
+            // mints them as it applies the new-thread drafts).
+            let first_new_thread = e2.read().next_thread_id;
             {
                 let mut proj = e2.proj.write().expect("projection lock poisoned");
                 review::fold(&mut proj, &parsed).expect("fold validated before commit");
@@ -813,15 +827,18 @@ async fn submit_review(
                 .iter()
                 .find(|r| r.id == review_id)
                 .ok_or_else(|| Error::internal("review vanished after fold"))?;
-            let published_comments: Vec<types::Comment> = change
-                .comments
+            // The threads this review touched: new-thread drafts minted ids in
+            // `first_new_thread..` (monotonic, under the gate), replies
+            // continued an existing thread.
+            let threads: Vec<types::Thread> = change
+                .threads
                 .iter()
-                .filter(|c| c.review_id == Some(review_id))
-                .map(views::comment_view)
+                .filter(|t| t.id >= first_new_thread || reply_thread_ids.contains(&t.id))
+                .map(|t| views::thread_view(t, id))
                 .collect();
             Ok(Json(types::SubmitReviewResponse {
                 review: views::review_json(review),
-                published_comments,
+                threads,
             }))
         })
         .await?;
@@ -866,46 +883,112 @@ fn resolve_target(
 // ---------------------------------------------------------------------------
 // Agent endpoints
 
-async fn create_reply(
+/// `POST /api/changes/{id}/comments` — the agent's single comment-posting path
+/// (docs/api.md "Agent endpoints"). With no `thread_id` it opens a new thread
+/// on the change (anchor validated like a reviewer draft; revision defaults to
+/// the change's latest, or pins to any earlier one given); with one it appends
+/// a reply to that thread. Appends one `comment` log entry and returns the
+/// resulting thread (author=agent).
+async fn create_comment(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-    AppJson(req): AppJson<types::NewReply>,
-) -> Result<Json<types::Comment>, Error> {
-    let (entry, chain_id) = entry_of_comment(&state, id)?;
+    AppJson(req): AppJson<types::NewComment>,
+) -> Result<Json<types::Thread>, Error> {
+    let (entry, chain_id) = entry_of_change(&state, id)?;
     let guard = entry.gate.lock().await;
     let st = state.clone();
     let e2 = entry.clone();
-    let resp = blocking(move || -> Result<Json<types::Comment>, Error> {
-        let reply_id = st.alloc_id();
-        let root_id = {
+    let resp = blocking(move || -> Result<Json<types::Thread>, Error> {
+        // A body is required, except a reply that only changes resolution.
+        let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
+        if req.body.trim().is_empty() && !resolution_only {
+            return Err(Error::bad_request("an agent comment needs a body"));
+        }
+        // Build the comment under the read lock, then drop it before appending.
+        let (change_key, comment) = {
             let proj = e2.read();
-            let root = proj
-                .root_comment(id)
-                .ok_or_else(|| Error::not_found(format!("comment {id} not found")))?;
-            root.id
+            let change = proj
+                .change_by_id(id)
+                .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
+            let comment = if let Some(tid) = req.thread_id {
+                // Reply: the thread must live on this change; its anchor is the
+                // thread's, so the payload carries none.
+                if change.thread(tid).is_none() {
+                    return Err(Error::bad_request("thread not found on this change"));
+                }
+                CommentInput {
+                    thread_id: Some(tid),
+                    revision: None,
+                    file: None,
+                    line: None,
+                    side: String::new(),
+                    range: None,
+                    line_text: None,
+                    body: req.body.clone(),
+                    resolved: req.resolved,
+                }
+            } else {
+                // New thread: validate the anchor and default the revision to
+                // the change's latest (the just-pushed one).
+                let (side, range) = validate_anchor(
+                    req.side.as_deref(),
+                    req.file.as_deref(),
+                    req.line,
+                    req.range,
+                )?;
+                let revision = match req.revision {
+                    Some(r) => r,
+                    None => {
+                        change
+                            .latest_revision()
+                            .ok_or_else(|| {
+                                Error::bad_request(format!("change {id} has no revisions"))
+                            })?
+                            .number
+                    }
+                };
+                let rev = change
+                    .revision(revision)
+                    .ok_or_else(|| Error::bad_request(format!("revision {revision} not found")))?;
+                let line_text =
+                    snapshot_line_text(&proj.git_dir, rev, req.file.as_deref(), req.line, side);
+                CommentInput {
+                    thread_id: None,
+                    revision: Some(revision),
+                    file: req.file.clone(),
+                    line: req.line,
+                    side: side.to_string(),
+                    range,
+                    line_text,
+                    body: req.body.clone(),
+                    resolved: req.resolved,
+                }
+            };
+            (change.change_key.clone(), comment)
         };
-        let payload = serde_json::to_value(review::ReplyPayload {
-            replies: vec![ReplyItem {
-                id: reply_id,
-                comment_id: root_id,
-                body: req.body.clone(),
-                resolved: req.resolved,
-            }],
+        let target_thread = comment.thread_id;
+        let payload = serde_json::to_value(review::CommentPayload {
+            change_key,
+            comment,
         })
         .map_err(anyhow::Error::from)?;
+        // A new thread takes the next id about to be minted.
+        let first_new_thread = e2.read().next_thread_id;
         let mut conn = st.open_db()?;
         state::commit_entries(
             &mut conn,
             &e2,
             chain_id,
-            vec![("reply".to_string(), payload)],
+            vec![("comment".to_string(), payload)],
         )
         .map_err(map_busy)?;
+        let thread_id = target_thread.unwrap_or(first_new_thread);
         let proj = e2.read();
-        let reply = proj
-            .comment_by_id(reply_id)
-            .ok_or_else(|| Error::internal("reply vanished after fold"))?;
-        Ok(Json(views::comment_view(reply)))
+        let thread = proj
+            .change_by_id(id)
+            .and_then(|c| c.thread(thread_id))
+            .ok_or_else(|| Error::internal("thread vanished after fold"))?;
+        Ok(Json(views::thread_view(thread, id)))
     })
     .await?;
     drop(guard);

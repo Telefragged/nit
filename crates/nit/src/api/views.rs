@@ -7,7 +7,7 @@ use rusqlite::Connection;
 
 use crate::db;
 use crate::gitscan::identity::subject_of;
-use crate::review::{self, ChangeProj, CommentProj, Entry, Projection};
+use crate::review::{self, ChangeProj, Entry, Projection, ThreadComment, ThreadProj};
 
 use super::types;
 
@@ -59,7 +59,7 @@ fn change_summary(
     let Some(latest) = change.latest_revision() else {
         return Ok(None);
     };
-    let (published_comments, drafts, unresolved) = comment_counts(conn, chain_id, change)?;
+    let (threads, drafts, unresolved) = comment_counts(conn, chain_id, change)?;
     Ok(Some(types::ChangeSummary {
         id: change.id,
         position: change.position,
@@ -72,76 +72,79 @@ fn change_summary(
         short_sha: short_sha(&latest.commit_sha),
         counts: types::ChangeCounts {
             revisions: latest.number,
-            published_comments,
+            threads,
             drafts,
             unresolved,
         },
     }))
 }
 
-/// `(published comments, drafts, unresolved root threads)` for a change.
+/// `(published threads, drafts, unresolved threads)` for a change.
 fn comment_counts(
     conn: &Connection,
     chain_id: u64,
     change: &ChangeProj,
 ) -> Result<(u64, u64, u64)> {
-    let published = u64::try_from(change.comments.len()).unwrap_or(u64::MAX);
+    let threads = u64::try_from(change.threads.len()).unwrap_or(u64::MAX);
     let drafts = u64::try_from(db::drafts_for_change(conn, chain_id, &change.change_key)?.len())
         .unwrap_or(u64::MAX);
-    let unresolved = change.unresolved_roots();
+    let unresolved = change.unresolved_threads();
     Ok((
-        published,
+        threads,
         drafts,
         u64::try_from(unresolved).unwrap_or(u64::MAX),
     ))
 }
 
 // ---------------------------------------------------------------------------
-// Comments
+// Threads + drafts
 
-/// A published projection comment → its wire shape.
+/// A published thread → its wire shape.
 #[must_use]
-pub fn comment_view(c: &CommentProj) -> types::Comment {
-    types::Comment {
-        id: c.id,
-        change_id: c.change_id,
-        revision: c.revision,
-        parent_id: c.parent_id,
-        author: c.author.clone(),
-        file: c.file.clone(),
-        line: c.line,
-        side: c.side.clone(),
-        range: c.range,
-        line_text: c.line_text.clone(),
-        body: c.body.clone(),
-        state: "published".to_string(),
-        resolved: c.resolved,
-        review_id: c.review_id,
-        created_at: c.created_at.clone(),
-        updated_at: c.updated_at.clone(),
+pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
+    types::Thread {
+        id: t.id,
+        change_id,
+        revision: t.revision,
+        file: t.file.clone(),
+        line: t.line,
+        side: t.side.clone(),
+        range: t.range,
+        line_text: t.line_text.clone(),
+        resolved: t.resolved,
+        comments: t.comments.iter().map(thread_comment_view).collect(),
+        created_at: t.created_at.clone(),
+        updated_at: t.updated_at.clone(),
     }
 }
 
-/// A draft row → its wire shape (author=reviewer, state=draft).
 #[must_use]
-pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Comment {
-    types::Comment {
+fn thread_comment_view(c: &ThreadComment) -> types::ThreadComment {
+    types::ThreadComment {
+        author: c.author.clone(),
+        body: c.body.clone(),
+        review_id: c.review_id,
+        created_at: c.created_at.clone(),
+    }
+}
+
+/// A draft row → its wire shape.
+#[must_use]
+pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Draft {
+    types::Draft {
         id: d.id,
         change_id,
+        thread_id: d.thread_id,
         revision: d.revision,
-        parent_id: d.parent_id,
-        author: "reviewer".to_string(),
         file: d.file.clone(),
         line: d.line,
         side: d.side.clone(),
         range: d.range,
         line_text: d.line_text.clone(),
         body: d.body.clone(),
-        state: "draft".to_string(),
         // For a draft, `resolved` is the decision staged on its checkbox —
         // the client reads it to show the thread's pending state.
         resolved: d.resolved.unwrap_or(false),
-        review_id: None,
         created_at: d.created_at.clone(),
         updated_at: d.updated_at.clone(),
     }
@@ -150,8 +153,8 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Comment {
 // ---------------------------------------------------------------------------
 // Change detail
 
-/// Change detail JSON: every revision, every comment (published + drafts),
-/// every review.
+/// Change detail JSON: every revision, every published thread, the
+/// reviewer's open drafts, and every review.
 ///
 /// # Errors
 /// When reading drafts fails.
@@ -161,10 +164,15 @@ pub fn build_change_detail(
     change: &ChangeProj,
 ) -> Result<types::ChangeDetail> {
     let revisions: Vec<types::Revision> = change.revisions.iter().map(revision_json).collect();
-    let mut comments: Vec<types::Comment> = change.comments.iter().map(comment_view).collect();
-    for draft in db::drafts_for_change(conn, chain_id, &change.change_key)? {
-        comments.push(draft_view(&draft, change.id));
-    }
+    let threads: Vec<types::Thread> = change
+        .threads
+        .iter()
+        .map(|t| thread_view(t, change.id))
+        .collect();
+    let drafts: Vec<types::Draft> = db::drafts_for_change(conn, chain_id, &change.change_key)?
+        .iter()
+        .map(|d| draft_view(d, change.id))
+        .collect();
     let reviews = change.reviews.iter().map(review_json).collect();
     let subject = change
         .latest_revision()
@@ -179,7 +187,8 @@ pub fn build_change_detail(
         subject,
         last_reviewed_revision: change.last_reviewed_revision(),
         revisions,
-        comments,
+        threads,
+        drafts,
         reviews,
     })
 }
@@ -238,7 +247,7 @@ pub fn build_feedback(public_base: &str, proj: &Projection) -> types::Feedback {
         let Some(latest) = change.latest_revision() else {
             continue;
         };
-        let comments = feedback_comments(change);
+        let threads = feedback_threads(change);
         changes.push(types::FeedbackChange {
             change_id: change.id,
             change_key: change.change_key.clone(),
@@ -246,13 +255,13 @@ pub fn build_feedback(public_base: &str, proj: &Projection) -> types::Feedback {
             commit_sha: latest.commit_sha.clone(),
             revision: latest.number,
             status: change.status_str().to_string(),
-            unresolved: u64::try_from(change.unresolved_roots()).unwrap_or(u64::MAX),
+            unresolved: u64::try_from(change.unresolved_threads()).unwrap_or(u64::MAX),
             review: change.latest_review().map(|r| types::FeedbackReview {
                 verdict: r.verdict.clone(),
                 message: r.message.clone(),
                 revision: r.revision,
             }),
-            comments,
+            threads,
         });
     }
     let state = review::derive_state(proj);
@@ -271,27 +280,20 @@ pub fn build_feedback(public_base: &str, proj: &Projection) -> types::Feedback {
     }
 }
 
-/// Feedback comment scope: the latest review's comments, plus
-/// still-unresolved published threads from earlier reviews — each thread
-/// whole (root + replies).
-fn feedback_comments(change: &ChangeProj) -> Vec<types::Comment> {
+/// Feedback thread scope: the latest review's threads, plus still-unresolved
+/// threads from earlier reviews — each thread whole.
+fn feedback_threads(change: &ChangeProj) -> Vec<types::Thread> {
     let latest_review_id = change.latest_review().map(|r| r.id);
-    let in_scope_root = |root: &CommentProj| -> bool {
-        if latest_review_id.is_some() && root.review_id == latest_review_id {
-            return true;
-        }
-        !root.resolved
-    };
-    let roots: std::collections::HashSet<u64> = change
-        .comments
-        .iter()
-        .filter(|c| c.parent_id.is_none() && in_scope_root(c))
-        .map(|c| c.id)
-        .collect();
     change
-        .comments
+        .threads
         .iter()
-        .filter(|c| roots.contains(&c.id) || c.parent_id.is_some_and(|p| roots.contains(&p)))
-        .map(comment_view)
+        .filter(|t| {
+            // The latest review touched it (created or replied), or it is
+            // still open from an earlier round.
+            !t.resolved
+                || (latest_review_id.is_some()
+                    && t.comments.iter().any(|c| c.review_id == latest_review_id))
+        })
+        .map(|t| thread_view(t, change.id))
         .collect()
 }

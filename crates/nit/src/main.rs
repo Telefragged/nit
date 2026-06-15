@@ -31,8 +31,8 @@ enum Cmd {
     Log(cli::LogArgs),
     /// Print the current feedback JSON without blocking (--oneline for a digest)
     Status(cli::StatusArgs),
-    /// Reply to a review comment as the agent
-    Reply(cli::ReplyArgs),
+    /// Comment on a change (--change / --change-id): open a thread or reply (--thread)
+    Comment(cli::CommentArgs),
     /// Inspect and manage registered repositories
     Repo(cli::RepoArgs),
 }
@@ -52,7 +52,7 @@ fn main() -> Result<()> {
         Cmd::Wait(args) => cli::wait(args),
         Cmd::Log(args) => cli::log(args),
         Cmd::Status(args) => cli::status(args),
-        Cmd::Reply(args) => cli::reply(args),
+        Cmd::Comment(args) => cli::comment(args),
         Cmd::Repo(args) => cli::repo(args),
     }
 }

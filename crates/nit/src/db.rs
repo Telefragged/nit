@@ -99,7 +99,7 @@ const MIGRATIONS: &[&str] = &[
       chain_id         INTEGER NOT NULL REFERENCES chains(id),
       change_key       TEXT NOT NULL,
       revision         INTEGER NOT NULL,
-      parent_id        INTEGER,      -- published comment id (fold-assigned)
+      thread_id        INTEGER,      -- fold-assigned thread id (NULL: new thread)
       file             TEXT,
       line             INTEGER,
       side             TEXT NOT NULL DEFAULT 'new',
@@ -447,7 +447,8 @@ pub struct DraftRow {
     pub chain_id: u64,
     pub change_key: String,
     pub revision: u64,
-    pub parent_id: Option<u64>,
+    /// The thread this draft replies to; `None` opens a new thread.
+    pub thread_id: Option<u64>,
     pub file: Option<String>,
     pub line: Option<u64>,
     pub side: String,
@@ -483,7 +484,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
         chain_id: col_u64(row.get("chain_id")?)?,
         change_key: row.get("change_key")?,
         revision: col_u64(row.get("revision")?)?,
-        parent_id: col_u64_opt(row.get("parent_id")?)?,
+        thread_id: col_u64_opt(row.get("thread_id")?)?,
         file: row.get("file")?,
         line: col_u64_opt(row.get("line")?)?,
         side: row.get("side")?,
@@ -500,7 +501,7 @@ pub struct NewDraft<'a> {
     pub chain_id: u64,
     pub change_key: &'a str,
     pub revision: u64,
-    pub parent_id: Option<u64>,
+    pub thread_id: Option<u64>,
     pub file: Option<&'a str>,
     pub line: Option<u64>,
     pub side: &'a str,
@@ -526,10 +527,10 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
         ),
         None => (None, None, None, None),
     };
-    let parent_id = d.parent_id.map(i64::try_from).transpose()?;
+    let thread_id = d.thread_id.map(i64::try_from).transpose()?;
     let line = d.line.map(i64::try_from).transpose()?;
     conn.execute(
-        "INSERT INTO drafts (id, chain_id, change_key, revision, parent_id, file, line, side,
+        "INSERT INTO drafts (id, chain_id, change_key, revision, thread_id, file, line, side,
             range_start_line, range_start_char, range_end_line, range_end_char,
             line_text, body, resolved, created_at, updated_at)
          VALUES (?15, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?16, ?14, ?14)",
@@ -537,7 +538,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
             i64::try_from(d.chain_id)?,
             d.change_key,
             i64::try_from(d.revision)?,
-            parent_id,
+            thread_id,
             d.file,
             line,
             d.side,
@@ -704,8 +705,8 @@ mod tests {
             &conn,
             c.id,
             1,
-            "reply",
-            &serde_json::json!({"replies": []}),
+            "comment",
+            &serde_json::json!({"change_key": "I1", "body": "note"}),
             "t1",
         )
         .expect("append");
@@ -716,7 +717,7 @@ mod tests {
         assert_eq!(entries[1].idx, 1);
         let tail = log_entries(&conn, c.id, 1, None).expect("tail");
         assert_eq!(tail.len(), 1);
-        assert_eq!(tail[0].kind, "reply");
+        assert_eq!(tail[0].kind, "comment");
     }
 
     #[test]
@@ -730,7 +731,7 @@ mod tests {
                 chain_id: c.id,
                 change_key: "I1",
                 revision: 1,
-                parent_id: None,
+                thread_id: None,
                 file: Some("src/main.rs"),
                 line: Some(3),
                 side: "new",

@@ -30,8 +30,7 @@ fn review_auto_retargets_after_pure_rebase() {
         &server.url(&format!("/api/changes/{change_id}/drafts")),
         &json!({"revision": 1, "file": "a.txt", "line": 2, "body": "why a2?"}),
     );
-    assert_eq!(st, 200);
-    let root_id = draft["id"].as_i64().unwrap();
+    assert_eq!(st, 200, "{draft}");
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/reviews")),
         &json!({"revision": 1, "verdict": "comment", "message": "one question"}),
@@ -65,12 +64,12 @@ fn review_auto_retargets_after_pure_rebase() {
     let (_, feedback) = http_get(&server.url(&format!("/api/chains/{chain_id}/feedback")));
     assert_eq!(feedback["state"], "approved");
     assert_eq!(feedback["changes"][0]["status"], "approved");
-    // The latest review (approve) has no comments, but the unresolved
+    // The latest review (approve) opened no threads, but the unresolved
     // thread from the earlier review stays in feedback scope.
-    let comments = feedback["changes"][0]["comments"].as_array().unwrap();
-    assert_eq!(comments.len(), 1);
-    assert_eq!(comments[0]["id"].as_i64(), Some(root_id));
-    assert_eq!(comments[0]["resolved"], false);
+    let threads = feedback["changes"][0]["threads"].as_array().unwrap();
+    assert_eq!(threads.len(), 1);
+    assert_eq!(threads[0]["resolved"], false);
+    assert_eq!(threads[0]["comments"][0]["body"], "why a2?");
 }
 
 #[test]
@@ -146,13 +145,11 @@ fn commit_msg_comments_stay_pinned() {
     );
     assert_eq!(st, 200, "{on_body}");
     assert_eq!(on_body["line_text"], "Second body line.");
-    let on_body_id = on_body["id"].as_i64().unwrap();
     let (st, on_subject) = http_post(
         &drafts_url,
         &json!({"revision": 1, "file": "/COMMIT_MSG", "line": 1, "body": "explain more"}),
     );
-    assert_eq!(st, 200);
-    let on_subject_id = on_subject["id"].as_i64().unwrap();
+    assert_eq!(st, 200, "{on_subject}");
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/reviews")),
         &json!({"revision": 1, "verdict": "request_changes", "message": "message nits"}),
@@ -175,22 +172,22 @@ fn commit_msg_comments_stay_pinned() {
 
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
     assert_eq!(st, 200);
-    let comments = detail["comments"].as_array().unwrap();
-    let by_id = |id: i64| {
-        comments
+    let threads = detail["threads"].as_array().unwrap();
+    let by_line = |line: i64| {
+        threads
             .iter()
-            .find(|c| c["id"].as_i64() == Some(id))
+            .find(|t| t["line"].as_i64() == Some(line))
             .unwrap()
     };
     // Both anchors are exactly where they were written, on revision 1, with
     // no ported fields on the wire (the client places by diff range).
-    let body = by_id(on_body_id);
+    let body = by_line(4);
     assert_eq!(body["revision"], 1);
     assert_eq!(body["line"], 4);
     assert_eq!(body["line_text"], "Second body line.");
     assert!(body.get("rendered_line").is_none());
     assert!(body.get("outdated").is_none());
-    let subject = by_id(on_subject_id);
+    let subject = by_line(1);
     assert_eq!(subject["revision"], 1);
     assert_eq!(subject["line"], 1);
     assert_eq!(subject["line_text"], "core: add a");
@@ -237,9 +234,11 @@ fn range_comments_served_verbatim() {
 
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
     assert_eq!(st, 200);
-    let comments = detail["comments"].as_array().unwrap();
+    // These drafts were never published, so they live in `drafts` (keeping
+    // their row ids), not `threads`.
+    let drafts = detail["drafts"].as_array().unwrap();
     let by_id = |id: i64| {
-        comments
+        drafts
             .iter()
             .find(|c| c["id"].as_i64() == Some(id))
             .unwrap()
@@ -356,8 +355,8 @@ fn request_validation() {
             "line without file",
         ),
         (
-            json!({"revision": 1, "body": "x", "parent_id": 999}),
-            "unknown parent",
+            json!({"revision": 1, "body": "x", "thread_id": 999}),
+            "unknown thread",
         ),
     ];
     for (body, what) in cases {
@@ -393,17 +392,18 @@ fn request_validation() {
     );
     assert_eq!(st, 400, "{e}");
 
-    // A draft is not a published comment, so replying to one is a 404.
+    // Replying to a non-existent thread (a draft id is not a thread id) is a
+    // 400 on the chain comment endpoint.
     let (_, draft) = http_post(
         &drafts_url,
         &json!({"revision": 1, "file": "x.txt", "line": 1, "body": "root"}),
     );
     let draft_id = draft["id"].as_i64().unwrap();
-    let (st, _) = http_post(
-        &server.url(&format!("/api/comments/{draft_id}/replies")),
-        &json!({"body": "hi"}),
+    let (st, e) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/comments")),
+        &json!({"thread_id": draft_id, "body": "hi"}),
     );
-    assert_eq!(st, 404);
+    assert_eq!(st, 400, "{e}");
 
     // An empty body is rejected unless the draft stages a resolution.
     let (st, e) = http_post(&drafts_url, &json!({"revision": 1, "body": ""}));
@@ -428,49 +428,55 @@ fn drafted_thread_resolution() {
     let drafts_url = server.url(&format!("/api/changes/{change_id}/drafts"));
     let reviews_url = server.url(&format!("/api/changes/{change_id}/reviews"));
 
-    // Publish a root comment (its draft id carries over to the published one).
-    let (_, draft) = http_post(
+    // Publish a thread (its first comment) via a review.
+    let (st, _) = http_post(
         &drafts_url,
         &json!({"revision": 1, "file": "x.txt", "line": 1, "body": "why?"}),
     );
-    let root_id = draft["id"].as_i64().unwrap();
+    assert_eq!(st, 200);
     let (st, _) = http_post(&reviews_url, &json!({"revision": 1, "verdict": "comment"}));
     assert_eq!(st, 200);
 
-    let resolved_of = |id: i64| -> bool {
-        let (_, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
-        let comments = detail["comments"].as_array().unwrap().clone();
-        // No empty-body resolution draft ever materializes as a comment.
-        assert!(comments.iter().all(|c| c["body"].as_str() != Some("")));
-        comments
-            .iter()
-            .find(|c| c["id"].as_i64() == Some(id))
-            .unwrap()["resolved"]
-            .as_bool()
-            .unwrap()
-    };
-    assert!(!resolved_of(root_id), "new thread starts unresolved");
+    // The published thread's fold id (drafts reference it to reply/resolve).
+    let (_, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+    let thread_id = detail["threads"][0]["id"].as_i64().unwrap();
 
-    // Resolve: an empty-body reply staging resolved=true, then publish.
+    let resolved_of = || -> bool {
+        let (_, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+        let t = detail["threads"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["id"].as_i64() == Some(thread_id))
+            .unwrap()
+            .clone();
+        // No empty-body resolution draft ever materializes as a comment.
+        let comments = t["comments"].as_array().unwrap();
+        assert!(comments.iter().all(|c| c["body"].as_str() != Some("")));
+        t["resolved"].as_bool().unwrap()
+    };
+    assert!(!resolved_of(), "new thread starts unresolved");
+
+    // Resolve: an empty-body reply draft staging resolved=true, then publish.
     let (st, res_draft) = http_post(
         &drafts_url,
-        &json!({"revision": 1, "parent_id": root_id, "body": "", "resolved": true}),
+        &json!({"revision": 1, "thread_id": thread_id, "body": "", "resolved": true}),
     );
     assert_eq!(st, 200, "{res_draft}");
     assert_eq!(res_draft["resolved"], true);
     let (st, _) = http_post(&reviews_url, &json!({"revision": 1, "verdict": "comment"}));
     assert_eq!(st, 200);
-    assert!(resolved_of(root_id), "drafted resolve applied on publish");
+    assert!(resolved_of(), "drafted resolve applied on publish");
 
     // Reopen: stage resolved=false, then publish.
     let (st, _) = http_post(
         &drafts_url,
-        &json!({"revision": 1, "parent_id": root_id, "body": "", "resolved": false}),
+        &json!({"revision": 1, "thread_id": thread_id, "body": "", "resolved": false}),
     );
     assert_eq!(st, 200);
     let (st, _) = http_post(&reviews_url, &json!({"revision": 1, "verdict": "comment"}));
     assert_eq!(st, 200);
-    assert!(!resolved_of(root_id), "drafted reopen applied on publish");
+    assert!(!resolved_of(), "drafted reopen applied on publish");
 }
 
 #[test]

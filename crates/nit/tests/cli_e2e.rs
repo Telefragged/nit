@@ -1,5 +1,5 @@
 //! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside
-//! a fixture repo against a real server — push / status / wait / reply
+//! a fixture repo against a real server — push / status / wait / comment
 //! per docs/agent-workflow.md.
 
 mod common;
@@ -10,7 +10,7 @@ use common::{GitRepo, TestServer, http_post, msg, nit, nit_register};
 use serde_json::{Value, json};
 
 #[test]
-fn push_wait_status_reply_loop() {
+fn push_wait_status_comment_loop() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
     g.branch("feat", c1);
@@ -46,8 +46,7 @@ fn push_wait_status_reply_loop() {
         &server.url(&format!("/api/changes/{change_id}/drafts")),
         &json!({"revision": 1, "file": "a.txt", "line": 1, "body": "naming"}),
     );
-    assert_eq!(st, 200);
-    let comment_id = draft["id"].as_i64().unwrap();
+    assert_eq!(st, 200, "{draft}");
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/reviews")),
         &json!({"revision": 1, "verdict": "request_changes", "message": "fix naming"}),
@@ -72,29 +71,73 @@ fn push_wait_status_reply_loop() {
     assert_eq!(entries[0]["idx"], 0);
     assert_eq!(entries[1]["kind"], "review");
     assert_eq!(entries[1]["idx"], 1);
+    let thread_id = resp["feedback"]["changes"][0]["threads"][0]["id"]
+        .as_i64()
+        .expect("a published thread");
     assert_eq!(
-        resp["feedback"]["changes"][0]["comments"][0]["id"].as_i64(),
-        Some(comment_id)
+        resp["feedback"]["changes"][0]["threads"][0]["comments"][0]["body"],
+        "naming"
     );
 
-    // reply --resolve threads under the root and resolves it.
+    // `nit comment --change-id … --thread … --resolve` appends to the thread
+    // and resolves it.
     let (ok, reply, stderr) = nit(
         &server,
         &g,
         &[
-            "reply",
-            &comment_id.to_string(),
+            "comment",
+            "--change-id",
+            "Ia",
+            "--thread",
+            &thread_id.to_string(),
             "-m",
             "renamed",
             "--resolve",
         ],
     );
     assert!(ok, "{stderr}");
-    assert_eq!(reply["author"], "agent");
-    assert_eq!(reply["parent_id"].as_i64(), Some(comment_id));
+    assert_eq!(reply["resolved"], true);
+    let comments = reply["comments"].as_array().unwrap();
+    assert_eq!(comments.last().unwrap()["author"], "agent");
+    assert_eq!(comments.last().unwrap()["body"], "renamed");
+
+    // `--change <numeric id>` targets the same change as `--change-id <trailer>`
+    // (born resolved, so the unresolved count below stays 0).
+    let change_num = resp["feedback"]["changes"][0]["change_id"]
+        .as_i64()
+        .expect("a numeric change id");
+    let (ok, opened, stderr) = nit(
+        &server,
+        &g,
+        &[
+            "comment",
+            "--change",
+            &change_num.to_string(),
+            "-m",
+            "by numeric id",
+            "--resolve",
+        ],
+    );
+    assert!(ok, "{stderr}");
+    assert_eq!(opened["change_id"], change_num);
+    assert_eq!(opened["resolved"], true);
+
     let (ok, feedback, _) = nit(&server, &g, &["status"]);
     assert!(ok);
     assert_eq!(feedback["changes"][0]["unresolved"], 0);
+}
+
+/// A merge commit fails the scan on push; a plain re-push after the agent
+/// rebases it away recovers.
+#[test]
+fn merge_commit_fails_push_then_recovers() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (ok, _, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    assert!(ok, "{stderr}");
 
     // A merge commit on the chain: push prints the chain JSON but exits
     // non-zero with the scan error on stderr.

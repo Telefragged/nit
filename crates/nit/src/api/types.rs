@@ -112,8 +112,10 @@ pub struct ChangeSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeCounts {
     pub revisions: u64,
-    pub published_comments: u64,
+    /// Published comment threads.
+    pub threads: u64,
     pub drafts: u64,
+    /// Unresolved threads.
     pub unresolved: u64,
 }
 
@@ -132,9 +134,11 @@ pub struct ChangeDetail {
     pub last_reviewed_revision: Option<u64>,
     /// Ascending.
     pub revisions: Vec<Revision>,
-    /// Published + drafts, all revisions; anchors verbatim (the client
-    /// places them by diff range, docs/api.md "Comment placement").
-    pub comments: Vec<Comment>,
+    /// Published threads, all revisions; anchors verbatim (the client places
+    /// them by diff range, docs/api.md "Comment placement").
+    pub threads: Vec<Thread>,
+    /// The reviewer's unpublished comments (drafts), all revisions.
+    pub drafts: Vec<Draft>,
     pub reviews: Vec<Review>,
 }
 
@@ -221,29 +225,59 @@ pub struct Line {
 /// rather than mirrored.
 pub use crate::db::CommentRange;
 
+/// A published comment thread: its anchor and resolution, plus the
+/// conversation on it (docs/api.md "Comment placement").
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Comment {
+pub struct Thread {
+    /// Fold-assigned by creation order (not stored).
     pub id: u64,
     pub change_id: u64,
-    /// The revision the comment is pinned to.
+    /// The revision the thread is pinned to.
     pub revision: u64,
-    pub parent_id: Option<u64>,
-    /// reviewer | agent
-    pub author: String,
     pub file: Option<String>,
     pub line: Option<u64>,
     /// old | new — `new` is `revision`'s commit tree, `old` its parent
     /// tree (docs/api.md "Comment placement").
     pub side: String,
-    /// Null: whole-line comment.
+    /// Null: whole-line thread.
     pub range: Option<CommentRange>,
     /// Snapshot of the anchored line.
     pub line_text: Option<String>,
-    pub body: String,
-    /// draft | published
-    pub state: String,
     pub resolved: bool,
+    pub comments: Vec<ThreadComment>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// One message in a [`Thread`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadComment {
+    /// reviewer | agent
+    pub author: String,
+    pub body: String,
+    /// The review that published it; null for an agent comment.
     pub review_id: Option<u64>,
+    pub created_at: String,
+}
+
+/// A reviewer's unpublished comment (a `drafts`-table row). It opens a new
+/// thread (`thread_id` null) or replies to one (`thread_id` set).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Draft {
+    pub id: u64,
+    pub change_id: u64,
+    pub thread_id: Option<u64>,
+    /// The request's anchor revision. Meaningful only for a new thread; a
+    /// reply ignores it (the thread keeps its own revision).
+    pub revision: u64,
+    pub file: Option<String>,
+    pub line: Option<u64>,
+    pub side: String,
+    pub range: Option<CommentRange>,
+    pub line_text: Option<String>,
+    pub body: String,
+    /// The staged thread-resolution decision (false when unset).
+    pub resolved: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -264,8 +298,10 @@ pub struct NewDraft {
     #[serde(default)]
     pub range: Option<CommentRange>,
     pub body: String,
+    /// Set: replies to that thread (on this change). Absent: opens a new
+    /// thread anchored by the fields above.
     #[serde(default)]
-    pub parent_id: Option<u64>,
+    pub thread_id: Option<u64>,
     /// Staged thread-resolution decision (api.md "Thread resolution"); a
     /// reply draft may stage one with an empty body.
     #[serde(default)]
@@ -297,18 +333,40 @@ pub struct SubmitReview {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitReviewResponse {
     pub review: Review,
-    pub published_comments: Vec<Comment>,
+    /// The threads this review created or added to.
+    pub threads: Vec<Thread>,
 }
 
 // ---------------------------------------------------------------------------
 // Agent endpoints
 
-/// `POST /api/comments/{id}/replies` request.
+/// `POST /api/changes/{id}/comments` request — the agent's single
+/// comment-posting path. With `thread_id` set it appends a reply to that
+/// thread (on this change); absent, it opens a new thread anchored by the
+/// `file`/`line`/`side`/`range` fields like a reviewer draft.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NewReply {
+pub struct NewComment {
+    /// Reply: the thread to append to (anchor ignored). Absent: a new thread.
+    #[serde(default)]
+    pub thread_id: Option<u64>,
+    /// New thread only; defaults to the change's latest revision (pass an
+    /// earlier one to pin the thread to a prior revision).
+    #[serde(default)]
+    pub revision: Option<u64>,
+    /// Optional: change-level when absent (a `line` requires a `file`).
+    #[serde(default)]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub line: Option<u64>,
+    /// Defaults to "new".
+    #[serde(default)]
+    pub side: Option<String>,
+    /// Optional but encouraged: requires `line`; api.md "Range comments".
+    #[serde(default)]
+    pub range: Option<CommentRange>,
     pub body: String,
-    /// Thread-resolution decision: `Some(true)` resolves, `Some(false)`
-    /// reopens, `None` leaves the thread unchanged.
+    /// New thread: initial state (`true` born resolved, else open). Reply:
+    /// `true` resolves / `false` reopens / `None` leaves it unchanged.
     #[serde(default)]
     pub resolved: Option<bool>,
 }
@@ -347,9 +405,9 @@ pub struct FeedbackChange {
     pub unresolved: u64,
     /// Latest review, null if none.
     pub review: Option<FeedbackReview>,
-    /// That review's comments only, plus still-unresolved threads from
+    /// The latest review's threads, plus still-unresolved threads from
     /// earlier reviews.
-    pub comments: Vec<Comment>,
+    pub threads: Vec<Thread>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -364,7 +422,7 @@ pub struct FeedbackReview {
 pub struct LogEntry {
     /// 0-based position in the chain's log.
     pub idx: u64,
-    /// revisions | review | reply | partial | `chain_closed`
+    /// revisions | review | comment | partial | `chain_closed`
     pub kind: String,
     pub created_at: String,
     /// Kind-specific; shapes in data-model.md "Payloads".

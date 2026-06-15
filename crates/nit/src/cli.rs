@@ -1,4 +1,4 @@
-//! `nit push` / `wait` / `status` / `reply` — thin CLI clients of the
+//! `nit push` / `wait` / `status` / `comment` — thin CLI clients of the
 //! HTTP API, run by coding agents from inside a git repo
 //! (docs/agent-workflow.md). They print API JSON to stdout and decide
 //! purely on the documented shapes; all review logic lives server-side.
@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, anyhow, bail};
 use git2::Repository;
 use serde_json::{Value, json};
+
+use crate::api::types::{CommentRange, NewComment};
 
 pub const DEFAULT_SERVER: &str = "http://127.0.0.1:8877";
 
@@ -96,7 +98,7 @@ pub struct LogArgs {
     #[arg(long)]
     pub follow: bool,
     /// With --follow, relay only entries worth acting on, applying `nit wait`'s
-    /// wake rule: drop the agent's own entries (`revisions`, `reply`, `partial`)
+    /// wake rule: drop the agent's own entries (`revisions`, `comment`, `partial`)
     /// and a comment-less approve that leaves the chain short of `approved`.
     /// Each relayed line is only a doorbell: re-read the gap from the index you
     /// last consumed from `nit log` (`nit log <cursor>..`), not the idx the
@@ -120,13 +122,46 @@ pub struct StatusArgs {
 }
 
 #[derive(clap::Args)]
-pub struct ReplyArgs {
-    /// Id of the comment to reply to
-    pub comment_id: u64,
-    /// Reply text
+pub struct CommentArgs {
+    /// The change to comment on, by its numeric id — the sequentially
+    /// assigned id `nit status` and `nit log --chain` show. Pass exactly one
+    /// of `--change` / `--change-id`.
+    #[arg(
+        long,
+        conflicts_with = "change_id",
+        required_unless_present = "change_id"
+    )]
+    pub change: Option<u64>,
+    /// The change to comment on, by its commit's rebase-stable `Change-Id:`
+    /// trailer — the form an agent has on hand.
+    #[arg(long)]
+    pub change_id: Option<String>,
+    /// Reply to an existing thread on the change (by id) instead of opening a
+    /// new one.
+    #[arg(long)]
+    pub thread: Option<u64>,
+    /// New thread: file to anchor to (a `--line` requires a `--file`).
+    #[arg(long, conflicts_with = "thread")]
+    pub file: Option<String>,
+    /// New thread: line to anchor to (1-based).
+    #[arg(long, conflicts_with = "thread")]
+    pub line: Option<u64>,
+    /// New thread: side — `new` (default) or `old`.
+    #[arg(long, conflicts_with = "thread")]
+    pub side: Option<String>,
+    /// New thread: selected-text range `START-END`, each `line:char`
+    /// (1-based line, 0-based char, end exclusive — e.g. `12:4-14:7`).
+    #[arg(long, conflicts_with = "thread")]
+    pub range: Option<String>,
+    /// New thread: revision to anchor to (defaults to the change's latest;
+    /// pass an earlier one to comment on a prior revision).
+    #[arg(long, conflicts_with = "thread")]
+    pub revision: Option<u64>,
+    /// Comment body (optional only for a `--thread` reply that just
+    /// resolves/reopens).
     #[arg(short = 'm', long = "message")]
-    pub message: String,
-    /// Mark the thread resolved
+    pub message: Option<String>,
+    /// Mark the thread resolved (a new thread is born resolved).
     #[arg(long)]
     pub resolve: bool,
     /// Reopen the thread (mark it unresolved)
@@ -483,7 +518,7 @@ fn reviewer_only_relays(client: &Client, chain_id: u64, entry: &Value) -> bool {
         .unwrap_or(true)
 }
 
-/// A log entry that echoes the agent's own action: a `reply`, a `partial`
+/// A log entry that echoes the agent's own action: a `comment`, a `partial`
 /// flip, or a `revisions` — the structural delta of a scan, which in the
 /// monitor loop is overwhelmingly the agent's own push (a rescan can append
 /// one too, so it is an echo only by heavy convention). `nit log --follow
@@ -494,7 +529,7 @@ fn reviewer_only_relays(client: &Client, chain_id: u64, entry: &Value) -> bool {
 fn is_agent_echo(entry: &Value) -> bool {
     matches!(
         entry["kind"].as_str(),
-        Some("revisions" | "reply" | "partial")
+        Some("revisions" | "comment" | "partial")
     )
 }
 
@@ -640,10 +675,13 @@ fn entry_summary(entry: &Value) -> String {
             p["revision"].as_u64().unwrap_or(0),
             p["comments"].as_array().map_or(0, Vec::len)
         ),
-        "reply" => format!(
-            "agent replied to {} comment(s)",
-            p["replies"].as_array().map_or(0, Vec::len)
-        ),
+        "comment" => match p["thread_id"].as_u64() {
+            Some(thread) => format!("agent commented on thread {thread}"),
+            None => format!(
+                "agent opened a thread on {}",
+                short_key(p["change_key"].as_str().unwrap_or(""))
+            ),
+        },
         "partial" => format!(
             "chain marked {}",
             if p["partial"].as_bool().unwrap_or(false) {
@@ -710,13 +748,22 @@ fn feedback_oneline(feedback: &Value) -> String {
     out
 }
 
-/// Threaded reply as the agent; `--resolve` closes the thread, `--unresolve`
-/// reopens it (neither leaves its resolution unchanged).
+/// Comment on the chain as the agent: open a new thread on a change
+/// (`--change-id`) or reply to one (`--thread`). `--resolve`/`--unresolve` set
+/// the thread's resolution (a new thread is born resolved with `--resolve`).
 ///
 /// # Errors
-/// When the server can't be reached or the comment id is unknown.
-pub fn reply(args: ReplyArgs) -> Result<()> {
+/// When the server can't be reached, the branch is not registered, or the
+/// arguments name no change/thread (the server validates the rest).
+pub fn comment(args: CommentArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
+    // clap requires exactly one of the two: `--change` is the numeric id
+    // already, `--change-id` resolves the Change-Id trailer to it.
+    let change_id = match (args.change, args.change_id.as_deref()) {
+        (Some(id), _) => id,
+        (None, Some(key)) => resolve_change(&client, key)?,
+        (None, None) => bail!("pass --change <id> or --change-id <Change-Id>"),
+    };
     let resolved = if args.resolve {
         Some(true)
     } else if args.unresolve {
@@ -724,11 +771,76 @@ pub fn reply(args: ReplyArgs) -> Result<()> {
     } else {
         None
     };
-    let comment = client.post(
-        &format!("/api/comments/{}/replies", args.comment_id),
-        &json!({"body": args.message, "resolved": resolved}),
+    let range = args
+        .range
+        .map(|spec| parse_comment_range(&spec))
+        .transpose()?;
+    // The server's request shape; `--thread` and the anchor flags are mutually
+    // exclusive (clap), so a reply carries no anchor and a new thread no
+    // thread_id, and absent Options serialize to null (== omitted server-side).
+    let req = NewComment {
+        thread_id: args.thread,
+        revision: args.revision,
+        file: args.file,
+        line: args.line,
+        side: args.side,
+        range,
+        body: args.message.unwrap_or_default(),
+        resolved,
+    };
+    let thread = client.post(
+        &format!("/api/changes/{change_id}/comments"),
+        &serde_json::to_value(&req)?,
     )?;
-    print_json(&comment)
+    print_json(&thread)
+}
+
+/// The numeric change id for a `Change-Id` trailer on the cwd's registered
+/// chain. The chain list already carries `changes[].id`/`change_key`, so this
+/// resolves without a second request.
+///
+/// # Errors
+/// When the server can't be reached, the branch is not registered, or no
+/// change on the chain carries that `Change-Id`.
+fn resolve_change(client: &Client, change_key: &str) -> Result<u64> {
+    let chain = find_chain(client, Retry::No)?;
+    chain["changes"]
+        .as_array()
+        .and_then(|cs| {
+            cs.iter()
+                .find(|c| c["change_key"].as_str() == Some(change_key))
+        })
+        .and_then(|c| c["id"].as_u64())
+        .ok_or_else(|| anyhow!("no change with Change-Id {change_key:?} on this chain"))
+}
+
+/// Parse a `--range` spec `START-END`, each endpoint `line:char` (1-based
+/// line, 0-based char); the server enforces the "Range comments" rules.
+fn parse_comment_range(spec: &str) -> Result<CommentRange> {
+    let (start, end) = spec
+        .split_once('-')
+        .ok_or_else(|| anyhow!("range must be START-END (e.g. 12:4-14:7), got {spec:?}"))?;
+    let point = |s: &str| -> Result<(u64, u64)> {
+        let (line, ch) = s
+            .split_once(':')
+            .ok_or_else(|| anyhow!("range endpoint must be line:char, got {s:?}"))?;
+        Ok((
+            line.trim()
+                .parse()
+                .with_context(|| format!("bad line in range endpoint {s:?}"))?,
+            ch.trim()
+                .parse()
+                .with_context(|| format!("bad char in range endpoint {s:?}"))?,
+        ))
+    };
+    let (start_line, start_char) = point(start)?;
+    let (end_line, end_char) = point(end)?;
+    Ok(CommentRange {
+        start_line,
+        start_char,
+        end_line,
+        end_char,
+    })
 }
 
 /// `nit repo` dispatch.
@@ -824,23 +936,30 @@ fn current_branch(repo: &Repository) -> Result<String> {
         .ok_or_else(|| anyhow!("branch name is not valid UTF-8"))
 }
 
-/// The registered chain for the cwd's repo + branch, via
-/// `GET /api/chains?status=all` (matched on the repo's git-common-dir, which
-/// the server stores canonicalized). `retry` covers only that GET — repo
-/// discovery and "branch not registered" stay fatal.
+/// The id of the registered chain for the cwd's repo + branch (see
+/// [`find_chain`]).
 fn resolve_chain(client: &Client, retry: Retry) -> Result<u64> {
+    find_chain(client, retry)?["id"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("malformed chain: missing id"))
+}
+
+/// The cwd's registered chain object from `GET /api/chains?status=all`,
+/// matched on the repo's git-common-dir (the server stores it canonicalized)
+/// and current branch. `retry` covers only that GET — repo discovery and
+/// "branch not registered" stay fatal.
+fn find_chain(client: &Client, retry: Retry) -> Result<serde_json::Value> {
     let (git_dir, repo) = discover_repo()?;
     let branch = current_branch(&repo)?;
     let list = client.get_retry("/api/chains?status=all", retry)?;
-    let chains = list["chains"]
+    list["chains"]
         .as_array()
-        .ok_or_else(|| anyhow!("malformed chain list: {list}"))?;
-    chains
+        .ok_or_else(|| anyhow!("malformed chain list: {list}"))?
         .iter()
         .find(|c| {
             c["git_dir"].as_str() == Some(git_dir.as_str()) && c["branch"].as_str() == Some(&branch)
         })
-        .and_then(|c| c["id"].as_u64())
+        .cloned()
         .ok_or_else(|| {
             anyhow!("branch '{branch}' is not registered with nit — run 'nit push' first")
         })
@@ -1145,7 +1264,7 @@ mod tests {
             "waiting_for_review"
         ));
         assert!(event_wakes(
-            &json!({"kind": "reply", "payload": {}}),
+            &json!({"kind": "comment", "payload": {}}),
             "waiting_for_review"
         ));
     }
@@ -1155,7 +1274,7 @@ mod tests {
         let echo = |kind: &str| is_agent_echo(&json!({"kind": kind, "payload": {}}));
         // The agent's own writes — suppressed by --reviewer-only.
         assert!(echo("revisions")); // a scan's delta — overwhelmingly its push
-        assert!(echo("reply")); // its nit reply
+        assert!(echo("comment")); // its nit comment
         assert!(echo("partial")); // its push --partial / ready flip
         // Reviewer activity and chain closure always reach the monitor.
         assert!(!echo("review"));
@@ -1178,10 +1297,42 @@ mod tests {
             entry_summary(&review),
             "reviewer request_changes I01234567 r2 (2 comment(s))"
         );
-        let reply = json!({"kind": "reply", "payload": {"replies": [{}]}});
-        assert_eq!(entry_summary(&reply), "agent replied to 1 comment(s)");
+        let opened =
+            json!({"kind": "comment", "payload": {"change_key": "I0123456789", "thread_id": null}});
+        assert_eq!(entry_summary(&opened), "agent opened a thread on I01234567");
+        let reply =
+            json!({"kind": "comment", "payload": {"change_key": "I0123456789", "thread_id": 3}});
+        assert_eq!(entry_summary(&reply), "agent commented on thread 3");
         let closed = json!({"kind": "chain_closed", "payload": {"status": "merged"}});
         assert_eq!(entry_summary(&closed), "chain merged");
+    }
+
+    #[test]
+    fn parse_comment_range_forms_and_rejections() {
+        assert_eq!(
+            parse_comment_range("12:4-14:7").expect("ok"),
+            CommentRange {
+                start_line: 12,
+                start_char: 4,
+                end_line: 14,
+                end_char: 7,
+            }
+        );
+        assert_eq!(
+            parse_comment_range("3:0-3:5").expect("ok"),
+            CommentRange {
+                start_line: 3,
+                start_char: 0,
+                end_line: 3,
+                end_char: 5,
+            }
+        );
+        assert!(parse_comment_range("12:4").is_err(), "missing end");
+        assert!(
+            parse_comment_range("12-14").is_err(),
+            "endpoint missing char"
+        );
+        assert!(parse_comment_range("a:4-14:7").is_err(), "non-numeric line");
     }
 
     #[test]

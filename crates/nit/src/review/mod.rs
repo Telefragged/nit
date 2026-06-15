@@ -3,10 +3,11 @@
 //! in-memory state machine; [`fold`] applies one [`Entry`]; [`replay`]
 //! rebuilds a projection from a chain row plus its log rows.
 //!
-//! Fold-assigned ids (changes, published comments, reviews) arrive already
-//! allocated inside the entry payloads — the server allocates them from a
-//! process-global counter at append time and writes them in, so replay just
-//! trusts them (docs/data-model.md "Identity within the log").
+//! Fold-assigned ids: change and review ids arrive already allocated inside
+//! the entry payloads (the server mints them from a process-global counter at
+//! append time and writes them in, so replay just trusts them). Thread ids are
+//! **not** stored — a thread is numbered by its creation order as the fold
+//! replays, a pure function of the log (docs/data-model.md "Identity").
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
@@ -101,44 +102,48 @@ pub struct ReviewPayload {
     pub revision: u64,
     pub verdict: String,
     pub message: String,
-    pub comments: Vec<PublishedComment>,
+    /// The drained drafts, in draft order. Each opens a new thread or replies
+    /// to an existing one (see [`CommentInput`]).
+    pub comments: Vec<CommentInput>,
 }
 
+/// The `comment` kind: one comment an agent posts, opening a thread or
+/// continuing one. The agent-authored mirror of a single review comment.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PublishedComment {
-    pub id: u64,
-    pub parent_id: Option<u64>,
-    /// The revision the comment was authored on (a draft's own revision —
-    /// not necessarily the review's target). `None` only on log entries that
-    /// predate this field; the fold then falls back to the review revision.
+pub struct CommentPayload {
+    pub change_key: String,
+    #[serde(flatten)]
+    pub comment: CommentInput,
+}
+
+/// A comment inside a `review` or `comment` payload: with `thread_id` unset it
+/// **opens a new thread** anchored by the fields below; with it set it
+/// **replies** to that thread (the anchor is ignored — the thread owns it).
+/// Shared by both kinds (docs/data-model.md "Payloads").
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommentInput {
+    /// `None` opens a new thread; `Some` appends to that thread.
+    #[serde(default)]
+    pub thread_id: Option<u64>,
+    /// Anchor revision for a new thread (a draft's own patchset — an interdiff
+    /// old side pins to an earlier revision). The API always stamps it; the
+    /// fold falls back to the change's latest only for a malformed payload.
     #[serde(default)]
     pub revision: Option<u64>,
+    #[serde(default)]
     pub file: Option<String>,
+    #[serde(default)]
     pub line: Option<u64>,
+    #[serde(default)]
     pub side: String,
+    #[serde(default)]
     pub range: Option<CommentRange>,
+    #[serde(default)]
     pub line_text: Option<String>,
     pub body: String,
-    /// The thread-resolution decision this comment carries when published
-    /// (`Some(true/false)` = resolve/reopen, `None` = no decision). Applied
-    /// to the comment's thread; an empty `body` carries only this. `None` on
-    /// entries that predate drafted resolution (docs/api.md).
-    #[serde(default)]
-    pub resolved: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReplyPayload {
-    pub replies: Vec<ReplyItem>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReplyItem {
-    pub id: u64,
-    pub comment_id: u64,
-    pub body: String,
-    /// Thread-resolution decision: `Some(true)` resolves, `Some(false)`
-    /// reopens, `None` leaves the thread unchanged.
+    /// Thread-resolution decision (`Some(true/false)` = resolve/reopen, `None`
+    /// = no decision). On a new thread it is the birth state; a `thread_id`
+    /// reply with an empty `body` carries only this.
     #[serde(default)]
     pub resolved: Option<bool>,
 }
@@ -195,23 +200,33 @@ pub struct RevisionProj {
     pub created_at: String,
 }
 
+/// A located, resolvable conversation. Its anchor and birth come from its
+/// first comment; later comments only extend it and may move `resolved`. The
+/// `id` is fold-assigned by creation order, never stored (module docs).
 #[derive(Debug, Clone)]
-pub struct CommentProj {
+pub struct ThreadProj {
     pub id: u64,
-    pub change_id: u64,
     pub revision: u64,
-    pub parent_id: Option<u64>,
-    pub author: String,
     pub file: Option<String>,
     pub line: Option<u64>,
     pub side: String,
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
-    pub body: String,
     pub resolved: bool,
-    pub review_id: Option<u64>,
+    pub comments: Vec<ThreadComment>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// One message in a thread.
+#[derive(Debug, Clone)]
+pub struct ThreadComment {
+    /// reviewer | agent.
+    pub author: String,
+    pub body: String,
+    /// The review that published this comment; `None` for an agent comment.
+    pub review_id: Option<u64>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone)]
@@ -231,7 +246,7 @@ pub struct ChangeProj {
     pub orphaned: bool,
     pub status: Status,
     pub revisions: Vec<RevisionProj>,
-    pub comments: Vec<CommentProj>,
+    pub threads: Vec<ThreadProj>,
     pub reviews: Vec<ReviewProj>,
 }
 
@@ -257,13 +272,16 @@ impl ChangeProj {
         self.revisions.iter().find(|r| r.number == number)
     }
 
-    /// Count of unresolved root threads (published roots not yet resolved).
+    /// A published thread by its fold id.
     #[must_use]
-    pub fn unresolved_roots(&self) -> usize {
-        self.comments
-            .iter()
-            .filter(|c| c.parent_id.is_none() && !c.resolved)
-            .count()
+    pub fn thread(&self, id: u64) -> Option<&ThreadProj> {
+        self.threads.iter().find(|t| t.id == id)
+    }
+
+    /// Count of unresolved threads (open conversations awaiting the reviewer).
+    #[must_use]
+    pub fn unresolved_threads(&self) -> usize {
+        self.threads.iter().filter(|t| !t.resolved).count()
     }
 
     /// The latest review on the change (highest id), if any.
@@ -291,6 +309,9 @@ pub struct Projection {
     pub status: ChainStatus,
     pub partial: bool,
     pub changes: Vec<ChangeProj>,
+    /// The next thread id to mint — bumped each time a thread is opened during
+    /// the fold, so ids are positional and never stored (module docs).
+    pub next_thread_id: u64,
     pub head: u64,
     pub last_entry_at: Option<String>,
     // Transient scan state — not folded from the log, re-derived each scan.
@@ -311,6 +332,7 @@ impl Projection {
             status: ChainStatus::Active,
             partial: false,
             changes: Vec::new(),
+            next_thread_id: 0,
             head: 0,
             last_entry_at: None,
             last_scan_error: None,
@@ -338,14 +360,6 @@ impl Projection {
         self.changes.iter().find(|c| c.id == id)
     }
 
-    /// A published comment by id (root or reply).
-    #[must_use]
-    pub fn comment_by_id(&self, id: u64) -> Option<&CommentProj> {
-        self.changes
-            .iter()
-            .find_map(|c| c.comments.iter().find(|cm| cm.id == id))
-    }
-
     /// Live changes (not orphaned) in chain order; then orphans last —
     /// matching the dashboard ordering.
     #[must_use]
@@ -355,21 +369,6 @@ impl Projection {
         let mut orphans: Vec<&ChangeProj> = self.changes.iter().filter(|c| c.orphaned).collect();
         live.append(&mut orphans);
         live
-    }
-
-    /// The root comment of a published comment id (walks a reply up to its
-    /// root). The owning change is reachable via `CommentProj::change_id`.
-    #[must_use]
-    pub fn root_comment(&self, comment_id: u64) -> Option<&CommentProj> {
-        for change in &self.changes {
-            if let Some(c) = change.comments.iter().find(|c| c.id == comment_id) {
-                return Some(match c.parent_id {
-                    None => c,
-                    Some(pid) => change.comments.iter().find(|r| r.id == pid).unwrap_or(c),
-                });
-            }
-        }
-        None
     }
 }
 
@@ -384,7 +383,7 @@ pub fn fold(proj: &mut Projection, entry: &Entry) -> Result<()> {
     match entry.kind.as_str() {
         "revisions" => fold_revisions(proj, &entry.parse()?, &entry.created_at),
         "review" => fold_review(proj, &entry.parse()?, &entry.created_at),
-        "reply" => fold_reply(proj, &entry.parse()?, &entry.created_at),
+        "comment" => fold_comment(proj, &entry.parse()?, &entry.created_at),
         "partial" => proj.partial = entry.parse::<PartialPayload>()?.partial,
         "chain_closed" => {
             proj.status = match entry.parse::<ChainClosedPayload>()?.status.as_str() {
@@ -418,7 +417,7 @@ fn fold_revisions(proj: &mut Projection, p: &RevisionsPayload, now: &str) {
                 orphaned: false,
                 status: Status::Pending,
                 revisions: Vec::new(),
-                comments: Vec::new(),
+                threads: Vec::new(),
                 reviews: Vec::new(),
             });
         }
@@ -451,7 +450,6 @@ fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
     let Some(change) = proj.change_by_key_mut(&p.change_key) else {
         return;
     };
-    let change_id = change.id;
     change.reviews.push(ReviewProj {
         id: p.review_id,
         revision: p.revision,
@@ -459,94 +457,95 @@ fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
         message: p.message.clone(),
         created_at: now.to_string(),
     });
+    // Each drained draft opens or continues a thread, authored by the reviewer
+    // and tagged with this review. Resolutions apply in draft order, so a
+    // thread ends at its last decision (docs/data-model.md "The fold").
     for c in &p.comments {
-        // An empty-body draft carries only a staged resolution: it updates
-        // its thread without materializing as a comment (docs/data-model.md).
-        if !c.body.trim().is_empty() {
-            change.comments.push(CommentProj {
-                id: c.id,
-                change_id,
-                // A comment stays pinned to the revision it was authored on
-                // (a draft on an older patchset / interdiff old side), not the
-                // review's target.
-                revision: c.revision.unwrap_or(p.revision),
-                parent_id: c.parent_id,
-                author: "reviewer".to_string(),
+        apply_comment(proj, &p.change_key, c, "reviewer", Some(p.review_id), now);
+    }
+    if let Some(change) = proj.change_by_key_mut(&p.change_key) {
+        change.status = Status::from_verdict(&p.verdict);
+    }
+}
+
+/// Fold an agent `comment`: one comment authored by the agent, opening or
+/// continuing a thread with no review attached (the change's status is
+/// untouched — an agent's note is not a verdict).
+fn fold_comment(proj: &mut Projection, p: &CommentPayload, now: &str) {
+    apply_comment(proj, &p.change_key, &p.comment, "agent", None, now);
+}
+
+/// Apply one comment to a change's threads (shared by `review` and `comment`).
+/// With no `thread_id`, mint the next thread id and open a thread at the
+/// comment's anchor; with one, append to that thread. An empty body adds no
+/// comment, only its resolution (docs/data-model.md "The fold").
+fn apply_comment(
+    proj: &mut Projection,
+    change_key: &str,
+    c: &CommentInput,
+    author: &str,
+    review_id: Option<u64>,
+    now: &str,
+) {
+    match c.thread_id {
+        None => {
+            // A new thread needs a body; never mint an id for an empty one, so
+            // the counter stays a function of the threads actually created.
+            if c.body.trim().is_empty() {
+                return;
+            }
+            let id = proj.next_thread_id;
+            let Some(change) = proj.change_by_key_mut(change_key) else {
+                return;
+            };
+            // The API always stamps `revision`; fall back to latest only for a
+            // malformed payload.
+            let revision = c
+                .revision
+                .unwrap_or_else(|| change.latest_revision().map_or(1, |r| r.number));
+            change.threads.push(ThreadProj {
+                id,
+                revision,
                 file: c.file.clone(),
                 line: c.line,
                 side: c.side.clone(),
                 range: c.range,
                 line_text: c.line_text.clone(),
-                body: c.body.clone(),
-                resolved: false,
-                review_id: Some(p.review_id),
+                resolved: c.resolved.unwrap_or(false),
+                comments: vec![ThreadComment {
+                    author: author.to_string(),
+                    body: c.body.clone(),
+                    review_id,
+                    created_at: now.to_string(),
+                }],
                 created_at: now.to_string(),
                 updated_at: now.to_string(),
             });
+            proj.next_thread_id += 1;
         }
-        // Apply the comment's staged resolution to its thread's root, in
-        // payload order — the thread ends at the last decision.
-        if let Some(state) = c.resolved {
-            set_thread_resolved(change, c.parent_id.unwrap_or(c.id), state, now);
-        }
-    }
-    change.status = Status::from_verdict(&p.verdict);
-}
-
-/// Set a thread's resolution by its root id (a no-op if the root is absent).
-fn set_thread_resolved(change: &mut ChangeProj, root_id: u64, resolved: bool, now: &str) {
-    if let Some(root) = change.comments.iter_mut().find(|c| c.id == root_id) {
-        root.resolved = resolved;
-        root.updated_at = now.to_string();
-    }
-}
-
-fn fold_reply(proj: &mut Projection, p: &ReplyPayload, now: &str) {
-    for r in &p.replies {
-        // Resolve the root comment's change + anchor before mutating.
-        let Some((change_idx, root)) = locate_root(proj, r.comment_id) else {
-            continue;
-        };
-        let change_id = proj.changes[change_idx].id;
-        let new = CommentProj {
-            id: r.id,
-            change_id,
-            revision: root.revision,
-            parent_id: Some(root.id),
-            author: "agent".to_string(),
-            file: root.file.clone(),
-            line: root.line,
-            side: root.side.clone(),
-            range: root.range,
-            line_text: root.line_text.clone(),
-            body: r.body.clone(),
-            resolved: false,
-            review_id: None,
-            created_at: now.to_string(),
-            updated_at: now.to_string(),
-        };
-        let root_id = root.id;
-        let change = &mut proj.changes[change_idx];
-        change.comments.push(new);
-        if let Some(state) = r.resolved {
-            set_thread_resolved(change, root_id, state, now);
-        }
-    }
-}
-
-/// Locate `(change index, root comment clone-free ref)` for a comment id,
-/// walking a reply up to its root.
-fn locate_root(proj: &Projection, comment_id: u64) -> Option<(usize, &CommentProj)> {
-    for (i, change) in proj.changes.iter().enumerate() {
-        if let Some(c) = change.comments.iter().find(|c| c.id == comment_id) {
-            let root = match c.parent_id {
-                None => c,
-                Some(pid) => change.comments.iter().find(|r| r.id == pid).unwrap_or(c),
+        Some(tid) => {
+            let Some(change) = proj.change_by_key_mut(change_key) else {
+                return;
             };
-            return Some((i, root));
+            let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) else {
+                return;
+            };
+            if !c.body.trim().is_empty() {
+                thread.comments.push(ThreadComment {
+                    author: author.to_string(),
+                    body: c.body.clone(),
+                    review_id,
+                    created_at: now.to_string(),
+                });
+            }
+            if let Some(state) = c.resolved {
+                thread.resolved = state;
+            }
+            // A reply always changes something — the API forbids an empty body
+            // with no resolution — so bump the thread's time unconditionally.
+            thread.updated_at = now.to_string();
         }
     }
-    None
 }
 
 /// Rebuild a projection from a chain row and its log rows (ascending idx).
@@ -578,16 +577,7 @@ pub fn max_assigned_id(rows: &[db::LogRow]) -> Result<u64> {
                 }
             }
             "review" => {
-                let p: ReviewPayload = entry.parse()?;
-                max = max.max(p.review_id);
-                for c in p.comments {
-                    max = max.max(c.id);
-                }
-            }
-            "reply" => {
-                for r in entry.parse::<ReplyPayload>()?.replies {
-                    max = max.max(r.id);
-                }
+                max = max.max(entry.parse::<ReviewPayload>()?.review_id);
             }
             _ => {}
         }

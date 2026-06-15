@@ -180,11 +180,11 @@ fn orphan_retains_status_then_reattaches() {
 }
 
 #[test]
-fn review_comments_carry_drafted_resolution() {
+fn review_opens_threads_and_carries_drafted_resolution() {
     let mut p = Projection::empty(&chain_row());
     fold(&mut p, &push_one("Iaaa", 10, 1, "a1")).expect("push");
-    // A review whose root comment is staged resolved: it publishes already
-    // resolved (the reviewer checked the box at draft time).
+    // A review opening a thread staged resolved publishes it already resolved
+    // (the reviewer checked the box at draft time), pinned to revision 1.
     fold(
         &mut p,
         &entry(
@@ -192,22 +192,25 @@ fn review_comments_carry_drafted_resolution() {
             "review",
             serde_json::json!({"change_key": "Iaaa", "review_id": 20, "revision": 1,
                 "verdict": "comment", "message": "",
-                "comments": [{"id": 30, "parent_id": null, "file": "m.rs", "line": 2,
+                "comments": [{"thread_id": null, "revision": 1, "file": "m.rs", "line": 2,
                     "side": "new", "range": null, "line_text": "x", "body": "nit",
                     "resolved": true}]}),
         ),
     )
     .expect("review");
     let a = p.change_by_key("Iaaa").expect("a");
-    assert_eq!(a.comments.len(), 1);
-    assert!(
-        a.comments[0].resolved,
-        "staged resolution applies on publish"
-    );
-    assert_eq!(a.unresolved_roots(), 0);
+    assert_eq!(a.threads.len(), 1);
+    let t = &a.threads[0];
+    assert_eq!(t.id, 0, "first thread minted id 0");
+    assert_eq!(t.comments[0].author, "reviewer");
+    assert_eq!(t.revision, 1, "pinned to the authored revision");
+    assert_eq!(t.comments.len(), 1);
+    assert_eq!(t.comments[0].review_id, Some(20));
+    assert!(t.resolved, "staged resolution applies on publish");
+    assert_eq!(a.unresolved_threads(), 0);
 
-    // A later review reopens the thread with an empty-body resolution-only
-    // reply: it changes thread state without materializing a comment.
+    // A later review reopens it with an empty-body resolution-only reply: it
+    // moves the thread's state without materializing a comment.
     fold(
         &mut p,
         &entry(
@@ -215,21 +218,25 @@ fn review_comments_carry_drafted_resolution() {
             "review",
             serde_json::json!({"change_key": "Iaaa", "review_id": 21, "revision": 1,
                 "verdict": "comment", "message": "",
-                "comments": [{"id": 31, "parent_id": 30, "side": "new", "body": "",
-                    "resolved": false}]}),
+                "comments": [{"thread_id": 0, "body": "", "resolved": false}]}),
         ),
     )
     .expect("reopen review");
     let a = p.change_by_key("Iaaa").expect("a");
-    assert_eq!(a.comments.len(), 1, "empty-body resolution adds no comment");
-    assert!(!a.comments[0].resolved, "thread reopened");
-    assert_eq!(a.unresolved_roots(), 1);
+    assert_eq!(
+        a.threads[0].comments.len(),
+        1,
+        "empty-body resolution adds no comment"
+    );
+    assert!(!a.threads[0].resolved, "thread reopened");
+    assert_eq!(a.unresolved_threads(), 1);
 }
 
 #[test]
-fn reply_resolved_field_toggles_thread() {
+fn agent_comment_replies_toggle_thread_resolution() {
     let mut p = Projection::empty(&chain_row());
     fold(&mut p, &push_one("Iaaa", 10, 1, "a1")).expect("push");
+    // A reviewer opens a thread requesting changes.
     fold(
         &mut p,
         &entry(
@@ -237,97 +244,142 @@ fn reply_resolved_field_toggles_thread() {
             "review",
             serde_json::json!({"change_key": "Iaaa", "review_id": 20, "revision": 1,
                 "verdict": "request_changes", "message": "fix",
-                "comments": [{"id": 30, "parent_id": null, "file": "m.rs", "line": 2,
+                "comments": [{"thread_id": null, "revision": 1, "file": "m.rs", "line": 2,
                     "side": "new", "range": null, "line_text": "x", "body": "why"}]}),
         ),
     )
     .expect("review");
 
-    // A reply with `resolved: true` resolves the thread; the reply is
-    // threaded under the root as the agent, inheriting the root's anchor.
+    // An agent `comment` replying with resolved:true appends a comment and
+    // resolves the thread.
     fold(
         &mut p,
         &entry(
             2,
-            "reply",
-            serde_json::json!({"replies": [{"id": 31, "comment_id": 30, "body": "done", "resolved": true}]}),
+            "comment",
+            serde_json::json!({"change_key": "Iaaa", "thread_id": 0, "body": "done", "resolved": true}),
         ),
     )
-    .expect("resolve reply");
-    assert!(p.comment_by_id(30).expect("root").resolved);
-    let reply = p.comment_by_id(31).expect("reply");
-    assert_eq!(reply.parent_id, Some(30));
-    assert_eq!(reply.author, "agent");
-    assert_eq!(reply.file.as_deref(), Some("m.rs"), "reply inherits anchor");
+    .expect("agent resolve");
+    let t = &p.change_by_key("Iaaa").expect("a").threads[0];
+    assert!(t.resolved);
+    assert_eq!(t.comments.len(), 2, "agent reply appended");
+    assert_eq!(t.comments[1].author, "agent");
+    assert_eq!(t.comments[1].body, "done");
+    assert_eq!(t.comments[1].review_id, None);
 
-    // A later reply with `resolved: false` reopens it.
+    // A later comment with resolved:false reopens it.
     fold(
         &mut p,
         &entry(
             3,
-            "reply",
-            serde_json::json!({"replies": [{"id": 32, "comment_id": 30, "body": "actually…", "resolved": false}]}),
+            "comment",
+            serde_json::json!({"change_key": "Iaaa", "thread_id": 0, "body": "actually…", "resolved": false}),
         ),
     )
-    .expect("reopen reply");
-    assert!(!p.comment_by_id(30).expect("root").resolved);
+    .expect("reopen");
+    assert!(!p.change_by_key("Iaaa").expect("a").threads[0].resolved);
 
-    // A plain reply (no decision) leaves the state unchanged.
+    // A plain comment (no decision) leaves the state unchanged.
     fold(
         &mut p,
         &entry(
             4,
-            "reply",
-            serde_json::json!({"replies": [{"id": 33, "comment_id": 30, "body": "ok"}]}),
+            "comment",
+            serde_json::json!({"change_key": "Iaaa", "thread_id": 0, "body": "ok"}),
         ),
     )
     .expect("plain reply");
-    assert!(!p.comment_by_id(30).expect("root").resolved);
+    assert!(!p.change_by_key("Iaaa").expect("a").threads[0].resolved);
 }
 
 #[test]
-fn published_comment_keeps_its_authored_revision() {
+fn agent_thread_leaves_status_untouched_and_mints_ids() {
     let mut p = Projection::empty(&chain_row());
     fold(&mut p, &push_one("Iaaa", 10, 1, "a1")).expect("push");
-    // A review targeting revision 2 publishing a comment authored on
-    // revision 1 must pin the comment to revision 1, not the review target.
+    // An agent opens a thread on its own change, born resolved (a
+    // for-the-record note) — it is not a verdict, so the status stays pending.
     fold(
         &mut p,
         &entry(
             1,
-            "review",
-            serde_json::json!({"change_key": "Iaaa", "review_id": 20, "revision": 2,
-                "verdict": "comment", "message": "",
-                "comments": [{"id": 30, "revision": 1, "parent_id": null, "file": "m.rs",
-                    "line": 2, "side": "new", "range": null, "line_text": "x", "body": "old"}]}),
+            "comment",
+            serde_json::json!({"change_key": "Iaaa", "thread_id": null, "revision": 1,
+                "file": "Cargo.toml", "line": 2, "side": "new", "range": null,
+                "line_text": "serde = …", "body": "why this dep", "resolved": true}),
         ),
     )
-    .expect("review");
-    let c = p.change_by_key("Iaaa").expect("a").comments[0].clone();
-    assert_eq!(c.revision, 1, "pinned to the authored revision");
-    // A comment without an explicit revision falls back to the review's.
+    .expect("agent comment");
+    let a = p.change_by_key("Iaaa").expect("a");
+    assert_eq!(a.status, Status::Pending, "an agent note is not a verdict");
+    assert_eq!(a.threads.len(), 1);
+    let t = &a.threads[0];
+    assert_eq!(t.id, 0);
+    assert_eq!(t.comments[0].author, "agent");
+    assert_eq!(t.revision, 1);
+    assert!(t.resolved, "born resolved");
+    assert_eq!(t.comments[0].review_id, None);
+    assert_eq!(a.unresolved_threads(), 0);
+
+    // A second opened thread mints id 1 (creation order) and is open.
     fold(
         &mut p,
         &entry(
             2,
-            "review",
-            serde_json::json!({"change_key": "Iaaa", "review_id": 21, "revision": 1,
-                "verdict": "approve", "message": "",
-                "comments": [{"id": 31, "parent_id": null, "file": null, "line": null,
-                    "side": "new", "range": null, "line_text": null, "body": "ok"}]}),
+            "comment",
+            serde_json::json!({"change_key": "Iaaa", "thread_id": null, "file": "m.rs",
+                "line": 1, "side": "new", "body": "another"}),
         ),
     )
-    .expect("review2");
-    let c = p
-        .change_by_key("Iaaa")
-        .expect("a")
-        .comments
-        .iter()
-        .find(|c| c.id == 31)
-        .expect("c");
+    .expect("agent comment 2");
+    let a = p.change_by_key("Iaaa").expect("a");
+    assert_eq!(a.threads.len(), 2);
+    assert_eq!(a.threads[1].id, 1);
+    assert!(!a.threads[1].resolved, "open by default");
+    assert_eq!(a.unresolved_threads(), 1);
+}
+
+#[test]
+fn thread_ids_are_deterministic_across_replay() {
+    let rows = vec![
+        db::LogRow {
+            idx: 0,
+            kind: "revisions".to_string(),
+            payload: revisions(
+                serde_json::json!([{"change_key": "Iaaa", "change_id": 10, "position": 0}]),
+                serde_json::json!([{"change_key": "Iaaa", "number": 1, "commit_sha": "a1",
+                    "parent_sha": "p", "message": "m", "resets_status": true}]),
+            )
+            .to_string(),
+            created_at: "t0".to_string(),
+        },
+        db::LogRow {
+            idx: 1,
+            kind: "comment".to_string(),
+            payload: serde_json::json!({"change_key": "Iaaa", "thread_id": null,
+                "file": "m.rs", "line": 1, "side": "new", "body": "first"})
+            .to_string(),
+            created_at: "t1".to_string(),
+        },
+        db::LogRow {
+            idx: 2,
+            kind: "comment".to_string(),
+            payload:
+                serde_json::json!({"change_key": "Iaaa", "thread_id": 0, "body": "reply to 0"})
+                    .to_string(),
+            created_at: "t2".to_string(),
+        },
+    ];
+    let p = replay(&chain_row(), &rows).expect("replay");
+    let a = p.change_by_key("Iaaa").expect("a");
+    assert_eq!(a.threads.len(), 1, "the second comment joined thread 0");
+    assert_eq!(a.threads[0].comments.len(), 2);
+    assert_eq!(p.next_thread_id, 1, "one thread minted");
+    // max_assigned_id ignores thread ids — they are never stored.
     assert_eq!(
-        c.revision, 1,
-        "falls back to the review revision when absent"
+        max_assigned_id(&rows).expect("max"),
+        10,
+        "only change/review ids resume the counter"
     );
 }
 

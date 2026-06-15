@@ -96,24 +96,21 @@ fn full_review_loop() {
         &json!({"revision": 1, "file": "src/lib.rs", "line": 3, "body": "rename this"}),
     );
     assert_eq!(st, 200, "{draft_a}");
-    assert_eq!(draft_a["state"], "draft");
-    assert_eq!(draft_a["author"], "reviewer");
     assert_eq!(draft_a["side"], "new");
     assert_eq!(draft_a["line_text"], "L3");
     assert_eq!(draft_a["revision"], 1);
     assert_eq!(draft_a["line"], 3);
+    assert_eq!(draft_a["thread_id"], Value::Null, "a new-thread draft");
     assert!(
         draft_a.get("rendered_line").is_none(),
         "comments carry no ported fields"
     );
-    let draft_a_id = draft_a["id"].as_i64().unwrap();
 
     let (st, draft_b) = http_post(
         &drafts_url,
         &json!({"revision": 1, "file": "src/lib.rs", "line": 10, "body": "typo"}),
     );
-    assert_eq!(st, 200);
-    let draft_b_id = draft_b["id"].as_i64().unwrap();
+    assert_eq!(st, 200, "{draft_b}");
 
     // Change-level draft: edit it, then delete it.
     let (st, draft_c) = http_post(&drafts_url, &json!({"revision": 1, "body": "overall"}));
@@ -157,15 +154,14 @@ fn full_review_loop() {
     assert_eq!(st, 200, "{submitted}");
     assert_eq!(submitted["review"]["verdict"], "request_changes");
     assert_eq!(submitted["review"]["revision"], 1);
-    let published = submitted["published_comments"].as_array().unwrap();
-    assert_eq!(published.len(), 2);
-    assert!(published.iter().all(|c| c["state"] == "published"));
+    // Two drafts → two new threads, each authored by this review.
+    let threads = submitted["threads"].as_array().unwrap();
+    assert_eq!(threads.len(), 2);
     let review_id = submitted["review"]["id"].as_i64().unwrap();
-    assert!(
-        published
-            .iter()
-            .all(|c| c["review_id"].as_i64() == Some(review_id))
-    );
+    assert!(threads.iter().all(|t| {
+        t["comments"][0]["author"] == "reviewer"
+            && t["comments"][0]["review_id"].as_i64() == Some(review_id)
+    }));
 
     let streamed = reader.join().unwrap();
     assert_eq!(streamed.len(), 1, "{streamed:?}");
@@ -180,7 +176,7 @@ fn full_review_loop() {
     assert_eq!(fb_change["review"]["verdict"], "request_changes");
     assert_eq!(fb_change["review"]["message"], "please fix");
     assert_eq!(fb_change["unresolved"], 2);
-    assert_eq!(fb_change["comments"].as_array().unwrap().len(), 2);
+    assert_eq!(fb_change["threads"].as_array().unwrap().len(), 2);
 
     // Chain state flips for the dashboard too.
     let (_, chain_now) = http_get(&server.url(&format!("/api/chains/{chain_id}")));
@@ -189,21 +185,41 @@ fn full_review_loop() {
     assert_eq!(chain_now["changes"][0]["last_reviewed_revision"], 1);
 
     // --- agent replies and resolves one thread -----------------------------
-    let (st, reply) = http_post(
-        &server.url(&format!("/api/comments/{draft_a_id}/replies")),
-        &json!({"body": "renamed in r2", "resolved": true}),
+    // The thread the reviewer opened at line 3.
+    let (_, detail) = http_get(&server.url(&format!("/api/changes/{change1}")));
+    let thread_a = detail["threads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["line"].as_i64() == Some(3))
+        .unwrap()["id"]
+        .as_i64()
+        .unwrap();
+    let (st, thread) = http_post(
+        &server.url(&format!("/api/changes/{change1}/comments")),
+        &json!({"thread_id": thread_a, "body": "renamed in r2", "resolved": true}),
     );
-    assert_eq!(st, 200, "{reply}");
-    assert_eq!(reply["author"], "agent");
-    assert_eq!(reply["state"], "published");
-    assert_eq!(reply["parent_id"].as_i64(), Some(draft_a_id));
+    assert_eq!(st, 200, "{thread}");
+    assert_eq!(thread["resolved"], true);
+    let comments = thread["comments"].as_array().unwrap();
+    assert_eq!(comments.last().unwrap()["author"], "agent");
+    assert_eq!(comments.last().unwrap()["body"], "renamed in r2");
+
+    // A thread id from another change must not resolve here: thread ids are
+    // chain-global, but the reply guard is change-scoped — the endpoint targets
+    // a change, and `change.thread(tid)` searches only that change's threads.
+    let (st, e) = http_post(
+        &server.url(&format!("/api/changes/{change2}/comments")),
+        &json!({"thread_id": thread_a, "body": "wrong change"}),
+    );
+    assert_eq!(st, 400, "cross-change thread_id rejected: {e}");
 
     let (_, feedback) = http_get(&server.url(&format!("/api/chains/{chain_id}/feedback")));
     assert_eq!(feedback["changes"][0]["unresolved"], 1);
-    // Latest review's threads (A incl. reply, B) stay in feedback scope.
+    // Both latest-review threads stay in scope (A now resolved, B still open).
     assert_eq!(
-        feedback["changes"][0]["comments"].as_array().unwrap().len(),
-        3
+        feedback["changes"][0]["threads"].as_array().unwrap().len(),
+        2
     );
 
     // --- amend push: new revisions, comments stay pinned --------------------
@@ -241,24 +257,24 @@ fn full_review_loop() {
     let rev2 = &detail["revisions"][1];
     assert_eq!(rev2["number"], 2);
     assert_eq!(rev2["commit_sha"], c1b.to_string());
-    let comments = detail["comments"].as_array().unwrap();
-    let by_id = |id: i64| {
-        comments
+    let threads = detail["threads"].as_array().unwrap();
+    let by_line = |line: i64| {
+        threads
             .iter()
-            .find(|c| c["id"].as_i64() == Some(id))
+            .find(|t| t["line"].as_i64() == Some(line))
             .unwrap()
     };
-    // Both published comments keep the revision-1 anchor they were written
+    // Both published threads keep the revision-1 anchor they were written
     // on — the server ports nothing onto revision 2, and the wire carries
     // no rendered_line/outdated for the client to misread.
-    let a = by_id(draft_a_id);
+    let a = by_line(3);
     assert_eq!(a["revision"], 1);
     assert_eq!(a["line"], 3);
     assert_eq!(a["side"], "new");
     assert_eq!(a["line_text"], "L3", "snapshot shows what was commented on");
     assert!(a.get("rendered_line").is_none());
     assert!(a.get("outdated").is_none());
-    let b = by_id(draft_b_id);
+    let b = by_line(10);
     assert_eq!(b["revision"], 1);
     assert_eq!(b["line"], 10);
 
