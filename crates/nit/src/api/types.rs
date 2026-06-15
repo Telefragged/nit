@@ -25,6 +25,23 @@ pub struct ApiError {
 }
 
 // ---------------------------------------------------------------------------
+// Repos (the registry grouping chains; docs/api.md "Repos")
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Repo {
+    pub id: u64,
+    /// Canonical git-common-dir — the repo's identity and display name.
+    pub git_dir: String,
+    /// Chains not merged/abandoned (computed from the fold, never stored).
+    pub active_chains: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepoList {
+    pub repos: Vec<Repo>,
+}
+
+// ---------------------------------------------------------------------------
 // Chains
 
 /// `POST /api/chains` request (this is `nit push`). `git_dir` is the repo's

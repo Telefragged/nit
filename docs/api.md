@@ -15,6 +15,25 @@ docs/data-model.md ("Concurrency", normative).
 
 - `GET /api/health` → `{"status":"ok","version":"0.1.0"}`
 
+## Repos
+
+A repo is the registry grouping for chains; its identity is the
+**git-common-dir** (the `.git` dir, shared across worktrees), which is also
+its display name. The web main page lists repos, each linking to that repo's
+chains. Repos are created lazily by the first `nit push` from a repo; there
+is no separate registration step.
+
+- `GET /api/repos` → `{"repos": [Repo]}` — registration order. Runs the same
+  throttled rescans as the dashboard so `active_chains` is current.
+
+```json
+Repo = {
+  "id": 1,
+  "git_dir": "/abs/path/.git",   // canonical git-common-dir — identity + name
+  "active_chains": 2             // chains not merged/abandoned (computed, not stored)
+}
+```
+
 ## Chains
 
 - `POST /api/chains` — register or refresh (idempotent; this is `nit push`)
@@ -41,7 +60,8 @@ docs/data-model.md ("Concurrency", normative).
 - `GET /api/chains?status=active` → `{"chains": [Chain]}` — dashboard.
   Runs (throttled) scans first; a chain whose scan fails is still listed
   with its previous state plus `last_scan_error`. `status` defaults to
-  `active`; `all` includes merged/abandoned.
+  `active`; `all` includes merged/abandoned. `repo={id}` restricts the list
+  to one repo (the repo-scoped chain view).
 - `GET /api/chains/{id}` → Chain (throttled rescan first). 404 if unknown.
 
 ```json

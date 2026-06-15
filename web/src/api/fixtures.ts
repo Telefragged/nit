@@ -38,6 +38,7 @@ import type {
   Diff,
   DiffFile,
   Line,
+  Repo,
   Review,
   Revision,
   SubmitReviewRequest,
@@ -1542,6 +1543,27 @@ function changeSummary(c: ChangeRecord): ChangeSummary {
   };
 }
 
+/** Derive the repo registry from the chain fixtures (grouped by repo_id),
+ * mirroring the server's `GET /api/repos` shape. */
+function repoList(): Repo[] {
+  const seen = new Map<number, { git_dir: string; active_chains: number }>();
+  for (const c of chains) {
+    const entry = seen.get(c.repo_id) ?? {
+      git_dir: c.git_dir,
+      active_chains: 0,
+    };
+    if (c.status === "active") entry.active_chains += 1;
+    seen.set(c.repo_id, entry);
+  }
+  return [...seen.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([id, { git_dir, active_chains }]) => ({
+      id,
+      git_dir,
+      active_chains,
+    }));
+}
+
 function chainView(chain: ChainRecord): Chain {
   return {
     id: chain.id,
@@ -1634,10 +1656,17 @@ export async function mockRequest(
     return { status: "ok", version: "0.1.0-mock" };
   }
 
+  if (method === "GET" && p === "/repos") {
+    return { repos: repoList() };
+  }
+
   if (method === "GET" && p === "/chains") {
     const status = q.get("status") ?? "active";
+    const repo = q.get("repo");
     const listed = chains.filter(
-      (c) => status === "all" || c.status === "active",
+      (c) =>
+        (status === "all" || c.status === "active") &&
+        (repo === null || c.repo_id === Number(repo)),
     );
     return { chains: listed.map(chainView) };
   }

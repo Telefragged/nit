@@ -207,6 +207,18 @@ pub fn find_repo(conn: &Connection, git_dir: &str) -> Result<Option<RepoRow>> {
     .map_err(Into::into)
 }
 
+/// All repos, id-ascending (registration order).
+///
+/// # Errors
+/// On a database failure.
+pub fn all_repos(conn: &Connection) -> Result<Vec<RepoRow>> {
+    let mut stmt = conn.prepare("SELECT * FROM repos ORDER BY id")?;
+    let rows = stmt
+        .query_map([], map_repo)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
 // ---------------------------------------------------------------------------
 // Chains (registration identity only)
 

@@ -15,6 +15,7 @@ pub mod state;
 pub mod types;
 pub mod views;
 
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
@@ -41,6 +42,7 @@ pub use state::{AppJson, AppPath, AppQuery, AppState, Error, blocking, scan_chai
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/repos", get(list_repos))
         .route("/api/chains", post(register_chain).get(list_chains))
         .route("/api/chains/{id}", get(get_chain))
         .route("/api/chains/{id}/feedback", get(get_feedback))
@@ -161,6 +163,41 @@ async fn health() -> Json<types::Health> {
 }
 
 // ---------------------------------------------------------------------------
+// Repos (the registry grouping for chains)
+
+/// List every registered repo with its active-chain count (the web main
+/// page). Rescans (throttled) first, like the dashboard, so the counts are
+/// current; the count is derived from the fold, never stored.
+async fn list_repos(State(state): State<Arc<AppState>>) -> Result<Json<types::RepoList>, Error> {
+    let ids = state.chain_ids();
+    for id in &ids {
+        scan_chain(&state, *id, false).await?;
+    }
+    blocking(move || {
+        let conn = state.open_db()?;
+        let mut active: HashMap<u64, u64> = HashMap::new();
+        for id in state.chain_ids() {
+            if let Some(entry) = state.chain_entry(id) {
+                let proj = entry.read();
+                if proj.status == review::ChainStatus::Active {
+                    *active.entry(proj.repo_id).or_default() += 1;
+                }
+            }
+        }
+        let repos = db::all_repos(&conn)?
+            .into_iter()
+            .map(|r| types::Repo {
+                id: r.id,
+                git_dir: r.git_dir,
+                active_chains: active.get(&r.id).copied().unwrap_or(0),
+            })
+            .collect();
+        Ok(Json(types::RepoList { repos }))
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
 // Chains
 
 async fn register_chain(
@@ -251,6 +288,8 @@ async fn chain_response(state: Arc<AppState>, chain_id: u64) -> Result<Json<type
 #[derive(Deserialize)]
 struct ListChainsQuery {
     status: Option<String>,
+    /// Restrict to one repo (the repo-scoped chain view).
+    repo: Option<u64>,
 }
 
 async fn list_chains(
@@ -281,6 +320,9 @@ async fn list_chains(
             };
             let proj = entry.read();
             if !include_closed && proj.status != review::ChainStatus::Active {
+                continue;
+            }
+            if q.repo.is_some_and(|rid| proj.repo_id != rid) {
                 continue;
             }
             chains.push(views::build_chain(&conn, &state.public_base, &proj)?);

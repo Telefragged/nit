@@ -10,6 +10,7 @@ import type {
   CreateDraftRequest,
   Diff,
   Health,
+  RepoList,
   SubmitReviewRequest,
   SubmitReviewResponse,
   UpdateDraftRequest,
@@ -63,10 +64,21 @@ async function request<T = void>(
 export const getHealth = () => request<Health>("GET", "/health");
 
 // ---------------------------------------------------------------------------
+// Repos
+
+export const listRepos = () => request<RepoList>("GET", "/repos");
+
+// ---------------------------------------------------------------------------
 // Chains
 
-export const listChains = (status: "active" | "all" = "active") =>
-  request<ChainList>("GET", `/chains?status=${status}`);
+export const listChains = (
+  status: "active" | "all" = "active",
+  repo?: number,
+) =>
+  request<ChainList>(
+    "GET",
+    `/chains?status=${status}${repo === undefined ? "" : `&repo=${repo}`}`,
+  );
 
 export const getChain = (id: number) => request<Chain>("GET", `/chains/${id}`);
 

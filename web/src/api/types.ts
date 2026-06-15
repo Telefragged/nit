@@ -88,6 +88,21 @@ export interface ChainList {
 }
 
 // ---------------------------------------------------------------------------
+// Repos (the registry grouping chains — docs/api.md "Repos")
+
+export interface Repo {
+  id: number;
+  /** Canonical git-common-dir — the repo's identity and display name. */
+  git_dir: string;
+  /** Chains not merged/abandoned (computed from the fold, never stored). */
+  active_chains: number;
+}
+
+export interface RepoList {
+  repos: Repo[];
+}
+
+// ---------------------------------------------------------------------------
 // Changes
 
 export interface ChangeDetail {
