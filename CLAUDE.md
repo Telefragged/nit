@@ -35,6 +35,16 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
    verification pass) delays a push: push now, amend later — amends become
    new revisions by design. An unpushed commit is invisible to the
    reviewer.
+8. **Simplicity over caution — remove, then change, then add.** nit is
+   pre-v1 and well-tested, so changes are cheap; do not hedge against blast
+   radius. Reach for the simplest solution in that order of preference:
+   delete code before rewriting it, rewrite existing code before adding
+   new code. A large rewrite that ends up simpler beats a small diff that
+   leaves complexity standing — if a simpler design exists, take it however
+   much it touches. This governs review and simplification passes too
+   (adversarial agents included): the status quo is never the "safe"
+   default; reject a change only when it is not actually simpler or it
+   breaks behavior, never because it changes a lot.
 
 ## Layout
 
