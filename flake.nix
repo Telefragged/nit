@@ -127,14 +127,9 @@
             commonArgs
             // {
               inherit cargoArtifacts;
-              # The test suite builds real repos and runs `git rebase` in the
-              # differential test; the sandbox has no git or identity config.
-              nativeCheckInputs = [ pkgs.git ];
-              preCheck = ''
-                export HOME=$TMPDIR
-                export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
-                export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
-              '';
+              # Tests run as a discrete `nix flake check` validator (the `test`
+              # check below), not as part of building the product.
+              doCheck = false;
             }
           );
 
@@ -169,6 +164,21 @@
             // {
               inherit cargoArtifacts;
               cargoClippyExtraArgs = "--all-targets -- -D warnings";
+            }
+          );
+          # The test suite as a discrete validator. It builds real repos and
+          # runs `git rebase` in the differential test, so it needs git and a
+          # committer identity the build sandbox otherwise lacks.
+          test = craneLib.cargoTest (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              nativeCheckInputs = [ pkgs.git ];
+              preCheck = ''
+                export HOME=$TMPDIR
+                export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
+                export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
+              '';
             }
           );
         }
