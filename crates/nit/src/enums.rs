@@ -21,6 +21,16 @@
 
 use serde::{Deserialize, Serialize};
 
+/// A reviewer's verdict on one change (docs/api.md "Reviews"). Maps to a
+/// change [`Status`](crate::review::Status) when folded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    Approve,
+    RequestChanges,
+    Comment,
+}
+
 /// `DiffFile.status` — how a file changed between the two diffed trees
 /// (docs/api.md "Diff").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

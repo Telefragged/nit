@@ -430,8 +430,12 @@ where
     async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
         match axum::Json::<T>::from_request(req, state).await {
             Ok(axum::Json(value)) => Ok(AppJson(value)),
+            // A body that won't deserialize is bad input — including an
+            // unknown enum value (a malformed `verdict`/`side`/…). axum
+            // reports a data error as 422, but nit speaks 400 for every bad
+            // request body (see `Error::bad_request`), so normalize it.
             Err(rej) => Err(Error {
-                status: rej.status(),
+                status: StatusCode::BAD_REQUEST,
                 message: rej.body_text(),
             }),
         }

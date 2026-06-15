@@ -210,7 +210,7 @@ pub fn review_json(review: &review::ReviewProj) -> types::Review {
     types::Review {
         id: review.id,
         revision: review.revision,
-        verdict: review.verdict.clone(),
+        verdict: review.verdict,
         message: review.message.clone(),
         created_at: review.created_at.clone(),
     }
@@ -257,7 +257,7 @@ pub fn build_feedback(public_base: &str, proj: &Projection) -> types::Feedback {
             status: change.status_str().to_string(),
             unresolved: u64::try_from(change.unresolved_threads()).unwrap_or(u64::MAX),
             review: change.latest_review().map(|r| types::FeedbackReview {
-                verdict: r.verdict.clone(),
+                verdict: r.verdict,
                 message: r.message.clone(),
                 revision: r.revision,
             }),

@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use crate::enums::{FileStatus, LineKind};
+pub use crate::enums::{FileStatus, LineKind, Verdict};
 
 // ---------------------------------------------------------------------------
 // Health
@@ -162,8 +162,7 @@ pub struct Revision {
 pub struct Review {
     pub id: u64,
     pub revision: u64,
-    /// approve | `request_changes` | comment
-    pub verdict: String,
+    pub verdict: Verdict,
     /// Cover message.
     pub message: String,
     pub created_at: String,
@@ -327,8 +326,7 @@ pub struct EditDraft {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitReview {
     pub revision: u64,
-    /// approve | `request_changes` | comment
-    pub verdict: String,
+    pub verdict: Verdict,
     #[serde(default)]
     pub message: String,
 }
@@ -415,7 +413,7 @@ pub struct FeedbackChange {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedbackReview {
-    pub verdict: String,
+    pub verdict: Verdict,
     pub message: String,
     pub revision: u64,
 }

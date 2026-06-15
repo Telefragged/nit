@@ -713,24 +713,11 @@ fn change_id_for_draft(state: &Arc<AppState>, draft: &db::DraftRow) -> u64 {
 // ---------------------------------------------------------------------------
 // Reviews
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one atomic flow: resolve target, drain drafts, probe-fold, append, fold, respond"
-)]
 async fn submit_review(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::SubmitReview>,
 ) -> Result<Json<types::SubmitReviewResponse>, Error> {
-    if !matches!(
-        req.verdict.as_str(),
-        "approve" | "request_changes" | "comment"
-    ) {
-        return Err(Error::bad_request(format!(
-            "verdict must be approve | request_changes | comment, got {:?}",
-            req.verdict
-        )));
-    }
     let (entry, chain_id) = entry_of_change(&state, id)?;
     let guard = entry.gate.lock().await;
     let st = state.clone();
@@ -778,7 +765,7 @@ async fn submit_review(
                 change_key: change_key.clone(),
                 review_id,
                 revision: target,
-                verdict: req.verdict.clone(),
+                verdict: req.verdict,
                 message: req.message.clone(),
                 comments,
             })

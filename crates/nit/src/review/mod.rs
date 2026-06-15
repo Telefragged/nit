@@ -13,6 +13,7 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{self, CommentRange};
+use crate::enums::Verdict;
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -56,15 +57,15 @@ impl Status {
             Status::Commented => "commented",
         }
     }
+}
 
+impl From<Verdict> for Status {
     /// The status a verdict produces (docs/data-model.md "The fold").
-    #[must_use]
-    pub fn from_verdict(verdict: &str) -> Status {
+    fn from(verdict: Verdict) -> Status {
         match verdict {
-            "approve" => Status::Approved,
-            "request_changes" => Status::ChangesRequested,
-            "comment" => Status::Commented,
-            _ => Status::Pending,
+            Verdict::Approve => Status::Approved,
+            Verdict::RequestChanges => Status::ChangesRequested,
+            Verdict::Comment => Status::Commented,
         }
     }
 }
@@ -100,7 +101,7 @@ pub struct ReviewPayload {
     pub change_key: String,
     pub review_id: u64,
     pub revision: u64,
-    pub verdict: String,
+    pub verdict: Verdict,
     pub message: String,
     /// The drained drafts, in draft order. Each opens a new thread or replies
     /// to an existing one (see [`CommentInput`]).
@@ -233,7 +234,7 @@ pub struct ThreadComment {
 pub struct ReviewProj {
     pub id: u64,
     pub revision: u64,
-    pub verdict: String,
+    pub verdict: Verdict,
     pub message: String,
     pub created_at: String,
 }
@@ -453,7 +454,7 @@ fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
     change.reviews.push(ReviewProj {
         id: p.review_id,
         revision: p.revision,
-        verdict: p.verdict.clone(),
+        verdict: p.verdict,
         message: p.message.clone(),
         created_at: now.to_string(),
     });
@@ -464,7 +465,7 @@ fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
         apply_comment(proj, &p.change_key, c, "reviewer", Some(p.review_id), now);
     }
     if let Some(change) = proj.change_by_key_mut(&p.change_key) {
-        change.status = Status::from_verdict(&p.verdict);
+        change.status = Status::from(p.verdict);
     }
 }
 
