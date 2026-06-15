@@ -112,6 +112,10 @@ pub struct LogArgs {
 
 #[derive(clap::Args)]
 pub struct StatusArgs {
+    /// Chain to read, by id; overrides the cwd's repo+branch lookup. Lets
+    /// you inspect any chain's status from anywhere (no git repo required).
+    #[arg(long)]
+    pub chain: Option<u64>,
     /// Print a compact one-line-per-change digest of the rolled-up state
     /// instead of the full Feedback JSON
     #[arg(long)]
@@ -700,14 +704,18 @@ fn short_key(key: &str) -> String {
 }
 
 /// Print the current Feedback JSON without blocking, or with `--oneline` a
-/// compact one-line-per-change digest of it.
+/// compact one-line-per-change digest of it. `--chain` names the chain
+/// directly; otherwise it is resolved from the cwd's repo + branch.
 ///
 /// # Errors
 /// When the server can't be reached or no chain matches the current
 /// branch.
 pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    let chain_id = resolve_chain(&client, Retry::No)?;
+    let chain_id = match args.chain {
+        Some(id) => id,
+        None => resolve_chain(&client, Retry::No)?,
+    };
     let feedback = client.get(&format!("/api/chains/{chain_id}/feedback"))?;
     if args.oneline {
         print!("{}", feedback_oneline(&feedback));
