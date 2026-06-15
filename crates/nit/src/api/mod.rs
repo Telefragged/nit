@@ -337,9 +337,21 @@ async fn chain_response(state: Arc<AppState>, chain_id: u64) -> Result<Json<type
     .await
 }
 
+/// `?status=` filter for the chain list: active-only (default) or all
+/// (includes merged/abandoned). An unknown value is rejected when the query
+/// deserializes (a 400 via [`AppQuery`]), so no in-handler string match.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ChainFilter {
+    #[default]
+    Active,
+    All,
+}
+
 #[derive(Deserialize)]
 struct ListChainsQuery {
-    status: Option<String>,
+    #[serde(default)]
+    status: ChainFilter,
     /// Restrict to one repo (the repo-scoped chain view).
     repo: Option<u64>,
 }
@@ -348,15 +360,7 @@ async fn list_chains(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<ListChainsQuery>,
 ) -> Result<Json<types::ChainList>, Error> {
-    let include_closed = match q.status.as_deref() {
-        None | Some("active") => false,
-        Some("all") => true,
-        Some(other) => {
-            return Err(Error::bad_request(format!(
-                "unknown status filter {other:?} (expected \"active\" or \"all\")"
-            )));
-        }
-    };
+    let include_closed = matches!(q.status, ChainFilter::All);
 
     let ids = state.chain_ids();
     for id in &ids {
