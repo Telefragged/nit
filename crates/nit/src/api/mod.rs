@@ -33,7 +33,7 @@ use git2::{Oid, Repository};
 use serde::Deserialize;
 
 use crate::db;
-use crate::enums::{LogKind, Side};
+use crate::enums::{ChainStatus, LogKind, Side};
 use crate::gitscan;
 use crate::review::{self, CommentInput, Entry, Projection};
 
@@ -158,7 +158,7 @@ fn active_chains_by_repo(state: &Arc<AppState>) -> HashMap<u64, u64> {
     for id in state.chain_ids() {
         if let Some(entry) = state.chain_entry(id) {
             let proj = entry.read();
-            if proj.status == review::ChainStatus::Active {
+            if proj.status == ChainStatus::Active {
                 *active.entry(proj.repo_id).or_default() += 1;
             }
         }
@@ -371,7 +371,7 @@ async fn list_chains(
                 continue;
             };
             let proj = entry.read();
-            if !include_closed && proj.status != review::ChainStatus::Active {
+            if !include_closed && proj.status != ChainStatus::Active {
                 continue;
             }
             if q.repo.is_some_and(|rid| proj.repo_id != rid) {

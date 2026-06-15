@@ -157,6 +157,16 @@ impl ChainState {
     }
 }
 
+/// A chain's lifecycle status — the fold's `Projection.status` and the wire
+/// `Chain.status` (docs/api.md).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChainStatus {
+    Active,
+    Merged,
+    Abandoned,
+}
+
 /// How a chain closed — the two terminal [`ChainStatus`] values, as the
 /// `chain_closed` log payload carries them (docs/data-model.md "Payloads").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,6 +174,15 @@ impl ChainState {
 pub enum ClosedStatus {
     Merged,
     Abandoned,
+}
+
+impl From<ClosedStatus> for ChainStatus {
+    fn from(closed: ClosedStatus) -> ChainStatus {
+        match closed {
+            ClosedStatus::Merged => ChainStatus::Merged,
+            ClosedStatus::Abandoned => ChainStatus::Abandoned,
+        }
+    }
 }
 
 /// `DiffFile.status` — how a file changed between the two diffed trees

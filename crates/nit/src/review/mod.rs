@@ -13,28 +13,12 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{self, CommentRange};
-use crate::enums::{Author, ChainState, ChangeStatus, ClosedStatus, LogKind, Side, Verdict};
+use crate::enums::{
+    Author, ChainState, ChainStatus, ChangeStatus, ClosedStatus, LogKind, Side, Verdict,
+};
 
 // ---------------------------------------------------------------------------
 // Enums
-
-/// A chain's lifecycle status — also the wire `Chain.status` (docs/api.md).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChainStatus {
-    Active,
-    Merged,
-    Abandoned,
-}
-
-impl From<ClosedStatus> for ChainStatus {
-    fn from(closed: ClosedStatus) -> ChainStatus {
-        match closed {
-            ClosedStatus::Merged => ChainStatus::Merged,
-            ClosedStatus::Abandoned => ChainStatus::Abandoned,
-        }
-    }
-}
 
 /// A change's retained review status — never `orphaned` (that is the
 /// separate [`ChangeProj::orphaned`] flag; the wire [`ChangeStatus`] is

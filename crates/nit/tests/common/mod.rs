@@ -13,9 +13,9 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use git2::{Oid, Repository, RepositoryInitOptions, Signature, Time};
 use nit::db::ChainRow;
-use nit::enums::{ChainState, LogKind};
+use nit::enums::{ChainState, ChainStatus, LogKind};
 use nit::gitscan::{self, ScanResult};
-use nit::review::{self, ChainStatus, ChangeProj, Entry, Projection};
+use nit::review::{self, ChangeProj, Entry, Projection};
 use serde_json::{Value, json};
 
 /// Strictly increasing commit timestamps so equal-content commits get

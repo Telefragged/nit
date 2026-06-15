@@ -11,9 +11,8 @@
 use serde::{Deserialize, Serialize};
 
 pub use crate::enums::{
-    Author, ChainState, ChangeStatus, FileStatus, LineKind, LogKind, Side, Verdict,
+    Author, ChainState, ChainStatus, ChangeStatus, FileStatus, LineKind, LogKind, Side, Verdict,
 };
-pub use crate::review::ChainStatus;
 
 // ---------------------------------------------------------------------------
 // Health

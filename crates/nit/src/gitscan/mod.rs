@@ -21,10 +21,8 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 use git2::{BranchType, Commit, ErrorCode, Oid, Repository, Sort};
 
-use crate::enums::{ClosedStatus, LogKind};
-use crate::review::{
-    AddedRevision, ChainStatus, ChangeProj, LivePos, Projection, RevisionsPayload,
-};
+use crate::enums::{ChainStatus, ClosedStatus, LogKind};
+use crate::review::{AddedRevision, ChangeProj, LivePos, Projection, RevisionsPayload};
 
 /// Documented scan error for chains containing merge commits.
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";

@@ -5,7 +5,8 @@
 mod common;
 
 use common::{Fixture, msg};
-use nit::review::{ChainStatus, Status};
+use nit::enums::ChainStatus;
+use nit::review::Status;
 
 fn ts(secs: i64) -> jiff::Timestamp {
     jiff::Timestamp::from_second(secs).unwrap()
