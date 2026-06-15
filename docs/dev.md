@@ -169,11 +169,20 @@ git branch -d <branch>
 Order matters: the scan must see the merge while the branch ref still
 exists, so it records `merged`, not `abandoned`.
 
+**Make the best effort to fully close an approved chain — don't stop at
+`approved`.** `--ff-only` is there to keep `main` linear (no merge
+commits), **not** to gate the work: a branch that isn't fast-forwardable
+because `main` moved is a rebase to do, not a reason to pause. So the
+approve action is always _rebase if needed, then `--ff-only` merge_, run
+end to end — never pause to ask whether to land an approved chain; land
+it.
+
 In a worktree (`.worktrees/*`): rebase there, but never `git checkout
 main` — main is checked out in the primary worktree. Run the merge from
-that checkout: `git -C <primary-checkout> merge --ff-only <branch>`. If
-that checkout isn't yours to drive (parallel agents), stop at `approved`
-and report to the coordinator.
+that checkout: `git -C <primary-checkout> merge --ff-only <branch>`. The
+only reason to stop at `approved` is a genuine ownership conflict —
+another agent actively driving that checkout; absent that, close the
+chain.
 
 ### Review exemptions
 
