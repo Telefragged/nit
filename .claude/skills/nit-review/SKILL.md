@@ -27,6 +27,20 @@ Nothing in the plan moves a push later:
 If commit N+1 is being started while commit N is unpushed, the cadence
 is already broken. An unpushed commit is invisible to the reviewer.
 
+## Keep shipping — bite-sized, not batched
+
+Review is asynchronous: the reviewer pulls your pushed commits and reads
+them at their own pace, so a long chain of small commits is the goal, never
+something to ration. Once a scope is agreed, drive it to completion — keep
+producing and pushing commits — without halting at a milestone to ask
+"shall I continue?". The reviewer is never blocked by _more_ commits; an
+arbitrary checkpoint just stalls the work, the terminal-channel equivalent
+of leaving a commit unpushed. Pause only for (a) a genuine decision that
+forks what you would build (ask it, or raise it as an unresolved `nit
+reply`), or (b) an explicit redirection from the user. "Turn length", "the
+user might want to steer", and "a clean stopping point" are not reasons to
+stop.
+
 ## When
 
 - The first commit of a piece of work is done on a feature branch and a
