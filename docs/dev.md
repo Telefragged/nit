@@ -8,8 +8,9 @@ direnv (`.envrc`) put you in it. Never call system cargo/node.
 ```sh
 # backend (auto-rebuild on change is fine via cargo-watch if added; plain:)
 nix develop -c cargo run -- serve              # api on :8877
-nix develop -c cargo test
+nix develop -c cargo check                     # fast compile gate — run it often
 nix develop -c cargo clippy --all-targets -- -D warnings
+nix develop -c cargo test
 nix develop -c cargo fmt
 
 # frontend, in web/ — vite dev server on :5173 proxies /api to :8877
@@ -19,8 +20,9 @@ nix develop -c npm run check                   # tsc
 nix develop -c npm run lint                     # eslint + stylelint
 nix develop -c npm run build
 
-# full production artifact
-nix build                                      # → result/bin/nit
+# product artifact + validators
+nix build                                      # product only → result/bin/nit (no tests)
+nix flake check                                # build + clippy + test validators
 ```
 
 `nix build` pins the web dependencies by hash: any commit that changes
@@ -28,6 +30,24 @@ nix build                                      # → result/bin/nit
 (`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json` prints the
 new value) and verify `nix build`. A stale hash breaks `nix build` — and
 with it every `nix run 'git+file://…?ref=main#nit'` CLI invocation.
+
+## Verification
+
+A change is verified by its checks, not by a successful build. `nix build`
+produces the product binary only — tests do **not** run as part of it
+(`doCheck = false`). Run the validators before every commit (golden
+rule 9):
+
+- `nix develop -c cargo check` — the fast inner-loop gate; run it often
+  while editing.
+- `nix flake check` — the authoritative pre-commit gate. It builds the
+  product and runs the crane validators: `clippy`
+  (`--all-targets -- -D warnings`, the same lints as the devShell command)
+  and `test` (the full `cargo test` suite, with the git identity the
+  differential rebase test needs). Build one in isolation with
+  `nix build .#checks.<system>.clippy` or `.#checks.<system>.test`.
+
+A commit is not done until `cargo check` and the flake checks are green.
 
 ## Formatting
 
@@ -113,7 +133,8 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
 
 - Rust: unit tests next to the code; scan/identity logic gets real-git
   integration tests (`tempfile` + git2 building tiny repos). `cargo test`
-  must stay green.
+  must stay green — it runs as the `test` flake check, not as part of
+  `nix build` ("Verification" above).
 - Frontend: tsc-clean always; component logic that's easy to break (diff
   rendering, comment anchoring) deserves vitest tests — `npm test` runs
   them (jsdom + testing-library, colocated `*.test.ts(x)` under `src/`)

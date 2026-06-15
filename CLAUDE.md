@@ -45,6 +45,13 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
    (adversarial agents included): the status quo is never the "safe"
    default; reject a change only when it is not actually simpler or it
    breaks behavior, never because it changes a lot.
+9. **Checks are verification — `cargo check` is the floor.** A commit is
+   done only when `nix develop -c cargo check` passes and the flake
+   validators are green: `nix flake check` runs `clippy` (`-D warnings`)
+   and the full test suite as crane checks. `nix build` builds the product
+   without running tests (rule 1), so a green build is necessary but not
+   sufficient — run the checks before every commit (docs/dev.md
+   "Verification").
 
 ## Layout
 
