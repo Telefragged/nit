@@ -307,7 +307,9 @@ async fn apply_partial(state: &Arc<AppState>, chain_id: u64, partial: bool) -> R
             return Ok(()); // no flip, no entry
         }
         let mut conn = st.open_db()?;
-        let news = vec![(LogKind::Partial, serde_json::json!({ "partial": partial }))];
+        let payload = serde_json::to_value(review::PartialPayload { partial })
+            .map_err(anyhow::Error::from)?;
+        let news = vec![(LogKind::Partial, payload)];
         state::commit_entries(&mut conn, &e2, chain_id, news).map_err(map_busy)?;
         Ok(())
     })
@@ -702,6 +704,10 @@ fn change_id_for_draft(state: &Arc<AppState>, draft: &db::DraftRow) -> u64 {
 // ---------------------------------------------------------------------------
 // Reviews
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one atomic flow: resolve target, drain drafts, probe-fold, append, fold, respond"
+)]
 async fn submit_review(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
@@ -780,8 +786,15 @@ async fn submit_review(
                 .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
                 .map_err(anyhow::Error::from)?;
             db::delete_drafts_for_change(&tx, chain_id, &change_key).map_err(map_busy)?;
-            db::append_log(&tx, chain_id, start, "review", &parsed.payload, &parsed.created_at)
-                .map_err(map_busy)?;
+            db::append_log(
+                &tx,
+                chain_id,
+                start,
+                parsed.kind.as_str(),
+                &parsed.payload,
+                &parsed.created_at,
+            )
+            .map_err(map_busy)?;
             tx.commit().map_err(anyhow::Error::from)?;
 
             // The threads this review opens get ids from here up (the fold
