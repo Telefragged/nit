@@ -3,7 +3,8 @@ use super::*;
 fn chain_row() -> db::ChainRow {
     db::ChainRow {
         id: 1,
-        repo_path: "/r".to_string(),
+        repo_id: 1,
+        git_dir: "/r/.git".to_string(),
         branch: "feat".to_string(),
         base: "main".to_string(),
         created_at: "t0".to_string(),

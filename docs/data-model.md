@@ -6,8 +6,8 @@ published comments, reviews, partial flag, open/closed status — is the
 **fold** of that log. Nothing in the log is ever mutated or deleted; a
 correction is a new entry. The server holds the fold in memory and
 **replays the log on startup** to rebuild it; SQLite stores only the log
-(plus two non-history side tables: chain registration and reviewer
-drafts).
+(plus three non-history side tables: the repo registry, chain
+registration, and reviewer drafts).
 
 git objects stay in the user's repo, pinned where needed (see "GC
 safety"). Diffs are never stored — they are computed on demand from the
@@ -16,9 +16,17 @@ commit shas an entry carries (see "Diffs").
 ## Tables
 
 ```sql
-chains  (id, repo_path, branch, base, created_at, UNIQUE(repo_path, branch))
-        -- registration identity only. repo_path is canonicalized. Everything
-        -- else about a chain (status, partial, changes, comments…) is folded
+repos   (id, git_dir, UNIQUE(git_dir))
+        -- the repository registry: a canonical git-common-dir → id, the
+        -- grouping/index key chains hang off. Stores nothing derivable from
+        -- git — no branches, bases, commits, or timestamps; those live in
+        -- .git, fetched on demand. git_dir is the repo's identity *and* its
+        -- display name; `nit repo move` repoints it after a disk move.
+
+chains  (id, repo_id, branch, base, created_at, UNIQUE(repo_id, branch))
+        -- registration identity only, grouped under a repo (repo_id → repos).
+        -- The repo's git_dir is the path every git op opens; everything else
+        -- about a chain (status, partial, changes, comments…) is folded
         -- from its log, never stored here.
 
 log     (chain_id, idx, kind, payload, created_at,
@@ -42,8 +50,9 @@ drafts  (id, chain_id, change_key, revision, parent_id, file, line, side,
 ```
 
 That is the whole schema. There are no `changes`, `revisions`,
-`comments` (published), `reviews`, `events`, or `repos` tables — all of
-that is folded state.
+`comments` (published), `reviews`, or `events` tables — all of that is
+folded state. The `repos`/`chains` side tables hold only registration
+identity (the grouping above); a chain's reviewable state is its log.
 
 ## The log
 

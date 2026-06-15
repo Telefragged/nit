@@ -1,10 +1,10 @@
 //! `SQLite` persistence layer.
 //!
 //! Schema contract: `docs/data-model.md` ("Tables"). The database stores
-//! only the append-only event `log` (plus `chains` registration identity
-//! and reviewer `drafts`); all reviewable state is the fold of the log
-//! (`crate::review`), held in memory and rebuilt by replay. Nothing in the
-//! log is ever mutated or deleted.
+//! only the append-only event `log` (plus the `repos` registry, `chains`
+//! registration identity, and reviewer `drafts`); all reviewable state is
+//! the fold of the log (`crate::review`), held in memory and rebuilt by
+//! replay. Nothing in the log is ever mutated or deleted.
 //!
 //! [`open`] applies pragmas (WAL, `busy_timeout`, foreign keys ON) and runs
 //! `PRAGMA user_version` migrations. Row structs and focused query helpers
@@ -71,25 +71,20 @@ pub fn open(path: &Path) -> Result<Connection> {
 }
 
 const MIGRATIONS: &[&str] = &[
-    // v1: the event-log schema — docs/data-model.md "Tables". Earlier
-    // pre-1.0 schemas (normalized changes/revisions/comments/reviews/events)
-    // are wiped: review state is re-derivable by re-pushing a branch, so the
-    // upgrade drops them and starts the log fresh.
+    // v1: the schema — docs/data-model.md "Tables". One `PRAGMA user_version`
+    // step per entry; later schema changes append as v2, v3, ….
     "
-    DROP TABLE IF EXISTS events;
-    DROP TABLE IF EXISTS comments;
-    DROP TABLE IF EXISTS reviews;
-    DROP TABLE IF EXISTS revisions;
-    DROP TABLE IF EXISTS changes;
-    DROP TABLE IF EXISTS chains;
-    DROP TABLE IF EXISTS repos;
+    CREATE TABLE repos (
+      id      INTEGER PRIMARY KEY,
+      git_dir TEXT NOT NULL UNIQUE   -- canonical git-common-dir; identity + name
+    );
     CREATE TABLE chains (
       id         INTEGER PRIMARY KEY,
-      repo_path  TEXT NOT NULL,
+      repo_id    INTEGER NOT NULL REFERENCES repos(id),
       branch     TEXT NOT NULL,
       base       TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      UNIQUE (repo_path, branch)
+      UNIQUE (repo_id, branch)
     );
     CREATE TABLE log (
       chain_id   INTEGER NOT NULL REFERENCES chains(id),
@@ -114,14 +109,11 @@ const MIGRATIONS: &[&str] = &[
       range_end_char   INTEGER,
       line_text        TEXT,
       body             TEXT NOT NULL,
+      resolved         INTEGER,
       created_at       TEXT NOT NULL,
       updated_at       TEXT NOT NULL
     );
     ",
-    // v2: thread resolution is now drafted (docs/api.md "Thread resolution").
-    // A draft carries the resolve-checkbox decision it stages on its thread;
-    // NULL means no decision. Pre-existing scratch drafts predate the column.
-    "ALTER TABLE drafts ADD COLUMN resolved INTEGER;",
 ];
 
 fn migrate(conn: &Connection) -> Result<()> {
@@ -169,39 +161,95 @@ fn col_u64_opt(v: Option<i64>) -> rusqlite::Result<Option<u64>> {
 }
 
 // ---------------------------------------------------------------------------
+// Repos (the registry: a canonical git-common-dir → id, the grouping key
+// chains hang off — docs/data-model.md "Tables")
+
+#[derive(Debug, Clone)]
+pub struct RepoRow {
+    pub id: u64,
+    /// Canonical git-common-dir — the repo's identity and its display name.
+    pub git_dir: String,
+}
+
+fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
+    Ok(RepoRow {
+        id: col_u64(row.get("id")?)?,
+        git_dir: row.get("git_dir")?,
+    })
+}
+
+/// Register or look up a repo by its canonical git-common-dir. Idempotent:
+/// the same `git_dir` always maps to the same id (a chain's first push from
+/// any worktree of a repo lazily creates the registry row).
+///
+/// # Errors
+/// On a database failure.
+pub fn get_or_create_repo(conn: &Connection, git_dir: &str) -> Result<RepoRow> {
+    if let Some(existing) = find_repo(conn, git_dir)? {
+        return Ok(existing);
+    }
+    conn.execute("INSERT INTO repos (git_dir) VALUES (?1)", params![git_dir])?;
+    Ok(RepoRow {
+        id: col_u64(conn.last_insert_rowid())?,
+        git_dir: git_dir.to_string(),
+    })
+}
+
+/// # Errors
+/// On a database failure.
+pub fn find_repo(conn: &Connection, git_dir: &str) -> Result<Option<RepoRow>> {
+    conn.query_row(
+        "SELECT * FROM repos WHERE git_dir = ?1",
+        params![git_dir],
+        map_repo,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+// ---------------------------------------------------------------------------
 // Chains (registration identity only)
 
 #[derive(Debug, Clone)]
 pub struct ChainRow {
     pub id: u64,
-    pub repo_path: String,
+    pub repo_id: u64,
+    /// The owning repo's git-common-dir (joined from `repos`) — the path
+    /// every git operation on the chain opens.
+    pub git_dir: String,
     pub branch: String,
     pub base: String,
     pub created_at: String,
 }
 
+/// The chain columns plus the owning repo's `git_dir`, the shape
+/// [`map_chain`] reads — chains never store the path themselves.
+const CHAIN_SELECT: &str = "SELECT c.id, c.repo_id, r.git_dir, c.branch, c.base, c.created_at \
+     FROM chains c JOIN repos r ON r.id = c.repo_id";
+
 fn map_chain(row: &rusqlite::Row) -> rusqlite::Result<ChainRow> {
     Ok(ChainRow {
         id: col_u64(row.get("id")?)?,
-        repo_path: row.get("repo_path")?,
+        repo_id: col_u64(row.get("repo_id")?)?,
+        git_dir: row.get("git_dir")?,
         branch: row.get("branch")?,
         base: row.get("base")?,
         created_at: row.get("created_at")?,
     })
 }
 
-/// Register or refresh a chain by `(repo_path, branch)`: insert if new,
+/// Register or refresh a chain by `(repo_id, branch)`: insert if new,
 /// otherwise update `base` (re-registration may change it). Returns the row.
 ///
 /// # Errors
 /// On a database failure.
 pub fn get_or_create_chain(
     conn: &Connection,
-    repo_path: &str,
+    repo_id: u64,
     branch: &str,
     base: &str,
 ) -> Result<ChainRow> {
-    if let Some(existing) = find_chain(conn, repo_path, branch)? {
+    if let Some(existing) = find_chain(conn, repo_id, branch)? {
         if existing.base != base {
             conn.execute(
                 "UPDATE chains SET base = ?1 WHERE id = ?2",
@@ -212,9 +260,9 @@ pub fn get_or_create_chain(
             .ok_or_else(|| anyhow!("chain {} vanished", existing.id));
     }
     conn.execute(
-        "INSERT INTO chains (repo_path, branch, base, created_at)
+        "INSERT INTO chains (repo_id, branch, base, created_at)
          VALUES (?1, ?2, ?3, ?4)",
-        params![repo_path, branch, base, now_rfc3339()],
+        params![i64::try_from(repo_id)?, branch, base, now_rfc3339()],
     )?;
     let id = col_u64(conn.last_insert_rowid())?;
     get_chain(conn, id)?.ok_or_else(|| anyhow!("chain {id} vanished"))
@@ -222,10 +270,10 @@ pub fn get_or_create_chain(
 
 /// # Errors
 /// On a database failure.
-pub fn find_chain(conn: &Connection, repo_path: &str, branch: &str) -> Result<Option<ChainRow>> {
+pub fn find_chain(conn: &Connection, repo_id: u64, branch: &str) -> Result<Option<ChainRow>> {
     conn.query_row(
-        "SELECT * FROM chains WHERE repo_path = ?1 AND branch = ?2",
-        params![repo_path, branch],
+        &format!("{CHAIN_SELECT} WHERE c.repo_id = ?1 AND c.branch = ?2"),
+        params![i64::try_from(repo_id)?, branch],
         map_chain,
     )
     .optional()
@@ -236,7 +284,7 @@ pub fn find_chain(conn: &Connection, repo_path: &str, branch: &str) -> Result<Op
 /// On a database failure.
 pub fn get_chain(conn: &Connection, id: u64) -> Result<Option<ChainRow>> {
     conn.query_row(
-        "SELECT * FROM chains WHERE id = ?1",
+        &format!("{CHAIN_SELECT} WHERE c.id = ?1"),
         params![i64::try_from(id)?],
         map_chain,
     )
@@ -249,7 +297,7 @@ pub fn get_chain(conn: &Connection, id: u64) -> Result<Option<ChainRow>> {
 /// # Errors
 /// On a database failure.
 pub fn all_chains(conn: &Connection) -> Result<Vec<ChainRow>> {
-    let mut stmt = conn.prepare("SELECT * FROM chains ORDER BY id")?;
+    let mut stmt = conn.prepare(&format!("{CHAIN_SELECT} ORDER BY c.id"))?;
     let rows = stmt
         .query_map([], map_chain)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -561,16 +609,41 @@ mod tests {
         conn
     }
 
+    /// A repo + one `feat` chain on it (the common setup).
+    fn chain(conn: &Connection) -> ChainRow {
+        let repo = get_or_create_repo(conn, "/r/.git").expect("repo");
+        get_or_create_chain(conn, repo.id, "feat", "main").expect("create")
+    }
+
+    #[test]
+    fn repo_upsert_is_idempotent() {
+        let conn = mem();
+        let a = get_or_create_repo(&conn, "/r/.git").expect("create");
+        let again = get_or_create_repo(&conn, "/r/.git").expect("re-register");
+        assert_eq!(a.id, again.id);
+        // A different git dir is a distinct repo.
+        let b = get_or_create_repo(&conn, "/other/.git").expect("create");
+        assert_ne!(a.id, b.id);
+        assert_eq!(
+            find_repo(&conn, "/r/.git").expect("find").map(|r| r.id),
+            Some(a.id)
+        );
+    }
+
     #[test]
     fn chain_upsert_is_idempotent_and_updates_base() {
         let conn = mem();
-        let a = get_or_create_chain(&conn, "/r", "feat", "main").expect("create");
+        let repo = get_or_create_repo(&conn, "/r/.git").expect("repo");
+        let a = get_or_create_chain(&conn, repo.id, "feat", "main").expect("create");
         // Re-registering with identical args returns the same chain, never a
         // duplicate row.
-        let again = get_or_create_chain(&conn, "/r", "feat", "main").expect("re-register");
+        let again = get_or_create_chain(&conn, repo.id, "feat", "main").expect("re-register");
         assert_eq!(a.id, again.id);
+        // The chain surfaces its repo's git dir (joined, not stored on the chain).
+        assert_eq!(a.repo_id, repo.id);
+        assert_eq!(a.git_dir, "/r/.git");
         // A moved base updates the existing row in place.
-        let b = get_or_create_chain(&conn, "/r", "feat", "develop").expect("upsert");
+        let b = get_or_create_chain(&conn, repo.id, "feat", "develop").expect("upsert");
         assert_eq!(a.id, b.id);
         assert_eq!(b.base, "develop");
     }
@@ -578,7 +651,7 @@ mod tests {
     #[test]
     fn log_append_and_head() {
         let conn = mem();
-        let c = get_or_create_chain(&conn, "/r", "feat", "main").expect("create");
+        let c = chain(&conn);
         assert_eq!(log_head(&conn, c.id).expect("head"), 0);
         append_log(
             &conn,
@@ -611,7 +684,7 @@ mod tests {
     #[test]
     fn draft_lifecycle() {
         let conn = mem();
-        let c = get_or_create_chain(&conn, "/r", "feat", "main").expect("create");
+        let c = chain(&conn);
         let d = insert_draft(
             &conn,
             7,

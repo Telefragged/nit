@@ -19,12 +19,16 @@ docs/data-model.md ("Concurrency", normative).
 
 - `POST /api/chains` — register or refresh (idempotent; this is `nit push`)
   ```json
-  req:  {"repo_path": "/abs/path", "branch": "feat/x", "base": "main",
+  req:  {"git_dir": "/abs/path/.git", "branch": "feat/x", "base": "main",
          "partial": true}
   resp: Chain (below)
   ```
-  `repo_path` is canonicalized; the chain row is auto-created. 400 if the
-  repo/branch/base can't be resolved at registration. A scan failure on an
+  `git_dir` is the repo's canonical **git-common-dir** (`git rev-parse
+--git-common-dir`) — the chain's repo identity, shared by every worktree of
+  one repo; the `nit` CLI infers it from `--repo`/the cwd. It is canonicalized
+  server-side, and both the `repos` registry row (grouping key) and the chain
+  row are auto-created. 400 if the repo/branch/base can't be resolved at
+  registration. A scan failure on an
   _existing_ chain is not an HTTP error: it appears as `last_scan_error`.
   Every commit in `base..tip` must carry its own `Change-Id:` trailer and
   must not be a `fixup!`/`squash!` commit — violations fail the scan
@@ -42,7 +46,8 @@ docs/data-model.md ("Concurrency", normative).
 
 ```json
 Chain = {
-  "id": 1, "repo_path": "/abs/path", "branch": "feat/x", "base": "main",
+  "id": 1, "repo_id": 1, "git_dir": "/abs/path/.git",  // repo registry id + git-common-dir
+  "branch": "feat/x", "base": "main",
   "status": "active",            // active | merged | abandoned
   "state": "waiting_for_review", // derived — see state table below
   "partial": false,              // sticky; set by push --partial, cleared by ready

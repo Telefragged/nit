@@ -27,10 +27,11 @@ pub struct ApiError {
 // ---------------------------------------------------------------------------
 // Chains
 
-/// `POST /api/chains` request (this is `nit push`).
+/// `POST /api/chains` request (this is `nit push`). `git_dir` is the repo's
+/// canonical git-common-dir (the client infers it; chains group by it).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterChain {
-    pub repo_path: String,
+    pub git_dir: String,
     pub branch: String,
     pub base: String,
     /// Sticky: true marks the chain partial (`nit push --partial`), false
@@ -42,7 +43,9 @@ pub struct RegisterChain {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chain {
     pub id: u64,
-    pub repo_path: String,
+    /// The repo this chain belongs to (registry id) and its git-common-dir.
+    pub repo_id: u64,
+    pub git_dir: String,
     pub branch: String,
     pub base: String,
     /// active | merged | abandoned

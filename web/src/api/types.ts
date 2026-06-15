@@ -32,7 +32,9 @@ export type ChangeStatus =
 
 export interface Chain {
   id: number;
-  repo_path: string;
+  /** The repo this chain belongs to (registry id) and its git-common-dir. */
+  repo_id: number;
+  git_dir: string;
   branch: string;
   base: string;
   status: ChainStatus;
@@ -70,7 +72,8 @@ export interface ChangeCounts {
 }
 
 export interface RegisterChainRequest {
-  repo_path: string;
+  /** The repo's canonical git-common-dir (the CLI infers it). */
+  git_dir: string;
   branch: string;
   base: string;
   /**

@@ -24,9 +24,11 @@ fn server_url(flag: Option<String>) -> String {
 #[derive(clap::Args)]
 pub struct PushArgs {
     /// Worktree of the branch to register. Required — there is no cwd
-    /// fallback: a chain's identity is this path + `--branch`, so deriving
-    /// the path from the cwd silently forks a duplicate chain when run from
-    /// the wrong checkout. A relative path resolves against the current dir.
+    /// fallback. The chain's identity is the repo's git-common-dir (inferred
+    /// from this path and shared across the repo's worktrees) plus `--branch`;
+    /// passing it explicitly keeps a push from the wrong checkout from
+    /// targeting the wrong repo. A relative path resolves against the current
+    /// dir.
     #[arg(long)]
     pub repo: PathBuf,
     /// Branch to register
@@ -173,9 +175,9 @@ pub fn ready(args: ReadyArgs) -> Result<()> {
 
 /// Shared push/ready core: register/refresh the chain via
 /// `POST /api/chains`, sending `partial` only when an override is given
-/// (absent leaves the server's sticky flag unchanged). The repo path is
-/// canonicalized client-side so a relative `--repo` resolves against the
-/// caller's cwd, not the server's.
+/// (absent leaves the server's sticky flag unchanged). The repo's
+/// git-common-dir is inferred from `--repo` client-side (so a relative path
+/// resolves against the caller's cwd) and is the chain's repo identity.
 fn register(
     repo: &Path,
     branch: &str,
@@ -183,11 +185,10 @@ fn register(
     server: Option<String>,
     partial: Option<bool>,
 ) -> Result<()> {
-    let repo = std::fs::canonicalize(repo)
-        .with_context(|| format!("cannot resolve repo path {}", repo.display()))?;
+    let git_dir = repo_git_dir(repo)?;
     let client = Client::new(server_url(server));
     let mut body = json!({
-        "repo_path": repo.to_string_lossy(),
+        "git_dir": git_dir,
         "branch": branch,
         "base": base,
     });
@@ -704,16 +705,38 @@ fn print_json(value: &Value) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Repo introspection (cwd → repo root + branch, for chain resolution)
+// Repo introspection (cwd → git-common-dir + branch, for chain resolution)
 
-fn discover_repo() -> Result<(PathBuf, Repository)> {
+/// The canonical git-common-dir of the repo at `path` — the chain's repo
+/// identity (≡ `git rev-parse --git-common-dir`), shared by every worktree
+/// of one repo.
+fn repo_git_dir(path: &Path) -> Result<String> {
+    let repo = Repository::discover(path).map_err(|e| {
+        anyhow!(
+            "not a git repository at {}: {}",
+            path.display(),
+            e.message()
+        )
+    })?;
+    git_common_dir(&repo)
+}
+
+/// Canonicalize a repo's git-common-dir to a UTF-8 string.
+fn git_common_dir(repo: &Repository) -> Result<String> {
+    let dir = std::fs::canonicalize(repo.commondir())
+        .with_context(|| format!("cannot resolve git dir {}", repo.commondir().display()))?;
+    dir.into_os_string()
+        .into_string()
+        .map_err(|_| anyhow!("git dir is not valid UTF-8"))
+}
+
+/// Discover the repo containing the cwd, returning its git-common-dir and the
+/// open handle (for the current branch).
+fn discover_repo() -> Result<(String, Repository)> {
     let repo = Repository::discover(".")
         .map_err(|e| anyhow!("not inside a git repository: {}", e.message()))?;
-    let root = repo
-        .workdir()
-        .ok_or_else(|| anyhow!("bare repositories are not supported"))?
-        .to_path_buf();
-    Ok((root, repo))
+    let git_dir = git_common_dir(&repo)?;
+    Ok((git_dir, repo))
 }
 
 fn current_branch(repo: &Repository) -> Result<String> {
@@ -727,14 +750,12 @@ fn current_branch(repo: &Repository) -> Result<String> {
 }
 
 /// The registered chain for the cwd's repo + branch, via
-/// `GET /api/chains?status=all` (the server stores canonicalized paths).
-/// `retry` covers only that GET — repo discovery and "branch not
-/// registered" stay fatal.
+/// `GET /api/chains?status=all` (matched on the repo's git-common-dir, which
+/// the server stores canonicalized). `retry` covers only that GET — repo
+/// discovery and "branch not registered" stay fatal.
 fn resolve_chain(client: &Client, retry: Retry) -> Result<u64> {
-    let (root, repo) = discover_repo()?;
+    let (git_dir, repo) = discover_repo()?;
     let branch = current_branch(&repo)?;
-    let canonical = std::fs::canonicalize(&root)
-        .with_context(|| format!("cannot resolve repo path {}", root.display()))?;
     let list = client.get_retry("/api/chains?status=all", retry)?;
     let chains = list["chains"]
         .as_array()
@@ -742,7 +763,7 @@ fn resolve_chain(client: &Client, retry: Retry) -> Result<u64> {
     chains
         .iter()
         .find(|c| {
-            c["repo_path"].as_str() == canonical.to_str() && c["branch"].as_str() == Some(&branch)
+            c["git_dir"].as_str() == Some(git_dir.as_str()) && c["branch"].as_str() == Some(&branch)
         })
         .and_then(|c| c["id"].as_u64())
         .ok_or_else(|| {

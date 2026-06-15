@@ -35,8 +35,11 @@ agent                         nit server                      reviewer (browser)
 ## Key decisions
 
 - **Local-first**: server and agents share a filesystem. No auth; binds 127.0.0.1.
-- **Repos are read in place** via libgit2. Registering a chain stores only
-  `(repo path, branch name, base ref)`.
+- **Repos are read in place** via libgit2, grouped under a minimal **repo
+  registry** keyed by the git-common-dir (the `.git` dir — one identity per
+  repo, shared across its worktrees; relocated with `nit repo move`).
+  Registering a chain stores only `(repo_id, branch name, base ref)`; the
+  repo row holds just its git-common-dir, nothing else git already knows.
 - **State is the fold of an append-only log**: every reviewable fact —
   a pushed revision, a verdict, a reply, a partial flip, a merge — is one
   immutable log entry. The chain's current state is the fold of its log,

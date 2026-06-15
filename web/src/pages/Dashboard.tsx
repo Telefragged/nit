@@ -26,7 +26,7 @@ function ChainRow({ chain }: { chain: Chain }) {
           ) : null}
         </div>
         <div className="repo">
-          {basename(chain.repo_path)} → {chain.base}
+          {basename(chain.git_dir.replace(/\/?\.git$/, ""))} → {chain.base}
         </div>
       </td>
       <td>

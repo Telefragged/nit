@@ -25,7 +25,7 @@ fn log_ranges_slice_and_reject_out_of_bounds() {
     let (st, chain) = http_post(
         &server.url("/api/chains"),
         &json!({
-            "repo_path": g.workdir().to_string_lossy(),
+            "git_dir": g.git_dir(),
             "branch": "feat",
             "base": "main",
         }),

@@ -36,7 +36,8 @@ pub fn build_chain(
     }
     Ok(types::Chain {
         id: proj.chain_id,
-        repo_path: proj.repo_path.clone(),
+        repo_id: proj.repo_id,
+        git_dir: proj.git_dir.clone(),
         branch: proj.branch.clone(),
         base: proj.base.clone(),
         status: proj.status.as_str().to_string(),

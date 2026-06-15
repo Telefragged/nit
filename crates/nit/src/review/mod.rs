@@ -282,7 +282,9 @@ impl ChangeProj {
 #[derive(Debug, Clone)]
 pub struct Projection {
     pub chain_id: u64,
-    pub repo_path: String,
+    pub repo_id: u64,
+    /// The owning repo's git-common-dir — the path every git operation opens.
+    pub git_dir: String,
     pub branch: String,
     pub base: String,
     pub created_at: String,
@@ -301,7 +303,8 @@ impl Projection {
     pub fn empty(chain: &db::ChainRow) -> Projection {
         Projection {
             chain_id: chain.id,
-            repo_path: chain.repo_path.clone(),
+            repo_id: chain.repo_id,
+            git_dir: chain.git_dir.clone(),
             branch: chain.branch.clone(),
             base: chain.base.clone(),
             created_at: chain.created_at.clone(),

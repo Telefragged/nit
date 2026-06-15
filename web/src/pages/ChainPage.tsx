@@ -104,7 +104,7 @@ export default function ChainPage() {
         {chain.partial ? <PartialBadge /> : null}
       </div>
       <p className="subtitle">
-        <span className="mono">{chain.repo_path}</span> → base{" "}
+        <span className="mono">{chain.git_dir}</span> → base{" "}
         <span className="mono">{chain.base}</span> · updated{" "}
         {timeAgo(chain.updated_at)}
       </p>

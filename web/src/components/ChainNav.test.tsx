@@ -41,7 +41,8 @@ function change(
 
 const chain: Chain = {
   id: 1,
-  repo_path: "/repo",
+  repo_id: 1,
+  git_dir: "/repo/.git",
   branch: "feat/x",
   base: "main",
   status: "active",

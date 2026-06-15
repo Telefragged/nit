@@ -80,11 +80,11 @@ impl ScanResult {
 ///
 /// # Errors
 /// The 400 case of `POST /api/chains`.
-pub fn validate_registration(repo_path: &std::path::Path, branch: &str, base: &str) -> Result<()> {
-    let repo = Repository::open(repo_path).map_err(|e| {
+pub fn validate_registration(git_dir: &std::path::Path, branch: &str, base: &str) -> Result<()> {
+    let repo = Repository::open(git_dir).map_err(|e| {
         anyhow!(
             "cannot open repository {}: {}",
-            repo_path.display(),
+            git_dir.display(),
             e.message()
         )
     })?;
@@ -109,12 +109,12 @@ pub fn validate_registration(repo_path: &std::path::Path, branch: &str, base: &s
               splitting its steps apart would obscure the contract"
 )]
 pub fn scan(proj: &Projection, now: jiff::Timestamp, alloc: &mut dyn FnMut() -> u64) -> ScanResult {
-    let repo = match Repository::open(&proj.repo_path) {
+    let repo = match Repository::open(&proj.git_dir) {
         Ok(r) => r,
         Err(e) => {
             return ScanResult::failed(format!(
                 "cannot open repository {}: {}",
-                proj.repo_path,
+                proj.git_dir,
                 e.message()
             ));
         }
@@ -309,7 +309,7 @@ fn missing_branch(proj: &Projection, now: jiff::Timestamp) -> ScanResult {
             let mut res = ScanResult::closed("abandoned");
             // delete_chain_keep_refs needs the repo; the branch is gone but
             // the repo opens — best effort via the caller's next scan.
-            if let Ok(repo) = Repository::open(&proj.repo_path) {
+            if let Ok(repo) = Repository::open(&proj.git_dir) {
                 objects::delete_chain_keep_refs(&repo, proj.chain_id);
             }
             res.branch_missing_since = None;

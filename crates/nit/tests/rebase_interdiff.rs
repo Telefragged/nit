@@ -443,7 +443,7 @@ fn http_interdiff_contains_a_pure_rebase() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let register = json!({
-        "repo_path": g.workdir().to_string_lossy(), "branch": "feat", "base": "main",
+        "git_dir": g.git_dir(), "branch": "feat", "base": "main",
     });
     let (st, chain) = http_post(&server.url("/api/chains"), &register);
     assert_eq!(st, 200, "register: {chain}");

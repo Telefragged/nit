@@ -171,19 +171,26 @@ async fn register_chain(
     let st = state.clone();
     let chain_id = blocking(move || {
         let conn = st.open_db()?;
-        let canonical = std::fs::canonicalize(&req.repo_path).map_err(|e| {
-            Error::bad_request(format!("cannot resolve repo path {}: {e}", req.repo_path))
+        let canonical = std::fs::canonicalize(&req.git_dir).map_err(|e| {
+            Error::bad_request(format!("cannot resolve git dir {}: {e}", req.git_dir))
         })?;
         let canonical = canonical
             .to_str()
-            .ok_or_else(|| Error::bad_request("repo path is not valid UTF-8"))?;
+            .ok_or_else(|| Error::bad_request("git dir is not valid UTF-8"))?;
         // A *new* chain validates (the 400 case); an existing one re-registers
-        // even mid-rebase, surfacing failures as last_scan_error.
-        if db::find_chain(&conn, canonical, &req.branch)?.is_none() {
+        // even mid-rebase, surfacing failures as last_scan_error. Validate
+        // before touching the registry so a bad branch/base never leaves an
+        // orphan repo row behind.
+        let is_new_chain = match db::find_repo(&conn, canonical)? {
+            Some(repo) => db::find_chain(&conn, repo.id, &req.branch)?.is_none(),
+            None => true,
+        };
+        if is_new_chain {
             gitscan::validate_registration(FsPath::new(canonical), &req.branch, &req.base)
                 .map_err(|e| Error::bad_request(format!("{e:#}")))?;
         }
-        let chain = db::get_or_create_chain(&conn, canonical, &req.branch, &req.base)?;
+        let repo = db::get_or_create_repo(&conn, canonical)?;
+        let chain = db::get_or_create_chain(&conn, repo.id, &req.branch, &req.base)?;
         st.ensure_entry(&conn, &chain)?;
         Ok(chain.id)
     })
@@ -336,7 +343,7 @@ async fn revision_diff(
         // lock before touching git.
         // For an interdiff, `against` also carries parent(m) so a rebase
         // (parent(m) != parent(n)) can be detected and contained.
-        let (repo_path, new_sha, new_msg, parent_sha, against): (
+        let (git_dir, new_sha, new_msg, parent_sha, against): (
             String,
             String,
             String,
@@ -364,14 +371,14 @@ async fn revision_diff(
                 }
             };
             (
-                proj.repo_path.clone(),
+                proj.git_dir.clone(),
                 rev.commit_sha.clone(),
                 rev.message.clone(),
                 rev.parent_sha.clone(),
                 against,
             )
         };
-        let repo = Repository::open(&repo_path)
+        let repo = Repository::open(&git_dir)
             .map_err(|e| Error::internal(format!("cannot open the chain's repository: {e}")))?;
         let new_tree = commit_tree(&repo, &new_sha)?;
         // The interdiff's old side (= revision m) and its parent, kept for
@@ -484,7 +491,7 @@ async fn create_draft(
                 } else {
                     &rev.commit_sha
                 };
-                Repository::open(&proj.repo_path).ok().and_then(|repo| {
+                Repository::open(&proj.git_dir).ok().and_then(|repo| {
                     diff::commit_tree(&repo, sha)
                         .and_then(|t| diff::line_text(&repo, &t, file, line))
                 })
@@ -728,7 +735,7 @@ fn resolve_target(
     let reviewed = change
         .revision(requested)
         .ok_or_else(|| Error::bad_request(format!("revision {requested} not found")))?;
-    let retargets = Repository::open(&proj.repo_path).is_ok_and(|repo| {
+    let retargets = Repository::open(&proj.git_dir).is_ok_and(|repo| {
         gitscan::pure_rebase(
             &repo,
             &reviewed.commit_sha,

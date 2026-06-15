@@ -104,7 +104,8 @@ function msgFile(message: string): DiffFile {
 
 interface ChainRecord {
   id: number;
-  repo_path: string;
+  repo_id: number;
+  git_dir: string;
   branch: string;
   base: string;
   status: ChainStatus;
@@ -1116,7 +1117,8 @@ const change40: ChangeRecord = {
 const chains: ChainRecord[] = [
   {
     id: 1,
-    repo_path: "/home/vetle/src/acme-runtime",
+    repo_id: 1,
+    git_dir: "/home/vetle/src/acme-runtime/.git",
     branch: "feat/token-rotation",
     base: "main",
     status: "active",
@@ -1128,7 +1130,8 @@ const chains: ChainRecord[] = [
   },
   {
     id: 2,
-    repo_path: "/home/vetle/src/quarry",
+    repo_id: 2,
+    git_dir: "/home/vetle/src/quarry/.git",
     branch: "fix/wal-checkpoint",
     base: "main",
     status: "active",
@@ -1144,7 +1147,8 @@ const chains: ChainRecord[] = [
   },
   {
     id: 3,
-    repo_path: "/home/vetle/src/quarry",
+    repo_id: 2,
+    git_dir: "/home/vetle/src/quarry/.git",
     branch: "chore/dedupe-ci-cache",
     base: "main",
     status: "active",
@@ -1156,7 +1160,8 @@ const chains: ChainRecord[] = [
   },
   {
     id: 4,
-    repo_path: "/home/vetle/src/acme-runtime",
+    repo_id: 1,
+    git_dir: "/home/vetle/src/acme-runtime/.git",
     branch: "build/rustls",
     base: "main",
     status: "merged",
@@ -1540,7 +1545,8 @@ function changeSummary(c: ChangeRecord): ChangeSummary {
 function chainView(chain: ChainRecord): Chain {
   return {
     id: chain.id,
-    repo_path: chain.repo_path,
+    repo_id: chain.repo_id,
+    git_dir: chain.git_dir,
     branch: chain.branch,
     base: chain.base,
     status: chain.status,

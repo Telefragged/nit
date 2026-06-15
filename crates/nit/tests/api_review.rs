@@ -16,7 +16,7 @@ fn review_auto_retargets_after_pure_rebase() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let register = json!({
-        "repo_path": g.workdir().to_string_lossy(),
+        "git_dir": g.git_dir(),
         "branch": "feat",
         "base": "main",
     });
@@ -82,7 +82,7 @@ fn reword_blocks_stale_review_retarget() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let register = json!({
-        "repo_path": g.workdir().to_string_lossy(),
+        "git_dir": g.git_dir(),
         "branch": "feat",
         "base": "main",
     });
@@ -131,7 +131,7 @@ fn commit_msg_comments_stay_pinned() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let register = json!({
-        "repo_path": g.workdir().to_string_lossy(),
+        "git_dir": g.git_dir(),
         "branch": "feat",
         "base": "main",
     });
@@ -205,7 +205,7 @@ fn range_comments_served_verbatim() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let register = json!({
-        "repo_path": g.workdir().to_string_lossy(),
+        "git_dir": g.git_dir(),
         "branch": "feat",
         "base": "main",
     });
@@ -270,7 +270,7 @@ fn range_draft_validation() {
     let (st, chain) = http_post(
         &server.url("/api/chains"),
         &json!({
-            "repo_path": g.workdir().to_string_lossy(),
+            "git_dir": g.git_dir(),
             "branch": "feat",
             "base": "main",
         }),
@@ -334,7 +334,7 @@ fn request_validation() {
     let (st, chain) = http_post(
         &server.url("/api/chains"),
         &json!({
-            "repo_path": g.workdir().to_string_lossy(),
+            "git_dir": g.git_dir(),
             "branch": "feat",
             "base": "main",
         }),
@@ -421,7 +421,7 @@ fn drafted_thread_resolution() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, chain) = http_post(
         &server.url("/api/chains"),
-        &json!({"repo_path": g.workdir().to_string_lossy(), "branch": "feat", "base": "main"}),
+        &json!({"git_dir": g.git_dir(), "branch": "feat", "base": "main"}),
     );
     assert_eq!(st, 200, "{chain}");
     let change_id = chain["changes"][0]["id"].as_i64().unwrap();
@@ -487,7 +487,7 @@ fn review_rejected_on_orphaned_change() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let register = json!({
-        "repo_path": g.workdir().to_string_lossy(),
+        "git_dir": g.git_dir(),
         "branch": "feat",
         "base": "main",
     });
@@ -525,7 +525,7 @@ fn old_side_draft_snapshots_the_parent_tree() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let register = json!({
-        "repo_path": g.workdir().to_string_lossy(),
+        "git_dir": g.git_dir(),
         "branch": "feat",
         "base": "main",
     });

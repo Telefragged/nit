@@ -54,7 +54,7 @@ fn diff_json_golden() {
     let (st, chain) = http_post(
         &server.url("/api/chains"),
         &json!({
-            "repo_path": g.workdir().to_string_lossy(),
+            "git_dir": g.git_dir(),
             "branch": "feat",
             "base": "main",
         }),

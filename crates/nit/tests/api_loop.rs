@@ -35,7 +35,7 @@ fn full_review_loop() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let register = json!({
-        "repo_path": g.workdir().to_string_lossy(),
+        "git_dir": g.git_dir(),
         "branch": "feat",
         "base": "main",
     });
@@ -75,12 +75,12 @@ fn full_review_loop() {
     assert!(e["error"].as_str().unwrap().contains("999"));
     let (st, e) = http_post(
         &server.url("/api/chains"),
-        &json!({"repo_path": "/does/not/exist", "branch": "b", "base": "main"}),
+        &json!({"git_dir": "/does/not/exist", "branch": "b", "base": "main"}),
     );
     assert_eq!(st, 400, "{e}");
     let (st, e) = http_post(
         &server.url("/api/chains"),
-        &json!({"repo_path": g.workdir().to_string_lossy(), "branch": "nope", "base": "main"}),
+        &json!({"git_dir": g.git_dir(), "branch": "nope", "base": "main"}),
     );
     assert_eq!(st, 400, "{e}");
 
@@ -356,7 +356,7 @@ fn partial_flag_is_sticky_and_flips_append_entries() {
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let mut register = json!({
-        "repo_path": g.workdir().to_string_lossy(),
+        "git_dir": g.git_dir(),
         "branch": "feat",
         "base": "main",
     });

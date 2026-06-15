@@ -51,10 +51,11 @@ impl Fixture {
         repo.reference("refs/heads/main", root, true, "test")
             .unwrap();
 
-        let repo_path = repo.workdir().unwrap().to_str().unwrap().to_string();
+        let git_dir = git_dir_string(&repo);
         let chain = ChainRow {
             id: 1,
-            repo_path,
+            repo_id: 1,
+            git_dir,
             branch: "feat".to_string(),
             base: "main".to_string(),
             created_at: "t0".to_string(),
@@ -171,6 +172,16 @@ impl Fixture {
     }
 }
 
+/// A repo's canonical git-common-dir as a string — the chain's repo identity
+/// on the wire (what `nit push` infers from a worktree and sends as `git_dir`).
+fn git_dir_string(repo: &Repository) -> String {
+    std::fs::canonicalize(repo.commondir())
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string()
+}
+
 fn commit_in(repo: &Repository, parents: &[Oid], message: &str, files: &[(&str, &str)]) -> Oid {
     let upserts: Vec<(&str, &[u8])> = files
         .iter()
@@ -248,6 +259,12 @@ impl GitRepo {
 
     pub fn workdir(&self) -> std::path::PathBuf {
         self.repo.workdir().unwrap().to_path_buf()
+    }
+
+    /// The repo's canonical git-common-dir (see [`git_dir_string`]) — the
+    /// chain's repo identity on the wire that `nit push` sends as `git_dir`.
+    pub fn git_dir(&self) -> String {
+        git_dir_string(&self.repo)
     }
 
     pub fn commit(&self, parents: &[Oid], message: &str, files: &[(&str, &str)]) -> Oid {
