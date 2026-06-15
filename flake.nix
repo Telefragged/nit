@@ -154,9 +154,25 @@
         }
       );
 
-      checks = forAllSystems (pkgs: {
-        build = self.packages.${pkgs.system}.nit;
-      });
+      checks = forAllSystems (
+        pkgs:
+        let
+          inherit (craneScopeFor pkgs) craneLib commonArgs cargoArtifacts;
+        in
+        {
+          build = self.packages.${pkgs.system}.nit;
+          # Clippy as a crane validator, mirroring the devShell lint command
+          # (cargo clippy --all-targets -- -D warnings). The workspace sets
+          # clippy::pedantic = warn; -D warnings turns any lint into a failure.
+          clippy = craneLib.cargoClippy (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "--all-targets -- -D warnings";
+            }
+          );
+        }
+      );
 
       # `nix fmt` = the same whole-tree treefmt the devShell runs,
       # self-contained (formatters on PATH without entering the shell).
