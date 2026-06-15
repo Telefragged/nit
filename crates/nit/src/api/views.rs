@@ -6,8 +6,9 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use crate::db;
+use crate::enums::Side;
 use crate::gitscan::identity::subject_of;
-use crate::review::{self, ChangeProj, Entry, Projection, ThreadComment, ThreadProj};
+use crate::review::{self, Anchor, ChangeProj, Entry, Projection, ThreadComment, ThreadProj};
 
 use super::types;
 
@@ -99,18 +100,37 @@ fn comment_counts(
 // ---------------------------------------------------------------------------
 // Threads + drafts
 
-/// A published thread → its wire shape.
+/// A published thread → its wire shape, projecting its [`Anchor`] back to the
+/// flat `file`/`line`/`side`/`range`/`line_text` fields (`side` defaults to
+/// `new` where the anchor has no line, matching the stored default).
 #[must_use]
 pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
+    let (file, line, side, range, line_text) = match &t.anchor {
+        Anchor::Change => (None, None, Side::New, None, None),
+        Anchor::File { file } => (Some(file.clone()), None, Side::New, None, None),
+        Anchor::Line {
+            file,
+            side,
+            line,
+            line_text,
+            range,
+        } => (
+            Some(file.clone()),
+            Some(*line),
+            *side,
+            *range,
+            line_text.clone(),
+        ),
+    };
     types::Thread {
         id: t.id,
         change_id,
         revision: t.revision,
-        file: t.file.clone(),
-        line: t.line,
-        side: t.side,
-        range: t.range,
-        line_text: t.line_text.clone(),
+        file,
+        line,
+        side,
+        range,
+        line_text,
         resolved: t.resolved,
         comments: t.comments.iter().map(thread_comment_view).collect(),
         created_at: t.created_at.clone(),

@@ -211,6 +211,48 @@ pub struct RevisionProj {
     pub created_at: String,
 }
 
+/// Where a thread is anchored within a revision (docs/api.md "Comment
+/// placement"), modeled so the invalid combinations the flat wire fields
+/// allow are unrepresentable: a `range` cannot exist without its `line`, a
+/// `line` not without its `file`, and `side`/`line_text` are meaningful only
+/// at a line. The flat `file`/`line`/`side`/`range`/`line_text` of the wire
+/// [`Thread`](crate::api::types::Thread) are this projected back out.
+#[derive(Debug, Clone)]
+pub enum Anchor {
+    /// The change as a whole (no file).
+    Change,
+    /// A whole file (no line).
+    File { file: String },
+    /// A line, optionally a sub-line `range` selection within it.
+    Line {
+        file: String,
+        side: Side,
+        line: u64,
+        /// Best-effort snapshot of the anchored line's text.
+        line_text: Option<String>,
+        range: Option<CommentRange>,
+    },
+}
+
+impl Anchor {
+    /// The anchor a new thread is born with, taken from its opening comment.
+    /// `file` without `line` is a file-level anchor; no `file` is
+    /// change-level (the API rejects a `line` without a `file` upstream).
+    fn from_input(c: &CommentInput) -> Anchor {
+        match (&c.file, c.line) {
+            (Some(file), Some(line)) => Anchor::Line {
+                file: file.clone(),
+                side: c.side.unwrap_or_default(),
+                line,
+                line_text: c.line_text.clone(),
+                range: c.range,
+            },
+            (Some(file), None) => Anchor::File { file: file.clone() },
+            (None, _) => Anchor::Change,
+        }
+    }
+}
+
 /// A located, resolvable conversation. Its anchor and birth come from its
 /// first comment; later comments only extend it and may move `resolved`. The
 /// `id` is fold-assigned by creation order, never stored (module docs).
@@ -218,11 +260,7 @@ pub struct RevisionProj {
 pub struct ThreadProj {
     pub id: u64,
     pub revision: u64,
-    pub file: Option<String>,
-    pub line: Option<u64>,
-    pub side: Side,
-    pub range: Option<CommentRange>,
-    pub line_text: Option<String>,
+    pub anchor: Anchor,
     pub resolved: bool,
     pub comments: Vec<ThreadComment>,
     pub created_at: String,
@@ -518,11 +556,7 @@ fn apply_comment(
             change.threads.push(ThreadProj {
                 id,
                 revision,
-                file: c.file.clone(),
-                line: c.line,
-                side: c.side.unwrap_or_default(),
-                range: c.range,
-                line_text: c.line_text.clone(),
+                anchor: Anchor::from_input(c),
                 resolved: c.resolved.unwrap_or(false),
                 comments: vec![ThreadComment {
                     author,
