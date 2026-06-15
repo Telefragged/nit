@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { getChain } from "../api/client";
 import type { ChangeSummary } from "../api/types";
 import { StateBadge, StatusChip, PartialBadge } from "../components/badges";
+import { repoPath } from "../lib/repo";
 import { timeAgo } from "../lib/time";
 import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
@@ -104,8 +105,10 @@ export default function ChainPage() {
         {chain.partial ? <PartialBadge /> : null}
       </div>
       <p className="subtitle">
-        <span className="mono">{chain.git_dir}</span> → base{" "}
-        <span className="mono">{chain.base}</span> · updated{" "}
+        <Link to={`/repos/${chain.repo_id}`} className="mono">
+          ← {repoPath(chain.git_dir)}
+        </Link>{" "}
+        · base <span className="mono">{chain.base}</span> · updated{" "}
         {timeAgo(chain.updated_at)}
       </p>
 
