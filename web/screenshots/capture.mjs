@@ -5,6 +5,10 @@
 // no backend) and captures against it. Set NIT_BASE_URL to capture against
 // an already-running server (e.g. the real rust backend) instead.
 //
+// The mock server binds a free ephemeral port by default, so parallel runs
+// (several agents, each in its own worktree) never race on a shared port;
+// set NIT_SCREENSHOT_PORT to pin it when a stable URL is wanted.
+//
 // Output: <repo root>/screenshots/*.png (gitignored).
 //
 // Browsers come from the nix devShell ($PLAYWRIGHT_BROWSERS_PATH); the
@@ -14,12 +18,31 @@
 import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
+import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const webDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = resolve(webDir, "../screenshots");
-const PORT = 5187;
+
+/** A free TCP port, obtained by letting the OS assign one on bind(0). The
+ * mock vite server defaults to this so parallel screenshot runs (several
+ * agents, each in its own worktree) never race on a shared port — the old
+ * fixed port made every concurrent run collide. There is a tiny window
+ * between closing this probe and vite binding, but across the ephemeral
+ * range a clash is far less likely than the fixed-port one it replaces, and
+ * --strictPort still makes any real clash fail loudly instead of drifting to
+ * a port the harness isn't watching. */
+function freePort() {
+  return new Promise((res, rej) => {
+    const probe = createServer();
+    probe.once("error", rej);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close((err) => (err ? rej(err) : res(port)));
+    });
+  });
+}
 
 /** File sections start collapsed; captures that show diff contents open
  * them all via the rail's toggle first. */
@@ -467,10 +490,13 @@ async function main() {
   let server = null;
 
   if (!baseUrl) {
-    baseUrl = `http://127.0.0.1:${PORT}`;
+    const port = process.env.NIT_SCREENSHOT_PORT
+      ? Number(process.env.NIT_SCREENSHOT_PORT)
+      : await freePort();
+    baseUrl = `http://127.0.0.1:${port}`;
     server = spawn(
       resolve(webDir, "node_modules/.bin/vite"),
-      ["--port", String(PORT), "--strictPort"],
+      ["--port", String(port), "--strictPort"],
       {
         cwd: webDir,
         env: { ...process.env, VITE_MOCK: "1" },
