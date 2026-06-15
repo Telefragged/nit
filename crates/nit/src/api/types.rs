@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use crate::enums::{FileStatus, LineKind, Verdict};
+pub use crate::enums::{Author, FileStatus, LineKind, Side, Verdict};
 
 // ---------------------------------------------------------------------------
 // Health
@@ -238,9 +238,9 @@ pub struct Thread {
     pub revision: u64,
     pub file: Option<String>,
     pub line: Option<u64>,
-    /// old | new — `new` is `revision`'s commit tree, `old` its parent
-    /// tree (docs/api.md "Comment placement").
-    pub side: String,
+    /// `new` is `revision`'s commit tree, `old` its parent tree
+    /// (docs/api.md "Comment placement").
+    pub side: Side,
     /// Null: whole-line thread.
     pub range: Option<CommentRange>,
     /// Snapshot of the anchored line.
@@ -254,8 +254,7 @@ pub struct Thread {
 /// One message in a [`Thread`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadComment {
-    /// reviewer | agent
-    pub author: String,
+    pub author: Author,
     pub body: String,
     /// The review that published it; null for an agent comment.
     pub review_id: Option<u64>,
@@ -274,7 +273,7 @@ pub struct Draft {
     pub revision: u64,
     pub file: Option<String>,
     pub line: Option<u64>,
-    pub side: String,
+    pub side: Side,
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub body: String,
@@ -295,7 +294,7 @@ pub struct NewDraft {
     pub line: Option<u64>,
     /// Defaults to "new".
     #[serde(default)]
-    pub side: Option<String>,
+    pub side: Option<Side>,
     /// Optional: requires `line`; api.md "Range comments".
     #[serde(default)]
     pub range: Option<CommentRange>,
@@ -361,7 +360,7 @@ pub struct NewComment {
     pub line: Option<u64>,
     /// Defaults to "new".
     #[serde(default)]
-    pub side: Option<String>,
+    pub side: Option<Side>,
     /// Optional but encouraged: requires `line`; api.md "Range comments".
     #[serde(default)]
     pub range: Option<CommentRange>,

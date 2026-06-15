@@ -13,7 +13,7 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{self, CommentRange};
-use crate::enums::Verdict;
+use crate::enums::{Author, Side, Verdict};
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -135,8 +135,9 @@ pub struct CommentInput {
     pub file: Option<String>,
     #[serde(default)]
     pub line: Option<u64>,
-    #[serde(default)]
-    pub side: String,
+    /// New-thread anchor side; `None` on a reply (the thread owns the anchor).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<Side>,
     #[serde(default)]
     pub range: Option<CommentRange>,
     #[serde(default)]
@@ -210,7 +211,7 @@ pub struct ThreadProj {
     pub revision: u64,
     pub file: Option<String>,
     pub line: Option<u64>,
-    pub side: String,
+    pub side: Side,
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub resolved: bool,
@@ -222,8 +223,7 @@ pub struct ThreadProj {
 /// One message in a thread.
 #[derive(Debug, Clone)]
 pub struct ThreadComment {
-    /// reviewer | agent.
-    pub author: String,
+    pub author: Author,
     pub body: String,
     /// The review that published this comment; `None` for an agent comment.
     pub review_id: Option<u64>,
@@ -462,7 +462,14 @@ fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
     // and tagged with this review. Resolutions apply in draft order, so a
     // thread ends at its last decision (docs/data-model.md "The fold").
     for c in &p.comments {
-        apply_comment(proj, &p.change_key, c, "reviewer", Some(p.review_id), now);
+        apply_comment(
+            proj,
+            &p.change_key,
+            c,
+            Author::Reviewer,
+            Some(p.review_id),
+            now,
+        );
     }
     if let Some(change) = proj.change_by_key_mut(&p.change_key) {
         change.status = Status::from(p.verdict);
@@ -473,7 +480,7 @@ fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
 /// continuing a thread with no review attached (the change's status is
 /// untouched — an agent's note is not a verdict).
 fn fold_comment(proj: &mut Projection, p: &CommentPayload, now: &str) {
-    apply_comment(proj, &p.change_key, &p.comment, "agent", None, now);
+    apply_comment(proj, &p.change_key, &p.comment, Author::Agent, None, now);
 }
 
 /// Apply one comment to a change's threads (shared by `review` and `comment`).
@@ -484,7 +491,7 @@ fn apply_comment(
     proj: &mut Projection,
     change_key: &str,
     c: &CommentInput,
-    author: &str,
+    author: Author,
     review_id: Option<u64>,
     now: &str,
 ) {
@@ -509,12 +516,12 @@ fn apply_comment(
                 revision,
                 file: c.file.clone(),
                 line: c.line,
-                side: c.side.clone(),
+                side: c.side.unwrap_or_default(),
                 range: c.range,
                 line_text: c.line_text.clone(),
                 resolved: c.resolved.unwrap_or(false),
                 comments: vec![ThreadComment {
-                    author: author.to_string(),
+                    author,
                     body: c.body.clone(),
                     review_id,
                     created_at: now.to_string(),
@@ -533,7 +540,7 @@ fn apply_comment(
             };
             if !c.body.trim().is_empty() {
                 thread.comments.push(ThreadComment {
-                    author: author.to_string(),
+                    author,
                     body: c.body.clone(),
                     review_id,
                     created_at: now.to_string(),

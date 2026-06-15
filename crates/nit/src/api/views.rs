@@ -108,7 +108,7 @@ pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
         revision: t.revision,
         file: t.file.clone(),
         line: t.line,
-        side: t.side.clone(),
+        side: t.side,
         range: t.range,
         line_text: t.line_text.clone(),
         resolved: t.resolved,
@@ -121,7 +121,7 @@ pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
 #[must_use]
 fn thread_comment_view(c: &ThreadComment) -> types::ThreadComment {
     types::ThreadComment {
-        author: c.author.clone(),
+        author: c.author,
         body: c.body.clone(),
         review_id: c.review_id,
         created_at: c.created_at.clone(),
@@ -138,7 +138,7 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Draft {
         revision: d.revision,
         file: d.file.clone(),
         line: d.line,
-        side: d.side.clone(),
+        side: d.side,
         range: d.range,
         line_text: d.line_text.clone(),
         body: d.body.clone(),

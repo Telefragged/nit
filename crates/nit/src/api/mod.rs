@@ -33,6 +33,7 @@ use git2::{Oid, Repository};
 use serde::Deserialize;
 
 use crate::db;
+use crate::enums::Side;
 use crate::gitscan;
 use crate::review::{self, CommentInput, Entry, Projection};
 
@@ -538,12 +539,7 @@ async fn create_draft(
         let rev = change
             .revision(req.revision)
             .ok_or_else(|| Error::bad_request(format!("revision {} not found", req.revision)))?;
-        let (side, range) = validate_anchor(
-            req.side.as_deref(),
-            req.file.as_deref(),
-            req.line,
-            req.range,
-        )?;
+        let (side, range) = validate_anchor(req.side, req.file.as_deref(), req.line, req.range)?;
         // An empty body is allowed only for a reply that stages a resolution
         // (docs/api.md "Thread resolution"); a new thread always needs a body,
         // and a resolution with no thread_id resolves nothing.
@@ -616,25 +612,21 @@ fn validate_range(
 }
 
 /// Validate a new thread's anchor, shared by reviewer drafts and agent
-/// comments: resolve the `side` (default `"new"`), require a `file` behind any
-/// `line`, reject a `/COMMIT_MSG` old-side anchor, and apply the "Range
-/// comments" rules. Returns the resolved side and validated range.
-fn validate_anchor<'a>(
-    side: Option<&'a str>,
+/// comments: default the `side` to `new`, require a `file` behind any `line`,
+/// reject a `/COMMIT_MSG` old-side anchor, and apply the "Range comments"
+/// rules. The `side` is a [`Side`], so only these semantic rules need
+/// checking — its value is constrained by the type.
+fn validate_anchor(
+    side: Option<Side>,
     file: Option<&str>,
     line: Option<u64>,
     range: Option<types::CommentRange>,
-) -> Result<(&'a str, Option<types::CommentRange>), Error> {
-    let side = side.unwrap_or("new");
-    if side != "new" && side != "old" {
-        return Err(Error::bad_request(format!(
-            "side must be \"new\" or \"old\", got {side:?}"
-        )));
-    }
+) -> Result<(Side, Option<types::CommentRange>), Error> {
+    let side = side.unwrap_or_default();
     if line.is_some() && file.is_none() {
         return Err(Error::bad_request("a line anchor requires a file"));
     }
-    if file == Some(diff::COMMIT_MSG_PATH) && side == "old" {
+    if file == Some(diff::COMMIT_MSG_PATH) && side == Side::Old {
         return Err(Error::bad_request(
             "/COMMIT_MSG has no old side — comment with side \"new\"",
         ));
@@ -653,12 +645,12 @@ fn snapshot_line_text(
     rev: &review::RevisionProj,
     file: Option<&str>,
     line: Option<u64>,
-    side: &str,
+    side: Side,
 ) -> Option<String> {
     match (file, line) {
         (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&rev.message, line),
         (Some(file), Some(line)) => {
-            let sha = if side == "old" {
+            let sha = if side == Side::Old {
                 &rev.parent_sha
             } else {
                 &rev.commit_sha
@@ -748,7 +740,8 @@ async fn submit_review(
                         revision: Some(d.revision),
                         file: d.file.clone(),
                         line: d.line,
-                        side: d.side.clone(),
+                        // A reply's side is the thread's, not the draft's.
+                        side: d.thread_id.is_none().then_some(d.side),
                         range: d.range,
                         line_text: d.line_text.clone(),
                         body: d.body.clone(),
@@ -908,7 +901,7 @@ async fn create_comment(
                     revision: None,
                     file: None,
                     line: None,
-                    side: String::new(),
+                    side: None,
                     range: None,
                     line_text: None,
                     body: req.body.clone(),
@@ -917,12 +910,8 @@ async fn create_comment(
             } else {
                 // New thread: validate the anchor and default the revision to
                 // the change's latest (the just-pushed one).
-                let (side, range) = validate_anchor(
-                    req.side.as_deref(),
-                    req.file.as_deref(),
-                    req.line,
-                    req.range,
-                )?;
+                let (side, range) =
+                    validate_anchor(req.side, req.file.as_deref(), req.line, req.range)?;
                 let revision = match req.revision {
                     Some(r) => r,
                     None => {
@@ -944,7 +933,7 @@ async fn create_comment(
                     revision: Some(revision),
                     file: req.file.clone(),
                     line: req.line,
-                    side: side.to_string(),
+                    side: Some(side),
                     range,
                     line_text,
                     body: req.body.clone(),

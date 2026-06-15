@@ -202,7 +202,7 @@ fn review_opens_threads_and_carries_drafted_resolution() {
     assert_eq!(a.threads.len(), 1);
     let t = &a.threads[0];
     assert_eq!(t.id, 0, "first thread minted id 0");
-    assert_eq!(t.comments[0].author, "reviewer");
+    assert_eq!(t.comments[0].author, Author::Reviewer);
     assert_eq!(t.revision, 1, "pinned to the authored revision");
     assert_eq!(t.comments.len(), 1);
     assert_eq!(t.comments[0].review_id, Some(20));
@@ -264,7 +264,7 @@ fn agent_comment_replies_toggle_thread_resolution() {
     let t = &p.change_by_key("Iaaa").expect("a").threads[0];
     assert!(t.resolved);
     assert_eq!(t.comments.len(), 2, "agent reply appended");
-    assert_eq!(t.comments[1].author, "agent");
+    assert_eq!(t.comments[1].author, Author::Agent);
     assert_eq!(t.comments[1].body, "done");
     assert_eq!(t.comments[1].review_id, None);
 
@@ -315,7 +315,7 @@ fn agent_thread_leaves_status_untouched_and_mints_ids() {
     assert_eq!(a.threads.len(), 1);
     let t = &a.threads[0];
     assert_eq!(t.id, 0);
-    assert_eq!(t.comments[0].author, "agent");
+    assert_eq!(t.comments[0].author, Author::Agent);
     assert_eq!(t.revision, 1);
     assert!(t.resolved, "born resolved");
     assert_eq!(t.comments[0].review_id, None);

@@ -21,6 +21,52 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Which tree of a revision a line comment is anchored to (docs/api.md
+/// "Comment placement"): `new` is the revision's commit tree, `old` its
+/// parent tree. Defaults to `new` where a request omits it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum Side {
+    Old,
+    #[default]
+    New,
+}
+
+impl Side {
+    /// The persisted/wire spelling — also the `drafts.side` column value
+    /// (the db↔domain boundary; mirrors the serde renaming).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Side::Old => "old",
+            Side::New => "new",
+        }
+    }
+}
+
+impl std::str::FromStr for Side {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Side, String> {
+        match s {
+            "old" => Ok(Side::Old),
+            "new" => Ok(Side::New),
+            other => Err(format!(
+                "invalid side {other:?} (expected \"old\" or \"new\")"
+            )),
+        }
+    }
+}
+
+/// Who wrote a comment (docs/api.md "Comment placement"): a `reviewer`
+/// verdict comment, or an `agent` note.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Author {
+    Reviewer,
+    Agent,
+}
+
 /// A reviewer's verdict on one change (docs/api.md "Reviews"). Maps to a
 /// change [`Status`](crate::review::Status) when folded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

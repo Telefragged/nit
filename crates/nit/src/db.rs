@@ -17,6 +17,8 @@ use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
+use crate::enums::Side;
+
 /// RFC3339 timestamp for "now" (UTC), the format stored in every
 /// `created_at`/`updated_at` column.
 #[must_use]
@@ -158,6 +160,15 @@ fn col_u64(v: i64) -> rusqlite::Result<u64> {
 
 fn col_u64_opt(v: Option<i64>) -> rusqlite::Result<Option<u64>> {
     v.map(col_u64).transpose()
+}
+
+/// Parse a stored `side` TEXT column into a [`Side`] (the read half of the
+/// db↔domain boundary, like [`col_u64`]). A value that is neither `old` nor
+/// `new` means external corruption, surfaced as a conversion error.
+fn col_side(s: &str) -> rusqlite::Result<Side> {
+    s.parse().map_err(|e: String| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -451,7 +462,7 @@ pub struct DraftRow {
     pub thread_id: Option<u64>,
     pub file: Option<String>,
     pub line: Option<u64>,
-    pub side: String,
+    pub side: Side,
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub body: String,
@@ -487,7 +498,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
         thread_id: col_u64_opt(row.get("thread_id")?)?,
         file: row.get("file")?,
         line: col_u64_opt(row.get("line")?)?,
-        side: row.get("side")?,
+        side: col_side(&row.get::<_, String>("side")?)?,
         range,
         line_text: row.get("line_text")?,
         body: row.get("body")?,
@@ -504,7 +515,7 @@ pub struct NewDraft<'a> {
     pub thread_id: Option<u64>,
     pub file: Option<&'a str>,
     pub line: Option<u64>,
-    pub side: &'a str,
+    pub side: Side,
     pub range: Option<CommentRange>,
     pub line_text: Option<&'a str>,
     pub body: &'a str,
@@ -541,7 +552,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
             thread_id,
             d.file,
             line,
-            d.side,
+            d.side.as_str(),
             rsl,
             rsc,
             rel,
@@ -734,7 +745,7 @@ mod tests {
                 thread_id: None,
                 file: Some("src/main.rs"),
                 line: Some(3),
-                side: "new",
+                side: Side::New,
                 range: None,
                 line_text: Some("fn main"),
                 body: "look",

@@ -12,6 +12,7 @@ use git2::Repository;
 use serde_json::{Value, json};
 
 use crate::api::types::{CommentRange, NewComment};
+use crate::enums::Side;
 
 pub const DEFAULT_SERVER: &str = "http://127.0.0.1:8877";
 
@@ -151,8 +152,8 @@ pub struct CommentArgs {
     #[arg(long, conflicts_with = "thread")]
     pub line: Option<u64>,
     /// New thread: side — `new` (default) or `old`.
-    #[arg(long, conflicts_with = "thread")]
-    pub side: Option<String>,
+    #[arg(long, conflicts_with = "thread", value_enum)]
+    pub side: Option<Side>,
     /// New thread: selected-text range `START-END`, each `line:char`
     /// (1-based line, 0-based char, end exclusive — e.g. `12:4-14:7`).
     #[arg(long, conflicts_with = "thread")]
