@@ -66,8 +66,10 @@ export interface ChangeSummary {
 
 export interface ChangeCounts {
   revisions: number;
-  published_comments: number;
+  /** Published comment threads. */
+  threads: number;
   drafts: number;
+  /** Unresolved threads. */
   unresolved: number;
 }
 
@@ -115,8 +117,10 @@ export interface ChangeDetail {
   last_reviewed_revision: number | null;
   /** Ascending. */
   revisions: Revision[];
-  /** Published + drafts, all revisions. */
-  comments: Comment[];
+  /** Published threads, all revisions. */
+  threads: Thread[];
+  /** The reviewer's unpublished comments (drafts), all revisions. */
+  drafts: Draft[];
   reviews: Review[];
 }
 
@@ -200,7 +204,6 @@ export interface Line {
 
 export type CommentAuthor = "reviewer" | "agent";
 export type CommentSide = "old" | "new";
-export type CommentState = "draft" | "published";
 
 /**
  * Selected-text anchor of a line comment (docs/api.md "Range comments"):
@@ -214,29 +217,54 @@ export interface CommentRange {
   end_char: number;
 }
 
-export interface Comment {
+/** A published comment thread: its anchor, rolled-up resolution, and the
+ * conversation on it (docs/api.md "Comment placement"). */
+export interface Thread {
+  /** Fold-assigned by creation order (not stored). */
   id: number;
   change_id: number;
-  /** The revision the comment is pinned to. */
+  /** The revision the thread is pinned to. */
   revision: number;
-  parent_id: number | null;
-  author: CommentAuthor;
   file: string | null;
   line: number | null;
-  /** `new` is `revision`'s commit tree, `old` its parent tree
-   * (docs/api.md "Comment placement"). */
+  /** `new` is `revision`'s commit tree, `old` its parent tree. */
   side: CommentSide;
-  /** Null: whole-line comment. */
+  /** Null: whole-line thread. */
   range: CommentRange | null;
   /** Snapshot of the anchored line. */
   line_text: string | null;
-  body: string;
-  state: CommentState;
-  /** Thread resolution (docs/api.md "Thread resolution"): on a published
-   * root the thread's current state, on a published reply always false, on
-   * a draft the decision staged on its resolve checkbox. */
   resolved: boolean;
+  comments: ThreadComment[];
+  created_at: string;
+  updated_at: string;
+}
+
+/** One message in a {@link Thread}. */
+export interface ThreadComment {
+  author: CommentAuthor;
+  body: string;
+  /** The review that published it; null for an agent comment. */
   review_id: number | null;
+  created_at: string;
+}
+
+/** A reviewer's unpublished comment. Opens a new thread (`thread_id` null)
+ * or replies to one (`thread_id` set). */
+export interface Draft {
+  id: number;
+  change_id: number;
+  thread_id: number | null;
+  /** The request's anchor revision; only a new thread uses it (a reply keeps
+   * the thread's). */
+  revision: number;
+  file: string | null;
+  line: number | null;
+  side: CommentSide;
+  range: CommentRange | null;
+  line_text: string | null;
+  body: string;
+  /** The staged thread-resolution decision (false when unset). */
+  resolved: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -252,7 +280,8 @@ export interface CreateDraftRequest {
   /** Optional: requires `line`; docs/api.md "Range comments". */
   range?: CommentRange;
   body: string;
-  parent_id?: number | null;
+  /** Set: reply to that thread (on this change). Absent: open a new thread. */
+  thread_id?: number | null;
   /** Staged thread-resolution decision (docs/api.md "Thread resolution"); a
    * reply draft may stage one with an empty body. */
   resolved?: boolean;
@@ -275,16 +304,26 @@ export interface SubmitReviewRequest {
 
 export interface SubmitReviewResponse {
   review: Review;
-  published_comments: Comment[];
+  /** The threads this review created or added to. */
+  threads: Thread[];
 }
 
 // ---------------------------------------------------------------------------
 // Agent endpoints
 
-export interface ReplyRequest {
+/** `POST /api/changes/{id}/comments` — the agent's single comment-posting
+ * path. With `thread_id` it replies to that thread; absent, it opens a new
+ * thread on the change. */
+export interface CreateCommentRequest {
+  thread_id?: number | null;
+  /** New thread only; defaults to the change's latest revision. */
+  revision?: number;
+  file?: string;
+  line?: number;
+  side?: CommentSide;
+  range?: CommentRange;
   body: string;
-  /** Thread-resolution decision: true resolves, false reopens, omitted
-   * leaves it unchanged. */
+  /** New thread: initial state. Reply: resolve/reopen decision. */
   resolved?: boolean;
 }
 
@@ -317,8 +356,8 @@ export interface FeedbackChange {
   unresolved: number;
   /** Latest review, null if none. */
   review: FeedbackReview | null;
-  /** That review's comments only, plus still-unresolved threads from earlier reviews. */
-  comments: Comment[];
+  /** The latest review's threads, plus still-unresolved threads from earlier reviews. */
+  threads: Thread[];
 }
 
 export interface FeedbackReview {
@@ -331,7 +370,7 @@ export interface FeedbackReview {
 export interface LogEntry {
   /** 0-based position in the chain's log. */
   idx: number;
-  /** revisions | review | reply | partial | chain_closed */
+  /** revisions | review | comment | partial | chain_closed */
   kind: string;
   created_at: string;
   /** Kind-specific; shapes in data-model.md "Payloads". */

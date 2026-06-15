@@ -17,6 +17,8 @@ import {
   commentCountLabel,
   commentPlacement,
   draftAnchor,
+  threadKey,
+  type UiThread,
 } from "../../lib/comments";
 import type { IntralineRange } from "../../lib/diffview";
 import {
@@ -38,7 +40,7 @@ import { selectionAnchorSide } from "../../lib/selection";
 import type { DraftTarget } from "../../pages/reviewContext";
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
-import CommentThread, { type Thread } from "../CommentThread";
+import CommentThread from "../CommentThread";
 
 /** A commented char window to tint on one line; `active` is the open
  * editor's pending selection (brighter chrome). */
@@ -123,7 +125,7 @@ export default function DiffFileView({
 }: {
   file: DiffFile;
   layout: "unified" | "split";
-  threads: Thread[];
+  threads: UiThread[];
   domId: string;
   collapsed: boolean;
   onToggle: () => void;
@@ -160,14 +162,14 @@ export default function DiffFileView({
   // (docs/api.md "Comment placement"). A thread pinned to a revision that
   // is neither FROM nor TO is dropped — it is not part of this diff.
   // File-level comments (no line) have no column; they group at the top.
-  const topThreads: Thread[] = [];
-  const inline = new Map<string, Thread[]>();
+  const topThreads: UiThread[] = [];
+  const inline = new Map<string, UiThread[]>();
   for (const t of threads) {
-    if (t.root.line === null) {
+    if (t.line === null) {
       topThreads.push(t);
       continue;
     }
-    const p = commentPlacement(t.root, ctx.selected, ctx.against);
+    const p = commentPlacement(t, ctx.selected, ctx.against);
     if (!p) continue;
     const key = `${p.side}:${p.line}`;
     if (present.has(key)) {
@@ -241,9 +243,9 @@ export default function DiffFileView({
       active: boolean;
     }[] = [];
     for (const t of threads) {
-      if (!t.root.range) continue;
-      const p = commentPlacement(t.root, ctx.selected, ctx.against);
-      if (p) paints.push({ side: p.side, range: t.root.range, active: false });
+      if (!t.range) continue;
+      const p = commentPlacement(t, ctx.selected, ctx.against);
+      if (p) paints.push({ side: p.side, range: t.range, active: false });
     }
     const et = ctx.editingTarget;
     if (et?.range && et.file === file.path) {
@@ -276,7 +278,7 @@ export default function DiffFileView({
     const items: ReactNode[] = [];
     for (const t of inline.get(`${side}:${no}`) ?? []) {
       items.push(
-        <div className="meta-item" key={`t-${side}-${t.root.id}`}>
+        <div className="meta-item" key={`t-${side}-${threadKey(t)}`}>
           <CommentThread thread={t} changeId={ctx.changeId} />
         </div>,
       );
@@ -461,21 +463,18 @@ export default function DiffFileView({
             <div className="outdated-group">
               <div className="outdated-title">Comments not on a shown line</div>
               {topThreads.map((t) => (
-                <div className="outdated-item" key={t.root.id}>
+                <div className="outdated-item" key={threadKey(t)}>
                   <div className="line-excerpt">
                     <span className="excerpt-line">
-                      r{t.root.revision}
+                      r{t.revision}
                       {/* Label the column it renders under (placement side),
                           not the raw stored side — an interdiff-left thread
                           is stored "new" on the FROM revision. */}
-                      {t.root.line !== null
-                        ? ` · ${commentPlacement(t.root, ctx.selected, ctx.against)?.side ?? t.root.side}`
+                      {t.line !== null
+                        ? ` · ${commentPlacement(t, ctx.selected, ctx.against)?.side ?? t.side}`
                         : ""}
                     </span>
-                    <Code
-                      text={t.root.line_text ?? "(file comment)"}
-                      lang={lang}
-                    />
+                    <Code text={t.line_text ?? "(file comment)"} lang={lang} />
                   </div>
                   <CommentThread thread={t} changeId={ctx.changeId} />
                 </div>

@@ -20,17 +20,10 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { createDraft, getChain, getChange, getDiff } from "../api/client";
-import type {
-  ChangeDetail,
-  Comment,
-  Review,
-  Revision,
-  Verdict,
-} from "../api/types";
+import type { ChangeDetail, Review, Revision, Verdict } from "../api/types";
 import { StatusChip } from "../components/badges";
 import ChainNav from "../components/ChainNav";
 import CommentEditor from "../components/CommentEditor";
-import type { Thread } from "../components/CommentThread";
 import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
 import FileRail from "../components/diff/FileRail";
@@ -44,9 +37,13 @@ import {
   toggle,
 } from "../lib/collapse";
 import {
+  assembleThreads,
   commentCountLabel,
   commentPlacement,
+  pendingUnresolvedCount,
   threadCountByRevision,
+  threadKey,
+  type UiThread,
 } from "../lib/comments";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { displayPath, fileDomId } from "../lib/diffview";
@@ -75,18 +72,6 @@ const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
   "cross-file": "selection crosses file sections",
   "hunk-gap": "selection spans a hunk gap",
 };
-
-function buildThreads(comments: Comment[]): Thread[] {
-  const roots = comments
-    .filter((c) => c.parent_id === null)
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
-  return roots.map((root) => ({
-    root,
-    replies: comments
-      .filter((c) => c.parent_id === root.id)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-  }));
-}
 
 /** Resolve the ?against param into a diff base for the selected revision.
  * Grammar: "base" → explicit full diff vs parent; "M" → interdiff
@@ -364,16 +349,19 @@ export default function ReviewPage() {
     [changeId, selected, against, editingTarget],
   );
 
+  // The reviewer's view of every thread: published threads merged with their
+  // pending drafts, plus draft-only new threads (lib/comments). Assembled
+  // once and reused for the diff grouping and the per-revision counts.
   const threads = useMemo(
-    () => buildThreads(change?.comments ?? []),
-    [change?.comments],
+    () => assembleThreads(change?.threads ?? [], change?.drafts ?? []),
+    [change?.threads, change?.drafts],
   );
 
   // Per-revision thread totals for the diff-range dropdowns (not filtered
   // by the shown range — each revision's own count).
   const revisionCommentCounts = useMemo(
-    () => threadCountByRevision(change?.comments ?? []),
-    [change?.comments],
+    () => threadCountByRevision(threads),
+    [threads],
   );
 
   const navigate = useNavigate();
@@ -528,18 +516,15 @@ export default function ReviewPage() {
   // revision drops out — of the diff, the rail counts, and the orphan
   // group alike (docs/api.md "Comment placement").
   const threadsByFile = useMemo(() => {
-    const map = new Map<string, Thread[]>();
+    const map = new Map<string, UiThread[]>();
     for (const t of threads) {
-      if (t.root.file === null) continue;
-      if (
-        t.root.line !== null &&
-        commentPlacement(t.root, selected, against) === null
-      )
+      if (t.file === null) continue;
+      if (t.line !== null && commentPlacement(t, selected, against) === null)
         continue;
       const file = files.find(
-        (f) => f.path === t.root.file || f.old_path === t.root.file,
+        (f) => f.path === t.file || f.old_path === t.file,
       );
-      const key = file ? file.path : t.root.file;
+      const key = file ? file.path : t.file;
       const list = map.get(key) ?? [];
       list.push(t);
       map.set(key, list);
@@ -583,7 +568,7 @@ export default function ReviewPage() {
     setEditingTarget(null);
     return true;
   };
-  const changeLevelThreads = threads.filter((t) => t.root.file === null);
+  const changeLevelThreads = threads.filter((t) => t.file === null);
   const orphanFileThreads = [...threadsByFile.entries()].filter(
     ([path]) => !files.some((f) => f.path === path),
   );
@@ -755,7 +740,7 @@ export default function ReviewPage() {
                 <div className="outdated-title">Change discussion</div>
                 {changeLevelThreads.map((t) => (
                   <CommentThread
-                    key={t.root.id}
+                    key={threadKey(t)}
                     thread={t}
                     changeId={changeId}
                   />
@@ -827,16 +812,16 @@ export default function ReviewPage() {
                       {displayPath(path)}
                     </div>
                     {fileThreads.map((t) => (
-                      <div className="outdated-item" key={t.root.id}>
-                        {t.root.line_text ? (
+                      <div className="outdated-item" key={threadKey(t)}>
+                        {t.line_text ? (
                           <div className="line-excerpt">
                             <span className="excerpt-line">
-                              r{t.root.revision}
-                              {t.root.line !== null ? `:${t.root.line}` : ""}
+                              r{t.revision}
+                              {t.line !== null ? `:${t.line}` : ""}
                             </span>
                             <span
                               dangerouslySetInnerHTML={{
-                                __html: highlightLine(t.root.line_text, null),
+                                __html: highlightLine(t.line_text, null),
                               }}
                             />
                           </div>
@@ -855,6 +840,7 @@ export default function ReviewPage() {
           change={change}
           chain={chain}
           selectedRevision={selected}
+          unresolved={pendingUnresolvedCount(threads)}
           replyOpen={replyOpen}
           onReplyOpenChange={setReplyOpen}
         />

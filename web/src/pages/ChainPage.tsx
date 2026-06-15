@@ -44,10 +44,10 @@ function ChangeRow({ change }: { change: ChangeSummary }) {
       </td>
       <td className="count-cell">
         <span className="counts">
-          {counts.published_comments > 0 && (
+          {counts.threads > 0 && (
             <span title="published comments">
-              {counts.published_comments} comment
-              {counts.published_comments > 1 ? "s" : ""}
+              {counts.threads} comment
+              {counts.threads > 1 ? "s" : ""}
             </span>
           )}
           {counts.drafts > 0 && (

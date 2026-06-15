@@ -1,23 +1,31 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { createDraft, deleteDraft, updateDraft } from "../api/client";
-import type { Comment } from "../api/types";
+import type { Draft, ThreadComment } from "../api/types";
+import type { UiThread } from "../lib/comments";
 import { pendingResolved } from "../lib/comments";
 import { timeAgo } from "../lib/time";
 import CommentEditor from "./CommentEditor";
 
-export interface Thread {
-  root: Comment;
-  replies: Comment[];
+/** A published comment, read-only: it has no id/state/resolved and is never
+ * editable (only the reviewer's own drafts are). */
+function PublishedComment({ comment }: { comment: ThreadComment }) {
+  return (
+    <div className="comment">
+      <div className="comment-head">
+        <span className={`author author-${comment.author}`}>
+          {comment.author.toUpperCase()}
+        </span>
+        <span className="comment-time">{timeAgo(comment.created_at)}</span>
+      </div>
+      <div className="comment-body">{comment.body}</div>
+    </div>
+  );
 }
 
-function CommentView({
-  comment,
-  changeId,
-}: {
-  comment: Comment;
-  changeId: number;
-}) {
+/** A pending draft: editable (Edit/Delete), with the DRAFT badge. An
+ * empty-body reply draft stages a resolution only — render the intent. */
+function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const invalidate = () =>
@@ -25,34 +33,30 @@ function CommentView({
 
   const update = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
-      updateDraft(comment.id, vars),
+      updateDraft(draft.id, vars),
     onSuccess: () => {
       setEditing(false);
       void invalidate();
     },
   });
   const remove = useMutation({
-    mutationFn: () => deleteDraft(comment.id),
+    mutationFn: () => deleteDraft(draft.id),
     onSuccess: invalidate,
   });
 
-  const isDraft = comment.state === "draft";
   // A reply draft carries a resolve decision; offer the checkbox when editing
-  // it. A root/new-comment draft has none (docs/api.md "Thread resolution").
-  const editResolved =
-    comment.parent_id !== null ? comment.resolved : undefined;
+  // it. A new-thread draft has none (docs/api.md "Thread resolution").
+  const editResolved = draft.thread_id !== null ? draft.resolved : undefined;
   // An empty-body draft stages a resolution only — render the intent.
-  const resolutionOnly = isDraft && comment.body.trim().length === 0;
+  const resolutionOnly = draft.body.trim().length === 0;
 
   return (
-    <div className={`comment ${isDraft ? "comment-draft" : ""}`}>
+    <div className="comment comment-draft">
       <div className="comment-head">
-        <span className={`author author-${comment.author}`}>
-          {comment.author.toUpperCase()}
-        </span>
-        {isDraft ? <span className="badge badge-amber">DRAFT</span> : null}
-        <span className="comment-time">{timeAgo(comment.created_at)}</span>
-        {isDraft && !editing ? (
+        <span className="author author-reviewer">REVIEWER</span>
+        <span className="badge badge-amber">DRAFT</span>
+        <span className="comment-time">{timeAgo(draft.created_at)}</span>
+        {!editing ? (
           <span className="comment-tools">
             <button
               className="linkish"
@@ -76,7 +80,7 @@ function CommentView({
       </div>
       {editing ? (
         <CommentEditor
-          initial={comment.body}
+          initial={draft.body}
           initialResolved={editResolved}
           saving={update.isPending}
           onSave={(body, resolved) => {
@@ -88,10 +92,10 @@ function CommentView({
         />
       ) : resolutionOnly ? (
         <div className="comment-body comment-resolution-only">
-          {comment.resolved ? "Resolving this thread" : "Reopening this thread"}
+          {draft.resolved ? "Resolving this thread" : "Reopening this thread"}
         </div>
       ) : (
-        <div className="comment-body">{comment.body}</div>
+        <div className="comment-body">{draft.body}</div>
       )}
     </div>
   );
@@ -106,41 +110,44 @@ interface ThreadEditor {
 }
 
 /**
- * A comment thread: root + replies, with reply / resolve / reopen actions
- * that each open the editor with the resolve checkbox pre-set. The decision
- * is staged on a draft reply and applied when the review publishes; the badge
- * shows the pending state. Draft members get dashed chrome via .comment-draft.
+ * A comment thread: published comments + pending drafts, with reply / resolve
+ * / reopen actions that each open the editor with the resolve checkbox
+ * pre-set. The decision is staged on a draft reply and applied when the review
+ * publishes; the badge shows the pending state. Drafts get dashed chrome via
+ * .comment-draft. A draft-only thread (`id === null`) is just its editable
+ * draft — no published comments and no actions yet.
  */
 export default function CommentThread({
   thread,
   changeId,
 }: {
-  thread: Thread;
+  thread: UiThread;
   changeId: number;
 }) {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<ThreadEditor | null>(null);
-  const { root, replies } = thread;
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["change", changeId] });
 
   // The thread's resolution as it will be after pending drafts publish.
-  const resolved = pendingResolved(root, replies);
-  const pending = resolved !== root.resolved;
+  const resolved = pendingResolved(thread);
+  const pending = resolved !== thread.resolved;
 
-  // Reply / resolve / reopen all stage a draft reply that copies the root's
+  // Reply / resolve / reopen all stage a draft reply that copies the thread's
   // whole anchor — including its revision, so the copied file/line/range stay
   // the coordinates they were written in (the server's agent replies match).
   const stage = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
       createDraft(changeId, {
-        revision: root.revision,
-        ...(root.file !== null ? { file: root.file } : {}),
-        ...(root.line !== null ? { line: root.line } : {}),
-        side: root.side,
-        ...(root.range !== null ? { range: root.range } : {}),
+        revision: thread.revision,
+        ...(thread.file !== null ? { file: thread.file } : {}),
+        ...(thread.line !== null ? { line: thread.line } : {}),
+        side: thread.side,
+        ...(thread.range !== null ? { range: thread.range } : {}),
         body: vars.body,
-        parent_id: root.id,
+        // Always a published thread here — the actions that open the editor
+        // render only when `thread.id !== null` (the !isDraftThread guard).
+        ...(thread.id !== null ? { thread_id: thread.id } : {}),
         ...(vars.resolved !== undefined ? { resolved: vars.resolved } : {}),
       }),
     onSuccess: () => {
@@ -149,7 +156,7 @@ export default function CommentThread({
     },
   });
 
-  const isDraftThread = root.state === "draft";
+  const isDraftThread = thread.id === null;
 
   return (
     <div
@@ -157,9 +164,11 @@ export default function CommentThread({
         resolved ? "thread-resolved" : ""
       }`}
     >
-      <CommentView comment={root} changeId={changeId} />
-      {replies.map((r) => (
-        <CommentView key={r.id} comment={r} changeId={changeId} />
+      {thread.comments.map((c, i) => (
+        <PublishedComment key={i} comment={c} />
+      ))}
+      {thread.drafts.map((d) => (
+        <DraftComment key={d.id} draft={d} changeId={changeId} />
       ))}
       {editor ? (
         <CommentEditor

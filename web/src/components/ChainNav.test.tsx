@@ -35,7 +35,7 @@ function change(
     last_reviewed_revision: null,
     commit_sha: `sha${id}`,
     short_sha: `sha${id}`,
-    counts: { revisions: 1, published_comments: 0, drafts: 0, unresolved },
+    counts: { revisions: 1, threads: 0, drafts: 0, unresolved },
   };
 }
 

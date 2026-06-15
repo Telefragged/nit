@@ -6,9 +6,9 @@ import type {
   Chain,
   ChainList,
   ChangeDetail,
-  Comment,
   CreateDraftRequest,
   Diff,
+  Draft,
   Health,
   RepoList,
   SubmitReviewRequest,
@@ -100,10 +100,10 @@ export const getDiff = (changeId: number, revision: number, against?: number) =>
 // Drafts
 
 export const createDraft = (changeId: number, draft: CreateDraftRequest) =>
-  request<Comment>("POST", `/changes/${changeId}/drafts`, draft);
+  request<Draft>("POST", `/changes/${changeId}/drafts`, draft);
 
 export const updateDraft = (id: number, req: UpdateDraftRequest) =>
-  request<Comment>("PATCH", `/drafts/${id}`, req);
+  request<Draft>("PATCH", `/drafts/${id}`, req);
 
 export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 

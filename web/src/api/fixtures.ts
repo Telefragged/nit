@@ -29,19 +29,19 @@ import type {
   ChangeDetail,
   ChangeStatus,
   ChangeSummary,
-  Comment,
-  CommentAuthor,
   CommentRange,
   CommentSide,
-  CommentState,
   CreateDraftRequest,
   Diff,
   DiffFile,
+  Draft,
   Line,
   Repo,
   Review,
   Revision,
   SubmitReviewRequest,
+  Thread,
+  ThreadComment,
   Verdict,
 } from "./types";
 
@@ -133,22 +133,39 @@ interface ChangeRecord {
   diffs: Record<string, Diff>;
 }
 
-interface CommentRecord {
+/** A published thread (its anchor, rolled-up resolution and conversation) —
+ * the mutable store shape behind the wire's {@link Thread}. */
+interface ThreadRecord {
   id: number;
   change_id: number;
   revision: number;
-  parent_id: number | null;
-  author: CommentAuthor;
   file: string | null;
   line: number | null;
   side: CommentSide;
-  /** Selected-text anchor; most fixture comments are whole-line. */
+  /** Selected-text anchor; most fixture threads are whole-line. */
+  range?: CommentRange | null;
+  line_text: string | null;
+  resolved: boolean;
+  comments: ThreadComment[];
+  created_at: string;
+  updated_at: string;
+}
+
+/** A reviewer's unpublished comment: a new thread (`thread_id` null) or a
+ * reply to a published one (`thread_id` set). */
+interface DraftRecord {
+  id: number;
+  change_id: number;
+  thread_id: number | null;
+  revision: number;
+  file: string | null;
+  line: number | null;
+  side: CommentSide;
   range?: CommentRange | null;
   line_text: string | null;
   body: string;
-  state: CommentState;
+  /** The staged thread-resolution decision. */
   resolved: boolean;
-  review_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -1184,25 +1201,29 @@ const changes: ChangeRecord[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Comments (drafts + published; anchors served verbatim — the client
-// places them by diff range, docs/api.md "Comment placement")
+// Threads + drafts (published threads carry their conversation; reviewer
+// drafts reply to one or open a new thread; anchors served verbatim — the
+// client places them by diff range, docs/api.md "Comment placement")
 
-const comments: CommentRecord[] = [
+const threads: ThreadRecord[] = [
   // change 10 — a change-level remark, published with the approval.
   {
     id: 70,
     change_id: 10,
     revision: 1,
-    parent_id: null,
-    author: "reviewer",
     file: null,
     line: null,
     side: "new",
     line_text: null,
-    body: "Consider a partial index on revoked=0 if the table grows; not blocking.",
-    state: "published",
     resolved: true,
-    review_id: 4,
+    comments: [
+      {
+        author: "reviewer",
+        body: "Consider a partial index on revoked=0 if the table grows; not blocking.",
+        review_id: 4,
+        created_at: ago(22 * 60),
+      },
+    ],
     created_at: ago(22 * 60),
     updated_at: ago(22 * 60),
   },
@@ -1211,38 +1232,30 @@ const comments: CommentRecord[] = [
     id: 71,
     change_id: 11,
     revision: 1,
-    parent_id: null,
-    author: "reviewer",
     file: "src/auth/rotate.rs",
     line: 22,
     side: "new",
     line_text: "        let fresh = Token::generate(&mut self.rng.lock());",
-    body:
-      "Locking the RNG mutex inside rotate() serializes every refresh — " +
-      "worth a thread-local RNG?",
-    state: "published",
     resolved: true,
-    review_id: 5,
+    comments: [
+      {
+        author: "reviewer",
+        body:
+          "Locking the RNG mutex inside rotate() serializes every refresh — " +
+          "worth a thread-local RNG?",
+        review_id: 5,
+        created_at: ago(21 * 60),
+      },
+      {
+        author: "agent",
+        body:
+          "ChaCha12 keystream behind the lock costs ~11ns per token; a " +
+          "thread-local would add per-thread reseeding. Keeping the mutex.",
+        review_id: null,
+        created_at: ago(110),
+      },
+    ],
     created_at: ago(21 * 60),
-    updated_at: ago(21 * 60),
-  },
-  {
-    id: 72,
-    change_id: 11,
-    revision: 1,
-    parent_id: 71,
-    author: "agent",
-    file: "src/auth/rotate.rs",
-    line: 22,
-    side: "new",
-    line_text: "        let fresh = Token::generate(&mut self.rng.lock());",
-    body:
-      "ChaCha12 keystream behind the lock costs ~11ns per token; a " +
-      "thread-local would add per-thread reseeding. Keeping the mutex.",
-    state: "published",
-    resolved: true,
-    review_id: null,
-    created_at: ago(110),
     updated_at: ago(110),
   },
   // change 11 — unresolved thread on store.rs.
@@ -1250,39 +1263,31 @@ const comments: CommentRecord[] = [
     id: 73,
     change_id: 11,
     revision: 1,
-    parent_id: null,
-    author: "reviewer",
     file: "src/auth/store.rs",
     line: 58,
     side: "new",
     line_text: "        let conn = self.pool.clone().get();",
-    body:
-      "Why clone the pool for a second connection? lookup() and " +
-      "mark_rotated() on different connections lose the transaction.",
-    state: "published",
     resolved: false,
-    review_id: 5,
+    comments: [
+      {
+        author: "reviewer",
+        body:
+          "Why clone the pool for a second connection? lookup() and " +
+          "mark_rotated() on different connections lose the transaction.",
+        review_id: 5,
+        created_at: ago(21 * 60),
+      },
+      {
+        author: "agent",
+        body:
+          "The pool connection is held across an await in the caller; cloning " +
+          "avoids a deadlock. Can wrap both calls in one connection if you " +
+          "prefer — say the word.",
+        review_id: null,
+        created_at: ago(105),
+      },
+    ],
     created_at: ago(21 * 60),
-    updated_at: ago(21 * 60),
-  },
-  {
-    id: 74,
-    change_id: 11,
-    revision: 1,
-    parent_id: 73,
-    author: "agent",
-    file: "src/auth/store.rs",
-    line: 58,
-    side: "new",
-    line_text: "        let conn = self.pool.clone().get();",
-    body:
-      "The pool connection is held across an await in the caller; cloning " +
-      "avoids a deadlock. Can wrap both calls in one connection if you " +
-      "prefer — say the word.",
-    state: "published",
-    resolved: false,
-    review_id: null,
-    created_at: ago(105),
     updated_at: ago(105),
   },
   // change 11 — unresolved range thread: the selection spans the
@@ -1292,19 +1297,22 @@ const comments: CommentRecord[] = [
     id: 79,
     change_id: 11,
     revision: 1,
-    parent_id: null,
-    author: "reviewer",
     file: "src/auth/rotate.rs",
     line: 23,
     side: "new",
     range: { start_line: 22, start_char: 8, end_line: 23, end_char: 50 },
     line_text: "        self.store.mark_rotated(entry.id, &fresh);",
-    body:
-      "Generate-then-mark isn't atomic: a crash between these two " +
-      "statements hands out a token the store never recorded.",
-    state: "published",
     resolved: false,
-    review_id: 5,
+    comments: [
+      {
+        author: "reviewer",
+        body:
+          "Generate-then-mark isn't atomic: a crash between these two " +
+          "statements hands out a token the store never recorded.",
+        review_id: 5,
+        created_at: ago(21 * 60),
+      },
+    ],
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
   },
@@ -1314,38 +1322,30 @@ const comments: CommentRecord[] = [
     id: 75,
     change_id: 11,
     revision: 1,
-    parent_id: null,
-    author: "reviewer",
     file: "src/auth/rotate.rs",
     line: 21,
     side: "new",
     line_text: "        let entry = self.store.lookup(presented).unwrap();",
-    body:
-      "This unwrap is a production panic on any unknown token — return a " +
-      "typed error and map it to 401 at the edge.",
-    state: "published",
     resolved: true,
-    review_id: 5,
+    comments: [
+      {
+        author: "reviewer",
+        body:
+          "This unwrap is a production panic on any unknown token — return a " +
+          "typed error and map it to 401 at the edge.",
+        review_id: 5,
+        created_at: ago(21 * 60),
+      },
+      {
+        author: "agent",
+        body:
+          "Done in r2: lookup() errors are typed (RotateError) and reuse " +
+          "now revokes the family.",
+        review_id: null,
+        created_at: ago(100),
+      },
+    ],
     created_at: ago(21 * 60),
-    updated_at: ago(21 * 60),
-  },
-  {
-    id: 76,
-    change_id: 11,
-    revision: 1,
-    parent_id: 75,
-    author: "agent",
-    file: "src/auth/rotate.rs",
-    line: 21,
-    side: "new",
-    line_text: "        let entry = self.store.lookup(presented).unwrap();",
-    body:
-      "Done in r2: lookup() errors are typed (RotateError) and reuse " +
-      "now revokes the family.",
-    state: "published",
-    resolved: true,
-    review_id: null,
-    created_at: ago(100),
     updated_at: ago(100),
   },
   // change 11 — resolved thread on the commit message: the r2 reword
@@ -1354,118 +1354,52 @@ const comments: CommentRecord[] = [
     id: 77,
     change_id: 11,
     revision: 1,
-    parent_id: null,
-    author: "reviewer",
     file: COMMIT_MSG_PATH,
     line: 5,
     side: "new",
     // Single-line partial selection: "the legitimate client refreshes."
     range: { start_line: 5, start_char: 7, end_line: 5, end_char: 40 },
     line_text: "moment the legitimate client refreshes.",
-    body:
-      "The body never says what happens on token *reuse* — state the " +
-      "family-revocation behavior here; it's the headline of this change.",
-    state: "published",
     resolved: true,
-    review_id: 5,
+    comments: [
+      {
+        author: "reviewer",
+        body:
+          "The body never says what happens on token *reuse* — state the " +
+          "family-revocation behavior here; it's the headline of this change.",
+        review_id: 5,
+        created_at: ago(21 * 60),
+      },
+      {
+        author: "agent",
+        body:
+          "Reworded: the message now calls out family revocation " +
+          "(RFC 6819 §5.2.2.3).",
+        review_id: null,
+        created_at: ago(96),
+      },
+    ],
     created_at: ago(21 * 60),
-    updated_at: ago(21 * 60),
-  },
-  {
-    id: 78,
-    change_id: 11,
-    revision: 1,
-    parent_id: 77,
-    author: "agent",
-    file: COMMIT_MSG_PATH,
-    line: 5,
-    side: "new",
-    // Replies copy the root's whole anchor, range included.
-    range: { start_line: 5, start_char: 7, end_line: 5, end_char: 40 },
-    line_text: "moment the legitimate client refreshes.",
-    body:
-      "Reworded: the message now calls out family revocation " +
-      "(RFC 6819 §5.2.2.3).",
-    state: "published",
-    resolved: true,
-    review_id: null,
-    created_at: ago(96),
     updated_at: ago(96),
-  },
-  // change 11 — drafts on revision 2: two on the new side, plus one on the
-  // old (red) side — a remark on the pre-change code, which the old column
-  // of the base → r2 diff is for (docs/api.md "Comment placement").
-  {
-    id: 100,
-    change_id: 11,
-    revision: 2,
-    parent_id: null,
-    author: "reviewer",
-    file: "src/auth/rotate.rs",
-    line: 26,
-    side: "new",
-    line_text:
-      "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
-    body: "Put the RFC section in the error message too — operators grep for it.",
-    state: "draft",
-    resolved: false,
-    review_id: null,
-    created_at: ago(30),
-    updated_at: ago(30),
-    // The anchored line does not exist in revision 1's tree.
-  },
-  {
-    id: 101,
-    change_id: 11,
-    revision: 2,
-    parent_id: null,
-    author: "reviewer",
-    file: "tests/rotation.rs",
-    line: 13,
-    side: "new",
-    line_text: "    let _ = rotator.rotate(&seeded).unwrap();",
-    body: "Also assert the family row is revoked — this only checks the error value.",
-    state: "draft",
-    resolved: false,
-    review_id: null,
-    created_at: ago(25),
-    updated_at: ago(25),
-    // tests/rotation.rs does not exist at revision 1.
-  },
-  {
-    id: 102,
-    change_id: 11,
-    revision: 2,
-    parent_id: null,
-    author: "reviewer",
-    file: "src/auth/rotate.rs",
-    line: 20,
-    side: "old",
-    line_text: "    pub fn rotate(&self, presented: &str) -> Token {",
-    body:
-      "The old signature returned Token directly; every caller now has to " +
-      "handle the Result — make sure none silently unwraps it.",
-    state: "draft",
-    resolved: false,
-    review_id: null,
-    created_at: ago(22),
-    updated_at: ago(22),
   },
   // change 20 — two unresolved threads from the request_changes review.
   {
     id: 80,
     change_id: 20,
     revision: 1,
-    parent_id: null,
-    author: "reviewer",
     file: "src/wal.rs",
     line: 94,
     side: "new",
     line_text: "        if self.backlog_bytes() < CHECKPOINT_BACKLOG {",
-    body: "Hard-coded 4MiB will thrash small deployments — read it from Config.",
-    state: "published",
     resolved: false,
-    review_id: 6,
+    comments: [
+      {
+        author: "reviewer",
+        body: "Hard-coded 4MiB will thrash small deployments — read it from Config.",
+        review_id: 6,
+        created_at: ago(3 * 60),
+      },
+    ],
     created_at: ago(3 * 60),
     updated_at: ago(3 * 60),
   },
@@ -1473,22 +1407,80 @@ const comments: CommentRecord[] = [
     id: 81,
     change_id: 20,
     revision: 1,
-    parent_id: null,
-    author: "reviewer",
     file: "src/wal/backoff.rs",
     line: 3,
     side: "old",
     line_text: "pub fn jitter(base: Duration) -> Duration {",
-    body: "compactor.rs still calls jitter(); this won't build.",
-    state: "published",
     resolved: false,
-    review_id: 6,
+    comments: [
+      {
+        author: "reviewer",
+        body: "compactor.rs still calls jitter(); this won't build.",
+        review_id: 6,
+        created_at: ago(3 * 60),
+      },
+    ],
     created_at: ago(3 * 60),
     updated_at: ago(3 * 60),
   },
 ];
 
-let nextCommentId = 200;
+// change 11 — the reviewer's in-progress drafts on revision 2: two new
+// threads on the new side, plus one on the old (red) side — a remark on the
+// pre-change code, which the old column of the base → r2 diff is for
+// (docs/api.md "Comment placement"). All open new threads (thread_id null).
+const drafts: DraftRecord[] = [
+  {
+    id: 100,
+    change_id: 11,
+    thread_id: null,
+    revision: 2,
+    file: "src/auth/rotate.rs",
+    line: 26,
+    side: "new",
+    line_text:
+      "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
+    body: "Put the RFC section in the error message too — operators grep for it.",
+    resolved: false,
+    created_at: ago(30),
+    updated_at: ago(30),
+    // The anchored line does not exist in revision 1's tree.
+  },
+  {
+    id: 101,
+    change_id: 11,
+    thread_id: null,
+    revision: 2,
+    file: "tests/rotation.rs",
+    line: 13,
+    side: "new",
+    line_text: "    let _ = rotator.rotate(&seeded).unwrap();",
+    body: "Also assert the family row is revoked — this only checks the error value.",
+    resolved: false,
+    created_at: ago(25),
+    updated_at: ago(25),
+    // tests/rotation.rs does not exist at revision 1.
+  },
+  {
+    id: 102,
+    change_id: 11,
+    thread_id: null,
+    revision: 2,
+    file: "src/auth/rotate.rs",
+    line: 20,
+    side: "old",
+    line_text: "    pub fn rotate(&self, presented: &str) -> Token {",
+    body:
+      "The old signature returned Token directly; every caller now has to " +
+      "handle the Result — make sure none silently unwraps it.",
+    resolved: false,
+    created_at: ago(22),
+    updated_at: ago(22),
+  },
+];
+
+let nextDraftId = 200;
+let nextThreadId = 300;
 let nextReviewId = 50;
 
 // ---------------------------------------------------------------------------
@@ -1519,7 +1511,8 @@ function chainState(chain: ChainRecord): ChainState {
 }
 
 function changeSummary(c: ChangeRecord): ChangeSummary {
-  const own = comments.filter((x) => x.change_id === c.id);
+  const ownThreads = threads.filter((x) => x.change_id === c.id);
+  const ownDrafts = drafts.filter((x) => x.change_id === c.id);
   const latest = c.revisions[c.revisions.length - 1];
   if (!latest) throw new Error(`change ${c.id} has no revisions`);
   return {
@@ -1534,11 +1527,9 @@ function changeSummary(c: ChangeRecord): ChangeSummary {
     short_sha: latest.short_sha,
     counts: {
       revisions: c.revisions.length,
-      published_comments: own.filter((x) => x.state === "published").length,
-      drafts: own.filter((x) => x.state === "draft").length,
-      unresolved: own.filter(
-        (x) => x.state === "published" && x.parent_id === null && !x.resolved,
-      ).length,
+      threads: ownThreads.length,
+      drafts: ownDrafts.length,
+      unresolved: ownThreads.filter((x) => !x.resolved).length,
     },
   };
 }
@@ -1588,10 +1579,13 @@ function chainView(chain: ChainRecord): Chain {
   };
 }
 
-/** A comment record → its wire shape; anchors are served verbatim (the
+/** A thread/draft record → its wire shape; anchors are served verbatim (the
  * client places them by diff range, docs/api.md "Comment placement"). */
-function renderComment(c: CommentRecord): Comment {
-  return { ...c, range: c.range ?? null };
+function renderThread(t: ThreadRecord): Thread {
+  return { ...t, range: t.range ?? null };
+}
+function renderDraft(d: DraftRecord): Draft {
+  return { ...d, range: d.range ?? null };
 }
 
 function changeDetail(c: ChangeRecord): ChangeDetail {
@@ -1604,7 +1598,8 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
     subject: c.subject,
     last_reviewed_revision: c.last_reviewed_revision,
     revisions: c.revisions,
-    comments: comments.filter((x) => x.change_id === c.id).map(renderComment),
+    threads: threads.filter((x) => x.change_id === c.id).map(renderThread),
+    drafts: drafts.filter((x) => x.change_id === c.id).map(renderDraft),
     reviews: c.reviews,
   };
 }
@@ -1701,44 +1696,41 @@ export async function mockRequest(
     const req = body as CreateDraftRequest;
     const side: CommentSide = req.side ?? "new";
     const now = new Date().toISOString();
-    const record: CommentRecord = {
-      id: nextCommentId++,
+    const record: DraftRecord = {
+      id: nextDraftId++,
       change_id: c.id,
+      thread_id: req.thread_id ?? null,
       revision: req.revision,
-      parent_id: req.parent_id ?? null,
-      author: "reviewer",
       file: req.file ?? null,
       line: req.line ?? null,
       side,
       range: req.range ?? null,
       line_text: snapshotLineText(c, req.revision, req.file, req.line, side),
       body: req.body,
-      state: "draft",
       resolved: req.resolved ?? false,
-      review_id: null,
       created_at: now,
       updated_at: now,
     };
-    comments.push(record);
-    return renderComment(record);
+    drafts.push(record);
+    return renderDraft(record);
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "PATCH") {
     const id = Number(m[1]);
-    const c = comments.find((x) => x.id === id && x.state === "draft");
-    if (!c) return notFound(`draft ${m[1] ?? ""}`);
+    const d = drafts.find((x) => x.id === id);
+    if (!d) return notFound(`draft ${m[1] ?? ""}`);
     const req = body as { body: string; resolved?: boolean };
-    c.body = req.body;
-    if (req.resolved !== undefined) c.resolved = req.resolved;
-    c.updated_at = new Date().toISOString();
-    return renderComment(c);
+    d.body = req.body;
+    if (req.resolved !== undefined) d.resolved = req.resolved;
+    d.updated_at = new Date().toISOString();
+    return renderDraft(d);
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "DELETE") {
     const id = Number(m[1]);
-    const i = comments.findIndex((x) => x.id === id && x.state === "draft");
+    const i = drafts.findIndex((x) => x.id === id);
     if (i < 0) notFound(`draft ${m[1] ?? ""}`);
-    comments.splice(i, 1);
+    drafts.splice(i, 1);
     return undefined;
   }
 
@@ -1765,31 +1757,61 @@ export async function mockRequest(
       created_at: now,
     };
     c.reviews.push(review);
-    const published: Comment[] = [];
-    // Drain drafts in creation order, applying each staged resolution to its
-    // thread root (last wins); an empty-body draft resolves without becoming
-    // a comment (docs/api.md "Thread resolution").
-    const drafts = comments
-      .filter((x) => x.change_id === c.id && x.state === "draft")
+    // The threads this review created or added to, in touch order.
+    const touched = new Map<number, ThreadRecord>();
+    // Drain drafts in creation order: a reply appends to its thread and
+    // restages its resolution (last wins); a new-thread draft opens a thread;
+    // an empty-body draft resolves without leaving a comment (docs/api.md
+    // "Thread resolution").
+    const changeDrafts = drafts
+      .filter((x) => x.change_id === c.id)
       .sort((a, b) => a.id - b.id);
-    for (const d of drafts) {
-      // Apply the staged resolution to the thread root (read before the reply
-      // reset below) — last draft in creation order wins.
-      const root = comments.find((x) => x.id === (d.parent_id ?? d.id));
-      if (root) {
-        root.resolved = d.resolved;
-        root.updated_at = now;
+    for (const d of changeDrafts) {
+      const hasBody = d.body.trim() !== "";
+      if (d.thread_id !== null) {
+        // Reply to a published thread: restage its resolution, optionally add
+        // the message.
+        const thread = threads.find((x) => x.id === d.thread_id);
+        if (thread) {
+          thread.resolved = d.resolved;
+          thread.updated_at = now;
+          if (hasBody) {
+            thread.comments.push({
+              author: "reviewer",
+              body: d.body,
+              review_id: review.id,
+              created_at: now,
+            });
+          }
+          touched.set(thread.id, thread);
+        }
+      } else if (hasBody) {
+        // A new thread: opens open-or-resolved per its staged decision.
+        const thread: ThreadRecord = {
+          id: nextThreadId++,
+          change_id: c.id,
+          revision: d.revision,
+          file: d.file,
+          line: d.line,
+          side: d.side,
+          range: d.range ?? null,
+          line_text: d.line_text,
+          resolved: d.resolved,
+          comments: [
+            {
+              author: "reviewer",
+              body: d.body,
+              review_id: review.id,
+              created_at: now,
+            },
+          ],
+          created_at: now,
+          updated_at: now,
+        };
+        threads.push(thread);
+        touched.set(thread.id, thread);
       }
-      if (d.body.trim() === "") {
-        comments.splice(comments.indexOf(d), 1);
-        continue;
-      }
-      d.state = "published";
-      d.review_id = review.id;
-      d.updated_at = now;
-      // A reply's own resolved is false; the thread's state lives on its root.
-      if (d.parent_id !== null) d.resolved = false;
-      published.push(renderComment(d));
+      drafts.splice(drafts.indexOf(d), 1);
     }
     const statusByVerdict: Record<Verdict, ChangeStatus> = {
       approve: "approved",
@@ -1803,7 +1825,7 @@ export async function mockRequest(
     );
     const chain = chains.find((x) => x.id === c.chain_id);
     if (chain) chain.updated_at = now;
-    return { review, published_comments: published };
+    return { review, threads: [...touched.values()].map(renderThread) };
   }
 
   throw new ApiError(404, `mock: no route for ${method} ${path}`);

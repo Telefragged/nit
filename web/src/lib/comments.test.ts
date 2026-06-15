@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { Comment } from "../api/types";
-import type { CommentAnchor } from "./comments";
+import type { Draft, Thread } from "../api/types";
+import type { CommentAnchor, UiThread } from "./comments";
 import {
+  assembleThreads,
   commentCountLabel,
   commentPlacement,
   draftAnchor,
@@ -13,29 +14,83 @@ import {
 const anchor = (revision: number, side: "old" | "new", line: number | null) =>
   ({ revision, side, line }) satisfies CommentAnchor;
 
-/** Minimal comment for the counting tests — only revision/parent_id matter. */
-const comment = (
-  id: number,
-  revision: number,
-  parent_id: number | null = null,
-  state: "draft" | "published" = "published",
-): Comment => ({
-  id,
+/** A published thread anchored on src/main.rs; only the fields the test
+ * exercises are spelled out, the rest take sensible defaults. */
+const thread = (over: Partial<Thread> & { id: number }): Thread => ({
   change_id: 1,
-  revision,
-  parent_id,
-  author: "reviewer",
+  revision: 1,
+  file: "src/main.rs",
+  line: 1,
+  side: "new",
+  range: null,
+  line_text: null,
+  resolved: false,
+  comments: [],
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+  ...over,
+});
+
+/** A reviewer draft on src/main.rs (a new thread unless `thread_id` is set). */
+const draft = (over: Partial<Draft> & { id: number }): Draft => ({
+  change_id: 1,
+  thread_id: null,
+  revision: 1,
   file: "src/main.rs",
   line: 1,
   side: "new",
   range: null,
   line_text: null,
   body: "",
-  state,
   resolved: false,
-  review_id: null,
-  created_at: "",
-  updated_at: "",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+  ...over,
+});
+
+/** A UiThread built inline for the pending-state/count tests. */
+const ui = (over: Partial<UiThread> & { id: number | null }): UiThread => ({
+  revision: 1,
+  file: "src/main.rs",
+  line: 1,
+  side: "new",
+  range: null,
+  line_text: null,
+  resolved: false,
+  comments: [],
+  drafts: [],
+  created_at: "2026-01-01T00:00:00Z",
+  ...over,
+});
+
+describe("assembleThreads", () => {
+  it("merges a published thread with its reply drafts, oldest first", () => {
+    const t = thread({ id: 1, created_at: "t0" });
+    const d1 = draft({ id: 11, thread_id: 1, created_at: "t2", body: "later" });
+    const d0 = draft({ id: 10, thread_id: 1, created_at: "t1", body: "first" });
+    const [u] = assembleThreads([t], [d1, d0]);
+    expect(u?.id).toBe(1);
+    // Reply drafts collected onto the thread, sorted oldest-first.
+    expect(u?.drafts.map((d) => d.id)).toEqual([10, 11]);
+  });
+
+  it("turns a new-thread draft into a draft-only UiThread", () => {
+    const d = draft({ id: 20, thread_id: null, body: "new thread" });
+    const [u] = assembleThreads([], [d]);
+    expect(u?.id).toBeNull();
+    expect(u?.comments).toEqual([]);
+    expect(u?.drafts).toEqual([d]);
+    // The anchor comes from the lone draft.
+    expect(u?.line).toBe(d.line);
+  });
+
+  it("sorts published and draft-only threads together by creation time", () => {
+    const tA = thread({ id: 1, created_at: "t1" });
+    const tB = thread({ id: 2, created_at: "t3" });
+    const dOnly = draft({ id: 30, thread_id: null, created_at: "t2" });
+    const assembled = assembleThreads([tB, tA], [dOnly]);
+    expect(assembled.map((u) => u.id)).toEqual([1, null, 2]);
+  });
 });
 
 describe("commentPlacement", () => {
@@ -129,12 +184,11 @@ describe("draftAnchor", () => {
 });
 
 describe("threadCountByRevision", () => {
-  it("counts roots per revision, ignoring replies", () => {
+  it("counts UiThreads per revision", () => {
     const counts = threadCountByRevision([
-      comment(1, 1),
-      comment(2, 1),
-      comment(3, 1, 1), // reply to comment 1 — rides with its thread
-      comment(4, 2),
+      ui({ id: 1, revision: 1 }),
+      ui({ id: 2, revision: 1 }),
+      ui({ id: 3, revision: 2 }),
     ]);
     expect(counts.get(1)).toBe(2);
     expect(counts.get(2)).toBe(1);
@@ -142,98 +196,78 @@ describe("threadCountByRevision", () => {
     expect(counts.get(3)).toBeUndefined();
   });
 
-  it("counts a reviewer's drafts alongside published comments", () => {
+  it("counts a reviewer's draft-only threads alongside published ones", () => {
     const counts = threadCountByRevision([
-      comment(1, 2, null, "published"),
-      comment(2, 2, null, "draft"),
+      ui({ id: 1, revision: 2 }),
+      ui({ id: null, revision: 2 }),
     ]);
     expect(counts.get(2)).toBe(2);
   });
 
-  it("is empty for no comments", () => {
+  it("is empty for no threads", () => {
     expect(threadCountByRevision([]).size).toBe(0);
   });
 });
 
-/** A comment with explicit resolution fields for the pending-state tests. */
-const c = (over: Partial<Comment> & { id: number }): Comment => ({
-  ...comment(over.id, over.revision ?? 1, over.parent_id ?? null, over.state),
-  created_at: "2026-01-01T00:00:00Z",
-  ...over,
-});
-
 describe("pendingResolved", () => {
-  it("uses the published root when there are no drafts", () => {
-    expect(pendingResolved(c({ id: 1, resolved: true }), [])).toBe(true);
-    expect(pendingResolved(c({ id: 1, resolved: false }), [])).toBe(false);
+  it("uses the published resolution when there are no drafts", () => {
+    expect(pendingResolved(ui({ id: 1, resolved: true }))).toBe(true);
+    expect(pendingResolved(ui({ id: 1, resolved: false }))).toBe(false);
   });
 
-  it("lets a draft reply override the published root", () => {
-    const root = c({ id: 1, resolved: false, created_at: "t0" });
-    const reply = c({
-      id: 2,
-      parent_id: 1,
-      state: "draft",
-      resolved: true,
-      created_at: "t1",
+  it("lets a draft reply override the published resolution", () => {
+    const t = ui({
+      id: 1,
+      resolved: false,
+      drafts: [draft({ id: 2, thread_id: 1, resolved: true })],
     });
-    expect(pendingResolved(root, [reply])).toBe(true);
+    expect(pendingResolved(t)).toBe(true);
   });
 
   it("takes the newest draft when several stage decisions", () => {
-    const root = c({ id: 1, resolved: false, created_at: "t0" });
-    const r1 = c({
-      id: 2,
-      parent_id: 1,
-      state: "draft",
-      resolved: true,
-      created_at: "t1",
-    });
-    const r2 = c({
-      id: 3,
-      parent_id: 1,
-      state: "draft",
+    // assembleThreads keeps drafts oldest-first, so the last one wins.
+    const t = ui({
+      id: 1,
       resolved: false,
-      created_at: "t2",
+      drafts: [
+        draft({ id: 2, thread_id: 1, resolved: true, created_at: "t1" }),
+        draft({ id: 3, thread_id: 1, resolved: false, created_at: "t2" }),
+      ],
     });
-    expect(pendingResolved(root, [r1, r2])).toBe(false);
+    expect(pendingResolved(t)).toBe(false);
   });
 
-  it("reads a draft-only thread's own decision", () => {
-    expect(
-      pendingResolved(c({ id: 1, state: "draft", resolved: true }), []),
-    ).toBe(true);
+  it("reads a draft-only thread's own staged decision", () => {
+    const t = ui({
+      id: null,
+      drafts: [draft({ id: 2, thread_id: null, resolved: true })],
+    });
+    expect(pendingResolved(t)).toBe(true);
   });
 });
 
 describe("pendingUnresolvedCount", () => {
   it("counts threads open once pending drafts apply", () => {
-    const comments = [
-      // published resolved root + a draft reply reopening it → unresolved
-      c({ id: 1, resolved: true, created_at: "t0" }),
-      c({
-        id: 2,
-        parent_id: 1,
-        state: "draft",
-        resolved: false,
-        created_at: "t1",
-      }),
-      // published unresolved root + a draft reply resolving it → resolved
-      c({ id: 3, resolved: false, created_at: "t0" }),
-      c({
-        id: 4,
-        parent_id: 3,
-        state: "draft",
+    const threads = [
+      // published resolved + a draft reply reopening it → unresolved
+      ui({
+        id: 1,
         resolved: true,
-        created_at: "t1",
+        drafts: [draft({ id: 11, thread_id: 1, resolved: false })],
+      }),
+      // published unresolved + a draft reply resolving it → resolved
+      ui({
+        id: 2,
+        resolved: false,
+        drafts: [draft({ id: 12, thread_id: 2, resolved: true })],
       }),
       // a plain unresolved published thread → unresolved
-      c({ id: 5, resolved: false }),
+      ui({ id: 3, resolved: false }),
     ];
-    expect(pendingUnresolvedCount(comments)).toBe(2);
+    expect(pendingUnresolvedCount(threads)).toBe(2);
   });
 
-  it("is zero with no comments", () => {
+  it("is zero with no threads", () => {
     expect(pendingUnresolvedCount([])).toBe(0);
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { DiffFile } from "../../api/types";
+import type { UiThread } from "../../lib/comments";
 import { diffTotals, displayPath, statusLetter } from "../../lib/diffview";
-import type { Thread } from "../CommentThread";
 
 /** Left rail: every file in the diff with status letter, +/- counts and
  * comment markers. Selecting expands the file section and scrolls to it.
@@ -18,7 +18,7 @@ export default function FileRail({
   onToggleAll,
 }: {
   files: DiffFile[];
-  threadsByFile: Map<string, Thread[]>;
+  threadsByFile: Map<string, UiThread[]>;
   activeIndex: number | null;
   onSelect: (index: number) => void;
   allExpanded: boolean;
@@ -58,8 +58,8 @@ export default function FileRail({
       </div>
       {files.map((file, i) => {
         const threads = threadsByFile.get(file.path) ?? [];
-        const drafts = threads.filter((t) => t.root.state === "draft").length;
-        const published = threads.length - drafts;
+        const drafts = threads.filter((t) => t.id === null).length;
+        const published = threads.filter((t) => t.id !== null).length;
         const letter = statusLetter(file);
         return (
           <div
