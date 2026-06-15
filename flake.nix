@@ -7,6 +7,7 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    crane.url = "github:ipetkov/crane";
   };
 
   outputs =
@@ -14,6 +15,7 @@
       self,
       nixpkgs,
       rust-overlay,
+      crane,
     }:
     let
       systems = [
@@ -36,6 +38,30 @@
       # The pinned toolchain (rust-toolchain.toml) drives both the devShell
       # and the build, so contributors and CI compile with the same rustc.
       rustToolchainFor = pkgs: pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+      # crane wired to that toolchain: the shared source filter, the
+      # deps-only artifact cache, and the args every build and check reuse.
+      craneScopeFor =
+        pkgs:
+        let
+          craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
+          commonArgs = {
+            src = pkgs.lib.fileset.toSource {
+              root = ./.;
+              fileset = craneLib.fileset.commonCargoSources ./.;
+            };
+            strictDeps = true;
+            nativeBuildInputs = [ pkgs.pkg-config ];
+            buildInputs = [
+              pkgs.libgit2
+              pkgs.sqlite
+              pkgs.zlib
+            ];
+          };
+          cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+        in
+        {
+          inherit craneLib commonArgs cargoArtifacts;
+        };
     in
     {
       devShells = forAllSystems (
@@ -82,11 +108,7 @@
       packages = forAllSystems (
         pkgs:
         let
-          rustToolchain = rustToolchainFor pkgs;
-          rustPlatform = pkgs.makeRustPlatform {
-            cargo = rustToolchain;
-            rustc = rustToolchain;
-          };
+          inherit (craneScopeFor pkgs) craneLib commonArgs cargoArtifacts;
         in
         rec {
           nit-web = pkgs.buildNpmPackage {
@@ -101,26 +123,20 @@
             '';
           };
 
-          nit-unwrapped = rustPlatform.buildRustPackage {
-            pname = "nit";
-            version = "0.1.0";
-            src = ./.;
-            cargoLock.lockFile = ./Cargo.lock;
-            nativeBuildInputs = [ pkgs.pkg-config ];
-            buildInputs = [
-              pkgs.libgit2
-              pkgs.sqlite
-              pkgs.zlib
-            ];
-            # The test suite builds real repos and runs `git rebase` in the
-            # differential test; the sandbox has no git or identity config.
-            nativeCheckInputs = [ pkgs.git ];
-            preCheck = ''
-              export HOME=$TMPDIR
-              export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
-              export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
-            '';
-          };
+          nit-unwrapped = craneLib.buildPackage (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              # The test suite builds real repos and runs `git rebase` in the
+              # differential test; the sandbox has no git or identity config.
+              nativeCheckInputs = [ pkgs.git ];
+              preCheck = ''
+                export HOME=$TMPDIR
+                export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
+                export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
+              '';
+            }
+          );
 
           # The real product: nit with the built web UI baked in via env.
           nit =
