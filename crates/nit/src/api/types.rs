@@ -2,10 +2,15 @@
 //! truth for shapes; the frontend mirror is `web/src/api/types.ts`).
 //! Change the doc first, then both mirrors.
 //!
-//! Enumerated values (statuses, states, verdicts, kinds, sides) stay
-//! plain strings here, exactly as they appear on the wire.
+//! Enumerated values (statuses, states, verdicts, kinds, sides) are the
+//! shared serde enums of [`crate::enums`], re-exported here — never plain
+//! `String`s. Their serde renamings reproduce the wire spellings, so the
+//! type carries the value end to end (domain → JSON → CLI) and an unknown
+//! value is rejected at deserialize time, not deep in a handler.
 
 use serde::{Deserialize, Serialize};
+
+pub use crate::enums::{FileStatus, LineKind};
 
 // ---------------------------------------------------------------------------
 // Health
@@ -179,8 +184,7 @@ pub struct DiffFile {
     /// Only set for renames.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub old_path: Option<String>,
-    /// added | deleted | modified | renamed
-    pub status: String,
+    pub status: FileStatus,
     pub binary: bool,
     pub additions: u64,
     pub deletions: u64,
@@ -200,8 +204,7 @@ pub struct Hunk {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Line {
-    /// context | add | del
-    pub kind: String,
+    pub kind: LineKind,
     /// Old line number; absent for add.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub old: Option<u64>,

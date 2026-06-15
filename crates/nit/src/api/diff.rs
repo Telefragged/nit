@@ -10,6 +10,7 @@ use anyhow::{Result, anyhow};
 use git2::{Delta, DiffOptions, Patch, Repository, Tree};
 
 use super::types;
+use crate::enums::{FileStatus, LineKind};
 
 /// The reserved synthetic diff path carrying the revision's commit
 /// message (docs/api.md "The commit message as a file"). Git tree paths
@@ -57,12 +58,12 @@ pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<types::Di
         } else {
             path(delta.new_file())
         };
-        let old_path = (status == "renamed").then(|| path(delta.old_file()));
+        let old_path = (status == FileStatus::Renamed).then(|| path(delta.old_file()));
 
         let mut file = types::DiffFile {
             path: file_path,
             old_path,
-            status: status.to_string(),
+            status,
             binary: false,
             additions: 0,
             deletions: 0,
@@ -87,12 +88,12 @@ pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<types::Di
     Ok(types::Diff { files })
 }
 
-fn delta_status(delta: Delta) -> Option<&'static str> {
+fn delta_status(delta: Delta) -> Option<FileStatus> {
     match delta {
-        Delta::Added => Some("added"),
-        Delta::Deleted => Some("deleted"),
-        Delta::Modified | Delta::Typechange => Some("modified"),
-        Delta::Renamed | Delta::Copied => Some("renamed"),
+        Delta::Added => Some(FileStatus::Added),
+        Delta::Deleted => Some(FileStatus::Deleted),
+        Delta::Modified | Delta::Typechange => Some(FileStatus::Modified),
+        Delta::Renamed | Delta::Copied => Some(FileStatus::Renamed),
         _ => None,
     }
 }
@@ -105,14 +106,14 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<types::Hunk>> {
         for l in 0..patch.num_lines_in_hunk(h)? {
             let line = patch.line_in_hunk(h, l)?;
             let kind = match line.origin() {
-                ' ' => "context",
-                '+' => "add",
-                '-' => "del",
+                ' ' => LineKind::Context,
+                '+' => LineKind::Add,
+                '-' => LineKind::Del,
                 _ => continue, // eofnl markers etc.
             };
             let text = String::from_utf8_lossy(line.content());
             lines.push(types::Line {
-                kind: kind.to_string(),
+                kind,
                 old: line.old_lineno().map(u64::from),
                 new: line.new_lineno().map(u64::from),
                 drift: false,
@@ -159,7 +160,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
             .map(|(i, text)| {
                 let n = u64::try_from(i)? + 1;
                 Ok(types::Line {
-                    kind: "context".to_string(),
+                    kind: LineKind::Context,
                     old: Some(n),
                     new: Some(n),
                     drift: false,
@@ -180,7 +181,11 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
     Ok(types::DiffFile {
         path: COMMIT_MSG_PATH.to_string(),
         old_path: None,
-        status: if old.is_some() { "modified" } else { "added" }.to_string(),
+        status: if old.is_some() {
+            FileStatus::Modified
+        } else {
+            FileStatus::Added
+        },
         binary: false,
         additions: u64::try_from(additions)?,
         deletions: u64::try_from(deletions)?,
@@ -287,7 +292,7 @@ mod tests {
         let f = &diff.files[0];
         assert_eq!(f.path, "a.txt");
         assert_eq!(f.old_path, None);
-        assert_eq!(f.status, "modified");
+        assert_eq!(f.status, FileStatus::Modified);
         assert!(!f.binary);
         assert_eq!((f.additions, f.deletions), (2, 1));
         assert_eq!(f.hunks.len(), 2);
@@ -300,7 +305,7 @@ mod tests {
         let del = h0
             .lines
             .iter()
-            .find(|l| l.kind == "del")
+            .find(|l| l.kind == LineKind::Del)
             .expect("del line should exist");
         assert_eq!(
             (del.old, del.new, del.text.as_str()),
@@ -309,7 +314,7 @@ mod tests {
         let add = h0
             .lines
             .iter()
-            .find(|l| l.kind == "add")
+            .find(|l| l.kind == LineKind::Add)
             .expect("add line should exist");
         assert_eq!(
             (add.old, add.new, add.text.as_str()),
@@ -317,8 +322,8 @@ mod tests {
         );
         let ctx = &h0.lines[0];
         assert_eq!(
-            (ctx.kind.as_str(), ctx.old, ctx.new),
-            ("context", Some(1), Some(1))
+            (ctx.kind, ctx.old, ctx.new),
+            (LineKind::Context, Some(1), Some(1))
         );
 
         let h1 = &f.hunks[1];
@@ -326,7 +331,7 @@ mod tests {
         let add = h1
             .lines
             .iter()
-            .find(|l| l.kind == "add")
+            .find(|l| l.kind == LineKind::Add)
             .expect("add line should exist");
         assert_eq!((add.new, add.text.as_str()), (Some(18), "line 17.5"));
     }
@@ -359,17 +364,17 @@ mod tests {
         assert_eq!(diff.files.len(), 4); // keep.txt untouched
 
         let added = by_path("fresh.txt");
-        assert_eq!(added.status, "added");
+        assert_eq!(added.status, FileStatus::Added);
         assert_eq!((added.additions, added.deletions), (1, 0));
         let l = &added.hunks[0].lines[0];
-        assert_eq!((l.kind.as_str(), l.old, l.new), ("add", None, Some(1)));
+        assert_eq!((l.kind, l.old, l.new), (LineKind::Add, None, Some(1)));
 
         let deleted = by_path("doomed.txt");
-        assert_eq!(deleted.status, "deleted");
+        assert_eq!(deleted.status, FileStatus::Deleted);
         assert_eq!((deleted.additions, deleted.deletions), (0, 1));
 
         let renamed = by_path("new_name.txt");
-        assert_eq!(renamed.status, "renamed");
+        assert_eq!(renamed.status, FileStatus::Renamed);
         assert_eq!(renamed.old_path.as_deref(), Some("old_name.txt"));
 
         let bin = by_path("bin.dat");
@@ -384,7 +389,7 @@ mod tests {
         let f = commit_msg_file(None, msg).expect("message file should build");
         assert_eq!(f.path, COMMIT_MSG_PATH);
         assert_eq!(f.old_path, None);
-        assert_eq!(f.status, "added");
+        assert_eq!(f.status, FileStatus::Added);
         assert!(!f.binary);
         assert_eq!((f.additions, f.deletions), (5, 0));
         assert_eq!(f.hunks.len(), 1);
@@ -393,19 +398,19 @@ mod tests {
             (h.old_start, h.old_lines, h.new_start, h.new_lines),
             (0, 0, 1, 5)
         );
-        let texts: Vec<(&str, Option<u64>, Option<u64>, &str)> = h
+        let texts: Vec<(LineKind, Option<u64>, Option<u64>, &str)> = h
             .lines
             .iter()
-            .map(|l| (l.kind.as_str(), l.old, l.new, l.text.as_str()))
+            .map(|l| (l.kind, l.old, l.new, l.text.as_str()))
             .collect();
         assert_eq!(
             texts,
             vec![
-                ("add", None, Some(1), "feat: subject"),
-                ("add", None, Some(2), ""),
-                ("add", None, Some(3), "A body line."),
-                ("add", None, Some(4), ""),
-                ("add", None, Some(5), "Change-Id: Iabc"),
+                (LineKind::Add, None, Some(1), "feat: subject"),
+                (LineKind::Add, None, Some(2), ""),
+                (LineKind::Add, None, Some(3), "A body line."),
+                (LineKind::Add, None, Some(4), ""),
+                (LineKind::Add, None, Some(5), "Change-Id: Iabc"),
             ]
         );
     }
@@ -416,19 +421,19 @@ mod tests {
         let new = "feat: subject\n\nNew body,\nover two lines.\n\nChange-Id: Iabc\n";
         let f = commit_msg_file(Some(old), new).expect("message file should build");
         assert_eq!(f.path, COMMIT_MSG_PATH);
-        assert_eq!(f.status, "modified");
+        assert_eq!(f.status, FileStatus::Modified);
         assert_eq!((f.additions, f.deletions), (2, 1));
         assert_eq!(f.hunks.len(), 1);
         let del = f.hunks[0]
             .lines
             .iter()
-            .find(|l| l.kind == "del")
+            .find(|l| l.kind == LineKind::Del)
             .expect("del line should exist");
         assert_eq!((del.old, del.text.as_str()), (Some(3), "Old body."));
         let adds: Vec<(&str, Option<u64>)> = f.hunks[0]
             .lines
             .iter()
-            .filter(|l| l.kind == "add")
+            .filter(|l| l.kind == LineKind::Add)
             .map(|l| (l.text.as_str(), l.new))
             .collect();
         assert_eq!(
@@ -441,7 +446,7 @@ mod tests {
     fn commit_msg_file_identical_interdiff_is_all_context() {
         let msg = "feat: subject\n\nSame body.\n\nChange-Id: Iabc\n";
         let f = commit_msg_file(Some(msg), msg).expect("message file should build");
-        assert_eq!(f.status, "modified");
+        assert_eq!(f.status, FileStatus::Modified);
         assert_eq!((f.additions, f.deletions), (0, 0));
         assert_eq!(f.hunks.len(), 1);
         let h = &f.hunks[0];
@@ -450,7 +455,7 @@ mod tests {
             (1, 5, 1, 5)
         );
         assert_eq!(h.header, "");
-        assert!(h.lines.iter().all(|l| l.kind == "context"));
+        assert!(h.lines.iter().all(|l| l.kind == LineKind::Context));
         assert_eq!(h.lines.len(), 5);
         let l = &h.lines[4];
         assert_eq!(

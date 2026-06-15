@@ -37,6 +37,7 @@ use git2::{DiffOptions, Patch, Repository, Tree};
 
 use super::diff::{self, COMMIT_MSG_PATH};
 use super::types;
+use crate::enums::{FileStatus, LineKind};
 
 /// A 0-based, half-open line range.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -232,10 +233,10 @@ fn tag_file(
     let mut any_drift = false;
     for hunk in &mut file.hunks {
         for line in &mut hunk.lines {
-            let drift = match line.kind.as_str() {
-                "del" => line.old.is_some_and(|l| in_ranges(&old_ranges, l)),
-                "add" => line.new.is_some_and(|l| in_ranges(&new_ranges, l)),
-                _ => false,
+            let drift = match line.kind {
+                LineKind::Del => line.old.is_some_and(|l| in_ranges(&old_ranges, l)),
+                LineKind::Add => line.new.is_some_and(|l| in_ranges(&new_ranges, l)),
+                LineKind::Context => false,
             };
             if drift {
                 line.drift = true;
@@ -253,9 +254,9 @@ fn tag_file(
     // Recount over the survivors, excluding drift (one pass for both totals).
     let (mut additions, mut deletions) = (0u64, 0u64);
     for line in file.hunks.iter().flat_map(|h| &h.lines) {
-        match line.kind.as_str() {
-            "add" if !line.drift => additions += 1,
-            "del" if !line.drift => deletions += 1,
+        match line.kind {
+            LineKind::Add if !line.drift => additions += 1,
+            LineKind::Del if !line.drift => deletions += 1,
             _ => {}
         }
     }
@@ -265,7 +266,7 @@ fn tag_file(
 }
 
 fn is_real_change(line: &types::Line) -> bool {
-    (line.kind == "add" || line.kind == "del") && !line.drift
+    matches!(line.kind, LineKind::Add | LineKind::Del) && !line.drift
 }
 
 /// Tag the interdiff `diff` (already rendered `tree(m) → tree(n)`) with
@@ -309,7 +310,7 @@ pub fn tag_drift(
     for (idx, file) in diff.files.iter_mut().enumerate() {
         if file.path == COMMIT_MSG_PATH
             || file.binary
-            || file.status == "renamed"
+            || file.status == FileStatus::Renamed
             || !drifted.contains(&file.path)
         {
             continue;

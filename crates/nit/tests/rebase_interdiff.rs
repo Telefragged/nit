@@ -16,6 +16,7 @@ use git2::Oid;
 use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, diff_trees};
 use nit::api::rebase::tag_drift;
 use nit::api::types::{Diff, DiffFile};
+use nit::enums::{FileStatus, LineKind};
 use serde_json::json;
 
 /// File content from lines, newline-terminated.
@@ -61,9 +62,9 @@ fn drift_lines(f: &DiffFile) -> Vec<(char, u64)> {
     for hunk in &f.hunks {
         for l in &hunk.lines {
             if l.drift {
-                if l.kind == "add" {
+                if l.kind == LineKind::Add {
                     out.push(('+', l.new.expect("add line has new no")));
-                } else if l.kind == "del" {
+                } else if l.kind == LineKind::Del {
                     out.push(('-', l.old.expect("del line has old no")));
                 }
             }
@@ -225,7 +226,7 @@ fn agent_removing_a_base_line_in_a_later_revision_is_real() {
         .hunks
         .iter()
         .flat_map(|h| &h.lines)
-        .filter(|l| l.kind == "del" && !l.drift)
+        .filter(|l| l.kind == LineKind::Del && !l.drift)
         .map(|l| l.text.as_str())
         .collect();
     assert_eq!(real_dels, vec!["use b;"], "the agent's deletion is real");
@@ -254,7 +255,7 @@ fn duplicate_lines_never_hide_the_agents_edit() {
         .hunks
         .iter()
         .flat_map(|h| &h.lines)
-        .filter(|l| l.kind != "context" && !l.drift)
+        .filter(|l| l.kind != LineKind::Context && !l.drift)
         .map(|l| l.text.as_str())
         .collect();
     assert!(real.contains(&"SAME"), "the agent's deletion is shown");
@@ -410,7 +411,7 @@ fn renamed_file_is_left_as_a_plain_diff() {
 
     let (_, tagged) = interdiff(&g, m, parent_m, n, parent_n);
     let renamed = file(&tagged, "b.rs").expect("renamed file present");
-    assert_eq!(renamed.status, "renamed");
+    assert_eq!(renamed.status, FileStatus::Renamed);
     assert!(
         drift_lines(renamed).is_empty(),
         "renamed file is not drift-processed"
