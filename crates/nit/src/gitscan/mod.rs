@@ -21,6 +21,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 use git2::{BranchType, Commit, ErrorCode, Oid, Repository, Sort};
 
+use crate::enums::LogKind;
 use crate::review::{
     AddedRevision, ChainStatus, ChangeProj, LivePos, Projection, RevisionsPayload,
 };
@@ -31,7 +32,7 @@ pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase on
 /// An entry the scan wants appended.
 #[derive(Debug)]
 pub struct NewEntry {
-    pub kind: &'static str,
+    pub kind: LogKind,
     pub payload: serde_json::Value,
 }
 
@@ -64,7 +65,7 @@ impl ScanResult {
     fn closed(status: &'static str) -> ScanResult {
         ScanResult {
             entries: vec![NewEntry {
-                kind: "chain_closed",
+                kind: LogKind::ChainClosed,
                 payload: serde_json::json!({ "status": status }),
             }],
             error: None,
@@ -257,7 +258,7 @@ pub fn scan(proj: &Projection, now: jiff::Timestamp, alloc: &mut dyn FnMut() -> 
 
     ScanResult {
         entries: vec![NewEntry {
-            kind: "revisions",
+            kind: LogKind::Revisions,
             payload: serde_json::to_value(RevisionsPayload { live, added })
                 .unwrap_or_else(|_| serde_json::json!({})),
         }],

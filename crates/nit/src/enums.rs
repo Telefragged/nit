@@ -67,6 +67,50 @@ pub enum Author {
     Agent,
 }
 
+/// The kind of one log entry (docs/data-model.md "The log"). The fold
+/// dispatches on it; the db `log.kind` TEXT column stores its [`as_str`].
+///
+/// [`as_str`]: LogKind::as_str
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogKind {
+    Revisions,
+    Review,
+    Comment,
+    Partial,
+    ChainClosed,
+}
+
+impl LogKind {
+    /// The persisted/wire spelling (the db↔domain boundary; mirrors the
+    /// serde renaming).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LogKind::Revisions => "revisions",
+            LogKind::Review => "review",
+            LogKind::Comment => "comment",
+            LogKind::Partial => "partial",
+            LogKind::ChainClosed => "chain_closed",
+        }
+    }
+}
+
+impl std::str::FromStr for LogKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<LogKind, String> {
+        match s {
+            "revisions" => Ok(LogKind::Revisions),
+            "review" => Ok(LogKind::Review),
+            "comment" => Ok(LogKind::Comment),
+            "partial" => Ok(LogKind::Partial),
+            "chain_closed" => Ok(LogKind::ChainClosed),
+            other => Err(format!("unknown log entry kind {other:?}")),
+        }
+    }
+}
+
 /// A reviewer's verdict on one change (docs/api.md "Reviews"). Maps to a
 /// change [`Status`](crate::review::Status) when folded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

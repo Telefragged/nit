@@ -23,6 +23,7 @@ use serde_json::Value;
 use tokio::sync::{Mutex, watch};
 
 use crate::db;
+use crate::enums::LogKind;
 use crate::gitscan;
 use crate::review::{self, Projection};
 
@@ -239,7 +240,7 @@ pub fn commit_entries(
     conn: &mut Connection,
     entry: &ChainEntry,
     chain_id: u64,
-    news: Vec<(String, Value)>,
+    news: Vec<(LogKind, Value)>,
 ) -> anyhow::Result<bool> {
     if news.is_empty() {
         return Ok(false);
@@ -266,7 +267,7 @@ pub fn commit_entries(
 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     for e in &parsed {
-        db::append_log(&tx, chain_id, e.idx, &e.kind, &e.payload, &now)?;
+        db::append_log(&tx, chain_id, e.idx, e.kind.as_str(), &e.payload, &now)?;
     }
     tx.commit()?;
 
@@ -322,10 +323,10 @@ pub async fn scan_chain(state: &Arc<AppState>, chain_id: u64, force: bool) -> Re
         let result = gitscan::scan(&snapshot, jiff::Timestamp::now(), &mut alloc);
         let error = result.error;
         let branch_missing_since = result.branch_missing_since;
-        let news: Vec<(String, Value)> = result
+        let news: Vec<(LogKind, Value)> = result
             .entries
             .into_iter()
-            .map(|n| (n.kind.to_string(), n.payload))
+            .map(|n| (n.kind, n.payload))
             .collect();
         // Commit first; apply the scan's transient state only when the
         // entries actually landed. A busy-dropped abandon would otherwise

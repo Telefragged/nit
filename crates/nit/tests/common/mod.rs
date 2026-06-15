@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use git2::{Oid, Repository, RepositoryInitOptions, Signature, Time};
 use nit::db::ChainRow;
+use nit::enums::LogKind;
 use nit::gitscan::{self, ScanResult};
 use nit::review::{self, ChainStatus, ChangeProj, Entry, Projection};
 use serde_json::{Value, json};
@@ -157,18 +158,18 @@ impl Fixture {
             "change_key": key, "review_id": review_id, "revision": revision,
             "verdict": verdict, "message": "msg", "comments": [],
         });
-        self.fold("review", payload);
+        self.fold(LogKind::Review, payload);
     }
 
-    fn fold(&mut self, kind: &str, payload: Value) {
+    fn fold(&mut self, kind: LogKind, payload: Value) {
         let entry = Entry {
             idx: self.proj.head,
-            kind: kind.to_string(),
+            kind,
             payload,
             created_at: format!("t{}", self.proj.head + 1),
         };
         review::fold(&mut self.proj, &entry).unwrap();
-        self.appended.push(kind.to_string());
+        self.appended.push(kind.as_str().to_string());
     }
 }
 

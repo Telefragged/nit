@@ -33,7 +33,7 @@ use git2::{Oid, Repository};
 use serde::Deserialize;
 
 use crate::db;
-use crate::enums::Side;
+use crate::enums::{LogKind, Side};
 use crate::gitscan;
 use crate::review::{self, CommentInput, Entry, Projection};
 
@@ -307,10 +307,7 @@ async fn apply_partial(state: &Arc<AppState>, chain_id: u64, partial: bool) -> R
             return Ok(()); // no flip, no entry
         }
         let mut conn = st.open_db()?;
-        let news = vec![(
-            "partial".to_string(),
-            serde_json::json!({ "partial": partial }),
-        )];
+        let news = vec![(LogKind::Partial, serde_json::json!({ "partial": partial }))];
         state::commit_entries(&mut conn, &e2, chain_id, news).map_err(map_busy)?;
         Ok(())
     })
@@ -771,7 +768,7 @@ async fn submit_review(
             let start = e2.read().head;
             let parsed = Entry {
                 idx: start,
-                kind: "review".to_string(),
+                kind: LogKind::Review,
                 payload,
                 created_at: now,
             };
@@ -951,13 +948,8 @@ async fn create_comment(
         // A new thread takes the next id about to be minted.
         let first_new_thread = e2.read().next_thread_id;
         let mut conn = st.open_db()?;
-        state::commit_entries(
-            &mut conn,
-            &e2,
-            chain_id,
-            vec![("comment".to_string(), payload)],
-        )
-        .map_err(map_busy)?;
+        state::commit_entries(&mut conn, &e2, chain_id, vec![(LogKind::Comment, payload)])
+            .map_err(map_busy)?;
         let thread_id = target_thread.unwrap_or(first_new_thread);
         let proj = e2.read();
         let thread = proj

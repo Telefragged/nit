@@ -13,7 +13,7 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{self, CommentRange};
-use crate::enums::{Author, Side, Verdict};
+use crate::enums::{Author, LogKind, Side, Verdict};
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -166,18 +166,21 @@ pub struct ChainClosedPayload {
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub idx: u64,
-    pub kind: String,
+    pub kind: LogKind,
     pub payload: serde_json::Value,
     pub created_at: String,
 }
 
 impl Entry {
     /// # Errors
-    /// When the stored payload is not valid JSON.
+    /// When the stored `kind` is unknown or the payload is not valid JSON.
     pub fn from_row(row: &db::LogRow) -> Result<Entry> {
         Ok(Entry {
             idx: row.idx,
-            kind: row.kind.clone(),
+            kind: row
+                .kind
+                .parse()
+                .map_err(|e| anyhow!("log entry {}: {e}", row.idx))?,
             payload: serde_json::from_str(&row.payload)
                 .map_err(|e| anyhow!("log entry {}: bad payload: {e}", row.idx))?,
             created_at: row.created_at.clone(),
@@ -185,8 +188,13 @@ impl Entry {
     }
 
     fn parse<T: for<'de> Deserialize<'de>>(&self) -> Result<T> {
-        serde_json::from_value(self.payload.clone())
-            .map_err(|e| anyhow!("log entry {}: {} payload: {e}", self.idx, self.kind))
+        serde_json::from_value(self.payload.clone()).map_err(|e| {
+            anyhow!(
+                "log entry {}: {} payload: {e}",
+                self.idx,
+                self.kind.as_str()
+            )
+        })
     }
 }
 
@@ -381,18 +389,17 @@ impl Projection {
 /// # Errors
 /// When a payload fails to parse.
 pub fn fold(proj: &mut Projection, entry: &Entry) -> Result<()> {
-    match entry.kind.as_str() {
-        "revisions" => fold_revisions(proj, &entry.parse()?, &entry.created_at),
-        "review" => fold_review(proj, &entry.parse()?, &entry.created_at),
-        "comment" => fold_comment(proj, &entry.parse()?, &entry.created_at),
-        "partial" => proj.partial = entry.parse::<PartialPayload>()?.partial,
-        "chain_closed" => {
+    match entry.kind {
+        LogKind::Revisions => fold_revisions(proj, &entry.parse()?, &entry.created_at),
+        LogKind::Review => fold_review(proj, &entry.parse()?, &entry.created_at),
+        LogKind::Comment => fold_comment(proj, &entry.parse()?, &entry.created_at),
+        LogKind::Partial => proj.partial = entry.parse::<PartialPayload>()?.partial,
+        LogKind::ChainClosed => {
             proj.status = match entry.parse::<ChainClosedPayload>()?.status.as_str() {
                 "abandoned" => ChainStatus::Abandoned,
                 _ => ChainStatus::Merged,
             };
         }
-        other => return Err(anyhow!("log entry {}: unknown kind {other:?}", entry.idx)),
     }
     proj.head = entry.idx + 1;
     proj.last_entry_at = Some(entry.created_at.clone());
@@ -578,16 +585,16 @@ pub fn max_assigned_id(rows: &[db::LogRow]) -> Result<u64> {
     let mut max = 0;
     for row in rows {
         let entry = Entry::from_row(row)?;
-        match entry.kind.as_str() {
-            "revisions" => {
+        match entry.kind {
+            LogKind::Revisions => {
                 for l in entry.parse::<RevisionsPayload>()?.live {
                     max = max.max(l.change_id);
                 }
             }
-            "review" => {
+            LogKind::Review => {
                 max = max.max(entry.parse::<ReviewPayload>()?.review_id);
             }
-            _ => {}
+            LogKind::Comment | LogKind::Partial | LogKind::ChainClosed => {}
         }
     }
     Ok(max)

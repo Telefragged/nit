@@ -14,7 +14,7 @@ fn chain_row() -> db::ChainRow {
 fn entry(idx: u64, kind: &str, payload: serde_json::Value) -> Entry {
     Entry {
         idx,
-        kind: kind.to_string(),
+        kind: kind.parse().expect("test log kind"),
         payload,
         created_at: format!("t{idx}"),
     }

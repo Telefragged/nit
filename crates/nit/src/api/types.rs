@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use crate::enums::{Author, FileStatus, LineKind, Side, Verdict};
+pub use crate::enums::{Author, FileStatus, LineKind, LogKind, Side, Verdict};
 
 // ---------------------------------------------------------------------------
 // Health
@@ -422,8 +422,7 @@ pub struct FeedbackReview {
 pub struct LogEntry {
     /// 0-based position in the chain's log.
     pub idx: u64,
-    /// revisions | review | comment | partial | `chain_closed`
-    pub kind: String,
+    pub kind: LogKind,
     pub created_at: String,
     /// Kind-specific; shapes in data-model.md "Payloads".
     pub payload: serde_json::Value,

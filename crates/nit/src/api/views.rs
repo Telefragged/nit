@@ -226,7 +226,7 @@ pub fn review_json(review: &review::ReviewProj) -> types::Review {
 pub fn log_entry_view(entry: &Entry) -> types::LogEntry {
     types::LogEntry {
         idx: entry.idx,
-        kind: entry.kind.clone(),
+        kind: entry.kind,
         created_at: entry.created_at.clone(),
         payload: entry.payload.clone(),
     }
