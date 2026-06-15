@@ -46,7 +46,7 @@ log entries you had not yet seen (`[cursor, head)`), and you then set your
 cursor to `head`. Two rules make this lossless:
 
 1. **Advance the cursor only from a `wait` (or `nit log`) result** — its
-   `head`. Never from `nit push`/`nit reply`: those append entries but
+   `head`. Never from `nit push`/`nit comment`: those append entries but
    return no index. If a reviewer comment lands between two of your own
    pushes, jumping the cursor to "after my second push" would skip it;
    only `wait` returns the whole contiguous run, so you always see it.
@@ -64,7 +64,7 @@ Inspect specific entries without moving your cursor with
 Each entry has a `kind` (docs/data-model.md): `review` (a reviewer
 verdict, carrying any thread-resolution changes too — act on it),
 `chain_closed` (merged/abandoned — stop), and the ones you caused
-(`revisions` from your push, `reply`, `partial`). You act on the
+(`revisions` from your push, `comment`, `partial`). You act on the
 reviewer's entries and on the rolled-up `state` the response carries.
 
 ## The loop
@@ -92,8 +92,8 @@ resp=$(nit wait $cursor)      # blocks until entries land beyond $cursor
 cursor=<resp.head>            # advance over everything you just received
 # inspect resp.entries (--oneline to skim) and resp.state:
 #   for each `review` entry: fix → amend the commit it targets (local
-#     fixup! + autosquash onto the fork point), or answer with
-#     nit reply <comment-id> [--resolve] -m "…"
+#     fixup! + autosquash onto the fork point), or answer on its thread with
+#     nit comment --change-id <Change-Id> --thread <thread-id> [--resolve] -m "…"
 nit push --repo "$repo" --branch "$branch"   # rewritten commits = new revisions
 # …then loop: nit wait $cursor again (returns your own entries first),
 #   advance, until state=approved or the chain closes
@@ -154,7 +154,7 @@ stays the right tool for a harness without a monitor; the cursor and "watch
 until the chain closes" rules above apply to both.
 
 **`--reviewer-only` mutes your own echoes.** Left to itself the monitor
-relays your own `revisions` (the scan after your push), `reply`, and
+relays your own `revisions` (the scan after your push), `comment`, and
 `partial` entries straight back at you — echoes of writes you already made.
 `--reviewer-only` drops those and otherwise applies the **same wake rule as
 `nit wait`**: it wakes you on the reviewer's `review` entries and on chain
@@ -171,7 +171,7 @@ single relayed entry alone, and track the index you consumed from
 `nit log`, not the idx the monitor printed.
 
 The suppression is a heuristic on `kind`: anything it mutes is your own
-push / reply / partial, which the next reviewer event makes you re-read
+push / comment / partial, which the next reviewer event makes you re-read
 past — seen late, never lost. The one case it cannot surface on its own is
 a scan with no reviewer event behind it — chiefly a rescan that reopens a
 closed chain (`revisions` is appended by any scan that changes structure,
@@ -226,7 +226,7 @@ invisible work.
   lands, relaying every one raw (no wake rule — you triage). `<cursor>` is
   a single open form (`0`, `5..`, or `..`). Prefer `--oneline` in a monitor
   — one parseable line per entry, not the multi-line, token-heavy full JSON.
-  `--reviewer-only` suppresses your own entries (`revisions`, `reply`,
+  `--reviewer-only` suppresses your own entries (`revisions`, `comment`,
   `partial`), waking the monitor on the reviewer and on chain closure;
   treat each relayed line as a doorbell and re-read the gap from the index
   you last consumed (`nit log <cursor>..`), not the idx it printed.
@@ -236,24 +236,61 @@ invisible work.
   digest instead — a `state=` header plus one line per change
   (`position change_key status rN Nu subject`) — to skim where the chain
   stands without parsing JSON.
-- `nit reply <comment-id> [--resolve | --unresolve] -m "text"` — threaded
-  reply as the agent; `--resolve` closes the thread (do this for addressed
-  comments — the reviewer sees unresolved counts), `--unresolve` reopens
-  it, neither leaves it unchanged. Appends a `reply` entry; returns no
-  cursor.
+- `nit comment --change-id <Change-Id> [--thread <id>] [anchor] [--resolve | --unresolve] -m "text"`
+  — comment on a change as the agent (the cwd resolves the chain). Name the
+  change with `--change-id <Change-Id>` — the rebase-stable trailer you have on
+  hand; a human can instead use `--change <id>` with the numeric id `nit status`
+  shows. Without `--thread` it opens
+  a **new thread**, anchored with `--file <path> --line <n> [--side new|old]
+[--range START-END]` (or change-level with no anchor) and
+  `[--revision <n>]` to pin it to a prior revision (default: the change's
+  latest); with `--thread` it **replies** to an existing thread on the change.
+  `--resolve` closes the thread (do this for comments you have addressed — the
+  reviewer sees unresolved counts), `--unresolve` reopens it. Appends a
+  `comment` entry; returns no cursor.
+
+## Annotate the choices you make
+
+When you make a non-obvious call while building — pulling in a new
+dependency, picking one approach where several were viable, working around
+a sharp edge — **leave a comment on the code instead of asking the human or
+hoping the diff speaks for itself.** Open a thread on the exact lines with
+`nit comment`:
+
+```sh
+# A choice the reviewer should weigh in on — leave it OPEN (default), so it
+# counts toward the change's unresolved threads and lands on their radar:
+nit comment --change-id <Change-Id> --file src/queue.rs --line 42 --range 42:8-42:30 \
+  -m "Bounded channel over unbounded: backpressure matters more here than
+      never blocking the producer. Happy to flip it if you'd rather."
+
+# A decision that is settled and just needs recording — open it already
+# RESOLVED (--resolve): a note for the record that needs no response.
+nit comment --change-id <Change-Id> --file Cargo.toml --line 14 --resolve \
+  -m "Added serde — the hand-rolled parser was most of this change, and the
+      alternatives pull it in transitively anyway."
+```
+
+Anchor it as tightly as you can (`--file`/`--line`, plus `--range` when the
+point is about a specific span) so the note pins to the code it explains.
+This is how you stop leaning on the human for mid-build decisions: make the
+call, annotate it, keep going. The reviewer engages with the thread when
+they reach the change, and the reasoning lives next to the code for good.
 
 ## Where the conversation happens
 
-nit is the single source of truth for the review conversation. When you
-need something from the reviewer — a clarifying question, a design choice,
-a trade-off for them to pick — raise it with `nit reply <comment-id> -m
-"…"` on the thread it concerns, leave it **unresolved** so it stays on
-their radar, then re-arm `nit wait` and carry on with other work. Do
-**not** block on the answer, and do not route the question through some
+nit is the single source of truth for the review conversation. When you do
+need something back from the reviewer — a clarifying question, a trade-off
+for them to pick — raise it in nit and leave it **unresolved** so it stays
+on their radar: reply on the thread it concerns with `nit comment --change-id
+<Change-Id> --thread <thread-id> -m "…"`, or open a new one with `nit comment
+--change-id <Change-Id> --file … --line … -m "…"` when none exists yet. Then
+re-arm `nit wait` and carry on with other work.
+Do **not** block on the answer, and do not route the question through some
 other channel: your interactive session is the channel only when the user
 prompts you there directly. Asking in nit pins the question to the code
-it's about, lets the reviewer answer asynchronously, and leaves one
-durable record of why the change ended up the way it did.
+it's about, lets the reviewer answer asynchronously, and leaves one durable
+record of why the change ended up the way it did.
 
 ## What `nit wait` returns
 
@@ -262,8 +299,8 @@ durable record of why the change ended up the way it did.
 
 - `agents_turn` — act now. For every change with status
   `changes_requested` or `commented`: address its `review.message` and
-  `comments` (fix every comment by amending the commit it targets, or
-  reply/`--resolve` with reasoning). Then `nit push` and wait again.
+  `threads` (fix what each thread asks by amending the commit it targets,
+  or reply/`--resolve` with reasoning). Then `nit push` and wait again.
   `commented` means the reviewer asked questions without blocking —
   reply, don't just wait.
   Exception: on a partial chain (`chain.partial: true`) with **no**
@@ -281,18 +318,20 @@ durable record of why the change ended up the way it did.
   just-pushed entries); wait again.
 - `merged` / `abandoned` — the chain is closed; stop.
 
-Comments in feedback are scoped to each change's **latest review**, plus
-any still-unresolved threads from earlier reviews. Each comment is pinned
+Threads in feedback are scoped to each change's **latest review**, plus
+any still-unresolved threads from earlier reviews. Each thread is pinned
 to the `revision` it was written on; its `line_text` shows the exact line
-it was commented on, and `side: "old"` anchors to a line in that
-revision's parent tree (a deleted/pre-change line).
+it was anchored on, and `side: "old"` anchors to a line in that
+revision's parent tree (a deleted/pre-change line). A thread carries its
+`comments` (the conversation, reviewer and agent both) and a rolled-up
+`resolved` flag.
 
-Comments with `file: "/COMMIT_MSG"` target the **commit message** (line
-numbers are 1-based message lines). Answer them by rewording the commit
+A thread on `file: "/COMMIT_MSG"` targets the **commit message** (line
+numbers are 1-based message lines). Answer it by rewording the commit
 (interactive-rebase reword / `git commit --amend`) — keep the
 `Change-Id:` trailer. A reword creates a new revision and resets the
 change to `pending`, exactly like a code edit.
 
 Never submit a review verdict yourself (`POST /api/changes/*/reviews` is
 the human's side). The agent surface is push / ready / wait / log /
-status / reply.
+status / comment.

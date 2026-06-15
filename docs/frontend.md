@@ -101,12 +101,15 @@ happens.
     threads under the right/new column, old-side under the left/old column
     (in side-by-side), and not at all when its revision is neither FROM nor
     TO. Ranged threads tint their selected text amber on the matching
-    column; the open editor's pending selection tints brighter. Published
-    comments render as threads (replies via `parent_id`, author chrome for
-    reviewer/agent) under their anchored line; a comment on
-    a displayed side but outside the rendered hunks groups at the top of
-    its file with its `line_text` excerpt; drafts get a dashed border +
-    `DRAFT` tag and edit/delete. Thread resolution is **drafted**, gerrit-style
+    column; the open editor's pending selection tints brighter. The server
+    hands back published **threads** (each its anchor, resolution, and the
+    comments on it, author chrome for reviewer/agent) and the reviewer's
+    **drafts** separately; the client merges them (`assembleThreads`) so a
+    thread renders its published comments plus any pending draft replies
+    under its anchored line. A thread on a displayed side but outside the
+    rendered hunks groups at the top of its file with its `line_text`
+    excerpt; drafts get a dashed border + `DRAFT` tag and edit/delete.
+    Thread resolution is **drafted**, gerrit-style
     (docs/api.md "Thread resolution"): Reply / Resolve / Reopen all open the
     editor with a `Resolved` checkbox (default: the thread's current state,
     checked, unchecked respectively), saving a draft reply — empty body

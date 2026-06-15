@@ -114,7 +114,7 @@ background-Bash follow streams into a file that nothing ever wakes you to
 read — the exact trap that looks like a working watcher but is a dropped
 review. (`nit wait`, which _does_ exit on each wake, is the one that belongs
 in a background Bash task — see below.) Keep `--oneline`: one parseable line
-per entry, not the token-heavy multi-line full JSON. `--reviewer-only` mutes your own echoes (`revisions`, `reply`,
+per entry, not the token-heavy multi-line full JSON. `--reviewer-only` mutes your own echoes (`revisions`, `comment`,
 `partial`) and otherwise applies `nit wait`'s wake rule — it wakes on the
 reviewer and chain closure, but not on a comment-less approve that leaves
 the chain short of `approved`. Each relayed line is still just a doorbell:
@@ -135,14 +135,14 @@ under the **Monitor tool** (`persistent: true`; the preferred form above)
 or, as the fallback, `nit wait $cursor` as a **background Bash task** (it
 exits on each wake, which re-invokes you). A `ready`/pushed chain with no
 watcher is a dropped review, as broken as an unpushed commit. Re-arm
-`nit wait` after every push and reply; a Monitor follow stays up on its own
+`nit wait` after every push and comment; a Monitor follow stays up on its own
 (stop it with TaskStop once the chain closes).
 
 `nit wait $cursor` returns `{head, entries, state, …}`. **Advance the
-cursor only from that result** (`cursor=<head>`); `push`/`reply` return no
-index at all (just a `Chain`/`Comment`, no `head`), so the cursor can only
+cursor only from that result** (`cursor=<head>`); `push`/`comment` return no
+index at all (just a `Chain`/`Thread`, no `head`), so the cursor can only
 ever come from `wait`/`log`. That is what guarantees a reviewer comment
-landing between two of your own pushes is never skipped. After every push/reply, the next
+landing between two of your own pushes is never skipped. After every push/comment, the next
 `nit wait $cursor` returns immediately (your own just-appended entries);
 process, advance, wait again until it actually blocks. Skim with
 `nit wait --oneline $cursor`; inspect specific entries without moving the
@@ -158,8 +158,9 @@ cursor via `nit log <ranges>`. Branch on `state`:
     conflicts — re-format every rewritten commit with the docs/dev.md
     "Formatting" rebase recipe (amending the tip alone misses churn in
     earlier commits).
-    Then `nit reply <comment-id> --resolve -m "what you did"`;
-  - questions → `nit reply` with the answer (`--resolve` when settled);
+    Then `nit comment --change-id <Change-Id> --thread <thread-id> --resolve -m "what you did"`;
+  - questions → `nit comment --change-id <Change-Id> --thread <thread-id>` with
+    the answer (`--resolve` when settled);
   - Then `nit push` (the rewritten commits become new revisions) and wait
     again.
   - On a partial chain, `agents_turn` with none of the above (every pushed
@@ -178,7 +179,7 @@ cursor via `nit log <ranges>`. Branch on `state`:
 
 Never submit a review verdict yourself (`POST /api/changes/*/reviews` is
 the human's side). The agent surface is push / ready / wait / log /
-status / reply.
+status / comment.
 
 Read rolled-up state through these verbs — `nit status` (`--oneline` to
 skim where the chain stands) and the `wait`/`log` `--oneline` digests —
@@ -190,15 +191,23 @@ only when the CLI genuinely lacks the data you need.
 - The cursor is yours to track (start `0`, advance to each `wait`/`log`
   `head`). Re-waiting right after a push returns immediately with your own
   `revisions` entry — that is expected; keep advancing until `wait`
-  blocks. A comment-only verdict you answer with replies alone does **not**
-  re-spin: your reply is just another entry, and the next `wait` blocks.
-- **The review conversation lives in nit, not this session.** When you
-  have a question or a design choice for the reviewer, ask it with
-  `nit reply <comment-id> -m "…"` on the thread (leave it unresolved),
-  re-arm `nit wait`, and carry on — never block the human session on the
-  answer. Your terminal is the channel only when the user prompts you
-  there directly (docs/agent-workflow.md "Where the conversation
-  happens").
+  blocks. A comment-only verdict you answer with comments alone does **not**
+  re-spin: your comment is just another entry, and the next `wait` blocks.
+- **Annotate the choices you make instead of asking the human.** When you
+  make a non-obvious call mid-build — a new dependency, one approach over
+  alternatives — open a thread on the exact lines with
+  `nit comment --change-id <Change-Id> --file … --line … [--range …] -m "…"`:
+  `--resolve` for a settled note that needs no response, left **open**
+  (default) for a choice the reviewer should weigh in on. Make the call,
+  annotate it, keep going (docs/agent-workflow.md "Annotate the choices you
+  make").
+- **The review conversation lives in nit, not this session.** When you do
+  have a question or a design choice for the reviewer, raise it with
+  `nit comment --change-id <Change-Id> --thread <thread-id> -m "…"` on the thread it concerns (or a
+  new one via `--change-id`), leave it unresolved, re-arm `nit wait`, and carry
+  on — never block the human session on the answer. Your terminal is the
+  channel only when the user prompts you there directly
+  (docs/agent-workflow.md "Where the conversation happens").
 - If a push fails with a Change-Id scan error (missing or duplicate
   trailer, or a `fixup!`/`squash!` commit), fix the commit messages and
   push again — a blank line splitting the trailer block is the usual
