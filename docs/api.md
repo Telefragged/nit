@@ -25,6 +25,16 @@ is no separate registration step.
 
 - `GET /api/repos` → `{"repos": [Repo]}` — registration order. Runs the same
   throttled rescans as the dashboard so `active_chains` is current.
+- `PATCH /api/repos/{id}` — repoint a repo at a new git-common-dir after it
+  moved on disk (`nit repo move`).
+  ```json
+  req:  {"git_dir": "/new/path/.git"}
+  resp: Repo
+  ```
+  `git_dir` is canonicalized and must open as a git repo. 404 if the repo is
+  unknown, 400 if the new path can't be resolved, 409 if it already belongs
+  to another repo. The server repoints the registry row and refreshes the
+  in-memory chains so subsequent scans open the new path.
 
 ```json
 Repo = {

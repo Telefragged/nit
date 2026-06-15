@@ -43,6 +43,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health))
         .route("/api/repos", get(list_repos))
+        .route("/api/repos/{id}", patch(relocate_repo))
         .route("/api/chains", post(register_chain).get(list_chains))
         .route("/api/chains/{id}", get(get_chain))
         .route("/api/chains/{id}/feedback", get(get_feedback))
@@ -165,6 +166,20 @@ async fn health() -> Json<types::Health> {
 // ---------------------------------------------------------------------------
 // Repos (the registry grouping for chains)
 
+/// Active (non-merged/abandoned) chain count per repo id, read from the fold.
+fn active_chains_by_repo(state: &Arc<AppState>) -> HashMap<u64, u64> {
+    let mut active: HashMap<u64, u64> = HashMap::new();
+    for id in state.chain_ids() {
+        if let Some(entry) = state.chain_entry(id) {
+            let proj = entry.read();
+            if proj.status == review::ChainStatus::Active {
+                *active.entry(proj.repo_id).or_default() += 1;
+            }
+        }
+    }
+    active
+}
+
 /// List every registered repo with its active-chain count (the web main
 /// page). Rescans (throttled) first, like the dashboard, so the counts are
 /// current; the count is derived from the fold, never stored.
@@ -175,15 +190,7 @@ async fn list_repos(State(state): State<Arc<AppState>>) -> Result<Json<types::Re
     }
     blocking(move || {
         let conn = state.open_db()?;
-        let mut active: HashMap<u64, u64> = HashMap::new();
-        for id in state.chain_ids() {
-            if let Some(entry) = state.chain_entry(id) {
-                let proj = entry.read();
-                if proj.status == review::ChainStatus::Active {
-                    *active.entry(proj.repo_id).or_default() += 1;
-                }
-            }
-        }
+        let active = active_chains_by_repo(&state);
         let repos = db::all_repos(&conn)?
             .into_iter()
             .map(|r| types::Repo {
@@ -195,6 +202,66 @@ async fn list_repos(State(state): State<Arc<AppState>>) -> Result<Json<types::Re
         Ok(Json(types::RepoList { repos }))
     })
     .await
+}
+
+/// Repoint a repo at a new git-common-dir after it moved on disk
+/// (`nit repo move`). Validates and canonicalizes the new path, updates the
+/// registry, then refreshes every loaded chain of that repo so subsequent
+/// scans open the new path (docs/api.md "Repos").
+async fn relocate_repo(
+    State(state): State<Arc<AppState>>,
+    AppPath(repo_id): AppPath<u64>,
+    AppJson(req): AppJson<types::RelocateRepo>,
+) -> Result<Json<types::Repo>, Error> {
+    let st = state.clone();
+    let new_git_dir = blocking(move || -> Result<String, Error> {
+        let conn = st.open_db()?;
+        if db::get_repo(&conn, repo_id)?.is_none() {
+            return Err(Error::not_found(format!("repo {repo_id} not found")));
+        }
+        let canonical = std::fs::canonicalize(&req.git_dir).map_err(|e| {
+            Error::bad_request(format!("cannot resolve git dir {}: {e}", req.git_dir))
+        })?;
+        let canonical = canonical
+            .to_str()
+            .ok_or_else(|| Error::bad_request("git dir is not valid UTF-8"))?
+            .to_string();
+        Repository::open(&canonical).map_err(|e| {
+            Error::bad_request(format!(
+                "not a git repository at {canonical}: {}",
+                e.message()
+            ))
+        })?;
+        if let Some(other) = db::find_repo(&conn, &canonical)?
+            && other.id != repo_id
+        {
+            return Err(Error::conflict(format!(
+                "git dir {canonical} is already registered as repo {}",
+                other.id
+            )));
+        }
+        db::update_repo_git_dir(&conn, repo_id, &canonical)?;
+        Ok(canonical)
+    })
+    .await?;
+    // Refresh the in-memory chains so scans open the new path (the projection
+    // caches the git dir; ensure_entry only refreshes base).
+    for id in state.chain_ids() {
+        if let Some(entry) = state.chain_entry(id) {
+            let mut proj = entry.proj.write().expect("projection lock poisoned");
+            if proj.repo_id == repo_id {
+                proj.git_dir.clone_from(&new_git_dir);
+            }
+        }
+    }
+    Ok(Json(types::Repo {
+        id: repo_id,
+        git_dir: new_git_dir,
+        active_chains: active_chains_by_repo(&state)
+            .get(&repo_id)
+            .copied()
+            .unwrap_or(0),
+    }))
 }
 
 // ---------------------------------------------------------------------------

@@ -41,6 +41,13 @@ pub struct RepoList {
     pub repos: Vec<Repo>,
 }
 
+/// `PATCH /api/repos/{id}` request — repoint a moved repo at its new
+/// git-common-dir (`nit repo move`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelocateRepo {
+    pub git_dir: String,
+}
+
 // ---------------------------------------------------------------------------
 // Chains
 

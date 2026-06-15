@@ -219,6 +219,32 @@ pub fn all_repos(conn: &Connection) -> Result<Vec<RepoRow>> {
     Ok(rows)
 }
 
+/// # Errors
+/// On a database failure.
+pub fn get_repo(conn: &Connection, id: u64) -> Result<Option<RepoRow>> {
+    conn.query_row(
+        "SELECT * FROM repos WHERE id = ?1",
+        params![i64::try_from(id)?],
+        map_repo,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+/// Repoint a repo at a new canonical git-common-dir (after a disk move). The
+/// new `git_dir` must be unique — re-pointing onto another repo's git dir is
+/// a `UNIQUE` violation (the caller maps it to a 409).
+///
+/// # Errors
+/// On a database failure, including the `UNIQUE(git_dir)` clash.
+pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE repos SET git_dir = ?1 WHERE id = ?2",
+        params![git_dir, i64::try_from(id)?],
+    )?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Chains (registration identity only)
 

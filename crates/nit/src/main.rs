@@ -33,6 +33,8 @@ enum Cmd {
     Status(cli::StatusArgs),
     /// Reply to a review comment as the agent
     Reply(cli::ReplyArgs),
+    /// Inspect and manage registered repositories
+    Repo(cli::RepoArgs),
 }
 
 fn main() -> Result<()> {
@@ -51,5 +53,6 @@ fn main() -> Result<()> {
         Cmd::Log(args) => cli::log(args),
         Cmd::Status(args) => cli::status(args),
         Cmd::Reply(args) => cli::reply(args),
+        Cmd::Repo(args) => cli::repo(args),
     }
 }

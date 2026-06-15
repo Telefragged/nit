@@ -137,6 +137,38 @@ pub struct ReplyArgs {
     pub server: Option<String>,
 }
 
+/// `nit repo` — inspect and manage the repository registry. Repos are
+/// created automatically by `nit push`; these subcommands are for humans.
+#[derive(clap::Args)]
+pub struct RepoArgs {
+    #[command(subcommand)]
+    pub cmd: RepoCmd,
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`).
+    /// Global: accepted before or after the subcommand
+    /// (`nit repo --server … list` or `nit repo list --server …`).
+    #[arg(long, global = true)]
+    pub server: Option<String>,
+}
+
+#[derive(clap::Subcommand)]
+pub enum RepoCmd {
+    /// List registered repos and their active-chain counts
+    List,
+    /// Repoint a repo at its new location after moving it on disk
+    Move(RepoMoveArgs),
+}
+
+#[derive(clap::Args)]
+pub struct RepoMoveArgs {
+    /// The repo's current path, exactly as `nit repo list` prints its
+    /// `git_dir` (or that path with the `/.git` dropped). Its `.git` need not
+    /// still exist — this is the moved-from key nit has stored.
+    pub from: String,
+    /// The repo's new location on disk (a worktree or its `.git` dir). Its
+    /// git-common-dir is inferred and becomes the repo's new identity.
+    pub to: PathBuf,
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 
@@ -699,6 +731,49 @@ pub fn reply(args: ReplyArgs) -> Result<()> {
     print_json(&comment)
 }
 
+/// `nit repo` dispatch.
+///
+/// # Errors
+/// Per subcommand: when the server can't be reached, or (for `move`) the new
+/// path or the named repo can't be resolved.
+pub fn repo(args: RepoArgs) -> Result<()> {
+    match args.cmd {
+        RepoCmd::List => repo_list(args.server),
+        RepoCmd::Move(a) => repo_move(&a, args.server),
+    }
+}
+
+/// Print the repo registry (`GET /api/repos`).
+fn repo_list(server: Option<String>) -> Result<()> {
+    let client = Client::new(server_url(server));
+    let repos = client.get("/api/repos")?;
+    print_json(&repos)
+}
+
+/// Repoint a moved repo: infer the new git-common-dir from `to`, find the
+/// repo whose stored git dir matches `from`, and `PATCH` it to the new path.
+fn repo_move(args: &RepoMoveArgs, server: Option<String>) -> Result<()> {
+    let client = Client::new(server_url(server));
+    let to = repo_git_dir(&args.to)?;
+    let from = args.from.trim_end_matches('/');
+    let list = client.get("/api/repos")?;
+    let repos = list["repos"]
+        .as_array()
+        .ok_or_else(|| anyhow!("malformed repo list: {list}"))?;
+    let id = repos
+        .iter()
+        .find(|r| {
+            let gd = r["git_dir"].as_str().unwrap_or("");
+            gd == from || gd.strip_suffix("/.git").is_some_and(|root| root == from)
+        })
+        .and_then(|r| r["id"].as_u64())
+        .ok_or_else(|| {
+            anyhow!("no repo registered at '{from}' — run 'nit repo list' to see the exact paths")
+        })?;
+    let updated = client.patch(&format!("/api/repos/{id}"), &json!({"git_dir": to}))?;
+    print_json(&updated)
+}
+
 fn print_json(value: &Value) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
@@ -903,6 +978,11 @@ impl Client {
             .map_err(|e| e.into_error(&self.base))
     }
 
+    fn patch(&self, path: &str, body: &Value) -> Result<Value> {
+        self.patch_raw(path, body)
+            .map_err(|e| e.into_error(&self.base))
+    }
+
     /// Open a streaming GET for the SSE `/events` endpoint. Retries the
     /// *connect* with backoff while the server is unreachable (`Retry::No`
     /// fails fast); the returned reader then streams the body. One stderr
@@ -940,6 +1020,16 @@ impl Client {
         let response = self
             .agent
             .post(&url)
+            .send_json(body)
+            .map_err(|e| classify(e, path))?;
+        Self::read(response, path)
+    }
+
+    fn patch_raw(&self, path: &str, body: &Value) -> Result<Value, CallError> {
+        let url = format!("{}{path}", self.base);
+        let response = self
+            .agent
+            .patch(&url)
             .send_json(body)
             .map_err(|e| classify(e, path))?;
         Self::read(response, path)
