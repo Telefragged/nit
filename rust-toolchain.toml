@@ -1,0 +1,6 @@
+# Single source of truth for the Rust toolchain. rust-overlay reads this
+# in flake.nix (devShell + build); rustup honours it for non-nix users.
+[toolchain]
+channel = "1.96.0"
+profile = "minimal"
+components = ["clippy", "rustfmt", "rust-src", "rust-analyzer"]

@@ -3,10 +3,18 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -14,95 +22,121 @@
         "x86_64-darwin"
         "aarch64-darwin"
       ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      forAllSystems =
+        f:
+        nixpkgs.lib.genAttrs systems (
+          system:
+          f (
+            import nixpkgs {
+              inherit system;
+              overlays = [ rust-overlay.overlays.default ];
+            }
+          )
+        );
+      # The pinned toolchain (rust-toolchain.toml) drives both the devShell
+      # and the build, so contributors and CI compile with the same rustc.
+      rustToolchainFor = pkgs: pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
     in
     {
-      devShells = forAllSystems (pkgs: {
-        default = pkgs.mkShell {
-          packages = with pkgs; [
-            # Rust backend
-            rustc
-            cargo
-            clippy
-            rustfmt
-            rust-analyzer
-            pkg-config
-            libgit2
-            sqlite
-            zlib
+      devShells = forAllSystems (
+        pkgs:
+        let
+          rustToolchain = rustToolchainFor pkgs;
+        in
+        {
+          default = pkgs.mkShell {
+            packages = with pkgs; [
+              # Rust backend — rustc/cargo/clippy/rustfmt/rust-analyzer all
+              # come from the one pinned toolchain.
+              rustToolchain
+              pkg-config
+              libgit2
+              sqlite
+              zlib
 
-            # Web frontend
-            nodejs_22
+              # Web frontend
+              nodejs_22
 
-            # Formatting — treefmt drives the per-language formatters
-            # configured in treefmt.toml (rustfmt above covers Rust)
-            treefmt
-            nixfmt
-            prettier
-            shfmt
-            taplo
+              # Formatting — treefmt drives the per-language formatters
+              # configured in treefmt.toml (rustfmt from the toolchain above)
+              treefmt
+              nixfmt
+              prettier
+              shfmt
+              taplo
 
-            # Screenshot harness / frontend checking
-            playwright-driver
-          ];
+              # Screenshot harness / frontend checking
+              playwright-driver
+            ];
 
-          env = {
-            PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
-            PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
-            # Pin for package.json: npm playwright must match the driver.
-            PLAYWRIGHT_DRIVER_VERSION = pkgs.playwright-driver.version;
+            env = {
+              PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
+              PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+              # Pin for package.json: npm playwright must match the driver.
+              PLAYWRIGHT_DRIVER_VERSION = pkgs.playwright-driver.version;
+            };
           };
-        };
-      });
+        }
+      );
 
-      packages = forAllSystems (pkgs: rec {
-        nit-web = pkgs.buildNpmPackage {
-          pname = "nit-web";
-          version = "0.1.0";
-          src = ./web;
-          npmDepsHash = "sha256-DUUz79xX9cTDY/DV7eSfSTJ04YV565pS9/Cc4Zbevh0=";
-          installPhase = ''
-            runHook preInstall
-            cp -r dist $out
-            runHook postInstall
-          '';
-        };
-
-        nit-unwrapped = pkgs.rustPlatform.buildRustPackage {
-          pname = "nit";
-          version = "0.1.0";
-          src = ./.;
-          cargoLock.lockFile = ./Cargo.lock;
-          nativeBuildInputs = [ pkgs.pkg-config ];
-          buildInputs = [
-            pkgs.libgit2
-            pkgs.sqlite
-            pkgs.zlib
-          ];
-          # The test suite builds real repos and runs `git rebase` in the
-          # differential test; the sandbox has no git or identity config.
-          nativeCheckInputs = [ pkgs.git ];
-          preCheck = ''
-            export HOME=$TMPDIR
-            export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
-            export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
-          '';
-        };
-
-        # The real product: nit with the built web UI baked in via env.
-        nit =
-          pkgs.runCommand "nit"
-            {
-              nativeBuildInputs = [ pkgs.makeWrapper ];
-            }
-            ''
-              mkdir -p $out/bin
-              makeWrapper ${nit-unwrapped}/bin/nit $out/bin/nit \
-                --set-default NIT_WEB_DIST ${nit-web}
+      packages = forAllSystems (
+        pkgs:
+        let
+          rustToolchain = rustToolchainFor pkgs;
+          rustPlatform = pkgs.makeRustPlatform {
+            cargo = rustToolchain;
+            rustc = rustToolchain;
+          };
+        in
+        rec {
+          nit-web = pkgs.buildNpmPackage {
+            pname = "nit-web";
+            version = "0.1.0";
+            src = ./web;
+            npmDepsHash = "sha256-DUUz79xX9cTDY/DV7eSfSTJ04YV565pS9/Cc4Zbevh0=";
+            installPhase = ''
+              runHook preInstall
+              cp -r dist $out
+              runHook postInstall
             '';
+          };
 
-        default = nit;
-      });
+          nit-unwrapped = rustPlatform.buildRustPackage {
+            pname = "nit";
+            version = "0.1.0";
+            src = ./.;
+            cargoLock.lockFile = ./Cargo.lock;
+            nativeBuildInputs = [ pkgs.pkg-config ];
+            buildInputs = [
+              pkgs.libgit2
+              pkgs.sqlite
+              pkgs.zlib
+            ];
+            # The test suite builds real repos and runs `git rebase` in the
+            # differential test; the sandbox has no git or identity config.
+            nativeCheckInputs = [ pkgs.git ];
+            preCheck = ''
+              export HOME=$TMPDIR
+              export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
+              export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
+            '';
+          };
+
+          # The real product: nit with the built web UI baked in via env.
+          nit =
+            pkgs.runCommand "nit"
+              {
+                nativeBuildInputs = [ pkgs.makeWrapper ];
+              }
+              ''
+                mkdir -p $out/bin
+                makeWrapper ${nit-unwrapped}/bin/nit $out/bin/nit \
+                  --set-default NIT_WEB_DIST ${nit-web}
+              '';
+
+          default = nit;
+        }
+      );
 
       checks = forAllSystems (pkgs: {
         build = self.packages.${pkgs.system}.nit;
