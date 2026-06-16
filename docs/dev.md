@@ -1,14 +1,14 @@
 # Development
 
-**Every command runs inside the devShell**: `nix develop -c <cmd>`, or let
-direnv (`.envrc`) put you in it. Never call system cargo/node.
+**Every command runs in the devShell**: `nix develop -c <cmd>` (or direnv
+via `.envrc`). Never use system cargo/node.
 
 ## Loops
 
 ```sh
-# backend (auto-rebuild on change is fine via cargo-watch if added; plain:)
+# backend
 nix develop -c cargo run -- serve              # api on :8877
-nix develop -c cargo check                     # fast compile gate — run it often
+nix develop -c cargo check                     # fast compile gate
 nix develop -c cargo clippy --all-targets -- -D warnings
 nix develop -c cargo test
 nix develop -c cargo fmt
@@ -25,301 +25,181 @@ nix build                                      # product only → result/bin/nit
 nix flake check                                # build + clippy + test validators
 ```
 
-`nix build` pins the web dependencies by hash: any commit that changes
-`web/package-lock.json` must also refresh `npmDepsHash` in `flake.nix`
-(`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json` prints the
-new value) and verify `nix build`. A stale hash breaks `nix build` — and
-with it every `nix run 'git+file://…?ref=main#nit'` CLI invocation.
+Changing `web/package-lock.json` means refreshing `npmDepsHash` in
+`flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`
+prints it); a stale hash breaks `nix build` and every
+`nix run '…?ref=main#nit'` CLI invocation.
 
 ## Verification
 
-A change is verified by its checks, not by a successful build. `nix build`
-produces the product binary only — tests do **not** run as part of it
-(`doCheck = false`). Run the validators before every commit (golden
-rule 9):
+Checks verify a change, not a green build — `nix build` skips tests
+(`doCheck = false`). Before every commit (golden rule 9):
 
-- `nix develop -c cargo check` — the fast inner-loop gate; run it often
-  while editing.
-- `nix flake check` — the authoritative pre-commit gate. It builds the
-  product and runs the crane validators: `clippy`
-  (`--all-targets -- -D warnings`, the same lints as the devShell command)
-  and `test` (the full `cargo test` suite, with the git identity the
-  differential rebase test needs). Build one in isolation with
+- `nix develop -c cargo check` — fast inner-loop gate.
+- `nix flake check` — the pre-commit gate: builds the product and runs the
+  `clippy` (`-D warnings`) and `test` crane validators. Run one alone with
   `nix build .#checks.<system>.clippy` or `.#checks.<system>.test`.
-
-A commit is not done until `cargo check` and the flake checks are green.
 
 ## Formatting
 
-`nix develop -c treefmt` formats the whole tree (`nix fmt` runs the
-same thing) — config in `treefmt.toml`, formatter binaries pinned by
-the devShell (rustfmt, prettier, nixfmt, shfmt, taplo).
-`treefmt --fail-on-change` is the check form.
+`nix develop -c treefmt` formats the tree (`nix fmt` is the same; config in
+`treefmt.toml`); `treefmt --fail-on-change` checks.
 
-Formatting is **per commit**, not per branch: run treefmt before every
-`git commit`, so each commit is treefmt-clean on its own, parallel
-chains never conflict on whitespace, and review interdiffs show real
-changes only. Committing or amending from a formatted tree keeps that
-invariant; a **rebase does not** — replayed commits and hand-typed
-conflict resolutions land unformatted in whichever commit they touched,
-where amending the tip cannot reach them. So after every rebase,
-re-format each rewritten commit in place:
+Format **per commit**, so each commit is clean on its own. A rebase breaks
+this — replayed commits and conflict resolutions land unformatted in
+whichever commit they touch, out of the tip's reach — so re-format every
+rewritten commit after a rebase:
 
 ```sh
 git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' \
   "$(git merge-base main HEAD)"    # when landing: onto main instead
 ```
 
-No-op on a clean chain. Check-only form: exec
-`nix develop -c treefmt --fail-on-change` instead — it stops at the
-first unformatted commit.
-
-treefmt walks the **whole tree**, which has two sharp edges:
-
-- Never run a bare treefmt right before amending a checked-out _historic_
-  commit (mid-rebase): it formats the whole tree and folds later commits'
-  formatting into the amend. Stage only the files you mean to.
-- prettier drops the hanging indent of a markdown list continuation when
-  an inline code span straddles the line break — keep code spans on one
-  line.
+Two edges: don't run a bare treefmt before amending a checked-out historic
+commit mid-rebase (it folds later commits' formatting into the amend —
+stage only your files); and keep inline code spans on one line, or prettier
+drops the hanging indent of a wrapped markdown list item.
 
 ## Linting
 
-`nix develop -c npm run lint` (in `web/`) runs ESLint then Stylelint —
-the frontend counterpart to `clippy::pedantic` on the backend. ESLint
-covers `.ts`/`.tsx`/`.html` with strict, type-aware rules
-(typescript-eslint strict + stylistic, react/hooks, jsx-a11y,
-@html-eslint); Stylelint covers `.css` with stylelint-config-standard
-(`npm run lint:css` for CSS alone). Both must stay green, same as clippy.
-Formatting is **not** their job: `eslint-config-prettier` and
-stylelint-config-standard both defer whitespace to prettier (run via
-treefmt), so lint and format never fight.
+`nix develop -c npm run lint` (in `web/`) runs ESLint then Stylelint, the
+frontend counterpart to backend `clippy::pedantic`; both stay green.
+Formatting is prettier's job, not theirs. Config: `web/eslint.config.js`,
+`web/stylelint.config.js`.
 
-Config is `web/eslint.config.js` and `web/stylelint.config.js`. Disables
-come in exactly two kinds: formatter-owned (permanent — prettier's
-territory) and a burn-down allow-list (temporary — rules the strict
-presets enable that the code doesn't satisfy yet, each silenced with its
-remaining count). The allow-list only shrinks: a new agent's first output
-is held to every rule not on it, and the list is whittled to empty over
-time. Re-enabling a rule means removing its line **and** fixing the code
-in the same commit, never relaxing it back. A genuinely ill-fitting rule
-gets a reasoned inline disable instead (ESLint's
-`reportUnusedDisableDirectives` flags it when stale — the `#[expect]`
-model), never a silent permanent allow.
+Strictness only ratchets **up**. Suppress a lint only with a reason —
+`#[expect(..., reason = "…")]` on the backend (`#[allow]` is denied), a
+reasoned inline disable on the frontend (a bare one is flagged stale). The
+backend also denies `unwrap` (use `expect` with a reason), via the
+workspace lints in the root `Cargo.toml`. The frontend allow-list of
+not-yet-satisfied rules only shrinks: re-enable a rule by removing its line
+and fixing the code in the same commit.
 
-The backend has the same shape. `clippy` runs
-`--all-targets -- -D warnings` with `clippy::pedantic`, and the workspace
-lints in the root `Cargo.toml` enforce the suppression discipline
-directly: `unwrap` is denied (use `expect` with a reason), and `#[allow]`
-is denied in favour of `#[expect(..., reason = "…")]` — the attribute
-that errors once it stops applying (`clippy::allow_attributes` /
-`allow_attributes_without_reason`). Strictness only ratchets **up**: a
-lint that fires widely is worked through or ratcheted temporarily, never
-permanently allowed as "noise".
-
-Relaxing a rule is a judgment call, not a way to dodge the work: relax
-one only when the fix it forces is uglier than the risk it guards — e.g.
-allowing number interpolation (`${n}`) rather than wrapping every span in
-`String()` — and say why. "It's a lot of edits" is never the reason.
+Relax a rule only when the fix it forces is uglier than the risk it guards
+(e.g. allowing `${n}` number interpolation over wrapping every span in
+`String()`) — and say why. "It's a lot of edits" is not a reason.
 
 ## Type discipline — let the types make illegal states unrepresentable
 
-Lean on the type system; do not push validation that a type could do into
-runtime checks or convention. Three standing rules:
+Lean on the type system instead of runtime checks or convention. Three
+rules, binding on review and simplification passes too (a violation is a
+finding to fix, and reviewer agents are told so):
 
-- **A closed set of values is an `enum`, never a `String`.** Every field
-  that can only be one of a fixed list (sides, verdicts, statuses, kinds,
-  authors, …) is a serde enum, not a string. The Rust home for these is
-  `crates/nit/src/enums.rs`; the TS mirror is the union types in
-  `web/src/api/types.ts`. A `#[serde(rename_all = "snake_case")]` (or
-  per-variant `rename`) reproduces the wire spelling, so swapping a
-  `String` for the enum is **not** a wire change — the JSON in `docs/api.md`
-  is unchanged. The payoff is exhaustive `match`es (no `_ =>`
-  fallthrough), no `as_str`/`from_str` round-tripping inside the server,
-  and automatic rejection of an unknown value at deserialize time (a 400
-  through `AppJson`) instead of a bad string flowing deeper. The one place
-  a string is still acceptable is the storage boundary — a `TEXT` column or
-  the dispatch on a not-yet-parsed log row — and it is converted to the
-  enum immediately (`db::col_side`, `Entry::from_row`).
-
-- **Absence is not a state — model it.** When a cluster of `Option` fields
-  has only a few legal combinations, encode the combinations as an enum so
-  the illegal ones are unrepresentable, rather than leaving the invariants
-  to a doc comment. A thread's location is `review::Anchor`
-  (`Change | File | Line { … }`), not five independent `Option`s where a
-  `range` without a `line` or a `line` without a `file` could be built.
-
-- **One input names one thing — don't overload a flag to sniff its form.**
-  When a value could be identified two ways, give it two
-  mutually-exclusive, type-distinct inputs rather than one that guesses
-  from the form. `nit comment` takes `--change <u64>` (the numeric change
-  id) **or** `--change-id <String>` (the `Change-Id` trailer) — never one
-  `--change-id` that tries `parse::<u64>()` first and falls back to a
-  trailer lookup, which invites passing the wrong class of value and
-  getting the wrong thing back.
-
-All three bind **review and simplification passes too** (the agents in a
-two-pronged review included): a new stringly-typed enumerated field, a new
-bag of `Option`s standing in for an enum, or an overloaded value-sniffing
-flag is a finding to fix, never the accepted baseline — and a reviewer
-agent is told so explicitly when it is spawned.
+- **A closed set of values is an `enum`, never a `String`** (sides,
+  verdicts, statuses, kinds…). Home: `crates/nit/src/enums.rs`, mirrored by
+  the TS unions in `web/src/api/types.ts`. `#[serde(rename_all = …)]` keeps
+  the wire spelling, so it is not a wire change. Buys exhaustive `match`es
+  and a 400 on an unknown value at deserialize time. A `String` is fine
+  only at the storage boundary, converted to the enum immediately.
+- **Absence is not a state — model it.** Encode the legal combinations of a
+  cluster of `Option`s as an enum so the illegal ones can't be built: a
+  thread's location is `review::Anchor` (`Change | File | Line { … }`), not
+  five loose `Option`s.
+- **One input names one thing.** Identify a thing two ways with two
+  type-distinct flags, not one that sniffs the value's form: `nit comment`
+  takes `--change <u64>` or `--change-id <String>`, never one flag that
+  guesses.
 
 ## Restarting the server
 
-Rebuild (`nix build` or `cargo build`), ctrl-c the running `nit serve`
-(in-flight `/events` streams end on the shutdown signal, so shutdown is prompt),
-then start it again with the same `--db`. Parked `nit wait`s are
-unaffected: each prints one stderr notice, retries with backoff (1–10s)
-until the server is back, and resumes the same sqlite-persisted cursor —
-no review events are missed. `nit push`/`status`/`reply` issued during
-the gap fail fast ("is 'nit serve' running?"); just rerun them.
+Rebuild, ctrl-c the running `nit serve`, restart with the same `--db`.
+Parked `nit wait`s ride it out (backoff retry, persisted cursor — no events
+missed); `push`/`status`/`reply` during the gap fail fast, so rerun them.
 
 ## Screenshot harness (frontend checking for AI agents)
 
-AI agents can't look at a browser; they look at PNGs. Both modes write to
-`screenshots/*.png` (repo root, gitignored) — to "see" the app, run one and
-`Read` the PNGs:
+Agents read PNGs, not browsers. Both modes write `screenshots/*.png` (repo
+root, gitignored); run one and `Read` them:
 
 ```sh
-# mock mode — every UI state from canned fixtures, no backend needed
+# mock mode — every UI state from fixtures, no backend
 cd web && nix develop -c npm run screenshots
-
-# live mode — seeds a demo repo, runs the real nix-built server + UI
-nix develop -c scripts/screenshots-live.sh     # needs ./result from nix build
+# live mode — real nix-built server + UI (needs ./result from nix build)
+nix develop -c scripts/screenshots-live.sh
 ```
 
-Mock mode is the design-review workhorse (it covers detailed states:
-drafts, 409s, interdiff…); live mode verifies real backend
-data renders. Add a mock capture whenever you add a page or significant
-state. Implementation lives in `web/screenshots/capture.mjs`; the npm
-`@playwright/test` version must match `pkgs.playwright-driver` (the
-devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
+Mock mode covers detailed states (drafts, 409s, interdiff); add a capture
+with every new page or state. The npm `@playwright/test` version must match
+`pkgs.playwright-driver` (the devShell sets `$PLAYWRIGHT_DRIVER_VERSION`).
 
 ## Testing expectations
 
-- Rust: unit tests next to the code; scan/identity logic gets real-git
-  integration tests (`tempfile` + git2 building tiny repos). `cargo test`
-  must stay green — it runs as the `test` flake check, not as part of
-  `nix build` ("Verification" above).
-- Frontend: tsc-clean always; component logic that's easy to break (diff
-  rendering, comment anchoring) deserves vitest tests — `npm test` runs
-  them (jsdom + testing-library, colocated `*.test.ts(x)` under `src/`)
-  and must stay green.
-- End-to-end: `scripts/e2e.sh` drives the full agent↔reviewer loop against
-  a fixture repo using the built binary.
+- Rust: unit tests beside the code; scan/identity logic gets real-git
+  integration tests (`tempfile` + git2). `cargo test` runs as the `test`
+  flake check.
+- Frontend: tsc-clean always; test break-prone logic (diff rendering,
+  comment anchoring) with vitest (`npm test`).
+- End-to-end: `scripts/e2e.sh` drives the full loop against a fixture repo.
 - A fresh `.worktrees/*` checkout has no `web/node_modules`; run
   `cd web && nix develop -c npm ci` before any web check.
 
 ## Commit & branch discipline
 
-- Small commits, one concern each. The imperative subject states the
-  _what_ (for easy indexing); the body explains _why_ — the what is
-  evident from the diff, so the why is the part worth writing. Hard-wrap
-  the body at 72 columns. Keep the message **timeless**: read years later
-  against the tree it produced, it carries no process narration — no
-  "rebased onto X", "the harness landed meanwhile", branch ordering, or
-  similar. That context is useful live; put it in the `nit` reply or
-  terminal output, not the git history.
-- Code comments are timeless too, and stricter: a commit _message_ may
-  describe what the commit changes, but a code _comment_ may not. A
-  comment states what the current code **is**, never how it got there —
-  no "now / no longer / replaced the old / used to"; one that only
-  narrates a change or a removed approach gets deleted, since git blame
-  holds the history.
-- Every commit treefmt-clean: format before committing, re-format and
-  amend after any rebase or conflict resolution ("Formatting" above).
+- Small commits, one concern each. The subject states the _what_ (for
+  indexing); the body explains _why_, wrapped at 72 columns. Keep messages
+  **timeless** — no process narration ("rebased onto X", branch ordering);
+  that goes in the `nit` reply or terminal, not git history.
+- Code comments are stricter: a comment says what the code **is**, never
+  how it got there (no "now / no longer / replaced"). git blame holds the
+  history.
+- Every commit treefmt-clean (re-format after a rebase — "Formatting").
 - Never mix refactors with behavior changes.
-- **Every change starts in its own worktree** under `.worktrees/` on a
-  `track/*` branch — the default for solo work, not just parallel work, so
-  the main checkout stays on `main` and chains never serialize on a shared
-  branch. Create one with:
+- **Every change starts in its own worktree** on a `track/*` branch, so
+  `main` stays put and chains never serialize on a shared branch:
 
   ```sh
   git worktree add .worktrees/<slug> -b track/<slug> main
   ```
 
-  Commit there, drive the nit review loop from that worktree, and land via
-  the approve action — rebase + fast-forward only, never a merge commit
-  anywhere (recipe: "The approve action" below).
-
-  Address the worktree **explicitly** in every command — absolute paths in
-  edits, `cargo --manifest-path <worktree>/crates/nit/Cargo.toml`,
-  `git -C <worktree>`, and treefmt/`nix build` pointed at the worktree —
-  rather than trusting an ambient working directory; a tool whose cwd has
-  drifted back to the primary checkout otherwise edits, builds, or tests
-  the wrong tree (the devShell toolchain is identical from either
-  checkout).
-
-  Tear it down after landing: `git worktree remove .worktrees/<slug>` then
+  Address the worktree explicitly — absolute paths,
+  `cargo --manifest-path <worktree>/crates/nit/Cargo.toml`,
+  `git -C <worktree>` — never an ambient cwd, which may have drifted back
+  to the primary checkout. Commit there, drive the review loop, land via
+  the approve action, then `git worktree remove .worktrees/<slug>` and
   `git branch -d track/<slug>`.
 
-- **Parallel chains stay independent.** With several pieces of work in
-  flight at once (one worktree/branch each), never pre-merge them into a
-  shared integration branch to "resolve conflicts once" — that serializes
-  independent reviews and couples them. Each branch is built, pushed, and
-  reviewed as if the others don't exist; conflicts are resolved only as
-  each one lands (rebase + ff-merge). The opposite case is always fine:
-  keep a single in-flight branch current with a moved `main` by rebasing
-  onto it mid-review whenever it helps.
+- **Parallel chains stay independent**: never pre-merge in-flight branches
+  into a shared integration branch — each is built and reviewed on its own,
+  conflicts resolved only as each lands. (Rebasing one in-flight branch
+  onto a moved `main` is fine.)
 
 ## Landing changes — the nit review loop
 
-This repo dogfoods itself: finished work is pushed as a nit chain and
-reviewed by a human before the approve action lands it on `main`. Agents
-drive the loop with the `nit-review` skill
-(`.claude/skills/nit-review/SKILL.md`); the underlying protocol is
-`docs/agent-workflow.md`.
-
-One dogfooding subtlety: the running server is whatever build started it —
-normally the `main` checkout's. Drive the loop's `nit` CLI from that same
-build (`nit` on PATH, else `nix run '…?ref=main#nit'`), **not** your
-branch's `target/debug/nit`. It matters most when the branch under review
-changes nit's own wait/server protocol: a branch-built `nit wait` is then
-version-skewed against the still-running server and won't park correctly.
-The other verbs (`push`/`ready`/`reply`/`log`) are wire-stable enough to
-run from either, but when unsure prefer the server-matching build.
+This repo dogfoods nit: push finished work as a chain, a human reviews it,
+the approve action lands it on `main`. Drive the loop with the `nit-review`
+skill (`.claude/skills/nit-review/SKILL.md`); protocol in
+`docs/agent-workflow.md`. Run the `nit` CLI from the build that matches the
+running server (normally `main`'s: `nit` on PATH, else
+`nix run '…?ref=main#nit'`), not your branch's binary.
 
 ### The approve action
 
-nit derives the `approved` state (every live change approved, chain not
-`partial`) but does **not** prescribe what landing it means — that is the
-**approve action**, defined per project. For this repo the approve action
-is a fast-forward-only merge to `main` (no merge commits — golden rule 2):
+nit derives `approved` (every live change approved, chain not `partial`)
+but doesn't prescribe landing — each project defines that. Here it's a
+fast-forward-only merge to `main` (no merge commits — golden rule 2):
 
 ```sh
-# when main moved: rebase onto it, keeping every replayed commit
-# treefmt-clean ("Formatting" above)
+# if main moved: rebase onto it, re-formatting each replayed commit
 git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' main
 git checkout main && git merge --ff-only <branch>
-nit push --repo <worktree> --branch <branch>   # scan flags the chain merged
+nit push --repo <worktree> --branch <branch>   # scan records the chain merged
 git branch -d <branch>
 ```
 
-Order matters: the scan must see the merge while the branch ref still
-exists, so it records `merged`, not `abandoned`.
-
-**Make the best effort to fully close an approved chain — don't stop at
-`approved`.** `--ff-only` is there to keep `main` linear (no merge
-commits), **not** to gate the work: a branch that isn't fast-forwardable
-because `main` moved is a rebase to do, not a reason to pause. So the
-approve action is always _rebase if needed, then `--ff-only` merge_, run
-end to end — never pause to ask whether to land an approved chain; land
-it.
-
-In a worktree (`.worktrees/*`): rebase there, but never `git checkout
-main` — main is checked out in the primary worktree. Run the merge from
-that checkout: `git -C <primary-checkout> merge --ff-only <branch>`. The
-only reason to stop at `approved` is a genuine ownership conflict —
-another agent actively driving that checkout; absent that, close the
-chain.
+The scan must see the merge while the branch ref still exists, or it
+records `abandoned` instead of `merged`. Always close an approved chain:
+`--ff-only` keeps `main` linear, it doesn't gate the work, so a non-ff
+branch is a rebase to do, not a reason to pause. In a worktree, rebase
+there but run the merge from the primary checkout (`git -C <primary> merge
+--ff-only <branch>`) — never `git checkout main` in the worktree. Stop at
+`approved` only if another agent owns that checkout.
 
 ### Review exemptions
 
-Changes matching an entry here may land on `main` directly (same commit
+Changes matching an entry here may land on `main` directly (same
 discipline, still green):
 
-- _(none yet — add bullets like "screenshot fixture data" or
-  "typo-level doc fixes" as policy emerges)_
+- _(none yet)_
 
-Ad-hoc exemption: the user saying "skip nit" / "land this directly" for a
-specific change. When in doubt, review.
+Ad-hoc: the user saying "skip nit" / "land directly". When in doubt,
+review.
