@@ -45,6 +45,11 @@
         let
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
           commonArgs = {
+            # The workspace root Cargo.toml has no [package], so crane cannot
+            # infer a name from it; set it here for every crane derivation
+            # (deps, build, clippy, test) instead of the placeholder.
+            pname = "nit";
+            version = "0.1.0";
             src = pkgs.lib.fileset.toSource {
               root = ./.;
               fileset = craneLib.fileset.commonCargoSources ./.;
