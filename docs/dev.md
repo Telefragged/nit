@@ -244,6 +244,15 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
   Tear it down after landing: `git worktree remove .worktrees/<slug>` then
   `git branch -d track/<slug>`.
 
+- **Parallel chains stay independent.** With several pieces of work in
+  flight at once (one worktree/branch each), never pre-merge them into a
+  shared integration branch to "resolve conflicts once" — that serializes
+  independent reviews and couples them. Each branch is built, pushed, and
+  reviewed as if the others don't exist; conflicts are resolved only as
+  each one lands (rebase + ff-merge). The opposite case is always fine:
+  keep a single in-flight branch current with a moved `main` by rebasing
+  onto it mid-review whenever it helps.
+
 ## Landing changes — the nit review loop
 
 This repo dogfoods itself: finished work is pushed as a nit chain and
