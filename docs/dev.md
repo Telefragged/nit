@@ -185,6 +185,12 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
   "rebased onto X", "the harness landed meanwhile", branch ordering, or
   similar. That context is useful live; put it in the `nit` reply or
   terminal output, not the git history.
+- Code comments are timeless too, and stricter: a commit _message_ may
+  describe what the commit changes, but a code _comment_ may not. A
+  comment states what the current code **is**, never how it got there —
+  no "now / no longer / replaced the old / used to"; one that only
+  narrates a change or a removed approach gets deleted, since git blame
+  holds the history.
 - Every commit treefmt-clean: format before committing, re-format and
   amend after any rebase or conflict resolution ("Formatting" above).
 - Never mix refactors with behavior changes.
