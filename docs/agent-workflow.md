@@ -2,360 +2,212 @@
 
 nit reviews **commits**, not branches. Make each commit one reviewable unit
 (one logical change, own subject + body). The branch you register is the
-"chain"; every commit on it becomes a change the human reviews separately.
+"chain"; each commit on it is a change the human reviews separately.
 
-This doc covers the **agent-driven** push/wait/reply loop only. CLI
-features for the human operator — inspecting an arbitrary chain from
-another directory, juggling parallel chains — belong in the `clap` help,
-not here.
+This doc is the **agent-driven** push/wait/reply loop. Human-operator CLI
+conveniences belong in the `clap` help, not here.
 
 ## Conventions for your commits
 
-- Add a `Change-Id: I<unique-token>` trailer (any opaque unique string;
-  40 hex like gerrit is customary) to every commit message — and never the
-  same token twice. The trailer is **required and canonical**: it is the
-  change's identity, keeping its comment history stable across rebases and
-  amends; a missing or duplicated trailer fails the scan
-  (`last_scan_error`). Keep every trailer in one block — a blank line
-  between trailers splits the block and git silently drops the
-  `Change-Id`.
-- **Never merge into your branch** — no `git pull` without `--rebase`. A
-  merge commit in the chain fails the scan; rebase onto the base instead.
-- Keep every commit **formatter-clean** (this repo:
-  `nix develop -c treefmt`): format before each commit, and after any
-  rebase re-format every rewritten commit, not just the tip —
-  hand-resolved conflict hunks land unformatted in whichever commit
-  conflicted (recipe: docs/dev.md "Formatting"). The reviewer's
-  interdiff should show your fix, never whitespace noise.
-- Answer review feedback by **amending the reviewed commit in place**,
-  keeping its Change-Id, then pushing the rewritten branch. nit appends a
-  new revision of the same change; the reviewer sees what you changed
-  (interdiff), not a pile of "address review comments" commits.
-  `fixup!`/`squash!` commits are fine as a local staging step, but squash
-  them before pushing — the scan rejects them (git ≥ 2.44):
-  `GIT_EDITOR=true git rebase --autosquash <fork-point>`
-  (fallback: `GIT_SEQUENCE_EDITOR=: GIT_EDITOR=true git rebase -i --autosquash <fork-point>`).
+- **A `Change-Id: I<unique-token>` trailer on every commit** (any opaque
+  string, 40 hex by convention), never reused. It is the change's identity
+  across rebases and amends; a missing or duplicate trailer fails the scan
+  (`last_scan_error`). Keep the trailer block unbroken — a blank line
+  between trailers makes git drop the `Change-Id`.
+- **Never merge into your branch** (no `git pull` without `--rebase`) — a
+  merge commit fails the scan. Rebase onto the base.
+- **Every commit formatter-clean** (`nix develop -c treefmt`), each
+  rewritten commit re-formatted after a rebase (docs/dev.md "Formatting"),
+  so the reviewer's interdiff shows your fix, not whitespace.
+- **Answer feedback by amending the reviewed commit in place**, keeping its
+  Change-Id, then pushing — nit appends a new revision and the reviewer
+  sees an interdiff, not "address review comments" commits. `fixup!`/
+  `squash!` are fine locally but squash before pushing (the scan rejects
+  them): `GIT_EDITOR=true git rebase --autosquash <fork-point>`.
 
-## The cursor — how `nit wait` works
+## The cursor
 
-nit's state is an append-only log per chain (docs/data-model.md). You
-drive review with a **0-based cursor**: the count of log entries you have
-already consumed. It starts at `0`.
+nit's state is an append-only log per chain (docs/data-model.md). You drive
+review with a **0-based cursor** — the count of entries you've consumed,
+starting at `0`. `nit wait <cursor>` returns `{head, entries, state, …}`
+where `entries` is `[cursor, head)`; set your cursor to `head`. Two rules
+keep it lossless:
 
-```sh
-nit wait <cursor>      # returns the entries beyond <cursor>; blocks while caught up
-```
+1. **Advance the cursor only from a `wait`/`log` `head`**, never from
+   `push`/`comment` (they return no index). A reviewer comment landing
+   between two of your pushes is only caught if you take the whole
+   contiguous run from `wait`.
+2. **Keep waiting until it blocks.** Right after a push/reply, `wait`
+   returns immediately with your own just-appended entries; process,
+   advance, wait again until it actually blocks — then you're parked.
 
-`nit wait <cursor>` returns `{head, entries, state, …}`: `entries` are the
-log entries you had not yet seen (`[cursor, head)`), and you then set your
-cursor to `head`. Two rules make this lossless:
-
-1. **Advance the cursor only from a `wait` (or `nit log`) result** — its
-   `head`. Never from `nit push`/`nit comment`: those append entries but
-   return no index. If a reviewer comment lands between two of your own
-   pushes, jumping the cursor to "after my second push" would skip it;
-   only `wait` returns the whole contiguous run, so you always see it.
-2. **Keep waiting until it blocks.** Right after you push or reply, the
-   next `nit wait <cursor>` returns immediately — it hands back your own
-   just-appended entries (and anything interleaved). Process them, advance
-   the cursor, wait again; repeat until the call actually blocks. Then you
-   are caught up and parked for the reviewer.
-
-Skim entries cheaply with `nit wait --oneline <cursor>` (one line each, so
-you can tell your own entries from the reviewer's without token bloat).
-Inspect specific entries without moving your cursor with
-`nit log <ranges>` (e.g. `nit log 3`, `nit log 3..6`, half-open).
-
-Each entry has a `kind` (docs/data-model.md): `review` (a reviewer
-verdict, carrying any thread-resolution changes too — act on it),
-`chain_closed` (merged/abandoned — stop), and the ones you caused
-(`revisions` from your push, `comment`, `partial`). You act on the
-reviewer's entries and on the rolled-up `state` the response carries.
+Skim with `--oneline`; inspect entries without moving the cursor via
+`nit log <ranges>` (`3`, `3..6`, half-open). Entry `kind`s
+(docs/data-model.md): `review` (a reviewer verdict — act on it),
+`chain_closed` (merged/abandoned — stop), and your own (`revisions`,
+`comment`, `partial`).
 
 ## The loop
 
-**Cadence: pushing is part of completing a commit, not a phase after the
-branch.** Commit, push `--partial`, build the next commit. A planned
-later pass over the chain (cleanup, self-review, verification) is never
-a reason to hold pushes — push now, amend later: post-push amends become
-new revisions by design, and the reviewer sees the pass as interdiffs.
-The only thing that delays a push is the commit itself not being done.
+**Pushing is part of completing a commit, not a later phase.** Commit, push
+`--partial`, build the next. A planned later pass (cleanup, self-review,
+verification) never holds a push — post-push amends become new revisions by
+design. The only thing that delays a push is the commit not being done.
 
 ```sh
 cursor=0
-repo=$(pwd); branch=$(git branch --show-current)   # push needs both explicitly
-# while building — after EVERY completed commit (green, formatter-clean,
-#   one concern, Change-Id'd), not once at the end:
-nit push --partial --repo "$repo" --branch "$branch"   # register/refresh, partial
-#   the FIRST push creates the chain — report web_url to the human now;
-#   review starts on commit one.
-nit ready --repo "$repo" --branch "$branch"   # last commit done: clears partial,
-                              #   refreshes — the chain can now reach approved
+repo=$(pwd); branch=$(git branch --show-current)   # both required on push
+# after EVERY completed commit (green, formatter-clean, one concern, Change-Id'd):
+nit push --partial --repo "$repo" --branch "$branch"   # register/refresh
+#   first push creates the chain — report its web_url to the human now
+nit ready --repo "$repo" --branch "$branch"            # last commit done: clears partial
 
 # then drive the cursor loop until the chain closes:
-resp=$(nit wait $cursor)      # blocks until entries land beyond $cursor
-cursor=<resp.head>            # advance over everything you just received
-# inspect resp.entries (--oneline to skim) and resp.state:
-#   for each `review` entry: fix → amend the commit it targets (local
-#     fixup! + autosquash onto the fork point), or answer on its thread with
-#     nit comment --change-id <Change-Id> --thread <thread-id> [--resolve] -m "…"
+resp=$(nit wait $cursor); cursor=<resp.head>
+#   for each `review` entry: fix by amending the commit it targets
+#     (fixup! + autosquash), or answer its thread:
+#     nit comment --change-id <Change-Id> --thread <id> [--resolve] -m "…"
 nit push --repo "$repo" --branch "$branch"   # rewritten commits = new revisions
-# …then loop: nit wait $cursor again (returns your own entries first),
-#   advance, until state=approved or the chain closes
-# then run the project's approve action (commonly: rebase onto <base> if
-#   it moved, re-formatting each replayed commit, then fast-forward it)
+#   loop wait→advance until state=approved, then run the approve action
 nit push --repo "$repo" --branch "$branch"   # next scan appends chain_closed{merged}
 ```
 
-A harness with a cooperative monitor can replace the `nit wait` loop with
-a `nit log --follow` tail — see "Following the log instead of waiting".
+**A watcher is mandatory until the chain closes.** The instant `nit ready`
+returns (or you push the last revision), a `nit wait` or `nit log --follow`
+must be running as a background task and stay up until `approved`/`merged`/
+`abandoned`. A ready/pushed chain with nothing watching it is a dropped
+review, as broken as an unpushed commit. With `nit wait`, re-arm after every
+push/reply. The turn ends when the chain closes, not at `nit ready`.
 
-**Watching the chain is mandatory, not the optional tail of the loop.**
-`nit ready` is never the last thing you do: the instant it returns, a
-watcher — a `nit wait <cursor>` or a `nit log --follow` monitor — must be
-running as a background task, and must stay running until the chain
-reaches `approved`, `merged`, or `abandoned`. A chain left `ready`
-(or pushed) with nothing watching it is a dropped review: the reviewer's
-feedback lands and nothing ever reacts to it. Treat "ready/pushed with no
-watcher" as a broken loop, exactly like an unpushed commit. With `nit
-wait`, re-arm it after every push and reply; when it returns non-actionable
-(it woke on your own just-pushed entries), advance the cursor and wait
-again. The turn is not over while the chain is open — it is over when the
-chain closes.
+The push duty is **per branch, owned by whoever builds it**. In multi-agent
+setups every worker drives its own `nit push --partial` from its own
+worktree the moment its first commit is green; the orchestrator must not
+centralize, batch, or phase-gate pushing. An unpushed branch is invisible.
 
 ### Partial vs ready
 
-`--partial` tracks **work in flight, not review state**. A chain is
-partial while a work unit is still open — more commits coming, or an
-in-flight rebase (a rebase counts) — and you run `nit ready` the moment
-that unit completes. Being _under review_ does not make a chain partial:
-a reviewable, merge-ready chain is in the `ready` state. Both states are
-reviewable; partial only blocks _merging_.
+`--partial` tracks **work in flight, not review state**. A chain is partial
+while a work unit is open (more commits coming, or an in-flight rebase) and
+`ready` the moment it completes. Being under review does not make a chain
+partial. Both states are reviewable; partial only blocks merging.
 
-**Never scan (`push`/`ready`) while the branch sits on a stale base** — an
-old commit `main` has already moved past. From there the branch diverges
-back at the old common ancestor, so a scan walks the divergent old-`main`
-commits into the chain as changes that become permanent `orphaned` entries
-in the log. To rebase a `ready` chain onto a moved `main`, rebase **first**
-(a local op, no server call), then `nit ready` once — do not
-`nit push --partial` beforehand. The partial flag is for genuine
-multi-commit WIP scanned on a consistent base, not for bracketing a local
-rebase.
+**Never scan (`push`/`ready`) on a stale base** — one `main` has moved past.
+The branch then diverges at the old ancestor, and the scan walks the
+divergent old-`main` commits in as permanent `orphaned` entries. To rebase a
+`ready` chain onto a moved `main`: rebase first (local, no server call),
+then `nit ready` once — not `nit push --partial` beforehand.
 
 ### Following the log instead of waiting
 
-`nit wait` blocks for one wake, then returns — it suits a harness that can
-only do one thing at a time. If yours has a **cooperative monitor** that
-relays a background process's output **line by line as it arrives** (e.g.
-Claude Code), follow the log instead of polling `wait`:
+`nit wait` blocks for one wake. A harness with a **cooperative monitor**
+that relays a process's output line-by-line (e.g. Claude Code) can follow
+the log instead:
 
 ```sh
-git checkout -b "$branch"
-nit push --partial --repo "$(pwd)" --branch "$branch"   # an empty branch is fine:
-#   registers the chain so review can start the moment the first commit lands
-nit log --follow --oneline --reviewer-only 0 &   # background monitor, cursor 0
-# build commits, nit push --partial after each; when you run dry, just stop
-#   and let the monitor sit — it wakes you only when it's your turn.
+nit log --follow --oneline --reviewer-only <cursor>   # background monitor
 ```
 
-**Use `--oneline` for a monitor** (as above): each entry is one parseable
-line, whereas the default full-JSON payload is multi-line and token-heavy —
-both a parsing hazard and noise a monitor relays on every entry. Reach for
-the full payload only when inspecting a specific entry (via `nit log`).
+- **`--oneline`**: one parseable line per entry, not token-heavy JSON.
+- The monitor must wake you **on each relayed line** — `nit log --follow`
+  never exits, so a "notify on exit" mechanism sits silent forever. (The
+  `nit-review` skill names the concrete tool for this repo.)
+- **`--reviewer-only`** mutes your own echoes (`revisions`/`comment`/
+  `partial`) and applies `nit wait`'s wake rule: wakes on the reviewer and
+  on chain closure, holds back a comment-less non-completing approve. Each
+  relayed line is a **doorbell** — re-read the gap with `nit log <cursor>..`
+  from the index you last consumed (not the printed idx), act on all of it,
+  then advance.
+- A bare `nit log --follow` relays every entry raw (no wake rule); you
+  triage. It advances no cursor — track the `head` of your last read, resume
+  with `nit log --follow <cursor>..`.
 
-The monitor must wake you **on each relayed line**, not only when the
-background process exits — `nit log --follow` never exits on its own, so any
-"notify me when this command finishes" mechanism will sit silent forever.
-Wire it to whatever your harness uses for live per-line relay; the
-project's `nit-review` skill names the concrete tool for this repo.
+The one thing `--reviewer-only` can't surface is a rescan that reopens a
+closed chain. So keep the standing rule: watch until the chain closes, and
+re-read the full log if you've been idle.
 
-A bare `nit log --follow` relays **every** entry raw — no wake rule — so
-you triage each as it arrives: a comment on the change you are mid-fix on,
-act now; comments on a different change, queue them. It advances no cursor
-for you — track the index you last consumed (the `head` of your last read)
-and resume after a restart with `nit log --follow <cursor>..`. `nit wait`
-stays the right tool for a harness without a monitor; the cursor and "watch
-until the chain closes" rules above apply to both.
-
-**`--reviewer-only` mutes your own echoes.** Left to itself the monitor
-relays your own `revisions` (the scan after your push), `comment`, and
-`partial` entries straight back at you — echoes of writes you already made.
-`--reviewer-only` drops those and otherwise applies the **same wake rule as
-`nit wait`**: it wakes you on the reviewer's `review` entries and on chain
-closure (`chain_closed`), but holds back a comment-less approve that leaves
-the chain short of `approved` (the reviewer ticking off one change of many
-is not yet your turn) — exactly as `nit wait` would. Other entry kinds,
-including any added later, are relayed unchanged. A relayed line is then
-only a **doorbell** — it tells you the reviewer did _something_, not the
-whole of what landed. Because the entries between the
-index you last **consumed** and it were suppressed, **always re-read the
-gap before acting**: `nit log <cursor>..` (`--oneline` to skim), handle
-everything in it, then advance your cursor to its `head`. Never act on the
-single relayed entry alone, and track the index you consumed from
-`nit log`, not the idx the monitor printed.
-
-The suppression is a heuristic on `kind`: anything it mutes is your own
-push / comment / partial, which the next reviewer event makes you re-read
-past — seen late, never lost. The one case it cannot surface on its own is
-a scan with no reviewer event behind it — chiefly a rescan that reopens a
-closed chain (`revisions` is appended by any scan that changes structure,
-not only your push). So keep the standing rule: watch until the chain
-actually closes, and if you have been idle a while, re-read the full log
-rather than trusting the quiet.
-
-The push duty is **per branch, owned by whoever builds it**. In
-multi-agent setups (an orchestrator fanning out workers, one
-worktree/branch each) every worker drives `nit push --partial` for its
-own branch from its own worktree, starting the moment its first commit
-is green — the orchestrator must write that into each worker's
-instructions, and must not centralize pushing, batch it, or gate it on
-later phases. "Completed" means green and coherent now, not final:
-post-push amends become new revisions by design, so a planned follow-up
-pass (cleanup, self-review, verification) is no reason to hold the
-first push back. From the reviewer's seat, an unpushed branch is
-invisible work.
+### Command reference
 
 - `nit push --repo <path> --branch <name> [--partial] [--base <ref>] [--server <url>]`
-  — `--repo` and `--branch` are **required**: a chain's identity is that
-  pair, and there is no cwd fallback (deriving the path from the cwd
-  silently forks a duplicate chain when run from the wrong checkout).
-  Defaults: base = `main`, server = `$NIT_SERVER` or
-  `http://127.0.0.1:8877`. Prints the chain JSON including `web_url` — tell
-  the human where to review. Exit ≠ 0 on scan errors; re-running is always
-  safe (idempotent). `--partial` marks the chain partial: review can start,
-  merging cannot. Sticky — a plain push never clears it. Returns no cursor
-  (see "The cursor").
+  — `--repo`/`--branch` required (the chain's identity; no cwd fallback, or
+  a stray push forks a duplicate). Defaults: base `main`, server
+  `$NIT_SERVER` or `http://127.0.0.1:8877`. Prints the chain JSON with
+  `web_url`. Idempotent; exit ≠ 0 on scan error. `--partial` is sticky (a
+  plain push never clears it). No cursor returned.
 - `nit ready --repo <path> --branch <name> [--base <ref>] [--server <url>]`
-  — same required args and defaults; clears the partial flag and refreshes
-  (idempotent).
-- `nit wait <cursor> [--oneline]` — consume the chain's `events` stream
-  from the 0-based `cursor` and block until something you should act on
-  lands, then print `{head, entries, state, …}` (Feedback fields plus
-  `head`/`entries`). **No timeout** — call it only when you have nothing
-  else to do; it blocks until the reviewer acts (a wake). `--oneline`
-  prints a one-line digest per entry instead of full payloads. Returns
-  immediately when you are already behind `head`. Survives server restarts:
-  the stream reconnects through the outage with backoff (a single stderr
-  notice per outage; stdout stays pure JSON).
+  — clears the partial flag and refreshes. Idempotent.
+- `nit wait <cursor> [--oneline]` — block on the `events` stream from the
+  0-based cursor until something actionable lands, then print
+  `{head, entries, state, …}`. **No timeout** — call it only when idle.
+  Returns immediately if behind `head`. Rides out server restarts.
 - `nit log <ranges> [--oneline] [--chain <id>] [--server <url>]` — print
-  specific log entries without touching your cursor: a bare index (`3`), a
-  half-open range (`3..6`), an open end (`3..`, `..6`, `..` for all), or
-  several at once (concatenated in order, duplicates kept). A reversed/empty
-  range or one reaching past the log is an error. `--chain <id>` reads any
-  chain directly (no git repo needed). For inspecting entries a `wait`
-  surfaced that you want the full detail on.
+  entries without moving the cursor: `3`, `3..6`, `3..`, `..6`, `..`, or
+  several at once. `--chain <id>` reads any chain (no git repo needed).
 - `nit log --follow <cursor> [--oneline] [--reviewer-only] [--chain <id>] [--server <url>]`
-  — a live tail for cooperative monitors (see "Following the log instead of
-  waiting"): replays `[cursor, head)` then streams each new entry as it
-  lands, relaying every one raw (no wake rule — you triage). `<cursor>` is
-  a single open form (`0`, `5..`, or `..`). Prefer `--oneline` in a monitor
-  — one parseable line per entry, not the multi-line, token-heavy full JSON.
-  `--reviewer-only` suppresses your own entries (`revisions`, `comment`,
-  `partial`), waking the monitor on the reviewer and on chain closure;
-  treat each relayed line as a doorbell and re-read the gap from the index
-  you last consumed (`nit log <cursor>..`), not the idx it printed.
-  Rides out server restarts; runs until stopped.
-- `nit status [--oneline]` — current Feedback JSON without blocking (no
-  entries, no cursor). `--oneline` prints a compact one-line-per-change
-  digest instead — a `state=` header plus one line per change
-  (`position change_key status rN Nu subject`) — to skim where the chain
-  stands without parsing JSON.
+  — live tail for monitors (above). `<cursor>` is one open form (`0`, `5..`,
+  `..`). Rides out restarts; runs until stopped.
+- `nit status [--oneline]` — current Feedback JSON, no blocking. `--oneline`
+  prints a `state=` header plus one line per change
+  (`position change_key status rN Nu subject`).
 - `nit comment --change-id <Change-Id> [--thread <id>] [anchor] [--resolve | --unresolve] -m "text"`
-  — comment on a change as the agent (the cwd resolves the chain). Name the
-  change with `--change-id <Change-Id>` — the rebase-stable trailer you have on
-  hand; a human can instead use `--change <id>` with the numeric id `nit status`
-  shows. Without `--thread` it opens
-  a **new thread**, anchored with `--file <path> --line <n> [--side new|old]
-[--range START-END]` (or change-level with no anchor) and
-  `[--revision <n>]` to pin it to a prior revision (default: the change's
-  latest); with `--thread` it **replies** to an existing thread on the change.
-  `--resolve` closes the thread (do this for comments you have addressed — the
-  reviewer sees unresolved counts), `--unresolve` reopens it. Appends a
-  `comment` entry; returns no cursor.
+  — comment as the agent (cwd resolves the chain). Pass the full
+  `--change-id` trailer (a human can use `--change <numeric id>` instead).
+  No `--thread`: opens a thread, anchored `--file <path> --line <n>
+[--side new|old] [--range S-E] [--revision <n>]` (or change-level with no
+  anchor). With `--thread`: replies. `--resolve`/`--unresolve` set the
+  thread state. Appends a `comment`; no cursor.
 
 ## Annotate the choices you make
 
-When you make a non-obvious call while building — pulling in a new
-dependency, picking one approach where several were viable, working around
-a sharp edge — **leave a comment on the code instead of asking the human or
-hoping the diff speaks for itself.** Open a thread on the exact lines with
-`nit comment`:
+Made a non-obvious call mid-build (a new dependency, one approach over
+others, a workaround)? Leave a thread on the exact lines instead of asking
+the human or hoping the diff speaks:
 
 ```sh
-# A choice the reviewer should weigh in on — leave it OPEN (default), so it
-# counts toward the change's unresolved threads and lands on their radar:
+# a choice the reviewer should weigh in on — leave it OPEN (counts unresolved):
 nit comment --change-id <Change-Id> --file src/queue.rs --line 42 --range 42:8-42:30 \
-  -m "Bounded channel over unbounded: backpressure matters more here than
-      never blocking the producer. Happy to flip it if you'd rather."
-
-# A decision that is settled and just needs recording — open it already
-# RESOLVED (--resolve): a note for the record that needs no response.
+  -m "Bounded channel over unbounded: backpressure matters more than never
+      blocking the producer. Happy to flip it."
+# a settled decision that just needs recording — open it --resolve'd:
 nit comment --change-id <Change-Id> --file Cargo.toml --line 14 --resolve \
-  -m "Added serde — the hand-rolled parser was most of this change, and the
-      alternatives pull it in transitively anyway."
+  -m "Added serde — alternatives pull it in transitively anyway."
 ```
 
-Anchor it as tightly as you can (`--file`/`--line`, plus `--range` when the
-point is about a specific span) so the note pins to the code it explains.
-This is how you stop leaning on the human for mid-build decisions: make the
-call, annotate it, keep going. The reviewer engages with the thread when
-they reach the change, and the reasoning lives next to the code for good.
+Anchor as tightly as you can so the note pins to the code. Make the call,
+annotate it, keep going.
 
 ## Where the conversation happens
 
-nit is the single source of truth for the review conversation. When you do
-need something back from the reviewer — a clarifying question, a trade-off
-for them to pick — raise it in nit and leave it **unresolved** so it stays
-on their radar: reply on the thread it concerns with `nit comment --change-id
-<Change-Id> --thread <thread-id> -m "…"`, or open a new one with `nit comment
---change-id <Change-Id> --file … --line … -m "…"` when none exists yet. Then
-re-arm `nit wait` and carry on with other work.
-Do **not** block on the answer, and do not route the question through some
-other channel: your interactive session is the channel only when the user
-prompts you there directly. Asking in nit pins the question to the code
-it's about, lets the reviewer answer asynchronously, and leaves one durable
-record of why the change ended up the way it did.
+nit is the single source of truth for the review conversation. Need
+something back from the reviewer (a question, a trade-off to pick)? Raise it
+in nit and leave it **unresolved**: reply on the relevant thread, or open a
+new one with `nit comment`. Then re-arm `nit wait` and carry on — don't
+block on the answer, and don't route it elsewhere. Your interactive session
+is the channel only when the user prompts you there directly.
 
 ## What `nit wait` returns
 
-`nit wait` prints the Feedback shape (docs/api.md) plus `head` and
-`entries`. Decide on `state`, using `entries` to see exactly what changed:
+`nit wait` prints the Feedback shape (docs/api.md) plus `head`/`entries`.
+Branch on `state`:
 
-- `agents_turn` — act now. For every change with status
-  `changes_requested` or `commented`: address its `review.message` and
-  `threads` (fix what each thread asks by amending the commit it targets,
-  or reply/`--resolve` with reasoning). Then `nit push` and wait again.
-  `commented` means the reviewer asked questions without blocking —
-  reply, don't just wait.
-  Exception: on a partial chain (`chain.partial: true`) with **no**
-  `changes_requested`/`commented` entries, `agents_turn`
-  just means every pushed change is approved — the reviewer is caught up.
-  Not an error, nothing to address: keep pushing commits, or `nit ready`
-  when the branch is done.
-- `approved` — every change approved. Run the project's **approve
-  action**: nit derives the state but does not prescribe what landing it
-  means — each project defines that (commonly: rebase onto the base if it
-  moved, re-formatting each replayed commit, then fast-forward the
-  branch). The chain leaves the dashboard once the action lands the work
-  and the next scan sees it.
-- `waiting_for_review` — nothing actionable (it woke on your own
-  just-pushed entries); wait again.
-- `merged` / `abandoned` — the chain is closed; stop.
+- `agents_turn` — act now. For each change `changes_requested`/`commented`:
+  address its `review.message` and `threads` (fix by amending the target
+  commit, or reply/`--resolve`), then `nit push` and wait again.
+  `commented` = questions without blocking; reply, don't just wait.
+  Exception: on a `partial` chain with no `changes_requested`/`commented`,
+  `agents_turn` just means every pushed change is approved (reviewer caught
+  up) — keep pushing, or `nit ready` when done.
+- `approved` — every change approved; run the project's approve action.
+- `waiting_for_review` — nothing actionable (woke on your own entries);
+  wait again.
+- `merged` / `abandoned` — chain closed; stop.
 
-Threads in feedback are scoped to each change's **latest review**, plus
-any still-unresolved threads from earlier reviews. Each thread is pinned
-to the `revision` it was written on; its `line_text` shows the exact line
-it was anchored on, and `side: "old"` anchors to a line in that
-revision's parent tree (a deleted/pre-change line). A thread carries its
-`comments` (the conversation, reviewer and agent both) and a rolled-up
-`resolved` flag.
+Threads are scoped to each change's latest review plus still-unresolved ones
+from earlier. Each is pinned to the `revision` it was written on;
+`line_text` is the anchored line, `side: "old"` a pre-change/deleted line. A
+thread on `/COMMIT_MSG` targets the commit message (1-based lines) — answer
+by rewording the commit (keep the `Change-Id`); a reword is a new revision
+and resets the change to `pending`.
 
-A thread on `file: "/COMMIT_MSG"` targets the **commit message** (line
-numbers are 1-based message lines). Answer it by rewording the commit
-(interactive-rebase reword / `git commit --amend`) — keep the
-`Change-Id:` trailer. A reword creates a new revision and resets the
-change to `pending`, exactly like a code edit.
-
-Never submit a review verdict yourself (`POST /api/changes/*/reviews` is
-the human's side). The agent surface is push / ready / wait / log /
-status / comment.
+Never submit a verdict yourself (`POST /api/changes/*/reviews` is the
+human's side). The agent surface is push / ready / wait / log / status /
+comment.
