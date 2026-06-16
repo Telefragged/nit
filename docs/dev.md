@@ -125,7 +125,7 @@ allowing number interpolation (`${n}`) rather than wrapping every span in
 ## Type discipline — let the types make illegal states unrepresentable
 
 Lean on the type system; do not push validation that a type could do into
-runtime checks or convention. Two standing rules:
+runtime checks or convention. Three standing rules:
 
 - **A closed set of values is an `enum`, never a `String`.** Every field
   that can only be one of a fixed list (sides, verdicts, statuses, kinds,
@@ -149,11 +149,20 @@ runtime checks or convention. Two standing rules:
   (`Change | File | Line { … }`), not five independent `Option`s where a
   `range` without a `line` or a `line` without a `file` could be built.
 
-Both rules bind **review and simplification passes too** (the agents in a
-two-pronged review included): a new stringly-typed enumerated field, or a
-new bag of `Option`s standing in for an enum, is a finding to fix, never
-the accepted baseline — and a reviewer agent is told so explicitly when it
-is spawned.
+- **One input names one thing — don't overload a flag to sniff its form.**
+  When a value could be identified two ways, give it two
+  mutually-exclusive, type-distinct inputs rather than one that guesses
+  from the form. `nit comment` takes `--change <u64>` (the numeric change
+  id) **or** `--change-id <String>` (the `Change-Id` trailer) — never one
+  `--change-id` that tries `parse::<u64>()` first and falls back to a
+  trailer lookup, which invites passing the wrong class of value and
+  getting the wrong thing back.
+
+All three bind **review and simplification passes too** (the agents in a
+two-pronged review included): a new stringly-typed enumerated field, a new
+bag of `Option`s standing in for an enum, or an overloaded value-sniffing
+flag is a finding to fix, never the accepted baseline — and a reviewer
+agent is told so explicitly when it is spawned.
 
 ## Restarting the server
 
