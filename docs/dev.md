@@ -177,7 +177,14 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
 
 ## Commit & branch discipline
 
-- Small commits, one concern each, imperative subject, body explains _why_.
+- Small commits, one concern each. The imperative subject states the
+  _what_ (for easy indexing); the body explains _why_ — the what is
+  evident from the diff, so the why is the part worth writing. Hard-wrap
+  the body at 72 columns. Keep the message **timeless**: read years later
+  against the tree it produced, it carries no process narration — no
+  "rebased onto X", "the harness landed meanwhile", branch ordering, or
+  similar. That context is useful live; put it in the `nit` reply or
+  terminal output, not the git history.
 - Every commit treefmt-clean: format before committing, re-format and
   amend after any rebase or conflict resolution ("Formatting" above).
 - Never mix refactors with behavior changes.
