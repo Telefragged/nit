@@ -270,6 +270,15 @@ drive the loop with the `nit-review` skill
 (`.claude/skills/nit-review/SKILL.md`); the underlying protocol is
 `docs/agent-workflow.md`.
 
+One dogfooding subtlety: the running server is whatever build started it —
+normally the `main` checkout's. Drive the loop's `nit` CLI from that same
+build (`nit` on PATH, else `nix run '…?ref=main#nit'`), **not** your
+branch's `target/debug/nit`. It matters most when the branch under review
+changes nit's own wait/server protocol: a branch-built `nit wait` is then
+version-skewed against the still-running server and won't park correctly.
+The other verbs (`push`/`ready`/`reply`/`log`) are wire-stable enough to
+run from either, but when unsure prefer the server-matching build.
+
 ### The approve action
 
 nit derives the `approved` state (every live change approved, chain not
