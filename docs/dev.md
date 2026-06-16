@@ -231,8 +231,17 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
 
   Commit there, drive the nit review loop from that worktree, and land via
   the approve action — rebase + fast-forward only, never a merge commit
-  anywhere (recipe: "The approve action" below). Tear it down after
-  landing: `git worktree remove .worktrees/<slug>` then
+  anywhere (recipe: "The approve action" below).
+
+  Address the worktree **explicitly** in every command — absolute paths in
+  edits, `cargo --manifest-path <worktree>/crates/nit/Cargo.toml`,
+  `git -C <worktree>`, and treefmt/`nix build` pointed at the worktree —
+  rather than trusting an ambient working directory; a tool whose cwd has
+  drifted back to the primary checkout otherwise edits, builds, or tests
+  the wrong tree (the devShell toolchain is identical from either
+  checkout).
+
+  Tear it down after landing: `git worktree remove .worktrees/<slug>` then
   `git branch -d track/<slug>`.
 
 ## Landing changes — the nit review loop
