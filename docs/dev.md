@@ -74,6 +74,15 @@ No-op on a clean chain. Check-only form: exec
 `nix develop -c treefmt --fail-on-change` instead — it stops at the
 first unformatted commit.
 
+treefmt walks the **whole tree**, which has two sharp edges:
+
+- Never run a bare treefmt right before amending a checked-out _historic_
+  commit (mid-rebase): it formats the whole tree and folds later commits'
+  formatting into the amend. Stage only the files you mean to.
+- prettier drops the hanging indent of a markdown list continuation when
+  an inline code span straddles the line break — keep code spans on one
+  line.
+
 ## Linting
 
 `nix develop -c npm run lint` (in `web/`) runs ESLint then Stylelint —
