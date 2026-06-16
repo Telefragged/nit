@@ -198,6 +198,8 @@ devShell exports `$PLAYWRIGHT_DRIVER_VERSION`).
   and must stay green.
 - End-to-end: `scripts/e2e.sh` drives the full agent↔reviewer loop against
   a fixture repo using the built binary.
+- A fresh `.worktrees/*` checkout has no `web/node_modules`; run
+  `cd web && nix develop -c npm ci` before any web check.
 
 ## Commit & branch discipline
 
