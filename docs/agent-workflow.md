@@ -118,6 +118,25 @@ wait`, re-arm it after every push and reply; when it returns non-actionable
 again. The turn is not over while the chain is open — it is over when the
 chain closes.
 
+### Partial vs ready
+
+`--partial` tracks **work in flight, not review state**. A chain is
+partial while a work unit is still open — more commits coming, or an
+in-flight rebase (a rebase counts) — and you run `nit ready` the moment
+that unit completes. Being _under review_ does not make a chain partial:
+a reviewable, merge-ready chain is in the `ready` state. Both states are
+reviewable; partial only blocks _merging_.
+
+**Never scan (`push`/`ready`) while the branch sits on a stale base** — an
+old commit `main` has already moved past. From there the branch diverges
+back at the old common ancestor, so a scan walks the divergent old-`main`
+commits into the chain as changes that become permanent `orphaned` entries
+in the log. To rebase a `ready` chain onto a moved `main`, rebase **first**
+(a local op, no server call), then `nit ready` once — do not
+`nit push --partial` beforehand. The partial flag is for genuine
+multi-commit WIP scanned on a consistent base, not for bracketing a local
+rebase.
+
 ### Following the log instead of waiting
 
 `nit wait` blocks for one wake, then returns — it suits a harness that can
