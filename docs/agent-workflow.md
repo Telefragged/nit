@@ -4,6 +4,11 @@ nit reviews **commits**, not branches. Make each commit one reviewable unit
 (one logical change, own subject + body). The branch you register is the
 "chain"; every commit on it becomes a change the human reviews separately.
 
+This doc covers the **agent-driven** push/wait/reply loop only. CLI
+features for the human operator — inspecting an arbitrary chain from
+another directory, juggling parallel chains — belong in the `clap` help,
+not here.
+
 ## Conventions for your commits
 
 - Add a `Change-Id: I<unique-token>` trailer (any opaque unique string;
