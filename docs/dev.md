@@ -107,6 +107,21 @@ gets a reasoned inline disable instead (ESLint's
 `reportUnusedDisableDirectives` flags it when stale — the `#[expect]`
 model), never a silent permanent allow.
 
+The backend has the same shape. `clippy` runs
+`--all-targets -- -D warnings` with `clippy::pedantic`, and the workspace
+lints in the root `Cargo.toml` enforce the suppression discipline
+directly: `unwrap` is denied (use `expect` with a reason), and `#[allow]`
+is denied in favour of `#[expect(..., reason = "…")]` — the attribute
+that errors once it stops applying (`clippy::allow_attributes` /
+`allow_attributes_without_reason`). Strictness only ratchets **up**: a
+lint that fires widely is worked through or ratcheted temporarily, never
+permanently allowed as "noise".
+
+Relaxing a rule is a judgment call, not a way to dodge the work: relax
+one only when the fix it forces is uglier than the risk it guards — e.g.
+allowing number interpolation (`${n}`) rather than wrapping every span in
+`String()` — and say why. "It's a lot of edits" is never the reason.
+
 ## Type discipline — let the types make illegal states unrepresentable
 
 Lean on the type system; do not push validation that a type could do into
