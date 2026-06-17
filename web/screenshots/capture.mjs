@@ -150,6 +150,22 @@ const captures = [
       await page.waitForSelector(".comment-resolution-only");
     },
   },
+  // One-click Resolve (docs/api.md "Thread resolution"): Resolve on an open
+  // thread stages the empty resolution-only draft directly — no editor. The
+  // "Resolving this thread" draft and the pending RESOLVED badge appear with
+  // a single click.
+  {
+    name: "review-resolve-oneclick",
+    path: "/changes/11",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await page
+        .locator(".thread", { hasText: "clone the pool" })
+        .getByRole("button", { name: "Resolve" })
+        .click();
+      await page.waitForSelector(".comment-resolution-only");
+    },
+  },
   // Side-by-side, base → r2: new-side drafts sit under the right column,
   // the old-side draft under the left (docs/api.md "Comment placement").
   {

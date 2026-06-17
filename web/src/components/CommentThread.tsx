@@ -102,7 +102,7 @@ function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
 }
 
 /** The draft editor a thread opens: `resolved` is the resolve-checkbox
- * default (reply keeps the thread's state, resolve/reopen flips it), and
+ * default (reply keeps the thread's state, reopen flips it to open), and
  * `isReply` only picks the placeholder (docs/api.md "Thread resolution"). */
 interface ThreadEditor {
   isReply: boolean;
@@ -111,7 +111,8 @@ interface ThreadEditor {
 
 /**
  * A comment thread: published comments + pending drafts, with reply / resolve
- * / reopen actions that each open the editor with the resolve checkbox
+ * / reopen actions. Resolve is one click — it stages an empty resolution-only
+ * draft directly; reply and reopen open the editor with the resolve checkbox
  * pre-set. The decision is staged on a draft reply and applied when the review
  * publishes; the badge shows the pending state. Drafts get dashed chrome via
  * .comment-draft. A draft-only thread (`id === null`) is just its editable
@@ -145,8 +146,9 @@ export default function CommentThread({
         side: thread.side,
         ...(thread.range !== null ? { range: thread.range } : {}),
         body: vars.body,
-        // Always a published thread here — the actions that open the editor
-        // render only when `thread.id !== null` (the !isDraftThread guard).
+        // Always a published thread here — the reply / resolve / reopen
+        // actions render only when `thread.id !== null` (the !isDraftThread
+        // guard).
         ...(thread.id !== null ? { thread_id: thread.id } : {}),
         ...(vars.resolved !== undefined ? { resolved: vars.resolved } : {}),
       }),
@@ -208,8 +210,16 @@ export default function CommentThread({
               <button
                 className="linkish"
                 onClick={() => {
-                  setEditor({ isReply: false, resolved: !resolved });
+                  // Resolve is one click: stage an empty resolution-only draft
+                  // straight away. Reopen still opens the editor so the
+                  // reviewer can say why before it publishes.
+                  if (resolved) {
+                    setEditor({ isReply: false, resolved: false });
+                  } else {
+                    stage.mutate({ body: "", resolved: true });
+                  }
                 }}
+                disabled={stage.isPending}
               >
                 {resolved ? "Reopen" : "Resolve"}
               </button>
