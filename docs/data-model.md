@@ -78,11 +78,12 @@ An entry is `(seq, change_id, idx, kind, payload, created_at)`. Five kinds:
 | `revision`  | a push observes a new commit-sha for this change         |
 | `review`    | a reviewer verdict, draining the change's drafts         |
 | `comment`   | an agent comment (`nit comment`)                         |
-| `lifecycle` | the merge/abandon timer, and `nit reopen`                |
+| `lifecycle` | the merge timer; `nit abandon` / `nit reopen`            |
 | `partial`   | `nit ready` (or a push) re-stamps the tip's partial flag |
 
 `push` is the only writer of `revision`; the background timer is the only
-writer of merged/abandoned `lifecycle` ("Lifecycle timer").
+writer of `merged` `lifecycle` entries; `abandoned`/`reopened` are written on
+request (the abandon/reopen actions, "Lifecycle timer").
 
 ### Identity within the log
 
@@ -144,9 +145,10 @@ Three kinds of id, all opaque and stable across replays:
   "resolved": true                     // new thread: born resolved/open; reply: resolve/reopen; null = unchanged
 }
 
-// lifecycle — the merge/abandon timer and `nit reopen`
+// lifecycle — the merge timer (merged), and `nit abandon` / `nit reopen`
 {"action": "merged", "revision": 2}    // merged | abandoned | reopened;
-                                       // `revision` set only for merged (which patchset landed)
+                                       // `revision` set only for merged (which patchset landed);
+                                       // `message` optional reason on abandoned
 
 // partial — re-stamp the tip change's latest-revision partial flag
 {"partial": true}
@@ -262,14 +264,17 @@ chain.
 revision) plus the tip's partial flag into the actionable state the agent
 branches on:
 
+**Abandonment is derivation-inert**: an `abandoned` member is dropped from the
+fold before the rollup (there is no chain-level abandoned state) — it shows as
+`abandoned` on its own path entry, and the agent decides what to do with it.
+
 ```
-every member merged (at its pinned revision)    → merged        (off the main page)
-else any member abandoned                        → has_abandoned (shown, flagged)
+every non-abandoned member merged (at its pinned revision) → merged   (off the main page)
 else any member changes_requested|commented      → agents_turn
 else any member pending                          → waiting_for_review
 else all approved (≥1) and tip partial           → agents_turn   (still pushing)
 else all approved (≥1)                           → approved
-else (no members)                                → agents_turn   (empty tip)
+else (no live members)                           → agents_turn   (empty/all-abandoned tip)
 ```
 
 A chain is **partial** iff its **tip** change's latest revision is partial —
@@ -323,10 +328,10 @@ construction, because `path_from_tip` truncates on an unresolved `parent_sha`
 
 ## Lifecycle timer
 
-A per-repo background sweep (`run_lifecycle_timer`) is the **only writer** of
-merged/abandoned `lifecycle` entries — a push cannot observe the base advancing
-or a branch disappearing. It runs every `NIT_TIMER_INTERVAL_MS` (default 5s)
-and, for each **non-terminal** change of each repo:
+A background sweep (`run_lifecycle_timer`) is the **only writer** of `merged`
+`lifecycle` entries — a push cannot observe the base advancing. It runs every
+`NIT_TIMER_INTERVAL_MS` (default 5s) and, for each **non-terminal** change of
+each repo, detects:
 
 - **Merged** — `landed_revision` matches the change's latest revision against
   the canonical branch over `base_sha..canonical`. First by **Change-Id**: a
@@ -337,20 +342,21 @@ and, for each **non-terminal** change of each repo:
   diff never alone counts). A match appends `lifecycle{merged, revision}` —
   which patchset landed. Prefix merge falls out for free: landing A and B marks
   them merged while C stays live, no chain-level gate.
-- **Abandoned** — when the change's latest revision is **unreachable from any
-  local branch ref** (nit's own `refs/nit/keep/*` are excluded, so they never
-  keep it alive) across **two consecutive sweeps ≥ `NIT_ABANDON_SECS` apart**
-  (default 10s). The gap rides out mid-rebase windows; the first-seen-unreachable
-  instant is in-memory (`unreachable_since`), so a restart resets it —
-  abandonment is best-effort, delayed not wrong. Reachability is refreshed each
-  sweep, so a re-reachable change clears its timer. A change shared by two chains
-  is reachable as long as **either** tip walks it.
 
-**Reopen is explicit.** `nit reopen` appends `lifecycle{reopened}`, clearing
-`abandoned` back to the retained verdict status and dropping the timer entry;
-the agent may then push a new revision (which folds it to `pending`). An
-abandoned change does not auto-reopen on bare re-reachability — keeping a
-transient rebase that briefly re-touches its commit from resurrecting it.
+The sweep skips already-terminal changes (merged or abandoned) — there is no
+point merge-checking a dead change. It never abandons: **abandonment is an
+explicit action**, not a ref-reachability observation. "Off every branch" is
+not terminal — a detached-HEAD or post-rebase-orphan change stays live as its
+own chain until a human (or the owning agent) abandons it.
+
+**Abandon and reopen are explicit.** `nit abandon` appends
+`lifecycle{abandoned}` (a reviewer/agent judgment, optionally with a reason
+message); the change goes terminal but stays a member/tip of its chains and
+does not roll up to a chain state. `nit reopen` appends `lifecycle{reopened}`,
+clearing `abandoned` back to the retained verdict status; the agent may then
+push a new revision (which folds it to `pending`). A push to an abandoned
+change is a 409 ("reopen first"). Both are durable log facts — there is no
+auto-correction.
 
 ## Diffs
 

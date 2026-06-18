@@ -143,8 +143,12 @@ it:
   ball is with the reviewer. Re-read later.
 - `approved` — every member approved and not `partial`; run the project's
   approve action.
-- `has_abandoned` — some member is abandoned (see `nit reopen`).
 - `merged` — every member landed; the chain is off the dashboard. Stop.
+
+There is **no abandoned chain state** — abandonment is per-change. A member
+shown `abandoned` (a reviewer or you marked it dead via `nit abandon`) is
+dropped from the chain's derived state; decide whether to drop the change
+(rebase off it) or `nit reopen` it.
 
 A change's displayed status is per `(change, revision)` — the latest review at
 the patchset the path pins, with `merged`/`abandoned` terminal. Two tips

@@ -110,13 +110,15 @@ and the commit-sha → `(change, revision)` index (docs/data-model.md "Chain
 derivation").
 
 - `GET /api/chains?repo={id}` → `{"chains": [ChainSummary]}` — one entry per
-  known **tip commit** (the dashboard). `status` defaults to `active`; `all`
-  includes tips whose every member is terminal (merged/abandoned).
+  known **tip commit** (the dashboard). `status` defaults to `active` (live
+  tips — neither merged nor abandoned, so an abandoned tip is hidden here);
+  `all` also includes merged and abandoned tips.
 - `GET /api/chains/{change_id}` → Chain — the derived path through that
-  change's tip commit. `?revision={n}` selects which patchset of the change to
-  root on (default: its latest); the selected revision's `parent_sha`
-  determines the path, so `?revision` _is_ the choice of chain context. 404 if
-  the change is unknown.
+  change's tip commit. An **abandoned** change still resolves (it stays a
+  member, and a tip if it is a leaf) — abandonment is membership-inert.
+  `?revision={n}` selects which patchset of the change to root on (default: its
+  latest); the selected revision's `parent_sha` determines the path, so
+  `?revision` _is_ the choice of chain context. 404 if the change is unknown.
 - `GET /api/chains/{change_id}/log` → the **aggregated** chain log: every
   member's log entries, merged and sorted by global `seq` (one timeline for
   the whole chain). Behind `nit log`.
@@ -475,6 +477,15 @@ over the websocket ("Events").
   not a verdict). Appends one `comment` log entry; returns no cursor. Used by
   `nit comment`. (Why an agent comments at all: docs/agent-workflow.md
   "Annotate the choices you make".)
+- `POST /api/changes/{id}/abandon` → ChangeDetail — mark a change
+  **abandoned** (`nit abandon`): a reviewer/agent judgment that this change is
+  dead, never an automatic decision. Optional `req: {"message": "…"}` records a
+  reason. Appends a `lifecycle{abandoned}` entry; a no-op on an already-terminal
+  change. Abandonment is a **per-change status only** — it does not change any
+  chain's derived `state` or membership (the change stays a member, and a tip if
+  it is a leaf); the agent reads the per-change `abandoned` and decides whether
+  to drop the change or pause (docs/data-model.md "Lifecycle"). Durable:
+  reversible only by `reopen`.
 - `POST /api/changes/{id}/reopen` → ChangeDetail — clear an `abandoned`
   change back to its retained verdict status (`nit reopen`), so the agent may
   push a new revision (which folds it to `pending`). Appends a
@@ -561,15 +572,17 @@ status:  pending | approved | changes_requested | commented | merged | abandoned
 ```
 
 A chain's **derived state** is a pure read-time function of its members, each
-at the revision the tip pins:
+at the revision the tip pins. **Abandonment is derivation-inert**: an
+`abandoned` member is excluded from the rollup entirely (no chain-level
+abandoned state exists) — it shows as `abandoned` on its own path entry, and
+the agent decides what to do with it.
 
-| state                | when                                                                                       | actionable |
-| -------------------- | ------------------------------------------------------------------------------------------ | ---------- |
-| `merged`             | every member merged at its pinned revision (off the main page)                             | true       |
-| `has_abandoned`      | else any member abandoned                                                                  | true       |
-| `agents_turn`        | else any member changes_requested/commented; or empty tip; or all approved while `partial` | true       |
-| `waiting_for_review` | else any member pending                                                                    | false      |
-| `approved`           | else all approved (≥1) and not `partial`                                                   | true       |
+| state                | when                                                                                                     | actionable |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | ---------- |
+| `merged`             | every non-abandoned member merged at its pinned revision (off the main page)                             | true       |
+| `agents_turn`        | else any member changes_requested/commented; or empty/all-abandoned tip; or all approved while `partial` | true       |
+| `waiting_for_review` | else any member pending                                                                                  | false      |
+| `approved`           | else all approved (≥1) and not `partial`                                                                 | true       |
 
 `actionable` ≡ `state != waiting_for_review`. A chain drops off the main page
 iff **every** member is terminal — any one live member keeps a partially-landed
