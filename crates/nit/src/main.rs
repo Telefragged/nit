@@ -33,6 +33,8 @@ enum Cmd {
     Log(cli::LogArgs),
     /// Comment on a change (--change / --change-id): open a thread or reply (--thread)
     Comment(cli::CommentArgs),
+    /// Mark a change abandoned (a reviewer/agent judgment; reopen to revert)
+    Abandon(cli::AbandonArgs),
     /// Reopen an abandoned change so a new revision can be pushed
     Reopen(cli::ReopenArgs),
     /// Inspect and manage registered repositories
@@ -55,6 +57,7 @@ fn main() -> Result<()> {
         Cmd::Status(args) => cli::status(args),
         Cmd::Log(args) => cli::log(args),
         Cmd::Comment(args) => cli::comment(args),
+        Cmd::Abandon(args) => cli::abandon(args),
         Cmd::Reopen(args) => cli::reopen(args),
         Cmd::Repo(args) => cli::repo(args),
     }

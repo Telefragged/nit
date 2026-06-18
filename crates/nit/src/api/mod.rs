@@ -63,6 +63,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/changes/{id}/drafts", post(create_draft))
         .route("/api/changes/{id}/comments", post(create_comment))
         .route("/api/changes/{id}/reviews", post(submit_review))
+        .route("/api/changes/{id}/abandon", post(abandon_change))
         .route("/api/changes/{id}/reopen", post(reopen_change))
         .route("/api/drafts/{id}", patch(edit_draft).delete(delete_draft))
         .route("/api/stream", get(stream))
@@ -1066,6 +1067,44 @@ async fn create_comment(
     .await
 }
 
+/// `POST /api/changes/{id}/abandon` — mark a live change abandoned
+/// (`nit abandon`): a reviewer/agent judgment, never automatic. Optional
+/// `message` records a reason. A no-op on an already-terminal change.
+async fn abandon_change(
+    State(state): State<Arc<AppState>>,
+    AppPath(id): AppPath<u64>,
+    AppJson(req): AppJson<types::AbandonRequest>,
+) -> Result<Json<types::ChangeDetail>, Error> {
+    let entry = change_or_404(&state, id)?;
+    blocking(move || {
+        let mut conn = state.open_db()?;
+        if matches!(entry.read().lifecycle, Lifecycle::Active) {
+            let payload = serde_json::to_value(review::LifecyclePayload {
+                action: LifecycleAction::Abandoned,
+                revision: None,
+                message: req.message,
+            })
+            .map_err(anyhow::Error::from)?;
+            append_to_change(&mut conn, &entry, id, vec![(LogKind::Lifecycle, payload)])
+                .map_err(map_busy)?;
+        }
+        let (repo, _) = repo_of_change(&state, &entry)?;
+        let repo_id = entry.read().repo_id;
+        let view = state.repo_view(repo_id);
+        let change = view
+            .change(id)
+            .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
+        Ok(Json(views::build_change_detail(
+            &conn,
+            &repo,
+            &view,
+            &state.public_base,
+            change,
+        )?))
+    })
+    .await
+}
+
 /// `POST /api/changes/{id}/reopen` — clear an abandoned change back to its
 /// retained verdict status (`nit reopen`).
 async fn reopen_change(
@@ -1079,6 +1118,7 @@ async fn reopen_change(
             let payload = serde_json::to_value(review::LifecyclePayload {
                 action: LifecycleAction::Reopened,
                 revision: None,
+                message: None,
             })
             .map_err(anyhow::Error::from)?;
             append_to_change(&mut conn, &entry, id, vec![(LogKind::Lifecycle, payload)])
@@ -1355,7 +1395,11 @@ fn append_lifecycle(
     action: LifecycleAction,
     revision: Option<u64>,
 ) {
-    let payload = match serde_json::to_value(review::LifecyclePayload { action, revision }) {
+    let payload = match serde_json::to_value(review::LifecyclePayload {
+        action,
+        revision,
+        message: None,
+    }) {
         Ok(p) => p,
         Err(e) => {
             tracing::warn!("lifecycle payload: {e}");

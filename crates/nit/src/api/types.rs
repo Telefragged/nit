@@ -57,6 +57,14 @@ pub struct RelocateRepo {
     pub git_dir: String,
 }
 
+/// `POST /api/changes/{id}/abandon` request (this is `nit abandon`). The body
+/// is optional — an absent or empty `message` abandons without a reason.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AbandonRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Push
 

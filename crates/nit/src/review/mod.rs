@@ -138,13 +138,16 @@ pub struct PartialPayload {
     pub partial: bool,
 }
 
-/// A `lifecycle` entry: the merge/abandon timer and `nit reopen`. `revision`
-/// is set only for `merged` (which patchset landed).
+/// A `lifecycle` entry: the merge timer (`merged`) and the `nit abandon` /
+/// `nit reopen` actions. `revision` is set only for `merged` (which patchset
+/// landed); `message` is an optional reason on `abandoned`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LifecyclePayload {
     pub action: LifecycleAction,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

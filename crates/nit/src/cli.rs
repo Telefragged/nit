@@ -183,6 +183,26 @@ pub struct ReopenArgs {
     pub server: Option<String>,
 }
 
+#[derive(clap::Args)]
+pub struct AbandonArgs {
+    /// The change to abandon, by its numeric id.
+    #[arg(
+        long,
+        conflicts_with = "change_id",
+        required_unless_present = "change_id"
+    )]
+    pub change: Option<u64>,
+    /// The change to abandon, by its `Change-Id:` trailer.
+    #[arg(long)]
+    pub change_id: Option<String>,
+    /// Optional reason recorded on the abandonment.
+    #[arg(long, short = 'm')]
+    pub message: Option<String>,
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
+    #[arg(long)]
+    pub server: Option<String>,
+}
+
 /// `nit repo` — inspect and manage the repository registry.
 #[derive(clap::Args)]
 pub struct RepoArgs {
@@ -563,6 +583,26 @@ pub fn reopen(args: ReopenArgs) -> Result<()> {
         (None, None) => bail!("pass --change <id> or --change-id <Change-Id>"),
     };
     let detail = client.post(&format!("/api/changes/{change_id}/reopen"), &json!({}))?;
+    print_json(&detail)
+}
+
+/// Mark a change abandoned — a reviewer/agent judgment that it is dead
+/// (reversible by `nit reopen`).
+///
+/// # Errors
+/// When the server can't be reached or the arguments name no change.
+pub fn abandon(args: AbandonArgs) -> Result<()> {
+    let client = Client::new(server_url(args.server));
+    let change_id = match (args.change, args.change_id.as_deref()) {
+        (Some(id), _) => id,
+        (None, Some(key)) => resolve_change(&client, key)?,
+        (None, None) => bail!("pass --change <id> or --change-id <Change-Id>"),
+    };
+    let body = match args.message {
+        Some(message) => json!({ "message": message }),
+        None => json!({}),
+    };
+    let detail = client.post(&format!("/api/changes/{change_id}/abandon"), &body)?;
     print_json(&detail)
 }
 
