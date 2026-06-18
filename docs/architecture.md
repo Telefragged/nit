@@ -19,10 +19,9 @@ nit is a single-machine, local-first review server. Three parts:
   rusqlite/git2 work runs in `spawn_blocking`. A background lifecycle timer
   runs alongside `serve` (`api/mod.rs` `run_lifecycle_timer`).
 - **git layer** (`gitscan/`) — pure with respect to the database: the push
-  walk (`walk_push`), merge/abandon detection (`landed_revision`,
-  `reachable_from_branches`), query-time tip names (`tip_name`), patch-ids
-  and keep refs (`gitscan/objects.rs`). It reads git and returns values the
-  api layer folds.
+  walk (`walk_push`), merge detection (`landed_revision`), query-time tip
+  names (`tip_name`), patch-ids and keep refs (`gitscan/objects.rs`). It reads
+  git and returns values the api layer folds.
 - **SQLite** (`db/`) — the four-table log; nothing in it is ever mutated or
   deleted. See [data-model.md](data-model.md) "Tables".
 - **The per-change fold** (`review/`) — `ChangeProj` is one change's folded
@@ -95,12 +94,11 @@ tip)..tip` oldest-first, upserts each change by its `Change-Id`, and appends
   branch** ([data-model.md](data-model.md) "Push"). There are **no read-time
   scans** — a read never walks git to discover structure.
 - **The lifecycle timer** (`api/mod.rs` `run_lifecycle_timer`) is the only
-  writer of `merged`/`abandoned`: per repo it sweeps each live change, marking
-  it `merged` when its patch lands on the canonical branch
-  (`landed_revision`) and `abandoned` when its latest revision is unreachable
-  from any branch ref across a 2-sweep window. A push cannot observe the base
-  advancing, so it never writes either; `nit reopen` clears `abandoned`.
-  `NIT_TIMER_INTERVAL_MS` / `NIT_ABANDON_SECS` configure it.
+  writer of `merged`: per repo it sweeps each live change, marking it `merged`
+  when its patch lands on the canonical branch (`landed_revision`). A push
+  cannot observe the base advancing, so it never writes merged. Abandonment is
+  an explicit action (`nit abandon`), not a sweep; `nit reopen` clears it.
+  `NIT_TIMER_INTERVAL_MS` configures the sweep interval.
 - **The unit of review is the commit** (a "change"); the required
   `Change-Id:` trailer is its identity. Amends become revisions (gerrit
   patchset style), pinned against `git gc` by

@@ -1,12 +1,13 @@
-//! Change lifecycle via the background timer (docs/api.md "State table",
-//! docs/data-model.md "Lifecycle"): merged detection when a change's patch
-//! lands on the canonical branch, prefix-merge of a stack's ancestor, the
-//! abandon window when a tip's revision goes unreachable, reopen, and the
-//! 409-then-200 push gate around an abandoned change.
+//! Change lifecycle (docs/api.md "State table", docs/data-model.md
+//! "Lifecycle"): merged detection when a change's patch lands on the canonical
+//! branch (the background timer's only job, prefix-merge included), plus the
+//! explicit `abandon`/`reopen` actions and the 409-then-200 push gate around an
+//! abandoned change.
 //!
-//! Merged/abandoned are written only by the background sweep, so every test
-//! calls `fast_timer()` *before* `TestServer::start` and polls the API with
-//! `wait_for` (no read-time scans exist anymore).
+//! `merged` is written only by the background sweep, so the merged tests call
+//! `fast_timer()` *before* `TestServer::start` and poll with `wait_for`.
+//! Abandonment is an explicit action, not a sweep — those tests drive
+//! `POST .../abandon` directly.
 
 mod common;
 
@@ -109,9 +110,24 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     assert_eq!(tip_entry["status"], "pending");
 }
 
+/// Abandon a change via the action.
+fn abandon(server: &TestServer, change_id: u64) {
+    let (st, _) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/abandon")),
+        &json!({}),
+    );
+    assert_eq!(st, 200);
+    assert_eq!(
+        status_at(server, change_id, 0).as_deref(),
+        Some("abandoned")
+    );
+}
+
 #[test]
-fn unreachable_revision_becomes_abandoned_after_window() {
-    fast_timer();
+fn branchless_change_stays_live_without_auto_abandon() {
+    // The core inversion: a change off every branch is NOT abandoned. Only the
+    // explicit action abandons.
+    fast_timer(); // give the (merge-only) sweep ample chances to misfire
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -121,19 +137,19 @@ fn unreachable_revision_becomes_abandoned_after_window() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&res, "I001");
 
-    // Delete the only branch reaching the revision: it goes unreachable, and
-    // after the abandon window the timer abandons the change.
+    // Delete the only branch and wait out several sweeps: the change stays
+    // pending (live), never auto-abandoned.
     g.delete_branch("feat");
-    wait_status(&server, change_id, 0, "abandoned");
-
-    let repo = first_repo_id(&server);
-    let (_, all) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=all")));
-    assert_eq!(all["chains"][0]["state"], "has_abandoned");
+    std::thread::sleep(Duration::from_millis(600));
+    assert_eq!(
+        status_at(&server, change_id, 0).as_deref(),
+        Some("pending"),
+        "a branch-less change stays live"
+    );
 }
 
 #[test]
 fn reopen_clears_abandoned_to_retained_status() {
-    fast_timer();
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -143,15 +159,13 @@ fn reopen_clears_abandoned_to_retained_status() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&res, "I001");
 
-    // Approve, then let it go abandoned: the verdict is retained, masked by
-    // the abandoned overlay.
+    // Approve, then abandon: the verdict is retained, masked by the overlay.
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/reviews")),
         &json!({"revision": 0, "verdict": "approve", "message": "lgtm"}),
     );
     assert_eq!(st, 200);
-    g.delete_branch("feat");
-    wait_status(&server, change_id, 0, "abandoned");
+    abandon(&server, change_id);
 
     // Reopen restores the retained verdict (approved), not pending.
     let (st, detail) = http_post(
@@ -169,7 +183,6 @@ fn reopen_clears_abandoned_to_retained_status() {
 
 #[test]
 fn push_to_abandoned_change_409s_until_reopened() {
-    fast_timer();
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -179,9 +192,8 @@ fn push_to_abandoned_change_409s_until_reopened() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&res, "I001");
 
-    // Drive it to abandoned, then resurrect the branch at a *new* revision.
-    g.delete_branch("feat");
-    wait_status(&server, change_id, 0, "abandoned");
+    // Abandon it, then move the branch to a *new* revision.
+    abandon(&server, change_id);
     let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
     g.branch("feat", c1b);
 
@@ -209,7 +221,6 @@ fn push_to_abandoned_change_409s_until_reopened() {
 fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     // The 409 guards a revision that *moves*; an idempotent re-push of the
     // already-recorded sha must not trip it (docs/api.md "Push").
-    fast_timer();
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -219,10 +230,8 @@ fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&res, "I001");
 
-    // Abandon the change, then re-create the branch at the *unchanged* sha.
-    g.delete_branch("feat");
-    wait_status(&server, change_id, 0, "abandoned");
-    g.branch("feat", c1);
+    // Abandon the change; the branch still points at the unchanged sha.
+    abandon(&server, change_id);
 
     // Re-pushing the same sha walks to nothing that moves, so the 409 guard
     // (which fires only on a moving revision) never trips — idempotent 200.

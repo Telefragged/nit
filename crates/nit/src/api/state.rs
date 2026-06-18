@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
-use std::time::Instant;
 
 use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use axum::Json;
@@ -43,9 +42,6 @@ pub struct AppState {
     /// Process-global allocator for fold-assigned ids (reviews, drafts). Change
     /// ids are `changes` rowids, never allocated here.
     next_id: AtomicU64,
-    /// Transient merge/abandon-timer state: `change_id` → first sweep that saw
-    /// its latest revision unreachable (the 2-sweep abandonment window).
-    pub unreachable_since: StdMutex<HashMap<u64, Instant>>,
     shutdown: watch::Sender<bool>,
 }
 
@@ -150,7 +146,6 @@ impl AppState {
             repos: StdMutex::new(repos),
             changes: StdMutex::new(changes),
             next_id: AtomicU64::new(max_id + 1),
-            unreachable_since: StdMutex::new(HashMap::new()),
             shutdown,
         }))
     }

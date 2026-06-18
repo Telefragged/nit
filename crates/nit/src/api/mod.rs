@@ -20,7 +20,7 @@ pub mod views;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use async_broadcast::Receiver;
 use axum::Json;
@@ -1123,11 +1123,6 @@ async fn reopen_change(
             .map_err(anyhow::Error::from)?;
             append_to_change(&mut conn, &entry, id, vec![(LogKind::Lifecycle, payload)])
                 .map_err(map_busy)?;
-            state
-                .unreachable_since
-                .lock()
-                .expect("timer state poisoned")
-                .remove(&id);
         }
         let (repo, _) = repo_of_change(&state, &entry)?;
         let repo_id = entry.read().repo_id;
@@ -1269,7 +1264,7 @@ async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<t
 }
 
 // ---------------------------------------------------------------------------
-// Lifecycle timer (merged / abandoned)
+// Lifecycle timer (merged only; abandonment is the explicit abandon action)
 
 /// Interval between timer sweeps, env-configurable for tests.
 fn timer_interval() -> Duration {
@@ -1281,24 +1276,12 @@ fn timer_interval() -> Duration {
     )
 }
 
-/// The abandonment window: a change's latest revision must be unreachable for
-/// this long, across two sweeps, before it is abandoned.
-fn abandon_window() -> Duration {
-    Duration::from_secs(
-        std::env::var("NIT_ABANDON_SECS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(10),
-    )
-}
-
-/// The background sweep: detect merged (a change landed on the canonical
-/// branch) and abandoned (a change's latest revision unreachable from any
-/// branch ref for the window) changes, appending `lifecycle` entries
-/// (docs/data-model.md "Lifecycle"). The only writer of merged/abandoned.
+/// The background sweep: detect **merged** changes (a change landed on the
+/// canonical branch) and append `lifecycle{merged}` entries
+/// (docs/data-model.md "Lifecycle"). The only writer of `merged`. It never
+/// abandons — abandonment is an explicit action (`abandon_change`).
 async fn run_lifecycle_timer(state: Arc<AppState>) {
     let interval = timer_interval();
-    let window = abandon_window();
     let mut shutdown = state.shutdown_watch();
     loop {
         tokio::select! {
@@ -1307,14 +1290,14 @@ async fn run_lifecycle_timer(state: Arc<AppState>) {
         }
         let st = state.clone();
         let _ = blocking(move || {
-            sweep_lifecycle(&st, window);
+            sweep_lifecycle(&st);
             Ok(())
         })
         .await;
     }
 }
 
-fn sweep_lifecycle(state: &Arc<AppState>, window: Duration) {
+fn sweep_lifecycle(state: &Arc<AppState>) {
     for repo_id in state.repo_ids() {
         let Some(repo_state) = state.repo_state(repo_id) else {
             continue;
@@ -1328,7 +1311,6 @@ fn sweep_lifecycle(state: &Arc<AppState>, window: Duration) {
                 continue;
             };
             let snapshot = entry.read().clone();
-            // Merged?
             if let Some(landed) =
                 gitscan::landed_revision(&repo, &repo_state.base_branch, &snapshot)
             {
@@ -1339,39 +1321,6 @@ fn sweep_lifecycle(state: &Arc<AppState>, window: Duration) {
                     LifecycleAction::Merged,
                     Some(landed),
                 );
-                state
-                    .unreachable_since
-                    .lock()
-                    .expect("timer state poisoned")
-                    .remove(&change_id);
-                continue;
-            }
-            // Abandoned? (unreachable from any branch ref for the window).
-            let Some(latest) = snapshot.latest_revision() else {
-                continue;
-            };
-            if gitscan::reachable_from_branches(&repo, &latest.commit_sha) {
-                state
-                    .unreachable_since
-                    .lock()
-                    .expect("timer state poisoned")
-                    .remove(&change_id);
-                continue;
-            }
-            let first = {
-                let mut map = state
-                    .unreachable_since
-                    .lock()
-                    .expect("timer state poisoned");
-                *map.entry(change_id).or_insert_with(Instant::now)
-            };
-            if first.elapsed() >= window {
-                append_lifecycle(state, &entry, change_id, LifecycleAction::Abandoned, None);
-                state
-                    .unreachable_since
-                    .lock()
-                    .expect("timer state poisoned")
-                    .remove(&change_id);
             }
         }
     }

@@ -355,6 +355,14 @@ impl ChangeProj {
         !matches!(self.lifecycle, Lifecycle::Active)
     }
 
+    /// Whether the change has **landed** on the canonical branch. Distinct from
+    /// `is_terminal`: an abandoned change is terminal but not merged, and stays
+    /// an enumerable member/tip of its chains (abandonment is membership-inert).
+    #[must_use]
+    pub fn is_merged(&self) -> bool {
+        matches!(self.lifecycle, Lifecycle::Merged { .. })
+    }
+
     /// Whether the latest revision is partial (`nit push --partial` set, not
     /// yet cleared by `nit ready`). A chain is partial iff its tip change is.
     #[must_use]

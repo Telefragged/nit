@@ -201,30 +201,6 @@ pub fn landed_revision(repo: &Repository, base_branch: &str, change: &ChangeProj
     }
 }
 
-/// Whether `commit_sha` is reachable from any local branch ref (`refs/heads/*`)
-/// — nit's own `refs/nit/keep/*` are excluded, so they never keep an
-/// abandoned change alive. A non-terminal change whose latest revision is
-/// unreachable is an abandonment candidate (docs/data-model.md "Abandon and
-/// reopen").
-#[must_use]
-pub fn reachable_from_branches(repo: &Repository, commit_sha: &str) -> bool {
-    let Ok(oid) = Oid::from_str(commit_sha) else {
-        return false;
-    };
-    let Ok(branches) = repo.branches(Some(BranchType::Local)) else {
-        return false;
-    };
-    for branch in branches.flatten() {
-        let Ok(Some(target)) = branch.0.get().peel_to_commit().map(|c| Some(c.id())) else {
-            continue;
-        };
-        if target == oid || repo.graph_descendant_of(target, oid).unwrap_or(false) {
-            return true;
-        }
-    }
-    false
-}
-
 /// Best-effort display name for a tip commit (docs/data-model.md "Tips"): a
 /// local branch pointing exactly at it, else one that contains it, else
 /// `None` (the caller falls back to the commit subject). nit stores no branch

@@ -12,7 +12,10 @@ mod common;
 
 use std::time::Duration;
 
-use common::{GitRepo, TestServer, fast_timer, http_get, http_patch, msg, push, wait_for};
+use common::{
+    GitRepo, TestServer, fast_timer, http_get, http_patch, http_post, member_id, msg, push,
+    wait_for,
+};
 use serde_json::json;
 
 /// Canonical git-common-dir of a checkout rooted at `root` (its `.git` child),
@@ -255,24 +258,25 @@ fn merged_chain_drops_out_of_active_chains() {
 
 #[test]
 fn abandoned_chain_drops_out_of_active_chains() {
-    fast_timer();
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Iab1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200);
+    let change_id = member_id(&res, "Iab1");
     let id = first_repo(&server);
     assert_eq!(active_chains(&server, id), 1);
 
-    // Delete the only branch reaching the tip: the change's latest revision is
-    // unreachable from any ref. After the abandon window the timer marks it
-    // abandoned, and the chain drops out of the live-tip set.
-    g.delete_branch("feat");
-    wait_for(Duration::from_secs(5), || {
-        (active_chains(&server, id) == 0).then_some(())
-    });
+    // Abandon the change: it drops out of the active-tip set (the dashboard
+    // hides abandoned tips), even though it stays enumerable as its own chain.
+    let (st, _) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/abandon")),
+        &json!({}),
+    );
+    assert_eq!(st, 200);
+    assert_eq!(active_chains(&server, id), 0);
 }
 
 // ---------------------------------------------------------------------------

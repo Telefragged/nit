@@ -165,10 +165,12 @@ fn path_entry(
 }
 
 /// The tip whose path walks `change` at `revision`, else the change's own
-/// revision sha (a dangling change is its own degenerate tip).
+/// revision sha (a dangling change is its own degenerate tip). Enumerates
+/// abandoned leaves too (membership-inert), so an abandoned change resolves to
+/// a real chain, not only the degenerate fallback.
 #[must_use]
 pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<String> {
-    for tip in view.tips() {
+    for tip in view.enumerable_tips() {
         let path = view.path_from_tip(&tip);
         if path
             .iter()

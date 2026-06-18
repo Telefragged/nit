@@ -11,9 +11,8 @@
 mod common;
 
 use std::process::Command;
-use std::time::Duration;
 
-use common::{GitRepo, TestServer, fast_timer, http_post, msg, nit, nit_register, wait_for};
+use common::{GitRepo, TestServer, http_post, msg, nit, nit_register};
 use serde_json::json;
 
 /// `nit push` prints a `PushResult` (`tip_change` + the derived chain) and
@@ -223,7 +222,6 @@ fn comment_opens_replies_resolves() {
 /// timer is sped up and the API polled until it lands.
 #[test]
 fn reopen_an_abandoned_change() {
-    fast_timer(); // before the server starts: 150ms sweeps, 1s abandon window
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -234,27 +232,24 @@ fn reopen_an_abandoned_change() {
     assert!(ok, "{stderr}");
     let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
 
-    // Make the tip unreachable from any branch ref; the timer abandons it. A
-    // change shows abandoned through its chain state — poll until it lands.
-    g.repo.set_head("refs/heads/main").unwrap(); // step HEAD off feat first
-    g.delete_branch("feat");
-    let chain_url = server.url(&format!("/api/chains/{change_id}"));
-    wait_for(Duration::from_secs(10), || {
-        let (_, chain) = common::http_get(&chain_url);
-        (chain["state"] == "has_abandoned").then_some(())
-    });
+    // Abandon it explicitly via the CLI (a reviewer/agent judgment).
+    let (ok, detail, stderr) = nit(
+        &server,
+        &g,
+        &["abandon", "--change", &change_id.to_string()],
+    );
+    assert!(ok, "{stderr}");
+    assert_eq!(detail["id"], change_id);
 
-    // reopen by Change-Id: a no-server-side error, change cleared to non-terminal.
+    // reopen by id clears it back to non-terminal.
     let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change", &change_id.to_string()]);
     assert!(ok, "{stderr}");
     assert_eq!(detail["id"], change_id);
     assert_eq!(detail["change_key"], "Ia");
 
-    // After reopen the change is pushable again: re-add the branch and push.
-    g.branch("feat", c1);
-    g.repo.set_head("refs/heads/feat").unwrap();
+    // After reopen the change is pushable again (no 409 gate).
     let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
-    assert!(ok, "reopened change accepts a new push: {stderr}");
+    assert!(ok, "reopened change accepts a push: {stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
 }
 

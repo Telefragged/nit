@@ -159,12 +159,13 @@ impl ChangeStatus {
 
 /// A chain's derived, actionable state (docs/api.md state table). Computed
 /// at read time from the path's members ([`derive_state`](crate::chain::derive_state));
-/// it is informational on the wire, never stored.
+/// it is informational on the wire, never stored. Abandonment is
+/// derivation-inert — there is no abandoned chain state (an abandoned member is
+/// excluded from the rollup; the agent reasons about its per-change status).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChainState {
     Merged,
-    HasAbandoned,
     AgentsTurn,
     WaitingForReview,
     Approved,

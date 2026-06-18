@@ -25,16 +25,14 @@ pub fn sig() -> Signature<'static> {
     Signature::new("Test", "test@example.com", &Time::new(t, 0)).unwrap()
 }
 
-/// Configure a fast lifecycle timer for the whole test process (one timer
-/// interval, one abandon window). Call once before starting a server in a
-/// lifecycle test. Process-global, so a test file relying on it must use the
-/// same values throughout.
+/// Configure a fast merge sweep for the whole test process. Call once before
+/// starting a server in a merge-detection test. Process-global, so a test file
+/// relying on it must use the same value throughout.
 pub fn fast_timer() {
     // SAFETY: set before any server thread reads it; identical values across a
     // file's tests, so concurrent writers do not tear.
     unsafe {
         std::env::set_var("NIT_TIMER_INTERVAL_MS", "150");
-        std::env::set_var("NIT_ABANDON_SECS", "1");
     }
 }
 

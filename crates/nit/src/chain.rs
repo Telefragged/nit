@@ -65,10 +65,10 @@ impl RepoView {
         self.changes.keys().copied().collect()
     }
 
-    /// Tips including terminal changes' leaves — the `status=all` view, which
-    /// still surfaces recently merged/abandoned chains.
-    #[must_use]
-    pub fn all_tips(&self) -> Vec<String> {
+    /// Leaf commit-shas (a change's latest-revision sha that no revision records
+    /// as a `parent_sha`) over the changes `keep` admits, sorted. A superseded
+    /// patchset is never a leaf — only the latest revision is a candidate.
+    fn leaves_where(&self, keep: impl Fn(&ChangeProj) -> bool) -> Vec<String> {
         let parents: HashSet<&str> = self
             .changes
             .values()
@@ -77,6 +77,7 @@ impl RepoView {
         let mut tips: Vec<String> = self
             .changes
             .values()
+            .filter(|&c| keep(c))
             .filter_map(ChangeProj::latest_revision)
             .map(|r| r.commit_sha.clone())
             .filter(|sha| !parents.contains(sha.as_str()))
@@ -85,29 +86,29 @@ impl RepoView {
         tips
     }
 
-    /// The set of live tip commit-shas: each non-terminal change's
-    /// latest-revision sha that no revision records as a `parent_sha` (a leaf
-    /// in the parent DAG). A superseded patchset is never a tip (only the
-    /// latest revision is a candidate); a terminal change is not a tip but can
-    /// still be an interior member of a live tip's path. Sorted for a stable
-    /// order.
+    /// Every leaf — the `status=all` view, which still surfaces recently
+    /// merged/abandoned chains.
+    #[must_use]
+    pub fn all_tips(&self) -> Vec<String> {
+        self.leaves_where(|_| true)
+    }
+
+    /// The **active frontier**: leaves of non-terminal changes (the dashboard's
+    /// `status=active`). A merged change has landed and an abandoned change is
+    /// dead, so neither is an active tip — but an abandoned change is still an
+    /// enumerable member ([`chains_through`](Self::chains_through)).
     #[must_use]
     pub fn tips(&self) -> Vec<String> {
-        let parents: HashSet<&str> = self
-            .changes
-            .values()
-            .flat_map(|c| c.revisions.iter().map(|r| r.parent_sha.as_str()))
-            .collect();
-        let mut tips: Vec<String> = self
-            .changes
-            .values()
-            .filter(|c| !c.is_terminal())
-            .filter_map(ChangeProj::latest_revision)
-            .map(|r| r.commit_sha.clone())
-            .filter(|sha| !parents.contains(sha.as_str()))
-            .collect();
-        tips.sort();
-        tips
+        self.leaves_where(|c| !c.is_terminal())
+    }
+
+    /// Leaves for **chain enumeration**: drops only merged changes, so an
+    /// abandoned leaf still resolves to its own chain (abandonment is
+    /// membership-inert). The dashboard hides these via [`tips`](Self::tips); a
+    /// change resource enumerates them.
+    #[must_use]
+    pub fn enumerable_tips(&self) -> Vec<String> {
+        self.leaves_where(|c| !c.is_merged())
     }
 
     /// Walk a tip commit-sha back to the canonical base through each revision's
@@ -145,7 +146,7 @@ impl RepoView {
     #[must_use]
     pub fn chains_through(&self, change_id: u64) -> Vec<ChainHit> {
         let mut hits = Vec::new();
-        for tip in self.tips() {
+        for tip in self.enumerable_tips() {
             let path = self.path_from_tip(&tip);
             let Some(member) = path.iter().find(|m| m.change_id == change_id) else {
                 continue;
@@ -177,17 +178,22 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     if path.is_empty() {
         return ChainState::AgentsTurn; // empty tip
     }
+    // Abandonment is derivation-inert: an abandoned member is excluded from the
+    // rollup entirely (no chain-level abandoned state). It shows as `abandoned`
+    // on its own path entry; the agent decides what to do with it.
     let statuses: Vec<ChangeStatus> = path
         .iter()
         .map(|m| {
             view.change(m.change_id)
                 .map_or(ChangeStatus::Pending, |c| c.status_at(m.revision))
         })
+        .filter(|s| *s != ChangeStatus::Abandoned)
         .collect();
+    if statuses.is_empty() {
+        return ChainState::AgentsTurn; // empty or all-abandoned tip
+    }
     if statuses.iter().all(|s| *s == ChangeStatus::Merged) {
         ChainState::Merged
-    } else if statuses.contains(&ChangeStatus::Abandoned) {
-        ChainState::HasAbandoned
     } else if statuses
         .iter()
         .any(|s| matches!(s, ChangeStatus::ChangesRequested | ChangeStatus::Commented))
