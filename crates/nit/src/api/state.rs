@@ -316,10 +316,11 @@ pub fn append_to_change(
 /// reorder buffer needed. The lock spans the commit, so a reader can briefly
 /// stall behind an in-flight append; cross-change appends never contend.
 ///
-/// The fold is validated on a throwaway copy **before** the commit: a payload
-/// that won't fold errors out with nothing written, so the log can never get
-/// ahead of the projection. `pre_commit` and the appends share one
-/// transaction, so either both land or neither does.
+/// The new entries are folded into a **clone** of the projection **before** the
+/// commit; a payload that won't fold errors out with nothing written, so the
+/// log can never get ahead of the projection. The clone that validated is then
+/// installed verbatim after the commit (no second fold). `pre_commit` and the
+/// appends share one transaction, so either both land or neither does.
 ///
 /// # Errors
 /// On a database failure (the projection is left untouched), a fold failure
@@ -343,10 +344,14 @@ pub fn append_to_change_with(
     let mut proj = entry.proj.write().expect("projection lock poisoned");
     let now = db::now_rfc3339();
 
-    // Validate the fold on a probe copy first; a bad payload aborts before any
-    // write. The live fold below is then infallible.
+    // Build the next projection on a clone and fold the new entries into it: a
+    // bad payload aborts here, before any write. The validated clone is then
+    // installed verbatim after the commit — one fold, not two, and the
+    // installed object is provably the one that validated (the fold ignores the
+    // global `seq`, so the clone equals what re-folding the committed rows
+    // gives).
     let start = db::log_head(conn, change_id)?;
-    let mut probe = proj.clone();
+    let mut next = proj.clone();
     let staged: Vec<review::Entry> = news
         .into_iter()
         .enumerate()
@@ -359,7 +364,7 @@ pub fn append_to_change_with(
         })
         .collect();
     for e in &staged {
-        review::fold(&mut probe, e)?;
+        review::fold(&mut next, e)?;
     }
 
     // Commit, minting each entry's global seq; `pre_commit` shares the tx.
@@ -372,11 +377,9 @@ pub fn append_to_change_with(
     }
     tx.commit()?;
 
-    // Apply to the held projection after the durable commit (validated above,
-    // so infallible), then release it before publishing so readers unblock.
-    for e in &applied {
-        review::fold(&mut proj, e).expect("fold validated before commit");
-    }
+    // Install the validated projection after the durable commit, then release
+    // the lock before publishing so readers unblock.
+    *proj = next;
     drop(proj);
     // Publish to live followers only after the durable commit + fold, so a
     // follower reconciling against its backlog never sees a half-applied entry.
