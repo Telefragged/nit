@@ -1,153 +1,187 @@
-//! Identity across rewrites: pure rebases, reorders, drop/restore
-//! orphaning and re-attachment — the Change-Id trailer is the identity.
+//! Pure-rebase vs reword semantics through `POST /api/push`: a patch-id-equal,
+//! same-message commit on a new parent appends a revision but carries the
+//! reviewed status forward; changing the message resets the change to pending.
+//! Revisions are 0-based (rev 0 is the first). Asserted through
+//! `GET /api/changes/{id}` and the derived chain path.
 
 mod common;
 
-use common::{Fixture, msg};
-use nit::review::Status;
+use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push};
+use serde_json::Value;
 
-#[test]
-fn pure_rebase_keeps_status_and_positions() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2);
-    f.scan();
-    f.review("I001", "approve");
-    f.review("I002", "request_changes");
+/// `GET /api/changes/{id}`.
+fn change_detail(server: &TestServer, change_id: u64) -> Value {
+    let (st, v) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+    assert_eq!(st, 200, "{v}");
+    v
+}
 
-    // main moves on; the agent rebases (same diffs, new shas, new parents).
-    let m1 = f.commit(&[f.root], "main: unrelated\n", &[("main.txt", "m\n")]);
-    f.branch("main", m1);
-    let c1b = f.commit(&[m1], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2b = f.commit(&[c1b], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2b);
+/// The status the derived chain path pins on `change_key` (rooted at the tip).
+fn path_status(server: &TestServer, tip_change_id: u64, change_key: &str) -> String {
+    let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip_change_id}")));
+    assert_eq!(st, 200, "{chain}");
+    chain["path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["change_key"] == change_key)
+        .unwrap_or_else(|| panic!("no {change_key} in path: {chain}"))["status"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
 
-    assert!(!f.scan().entries.is_empty());
-    let changes = f.changes();
-    assert_eq!(changes.len(), 2);
-    assert_eq!(
-        changes[0].status,
-        Status::Approved,
-        "pure rebase keeps status"
+/// Approve a change at a pinned revision.
+fn approve(server: &TestServer, change_id: u64, revision: u64) {
+    let (st, _) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reviews")),
+        &serde_json::json!({"revision": revision, "verdict": "approve", "message": "lgtm"}),
     );
-    assert_eq!(changes[1].status, Status::ChangesRequested);
-    let rev = changes[0].latest_revision().unwrap();
-    assert_eq!(rev.number, 2);
-    assert_eq!(rev.commit_sha, c1b.to_string());
-    assert_eq!(rev.parent_sha, m1.to_string());
+    assert_eq!(st, 200);
 }
 
+/// A pure rebase (same patch-id + same message, new parent) appends a revision
+/// but the displayed status at the pinned revision carries the approval
+/// forward; a reword (message changed) resets that change to pending.
 #[test]
-fn reorder_updates_positions_and_keeps_statuses() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2);
-    f.scan();
-    f.review("I001", "approve");
-    f.review("I002", "request_changes");
+fn pure_rebase_carries_status_forward_then_reword_resets() {
+    let g = GitRepo::new();
+    let a_txt = "a1\na2\na3\n";
+    let b_txt = "b1\nb2\n";
+    // A 2-change chain on `feat`: Ia (base) then Ib (tip).
+    let c1 = g.commit(&[g.root], &msg("one", "Ia"), &[("a.txt", a_txt)]);
+    let c2 = g.commit(&[c1], &msg("two", "Ib"), &[("b.txt", b_txt)]);
+    g.branch("feat", c2);
 
-    // Swap the two commits (independent files: diffs unchanged).
-    let c2b = f.commit(&[f.root], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    let c1b = f.commit(&[c2b], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1b);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, pr) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{pr}");
+    let tip_id = member_id(&pr, "Ib");
+    assert_eq!(pr["tip_change"]["revision"], 0, "first revision is rev 0");
 
-    f.scan();
-    let changes = f.changes(); // ordered by position
-    assert_eq!(changes[0].change_key, "I002");
-    assert_eq!(changes[0].position, Some(0));
-    assert_eq!(changes[0].status, Status::ChangesRequested);
-    assert_eq!(changes[1].change_key, "I001");
-    assert_eq!(changes[1].position, Some(1));
-    assert_eq!(changes[1].status, Status::Approved);
-    assert_eq!(changes[1].latest_revision().unwrap().number, 2);
-}
+    // Approve the tip change Ib at rev 0.
+    approve(&server, tip_id, 0);
+    assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
 
-#[test]
-fn drop_and_restore_reattaches_with_previous_status() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2);
-    f.scan();
-    f.review("I002", "approve");
+    // main moves on; the agent rebases the whole chain onto it. Same diffs and
+    // messages, new shas + new parents → pure rebases.
+    let m1 = g.commit(&[g.root], "main: unrelated\n", &[("m.txt", "m\n")]);
+    g.branch("main", m1);
+    let c1r = g.commit(&[m1], &msg("one", "Ia"), &[("a.txt", a_txt)]);
+    let c2r = g.commit(&[c1r], &msg("two", "Ib"), &[("b.txt", b_txt)]);
+    g.branch("feat", c2r);
 
-    // Drop the second commit.
-    f.branch("feat", c1);
-    assert!(!f.scan().entries.is_empty());
-    let changes = f.changes();
-    assert_eq!(changes.len(), 2, "changes are never deleted");
-    let orphan = f.change("I002");
-    assert!(orphan.orphaned);
-    assert_eq!(orphan.position, None);
-
-    // Restore the exact same commit: its trailer re-attaches the orphan and
-    // the status returns to its pre-orphan value.
-    f.branch("feat", c2);
-    f.scan();
-    let restored = f.change("I002");
-    assert_eq!(restored.status, Status::Approved);
-    assert_eq!(restored.position, Some(1));
+    let (st, pr) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{pr}");
     assert_eq!(
-        restored.latest_revision().unwrap().number,
+        pr["tip_change"]["revision"], 1,
+        "a pure rebase appends rev 1"
+    );
+    assert_eq!(
+        pr["tip_change"]["status"], "approved",
+        "the approval carries forward across a pure rebase"
+    );
+    assert_eq!(member_id(&pr, "Ib"), tip_id, "same change identity");
+
+    // The change detail: a new revision recorded, status still approved at the
+    // pinned (latest) revision, and the review row stays on rev 0.
+    let detail = change_detail(&server, tip_id);
+    let revs = detail["revisions"].as_array().unwrap();
+    assert_eq!(revs.len(), 2, "rev 0 and rev 1");
+    assert_eq!(revs[1]["number"], 1);
+    assert_eq!(revs[1]["commit_sha"], c2r.to_string());
+    assert_eq!(revs[1]["parent_sha"], c1r.to_string());
+    assert_eq!(
+        detail["reviews"][0]["revision"], 0,
+        "the verdict stays anchored to rev 0"
+    );
+    assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
+
+    // A reword (message changed, same diff + parent) is reviewable, so it
+    // resets the change to pending — a new revision the reviewer hasn't seen.
+    let c2w = g.commit(&[c1r], &msg("two: explained", "Ib"), &[("b.txt", b_txt)]);
+    g.branch("feat", c2w);
+    let (st, pr) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{pr}");
+    assert_eq!(pr["tip_change"]["revision"], 2, "the reword appends rev 2");
+    assert_eq!(
+        pr["tip_change"]["status"], "pending",
+        "a reword resets the displayed status"
+    );
+
+    let detail = change_detail(&server, tip_id);
+    assert_eq!(detail["revisions"].as_array().unwrap().len(), 3);
+    assert_eq!(path_status(&server, tip_id, "Ib"), "pending");
+}
+
+/// A re-push where nothing moved is idempotent: no new revision, and the
+/// carried status is unchanged.
+#[test]
+fn re_push_of_an_unchanged_tip_is_idempotent() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("only", "Ic"), &[("c.txt", "c\n")]);
+    g.branch("feat", c1);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, pr) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{pr}");
+    let change_id = member_id(&pr, "Ic");
+    approve(&server, change_id, 0);
+
+    // Push the same tip again — nothing moved.
+    let (st, pr) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{pr}");
+    assert_eq!(pr["tip_change"]["revision"], 0, "no new revision");
+    assert_eq!(pr["tip_change"]["status"], "approved");
+
+    let detail = change_detail(&server, change_id);
+    assert_eq!(
+        detail["revisions"].as_array().unwrap().len(),
         1,
-        "same effective state: no new revision"
+        "a no-op re-push records nothing"
     );
 }
 
+/// A pure rebase carries `changes_requested` forward exactly like `approved`,
+/// and the subsequent reword resets it — the reset is verdict-independent.
 #[test]
-fn identity_follows_the_trailer() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2);
-    f.scan();
-    let id001 = f.change("I001").id;
+fn pure_rebase_carries_request_changes_reword_resets() {
+    let g = GitRepo::new();
+    let txt = "x1\nx2\n";
+    let c1 = g.commit(&[g.root], &msg("feat: x", "Ix"), &[("x.txt", txt)]);
+    g.branch("feat", c1);
 
-    // Swap the *contents* but keep the trailers: identity follows the
-    // Change-Id, no matter how much the diff changed.
-    let c1b = f.commit(&[f.root], &msg("one", "I001"), &[("b.txt", "b\n")]);
-    let c2b = f.commit(&[c1b], &msg("two", "I002"), &[("a.txt", "a\n")]);
-    f.branch("feat", c2b);
-    f.scan();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, pr) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{pr}");
+    let change_id = member_id(&pr, "Ix");
 
-    let changes = f.changes();
-    assert_eq!(changes[0].id, id001);
-    assert_eq!(changes[0].change_key, "I001");
-    assert_eq!(
-        changes[0].latest_revision().unwrap().commit_sha,
-        c1b.to_string()
+    let (st, _) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reviews")),
+        &serde_json::json!({"revision": 0, "verdict": "request_changes", "message": "rename"}),
     );
-    assert_eq!(changes[1].change_key, "I002");
+    assert_eq!(st, 200);
+    assert_eq!(path_status(&server, change_id, "Ix"), "changes_requested");
+
+    // Pure rebase onto a moved base.
+    let m1 = g.commit(&[g.root], "main moves\n", &[("m.txt", "m\n")]);
+    g.branch("main", m1);
+    let c1r = g.commit(&[m1], &msg("feat: x", "Ix"), &[("x.txt", txt)]);
+    g.branch("feat", c1r);
+    let (st, pr) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{pr}");
+    assert_eq!(pr["tip_change"]["revision"], 1);
     assert_eq!(
-        changes[1].latest_revision().unwrap().commit_sha,
-        c2b.to_string()
+        pr["tip_change"]["status"], "changes_requested",
+        "request_changes carries forward across a pure rebase"
     );
-}
 
-#[test]
-fn new_change_id_is_a_new_change() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-    let id001 = f.change("I001").id;
-    f.review("I001", "approve");
-
-    // Same diff, same subject, different trailer: gerrit semantics — the
-    // Change-Id is the identity, so this is a new change and the old change
-    // orphans (its review history stays with the old id).
-    let c1b = f.commit(&[f.root], &msg("one", "I00b"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1b);
-    f.scan();
-
-    let changes = f.changes();
-    assert_eq!(changes.len(), 2);
-    let new = f.change("I00b");
-    assert_eq!(new.position, Some(0));
-    assert_eq!(new.status, Status::Pending);
-    let old = f.change("I001");
-    assert_eq!(old.id, id001);
-    assert!(old.orphaned);
+    // Reword resets to pending.
+    let c1w = g.commit(&[m1], &msg("feat: x, reworded", "Ix"), &[("x.txt", txt)]);
+    g.branch("feat", c1w);
+    let (st, pr) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{pr}");
+    assert_eq!(pr["tip_change"]["revision"], 2);
+    assert_eq!(pr["tip_change"]["status"], "pending");
+    assert_eq!(path_status(&server, change_id, "Ix"), "pending");
 }

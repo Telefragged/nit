@@ -69,16 +69,18 @@ pub enum Author {
 
 /// The kind of one log entry (docs/data-model.md "The log"). The fold
 /// dispatches on it; the db `log.kind` TEXT column stores its [`as_str`].
+/// Each entry belongs to one **change**: a `revision` records a new
+/// commit-sha for the change, a `lifecycle` records a merge/abandon/reopen.
 ///
 /// [`as_str`]: LogKind::as_str
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogKind {
-    Revisions,
+    Revision,
     Review,
     Comment,
+    Lifecycle,
     Partial,
-    ChainClosed,
 }
 
 impl LogKind {
@@ -87,11 +89,11 @@ impl LogKind {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            LogKind::Revisions => "revisions",
+            LogKind::Revision => "revision",
             LogKind::Review => "review",
             LogKind::Comment => "comment",
+            LogKind::Lifecycle => "lifecycle",
             LogKind::Partial => "partial",
-            LogKind::ChainClosed => "chain_closed",
         }
     }
 }
@@ -101,14 +103,25 @@ impl std::str::FromStr for LogKind {
 
     fn from_str(s: &str) -> Result<LogKind, String> {
         match s {
-            "revisions" => Ok(LogKind::Revisions),
+            "revision" => Ok(LogKind::Revision),
             "review" => Ok(LogKind::Review),
             "comment" => Ok(LogKind::Comment),
+            "lifecycle" => Ok(LogKind::Lifecycle),
             "partial" => Ok(LogKind::Partial),
-            "chain_closed" => Ok(LogKind::ChainClosed),
             other => Err(format!("unknown log entry kind {other:?}")),
         }
     }
+}
+
+/// What a `lifecycle` log entry records about a change (docs/data-model.md
+/// "Payloads"). The merge/abandon timer writes `merged`/`abandoned`;
+/// `nit reopen` writes `reopened`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LifecycleAction {
+    Merged,
+    Abandoned,
+    Reopened,
 }
 
 /// A reviewer's verdict on one change (docs/api.md "Reviews"). Maps to a
@@ -121,11 +134,10 @@ pub enum Verdict {
     Comment,
 }
 
-/// A change's wire status (docs/api.md state table). The fold keeps the
-/// retained [`Status`](crate::review::Status) plus a separate orphaned flag
-/// and collapses them into this for the wire ([`ChangeProj::wire_status`]).
-///
-/// [`ChangeProj::wire_status`]: crate::review::ChangeProj::wire_status
+/// A change's displayed status at a pinned revision (docs/api.md state
+/// table): the verdict-derived [`Status`](crate::review::Status) under the
+/// lifecycle overlay (`merged` for the landed patchset, `abandoned`
+/// change-wide). Per `(change, revision)`, never a change-wide scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChangeStatus {
@@ -133,20 +145,29 @@ pub enum ChangeStatus {
     Approved,
     ChangesRequested,
     Commented,
-    Orphaned,
+    Merged,
+    Abandoned,
+}
+
+impl ChangeStatus {
+    /// Terminal for review (the lifecycle closed it).
+    #[must_use]
+    pub fn is_terminal(self) -> bool {
+        matches!(self, ChangeStatus::Merged | ChangeStatus::Abandoned)
+    }
 }
 
 /// A chain's derived, actionable state (docs/api.md state table). Computed
-/// from the live changes by [`derive_state`](crate::review::derive_state);
+/// at read time from the path's members ([`derive_state`](crate::chain::derive_state));
 /// it is informational on the wire, never stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChainState {
-    WaitingForReview,
-    AgentsTurn,
-    Approved,
     Merged,
-    Abandoned,
+    HasAbandoned,
+    AgentsTurn,
+    WaitingForReview,
+    Approved,
 }
 
 impl ChainState {
@@ -154,34 +175,6 @@ impl ChainState {
     #[must_use]
     pub fn actionable(self) -> bool {
         self != ChainState::WaitingForReview
-    }
-}
-
-/// A chain's lifecycle status — the fold's `Projection.status` and the wire
-/// `Chain.status` (docs/api.md).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChainStatus {
-    Active,
-    Merged,
-    Abandoned,
-}
-
-/// How a chain closed — the two terminal [`ChainStatus`] values, as the
-/// `chain_closed` log payload carries them (docs/data-model.md "Payloads").
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ClosedStatus {
-    Merged,
-    Abandoned,
-}
-
-impl From<ClosedStatus> for ChainStatus {
-    fn from(closed: ClosedStatus) -> ChainStatus {
-        match closed {
-            ClosedStatus::Merged => ChainStatus::Merged,
-            ClosedStatus::Abandoned => ChainStatus::Abandoned,
-        }
     }
 }
 

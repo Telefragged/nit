@@ -7,16 +7,20 @@
 //!   wire, and the CLI alike (never a `String`).
 //! - [`db`] — `SQLite` persistence: open/migrate, typed rows, query helpers
 //!   (schema contract: `docs/data-model.md`).
-//! - [`gitscan`] — the scan engine: walks `base..tip` of a registered
-//!   branch, reconciles changes/revisions, detects merged/abandoned
-//!   chains (`docs/data-model.md` "Scan algorithm").
+//! - [`review`] — the per-change fold: a change's reviewable state is the
+//!   replay of its append-only log.
+//! - [`chain`] — chain derivation: walks a tip's `parent_sha` back to the
+//!   canonical base, a pure function of the per-change folds.
+//! - [`gitscan`] — the git layer: the push walk, merged/abandoned detection,
+//!   and GC-safety keep refs (`docs/data-model.md`).
 //! - [`api`] — the axum HTTP layer (`docs/api.md` is the contract) plus
 //!   the `nit serve` wiring.
-//! - [`cli`] — `nit push`/`wait`/`status`/`reply`, thin clients of the API.
+//! - [`cli`] — `nit push`/`status`/`log`/`comment`, thin clients of the API.
 
 #![deny(clippy::unwrap_used)]
 
 pub mod api;
+pub mod chain;
 pub mod cli;
 pub mod db;
 pub mod enums;

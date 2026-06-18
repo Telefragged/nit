@@ -1,86 +1,186 @@
-//! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside
-//! a fixture repo against a real server — push / status / wait / comment
-//! per docs/agent-workflow.md.
+//! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside a
+//! fixture repo against a real server. The agent drives push / ready / status /
+//! log / comment / reopen one-shot (the live followers `nit wait` /
+//! `nit log --follow` return in a later stage) — docs/agent-workflow.md.
+//!
+//! `nit push` walks the change-centric model: oldest-first, upsert each change
+//! by its `Change-Id`, append a revision iff the sha moved (revisions are
+//! 0-based). `nit status`/`nit log` resolve the cwd's tip change from local
+//! HEAD, then read the derived chain on demand.
 
 mod common;
 
 use std::process::Command;
+use std::time::Duration;
 
-use common::{GitRepo, TestServer, http_post, msg, nit, nit_register};
-use serde_json::{Value, json};
+use common::{GitRepo, TestServer, fast_timer, http_post, msg, nit, nit_register, wait_for};
+use serde_json::json;
 
+/// `nit push` prints a `PushResult` (`tip_change` + the derived chain) and
+/// registers the chain; `nit status`/`nit log` then read it back, resolved from
+/// the cwd HEAD.
 #[test]
-fn push_wait_status_comment_loop() {
+fn push_prints_result_then_status_and_log_read_it_back() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap(); // the agent's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // push: repo + branch passed explicitly, base defaults to main.
-    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    // push: repo + branch explicit, base defaults to main. The result carries
+    // the tip change at rev 0 (0-based) and the tip-rooted chain.
+    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
-    assert_eq!(chain["branch"], "feat");
-    assert_eq!(chain["base"], "main");
+    assert_eq!(push["tip_change"]["change_key"], "Ia");
+    assert_eq!(push["tip_change"]["revision"], 0, "{push}");
+    assert_eq!(push["tip_change"]["status"], "pending");
+    let chain = &push["chain"];
+    assert_eq!(chain["base_branch"], "main");
     assert_eq!(chain["state"], "waiting_for_review");
-    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
+    assert_eq!(chain["partial"], false);
+    assert_eq!(chain["path"].as_array().unwrap().len(), 1);
+    assert_eq!(chain["path"][0]["position"], 0);
+    assert_eq!(chain["path"][0]["change_key"], "Ia");
+    assert_eq!(chain["path"][0]["revision"], 0);
 
-    // status: feedback snapshot, not actionable yet.
-    let (ok, feedback, stderr) = nit(&server, &g, &["status"]);
+    // status (no --oneline) reads `GET /api/chains/{tip}` for the cwd HEAD.
+    let (ok, status, stderr) = nit(&server, &g, &["status"]);
     assert!(ok, "{stderr}");
-    assert_eq!(feedback["state"], "waiting_for_review");
-    assert_eq!(feedback["actionable"], false);
+    assert_eq!(status["state"], "waiting_for_review");
+    assert_eq!(status["path"][0]["change_key"], "Ia");
+    assert_eq!(status["path"][0]["revision"], 0);
 
-    // wait 0: returns immediately with the whole backlog since the start and
-    // the current (not-actionable) state — cursor 0 is behind head, so it
-    // does not block.
-    let (ok, resp, stderr) = nit(&server, &g, &["wait", "0"]);
+    // status --oneline: a compact state line plus one line per member.
+    let out = Command::new(env!("CARGO_BIN_EXE_nit"))
+        .args(["status", "--oneline"])
+        .current_dir(g.workdir())
+        .env("NIT_SERVER", &server.base)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("state=waiting_for_review"), "{text}");
+    assert!(text.contains("\tIa\t"), "one line per member: {text}");
+
+    // log: the aggregated chain log, one revision entry from the push.
+    let (ok, log, stderr) = nit(&server, &g, &["log"]);
     assert!(ok, "{stderr}");
-    assert_eq!(resp["feedback"]["state"], "waiting_for_review");
-    assert_eq!(resp["head"], 1, "{resp}");
-    assert_eq!(resp["entries"].as_array().unwrap().len(), 1, "{resp}");
-    assert_eq!(resp["entries"][0]["kind"], "revisions");
+    let entries = log["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 1, "{log}");
+    assert_eq!(entries[0]["kind"], "revision");
+    assert_eq!(entries[0]["change_id"], push["tip_change"]["change_id"]);
+}
 
-    // Reviewer acts (over HTTP, as the browser would).
-    let (st, draft) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/drafts")),
-        &json!({"revision": 1, "file": "a.txt", "line": 1, "body": "naming"}),
-    );
-    assert_eq!(st, 200, "{draft}");
+/// An amend (same Change-Id, new sha) appends a second revision (rev 1); a
+/// re-push with nothing moved is idempotent and adds no entry.
+#[test]
+fn amend_appends_a_revision_idempotent_repush_does_not() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (ok, _push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    assert!(ok, "{stderr}");
+
+    // amend (same Change-Id Ia, new content -> new sha) = rev 1.
+    let c1b = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nB\n")]);
+    g.branch("feat", c1b);
+    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    assert!(ok, "{stderr}");
+    assert_eq!(push["tip_change"]["revision"], 1, "amend is rev 1: {push}");
+
+    // The aggregated log now has two revision entries.
+    let (ok, log, stderr) = nit(&server, &g, &["log"]);
+    assert!(ok, "{stderr}");
+    let entries = log["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 2, "{log}");
+    assert!(entries.iter().all(|e| e["kind"] == "revision"));
+
+    // Re-push with nothing moved: idempotent, still rev 1, no new entry.
+    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    assert!(ok, "{stderr}");
+    assert_eq!(push["tip_change"]["revision"], 1);
+    let (_ok, log, _) = nit(&server, &g, &["log"]);
+    assert_eq!(log["entries"].as_array().unwrap().len(), 2, "{log}");
+}
+
+/// `nit push --partial` marks the tip partial; `nit ready` clears it. While
+/// partial, an all-approved chain is `agents_turn`, never `approved`.
+#[test]
+fn partial_push_then_ready_clears_it() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &["--partial"]);
+    assert!(ok, "{stderr}");
+    assert_eq!(push["chain"]["partial"], true);
+    assert_eq!(push["chain"]["state"], "waiting_for_review");
+    let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
+
+    // Reviewer approves the only change (over HTTP, as the browser would). The
+    // verdict lands on rev 0.
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/reviews")),
-        &json!({"revision": 1, "verdict": "request_changes", "message": "fix naming"}),
+        &json!({"revision": 0, "verdict": "approve", "message": "lgtm"}),
     );
     assert_eq!(st, 200);
 
-    // wait 0 now returns the WHOLE run since the cursor — the initial
-    // `revisions` push *and* the reviewer's `review` — not just the first
-    // entry, with the actionable feedback.
-    let (ok, resp, stderr) = nit(&server, &g, &["wait", "0"]);
+    // Approved but still partial: agents_turn, never approved.
+    let (ok, status, stderr) = nit(&server, &g, &["status"]);
     assert!(ok, "{stderr}");
-    assert_eq!(resp["feedback"]["state"], "agents_turn");
-    assert_eq!(resp["feedback"]["actionable"], true);
-    assert_eq!(resp["head"], 2, "{resp}");
-    let entries = resp["entries"].as_array().unwrap();
-    assert_eq!(
-        entries.len(),
-        2,
-        "wait must drain the whole backlog: {resp}"
-    );
-    assert_eq!(entries[0]["kind"], "revisions");
-    assert_eq!(entries[0]["idx"], 0);
-    assert_eq!(entries[1]["kind"], "review");
-    assert_eq!(entries[1]["idx"], 1);
-    let thread_id = resp["feedback"]["changes"][0]["threads"][0]["id"]
-        .as_i64()
-        .expect("a published thread");
-    assert_eq!(
-        resp["feedback"]["changes"][0]["threads"][0]["comments"][0]["body"],
-        "naming"
-    );
+    assert_eq!(status["state"], "agents_turn");
+    assert_eq!(status["partial"], true);
+    assert_eq!(status["path"][0]["status"], "approved");
 
-    // `nit comment --change-id … --thread … --resolve` appends to the thread
-    // and resolves it.
+    // ready clears the sticky flag; the approved chain becomes mergeable.
+    let (ok, ready, stderr) = nit_register(&server, &g, "ready", "feat", &[]);
+    assert!(ok, "{stderr}");
+    assert_eq!(ready["chain"]["partial"], false);
+    assert_eq!(ready["chain"]["state"], "approved");
+}
+
+/// `nit comment --change-id` opens a thread; `--thread … --resolve` replies and
+/// resolves it; `--change <numeric>` targets the same change by id.
+#[test]
+fn comment_opens_replies_resolves() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (ok, _push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    assert!(ok, "{stderr}");
+
+    // Open a new thread on the change, resolved by the cwd's Change-Id. Returns
+    // a Thread (author=agent), born unresolved.
+    let (ok, thread, stderr) = nit(
+        &server,
+        &g,
+        &[
+            "comment",
+            "--change-id",
+            "Ia",
+            "--file",
+            "a.txt",
+            "--line",
+            "1",
+            "-m",
+            "is this right?",
+        ],
+    );
+    assert!(ok, "{stderr}");
+    assert_eq!(thread["resolved"], false);
+    assert_eq!(thread["comments"][0]["author"], "agent");
+    assert_eq!(thread["comments"][0]["body"], "is this right?");
+    let thread_id = thread["id"].as_u64().unwrap();
+    let change_num = thread["change_id"].as_u64().unwrap();
+
+    // Reply to the thread and resolve it in one shot (--thread … --resolve).
     let (ok, reply, stderr) = nit(
         &server,
         &g,
@@ -91,21 +191,17 @@ fn push_wait_status_comment_loop() {
             "--thread",
             &thread_id.to_string(),
             "-m",
-            "renamed",
+            "fixed it",
             "--resolve",
         ],
     );
     assert!(ok, "{stderr}");
     assert_eq!(reply["resolved"], true);
     let comments = reply["comments"].as_array().unwrap();
-    assert_eq!(comments.last().unwrap()["author"], "agent");
-    assert_eq!(comments.last().unwrap()["body"], "renamed");
+    assert_eq!(comments.len(), 2);
+    assert_eq!(comments.last().unwrap()["body"], "fixed it");
 
-    // `--change <numeric id>` targets the same change as `--change-id <trailer>`
-    // (born resolved, so the unresolved count below stays 0).
-    let change_num = resp["feedback"]["changes"][0]["change_id"]
-        .as_i64()
-        .expect("a numeric change id");
+    // `--change <numeric id>` targets the same change as `--change-id Ia`.
     let (ok, opened, stderr) = nit(
         &server,
         &g,
@@ -115,100 +211,105 @@ fn push_wait_status_comment_loop() {
             &change_num.to_string(),
             "-m",
             "by numeric id",
-            "--resolve",
         ],
     );
     assert!(ok, "{stderr}");
     assert_eq!(opened["change_id"], change_num);
-    assert_eq!(opened["resolved"], true);
-
-    let (ok, feedback, _) = nit(&server, &g, &["status"]);
-    assert!(ok);
-    assert_eq!(feedback["changes"][0]["unresolved"], 0);
+    assert_eq!(opened["comments"][0]["body"], "by numeric id");
 }
 
-/// A merge commit fails the scan on push; a plain re-push after the agent
-/// rebases it away recovers.
+/// `nit reopen` clears an abandoned change back to its retained status so a new
+/// revision can be pushed. Abandonment is the background timer's call, so the
+/// timer is sped up and the API polled until it lands.
 #[test]
-fn merge_commit_fails_push_then_recovers() {
+fn reopen_an_abandoned_change() {
+    fast_timer(); // before the server starts: 150ms sweeps, 1s abandon window
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (ok, _, stderr) = nit_register(&server, &g, "push", "feat", &[]);
-    assert!(ok, "{stderr}");
 
-    // A merge commit on the chain: push prints the chain JSON but exits
-    // non-zero with the scan error on stderr.
-    let side = g.commit(&[g.root], "side\n", &[("s.txt", "s\n")]);
-    let merge = g.commit(&[c1, side], "merge side\n", &[]);
-    g.branch("feat", merge);
-    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &[]);
-    assert!(!ok, "merge commits must fail the push");
+    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    assert!(ok, "{stderr}");
+    let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
+
+    // Make the tip unreachable from any branch ref; the timer abandons it. A
+    // change shows abandoned through its chain state — poll until it lands.
+    g.repo.set_head("refs/heads/main").unwrap(); // step HEAD off feat first
+    g.delete_branch("feat");
+    let chain_url = server.url(&format!("/api/chains/{change_id}"));
+    wait_for(Duration::from_secs(10), || {
+        let (_, chain) = common::http_get(&chain_url);
+        (chain["state"] == "has_abandoned").then_some(())
+    });
+
+    // reopen by Change-Id: a no-server-side error, change cleared to non-terminal.
+    let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change", &change_id.to_string()]);
+    assert!(ok, "{stderr}");
+    assert_eq!(detail["id"], change_id);
+    assert_eq!(detail["change_key"], "Ia");
+
+    // After reopen the change is pushable again: re-add the branch and push.
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    assert!(ok, "reopened change accepts a new push: {stderr}");
+    assert_eq!(push["tip_change"]["change_key"], "Ia");
+}
+
+/// A push from a branch with a commit missing its `Change-Id` trailer fails
+/// non-zero with a helpful message (the all-or-nothing walk rejects it).
+#[test]
+fn push_without_change_id_fails_with_a_helpful_message() {
+    let g = GitRepo::new();
+    // No Change-Id trailer on this commit.
+    let c1 = g.commit(&[g.root], "core: add a\n", &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (ok, _json, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    assert!(!ok, "a missing Change-Id must fail the push");
     assert!(
-        chain["last_scan_error"]
-            .as_str()
-            .unwrap()
-            .contains("merge commits"),
-        "{chain}"
+        stderr.contains("Change-Id trailer"),
+        "the error names the missing trailer: {stderr}"
     );
-    assert!(stderr.contains("merge commits"), "{stderr}");
-
-    // Recovery is plain re-push after the agent rebases.
-    g.branch("feat", c1);
-    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &[]);
-    assert!(ok, "{stderr}");
-    assert_eq!(chain["last_scan_error"], Value::Null);
 }
 
+/// `nit status` before any push fails non-zero, telling the agent to push first.
 #[test]
-fn partial_push_blocks_merge_until_ready() {
+fn status_before_any_push_says_run_nit_push_first() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // push --partial: chain registers partial, review can start.
-    let (ok, chain, stderr) = nit_register(&server, &g, "push", "feat", &["--partial"]);
-    assert!(ok, "{stderr}");
-    assert_eq!(chain["partial"], true);
-    assert_eq!(chain["state"], "waiting_for_review");
-    let change_id = chain["changes"][0]["id"].as_i64().unwrap();
-
-    // Reviewer approves the only change (over HTTP, as the browser would).
-    let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reviews")),
-        &json!({"revision": 1, "verdict": "approve", "message": "lgtm"}),
-    );
-    assert_eq!(st, 200);
-
-    // All approved but still partial: agents_turn, never approved.
-    let (ok, feedback, stderr) = nit(&server, &g, &["status"]);
-    assert!(ok, "{stderr}");
-    assert_eq!(feedback["state"], "agents_turn");
-    assert_eq!(feedback["chain"]["partial"], true);
-
-    // ready clears the flag; the approved chain becomes mergeable.
-    let (ok, chain, stderr) = nit_register(&server, &g, "ready", "feat", &[]);
-    assert!(ok, "{stderr}");
-    assert_eq!(chain["partial"], false);
-    assert_eq!(chain["state"], "approved");
+    let out = Command::new(env!("CARGO_BIN_EXE_nit"))
+        .args(["status"])
+        .current_dir(g.workdir())
+        .env("NIT_SERVER", &server.base)
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "status before push must fail");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("run 'nit push' first"), "{stderr}");
 }
 
+/// An unreachable server is reported as such, not as a malformed request.
 #[test]
-fn cli_errors_are_human_readable() {
+fn push_to_a_dead_server_reports_unreachable() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
 
-    // No server listening: a well-formed push (repo path resolves) still
-    // reaches the HTTP layer and reports the unreachable server.
+    // Start then drop a server to claim (and free) a port the client will hit.
     let dead = TestServer::start(g.dir.path().join("dead.sqlite3"), None);
     let base = dead.base.clone();
     drop(dead);
+
     let workdir = g.workdir();
     let out = Command::new(env!("CARGO_BIN_EXE_nit"))
         .args([
@@ -225,24 +326,11 @@ fn cli_errors_are_human_readable() {
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("is 'nit serve' running?"), "{stderr}");
-
-    // wait/status before any push: explain the fix.
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let out = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(["status"])
-        .current_dir(g.workdir())
-        .env("NIT_SERVER", &server.base)
-        .output()
-        .unwrap();
-    assert!(!out.status.success());
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("run 'nit push' first"), "{stderr}");
 }
 
-// push has no cwd fallback: repo and branch are required, so being inside a
-// git checkout is not enough — clap rejects the call before any HTTP, which
-// is what stops a stray push from forking a duplicate chain off the wrong
-// path.
+/// push has no cwd fallback: `--repo` and `--branch` are both required, so being
+/// inside a checkout is not enough — clap rejects the call before any HTTP, the
+/// guard against a stray push forking a duplicate chain off the wrong path.
 #[test]
 fn push_requires_repo_and_branch() {
     let g = GitRepo::new();
@@ -261,41 +349,4 @@ fn push_requires_repo_and_branch() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("--repo"), "{stderr}");
     assert!(stderr.contains("--branch"), "{stderr}");
-}
-
-// A new revision of an existing change (amend → new sha, same Change-Id) is a
-// fresh `revisions` entry; one `nit wait` from behind it must surface it, not
-// stop at an earlier entry. Regression: `wait` used to return only the first
-// waking frame, leaving later entries — the new revision among them — stuck in
-// the backlog until a subsequent wait.
-#[test]
-fn wait_surfaces_a_new_revision_behind_an_earlier_entry() {
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
-    g.branch("feat", c1);
-    g.repo.set_head("refs/heads/feat").unwrap();
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-
-    // push r1 of change Ia -> revisions@0
-    let (ok, _c, stderr) = nit_register(&server, &g, "push", "feat", &[]);
-    assert!(ok, "{stderr}");
-    // amend (same Change-Id Ia, new content -> new sha) = r2; push -> revisions@1
-    let c1b = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nB\n")]);
-    g.branch("feat", c1b);
-    let (ok, _c, stderr) = nit_register(&server, &g, "push", "feat", &[]);
-    assert!(ok, "{stderr}");
-
-    // One wait from cursor 0 returns the whole run, the new revision included.
-    let (ok, resp, stderr) = nit(&server, &g, &["wait", "0"]);
-    assert!(ok, "{stderr}");
-    assert_eq!(resp["head"], 2, "{resp}");
-    let entries = resp["entries"].as_array().unwrap();
-    assert_eq!(
-        entries.len(),
-        2,
-        "wait must drain the whole backlog: {resp}"
-    );
-    assert_eq!(entries[1]["idx"], 1);
-    assert_eq!(entries[1]["payload"]["added"][0]["number"], 2);
-    assert_eq!(entries[1]["payload"]["added"][0]["change_key"], "Ia");
 }

@@ -1,10 +1,11 @@
 //! `SQLite` persistence layer.
 //!
-//! Schema contract: `docs/data-model.md` ("Tables"). The database stores
-//! only the append-only event `log` (plus the `repos` registry, `chains`
-//! registration identity, and reviewer `drafts`); all reviewable state is
-//! the fold of the log (`crate::review`), held in memory and rebuilt by
-//! replay. Nothing in the log is ever mutated or deleted.
+//! Schema contract: `docs/data-model.md` ("Tables"). Four tables: the
+//! `repos` registry, the `changes` identity registry, the append-only event
+//! `log` (keyed on the change, with a global `seq`), and reviewer `drafts`.
+//! All reviewable state is the fold of the per-change logs (`crate::review`),
+//! held in memory and rebuilt by replay. Nothing in the log is ever mutated
+//! or deleted.
 //!
 //! [`open`] applies pragmas (WAL, `busy_timeout`, foreign keys ON) and runs
 //! `PRAGMA user_version` migrations. Row structs and focused query helpers
@@ -77,29 +78,29 @@ const MIGRATIONS: &[&str] = &[
     // step per entry; later schema changes append as v2, v3, ….
     "
     CREATE TABLE repos (
-      id      INTEGER PRIMARY KEY,
-      git_dir TEXT NOT NULL UNIQUE   -- canonical git-common-dir; identity + name
+      id          INTEGER PRIMARY KEY,
+      git_dir     TEXT NOT NULL UNIQUE,   -- canonical git-common-dir; identity + name
+      base_branch TEXT NOT NULL           -- the one canonical branch; mergedness tracks it
     );
-    CREATE TABLE chains (
-      id         INTEGER PRIMARY KEY,
+    CREATE TABLE changes (
+      id         INTEGER PRIMARY KEY,      -- rowid; the identity everything carries
       repo_id    INTEGER NOT NULL REFERENCES repos(id),
-      branch     TEXT NOT NULL,
-      base       TEXT NOT NULL,
+      change_key TEXT NOT NULL,            -- the Change-Id trailer, verbatim
       created_at TEXT NOT NULL,
-      UNIQUE (repo_id, branch)
+      UNIQUE (repo_id, change_key)
     );
     CREATE TABLE log (
-      chain_id   INTEGER NOT NULL REFERENCES chains(id),
-      idx        INTEGER NOT NULL,  -- 0-based, contiguous per chain
+      seq        INTEGER PRIMARY KEY AUTOINCREMENT,  -- globally monotone: cross-change order
+      change_id  INTEGER NOT NULL REFERENCES changes(id),
+      idx        INTEGER NOT NULL,         -- 0-based, contiguous per change
       kind       TEXT NOT NULL,
       payload    TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL,
-      PRIMARY KEY (chain_id, idx)
+      UNIQUE (change_id, idx)
     );
     CREATE TABLE drafts (
       id               INTEGER PRIMARY KEY,
-      chain_id         INTEGER NOT NULL REFERENCES chains(id),
-      change_key       TEXT NOT NULL,
+      change_id        INTEGER NOT NULL REFERENCES changes(id),
       revision         INTEGER NOT NULL,
       thread_id        INTEGER,      -- fold-assigned thread id (NULL: new thread)
       file             TEXT,
@@ -172,37 +173,46 @@ fn col_side(s: &str) -> rusqlite::Result<Side> {
 }
 
 // ---------------------------------------------------------------------------
-// Repos (the registry: a canonical git-common-dir → id, the grouping key
-// chains hang off — docs/data-model.md "Tables")
+// Repos (the registry: a canonical git-common-dir → id + its one canonical
+// branch — docs/data-model.md "Tables")
 
 #[derive(Debug, Clone)]
 pub struct RepoRow {
     pub id: u64,
     /// Canonical git-common-dir — the repo's identity and its display name.
     pub git_dir: String,
+    /// The repo's one canonical branch; mergedness always tracks it.
+    pub base_branch: String,
 }
 
 fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
     Ok(RepoRow {
         id: col_u64(row.get("id")?)?,
         git_dir: row.get("git_dir")?,
+        base_branch: row.get("base_branch")?,
     })
 }
 
 /// Register or look up a repo by its canonical git-common-dir. Idempotent:
-/// the same `git_dir` always maps to the same id (a chain's first push from
-/// any worktree of a repo lazily creates the registry row).
+/// the same `git_dir` always maps to the same id. `base_branch` is recorded
+/// on the **first** push and never changed here — the row's stored value is
+/// returned unchanged on re-registration (the push handler enforces that a
+/// later push naming a different base is a 400).
 ///
 /// # Errors
 /// On a database failure.
-pub fn get_or_create_repo(conn: &Connection, git_dir: &str) -> Result<RepoRow> {
+pub fn get_or_create_repo(conn: &Connection, git_dir: &str, base_branch: &str) -> Result<RepoRow> {
     if let Some(existing) = find_repo(conn, git_dir)? {
         return Ok(existing);
     }
-    conn.execute("INSERT INTO repos (git_dir) VALUES (?1)", params![git_dir])?;
+    conn.execute(
+        "INSERT INTO repos (git_dir, base_branch) VALUES (?1, ?2)",
+        params![git_dir, base_branch],
+    )?;
     Ok(RepoRow {
         id: col_u64(conn.last_insert_rowid())?,
         git_dir: git_dir.to_string(),
+        base_branch: base_branch.to_string(),
     })
 }
 
@@ -257,121 +267,92 @@ pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<
 }
 
 // ---------------------------------------------------------------------------
-// Chains (registration identity only)
+// Changes (identity: a (repo, Change-Id) → stable id everything carries)
 
 #[derive(Debug, Clone)]
-pub struct ChainRow {
+pub struct ChangeRow {
     pub id: u64,
     pub repo_id: u64,
-    /// The owning repo's git-common-dir (joined from `repos`) — the path
-    /// every git operation on the chain opens.
-    pub git_dir: String,
-    pub branch: String,
-    pub base: String,
+    pub change_key: String,
     pub created_at: String,
 }
 
-/// The chain columns plus the owning repo's `git_dir`, the shape
-/// [`map_chain`] reads — chains never store the path themselves.
-const CHAIN_SELECT: &str = "SELECT c.id, c.repo_id, r.git_dir, c.branch, c.base, c.created_at \
-     FROM chains c JOIN repos r ON r.id = c.repo_id";
-
-fn map_chain(row: &rusqlite::Row) -> rusqlite::Result<ChainRow> {
-    Ok(ChainRow {
+fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
+    Ok(ChangeRow {
         id: col_u64(row.get("id")?)?,
         repo_id: col_u64(row.get("repo_id")?)?,
-        git_dir: row.get("git_dir")?,
-        branch: row.get("branch")?,
-        base: row.get("base")?,
+        change_key: row.get("change_key")?,
         created_at: row.get("created_at")?,
     })
 }
 
-/// Register or refresh a chain by `(repo_id, branch)`: insert if new,
-/// otherwise update `base` (re-registration may change it). Returns the row.
+/// Upsert a change by `(repo_id, change_key)`, returning its stable id. The
+/// `UNIQUE` index makes this idempotent and self-serializing — two pushes
+/// first-seeing the same key race one `INSERT … ON CONFLICT DO NOTHING`, the
+/// loser falls back to the `SELECT`, and both read the same id.
 ///
 /// # Errors
 /// On a database failure.
-pub fn get_or_create_chain(
-    conn: &Connection,
-    repo_id: u64,
-    branch: &str,
-    base: &str,
-) -> Result<ChainRow> {
-    if let Some(existing) = find_chain(conn, repo_id, branch)? {
-        if existing.base != base {
-            conn.execute(
-                "UPDATE chains SET base = ?1 WHERE id = ?2",
-                params![base, i64::try_from(existing.id)?],
-            )?;
-        }
-        return get_chain(conn, existing.id)?
-            .ok_or_else(|| anyhow!("chain {} vanished", existing.id));
-    }
+pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &str) -> Result<u64> {
     conn.execute(
-        "INSERT INTO chains (repo_id, branch, base, created_at)
-         VALUES (?1, ?2, ?3, ?4)",
-        params![i64::try_from(repo_id)?, branch, base, now_rfc3339()],
+        "INSERT INTO changes (repo_id, change_key, created_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT (repo_id, change_key) DO NOTHING",
+        params![i64::try_from(repo_id)?, change_key, now_rfc3339()],
     )?;
-    let id = col_u64(conn.last_insert_rowid())?;
-    get_chain(conn, id)?.ok_or_else(|| anyhow!("chain {id} vanished"))
+    let id: i64 = conn.query_row(
+        "SELECT id FROM changes WHERE repo_id = ?1 AND change_key = ?2",
+        params![i64::try_from(repo_id)?, change_key],
+        |r| r.get(0),
+    )?;
+    Ok(col_u64(id)?)
 }
 
 /// # Errors
 /// On a database failure.
-pub fn find_chain(conn: &Connection, repo_id: u64, branch: &str) -> Result<Option<ChainRow>> {
+pub fn get_change(conn: &Connection, id: u64) -> Result<Option<ChangeRow>> {
     conn.query_row(
-        &format!("{CHAIN_SELECT} WHERE c.repo_id = ?1 AND c.branch = ?2"),
-        params![i64::try_from(repo_id)?, branch],
-        map_chain,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-/// # Errors
-/// On a database failure.
-pub fn get_chain(conn: &Connection, id: u64) -> Result<Option<ChainRow>> {
-    conn.query_row(
-        &format!("{CHAIN_SELECT} WHERE c.id = ?1"),
+        "SELECT * FROM changes WHERE id = ?1",
         params![i64::try_from(id)?],
-        map_chain,
+        map_change,
     )
     .optional()
     .map_err(Into::into)
 }
 
-/// All chain rows, id-ascending (registration order).
+/// All change rows, id-ascending (creation order) — for replay on startup.
 ///
 /// # Errors
 /// On a database failure.
-pub fn all_chains(conn: &Connection) -> Result<Vec<ChainRow>> {
-    let mut stmt = conn.prepare(&format!("{CHAIN_SELECT} ORDER BY c.id"))?;
+pub fn all_changes(conn: &Connection) -> Result<Vec<ChangeRow>> {
+    let mut stmt = conn.prepare("SELECT * FROM changes ORDER BY id")?;
     let rows = stmt
-        .query_map([], map_chain)?
+        .query_map([], map_change)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
 // ---------------------------------------------------------------------------
-// Log (the append-only event log)
+// Log (the append-only event log, keyed on the change, globally ordered by seq)
 
 #[derive(Debug, Clone)]
 pub struct LogRow {
+    /// Globally monotone across the repo — the cross-change order.
+    pub seq: u64,
+    /// 0-based, contiguous per change.
     pub idx: u64,
     pub kind: String,
     pub payload: String,
     pub created_at: String,
 }
 
-/// `head` = number of entries = idx of the next entry to append.
+/// `head` = number of entries for a change = idx of its next entry.
 ///
 /// # Errors
 /// On a database failure.
-pub fn log_head(conn: &Connection, chain_id: u64) -> Result<u64> {
+pub fn log_head(conn: &Connection, change_id: u64) -> Result<u64> {
     let max: Option<i64> = conn.query_row(
-        "SELECT MAX(idx) FROM log WHERE chain_id = ?1",
-        params![i64::try_from(chain_id)?],
+        "SELECT MAX(idx) FROM log WHERE change_id = ?1",
+        params![i64::try_from(change_id)?],
         |r| r.get(0),
     )?;
     Ok(match max {
@@ -380,70 +361,73 @@ pub fn log_head(conn: &Connection, chain_id: u64) -> Result<u64> {
     })
 }
 
-/// Append one entry at `idx` (must equal the current head; the caller holds
-/// the chain lock and computes it).
+/// Append one entry at `idx` (must equal the change's current head; the caller
+/// computes it under the change's projection write lock) and return the global
+/// `seq` `SQLite` minted for it.
 ///
 /// # Errors
-/// On a database failure (including a primary-key clash on `idx`).
+/// On a database failure (including a `UNIQUE(change_id, idx)` clash).
 pub fn append_log(
     conn: &Connection,
-    chain_id: u64,
+    change_id: u64,
     idx: u64,
     kind: &str,
     payload: &Value,
     created_at: &str,
-) -> Result<()> {
+) -> Result<u64> {
     conn.execute(
-        "INSERT INTO log (chain_id, idx, kind, payload, created_at)
+        "INSERT INTO log (change_id, idx, kind, payload, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
-            i64::try_from(chain_id)?,
+            i64::try_from(change_id)?,
             i64::try_from(idx)?,
             kind,
             payload.to_string(),
             created_at
         ],
     )?;
-    Ok(())
+    Ok(col_u64(conn.last_insert_rowid())?)
 }
 
-/// Entries in `[from, to)`, idx-ascending. `to = None` means through head.
+fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
+    Ok(LogRow {
+        seq: col_u64(row.get("seq")?)?,
+        idx: col_u64(row.get("idx")?)?,
+        kind: row.get("kind")?,
+        payload: row.get("payload")?,
+        created_at: row.get("created_at")?,
+    })
+}
+
+/// One change's entries in `[from, to)`, idx-ascending. `to = None` means
+/// through head.
 ///
 /// # Errors
 /// On a database failure.
 pub fn log_entries(
     conn: &Connection,
-    chain_id: u64,
+    change_id: u64,
     from: u64,
     to: Option<u64>,
 ) -> Result<Vec<LogRow>> {
-    let map = |r: &rusqlite::Row| -> rusqlite::Result<LogRow> {
-        Ok(LogRow {
-            idx: col_u64(r.get("idx")?)?,
-            kind: r.get("kind")?,
-            payload: r.get("payload")?,
-            created_at: r.get("created_at")?,
-        })
-    };
-    let chain_id = i64::try_from(chain_id)?;
+    let change_id = i64::try_from(change_id)?;
     let from = i64::try_from(from)?;
     // `to = None` means "through head": omit the upper bound entirely rather
-    // than fake one with a sentinel (an `idx < i64::MAX` clause would drop a
-    // hypothetical entry at i64::MAX).
+    // than fake one with a sentinel.
     let rows = match to {
         Some(to) => conn
             .prepare(
-                "SELECT idx, kind, payload, created_at FROM log
-                 WHERE chain_id = ?1 AND idx >= ?2 AND idx < ?3 ORDER BY idx",
+                "SELECT seq, idx, kind, payload, created_at FROM log
+                 WHERE change_id = ?1 AND idx >= ?2 AND idx < ?3 ORDER BY idx",
             )?
-            .query_map(params![chain_id, from, i64::try_from(to)?], map)?
+            .query_map(params![change_id, from, i64::try_from(to)?], map_log)?
             .collect::<rusqlite::Result<Vec<_>>>()?,
         None => conn
             .prepare(
-                "SELECT idx, kind, payload, created_at FROM log
-                 WHERE chain_id = ?1 AND idx >= ?2 ORDER BY idx",
+                "SELECT seq, idx, kind, payload, created_at FROM log
+                 WHERE change_id = ?1 AND idx >= ?2 ORDER BY idx",
             )?
-            .query_map(params![chain_id, from], map)?
+            .query_map(params![change_id, from], map_log)?
             .collect::<rusqlite::Result<Vec<_>>>()?,
     };
     Ok(rows)
@@ -455,8 +439,7 @@ pub fn log_entries(
 #[derive(Debug, Clone)]
 pub struct DraftRow {
     pub id: u64,
-    pub chain_id: u64,
-    pub change_key: String,
+    pub change_id: u64,
     pub revision: u64,
     /// The thread this draft replies to; `None` opens a new thread.
     pub thread_id: Option<u64>,
@@ -492,8 +475,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
     };
     Ok(DraftRow {
         id: col_u64(row.get("id")?)?,
-        chain_id: col_u64(row.get("chain_id")?)?,
-        change_key: row.get("change_key")?,
+        change_id: col_u64(row.get("change_id")?)?,
         revision: col_u64(row.get("revision")?)?,
         thread_id: col_u64_opt(row.get("thread_id")?)?,
         file: row.get("file")?,
@@ -509,8 +491,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
 }
 
 pub struct NewDraft<'a> {
-    pub chain_id: u64,
-    pub change_key: &'a str,
+    pub change_id: u64,
     pub revision: u64,
     pub thread_id: Option<u64>,
     pub file: Option<&'a str>,
@@ -541,13 +522,12 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
     let thread_id = d.thread_id.map(i64::try_from).transpose()?;
     let line = d.line.map(i64::try_from).transpose()?;
     conn.execute(
-        "INSERT INTO drafts (id, chain_id, change_key, revision, thread_id, file, line, side,
+        "INSERT INTO drafts (id, change_id, revision, thread_id, file, line, side,
             range_start_line, range_start_char, range_end_line, range_end_char,
             line_text, body, resolved, created_at, updated_at)
-         VALUES (?15, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?16, ?14, ?14)",
+         VALUES (?14, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?15, ?13, ?13)",
         params![
-            i64::try_from(d.chain_id)?,
-            d.change_key,
+            i64::try_from(d.change_id)?,
             i64::try_from(d.revision)?,
             thread_id,
             d.file,
@@ -623,15 +603,10 @@ pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
 ///
 /// # Errors
 /// On a database failure.
-pub fn drafts_for_change(
-    conn: &Connection,
-    chain_id: u64,
-    change_key: &str,
-) -> Result<Vec<DraftRow>> {
-    let mut stmt =
-        conn.prepare("SELECT * FROM drafts WHERE chain_id = ?1 AND change_key = ?2 ORDER BY id")?;
+pub fn drafts_for_change(conn: &Connection, change_id: u64) -> Result<Vec<DraftRow>> {
+    let mut stmt = conn.prepare("SELECT * FROM drafts WHERE change_id = ?1 ORDER BY id")?;
     let rows = stmt
-        .query_map(params![i64::try_from(chain_id)?, change_key], map_draft)?
+        .query_map(params![i64::try_from(change_id)?], map_draft)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
@@ -640,10 +615,10 @@ pub fn drafts_for_change(
 ///
 /// # Errors
 /// On a database failure.
-pub fn delete_drafts_for_change(conn: &Connection, chain_id: u64, change_key: &str) -> Result<()> {
+pub fn delete_drafts_for_change(conn: &Connection, change_id: u64) -> Result<()> {
     conn.execute(
-        "DELETE FROM drafts WHERE chain_id = ?1 AND change_key = ?2",
-        params![i64::try_from(chain_id)?, change_key],
+        "DELETE FROM drafts WHERE change_id = ?1",
+        params![i64::try_from(change_id)?],
     )?;
     Ok(())
 }
@@ -659,88 +634,98 @@ mod tests {
         conn
     }
 
-    /// A repo + one `feat` chain on it (the common setup).
-    fn chain(conn: &Connection) -> ChainRow {
-        let repo = get_or_create_repo(conn, "/r/.git").expect("repo");
-        get_or_create_chain(conn, repo.id, "feat", "main").expect("create")
+    /// A repo + one change on it (the common setup).
+    fn change(conn: &Connection) -> u64 {
+        let repo = get_or_create_repo(conn, "/r/.git", "main").expect("repo");
+        upsert_change(conn, repo.id, "I1").expect("change")
     }
 
     #[test]
-    fn repo_upsert_is_idempotent() {
+    fn repo_upsert_is_idempotent_and_keeps_base() {
         let conn = mem();
-        let a = get_or_create_repo(&conn, "/r/.git").expect("create");
-        let again = get_or_create_repo(&conn, "/r/.git").expect("re-register");
+        let a = get_or_create_repo(&conn, "/r/.git", "main").expect("create");
+        // Re-registering with a different base does not change the stored one
+        // (the push handler rejects a base mismatch; the row is canonical).
+        let again = get_or_create_repo(&conn, "/r/.git", "develop").expect("re-register");
         assert_eq!(a.id, again.id);
+        assert_eq!(again.base_branch, "main");
         // A different git dir is a distinct repo.
-        let b = get_or_create_repo(&conn, "/other/.git").expect("create");
+        let b = get_or_create_repo(&conn, "/other/.git", "main").expect("create");
         assert_ne!(a.id, b.id);
+    }
+
+    #[test]
+    fn change_upsert_is_idempotent() {
+        let conn = mem();
+        let repo = get_or_create_repo(&conn, "/r/.git", "main").expect("repo");
+        let a = upsert_change(&conn, repo.id, "Iabc").expect("create");
+        let again = upsert_change(&conn, repo.id, "Iabc").expect("re-upsert");
+        assert_eq!(a, again);
+        // A different key is a distinct change.
+        let b = upsert_change(&conn, repo.id, "Idef").expect("create");
+        assert_ne!(a, b);
         assert_eq!(
-            find_repo(&conn, "/r/.git").expect("find").map(|r| r.id),
-            Some(a.id)
+            get_change(&conn, a).expect("get").expect("some").change_key,
+            "Iabc"
         );
     }
 
     #[test]
-    fn chain_upsert_is_idempotent_and_updates_base() {
+    fn log_append_mints_seq_and_idx() {
         let conn = mem();
-        let repo = get_or_create_repo(&conn, "/r/.git").expect("repo");
-        let a = get_or_create_chain(&conn, repo.id, "feat", "main").expect("create");
-        // Re-registering with identical args returns the same chain, never a
-        // duplicate row.
-        let again = get_or_create_chain(&conn, repo.id, "feat", "main").expect("re-register");
-        assert_eq!(a.id, again.id);
-        // The chain surfaces its repo's git dir (joined, not stored on the chain).
-        assert_eq!(a.repo_id, repo.id);
-        assert_eq!(a.git_dir, "/r/.git");
-        // A moved base updates the existing row in place.
-        let b = get_or_create_chain(&conn, repo.id, "feat", "develop").expect("upsert");
-        assert_eq!(a.id, b.id);
-        assert_eq!(b.base, "develop");
-    }
-
-    #[test]
-    fn log_append_and_head() {
-        let conn = mem();
-        let c = chain(&conn);
-        assert_eq!(log_head(&conn, c.id).expect("head"), 0);
-        append_log(
+        let c = change(&conn);
+        assert_eq!(log_head(&conn, c).expect("head"), 0);
+        let s0 = append_log(
             &conn,
-            c.id,
+            c,
             0,
             "partial",
             &serde_json::json!({"partial": true}),
             "t0",
         )
         .expect("append");
-        append_log(
+        let s1 = append_log(
             &conn,
-            c.id,
+            c,
             1,
             "comment",
-            &serde_json::json!({"change_key": "I1", "body": "note"}),
+            &serde_json::json!({"body": "note"}),
             "t1",
         )
         .expect("append");
-        assert_eq!(log_head(&conn, c.id).expect("head"), 2);
-        let entries = log_entries(&conn, c.id, 0, None).expect("entries");
+        assert!(s1 > s0, "seq is monotone");
+        assert_eq!(log_head(&conn, c).expect("head"), 2);
+        let entries = log_entries(&conn, c, 0, None).expect("entries");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].kind, "partial");
         assert_eq!(entries[1].idx, 1);
-        let tail = log_entries(&conn, c.id, 1, None).expect("tail");
+        let tail = log_entries(&conn, c, 1, None).expect("tail");
         assert_eq!(tail.len(), 1);
         assert_eq!(tail[0].kind, "comment");
     }
 
     #[test]
+    fn seq_is_global_across_changes() {
+        let conn = mem();
+        let repo = get_or_create_repo(&conn, "/r/.git", "main").expect("repo");
+        let a = upsert_change(&conn, repo.id, "Ia").expect("a");
+        let b = upsert_change(&conn, repo.id, "Ib").expect("b");
+        let sa = append_log(&conn, a, 0, "comment", &serde_json::json!({}), "t0").expect("a0");
+        let sb = append_log(&conn, b, 0, "comment", &serde_json::json!({}), "t1").expect("b0");
+        let sa1 = append_log(&conn, a, 1, "comment", &serde_json::json!({}), "t2").expect("a1");
+        // Both changes' idx restart at 0, but seq totally orders the interleave.
+        assert!(sa < sb && sb < sa1);
+    }
+
+    #[test]
     fn draft_lifecycle() {
         let conn = mem();
-        let c = chain(&conn);
+        let c = change(&conn);
         let d = insert_draft(
             &conn,
             7,
             &NewDraft {
-                chain_id: c.id,
-                change_key: "I1",
+                change_id: c,
                 revision: 1,
                 thread_id: None,
                 file: Some("src/main.rs"),
@@ -754,16 +739,12 @@ mod tests {
             "t0",
         )
         .expect("insert");
-        assert_eq!(drafts_for_change(&conn, c.id, "I1").expect("list").len(), 1);
+        assert_eq!(drafts_for_change(&conn, c).expect("list").len(), 1);
         update_draft(&conn, d.id, "look again", Some(true), "t1").expect("edit");
         let edited = get_draft(&conn, d.id).expect("get").expect("some");
         assert_eq!(edited.body, "look again");
         assert_eq!(edited.resolved, Some(true));
-        delete_drafts_for_change(&conn, c.id, "I1").expect("drain");
-        assert!(
-            drafts_for_change(&conn, c.id, "I1")
-                .expect("list")
-                .is_empty()
-        );
+        delete_drafts_for_change(&conn, c).expect("drain");
+        assert!(drafts_for_change(&conn, c).expect("list").is_empty());
     }
 }

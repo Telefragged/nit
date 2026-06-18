@@ -1,256 +1,285 @@
-//! Scan happy path: change creation, revisions, amends, the `revisions`
-//! log entry, idempotency, Change-Id validation, and scan-failure isolation.
+//! Push basics over real HTTP (docs/api.md "Push"): an N-commit branch
+//! becomes N changes each at revision 0, the derived chain lists exactly one
+//! tip with its path ordered base→tip, a no-op re-push is idempotent,
+//! extending the branch adds a change, an amend opens revision 1, and every
+//! structural fault rejects the whole push with a 400.
 
 mod common;
 
-use common::{Fixture, msg};
-use nit::gitscan::{self, MERGE_COMMIT_ERROR};
-use nit::review::Status;
+use common::{GitRepo, TestServer, http_get, member_id, msg, push};
+
+/// The single chain summary in the repo (one tip), failing loudly otherwise.
+fn only_chain(server: &TestServer) -> serde_json::Value {
+    let (st, list) = http_get(&server.url("/api/chains"));
+    assert_eq!(st, 200, "{list}");
+    let chains = list["chains"].as_array().unwrap();
+    assert_eq!(chains.len(), 1, "exactly one tip: {list}");
+    chains[0].clone()
+}
 
 #[test]
-fn happy_path_creates_changes_and_revisions() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(
-        &[f.root],
-        &msg("server: add health endpoint", "I001"),
+fn push_creates_a_change_per_commit_at_revision_zero() {
+    let g = GitRepo::new();
+    let c1 = g.commit(
+        &[g.root],
+        &msg("server: add health", "I001"),
         &[("a.rs", "a\n")],
     );
-    let c2 = f.commit(
+    let c2 = g.commit(
         &[c1],
         &msg("server: add chains api", "I002"),
         &[("b.rs", "b\n")],
     );
-    f.branch("feat", c2);
+    g.branch("feat", c2);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let outcome = f.scan();
-    assert!(!outcome.entries.is_empty());
-    assert_eq!(f.scan_error(), None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
 
-    let changes = f.changes();
-    assert_eq!(changes.len(), 2);
-    assert_eq!(changes[0].change_key, "I001");
-    assert_eq!(changes[0].position, Some(0));
-    assert_eq!(changes[0].status, Status::Pending);
-    assert_eq!(changes[1].change_key, "I002");
-    assert_eq!(changes[1].position, Some(1));
+    // The tip change is I002 at revision 0, pending.
+    let tip = &res["tip_change"];
+    assert_eq!(tip["change_key"], "I002");
+    assert_eq!(tip["revision"], 0);
+    assert_eq!(tip["status"], "pending");
 
-    let rev1 = changes[0].latest_revision().unwrap();
-    assert_eq!(rev1.number, 1);
-    assert_eq!(rev1.commit_sha, c1.to_string());
-    assert_eq!(rev1.parent_sha, f.root.to_string());
-    assert!(rev1.message.starts_with("server: add health endpoint"));
-
+    // The push result's chain is the derived path, base→tip, 0-based positions.
+    let path = res["chain"]["path"].as_array().unwrap();
+    assert_eq!(path.len(), 2);
+    assert_eq!(path[0]["change_key"], "I001");
+    assert_eq!(path[0]["position"], 0);
+    assert_eq!(path[0]["revision"], 0);
+    assert_eq!(path[0]["commit_sha"], c1.to_string());
     assert_eq!(
-        changes[1].latest_revision().unwrap().parent_sha,
-        c1.to_string()
+        path[0]["parent_sha"].as_str(),
+        None,
+        "PathEntry has no parent_sha"
     );
-    assert_eq!(f.appended("revisions"), 1);
-}
+    assert_eq!(path[1]["change_key"], "I002");
+    assert_eq!(path[1]["position"], 1);
+    assert_eq!(path[1]["revision"], 0);
+    assert_eq!(path[1]["commit_sha"], c2.to_string());
 
-#[test]
-fn rescan_without_changes_is_quiet() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    assert!(!f.scan().entries.is_empty());
-
-    let outcome = f.scan();
-    assert!(outcome.entries.is_empty());
-    assert_eq!(
-        f.appended("revisions"),
-        1,
-        "no entry without a structural change"
-    );
-    assert_eq!(f.changes().len(), 1);
-    assert_eq!(f.change("I001").latest_revision().unwrap().number, 1);
-}
-
-#[test]
-fn amend_creates_new_revision_and_resets_status() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-    f.review("I001", "approve");
-
-    // Amend: same Change-Id, different content → new revision, pending.
-    let c1b = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "different\n")]);
-    f.branch("feat", c1b);
-    assert!(!f.scan().entries.is_empty());
-
-    let changes = f.changes();
-    assert_eq!(changes.len(), 1, "same change across the amend");
-    assert_eq!(changes[0].status, Status::Pending);
-    let rev = changes[0].latest_revision().unwrap();
-    assert_eq!(rev.number, 2);
-    assert_eq!(rev.commit_sha, c1b.to_string());
-}
-
-#[test]
-fn reword_only_amend_resets_status() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-    f.review("I001", "approve");
-
-    // Same diff (patch-id equal) — only the message changed. A reword is
-    // reviewable (/COMMIT_MSG), so it is not a pure rebase: status resets.
-    let c1b = f.commit(
-        &[f.root],
-        &msg("one\n\nnow with body", "I001"),
-        &[("a.rs", "a\n")],
-    );
-    f.branch("feat", c1b);
-    f.scan();
-
-    assert_eq!(f.change("I001").status, Status::Pending);
-    assert_eq!(f.change("I001").latest_revision().unwrap().number, 2);
-}
-
-#[test]
-fn new_commit_appends_change() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
-    f.branch("feat", c2);
-    assert!(!f.scan().entries.is_empty());
-
-    let changes = f.changes();
-    assert_eq!(changes.len(), 2);
-    assert_eq!(changes[1].change_key, "I002");
-    assert_eq!(changes[1].position, Some(1));
-    assert_eq!(
-        changes[0].latest_revision().unwrap().number,
-        1,
-        "untouched change keeps revision 1"
-    );
-}
-
-#[test]
-fn missing_change_id_fails_scan_and_keeps_state() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-
-    // A new commit without a trailer poisons the chain until it is fixed.
-    let c2 = f.commit(&[c1], "no trailer here\n", &[("b.rs", "b\n")]);
-    f.branch("feat", c2);
-    assert!(f.scan().entries.is_empty());
-    let err = f.scan_error().unwrap();
-    assert!(err.contains("without a Change-Id trailer"), "{err}");
-    assert!(err.contains(&c2.to_string()[..12]), "{err}");
-    assert_eq!(f.changes().len(), 1, "prior state kept");
-
-    // Adding the trailer (new sha) clears the error.
-    let c2b = f.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
-    f.branch("feat", c2b);
-    f.scan();
-    assert_eq!(f.scan_error(), None);
-    assert_eq!(f.changes().len(), 2);
-}
-
-#[test]
-fn duplicate_change_id_fails_scan() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "Idup"), &[("a.rs", "a\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "Idup"), &[("b.rs", "b\n")]);
-    f.branch("feat", c2);
-
-    f.scan();
-    let err = f.scan_error().unwrap();
-    assert!(err.contains("duplicate Change-Id Idup"), "{err}");
-    assert_eq!(f.changes().len(), 0, "nothing reconciled");
-}
-
-#[test]
-fn fixup_commit_fails_scan() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-
-    let fx = f.commit(&[c1], "fixup! one\n", &[("a.rs", "a2\n")]);
-    f.branch("feat", fx);
-    f.scan();
-    let err = f.scan_error().unwrap();
-    assert!(err.contains("fixup!/squash!"), "{err}");
-    assert!(err.contains(&fx.to_string()[..12]), "{err}");
-    assert_eq!(f.changes().len(), 1, "prior state kept");
-}
-
-#[test]
-fn merge_commit_aborts_scan_and_keeps_state() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-
-    let side = f.commit(&[f.root], &msg("side", "I00s"), &[("s.rs", "s\n")]);
-    let merge = f.commit(&[c1, side], "Merge main into feat\n", &[]);
-    f.branch("feat", merge);
-
-    assert!(f.scan().entries.is_empty());
-    assert_eq!(f.scan_error().as_deref(), Some(MERGE_COMMIT_ERROR));
-
-    let changes = f.changes();
-    assert_eq!(changes.len(), 1);
-    assert_eq!(changes[0].status, Status::Pending);
-    assert_eq!(changes[0].position, Some(0));
-    assert_eq!(f.appended("revisions"), 1);
-
-    // Rebasing away the merge clears the error.
-    f.branch("feat", c1);
-    f.scan();
-    assert_eq!(f.scan_error(), None);
-}
-
-#[test]
-fn register_validates_resolvable_refs() {
-    let f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    let workdir = f.repo.workdir().unwrap();
-
-    // Unresolvable branch/base/repo are registration-time errors (HTTP 400).
-    assert!(gitscan::validate_registration(workdir, "nope", "main").is_err());
-    assert!(gitscan::validate_registration(workdir, "feat", "nope").is_err());
+    // Each change shows exactly its revision 0.
+    let id1 = member_id(&res, "I001");
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
+    assert_eq!(st, 200, "{detail}");
+    let revs = detail["revisions"].as_array().unwrap();
+    assert_eq!(revs.len(), 1);
+    assert_eq!(revs[0]["number"], 0);
+    assert_eq!(revs[0]["commit_sha"], c1.to_string());
+    assert_eq!(revs[0]["parent_sha"], g.root.to_string());
     assert!(
-        gitscan::validate_registration(std::path::Path::new("/no/such/dir"), "feat", "main")
-            .is_err()
+        detail["subject"]
+            .as_str()
+            .unwrap()
+            .starts_with("server: add health")
     );
-    assert!(gitscan::validate_registration(workdir, "feat", "main").is_ok());
 }
 
 #[test]
-fn unrelated_root_commit_sets_scan_error() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
+fn chains_lists_one_ordered_tip() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
+    let c3 = g.commit(&[c2], &msg("three", "I003"), &[("c.rs", "c\n")]);
+    g.branch("feat", c3);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, _) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200);
 
-    // A branch rebuilt from an unrelated root: the walk hits a parentless
-    // commit, which the diff/identity model cannot represent.
-    let rogue = f.commit(&[], "unrelated root\n", &[("z.rs", "z\n")]);
-    f.branch("feat", rogue);
-    f.scan();
-    assert!(f.scan_error().unwrap().contains("root commit"));
-    assert_eq!(f.changes().len(), 1, "prior state kept");
+    let chain = only_chain(&server);
+    assert_eq!(chain["state"], "waiting_for_review");
+    let path = chain["path"].as_array().unwrap();
+    // base→tip, contiguous 0-based positions, in commit order.
+    let keys: Vec<&str> = path
+        .iter()
+        .map(|m| m["change_key"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, vec!["I001", "I002", "I003"]);
+    for (i, m) in path.iter().enumerate() {
+        assert_eq!(m["position"], i as u64, "0-based position");
+        assert_eq!(m["revision"], 0);
+        assert_eq!(m["latest_revision"], 0);
+        assert_eq!(m["newer_elsewhere"], false);
+        assert_eq!(m["status"], "pending");
+    }
+    assert_eq!(path[2]["commit_sha"], c3.to_string());
 }
 
 #[test]
-fn unresolvable_base_sets_scan_error() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
+fn no_op_repush_is_idempotent() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, _) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200);
+    let id = member_id(&only_chain(&server), "I001");
 
-    f.proj.base = "no-such-ref".to_string();
-    f.scan();
-    assert!(f.scan_error().unwrap().contains("no-such-ref"));
-    assert_eq!(f.changes().len(), 1, "prior state kept");
+    // Nothing moved: a re-push is a 200 that records no new revision.
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(res["tip_change"]["revision"], 0);
+    let (_, detail) = http_get(&server.url(&format!("/api/changes/{id}")));
+    assert_eq!(
+        detail["revisions"].as_array().unwrap().len(),
+        1,
+        "still one revision"
+    );
+}
+
+#[test]
+fn extending_the_branch_adds_a_change() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, _) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200);
+
+    // A new commit on top is a new change; the chain extends, prior change untouched.
+    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
+    g.branch("feat", c2);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(res["tip_change"]["change_key"], "I002");
+    assert_eq!(res["tip_change"]["revision"], 0);
+
+    let path = only_chain(&server)["path"].as_array().unwrap().clone();
+    assert_eq!(path.len(), 2);
+    assert_eq!(path[1]["change_key"], "I002");
+    assert_eq!(path[1]["position"], 1);
+
+    // The untouched first change keeps revision 0 (one revision only).
+    let id1 = member_id(&res, "I001");
+    let (_, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
+    assert_eq!(detail["revisions"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn amend_opens_revision_one_on_the_change() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200);
+    let id = member_id(&res, "I001");
+
+    // Amend: same Change-Id, new content → revision 1 on the same change.
+    let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "different\n")]);
+    g.branch("feat", c1b);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(
+        res["tip_change"]["change_id"], id,
+        "same change across the amend"
+    );
+    assert_eq!(res["tip_change"]["revision"], 1);
+
+    let (_, detail) = http_get(&server.url(&format!("/api/changes/{id}")));
+    let revs = detail["revisions"].as_array().unwrap();
+    assert_eq!(revs.len(), 2);
+    assert_eq!(revs[1]["number"], 1);
+    assert_eq!(revs[1]["commit_sha"], c1b.to_string());
+}
+
+#[test]
+fn merge_commit_rejects_the_push() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    let side = g.commit(&[g.root], &msg("side", "I00s"), &[("s.rs", "s\n")]);
+    let merge = g.commit(&[c1, side], "Merge side into feat\n", &[]);
+    g.branch("feat", merge);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, e) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 400, "{e}");
+    assert!(
+        e["error"].as_str().unwrap().contains("merge commits"),
+        "{e}"
+    );
+    // All-or-nothing: nothing was recorded.
+    let (_, list) = http_get(&server.url("/api/chains"));
+    assert!(list["chains"].as_array().unwrap().is_empty(), "{list}");
+}
+
+#[test]
+fn missing_change_id_rejects_the_push() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], "no trailer here\n", &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, e) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 400, "{e}");
+    assert!(
+        e["error"]
+            .as_str()
+            .unwrap()
+            .contains("without a Change-Id trailer"),
+        "{e}"
+    );
+}
+
+#[test]
+fn duplicate_change_id_rejects_the_push() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "Idup"), &[("a.rs", "a\n")]);
+    let c2 = g.commit(&[c1], &msg("two", "Idup"), &[("b.rs", "b\n")]);
+    g.branch("feat", c2);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, e) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 400, "{e}");
+    assert!(
+        e["error"]
+            .as_str()
+            .unwrap()
+            .contains("duplicate Change-Id Idup"),
+        "{e}"
+    );
+    let (_, list) = http_get(&server.url("/api/chains"));
+    assert!(
+        list["chains"].as_array().unwrap().is_empty(),
+        "nothing recorded: {list}"
+    );
+}
+
+#[test]
+fn fixup_subject_rejects_the_push() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    let fx = g.commit(&[c1], &msg("fixup! one", "I00f"), &[("a.rs", "a2\n")]);
+    g.branch("feat", fx);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, e) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 400, "{e}");
+    assert!(
+        e["error"].as_str().unwrap().contains("fixup!/squash!"),
+        "{e}"
+    );
+}
+
+#[test]
+fn wrong_base_rejects_the_push() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    // A second base ref the repo could be pushed against, but must not be.
+    g.branch("trunk", g.root);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    // First push records `main` as the repo's canonical base.
+    let (st, _) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200);
+
+    // A later push naming a different base is a 400 (one base per repo).
+    let (st, e) = push(&server, &g, "feat", "trunk", None);
+    assert_eq!(st, 400, "{e}");
+    assert!(
+        e["error"].as_str().unwrap().contains("canonical branch"),
+        "{e}"
+    );
 }

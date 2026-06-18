@@ -1,131 +1,137 @@
-//! Shared server state: the in-memory fold of every chain's log, per-chain
-//! locks + the live event broadcast, scan orchestration, the append-then-fold
-//! primitive, and the API error type.
+//! Shared server state: the in-memory fold of every **change's** log, the
+//! repo registry cache, the per-change append primitive, and the API error
+//! type.
 //!
-//! Each chain's [`Projection`](crate::review::Projection) is rebuilt by
-//! replaying its log on startup and kept current by [`commit_entries`],
-//! which appends to the DB log and folds in lock-step under the chain lock,
-//! then publishes each appended entry on the chain's broadcast channel for
-//! live `/events` subscribers (docs/data-model.md "Concurrency").
+//! Each change's [`ChangeProj`](crate::review::ChangeProj) is rebuilt by
+//! replaying its log on startup and kept current by [`append_to_change`],
+//! which appends to the DB log and folds in lock-step under the change's
+//! projection write lock (docs/data-model.md "Concurrency"). A chain owns no
+//! state — it is derived at read time from member folds (`crate::chain`).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use rusqlite::{Connection, TransactionBehavior};
 use serde_json::Value;
-use tokio::sync::{Mutex, watch};
+use tokio::sync::watch;
 
+use crate::chain::RepoView;
 use crate::db;
 use crate::enums::LogKind;
-use crate::gitscan;
-use crate::review::{self, Projection};
+use crate::review::{self, ChangeProj};
 
 use super::types;
-
-/// Scans younger than this are not repeated (reads serve the current fold).
-const SCAN_THROTTLE: Duration = Duration::from_secs(2);
-
-/// Per-chain live-event buffer. A subscriber that lags more than this many
-/// appended entries behind is dropped with an overflow signal; `nit wait`
-/// then reconnects at its cursor and re-reads the gap from the log. Chosen
-/// far above the burst any single review action produces.
-const EVENTS_BUFFER: usize = 256;
 
 pub struct AppState {
     pub db_path: PathBuf,
     /// `http://<listen addr>` — prefix of every `web_url`.
     pub public_base: String,
-    chains: StdMutex<HashMap<u64, Arc<ChainEntry>>>,
-    /// Process-global allocator for fold-assigned ids (changes, comments,
-    /// reviews). Initialized above every id in the log on startup so the
-    /// flat `/api/{changes,comments}/{id}` endpoints stay unambiguous.
+    repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
+    changes: StdMutex<HashMap<u64, Arc<ChangeEntry>>>,
+    /// Process-global allocator for fold-assigned ids (reviews, drafts). Change
+    /// ids are `changes` rowids, never allocated here.
     next_id: AtomicU64,
+    /// Transient merge/abandon-timer state: `change_id` → first sweep that saw
+    /// its latest revision unreachable (the 2-sweep abandonment window).
+    pub unreachable_since: StdMutex<HashMap<u64, Instant>>,
     shutdown: watch::Sender<bool>,
 }
 
-/// Per-chain coordination: the serializing lock, the folded state, the
-/// live-entry broadcast, and the scan throttle.
-pub struct ChainEntry {
-    /// Held by every appender (scan / review / reply / resolve / partial) so
-    /// they serialize.
-    pub gate: Mutex<()>,
-    /// The fold; readers take `read()`, appenders `write()` (briefly, after
-    /// the DB commit).
-    pub proj: StdRwLock<Projection>,
-    /// Live `/events` feed: each appended entry is published here for
-    /// currently-connected subscribers.
-    events: Sender<types::LogEntry>,
-    /// A parked receiver kept for the chain's lifetime so the channel never
-    /// closes for lack of subscribers (an empty `/events` audience is normal).
-    events_keepalive: InactiveReceiver<types::LogEntry>,
-    scan_at: StdMutex<Option<Instant>>,
+/// Cached repo registry row: identity, the one canonical branch, and the git
+/// dir (mutable on `nit repo move`).
+pub struct RepoState {
+    pub id: u64,
+    pub base_branch: String,
+    pub git_dir: StdRwLock<String>,
 }
 
-impl ChainEntry {
+impl RepoState {
+    fn new(row: &db::RepoRow) -> RepoState {
+        RepoState {
+            id: row.id,
+            base_branch: row.base_branch.clone(),
+            git_dir: StdRwLock::new(row.git_dir.clone()),
+        }
+    }
+
+    /// The current git-common-dir.
+    ///
+    /// # Panics
+    /// When the git-dir lock is poisoned.
+    #[must_use]
+    pub fn git_dir(&self) -> String {
+        self.git_dir.read().expect("git_dir lock poisoned").clone()
+    }
+}
+
+/// Per-change coordination: the folded state behind one `RwLock`. Appenders
+/// take it for `write` (which both serializes them and guards the fold);
+/// readers take it for `read`. Held only inside `spawn_blocking`, never across
+/// `.await`.
+pub struct ChangeEntry {
+    pub proj: StdRwLock<ChangeProj>,
+}
+
+impl ChangeEntry {
+    fn new(proj: ChangeProj) -> ChangeEntry {
+        ChangeEntry {
+            proj: StdRwLock::new(proj),
+        }
+    }
+
     /// Read-lock the projection.
     ///
     /// # Panics
     /// When the projection lock is poisoned.
-    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, Projection> {
+    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, ChangeProj> {
         self.proj.read().expect("projection lock poisoned")
-    }
-
-    /// Publish a freshly appended entry to live `/events` subscribers.
-    /// Best-effort: with no subscribers the channel is inactive and the
-    /// entry is simply not delivered — it is durable in the log, so a later
-    /// subscriber reads it from the backlog. An overflowing slow subscriber
-    /// is signalled (and reconnects); it is never blocked on here.
-    pub fn publish(&self, entry: types::LogEntry) {
-        let _ = self.events.try_broadcast(entry);
-    }
-
-    /// An active subscription to this chain's live entry feed. Arm it
-    /// **before** reading the log backlog so no append slips through the gap
-    /// between the read and the subscription.
-    pub fn subscribe(&self) -> Receiver<types::LogEntry> {
-        self.events_keepalive.activate_cloned()
     }
 }
 
 impl AppState {
-    /// Open the database, replay every chain's log into memory, and seed the
-    /// id allocator above every id the logs already use.
+    /// Open the database, replay every change's log into memory, cache the repo
+    /// registry, and seed the id allocator above every fold id in use.
     ///
     /// # Errors
     /// When the database can't be opened or a log fails to replay.
     pub fn load(db_path: PathBuf, public_base: String) -> anyhow::Result<Arc<Self>> {
         let conn = db::open(&db_path)?;
-        let mut map = HashMap::new();
         let mut max_id = db::max_draft_id(&conn)?;
-        for chain in db::all_chains(&conn)? {
-            let rows = db::log_entries(&conn, chain.id, 0, None)?;
+        let mut changes = HashMap::new();
+        for row in db::all_changes(&conn)? {
+            let rows = db::log_entries(&conn, row.id, 0, None)?;
             max_id = max_id.max(review::max_assigned_id(&rows)?);
-            let proj = review::replay(&chain, &rows)?;
-            map.insert(chain.id, Arc::new(ChainEntry::new(proj)));
+            let proj = review::replay(&row, &rows)?;
+            changes.insert(row.id, Arc::new(ChangeEntry::new(proj)));
         }
+        let repos = db::all_repos(&conn)?
+            .into_iter()
+            .map(|r| (r.id, Arc::new(RepoState::new(&r))))
+            .collect();
         let (shutdown, _) = watch::channel(false);
         Ok(Arc::new(AppState {
             db_path,
             public_base,
-            chains: StdMutex::new(map),
+            repos: StdMutex::new(repos),
+            changes: StdMutex::new(changes),
             next_id: AtomicU64::new(max_id + 1),
+            unreachable_since: StdMutex::new(HashMap::new()),
             shutdown,
         }))
     }
 
-    /// Allocate the next fold-assigned id.
+    /// Allocate the next fold-assigned id (reviews, drafts).
     pub fn alloc_id(&self) -> u64 {
         self.next_id.fetch_add(1, Ordering::SeqCst)
     }
 
-    /// Mark the server as shutting down, waking every subscribed event stream.
+    /// Mark the server as shutting down, waking every parked task.
     pub fn begin_shutdown(&self) {
         self.shutdown.send_replace(true);
     }
@@ -136,27 +142,27 @@ impl AppState {
         self.shutdown.subscribe()
     }
 
-    /// The coordination entry for a loaded chain, if any.
+    /// The coordination entry for a loaded change, if any.
     ///
     /// # Panics
-    /// When the chain map mutex is poisoned.
-    pub fn chain_entry(&self, chain_id: u64) -> Option<Arc<ChainEntry>> {
-        self.chains
+    /// When the change map mutex is poisoned.
+    pub fn change_entry(&self, change_id: u64) -> Option<Arc<ChangeEntry>> {
+        self.changes
             .lock()
-            .expect("chain map poisoned")
-            .get(&chain_id)
+            .expect("change map poisoned")
+            .get(&change_id)
             .cloned()
     }
 
-    /// Loaded chain ids, ascending.
+    /// Loaded change ids, ascending.
     ///
     /// # Panics
-    /// When the chain map mutex is poisoned.
-    pub fn chain_ids(&self) -> Vec<u64> {
+    /// When the change map mutex is poisoned.
+    pub fn change_ids(&self) -> Vec<u64> {
         let mut ids: Vec<u64> = self
-            .chains
+            .changes
             .lock()
-            .expect("chain map poisoned")
+            .expect("change map poisoned")
             .keys()
             .copied()
             .collect();
@@ -164,32 +170,95 @@ impl AppState {
         ids
     }
 
-    /// Ensure a [`ChainEntry`] exists for `chain` (building it by replaying
-    /// the chain's log), and return it. Refreshes `base` on an existing one.
+    /// The cached repo state, if loaded.
+    ///
+    /// # Panics
+    /// When the repo map mutex is poisoned.
+    pub fn repo_state(&self, repo_id: u64) -> Option<Arc<RepoState>> {
+        self.repos
+            .lock()
+            .expect("repo map poisoned")
+            .get(&repo_id)
+            .cloned()
+    }
+
+    /// Loaded repo ids, ascending.
+    ///
+    /// # Panics
+    /// When the repo map mutex is poisoned.
+    pub fn repo_ids(&self) -> Vec<u64> {
+        let mut ids: Vec<u64> = self
+            .repos
+            .lock()
+            .expect("repo map poisoned")
+            .keys()
+            .copied()
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// Cache (or refresh the git dir of) a repo's registry row.
+    ///
+    /// # Panics
+    /// When the repo map mutex is poisoned.
+    pub fn ensure_repo(&self, row: &db::RepoRow) -> Arc<RepoState> {
+        let mut map = self.repos.lock().expect("repo map poisoned");
+        if let Some(existing) = map.get(&row.id) {
+            existing
+                .git_dir
+                .write()
+                .expect("git_dir lock poisoned")
+                .clone_from(&row.git_dir);
+            return existing.clone();
+        }
+        let state = Arc::new(RepoState::new(row));
+        map.insert(row.id, state.clone());
+        state
+    }
+
+    /// Ensure a [`ChangeEntry`] exists for a change row (an empty projection if
+    /// new), and return it. Replays the change's log if it is already on disk.
     ///
     /// # Errors
     /// When replay fails.
     ///
     /// # Panics
-    /// When the chain map mutex is poisoned.
-    pub fn ensure_entry(
+    /// When the change map mutex is poisoned.
+    pub fn ensure_change(
         &self,
         conn: &Connection,
-        chain: &db::ChainRow,
-    ) -> anyhow::Result<Arc<ChainEntry>> {
-        if let Some(existing) = self.chain_entry(chain.id) {
-            let mut proj = existing.proj.write().expect("projection lock poisoned");
-            proj.base.clone_from(&chain.base);
-            drop(proj);
+        row: &db::ChangeRow,
+    ) -> anyhow::Result<Arc<ChangeEntry>> {
+        if let Some(existing) = self.change_entry(row.id) {
             return Ok(existing);
         }
-        let rows = db::log_entries(conn, chain.id, 0, None)?;
+        let rows = db::log_entries(conn, row.id, 0, None)?;
         self.next_id
             .fetch_max(review::max_assigned_id(&rows)? + 1, Ordering::SeqCst);
-        let proj = review::replay(chain, &rows)?;
-        let entry = Arc::new(ChainEntry::new(proj));
-        let mut map = self.chains.lock().expect("chain map poisoned");
-        Ok(map.entry(chain.id).or_insert(entry).clone())
+        let proj = review::replay(row, &rows)?;
+        let entry = Arc::new(ChangeEntry::new(proj));
+        let mut map = self.changes.lock().expect("change map poisoned");
+        Ok(map.entry(row.id).or_insert(entry).clone())
+    }
+
+    /// Snapshot every loaded change of one repo (each cloned out from under its
+    /// lock), and build a [`RepoView`] for chain derivation.
+    ///
+    /// # Panics
+    /// When the change map mutex is poisoned.
+    #[must_use]
+    pub fn repo_view(&self, repo_id: u64) -> RepoView {
+        let entries: Vec<Arc<ChangeEntry>> = {
+            let map = self.changes.lock().expect("change map poisoned");
+            map.values().cloned().collect()
+        };
+        let changes: Vec<ChangeProj> = entries
+            .iter()
+            .map(|e| e.read().clone())
+            .filter(|c| c.repo_id == repo_id)
+            .collect();
+        RepoView::new(changes)
     }
 
     /// Open a database connection (blocking — call inside `spawn_blocking`).
@@ -201,160 +270,90 @@ impl AppState {
     }
 }
 
-impl ChainEntry {
-    fn new(proj: Projection) -> ChainEntry {
-        let (mut events, rx) = async_broadcast::broadcast(EVENTS_BUFFER);
-        // Overflow rather than block: a publisher (holding the chain gate)
-        // must never stall on a slow subscriber. An overflowed subscriber
-        // gets an explicit signal and reconnects.
-        events.set_overflow(true);
-        ChainEntry {
-            gate: Mutex::new(()),
-            proj: StdRwLock::new(proj),
-            events,
-            events_keepalive: rx.deactivate(),
-            scan_at: StdMutex::new(None),
-        }
-    }
-}
-
-/// Persist a batch of entries (one transaction), fold them into the
-/// projection, and publish each on the chain's live `/events` feed; returns
-/// whether anything was appended. The caller holds the chain gate. Entries
-/// are appended at the projection's current head onward.
-///
-/// The fold is validated on a throwaway copy of the projection **before**
-/// the database commit: a payload that won't fold errors out with nothing
-/// written, so the log can never get ahead of the projection (which would
-/// wedge replay on restart). Persisting before the live fold is deliberate
-/// the other way too — a busy-DB abort then leaves the live projection
-/// untouched.
+/// Append a batch of entries to one change (one transaction), folding them in
+/// lock-step, and return the applied entries (with their minted `seq`). See
+/// [`append_to_change_with`]; this is the no-extra-work case.
 ///
 /// # Errors
-/// On a database failure (the projection is left untouched) or a fold
-/// failure (nothing is written).
+/// See [`append_to_change_with`].
+pub fn append_to_change(
+    conn: &mut Connection,
+    entry: &ChangeEntry,
+    change_id: u64,
+    news: Vec<(LogKind, Value)>,
+) -> anyhow::Result<Vec<review::Entry>> {
+    append_to_change_with(conn, entry, change_id, news, |_| Ok(()))
+}
+
+/// Append entries to one change, running `pre_commit` inside the **same**
+/// transaction first (e.g. draining drafts atomically with a `review` append).
+/// The change's projection write lock serializes appenders, so the
+/// committed-state `idx` is consistent and applies happen in order — no
+/// reorder buffer needed. The lock spans the commit, so a reader can briefly
+/// stall behind an in-flight append; cross-change appends never contend.
+///
+/// The fold is validated on a throwaway copy **before** the commit: a payload
+/// that won't fold errors out with nothing written, so the log can never get
+/// ahead of the projection. `pre_commit` and the appends share one
+/// transaction, so either both land or neither does.
+///
+/// # Errors
+/// On a database failure (the projection is left untouched), a fold failure
+/// (nothing is written), or a `pre_commit` failure (the transaction rolls
+/// back).
 ///
 /// # Panics
 /// When the projection lock is poisoned.
-pub fn commit_entries(
+pub fn append_to_change_with(
     conn: &mut Connection,
-    entry: &ChainEntry,
-    chain_id: u64,
+    entry: &ChangeEntry,
+    change_id: u64,
     news: Vec<(LogKind, Value)>,
-) -> anyhow::Result<bool> {
+    pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
+) -> anyhow::Result<Vec<review::Entry>> {
     if news.is_empty() {
-        return Ok(false);
+        return Ok(Vec::new());
     }
+    // The write lock both serializes appenders and guards the fold; held
+    // across the commit so the log can never get ahead of the projection.
+    let mut proj = entry.proj.write().expect("projection lock poisoned");
     let now = db::now_rfc3339();
-    let start = entry.read().head;
-    let parsed: Vec<review::Entry> = news
+
+    // Validate the fold on a probe copy first; a bad payload aborts before any
+    // write. The live fold below is then infallible.
+    let start = db::log_head(conn, change_id)?;
+    let mut probe = proj.clone();
+    let staged: Vec<review::Entry> = news
         .into_iter()
         .enumerate()
         .map(|(k, (kind, payload))| review::Entry {
+            seq: 0,
             idx: start + u64::try_from(k).expect("batch fits u64"),
             kind,
             payload,
             created_at: now.clone(),
         })
         .collect();
-
-    // Validate the fold on a probe copy; a failure here aborts before any
-    // write. The live fold below is then infallible.
-    let mut probe = entry.read().clone();
-    for e in &parsed {
+    for e in &staged {
         review::fold(&mut probe, e)?;
     }
 
+    // Commit, minting each entry's global seq; `pre_commit` shares the tx.
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    for e in &parsed {
-        db::append_log(&tx, chain_id, e.idx, e.kind.as_str(), &e.payload, &now)?;
+    pre_commit(&tx)?;
+    let mut applied = Vec::with_capacity(staged.len());
+    for e in staged {
+        let seq = db::append_log(&tx, change_id, e.idx, e.kind.as_str(), &e.payload, &now)?;
+        applied.push(review::Entry { seq, ..e });
     }
     tx.commit()?;
 
-    {
-        let mut proj = entry.proj.write().expect("projection lock poisoned");
-        for e in &parsed {
-            review::fold(&mut proj, e).expect("fold validated before commit");
-        }
+    // Apply to the held projection after the durable commit (validated above,
+    // so infallible).
+    for e in &applied {
+        review::fold(&mut proj, e).expect("fold validated before commit");
     }
-    // Publish only after the durable commit + fold, so a subscriber that
-    // also reads this entry from its backlog sees a consistent log.
-    for e in parsed {
-        entry.publish(super::views::log_entry_view(&e));
-    }
-    Ok(true)
-}
-
-/// Run a scan for `chain_id` and apply its result under the chain lock.
-/// `force` skips the throttle (`nit push` always rescans; dashboard reads
-/// don't).
-///
-/// # Errors
-/// Only infrastructure problems (broken db) — scan-level git failures land
-/// in the projection's `last_scan_error` instead.
-///
-/// # Panics
-/// When the projection or scan-throttle lock is poisoned.
-pub async fn scan_chain(state: &Arc<AppState>, chain_id: u64, force: bool) -> Result<(), Error> {
-    let Some(entry) = state.chain_entry(chain_id) else {
-        return Ok(());
-    };
-    let guard = if force {
-        entry.gate.lock().await
-    } else {
-        match entry.gate.try_lock() {
-            Ok(guard) => guard,
-            Err(_) => return Ok(()), // reads never wait on a running scan
-        }
-    };
-    if !force {
-        let last = *entry.scan_at.lock().expect("scan throttle poisoned");
-        if last.is_some_and(|at| at.elapsed() < SCAN_THROTTLE) {
-            return Ok(());
-        }
-    }
-
-    let st = state.clone();
-    let e2 = entry.clone();
-    blocking(move || -> Result<(), Error> {
-        let mut conn = st.open_db()?;
-        let snapshot = e2.read().clone();
-        let mut alloc = || st.alloc_id();
-        let result = gitscan::scan(&snapshot, jiff::Timestamp::now(), &mut alloc);
-        let error = result.error;
-        let branch_missing_since = result.branch_missing_since;
-        let news: Vec<(LogKind, Value)> = result
-            .entries
-            .into_iter()
-            .map(|n| (n.kind, n.payload))
-            .collect();
-        // Commit first; apply the scan's transient state only when the
-        // entries actually landed. A busy-dropped abandon would otherwise
-        // null the branch-missing timer without closing the chain, so the
-        // 10s window could never accumulate under sustained contention.
-        match commit_entries(&mut conn, &e2, chain_id, news) {
-            Ok(_) => {}
-            Err(err) if is_sqlite_busy(&err) => {
-                return if force {
-                    Err(Error::unavailable(
-                        "database is busy (another chain is being scanned) — retry shortly",
-                    ))
-                } else {
-                    Ok(()) // transient state untouched: the prior timer survives
-                };
-            }
-            Err(err) => return Err(err.into()),
-        }
-        let mut proj = e2.proj.write().expect("projection lock poisoned");
-        proj.last_scan_error = error;
-        proj.branch_missing_since = branch_missing_since;
-        Ok(())
-    })
-    .await?;
-
-    *entry.scan_at.lock().expect("scan throttle poisoned") = Some(Instant::now());
-    drop(guard);
-    Ok(())
+    Ok(applied)
 }
 
 /// Run blocking (rusqlite / git2) work off the async threads.
@@ -431,10 +430,6 @@ where
     async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
         match axum::Json::<T>::from_request(req, state).await {
             Ok(axum::Json(value)) => Ok(AppJson(value)),
-            // A body that won't deserialize is bad input — including an
-            // unknown enum value (a malformed `verdict`/`side`/…). axum
-            // reports a data error as 422, but nit speaks 400 for every bad
-            // request body (see `Error::bad_request`), so normalize it.
             Err(rej) => Err(Error {
                 status: StatusCode::BAD_REQUEST,
                 message: rej.body_text(),
@@ -489,7 +484,7 @@ where
     }
 }
 
-/// `SQLITE_BUSY/LOCKED` anywhere in an error chain: cross-chain write
+/// `SQLITE_BUSY/LOCKED` anywhere in an error chain: cross-change write
 /// contention, not a broken database.
 #[must_use]
 pub fn is_sqlite_busy(err: &anyhow::Error) -> bool {

@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 pub use crate::enums::{
-    Author, ChainState, ChainStatus, ChangeStatus, FileStatus, LineKind, LogKind, Side, Verdict,
+    Author, ChainState, ChangeStatus, FileStatus, LineKind, LogKind, Side, Verdict,
 };
 
 // ---------------------------------------------------------------------------
@@ -32,14 +32,16 @@ pub struct ApiError {
 }
 
 // ---------------------------------------------------------------------------
-// Repos (the registry grouping chains; docs/api.md "Repos")
+// Repos
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Repo {
     pub id: u64,
     /// Canonical git-common-dir — the repo's identity and display name.
     pub git_dir: String,
-    /// Chains not merged/abandoned (computed from the fold, never stored).
+    /// The one canonical branch; mergedness tracks it.
+    pub base_branch: String,
+    /// Live tip count (derived from the tip set, never stored).
     pub active_chains: u64,
 }
 
@@ -56,72 +58,113 @@ pub struct RelocateRepo {
 }
 
 // ---------------------------------------------------------------------------
-// Chains
+// Push
 
-/// `POST /api/chains` request (this is `nit push`). `git_dir` is the repo's
-/// canonical git-common-dir (the client infers it; chains group by it).
+/// `POST /api/push` request (this is `nit push`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterChain {
+pub struct PushRequest {
     pub git_dir: String,
-    pub branch: String,
+    /// Any ref or rev, resolved to a commit at push time.
+    pub tip: String,
+    /// The repo's canonical branch (recorded on first push; must match after).
     pub base: String,
-    /// Sticky: true marks the chain partial (`nit push --partial`), false
-    /// clears it (`nit ready`), absent leaves it unchanged.
+    /// Sticky: true marks the tip's revision partial (`nit push --partial`),
+    /// false clears it (`nit ready`), absent leaves it unchanged.
     #[serde(default)]
     pub partial: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Chain {
-    pub id: u64,
-    /// The repo this chain belongs to (registry id) and its git-common-dir.
-    pub repo_id: u64,
-    pub git_dir: String,
-    pub branch: String,
-    pub base: String,
-    pub status: ChainStatus,
-    /// Derived — api.md state table.
+pub struct PushResult {
+    /// The pushed tip change, at the revision this push gave it. `None` when
+    /// the push walked to nothing (tip ancestor-or-equal of base).
+    pub tip_change: Option<TipChange>,
+    /// The derived path, tip-rooted (each member at this push's revision).
+    pub chain: Chain,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TipChange {
+    pub change_id: u64,
+    pub change_key: String,
+    pub revision: u64,
+    pub status: ChangeStatus,
+}
+
+// ---------------------------------------------------------------------------
+// Chains (derived; addressed by tip change id + ?revision)
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainSummary {
+    pub tip_change_id: u64,
+    /// Best-effort, resolved at query time.
+    pub name: String,
     pub state: ChainState,
-    /// Sticky; set by push --partial, cleared by ready.
+    /// The tip's latest revision is partial.
     pub partial: bool,
-    pub last_scan_error: Option<String>,
     pub web_url: String,
-    pub created_at: String,
+    /// Newest member-entry time across the path.
     pub updated_at: String,
-    /// Chain order; orphaned ones last.
-    pub changes: Vec<ChangeSummary>,
+    /// Oldest-first, base → tip.
+    pub path: Vec<PathEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainList {
-    pub chains: Vec<Chain>,
+    pub chains: Vec<ChainSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChangeSummary {
-    pub id: u64,
-    /// Null while orphaned.
-    pub position: Option<u64>,
+pub struct Chain {
+    pub tip_change_id: u64,
+    pub name: String,
+    pub base_branch: String,
+    pub state: ChainState,
+    pub partial: bool,
+    pub web_url: String,
+    pub path: Vec<PathEntry>,
+}
+
+/// One member of a derived path, read at the revision the path pins.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathEntry {
+    pub change_id: u64,
+    /// Position in THIS path (0-based).
+    pub position: u64,
     pub change_key: String,
-    pub subject: String,
-    pub status: ChangeStatus,
-    /// Latest revision number.
+    /// The patchset this path walks.
     pub revision: u64,
-    /// Max revision with a review; null if none.
-    pub last_reviewed_revision: Option<u64>,
+    /// The change's newest patchset anywhere.
+    pub latest_revision: u64,
+    /// `latest_revision > revision` (badge driver).
+    pub newer_elsewhere: bool,
+    /// Per `(change, this revision)`.
+    pub status: ChangeStatus,
+    /// A newer revision of this change landed on the canonical branch.
+    pub merged_elsewhere: bool,
+    pub subject: String,
     pub commit_sha: String,
     pub short_sha: String,
+    /// Scoped to this revision.
     pub counts: ChangeCounts,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeCounts {
-    pub revisions: u64,
-    /// Published comment threads.
+    /// Published comment threads at this revision.
     pub threads: u64,
     pub drafts: u64,
-    /// Unresolved threads.
+    /// Unresolved threads at this revision.
     pub unresolved: u64,
+}
+
+/// A tip walking through a change, plus the patchset it pins there.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainRef {
+    pub tip_change_id: u64,
+    pub revision: u64,
+    pub name: String,
+    pub web_url: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -131,10 +174,8 @@ pub struct ChangeCounts {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeDetail {
     pub id: u64,
-    pub chain_id: u64,
+    pub repo_id: u64,
     pub change_key: String,
-    pub position: Option<u64>,
-    pub status: ChangeStatus,
     pub subject: String,
     pub last_reviewed_revision: Option<u64>,
     /// Ascending.
@@ -145,6 +186,8 @@ pub struct ChangeDetail {
     /// The reviewer's unpublished comments (drafts), all revisions.
     pub drafts: Vec<Draft>,
     pub reviews: Vec<Review>,
+    /// Every tip walking through this change, each with the patchset it pins.
+    pub chains: Vec<ChainRef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +196,8 @@ pub struct Revision {
     pub commit_sha: String,
     pub short_sha: String,
     pub parent_sha: String,
+    pub base_sha: String,
+    pub partial: bool,
     /// Full commit message.
     pub message: String,
     pub created_at: String,
@@ -211,8 +256,7 @@ pub struct Line {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub new: Option<u64>,
     /// Changed by a rebase, not the agent (docs/api.md "Rebase-aware
-    /// interdiffs"). Omitted on the wire when false, so non-rebased diffs
-    /// are byte-for-byte unaffected.
+    /// interdiffs"). Omitted on the wire when false.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub drift: bool,
     /// Without trailing newline.
@@ -223,12 +267,10 @@ pub struct Line {
 // Comments
 
 /// Selected-text anchor of a line comment (api.md "Range comments") —
-/// the db row type is the wire shape verbatim, so it is re-exported
-/// rather than mirrored.
+/// the db row type is the wire shape verbatim, re-exported not mirrored.
 pub use crate::db::CommentRange;
 
-/// A published comment thread: its anchor and resolution, plus the
-/// conversation on it (docs/api.md "Comment placement").
+/// A published comment thread (docs/api.md "Comment placement").
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Thread {
     /// Fold-assigned by creation order (not stored).
@@ -238,12 +280,9 @@ pub struct Thread {
     pub revision: u64,
     pub file: Option<String>,
     pub line: Option<u64>,
-    /// `new` is `revision`'s commit tree, `old` its parent tree
-    /// (docs/api.md "Comment placement").
     pub side: Side,
     /// Null: whole-line thread.
     pub range: Option<CommentRange>,
-    /// Snapshot of the anchored line.
     pub line_text: Option<String>,
     pub resolved: bool,
     pub comments: Vec<ThreadComment>,
@@ -261,15 +300,13 @@ pub struct ThreadComment {
     pub created_at: String,
 }
 
-/// A reviewer's unpublished comment (a `drafts`-table row). It opens a new
-/// thread (`thread_id` null) or replies to one (`thread_id` set).
+/// A reviewer's unpublished comment (a `drafts`-table row).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Draft {
     pub id: u64,
     pub change_id: u64,
     pub thread_id: Option<u64>,
-    /// The request's anchor revision. Meaningful only for a new thread; a
-    /// reply ignores it (the thread keeps its own revision).
+    /// The request's anchor revision; only a new thread uses it.
     pub revision: u64,
     pub file: Option<String>,
     pub line: Option<u64>,
@@ -287,24 +324,17 @@ pub struct Draft {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewDraft {
     pub revision: u64,
-    /// Optional: change-/file-level comments omit file/line.
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]
     pub line: Option<u64>,
-    /// Defaults to "new".
     #[serde(default)]
     pub side: Option<Side>,
-    /// Optional: requires `line`; api.md "Range comments".
     #[serde(default)]
     pub range: Option<CommentRange>,
     pub body: String,
-    /// Set: replies to that thread (on this change). Absent: opens a new
-    /// thread anchored by the fields above.
     #[serde(default)]
     pub thread_id: Option<u64>,
-    /// Staged thread-resolution decision (api.md "Thread resolution"); a
-    /// reply draft may stage one with an empty body.
     #[serde(default)]
     pub resolved: Option<bool>,
 }
@@ -313,7 +343,6 @@ pub struct NewDraft {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditDraft {
     pub body: String,
-    /// Re-stage the resolution decision (api.md "Thread resolution").
     #[serde(default)]
     pub resolved: Option<bool>,
 }
@@ -341,99 +370,50 @@ pub struct SubmitReviewResponse {
 // Agent endpoints
 
 /// `POST /api/changes/{id}/comments` request — the agent's single
-/// comment-posting path. With `thread_id` set it appends a reply to that
-/// thread (on this change); absent, it opens a new thread anchored by the
-/// `file`/`line`/`side`/`range` fields like a reviewer draft.
+/// comment-posting path.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewComment {
-    /// Reply: the thread to append to (anchor ignored). Absent: a new thread.
     #[serde(default)]
     pub thread_id: Option<u64>,
-    /// New thread only; defaults to the change's latest revision (pass an
-    /// earlier one to pin the thread to a prior revision).
     #[serde(default)]
     pub revision: Option<u64>,
-    /// Optional: change-level when absent (a `line` requires a `file`).
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]
     pub line: Option<u64>,
-    /// Defaults to "new".
     #[serde(default)]
     pub side: Option<Side>,
-    /// Optional but encouraged: requires `line`; api.md "Range comments".
     #[serde(default)]
     pub range: Option<CommentRange>,
     pub body: String,
-    /// New thread: initial state (`true` born resolved, else open). Reply:
-    /// `true` resolves / `false` reopens / `None` leaves it unchanged.
     #[serde(default)]
     pub resolved: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Feedback {
-    /// See the api.md state table.
-    pub state: ChainState,
-    /// ≡ state != `waiting_for_review`
-    pub actionable: bool,
-    pub chain: FeedbackChain,
-    /// Live changes, chain order.
-    pub changes: Vec<FeedbackChange>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeedbackChain {
-    pub id: u64,
-    pub branch: String,
-    pub base: String,
-    pub web_url: String,
-    /// Sticky; set by push --partial, cleared by ready.
-    pub partial: bool,
-    pub last_scan_error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeedbackChange {
-    pub change_id: u64,
-    pub change_key: String,
-    pub subject: String,
-    pub commit_sha: String,
-    /// Latest revision number.
-    pub revision: u64,
-    pub status: ChangeStatus,
-    pub unresolved: u64,
-    /// Latest review, null if none.
-    pub review: Option<FeedbackReview>,
-    /// The latest review's threads, plus still-unresolved threads from
-    /// earlier reviews.
-    pub threads: Vec<Thread>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeedbackReview {
-    pub verdict: Verdict,
-    pub message: String,
-    pub revision: u64,
-}
-
-/// One entry in a chain's log (docs/api.md `LogEntry`).
+/// One log entry (docs/api.md `LogEntry`). Belongs to one change; `seq` totally
+/// orders the whole repo, `idx` orders one change.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
-    /// 0-based position in the chain's log.
+    pub change_id: u64,
     pub idx: u64,
+    pub seq: u64,
     pub kind: LogKind,
     pub created_at: String,
     /// Kind-specific; shapes in data-model.md "Payloads".
     pub payload: serde_json::Value,
 }
 
-/// `GET /api/chains/{id}/log` response. The `/events` stream emits bare
-/// `LogEntry` values (one per SSE event), not a wrapper — the agent-side
-/// `head`/feedback view is assembled by the client (`nit wait`) from the
-/// stream plus `…/feedback`.
+/// `GET /api/changes/{id}/log` response — one change's slice. `head` is the
+/// change's per-change `idx` count.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogResponse {
     pub head: u64,
+    pub entries: Vec<LogEntry>,
+}
+
+/// `GET /api/chains/{change_id}/log` response — the aggregated chain log,
+/// merged across members and sorted by global `seq`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainLog {
     pub entries: Vec<LogEntry>,
 }

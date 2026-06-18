@@ -1,14 +1,17 @@
-//! View assembly: the fold (`crate::review`) + reviewer drafts → the wire
-//! shapes of docs/api.md. Read functions take a [`Projection`] snapshot;
-//! draft rows still come from the database.
+//! View assembly: the per-change folds (`crate::review`) + chain derivation
+//! (`crate::chain`) + reviewer drafts → the wire shapes of docs/api.md. Chain
+//! views take a [`RepoView`] snapshot plus the repo handle (for query-time tip
+//! names); draft rows come from the database.
 
 use anyhow::Result;
+use git2::Repository;
 use rusqlite::Connection;
 
+use crate::chain::{self, PathMember, RepoView};
 use crate::db;
 use crate::enums::Side;
-use crate::gitscan::identity::subject_of;
-use crate::review::{self, Anchor, ChangeProj, Entry, Projection, ThreadComment, ThreadProj};
+use crate::gitscan::{self, identity::subject_of};
+use crate::review::{self, Anchor, ChangeProj, Entry, ThreadComment, ThreadProj};
 
 use super::types;
 
@@ -18,91 +21,168 @@ pub fn short_sha(sha: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Chain + ChangeSummary
+// Chains (derived)
 
-/// Chain JSON: the chain plus per-change summaries, live first.
+/// A tip's display name: a query-time branch ref, else the tip change's
+/// subject (docs/data-model.md "Tips").
+#[must_use]
+pub fn tip_name(repo: &Repository, view: &RepoView, path: &[PathMember]) -> String {
+    let Some(tip) = path.last() else {
+        return "(empty)".to_string();
+    };
+    if let Some(name) = gitscan::tip_name(repo, &tip.commit_sha) {
+        return name;
+    }
+    view.change(tip.change_id)
+        .and_then(|c| c.revision(tip.revision))
+        .map_or_else(|| short_sha(&tip.commit_sha), |r| subject_of(&r.message))
+}
+
+/// Build a chain summary from a tip commit-sha (the dashboard entry).
+///
+/// # Errors
+/// When reading drafts from the database fails.
+pub fn build_chain_summary(
+    conn: &Connection,
+    repo: &Repository,
+    view: &RepoView,
+    public_base: &str,
+    tip_sha: &str,
+) -> Result<types::ChainSummary> {
+    let path = view.path_from_tip(tip_sha);
+    let tip_change_id = path.last().map_or(0, |m| m.change_id);
+    let entries = path_entries(conn, view, &path)?;
+    Ok(types::ChainSummary {
+        tip_change_id,
+        name: tip_name(repo, view, &path),
+        state: chain::derive_state(view, &path),
+        partial: chain::is_partial(view, &path),
+        web_url: format!("{public_base}/chains/{tip_change_id}"),
+        updated_at: path_updated_at(view, &path),
+        path: entries,
+    })
+}
+
+/// Build the full `Chain` for one tip commit-sha (the chain page / push result).
 ///
 /// # Errors
 /// When reading drafts from the database fails.
 pub fn build_chain(
     conn: &Connection,
+    repo: &Repository,
+    view: &RepoView,
     public_base: &str,
-    proj: &Projection,
+    base_branch: &str,
+    tip_sha: &str,
 ) -> Result<types::Chain> {
-    let mut summaries = Vec::new();
-    for change in proj.changes_ordered() {
-        if let Some(summary) = change_summary(conn, proj.chain_id, change)? {
-            summaries.push(summary);
-        }
-    }
+    let path = view.path_from_tip(tip_sha);
+    let tip_change_id = path.last().map_or(0, |m| m.change_id);
+    let entries = path_entries(conn, view, &path)?;
     Ok(types::Chain {
-        id: proj.chain_id,
-        repo_id: proj.repo_id,
-        git_dir: proj.git_dir.clone(),
-        branch: proj.branch.clone(),
-        base: proj.base.clone(),
-        status: proj.status,
-        state: review::derive_state(proj),
-        partial: proj.partial,
-        last_scan_error: proj.last_scan_error.clone(),
-        web_url: format!("{public_base}/chains/{}", proj.chain_id),
-        created_at: proj.created_at.clone(),
-        updated_at: proj.updated_at().to_string(),
-        changes: summaries,
+        tip_change_id,
+        name: tip_name(repo, view, &path),
+        base_branch: base_branch.to_string(),
+        state: chain::derive_state(view, &path),
+        partial: chain::is_partial(view, &path),
+        web_url: format!("{public_base}/chains/{tip_change_id}"),
+        path: entries,
     })
 }
 
-fn change_summary(
-    conn: &Connection,
-    chain_id: u64,
-    change: &ChangeProj,
-) -> Result<Option<types::ChangeSummary>> {
-    let Some(latest) = change.latest_revision() else {
-        return Ok(None);
-    };
-    let (threads, drafts, unresolved) = comment_counts(conn, chain_id, change)?;
-    Ok(Some(types::ChangeSummary {
-        id: change.id,
-        position: change.position,
-        change_key: change.change_key.clone(),
-        subject: subject_of(&latest.message),
-        status: change.wire_status(),
-        revision: latest.number,
-        last_reviewed_revision: change.last_reviewed_revision(),
-        commit_sha: latest.commit_sha.clone(),
-        short_sha: short_sha(&latest.commit_sha),
-        counts: types::ChangeCounts {
-            revisions: latest.number,
-            threads,
-            drafts,
-            unresolved,
-        },
-    }))
+/// The newest member `updated_at` across a path.
+fn path_updated_at(view: &RepoView, path: &[PathMember]) -> String {
+    path.iter()
+        .filter_map(|m| view.change(m.change_id))
+        .map(|c| c.updated_at().to_string())
+        .max()
+        .unwrap_or_default()
 }
 
-/// `(published threads, drafts, unresolved threads)` for a change.
-fn comment_counts(
+/// One `PathEntry` per member, read at the revision the path pins.
+fn path_entries(
     conn: &Connection,
-    chain_id: u64,
+    view: &RepoView,
+    path: &[PathMember],
+) -> Result<Vec<types::PathEntry>> {
+    path.iter()
+        .enumerate()
+        .filter_map(|(position, m)| {
+            view.change(m.change_id)
+                .map(|c| path_entry(conn, c, m, u64::try_from(position).unwrap_or(u64::MAX)))
+        })
+        .collect()
+}
+
+fn path_entry(
+    conn: &Connection,
     change: &ChangeProj,
-) -> Result<(u64, u64, u64)> {
-    let threads = u64::try_from(change.threads.len()).unwrap_or(u64::MAX);
-    let drafts = u64::try_from(db::drafts_for_change(conn, chain_id, &change.change_key)?.len())
-        .unwrap_or(u64::MAX);
-    let unresolved = change.unresolved_threads();
-    Ok((
-        threads,
-        drafts,
-        u64::try_from(unresolved).unwrap_or(u64::MAX),
-    ))
+    member: &PathMember,
+    position: u64,
+) -> Result<types::PathEntry> {
+    let revision = member.revision;
+    let latest_revision = change.latest_revision().map_or(revision, |r| r.number);
+    let subject = change
+        .revision(revision)
+        .map(|r| subject_of(&r.message))
+        .unwrap_or_default();
+    let drafts = u64::try_from(
+        db::drafts_for_change(conn, change.id)?
+            .iter()
+            .filter(|d| d.revision == revision)
+            .count(),
+    )
+    .unwrap_or(u64::MAX);
+    let threads = u64::try_from(
+        change
+            .threads
+            .iter()
+            .filter(|t| t.revision == revision)
+            .count(),
+    )
+    .unwrap_or(u64::MAX);
+    Ok(types::PathEntry {
+        change_id: change.id,
+        position,
+        change_key: change.change_key.clone(),
+        revision,
+        latest_revision,
+        newer_elsewhere: latest_revision > revision,
+        status: change.status_at(revision),
+        merged_elsewhere: change.merged_elsewhere(revision),
+        subject,
+        commit_sha: member.commit_sha.clone(),
+        short_sha: short_sha(&member.commit_sha),
+        counts: types::ChangeCounts {
+            threads,
+            drafts,
+            unresolved: u64::try_from(change.unresolved_at(revision)).unwrap_or(u64::MAX),
+        },
+    })
+}
+
+/// The tip whose path walks `change` at `revision`, else the change's own
+/// revision sha (a dangling change is its own degenerate tip).
+#[must_use]
+pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<String> {
+    for tip in view.tips() {
+        let path = view.path_from_tip(&tip);
+        if path
+            .iter()
+            .any(|m| m.change_id == change_id && m.revision == revision)
+        {
+            return Some(tip);
+        }
+    }
+    view.change(change_id)
+        .and_then(|c| c.revision(revision))
+        .map(|r| r.commit_sha.clone())
 }
 
 // ---------------------------------------------------------------------------
 // Threads + drafts
 
 /// A published thread → its wire shape, projecting its [`Anchor`] back to the
-/// flat `file`/`line`/`side`/`range`/`line_text` fields (`side` defaults to
-/// `new` where the anchor has no line, matching the stored default).
+/// flat `file`/`line`/`side`/`range`/`line_text` fields.
 #[must_use]
 pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
     let (file, line, side, range, line_text) = match &t.anchor {
@@ -162,8 +242,6 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Draft {
         range: d.range,
         line_text: d.line_text.clone(),
         body: d.body.clone(),
-        // For a draft, `resolved` is the decision staged on its checkbox —
-        // the client reads it to show the thread's pending state.
         resolved: d.resolved.unwrap_or(false),
         created_at: d.created_at.clone(),
         updated_at: d.updated_at.clone(),
@@ -173,14 +251,16 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Draft {
 // ---------------------------------------------------------------------------
 // Change detail
 
-/// Change detail JSON: every revision, every published thread, the
-/// reviewer's open drafts, and every review.
+/// Change detail JSON: every revision, every published thread, the reviewer's
+/// open drafts, every review, and the tips that walk through this change.
 ///
 /// # Errors
 /// When reading drafts fails.
 pub fn build_change_detail(
     conn: &Connection,
-    chain_id: u64,
+    repo: &Repository,
+    view: &RepoView,
+    public_base: &str,
     change: &ChangeProj,
 ) -> Result<types::ChangeDetail> {
     let revisions: Vec<types::Revision> = change.revisions.iter().map(revision_json).collect();
@@ -189,7 +269,7 @@ pub fn build_change_detail(
         .iter()
         .map(|t| thread_view(t, change.id))
         .collect();
-    let drafts: Vec<types::Draft> = db::drafts_for_change(conn, chain_id, &change.change_key)?
+    let drafts: Vec<types::Draft> = db::drafts_for_change(conn, change.id)?
         .iter()
         .map(|d| draft_view(d, change.id))
         .collect();
@@ -198,19 +278,39 @@ pub fn build_change_detail(
         .latest_revision()
         .map(|r| subject_of(&r.message))
         .unwrap_or_default();
+    let chains = view
+        .chains_through(change.id)
+        .into_iter()
+        .map(|hit| {
+            let path = view.path_from_tip(&tip_sha_of(view, hit.tip_change_id));
+            types::ChainRef {
+                tip_change_id: hit.tip_change_id,
+                revision: hit.revision,
+                name: tip_name(repo, view, &path),
+                web_url: format!("{public_base}/chains/{}", hit.tip_change_id),
+            }
+        })
+        .collect();
     Ok(types::ChangeDetail {
         id: change.id,
-        chain_id,
+        repo_id: change.repo_id,
         change_key: change.change_key.clone(),
-        position: change.position,
-        status: change.wire_status(),
         subject,
         last_reviewed_revision: change.last_reviewed_revision(),
         revisions,
         threads,
         drafts,
         reviews,
+        chains,
     })
+}
+
+/// The tip commit-sha of a tip change (its latest revision).
+fn tip_sha_of(view: &RepoView, tip_change_id: u64) -> String {
+    view.change(tip_change_id)
+        .and_then(ChangeProj::latest_revision)
+        .map(|r| r.commit_sha.clone())
+        .unwrap_or_default()
 }
 
 #[must_use]
@@ -220,6 +320,8 @@ pub fn revision_json(rev: &review::RevisionProj) -> types::Revision {
         commit_sha: rev.commit_sha.clone(),
         short_sha: short_sha(&rev.commit_sha),
         parent_sha: rev.parent_sha.clone(),
+        base_sha: rev.base_sha.clone(),
+        partial: rev.partial,
         message: rev.message.clone(),
         created_at: rev.created_at.clone(),
     }
@@ -239,81 +341,15 @@ pub fn review_json(review: &review::ReviewProj) -> types::Review {
 // ---------------------------------------------------------------------------
 // Log entries
 
-/// A parsed log entry → its wire shape. The one-line digest is not part of
-/// the API — it is a CLI display concern derived from the raw entry on
-/// demand (docs/api.md `LogEntry`).
+/// A parsed log entry → its wire shape.
 #[must_use]
-pub fn log_entry_view(entry: &Entry) -> types::LogEntry {
+pub fn log_entry_view(change_id: u64, entry: &Entry) -> types::LogEntry {
     types::LogEntry {
+        change_id,
         idx: entry.idx,
+        seq: entry.seq,
         kind: entry.kind,
         created_at: entry.created_at.clone(),
         payload: entry.payload.clone(),
     }
-}
-
-// ---------------------------------------------------------------------------
-// Feedback (agent side)
-
-/// Feedback JSON: chain state plus actionable comments per live change.
-/// Built purely from the in-memory fold (drafts are not part of feedback).
-#[must_use]
-pub fn build_feedback(public_base: &str, proj: &Projection) -> types::Feedback {
-    let mut changes = Vec::new();
-    for change in proj.changes_ordered() {
-        if change.orphaned {
-            continue; // live changes only
-        }
-        let Some(latest) = change.latest_revision() else {
-            continue;
-        };
-        let threads = feedback_threads(change);
-        changes.push(types::FeedbackChange {
-            change_id: change.id,
-            change_key: change.change_key.clone(),
-            subject: subject_of(&latest.message),
-            commit_sha: latest.commit_sha.clone(),
-            revision: latest.number,
-            status: change.wire_status(),
-            unresolved: u64::try_from(change.unresolved_threads()).unwrap_or(u64::MAX),
-            review: change.latest_review().map(|r| types::FeedbackReview {
-                verdict: r.verdict,
-                message: r.message.clone(),
-                revision: r.revision,
-            }),
-            threads,
-        });
-    }
-    let state = review::derive_state(proj);
-    types::Feedback {
-        state,
-        actionable: state.actionable(),
-        chain: types::FeedbackChain {
-            id: proj.chain_id,
-            branch: proj.branch.clone(),
-            base: proj.base.clone(),
-            web_url: format!("{public_base}/chains/{}", proj.chain_id),
-            partial: proj.partial,
-            last_scan_error: proj.last_scan_error.clone(),
-        },
-        changes,
-    }
-}
-
-/// Feedback thread scope: the latest review's threads, plus still-unresolved
-/// threads from earlier reviews — each thread whole.
-fn feedback_threads(change: &ChangeProj) -> Vec<types::Thread> {
-    let latest_review_id = change.latest_review().map(|r| r.id);
-    change
-        .threads
-        .iter()
-        .filter(|t| {
-            // The latest review touched it (created or replied), or it is
-            // still open from an earlier round.
-            !t.resolved
-                || (latest_review_id.is_some()
-                    && t.comments.iter().any(|c| c.review_id == latest_review_id))
-        })
-        .map(|t| thread_view(t, change.id))
-        .collect()
 }

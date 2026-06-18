@@ -1,28 +1,29 @@
-//! The fold: a chain's reviewable state is the replay of its append-only
-//! event log (docs/data-model.md "The fold"). [`Projection`] is the
-//! in-memory state machine; [`fold`] applies one [`Entry`]; [`replay`]
-//! rebuilds a projection from a chain row plus its log rows.
+//! The fold: a **change's** reviewable state is the replay of its
+//! append-only event log (docs/data-model.md "The fold"). [`ChangeProj`] is
+//! the in-memory state machine; [`fold`] applies one [`Entry`]; [`replay`]
+//! rebuilds a change's projection from its row plus its log rows. A chain is
+//! never folded — it is composed at read time from member projections
+//! (`crate::chain`).
 //!
-//! Fold-assigned ids: change and review ids arrive already allocated inside
-//! the entry payloads (the server mints them from a process-global counter at
-//! append time and writes them in, so replay just trusts them). Thread ids are
-//! **not** stored — a thread is numbered by its creation order as the fold
-//! replays, a pure function of the log (docs/data-model.md "Identity").
+//! Fold-assigned ids: review ids arrive already allocated inside the entry
+//! payloads (the server mints them from a process-global counter at append
+//! time). The change id is the `changes` rowid, carried on the projection.
+//! Revision numbers (0-based) and thread ids are minted **in the fold** by
+//! creation order — pure functions of the log, never stored (docs/data-model.md
+//! "Identity"), so a concurrent shared-change push cannot mint a duplicate.
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{self, CommentRange};
-use crate::enums::{
-    Author, ChainState, ChainStatus, ChangeStatus, ClosedStatus, LogKind, Side, Verdict,
-};
+use crate::enums::{Author, ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
 
 // ---------------------------------------------------------------------------
 // Enums
 
-/// A change's retained review status — never `orphaned` (that is the
-/// separate [`ChangeProj::orphaned`] flag; the wire [`ChangeStatus`] is
-/// `orphaned` while it is set).
+/// A change's retained review status at a revision — the four verdict-derived
+/// values, before the lifecycle overlay (`merged`/`abandoned`). The wire
+/// [`ChangeStatus`] adds those two ([`ChangeProj::status_at`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Pending,
@@ -43,8 +44,6 @@ impl From<Verdict> for Status {
 }
 
 impl From<Status> for ChangeStatus {
-    /// The wire status of a non-orphaned change (orphaned is handled by
-    /// [`ChangeProj::wire_status`]).
     fn from(status: Status) -> ChangeStatus {
         match status {
             Status::Pending => ChangeStatus::Pending,
@@ -55,35 +54,36 @@ impl From<Status> for ChangeStatus {
     }
 }
 
+/// A change's terminal lifecycle, folded from its `lifecycle` entries
+/// (docs/data-model.md "Lifecycle"). `Merged` records which patchset landed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lifecycle {
+    Active,
+    Merged { revision: u64 },
+    Abandoned,
+}
+
 // ---------------------------------------------------------------------------
 // Log payloads (the JSON in each `log.payload`; docs/data-model.md "Payloads")
 
+/// A `revision` entry: one new commit-sha observed for this change. The
+/// revision `number` is **not** carried — the fold mints it (0-based, by
+/// append order) so a concurrent shared-change push cannot duplicate it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RevisionsPayload {
-    pub live: Vec<LivePos>,
-    pub added: Vec<AddedRevision>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LivePos {
-    pub change_key: String,
-    pub change_id: u64,
-    pub position: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddedRevision {
-    pub change_key: String,
-    pub number: u64,
+pub struct RevisionPayload {
     pub commit_sha: String,
     pub parent_sha: String,
+    pub base_sha: String,
     pub message: String,
+    pub partial: bool,
+    /// `false` only for a pure rebase (patch-id-equal, message unchanged): the
+    /// new revision then inherits the prior revision's review status rather
+    /// than resetting to `pending`.
     pub resets_status: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewPayload {
-    pub change_key: String,
     pub review_id: u64,
     pub revision: u64,
     pub verdict: Verdict,
@@ -94,10 +94,9 @@ pub struct ReviewPayload {
 }
 
 /// The `comment` kind: one comment an agent posts, opening a thread or
-/// continuing one. The agent-authored mirror of a single review comment.
+/// continuing one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommentPayload {
-    pub change_key: String,
     #[serde(flatten)]
     pub comment: CommentInput,
 }
@@ -105,7 +104,6 @@ pub struct CommentPayload {
 /// A comment inside a `review` or `comment` payload: with `thread_id` unset it
 /// **opens a new thread** anchored by the fields below; with it set it
 /// **replies** to that thread (the anchor is ignored — the thread owns it).
-/// Shared by both kinds (docs/data-model.md "Payloads").
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommentInput {
     /// `None` opens a new thread; `Some` appends to that thread.
@@ -140,9 +138,13 @@ pub struct PartialPayload {
     pub partial: bool,
 }
 
+/// A `lifecycle` entry: the merge/abandon timer and `nit reopen`. `revision`
+/// is set only for `merged` (which patchset landed).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainClosedPayload {
-    pub status: ClosedStatus,
+pub struct LifecyclePayload {
+    pub action: LifecycleAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<u64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +152,7 @@ pub struct ChainClosedPayload {
 
 #[derive(Debug, Clone)]
 pub struct Entry {
+    pub seq: u64,
     pub idx: u64,
     pub kind: LogKind,
     pub payload: serde_json::Value,
@@ -161,6 +164,7 @@ impl Entry {
     /// When the stored `kind` is unknown or the payload is not valid JSON.
     pub fn from_row(row: &db::LogRow) -> Result<Entry> {
         Ok(Entry {
+            seq: row.seq,
             idx: row.idx,
             kind: row
                 .kind
@@ -184,23 +188,26 @@ impl Entry {
 }
 
 // ---------------------------------------------------------------------------
-// Projection (the folded state)
+// Projection (the folded state of ONE change)
 
 #[derive(Debug, Clone)]
 pub struct RevisionProj {
+    /// 0-based, minted in the fold.
     pub number: u64,
     pub commit_sha: String,
     pub parent_sha: String,
+    pub base_sha: String,
     pub message: String,
+    /// This push's partial flag; `nit ready` re-stamps the latest revision's.
+    pub partial: bool,
+    /// `false` for a pure rebase — the revision inherits the prior status.
+    pub resets_status: bool,
     pub created_at: String,
 }
 
 /// Where a thread is anchored within a revision (docs/api.md "Comment
 /// placement"), modeled so the invalid combinations the flat wire fields
-/// allow are unrepresentable: a `range` cannot exist without its `line`, a
-/// `line` not without its `file`, and `side`/`line_text` are meaningful only
-/// at a line. The flat `file`/`line`/`side`/`range`/`line_text` of the wire
-/// [`Thread`](crate::api::types::Thread) are this projected back out.
+/// allow are unrepresentable.
 #[derive(Debug, Clone)]
 pub enum Anchor {
     /// The change as a whole (no file).
@@ -212,7 +219,6 @@ pub enum Anchor {
         file: String,
         side: Side,
         line: u64,
-        /// Best-effort snapshot of the anchored line's text.
         line_text: Option<String>,
         range: Option<CommentRange>,
     },
@@ -220,8 +226,6 @@ pub enum Anchor {
 
 impl Anchor {
     /// The anchor a new thread is born with, taken from its opening comment.
-    /// `file` without `line` is a file-level anchor; no `file` is
-    /// change-level (the API rejects a `line` without a `file` upstream).
     fn from_input(c: &CommentInput) -> Anchor {
         match (&c.file, c.line) {
             (Some(file), Some(line)) => Anchor::Line {
@@ -238,8 +242,7 @@ impl Anchor {
 }
 
 /// A located, resolvable conversation. Its anchor and birth come from its
-/// first comment; later comments only extend it and may move `resolved`. The
-/// `id` is fold-assigned by creation order, never stored (module docs).
+/// first comment; the `id` is fold-assigned by creation order, never stored.
 #[derive(Debug, Clone)]
 pub struct ThreadProj {
     pub id: u64,
@@ -256,7 +259,6 @@ pub struct ThreadProj {
 pub struct ThreadComment {
     pub author: Author,
     pub body: String,
-    /// The review that published this comment; `None` for an agent comment.
     pub review_id: Option<u64>,
     pub created_at: String,
 }
@@ -270,32 +272,49 @@ pub struct ReviewProj {
     pub created_at: String,
 }
 
+/// The fold of one change's log.
 #[derive(Debug, Clone)]
 pub struct ChangeProj {
     pub id: u64,
+    pub repo_id: u64,
     pub change_key: String,
-    pub position: Option<u64>,
-    pub orphaned: bool,
-    pub status: Status,
+    pub created_at: String,
     pub revisions: Vec<RevisionProj>,
     pub threads: Vec<ThreadProj>,
     pub reviews: Vec<ReviewProj>,
+    pub lifecycle: Lifecycle,
+    /// The next thread id to mint — bumped each time a thread is opened.
+    pub next_thread_id: u64,
+    pub head: u64,
+    pub last_entry_at: Option<String>,
 }
 
 impl ChangeProj {
     #[must_use]
-    pub fn latest_revision(&self) -> Option<&RevisionProj> {
-        self.revisions.last()
+    pub fn empty(row: &db::ChangeRow) -> ChangeProj {
+        ChangeProj {
+            id: row.id,
+            repo_id: row.repo_id,
+            change_key: row.change_key.clone(),
+            created_at: row.created_at.clone(),
+            revisions: Vec::new(),
+            threads: Vec::new(),
+            reviews: Vec::new(),
+            lifecycle: Lifecycle::Active,
+            next_thread_id: 0,
+            head: 0,
+            last_entry_at: None,
+        }
     }
 
-    /// The wire status: `orphaned` while orphaned, else the retained status.
     #[must_use]
-    pub fn wire_status(&self) -> ChangeStatus {
-        if self.orphaned {
-            ChangeStatus::Orphaned
-        } else {
-            self.status.into()
-        }
+    pub fn updated_at(&self) -> &str {
+        self.last_entry_at.as_deref().unwrap_or(&self.created_at)
+    }
+
+    #[must_use]
+    pub fn latest_revision(&self) -> Option<&RevisionProj> {
+        self.revisions.last()
     }
 
     #[must_use]
@@ -303,19 +322,20 @@ impl ChangeProj {
         self.revisions.iter().find(|r| r.number == number)
     }
 
-    /// A published thread by its fold id.
     #[must_use]
     pub fn thread(&self, id: u64) -> Option<&ThreadProj> {
         self.threads.iter().find(|t| t.id == id)
     }
 
-    /// Count of unresolved threads (open conversations awaiting the reviewer).
+    /// Unresolved threads anchored at `revision` (the count the reviewer owes).
     #[must_use]
-    pub fn unresolved_threads(&self) -> usize {
-        self.threads.iter().filter(|t| !t.resolved).count()
+    pub fn unresolved_at(&self, revision: u64) -> usize {
+        self.threads
+            .iter()
+            .filter(|t| t.revision == revision && !t.resolved)
+            .count()
     }
 
-    /// The latest review on the change (highest id), if any.
     #[must_use]
     pub fn latest_review(&self) -> Option<&ReviewProj> {
         self.reviews.iter().max_by_key(|r| r.id)
@@ -326,157 +346,106 @@ impl ChangeProj {
     pub fn last_reviewed_revision(&self) -> Option<u64> {
         self.reviews.iter().map(|r| r.revision).max()
     }
-}
 
-#[derive(Debug, Clone)]
-pub struct Projection {
-    pub chain_id: u64,
-    pub repo_id: u64,
-    /// The owning repo's git-common-dir — the path every git operation opens.
-    pub git_dir: String,
-    pub branch: String,
-    pub base: String,
-    pub created_at: String,
-    pub status: ChainStatus,
-    pub partial: bool,
-    pub changes: Vec<ChangeProj>,
-    /// The next thread id to mint — bumped each time a thread is opened during
-    /// the fold, so ids are positional and never stored (module docs).
-    pub next_thread_id: u64,
-    pub head: u64,
-    pub last_entry_at: Option<String>,
-    // Transient scan state — not folded from the log, re-derived each scan.
-    pub last_scan_error: Option<String>,
-    pub branch_missing_since: Option<String>,
-}
-
-impl Projection {
     #[must_use]
-    pub fn empty(chain: &db::ChainRow) -> Projection {
-        Projection {
-            chain_id: chain.id,
-            repo_id: chain.repo_id,
-            git_dir: chain.git_dir.clone(),
-            branch: chain.branch.clone(),
-            base: chain.base.clone(),
-            created_at: chain.created_at.clone(),
-            status: ChainStatus::Active,
-            partial: false,
-            changes: Vec::new(),
-            next_thread_id: 0,
-            head: 0,
-            last_entry_at: None,
-            last_scan_error: None,
-            branch_missing_since: None,
+    pub fn is_terminal(&self) -> bool {
+        !matches!(self.lifecycle, Lifecycle::Active)
+    }
+
+    /// Whether the latest revision is partial (`nit push --partial` set, not
+    /// yet cleared by `nit ready`). A chain is partial iff its tip change is.
+    #[must_use]
+    pub fn is_partial(&self) -> bool {
+        self.latest_revision().is_some_and(|r| r.partial)
+    }
+
+    /// The displayed status at a pinned revision: the lifecycle overlay
+    /// (`abandoned` change-wide, `merged` only for the landed patchset) over
+    /// the verdict-derived review status (docs/data-model.md "Per-change,
+    /// per-revision status").
+    #[must_use]
+    pub fn status_at(&self, revision: u64) -> ChangeStatus {
+        if matches!(self.lifecycle, Lifecycle::Abandoned) {
+            return ChangeStatus::Abandoned;
         }
+        if let Lifecycle::Merged { revision: landed } = self.lifecycle
+            && landed == revision
+        {
+            return ChangeStatus::Merged;
+        }
+        self.review_status_at(revision).into()
     }
 
-    /// `updated_at` = the last entry's time, else the chain's creation time.
+    /// A newer revision of this change landed on the canonical branch, but the
+    /// pinned revision is not it — the path member shows live with a note.
     #[must_use]
-    pub fn updated_at(&self) -> &str {
-        self.last_entry_at.as_deref().unwrap_or(&self.created_at)
+    pub fn merged_elsewhere(&self, revision: u64) -> bool {
+        matches!(self.lifecycle, Lifecycle::Merged { revision: landed } if landed != revision)
     }
 
-    fn change_by_key_mut(&mut self, key: &str) -> Option<&mut ChangeProj> {
-        self.changes.iter_mut().find(|c| c.change_key == key)
-    }
-
-    #[must_use]
-    pub fn change_by_key(&self, key: &str) -> Option<&ChangeProj> {
-        self.changes.iter().find(|c| c.change_key == key)
-    }
-
-    #[must_use]
-    pub fn change_by_id(&self, id: u64) -> Option<&ChangeProj> {
-        self.changes.iter().find(|c| c.id == id)
-    }
-
-    /// Live changes (not orphaned) in chain order; then orphans last —
-    /// matching the dashboard ordering.
-    #[must_use]
-    pub fn changes_ordered(&self) -> Vec<&ChangeProj> {
-        let mut live: Vec<&ChangeProj> = self.changes.iter().filter(|c| !c.orphaned).collect();
-        live.sort_by_key(|c| c.position.unwrap_or(u64::MAX));
-        let mut orphans: Vec<&ChangeProj> = self.changes.iter().filter(|c| c.orphaned).collect();
-        live.append(&mut orphans);
-        live
+    /// The verdict-derived status at a revision: the latest review on it, else
+    /// the prior revision's status when this one is a pure rebase, else
+    /// pending.
+    fn review_status_at(&self, revision: u64) -> Status {
+        if let Some(rv) = self
+            .reviews
+            .iter()
+            .filter(|r| r.revision == revision)
+            .max_by_key(|r| r.id)
+        {
+            return Status::from(rv.verdict);
+        }
+        // No review here: a pure-rebase revision carries the prior one forward.
+        if revision > 0 && self.revision(revision).is_some_and(|r| !r.resets_status) {
+            return self.review_status_at(revision - 1);
+        }
+        Status::Pending
     }
 }
 
 // ---------------------------------------------------------------------------
 // Fold
 
-/// Apply one entry to the projection (docs/data-model.md "The fold").
+/// Apply one entry to a change's projection (docs/data-model.md "The fold").
 ///
 /// # Errors
 /// When a payload fails to parse.
-pub fn fold(proj: &mut Projection, entry: &Entry) -> Result<()> {
+pub fn fold(change: &mut ChangeProj, entry: &Entry) -> Result<()> {
     match entry.kind {
-        LogKind::Revisions => fold_revisions(proj, &entry.parse()?, &entry.created_at),
-        LogKind::Review => fold_review(proj, &entry.parse()?, &entry.created_at),
-        LogKind::Comment => fold_comment(proj, &entry.parse()?, &entry.created_at),
-        LogKind::Partial => proj.partial = entry.parse::<PartialPayload>()?.partial,
-        LogKind::ChainClosed => {
-            proj.status = entry.parse::<ChainClosedPayload>()?.status.into();
+        LogKind::Revision => fold_revision(change, &entry.parse()?, &entry.created_at),
+        LogKind::Review => fold_review(change, &entry.parse()?, &entry.created_at),
+        LogKind::Comment => {
+            let p: CommentPayload = entry.parse()?;
+            apply_comment(change, &p.comment, Author::Agent, None, &entry.created_at);
         }
+        LogKind::Partial => {
+            let p: PartialPayload = entry.parse()?;
+            if let Some(rev) = change.revisions.last_mut() {
+                rev.partial = p.partial;
+            }
+        }
+        LogKind::Lifecycle => fold_lifecycle(change, &entry.parse()?),
     }
-    proj.head = entry.idx + 1;
-    proj.last_entry_at = Some(entry.created_at.clone());
+    change.head = entry.idx + 1;
+    change.last_entry_at = Some(entry.created_at.clone());
     Ok(())
 }
 
-fn fold_revisions(proj: &mut Projection, p: &RevisionsPayload, now: &str) {
-    // A revisions entry means the branch is alive with commits.
-    proj.status = ChainStatus::Active;
-    let live_keys: std::collections::HashSet<&str> =
-        p.live.iter().map(|l| l.change_key.as_str()).collect();
-
-    // Establish the live set (create new changes, set positions, un-orphan).
-    for l in &p.live {
-        if let Some(change) = proj.change_by_key_mut(&l.change_key) {
-            change.position = Some(l.position);
-            change.orphaned = false;
-        } else {
-            proj.changes.push(ChangeProj {
-                id: l.change_id,
-                change_key: l.change_key.clone(),
-                position: Some(l.position),
-                orphaned: false,
-                status: Status::Pending,
-                revisions: Vec::new(),
-                threads: Vec::new(),
-                reviews: Vec::new(),
-            });
-        }
-    }
-    // Orphan changes that left the walk (state retained, position cleared).
-    for change in &mut proj.changes {
-        if !live_keys.contains(change.change_key.as_str()) {
-            change.orphaned = true;
-            change.position = None;
-        }
-    }
-    // Append new revisions; a non-pure-rebase revision resets review status.
-    for a in &p.added {
-        if let Some(change) = proj.change_by_key_mut(&a.change_key) {
-            change.revisions.push(RevisionProj {
-                number: a.number,
-                commit_sha: a.commit_sha.clone(),
-                parent_sha: a.parent_sha.clone(),
-                message: a.message.clone(),
-                created_at: now.to_string(),
-            });
-            if a.resets_status {
-                change.status = Status::Pending;
-            }
-        }
-    }
+fn fold_revision(change: &mut ChangeProj, p: &RevisionPayload, now: &str) {
+    let number = u64::try_from(change.revisions.len()).expect("revision count fits u64");
+    change.revisions.push(RevisionProj {
+        number,
+        commit_sha: p.commit_sha.clone(),
+        parent_sha: p.parent_sha.clone(),
+        base_sha: p.base_sha.clone(),
+        message: p.message.clone(),
+        partial: p.partial,
+        resets_status: p.resets_status,
+        created_at: now.to_string(),
+    });
 }
 
-fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
-    let Some(change) = proj.change_by_key_mut(&p.change_key) else {
-        return;
-    };
+fn fold_review(change: &mut ChangeProj, p: &ReviewPayload, now: &str) {
     change.reviews.push(ReviewProj {
         id: p.review_id,
         revision: p.revision,
@@ -484,29 +453,19 @@ fn fold_review(proj: &mut Projection, p: &ReviewPayload, now: &str) {
         message: p.message.clone(),
         created_at: now.to_string(),
     });
-    // Each drained draft opens or continues a thread, authored by the reviewer
-    // and tagged with this review. Resolutions apply in draft order, so a
-    // thread ends at its last decision (docs/data-model.md "The fold").
     for c in &p.comments {
-        apply_comment(
-            proj,
-            &p.change_key,
-            c,
-            Author::Reviewer,
-            Some(p.review_id),
-            now,
-        );
-    }
-    if let Some(change) = proj.change_by_key_mut(&p.change_key) {
-        change.status = Status::from(p.verdict);
+        apply_comment(change, c, Author::Reviewer, Some(p.review_id), now);
     }
 }
 
-/// Fold an agent `comment`: one comment authored by the agent, opening or
-/// continuing a thread with no review attached (the change's status is
-/// untouched — an agent's note is not a verdict).
-fn fold_comment(proj: &mut Projection, p: &CommentPayload, now: &str) {
-    apply_comment(proj, &p.change_key, &p.comment, Author::Agent, None, now);
+fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
+    change.lifecycle = match p.action {
+        LifecycleAction::Merged => Lifecycle::Merged {
+            revision: p.revision.unwrap_or(0),
+        },
+        LifecycleAction::Abandoned => Lifecycle::Abandoned,
+        LifecycleAction::Reopened => Lifecycle::Active,
+    };
 }
 
 /// Apply one comment to a change's threads (shared by `review` and `comment`).
@@ -514,8 +473,7 @@ fn fold_comment(proj: &mut Projection, p: &CommentPayload, now: &str) {
 /// comment's anchor; with one, append to that thread. An empty body adds no
 /// comment, only its resolution (docs/data-model.md "The fold").
 fn apply_comment(
-    proj: &mut Projection,
-    change_key: &str,
+    change: &mut ChangeProj,
     c: &CommentInput,
     author: Author,
     review_id: Option<u64>,
@@ -523,20 +481,14 @@ fn apply_comment(
 ) {
     match c.thread_id {
         None => {
-            // A new thread needs a body; never mint an id for an empty one, so
-            // the counter stays a function of the threads actually created.
+            // A new thread needs a body; never mint an id for an empty one.
             if c.body.trim().is_empty() {
                 return;
             }
-            let id = proj.next_thread_id;
-            let Some(change) = proj.change_by_key_mut(change_key) else {
-                return;
-            };
-            // The API always stamps `revision`; fall back to latest only for a
-            // malformed payload.
+            let id = change.next_thread_id;
             let revision = c
                 .revision
-                .unwrap_or_else(|| change.latest_revision().map_or(1, |r| r.number));
+                .unwrap_or_else(|| change.latest_revision().map_or(0, |r| r.number));
             change.threads.push(ThreadProj {
                 id,
                 revision,
@@ -551,12 +503,9 @@ fn apply_comment(
                 created_at: now.to_string(),
                 updated_at: now.to_string(),
             });
-            proj.next_thread_id += 1;
+            change.next_thread_id += 1;
         }
         Some(tid) => {
-            let Some(change) = proj.change_by_key_mut(change_key) else {
-                return;
-            };
             let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) else {
                 return;
             };
@@ -571,27 +520,25 @@ fn apply_comment(
             if let Some(state) = c.resolved {
                 thread.resolved = state;
             }
-            // A reply always changes something — the API forbids an empty body
-            // with no resolution — so bump the thread's time unconditionally.
             thread.updated_at = now.to_string();
         }
     }
 }
 
-/// Rebuild a projection from a chain row and its log rows (ascending idx).
+/// Rebuild a change's projection from its row and its log rows (ascending idx).
 ///
 /// # Errors
 /// When a log payload fails to parse.
-pub fn replay(chain: &db::ChainRow, rows: &[db::LogRow]) -> Result<Projection> {
-    let mut proj = Projection::empty(chain);
-    for row in rows {
-        let entry = Entry::from_row(row)?;
-        fold(&mut proj, &entry)?;
+pub fn replay(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangeProj> {
+    let mut change = ChangeProj::empty(row);
+    for log_row in rows {
+        let entry = Entry::from_row(log_row)?;
+        fold(&mut change, &entry)?;
     }
-    Ok(proj)
+    Ok(change)
 }
 
-/// The maximum fold-assigned id appearing in a batch of log rows — used to
+/// The maximum fold-assigned id (review ids) in a batch of log rows — used to
 /// resume the global id counter on startup (docs/data-model.md "Identity").
 ///
 /// # Errors
@@ -600,49 +547,11 @@ pub fn max_assigned_id(rows: &[db::LogRow]) -> Result<u64> {
     let mut max = 0;
     for row in rows {
         let entry = Entry::from_row(row)?;
-        match entry.kind {
-            LogKind::Revisions => {
-                for l in entry.parse::<RevisionsPayload>()?.live {
-                    max = max.max(l.change_id);
-                }
-            }
-            LogKind::Review => {
-                max = max.max(entry.parse::<ReviewPayload>()?.review_id);
-            }
-            LogKind::Comment | LogKind::Partial | LogKind::ChainClosed => {}
+        if entry.kind == LogKind::Review {
+            max = max.max(entry.parse::<ReviewPayload>()?.review_id);
         }
     }
     Ok(max)
-}
-
-// ---------------------------------------------------------------------------
-// Derived chain state + wake rule
-
-/// Derived chain state (docs/data-model.md "Derived chain state").
-#[must_use]
-pub fn derive_state(proj: &Projection) -> ChainState {
-    match proj.status {
-        ChainStatus::Merged => ChainState::Merged,
-        ChainStatus::Abandoned => ChainState::Abandoned,
-        ChainStatus::Active => {
-            let live: Vec<&ChangeProj> = proj.changes.iter().filter(|c| !c.orphaned).collect();
-            if live.is_empty() {
-                return ChainState::AgentsTurn; // empty chain
-            }
-            if live
-                .iter()
-                .any(|c| matches!(c.status, Status::ChangesRequested | Status::Commented))
-            {
-                ChainState::AgentsTurn
-            } else if live.iter().any(|c| c.status != Status::Approved) {
-                ChainState::WaitingForReview
-            } else if proj.partial {
-                ChainState::AgentsTurn
-            } else {
-                ChainState::Approved
-            }
-        }
-    }
 }
 
 #[cfg(test)]

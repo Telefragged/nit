@@ -7,17 +7,17 @@
 //! `tag_drift` reads only the shas it is given, so the four commits need no
 //! real parent/child wiring; their *trees* are what matter. One end-to-end
 //! test exercises the HTTP handler so the wiring (threading parent(m),
-//! invoking the tagger) is covered too.
+//! invoking the tagger) is covered too — built by pushing a stack and amending
+//! an earlier change so a later one is rewritten by rebase only.
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, http_post, msg};
+use common::*;
 use git2::Oid;
 use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, diff_trees};
 use nit::api::rebase::tag_drift;
 use nit::api::types::{Diff, DiffFile};
 use nit::enums::{FileStatus, LineKind};
-use serde_json::json;
 
 /// File content from lines, newline-terminated.
 fn body(lines: &[&str]) -> Vec<u8> {
@@ -78,7 +78,7 @@ fn drift_lines(f: &DiffFile) -> Vec<(char, u64)> {
 
 /// The motivating case: an earlier change C1 is amended, which rewrites the
 /// later change C2 onto a new parent. C2's own delta is unchanged (a pure
-/// rebase), so C2's r1→r2 interdiff should show *nothing* — but the plain
+/// rebase), so C2's r0→r1 interdiff should show *nothing* — but the plain
 /// diff leaks C1's amendment as if C2 had made it.
 #[test]
 fn stacked_amend_leaks_into_a_later_change_until_contained() {
@@ -87,7 +87,7 @@ fn stacked_amend_leaks_into_a_later_change_until_contained() {
     let drifted = ["fn one() {}", "fn TWO() {}", "fn three() {}"]; // C1 amended line 2
     let feat = body(&["pub const C2: u8 = 1;"]);
 
-    // parent(m)=C1@r1, m=C2@r1; parent(n)=C1@r2 (amended), n=C2@r2 (rebased).
+    // parent(m)=C1@r0, m=C2@r0; parent(n)=C1@r1 (amended), n=C2@r1 (rebased).
     let parent_m = snapshot(&g, &[("base.rs", &body(&base))]);
     let m = snapshot(&g, &[("base.rs", &body(&base)), ("feat.rs", &feat)]);
     let parent_n = snapshot(&g, &[("base.rs", &body(&drifted))]);
@@ -101,7 +101,7 @@ fn stacked_amend_leaks_into_a_later_change_until_contained() {
     assert_eq!((leaked.additions, leaked.deletions), (1, 1));
 
     // Contained: base.rs is entirely drift, so it drops out; feat.rs is
-    // unchanged between r1 and r2 so it was never in the diff. Nothing left.
+    // unchanged between r0 and r1 so it was never in the diff. Nothing left.
     assert!(
         tagged.files.is_empty(),
         "a pure rebase collapses to no code files, got {:?}",
@@ -421,56 +421,142 @@ fn renamed_file_is_left_as_a_plain_diff() {
 }
 
 // ---------------------------------------------------------------------------
-// End-to-end through the HTTP handler: a pushed change rebased onto a moved
-// base, its interdiff served by `/api/changes/{id}/revisions/{n}/diff`.
+// A vs-parent diff is never drift-processed: byte-for-byte the plain diff,
+// no drift lines, even when stacked on a moved base.
 
 #[test]
-fn http_interdiff_contains_a_pure_rebase() {
+fn vs_parent_diff_is_never_drift_processed() {
     let g = GitRepo::new();
     let base = body(&["fn shared() {}", "// stable", "fn tail() {}"]);
     let moved = body(&["fn shared() {}", "// CHANGED", "fn tail() {}"]);
     let feat = body(&["pub const F: u8 = 1;"]);
 
-    // main @ base0; the change adds feat.rs on top (revision 1).
-    let base0 = g.commit_full(&[g.root], "base\n", &[("shared.rs", &base)], &[]);
-    g.branch("main", base0);
-    let r1 = g.commit_full(
-        &[base0],
-        &msg("feat: add F", "Idrift0001"),
+    // C1 (base) is amended; C2 is rebased onto the moved base, revision 1.
+    let parent0 = g.commit_full(
+        &[g.root],
+        &msg("base", "Ibase"),
+        &[("shared.rs", &base)],
+        &[],
+    );
+    let r0 = g.commit_full(
+        &[parent0],
+        &msg("feat: add F", "Ifeat"),
         &[("shared.rs", &base), ("feat.rs", &feat)],
         &[],
     );
-    g.branch("feat", r1);
-
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let register = json!({
-        "git_dir": g.git_dir(), "branch": "feat", "base": "main",
-    });
-    let (st, chain) = http_post(&server.url("/api/chains"), &register);
-    assert_eq!(st, 200, "register: {chain}");
-    let change_id = chain["changes"][0]["id"].as_i64().expect("change id");
-
-    // The base moves; the change is rebased onto it with the *same* delta and
-    // message — a pure rebase (revision 2, new parent).
-    let base1 = g.commit_full(&[base0], "base moved\n", &[("shared.rs", &moved)], &[]);
-    g.branch("main", base1);
-    let r2 = g.commit_full(
-        &[base1],
-        &msg("feat: add F", "Idrift0001"),
+    g.branch("feat", r0);
+    let parent1 = g.commit_full(
+        &[g.root],
+        &msg("base", "Ibase"),
+        &[("shared.rs", &moved)],
+        &[],
+    );
+    let r1 = g.commit_full(
+        &[parent1],
+        &msg("feat: add F", "Ifeat"),
         &[("shared.rs", &moved), ("feat.rs", &feat)],
         &[],
     );
-    g.branch("feat", r2);
-    let (st, chain) = http_post(&server.url("/api/chains"), &register);
-    assert_eq!(st, 200, "rescan: {chain}");
-    assert_eq!(chain["changes"][0]["revision"].as_i64(), Some(2));
+    g.branch("feat2", r1);
 
-    // The r1 → r2 interdiff: shared.rs is entirely drift and drops out, so
-    // only the (unchanged) commit message remains.
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, p0) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "push r0: {p0}");
+    let (st, p1) = push(&server, &g, "feat2", "main", None);
+    assert_eq!(st, 200, "push r1: {p1}");
+    let change_id = member_id(&p1, "Ifeat");
+
+    // r1's vs-parent diff is the plain `parent1 → r1` tree diff: feat.rs added,
+    // nothing else, no drift — its parent is the source of truth, not r0's.
+    let (st, diff) = http_get(&server.url(&format!("/api/changes/{change_id}/revisions/1/diff")));
+    assert_eq!(st, 200, "vs-parent diff: {diff}");
+    let any_drift = diff["files"]
+        .as_array()
+        .expect("files array")
+        .iter()
+        .flat_map(|f| f["hunks"].as_array().into_iter().flatten())
+        .flat_map(|h| h["lines"].as_array().into_iter().flatten())
+        .any(|l| l["drift"].as_bool() == Some(true));
+    assert!(!any_drift, "a vs-parent diff carries no drift lines");
+    let paths: Vec<&str> = diff["files"]
+        .as_array()
+        .expect("files array")
+        .iter()
+        .map(|f| f["path"].as_str().expect("path"))
+        .collect();
+    assert_eq!(
+        paths,
+        vec![COMMIT_MSG_PATH, "feat.rs"],
+        "vs-parent shows only the agent's added file plus the message"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// End-to-end through the HTTP handler: a stacked change rebased onto an
+// amended earlier change, its r0→r1 interdiff served by
+// `/api/changes/{id}/revisions/{n}/diff?against={m}`. A pure rebase collapses
+// to just `/COMMIT_MSG`.
+
+#[test]
+fn http_interdiff_contains_a_pure_rebase() {
+    let g = GitRepo::new();
+    let base_v0 = body(&["fn shared() {}", "// stable", "fn tail() {}"]);
+    let base_v1 = body(&["fn shared() {}", "// CHANGED", "fn tail() {}"]);
+    let feat = body(&["pub const F: u8 = 1;"]);
+
+    // A two-change stack on main: C1 (Ibase) edits shared.rs, C2 (Ifeat) adds
+    // feat.rs on top. Push the whole stack — both at revision 0.
+    let c1_r0 = g.commit_full(
+        &[g.root],
+        &msg("infra: shared", "Ibase"),
+        &[("shared.rs", &base_v0)],
+        &[],
+    );
+    let c2_r0 = g.commit_full(
+        &[c1_r0],
+        &msg("feat: add F", "Ifeat"),
+        &[("shared.rs", &base_v0), ("feat.rs", &feat)],
+        &[],
+    );
+    g.branch("feat", c2_r0);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, p0) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "push the stack: {p0}");
+    let change_id = member_id(&p0, "Ifeat");
+
+    // Amend C1 (its body moves) and rebase C2 onto it with the *same* delta and
+    // message — a pure rebase of C2. Re-push: C1 gets revision 1 (a real edit),
+    // C2 gets revision 1 (pure rebase, new parent only).
+    let c1_r1 = g.commit_full(
+        &[g.root],
+        &msg("infra: shared", "Ibase"),
+        &[("shared.rs", &base_v1)],
+        &[],
+    );
+    let c2_r1 = g.commit_full(
+        &[c1_r1],
+        &msg("feat: add F", "Ifeat"),
+        &[("shared.rs", &base_v1), ("feat.rs", &feat)],
+        &[],
+    );
+    g.branch("feat", c2_r1);
+    let (st, p1) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "re-push: {p1}");
+
+    // C2 is now at revision 1, a pure rebase of revision 0.
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+    assert_eq!(st, 200, "change detail: {detail}");
+    let revs = detail["revisions"].as_array().expect("revisions");
+    assert_eq!(revs.len(), 2, "C2 has two revisions");
+    assert_eq!(revs[1]["number"].as_u64(), Some(1), "revisions are 0-based");
+
+    // The r0 → r1 interdiff: shared.rs is entirely drift (C1's amendment) and
+    // drops out, so only the (unchanged) commit message remains.
     let (st, diff) = http_get(&server.url(&format!(
-        "/api/changes/{change_id}/revisions/2/diff?against=1"
+        "/api/changes/{change_id}/revisions/1/diff?against=0"
     )));
-    assert_eq!(st, 200, "diff: {diff}");
+    assert_eq!(st, 200, "interdiff: {diff}");
     let paths: Vec<&str> = diff["files"]
         .as_array()
         .expect("files array")

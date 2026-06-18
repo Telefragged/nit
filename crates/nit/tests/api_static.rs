@@ -1,10 +1,11 @@
 //! Static UI serving (docs/api.md "Static UI"): the built SPA outside
 //! /api, index.html fallback for client-side routes, API-only without a
-//! web dist.
+//! web dist. Client routes are change-id addressed now (`/chains/{change_id}`,
+//! `/changes/{id}`).
 
 mod common;
 
-use common::{TestServer, http_get};
+use common::*;
 
 #[test]
 fn serves_spa_with_index_fallback() {
@@ -24,8 +25,8 @@ fn serves_spa_with_index_fallback() {
     assert_eq!(st, 200);
     assert_eq!(body.as_str().unwrap(), "console.log('nit')");
 
-    // Client-side routes fall back to index.html.
-    for route in ["/", "/chains/1", "/changes/10"] {
+    // Client-side routes fall back to index.html — now change-id addressed.
+    for route in ["/", "/chains/12", "/changes/10"] {
         let (st, body) = http_get(&server.url(route));
         assert_eq!(st, 200, "{route}");
         assert_eq!(body.as_str().unwrap(), "<html>nit-spa</html>", "{route}");
@@ -36,7 +37,8 @@ fn serves_spa_with_index_fallback() {
     assert_eq!(st, 200);
     assert_eq!(health["status"], "ok");
     assert_eq!(health["version"], env!("CARGO_PKG_VERSION"));
-    let (st, e) = http_get(&server.url("/api/chains/1"));
+    // An unknown change is a JSON 404, never the SPA.
+    let (st, e) = http_get(&server.url("/api/chains/12"));
     assert_eq!(st, 404);
     assert!(e["error"].is_string());
 }
@@ -50,7 +52,8 @@ fn runs_api_only_without_web_dist() {
     assert_eq!(st, 200);
     assert_eq!(health["status"], "ok");
 
-    let (st, _) = http_get(&server.url("/chains/1"));
+    // No SPA → client routes are a bare 404 (no index.html to fall back to).
+    let (st, _) = http_get(&server.url("/chains/12"));
     assert_eq!(st, 404);
 }
 
@@ -66,7 +69,7 @@ fn api_errors_are_json_everywhere() {
     let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(dist));
 
     // Unknown /api paths: JSON 404, not the SPA.
-    for path in ["/api", "/api/", "/api/nonexistent", "/api/chain/1"] {
+    for path in ["/api", "/api/", "/api/nonexistent", "/api/chain/12"] {
         let (st, body) = http_get(&server.url(path));
         assert_eq!(st, 404, "{path}: {body}");
         assert!(body["error"].is_string(), "{path}: {body}");
@@ -79,7 +82,7 @@ fn api_errors_are_json_everywhere() {
 
     // Malformed JSON body: JSON 400, not text/plain.
     let resp = ureq::Agent::new_with_defaults()
-        .post(&server.url("/api/chains"))
+        .post(&server.url("/api/push"))
         .header("content-type", "application/json")
         .config()
         .http_status_as_error(false)

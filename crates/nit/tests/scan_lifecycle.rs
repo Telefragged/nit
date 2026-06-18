@@ -1,298 +1,232 @@
-//! Chain lifecycle: merged detection (patch-id quorum), the
-//! tip==base-is-not-merged rule, the two-scan abandoned rule, reopening,
-//! and keep-ref cleanup on close.
+//! Change lifecycle via the background timer (docs/api.md "State table",
+//! docs/data-model.md "Lifecycle"): merged detection when a change's patch
+//! lands on the canonical branch, prefix-merge of a stack's ancestor, the
+//! abandon window when a tip's revision goes unreachable, reopen, and the
+//! 409-then-200 push gate around an abandoned change.
+//!
+//! Merged/abandoned are written only by the background sweep, so every test
+//! calls `fast_timer()` *before* `TestServer::start` and polls the API with
+//! `wait_for` (no read-time scans exist anymore).
 
 mod common;
 
-use common::{Fixture, msg};
-use nit::enums::ChainStatus;
-use nit::review::Status;
+use std::time::Duration;
 
-fn ts(secs: i64) -> jiff::Timestamp {
-    jiff::Timestamp::from_second(secs).unwrap()
+use common::{
+    GitRepo, TestServer, fast_timer, first_repo_id, http_get, http_post, member_id, msg, push,
+    wait_for,
+};
+use serde_json::json;
+
+/// The per-revision status of `change_id` at `revision`, read off the derived
+/// chain path (the change is its own degenerate tip after it goes terminal).
+fn status_at(server: &TestServer, change_id: u64, revision: u64) -> Option<String> {
+    let (st, chain) =
+        http_get(&server.url(&format!("/api/chains/{change_id}?revision={revision}")));
+    if st != 200 {
+        return None;
+    }
+    chain["path"]
+        .as_array()?
+        .iter()
+        .find(|m| m["change_id"].as_u64() == Some(change_id))
+        .and_then(|m| m["status"].as_str().map(str::to_string))
 }
 
-fn keep_ref_count(f: &Fixture) -> usize {
-    f.repo
-        .references_glob(&format!("refs/nit/keep/{}/*", f.proj.chain_id))
-        .unwrap()
-        .count()
-}
-
-#[test]
-fn fast_forward_merge_closes_chain() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2);
-    f.scan();
-    assert_eq!(keep_ref_count(&f), 2);
-
-    // The agent fast-forwards main to the chain tip.
-    f.branch("main", c2);
-    assert!(!f.scan().entries.is_empty());
-    assert_eq!(f.status(), ChainStatus::Merged);
-    assert_eq!(f.appended("chain_closed"), 1);
-    assert_eq!(keep_ref_count(&f), 0, "keep refs deleted on close");
-
-    // Changes stay untouched (review history preserved).
-    let changes = f.changes();
-    assert_eq!(changes.len(), 2);
-    assert!(changes.iter().all(|c| !c.orphaned));
-
-    // Idempotent: scanning a closed chain again is a no-op.
-    assert!(f.scan().entries.is_empty());
-    assert_eq!(f.appended("chain_closed"), 1);
+/// Block until `change_id`'s status at `revision` equals `want`.
+fn wait_status(server: &TestServer, change_id: u64, revision: u64, want: &str) {
+    wait_for(Duration::from_secs(5), || {
+        (status_at(server, change_id, revision).as_deref() == Some(want)).then_some(())
+    });
 }
 
 #[test]
-fn merge_commit_on_main_closes_chain() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2);
-    f.scan();
+fn change_landed_on_main_becomes_merged() {
+    fast_timer();
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
 
-    // True merge commit on main; feat still points at c2.
-    let m = f.commit(&[f.root, c2], "Merge feat\n", &[]);
-    f.branch("main", m);
-    f.scan();
-    assert_eq!(f.status(), ChainStatus::Merged);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    let change_id = member_id(&res, "I001");
+    assert_eq!(res["tip_change"]["revision"], 0);
+    assert_eq!(res["tip_change"]["status"], "pending");
+
+    // Land the same change on the canonical branch: same Change-Id, same
+    // patch-id (identical tree edit). The timer recognises the patch.
+    let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("main", landed);
+
+    wait_status(&server, change_id, 0, "merged");
+
+    // A fully-merged chain drops off the active dashboard but stays reachable
+    // by id (and under ?status=all).
+    let repo = first_repo_id(&server);
+    let (_, active) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=active")));
+    assert!(
+        active["chains"].as_array().unwrap().is_empty(),
+        "merged chain left the active list: {active}"
+    );
+    let (_, all) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=all")));
+    assert_eq!(all["chains"][0]["state"], "merged");
 }
 
 #[test]
-fn squash_merge_of_single_change_closes_chain() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
+fn prefix_merge_marks_ancestor_while_tip_stays_live() {
+    fast_timer();
+    let g = GitRepo::new();
+    // A two-change stack: I001 then I002 on top.
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
+    g.branch("feat", c2);
 
-    // Squash-merge: same diff under a new commit, then the agent resets the
-    // branch onto main. The patch-id quorum recognises the content.
-    let s = f.commit(&[f.root], "one (squashed)\n", &[("a.txt", "a\n")]);
-    f.branch("main", s);
-    f.branch("feat", s);
-    f.scan();
-    assert_eq!(f.status(), ChainStatus::Merged);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    let tip = res["tip_change"]["change_id"].as_u64().unwrap();
+    let ancestor = member_id(&res, "I001");
+    assert_eq!(tip, member_id(&res, "I002"));
+
+    // Land only the ancestor (I001) on main — the tip (I002) stays unlanded.
+    let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("main", landed);
+
+    wait_status(&server, ancestor, 0, "merged");
+    // The tip change is untouched; it never landed.
+    assert_eq!(status_at(&server, tip, 0).as_deref(), Some("pending"));
+
+    // One live member keeps the partially-landed stack on the active list.
+    let repo = first_repo_id(&server);
+    let (_, active) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=active")));
+    let chains = active["chains"].as_array().unwrap();
+    assert_eq!(chains.len(), 1, "stack stays visible: {active}");
+    let path = chains[0]["path"].as_array().unwrap();
+    let ancestor_entry = path.iter().find(|m| m["change_id"] == ancestor).unwrap();
+    let tip_entry = path.iter().find(|m| m["change_id"] == tip).unwrap();
+    assert_eq!(ancestor_entry["status"], "merged");
+    assert_eq!(tip_entry["status"], "pending");
 }
 
 #[test]
-fn reset_to_base_is_an_empty_active_chain_not_merged() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2);
-    f.scan();
+fn unreachable_revision_becomes_abandoned_after_window() {
+    fast_timer();
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
 
-    // tip == base but nothing landed in main: an agent rebuild, not a merge.
-    f.branch("feat", f.root);
-    f.scan();
-    assert_eq!(f.status(), ChainStatus::Active);
-    assert_eq!(f.appended("chain_closed"), 0);
-    assert!(f.changes().iter().all(|c| c.orphaned));
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    let change_id = member_id(&res, "I001");
+
+    // Delete the only branch reaching the revision: it goes unreachable, and
+    // after the abandon window the timer abandons the change.
+    g.delete_branch("feat");
+    wait_status(&server, change_id, 0, "abandoned");
+
+    let repo = first_repo_id(&server);
+    let (_, all) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=all")));
+    assert_eq!(all["chains"][0]["state"], "has_abandoned");
 }
 
 #[test]
-fn merged_chain_reopens_on_new_commits() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-    f.branch("main", c1); // ff merge
-    f.scan();
-    assert_eq!(f.status(), ChainStatus::Merged);
+fn reopen_clears_abandoned_to_retained_status() {
+    fast_timer();
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
 
-    // New work on the same branch name reopens the chain.
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    f.branch("feat", c2);
-    assert!(!f.scan().entries.is_empty());
-    assert_eq!(f.status(), ChainStatus::Active);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    let change_id = member_id(&res, "I001");
 
-    let changes = f.changes();
-    assert_eq!(changes.len(), 2);
-    assert!(f.change("I001").orphaned, "merged work left the walk");
-    assert_eq!(f.change("I002").position, Some(0));
+    // Approve, then let it go abandoned: the verdict is retained, masked by
+    // the abandoned overlay.
+    let (st, _) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reviews")),
+        &json!({"revision": 0, "verdict": "approve", "message": "lgtm"}),
+    );
+    assert_eq!(st, 200);
+    g.delete_branch("feat");
+    wait_status(&server, change_id, 0, "abandoned");
+
+    // Reopen restores the retained verdict (approved), not pending.
+    let (st, detail) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reopen")),
+        &json!({}),
+    );
+    assert_eq!(st, 200, "{detail}");
+    assert_eq!(detail["id"], change_id);
     assert_eq!(
-        keep_ref_count(&f),
-        2,
-        "keep refs re-created for every revision"
+        status_at(&server, change_id, 0).as_deref(),
+        Some("approved"),
+        "reopen surfaces the retained verdict"
     );
 }
 
 #[test]
-fn abandoned_only_after_two_scans_ten_seconds_apart() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1);
-    f.scan_at(ts(1_000));
-    f.delete_branch("feat");
+fn push_to_abandoned_change_409s_until_reopened() {
+    fast_timer();
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
 
-    // First missing observation: recorded as a scan error, chain stays.
-    f.scan_at(ts(2_000));
-    assert_eq!(f.status(), ChainStatus::Active);
-    assert_eq!(f.scan_error().as_deref(), Some("branch 'feat' not found"));
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    let change_id = member_id(&res, "I001");
 
-    // Second scan too soon: still protected (mid-rebase window).
-    f.scan_at(ts(2_005));
-    assert_eq!(f.status(), ChainStatus::Active);
+    // Drive it to abandoned, then resurrect the branch at a *new* revision.
+    g.delete_branch("feat");
+    wait_status(&server, change_id, 0, "abandoned");
+    let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
+    g.branch("feat", c1b);
 
-    // ≥ 10s after the *first* missing observation: abandoned.
-    f.scan_at(ts(2_011));
-    assert_eq!(f.status(), ChainStatus::Abandoned);
-    assert_eq!(f.scan_error(), None);
-    assert_eq!(f.appended("chain_closed"), 1);
-    assert_eq!(keep_ref_count(&f), 0);
+    // Pushing a new revision onto an abandoned change is a 409.
+    let (st, e) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 409, "{e}");
+    assert!(e["error"].as_str().unwrap().contains("abandoned"), "{e}");
 
-    // Further scans with the branch still gone stay quiet.
-    let outcome = f.scan_at(ts(2_100));
-    assert!(outcome.entries.is_empty());
-    assert_eq!(f.status(), ChainStatus::Abandoned);
-    assert_eq!(f.appended("chain_closed"), 1);
-}
-
-#[test]
-fn branch_reappearing_resets_the_missing_window() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1);
-    f.scan_at(ts(1_000));
-
-    // Mid-rebase: ref vanishes, then comes back.
-    f.delete_branch("feat");
-    f.scan_at(ts(2_000));
-    f.branch("feat", c1);
-    f.scan_at(ts(2_004));
-    assert_eq!(f.status(), ChainStatus::Active);
-    assert_eq!(f.scan_error(), None);
-
-    // Vanishes again: the 10s window restarts from this observation.
-    f.delete_branch("feat");
-    f.scan_at(ts(3_000));
-    f.scan_at(ts(3_005));
-    assert_eq!(f.status(), ChainStatus::Active, "window restarted");
-    f.scan_at(ts(3_011));
-    assert_eq!(f.status(), ChainStatus::Abandoned);
-}
-
-#[test]
-fn abandoned_chain_reopens_when_branch_returns() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1);
-    f.scan_at(ts(1_000));
-    f.review("I001", "approve");
-
-    f.delete_branch("feat");
-    f.scan_at(ts(2_000));
-    f.scan_at(ts(2_011));
-    assert_eq!(f.status(), ChainStatus::Abandoned);
-
-    f.branch("feat", c1);
-    f.scan_at(ts(3_000));
-    assert_eq!(f.status(), ChainStatus::Active);
+    // After reopen the same push succeeds and folds to a fresh revision.
+    let (st, _) = http_post(
+        &server.url(&format!("/api/changes/{change_id}/reopen")),
+        &json!({}),
+    );
+    assert_eq!(st, 200);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(res["tip_change"]["revision"], 1, "the new revision landed");
     assert_eq!(
-        f.change("I001").status,
-        Status::Approved,
-        "review state intact"
-    );
-    assert_eq!(
-        f.change("I001").latest_revision().unwrap().number,
-        1,
-        "same commit: no new revision"
+        res["tip_change"]["status"], "pending",
+        "a content change resets status"
     );
 }
 
 #[test]
-fn merged_despite_amend_context_drift() {
-    let mut f = Fixture::new();
-    // Two changes in one file, close enough that amending change one
-    // rewrites change two's diff context.
-    let b0 = f.commit(&[f.root], "seed\n", &[("f.txt", "a\nb\nc\nd\ne\n")]);
-    f.branch("main", b0);
-    let c1 = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A1\nb\nc\nd\ne\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("f.txt", "A1\nb\nc\nD\ne\n")]);
-    f.branch("feat", c2);
-    f.scan();
+fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
+    // The 409 guards a revision that *moves*; an idempotent re-push of the
+    // already-recorded sha must not trip it (docs/api.md "Push").
+    fast_timer();
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
 
-    // The agent amends change one (A1 → A2), rebases change two on top, and
-    // ff-merges without an intermediate scan. Both stored diffs now differ
-    // from what landed; only the Change-Id trailers still match.
-    let c1r = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A2\nb\nc\nd\ne\n")]);
-    let c2r = f.commit(
-        &[c1r],
-        &msg("two", "I002"),
-        &[("f.txt", "A2\nb\nc\nD\ne\n")],
-    );
-    f.branch("feat", c2r);
-    f.branch("main", c2r);
-    f.scan();
-    assert_eq!(f.status(), ChainStatus::Merged);
-}
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    let change_id = member_id(&res, "I001");
 
-#[test]
-fn orphaned_chain_still_detects_merge() {
-    let mut f = Fixture::new();
-    let b0 = f.commit(&[f.root], "seed\n", &[("f.txt", "a\nb\nc\nd\ne\n")]);
-    f.branch("main", b0);
-    let c1 = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A1\nb\nc\nd\ne\n")]);
-    let c2 = f.commit(&[c1], &msg("two", "I002"), &[("f.txt", "A1\nb\nc\nD\ne\n")]);
-    f.branch("feat", c2);
-    f.scan();
+    // Abandon the change, then re-create the branch at the *unchanged* sha.
+    g.delete_branch("feat");
+    wait_status(&server, change_id, 0, "abandoned");
+    g.branch("feat", c1);
 
-    // Agent rebuilds from scratch: reset-to-base must NOT read as merged,
-    // and orphans every change.
-    f.branch("feat", b0);
-    f.scan();
-    assert_eq!(f.status(), ChainStatus::Active);
-    assert!(f.changes().iter().all(|c| c.orphaned));
-
-    // The work lands on main anyway (rebased elsewhere); even with every
-    // change orphaned the trailer quorum must recognize the merge.
-    let c1r = f.commit(&[b0], &msg("one", "I001"), &[("f.txt", "A2\nb\nc\nd\ne\n")]);
-    let c2r = f.commit(
-        &[c1r],
-        &msg("two", "I002"),
-        &[("f.txt", "A2\nb\nc\nD\ne\n")],
-    );
-    f.branch("feat", c2r);
-    f.branch("main", c2r);
-    f.scan();
-    assert_eq!(f.status(), ChainStatus::Merged);
-}
-
-#[test]
-fn orphan_reattach_keeps_approval_carried_across_pure_rebase() {
-    let mut f = Fixture::new();
-    let c1 = f.commit(&[f.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1);
-    f.scan();
-    f.review("I001", "approve");
-
-    // Pure rebase onto a moved main: revision 2, approval carried while the
-    // review row stays on revision 1.
-    let m1 = f.commit(&[f.root], "main moves\n", &[("m.txt", "m\n")]);
-    f.branch("main", m1);
-    let c1r = f.commit(&[m1], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    f.branch("feat", c1r);
-    f.scan();
-    assert_eq!(f.change("I001").status, Status::Approved);
-    assert_eq!(f.change("I001").latest_revision().unwrap().number, 2);
-
-    // Orphan (rebuild from base) and restore the exact rebased commit: the
-    // retained status must come back as approved, not pending.
-    f.branch("feat", m1);
-    f.scan();
-    assert!(f.change("I001").orphaned);
-    f.branch("feat", c1r);
-    f.scan();
-    assert_eq!(
-        f.change("I001").status,
-        Status::Approved,
-        "approval survived"
-    );
-    assert_eq!(
-        f.change("I001").latest_revision().unwrap().number,
-        2,
-        "no spurious revision"
-    );
+    // Re-pushing the same sha walks to nothing that moves, so the 409 guard
+    // (which fires only on a moving revision) never trips — idempotent 200.
+    let (st, res) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(res["tip_change"]["revision"], 0, "no new revision recorded");
 }

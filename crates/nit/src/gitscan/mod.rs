@@ -1,14 +1,10 @@
-//! Git scan engine: reconciles a registered branch (`base..tip`) with a
-//! chain's [`Projection`] — docs/data-model.md "Scan algorithm" is the
-//! contract.
+//! The git layer: the push walk, merged/abandoned detection for the
+//! background timer, and tip-name resolution — docs/data-model.md
+//! ("Push", "Lifecycle") is the contract.
 //!
-//! [`scan`] is pure with respect to the database: it reads the current
-//! projection plus the repo and returns a [`ScanResult`] — the entries to
-//! append (a `revisions` and/or `chain_closed`), the transient
-//! `last_scan_error`, and the branch-missing timer. The caller (the server
-//! layer) appends under the chain lock. A failing scan returns no entries,
-//! so it never partially reconciles. Keep refs (GC safety) are maintained
-//! here as an idempotent side effect.
+//! Everything here is pure with respect to the database: it reads git and
+//! returns values the caller (the api layer) folds into the per-change logs.
+//! Keep refs (GC safety) are an idempotent side effect.
 //!
 //! - [`identity`] — `Change-Id:` trailer extraction and validation.
 //! - [`objects`] — patch-ids and GC-safety keep refs.
@@ -16,173 +12,63 @@
 pub mod identity;
 pub mod objects;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use anyhow::{Result, anyhow};
-use git2::{BranchType, Commit, ErrorCode, Oid, Repository, Sort};
+use git2::{BranchType, Commit, Oid, Repository, Sort};
 
-use crate::enums::{ChainStatus, ClosedStatus, LogKind};
-use crate::review::{AddedRevision, ChangeProj, LivePos, Projection, RevisionsPayload};
+use crate::review::ChangeProj;
 
-/// Documented scan error for chains containing merge commits.
+/// Documented push error for chains containing merge commits.
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
-/// An entry the scan wants appended.
-#[derive(Debug)]
-pub struct NewEntry {
-    pub kind: LogKind,
-    pub payload: serde_json::Value,
+/// One commit the push walk recorded, oldest-first. `parent_sha` is its first
+/// parent (the previous member, or the fork for the first); `base_sha` is the
+/// whole walk's fork point on the canonical branch.
+#[derive(Debug, Clone)]
+pub struct WalkedCommit {
+    pub change_key: String,
+    pub commit_sha: String,
+    pub parent_sha: String,
+    pub message: String,
 }
 
-/// The result of one scan. The caller appends `entries` (in order) and sets
-/// the transient `error` / `branch_missing_since` on the projection.
-#[derive(Debug)]
-pub struct ScanResult {
-    pub entries: Vec<NewEntry>,
-    pub error: Option<String>,
-    pub branch_missing_since: Option<String>,
+/// The result of a push walk: the fork point on the canonical branch and the
+/// commits between it and the tip, oldest-first.
+#[derive(Debug, Clone)]
+pub struct PushWalk {
+    pub fork_sha: String,
+    pub commits: Vec<WalkedCommit>,
 }
 
-impl ScanResult {
-    fn nothing() -> ScanResult {
-        ScanResult {
-            entries: Vec::new(),
-            error: None,
-            branch_missing_since: None,
-        }
-    }
-
-    fn failed(msg: String) -> ScanResult {
-        ScanResult {
-            entries: Vec::new(),
-            error: Some(msg),
-            branch_missing_since: None,
-        }
-    }
-
-    fn closed(status: ClosedStatus) -> ScanResult {
-        ScanResult {
-            entries: vec![NewEntry {
-                kind: LogKind::ChainClosed,
-                payload: serde_json::json!({ "status": status }),
-            }],
-            error: None,
-            branch_missing_since: None,
-        }
-    }
+/// Resolve a refish to a commit oid, with a human message on failure.
+fn resolve_commit(repo: &Repository, refish: &str) -> Result<Oid, String> {
+    repo.revparse_single(refish)
+        .and_then(|o| o.peel_to_commit())
+        .map(|c| c.id())
+        .map_err(|e| format!("cannot resolve '{refish}': {}", e.message()))
 }
 
-/// Validate a registration: the repo opens and base/branch both resolve.
-/// Only enforced when creating a *new* chain — an existing chain
-/// re-registers even mid-rebase (the failure then surfaces as
-/// `last_scan_error`).
+/// Walk `merge-base(base, tip)..tip` oldest-first and validate it
+/// (docs/data-model.md "Push"). The whole walk is all-or-nothing: any
+/// structural fault is an `Err(message)` the caller maps to a 400.
 ///
 /// # Errors
-/// The 400 case of `POST /api/chains`.
-pub fn validate_registration(git_dir: &std::path::Path, branch: &str, base: &str) -> Result<()> {
-    let repo = Repository::open(git_dir).map_err(|e| {
-        anyhow!(
-            "cannot open repository {}: {}",
-            git_dir.display(),
+/// When the repo/base/tip can't be resolved, there is no merge base, or the
+/// walk contains a merge/root commit, a missing/duplicate `Change-Id`, or a
+/// `fixup!`/`squash!` subject.
+pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, String> {
+    let repo = Repository::open(git_dir)
+        .map_err(|e| format!("cannot open repository {git_dir}: {}", e.message()))?;
+    let base_oid = resolve_commit(&repo, base)?;
+    let tip_oid = resolve_commit(&repo, tip)?;
+    let fork = repo.merge_base(base_oid, tip_oid).map_err(|e| {
+        format!(
+            "no merge base between '{base}' and '{tip}': {}",
             e.message()
         )
     })?;
-    repo.revparse_single(base)
-        .and_then(|o| o.peel_to_commit())
-        .map_err(|e| anyhow!("cannot resolve base '{base}': {}", e.message()))?;
-    repo.find_branch(branch, BranchType::Local)
-        .map_err(|e| anyhow!("cannot resolve branch '{branch}': {}", e.message()))?;
-    Ok(())
-}
 
-/// Scan a chain against its projection. `alloc` mints fresh fold-assigned
-/// ids for newly-seen changes. Never mutates the database; git ref keep
-/// maintenance is the only side effect.
-///
-/// # Panics
-/// When the chain length does not fit `u64` (a chain that long is
-/// unreachable in practice).
-#[expect(
-    clippy::too_many_lines,
-    reason = "the documented scan algorithm reads as one linear pass; \
-              splitting its steps apart would obscure the contract"
-)]
-pub fn scan(proj: &Projection, now: jiff::Timestamp, alloc: &mut dyn FnMut() -> u64) -> ScanResult {
-    let repo = match Repository::open(&proj.git_dir) {
-        Ok(r) => r,
-        Err(e) => {
-            return ScanResult::failed(format!(
-                "cannot open repository {}: {}",
-                proj.git_dir,
-                e.message()
-            ));
-        }
-    };
-
-    // Step 1: resolve base and tip.
-    let base_commit = match repo
-        .revparse_single(&proj.base)
-        .and_then(|o| o.peel_to_commit())
-    {
-        Ok(c) => c,
-        Err(e) => {
-            return ScanResult::failed(format!(
-                "cannot resolve base '{}': {}",
-                proj.base,
-                e.message()
-            ));
-        }
-    };
-
-    let tip = match repo.find_branch(&proj.branch, BranchType::Local) {
-        Ok(branch) => match branch.get().peel_to_commit() {
-            Ok(c) => c,
-            Err(e) => {
-                return ScanResult::failed(format!(
-                    "cannot resolve branch '{}': {}",
-                    proj.branch,
-                    e.message()
-                ));
-            }
-        },
-        Err(e) if e.code() == ErrorCode::NotFound => return missing_branch(proj, now),
-        Err(e) => {
-            return ScanResult::failed(format!(
-                "cannot resolve branch '{}': {}",
-                proj.branch,
-                e.message()
-            ));
-        }
-    };
-
-    // Step 2 (walk) happens early: closed chains only reopen when the branch
-    // is alive *with commits*. Merge/root commits abort here.
-    let commits = match walk_chain(&repo, base_commit.id(), tip.id()) {
-        Ok(c) => c,
-        Err(msg) => return ScanResult::failed(msg),
-    };
-
-    // Merged test: tip ancestor-or-equal of base (⇔ empty walk) plus the
-    // patch-id quorum. tip == base *without* the quorum is just an empty
-    // active chain.
-    if proj.status == ChainStatus::Active && commits.is_empty() {
-        let tip_in_base = tip.id() == base_commit.id()
-            || repo
-                .graph_descendant_of(base_commit.id(), tip.id())
-                .unwrap_or(false);
-        if tip_in_base && merged_quorum(&repo, proj, &base_commit) {
-            objects::delete_chain_keep_refs(&repo, proj.chain_id);
-            return ScanResult::closed(ClosedStatus::Merged);
-        }
-    }
-
-    // A closed (merged/abandoned) chain whose walk is empty stays closed: an
-    // empty walk must not orphan its retained changes (it only reopens with
-    // live commits, handled below).
-    if commits.is_empty() && proj.status != ChainStatus::Active {
-        return ScanResult::nothing();
-    }
-
+    let commits = walk_linear(&repo, fork, tip_oid)?;
     let messages: Vec<String> = commits
         .iter()
         .map(|c| String::from_utf8_lossy(c.message_bytes()).into_owned())
@@ -191,146 +77,29 @@ pub fn scan(proj: &Projection, now: jiff::Timestamp, alloc: &mut dyn FnMut() -> 
         .iter()
         .map(|c| c.id().to_string()[..12].to_string())
         .collect();
+    let keys = identity::require_keys(&messages, &short_shas)?;
 
-    // Step 2, identity validation.
-    let keys = match identity::require_keys(&messages, &short_shas) {
-        Ok(k) => k,
-        Err(msg) => return ScanResult::failed(msg),
-    };
-
-    // Step 3: build the live set and the added revisions.
-    let mut live = Vec::with_capacity(commits.len());
-    let mut added = Vec::new();
+    let mut walked = Vec::with_capacity(commits.len());
+    let mut prev = fork.to_string();
     for (i, commit) in commits.iter().enumerate() {
-        let key = &keys[i];
         let sha = commit.id().to_string();
-        let position = u64::try_from(i).expect("chain length fits u64");
-        let existing = proj.change_by_key(key);
-        let change_id = existing.map_or_else(&mut *alloc, |c| c.id);
-        live.push(LivePos {
-            change_key: key.clone(),
-            change_id,
-            position,
-        });
-
-        let latest = existing.and_then(ChangeProj::latest_revision);
-        if latest.is_some_and(|r| r.commit_sha == sha) {
-            continue; // unchanged commit, no new revision
-        }
-        let parent_sha = match commit.parent_id(0) {
-            Ok(o) => o.to_string(),
-            Err(e) => return ScanResult::failed(format!("commit {sha} has no parent: {e}")),
-        };
-        let resets_status = match latest {
-            Some(old) => !pure_rebase(&repo, &old.commit_sha, &old.message, &sha, &messages[i]),
-            None => true,
-        };
-        added.push(AddedRevision {
-            change_key: key.clone(),
-            number: latest.map_or(1, |r| r.number + 1),
-            commit_sha: sha,
-            parent_sha,
+        walked.push(WalkedCommit {
+            change_key: keys[i].clone(),
+            commit_sha: sha.clone(),
+            parent_sha: prev.clone(),
             message: messages[i].clone(),
-            resets_status,
         });
+        prev = sha;
     }
-
-    // A reopened (merged/abandoned) chain with live commits must re-emit even
-    // when the structure is unchanged, so the fold flips it back to active.
-    let reopen = proj.status != ChainStatus::Active && !commits.is_empty();
-    let new_live: Vec<(&str, u64)> = live
-        .iter()
-        .map(|l| (l.change_key.as_str(), l.position))
-        .collect();
-    let current_live: Vec<(&str, u64)> = proj
-        .changes_ordered()
-        .iter()
-        .filter(|c| !c.orphaned)
-        .map(|c| (c.change_key.as_str(), c.position.unwrap_or(0)))
-        .collect();
-    if added.is_empty() && new_live == current_live && !reopen {
-        return ScanResult::nothing(); // no structural change; clears any prior error
-    }
-
-    maintain_keep_refs(&repo, proj, &live, &added);
-
-    ScanResult {
-        entries: vec![NewEntry {
-            kind: LogKind::Revisions,
-            payload: serde_json::to_value(RevisionsPayload { live, added })
-                .unwrap_or_else(|_| serde_json::json!({})),
-        }],
-        error: None,
-        branch_missing_since: None,
-    }
+    Ok(PushWalk {
+        fork_sha: fork.to_string(),
+        commits: walked,
+    })
 }
 
-/// Keep refs for every revision (live and orphan) so history stays
-/// renderable — idempotent (docs/data-model.md "GC safety").
-fn maintain_keep_refs(
-    repo: &Repository,
-    proj: &Projection,
-    live: &[LivePos],
-    added: &[AddedRevision],
-) {
-    let id_of: HashMap<&str, u64> = live
-        .iter()
-        .map(|l| (l.change_key.as_str(), l.change_id))
-        .collect();
-    for change in &proj.changes {
-        for rev in &change.revisions {
-            objects::ensure_keep_ref(repo, proj.chain_id, change.id, rev.number, &rev.commit_sha);
-        }
-    }
-    // Every added revision's key is also in `live` (scan pushes both
-    // together), so id_of is exhaustive over added keys.
-    for a in added {
-        if let Some(&change_id) = id_of.get(a.change_key.as_str()) {
-            objects::ensure_keep_ref(repo, proj.chain_id, change_id, a.number, &a.commit_sha);
-        }
-    }
-}
-
-/// The branch ref is gone. Closed chains stay closed quietly; an active
-/// chain is only abandoned after the ref is missing on two consecutive
-/// scans ≥ 10s apart (mid-rebase protection).
-fn missing_branch(proj: &Projection, now: jiff::Timestamp) -> ScanResult {
-    if proj.status != ChainStatus::Active {
-        return ScanResult::nothing();
-    }
-    let marker = format!("branch '{}' not found", proj.branch);
-    match proj
-        .branch_missing_since
-        .as_deref()
-        .and_then(|s| s.parse::<jiff::Timestamp>().ok())
-    {
-        Some(prev) if now.as_second() - prev.as_second() >= 10 => {
-            let mut res = ScanResult::closed(ClosedStatus::Abandoned);
-            // delete_chain_keep_refs needs the repo; the branch is gone but
-            // the repo opens — best effort via the caller's next scan.
-            if let Ok(repo) = Repository::open(&proj.git_dir) {
-                objects::delete_chain_keep_refs(&repo, proj.chain_id);
-            }
-            res.branch_missing_since = None;
-            res
-        }
-        Some(prev) => ScanResult {
-            entries: Vec::new(),
-            error: Some(marker),
-            branch_missing_since: Some(prev.to_string()),
-        },
-        None => ScanResult {
-            entries: Vec::new(),
-            error: Some(marker),
-            branch_missing_since: Some(now.to_string()),
-        },
-    }
-}
-
-/// Walk `base..tip` oldest-first. Any merge commit aborts the scan with the
-/// documented error; so does a root commit (the diff/identity model needs a
-/// first parent everywhere). Returns the abort message on `Err`.
-fn walk_chain(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>, String> {
+/// Walk `base..tip` oldest-first, rejecting merge and root commits (the
+/// diff/identity model needs a single first parent everywhere).
+fn walk_linear(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>, String> {
     let mut walk = repo.revwalk().map_err(|e| e.to_string())?;
     walk.push(tip).map_err(|e| e.to_string())?;
     walk.hide(base).map_err(|e| e.to_string())?;
@@ -355,82 +124,9 @@ fn walk_chain(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>,
     Ok(commits)
 }
 
-/// Merged quorum: every live non-empty change's patch-id (or Change-Id
-/// trailer) must appear in `fork..base`, where fork is the chain's recorded
-/// fork point (the first live change's latest revision's parent). At least
-/// one real match required. Anything unverifiable counts against merging.
-fn merged_quorum(repo: &Repository, proj: &Projection, base: &Commit) -> bool {
-    // Candidates: live changes' latest revisions; if none (an earlier failed
-    // quorum orphaned everything), fall back to the orphans.
-    let mut candidates: Vec<(&str, &str, &str)> = Vec::new(); // (key, commit_sha, parent_sha)
-    for change in proj.changes_ordered() {
-        if change.orphaned {
-            continue;
-        }
-        match change.latest_revision() {
-            Some(rev) => candidates.push((&change.change_key, &rev.commit_sha, &rev.parent_sha)),
-            None => return false,
-        }
-    }
-    if candidates.is_empty() {
-        for change in &proj.changes {
-            if let Some(rev) = change.latest_revision() {
-                candidates.push((&change.change_key, &rev.commit_sha, &rev.parent_sha));
-            }
-        }
-    }
-    let Some((_, _, fork_sha)) = candidates.first() else {
-        return false;
-    };
-    let Ok(fork) = Oid::from_str(fork_sha) else {
-        return false;
-    };
-
-    let mut base_patch_ids: HashSet<String> = HashSet::new();
-    let mut base_trailers: HashSet<String> = HashSet::new();
-    let Ok(mut walk) = repo.revwalk() else {
-        return false;
-    };
-    if walk.push(base.id()).is_err() || walk.hide(fork).is_err() {
-        return false;
-    }
-    for oid in walk {
-        let Ok(oid) = oid else { return false };
-        let Ok(commit) = repo.find_commit(oid) else {
-            return false;
-        };
-        if let Some(trailer) =
-            identity::change_id_trailer(&String::from_utf8_lossy(commit.message_bytes()))
-        {
-            base_trailers.insert(trailer);
-        }
-        if commit.parent_count() == 1
-            && let (Ok(parent_tree), Ok(tree)) =
-                (commit.parent(0).and_then(|p| p.tree()), commit.tree())
-            && let Ok(pid) = objects::tree_patch_id(repo, &parent_tree, &tree)
-        {
-            base_patch_ids.insert(pid);
-        }
-    }
-
-    let mut any_matched = false;
-    for (key, commit_sha, _) in &candidates {
-        if base_trailers.contains(*key) {
-            any_matched = true;
-            continue;
-        }
-        match objects::sha_patch_id(repo, commit_sha) {
-            Some(pid) if pid == objects::EMPTY_PATCH_ID => {}
-            Some(pid) if base_patch_ids.contains(&pid) => any_matched = true,
-            _ => return false, // unverifiable or unmatched
-        }
-    }
-    any_matched
-}
-
 /// True when a revision differs from the previous one only by a rebase: a
-/// patch-id-equal commit with an unchanged message (the predicate behind
-/// review auto-retargeting in api.md). Unverifiable objects make it false.
+/// patch-id-equal commit with an unchanged message. Unverifiable objects make
+/// it false.
 #[must_use]
 pub fn pure_rebase(
     repo: &Repository,
@@ -447,4 +143,118 @@ pub fn pure_rebase(
             (objects::sha_patch_id(repo, old_sha), objects::sha_patch_id(repo, new_sha)),
             (Some(x), Some(y)) if x == y
         )
+}
+
+/// Whether the change's latest revision has **landed** on the canonical
+/// branch, returning the landed revision number (docs/data-model.md "The
+/// per-change merge timer"). The window is `base_sha..canonical`:
+///
+/// 1. **Change-Id match** — a commit in the window carries this change's key.
+///    If its patch-id matches the latest revision's, it landed; if it differs
+///    ("previously landed, now amended"), the change stays open (None).
+/// 2. **Patch-id match** — else the latest revision's patch-id appears in the
+///    window. An empty diff never alone counts as a landing.
+#[must_use]
+pub fn landed_revision(repo: &Repository, base_branch: &str, change: &ChangeProj) -> Option<u64> {
+    let latest = change.latest_revision()?;
+    let fork = Oid::from_str(&latest.base_sha).ok()?;
+    let base = resolve_commit(repo, base_branch).ok()?;
+
+    let mut base_pids: HashSet<String> = HashSet::new();
+    let mut keyed_pid: Option<Option<String>> = None; // Some(pid?) if a commit carries this key
+    let mut walk = repo.revwalk().ok()?;
+    walk.push(base).ok()?;
+    walk.hide(fork).ok()?;
+    for oid in walk {
+        let Ok(oid) = oid else { return None };
+        let Ok(commit) = repo.find_commit(oid) else {
+            return None;
+        };
+        let pid = (commit.parent_count() == 1)
+            .then(|| objects::sha_patch_id(repo, &oid.to_string()))
+            .flatten();
+        if let Some(p) = &pid {
+            base_pids.insert(p.clone());
+        }
+        if let Some(trailer) =
+            identity::change_id_trailer(&String::from_utf8_lossy(commit.message_bytes()))
+            && trailer == change.change_key
+        {
+            keyed_pid = Some(pid);
+        }
+    }
+
+    let latest_pid = objects::sha_patch_id(repo, &latest.commit_sha);
+    if let Some(landed) = keyed_pid {
+        // The Change-Id is in the base. Landed only if the patch-id matches the
+        // current revision; a mismatch is "landed earlier, since amended".
+        return match (landed, &latest_pid) {
+            (Some(a), Some(b)) if a == *b && a != objects::EMPTY_PATCH_ID => Some(latest.number),
+            _ => None,
+        };
+    }
+    match latest_pid {
+        Some(pid) if pid != objects::EMPTY_PATCH_ID && base_pids.contains(&pid) => {
+            Some(latest.number)
+        }
+        _ => None,
+    }
+}
+
+/// Whether `commit_sha` is reachable from any local branch ref (`refs/heads/*`)
+/// — nit's own `refs/nit/keep/*` are excluded, so they never keep an
+/// abandoned change alive. A non-terminal change whose latest revision is
+/// unreachable is an abandonment candidate (docs/data-model.md "Abandon and
+/// reopen").
+#[must_use]
+pub fn reachable_from_branches(repo: &Repository, commit_sha: &str) -> bool {
+    let Ok(oid) = Oid::from_str(commit_sha) else {
+        return false;
+    };
+    let Ok(branches) = repo.branches(Some(BranchType::Local)) else {
+        return false;
+    };
+    for branch in branches.flatten() {
+        let Ok(Some(target)) = branch.0.get().peel_to_commit().map(|c| Some(c.id())) else {
+            continue;
+        };
+        if target == oid || repo.graph_descendant_of(target, oid).unwrap_or(false) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Best-effort display name for a tip commit (docs/data-model.md "Tips"): a
+/// local branch pointing exactly at it, else one that contains it, else
+/// `None` (the caller falls back to the commit subject). nit stores no branch
+/// key — names are resolved here at query time.
+#[must_use]
+pub fn tip_name(repo: &Repository, tip_sha: &str) -> Option<String> {
+    let oid = Oid::from_str(tip_sha).ok()?;
+    let branches = repo.branches(Some(BranchType::Local)).ok()?;
+    let mut contains: Option<String> = None;
+    for branch in branches.flatten() {
+        let Some(name) = branch.0.name().ok().flatten().map(str::to_string) else {
+            continue;
+        };
+        let Ok(target) = branch.0.get().peel_to_commit().map(|c| c.id()) else {
+            continue;
+        };
+        if target == oid {
+            return Some(name);
+        }
+        if contains.is_none() && repo.graph_descendant_of(target, oid).unwrap_or(false) {
+            contains = Some(name);
+        }
+    }
+    contains
+}
+
+/// The keep-ref maintenance for one change's revisions — idempotent
+/// (docs/data-model.md "Keep refs").
+pub fn maintain_keep_refs(repo: &Repository, change: &ChangeProj) {
+    for rev in &change.revisions {
+        objects::ensure_keep_ref(repo, change.id, rev.number, &rev.commit_sha);
+    }
 }
