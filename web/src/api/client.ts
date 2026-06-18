@@ -3,6 +3,7 @@
 // contract-true fixtures in fixtures.ts instead of the network.
 
 import type {
+  AbandonRequest,
   Chain,
   ChainList,
   ChangeDetail,
@@ -120,3 +121,12 @@ export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 
 export const submitReview = (changeId: number, review: SubmitReviewRequest) =>
   request<SubmitReviewResponse>("POST", `/changes/${changeId}/reviews`, review);
+
+// ---------------------------------------------------------------------------
+// Lifecycle (abandon / reopen — explicit reviewer/agent actions)
+
+export const abandonChange = (changeId: number, req: AbandonRequest = {}) =>
+  request<ChangeDetail>("POST", `/changes/${changeId}/abandon`, req);
+
+export const reopenChange = (changeId: number) =>
+  request<ChangeDetail>("POST", `/changes/${changeId}/reopen`, {});

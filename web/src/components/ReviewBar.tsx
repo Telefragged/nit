@@ -1,7 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, submitReview } from "../api/client";
+import {
+  ApiError,
+  abandonChange,
+  reopenChange,
+  submitReview,
+} from "../api/client";
 import type { Chain, ChangeDetail, Verdict } from "../api/types";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
@@ -84,6 +89,20 @@ export default function ReviewBar({
     },
   });
 
+  // Abandon/reopen — an explicit lifecycle judgment, reversible. The change's
+  // terminal state rides on its path member (status is per (change, revision)).
+  const here = chain?.path.find((c) => c.change_id === change.id);
+  const abandoned = here?.status === "abandoned";
+  const lifecycle = useMutation({
+    mutationFn: () =>
+      abandoned ? reopenChange(change.id) : abandonChange(change.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["change", change.id] });
+      void queryClient.invalidateQueries({ queryKey: ["chain"] });
+      void queryClient.invalidateQueries({ queryKey: ["chains"] });
+    },
+  });
+
   // showModal() puts the dialog in the top layer and makes the rest of the
   // page inert: real focus containment behind the dialog role, and Escape
   // arrives as the `cancel` event no matter where focus sits (it can land
@@ -126,14 +145,30 @@ export default function ReviewBar({
     <>
       <div className="review-bar">
         {stats}
-        <button
-          className="btn-primary"
-          onClick={() => {
-            onReplyOpenChange(true);
-          }}
-        >
-          Review (a)
-        </button>
+        <div className="review-bar-actions">
+          <button
+            className="btn-lifecycle"
+            disabled={lifecycle.isPending}
+            title={
+              abandoned
+                ? "Reopen this change for review"
+                : "Mark this change abandoned (reversible)"
+            }
+            onClick={() => {
+              lifecycle.mutate();
+            }}
+          >
+            {abandoned ? "Reopen" : "Abandon"}
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              onReplyOpenChange(true);
+            }}
+          >
+            Review (a)
+          </button>
+        </div>
       </div>
       {replyOpen ? (
         // The native modal dialog is its own full-bleed backdrop; the

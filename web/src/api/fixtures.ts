@@ -1884,18 +1884,13 @@ function derivePath(tip: TipRecord): PathEntry[] {
   return walkPath(tip).map((m, i) => pathEntry(m, i));
 }
 
-/** A chain's derived state from its path members (docs/api.md state table). */
+/** A chain's derived state from its path members (docs/api.md state table).
+ * Abandonment is derivation-inert: abandoned members are dropped before the
+ * rollup, and there is no abandoned chain state. */
 function chainState(tip: TipRecord, path: PathEntry[]): ChainState {
-  const live = path.filter(
-    (e) => e.status !== "merged" && e.status !== "abandoned",
-  );
-  if (path.length > 0 && live.length === 0) {
-    // Every member terminal: merged unless any abandoned.
-    return path.every((e) => e.status === "merged")
-      ? "merged"
-      : "has_abandoned";
-  }
-  if (path.some((e) => e.status === "abandoned")) return "has_abandoned";
+  const live = path.filter((e) => e.status !== "abandoned");
+  if (live.length === 0) return "agents_turn"; // empty or all-abandoned tip
+  if (live.every((e) => e.status === "merged")) return "merged";
   if (
     live.some(
       (e) => e.status === "changes_requested" || e.status === "commented",
@@ -1904,12 +1899,9 @@ function chainState(tip: TipRecord, path: PathEntry[]): ChainState {
     return "agents_turn";
   }
   if (live.some((e) => e.status === "pending")) return "waiting_for_review";
-  if (live.length > 0 && live.every((e) => e.status === "approved")) {
-    // All approved while partial is agents_turn, never approved — the agent
-    // is still pushing (api.md state table).
-    return tip.partial ? "agents_turn" : "approved";
-  }
-  return "agents_turn"; // empty tip
+  // The rest are approved (≥1) and/or merged, no pending — approved, unless the
+  // tip is still partial (the agent is pushing), which is agents_turn.
+  return tip.partial ? "agents_turn" : "approved";
 }
 
 const newestEntryTime = (path: PathEntry[]): string => {
@@ -1973,7 +1965,7 @@ function resolveTip(
   const rev = revision ?? latestRevision(c).number;
   for (const tip of tips) {
     const member = derivePath(tip).find((e) => e.change_id === changeId);
-    if (member && member.revision === rev) return tip;
+    if (member?.revision === rev) return tip;
   }
   // No live tip pins this (change, revision): the change is its own tip.
   return {
@@ -2260,6 +2252,18 @@ export async function mockRequest(
       req.revision,
     );
     return { review, threads: [...touched.values()].map(renderThread) };
+  }
+
+  if ((m = /^\/changes\/(\d+)\/abandon$/.exec(p)) && method === "POST") {
+    const c = getChange(Number(m[1]));
+    c.terminal ??= "abandoned";
+    return changeDetail(c);
+  }
+
+  if ((m = /^\/changes\/(\d+)\/reopen$/.exec(p)) && method === "POST") {
+    const c = getChange(Number(m[1]));
+    if (c.terminal === "abandoned") c.terminal = undefined;
+    return changeDetail(c);
   }
 
   throw new ApiError(404, `mock: no route for ${method} ${path}`);

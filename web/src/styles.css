@@ -1485,6 +1485,21 @@ table.list tbody tr:hover {
   gap: 12px;
 }
 
+.review-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-lifecycle {
+  color: var(--text-dim);
+}
+
+.btn-lifecycle:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
 .review-stats {
   display: flex;
   gap: 12px;

@@ -30,10 +30,10 @@ export interface RepoList {
 // ---------------------------------------------------------------------------
 // Chains (derived; addressed by tip change id + ?revision)
 
-/** Derived chain state — see the normative state table in docs/api.md. */
+/** Derived chain state — see the normative state table in docs/api.md.
+ * Abandonment is derivation-inert, so there is no abandoned chain state. */
 export type ChainState =
   | "merged"
-  | "has_abandoned"
   | "agents_turn"
   | "waiting_for_review"
   | "approved";
@@ -312,6 +312,12 @@ export interface SubmitReviewResponse {
   review: Review;
   /** The threads this review created or added to. */
   threads: Thread[];
+}
+
+/** `POST /api/changes/{id}/abandon` body (`nit abandon`). The optional
+ * `message` records a reason; an absent body abandons without one. */
+export interface AbandonRequest {
+  message?: string;
 }
 
 // ---------------------------------------------------------------------------

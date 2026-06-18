@@ -8,7 +8,6 @@ const STATE_LABEL: Record<ChainState, string> = {
   agents_turn: "AGENT'S TURN",
   approved: "APPROVED",
   merged: "MERGED",
-  has_abandoned: "HAS ABANDONED",
 };
 
 const STATE_COLOR: Record<ChainState, string> = {
@@ -16,7 +15,6 @@ const STATE_COLOR: Record<ChainState, string> = {
   agents_turn: "blue",
   approved: "green",
   merged: "gray",
-  has_abandoned: "gray",
 };
 
 export function StateBadge({ state }: { state: ChainState }) {
