@@ -23,6 +23,7 @@ export default function ReviewBar({
   onReplyOpenChange,
 }: {
   change: ChangeDetail;
+  /** The selected revision's chain context, for next-change navigation. */
   chain: Chain | undefined;
   selectedRevision: number;
   /** Threads that would stay open once the staged drafts publish — computed
@@ -56,18 +57,17 @@ export default function ReviewBar({
       void queryClient.invalidateQueries({ queryKey: ["change", change.id] });
       void queryClient.invalidateQueries({ queryKey: ["chain"] });
       void queryClient.invalidateQueries({ queryKey: ["chains"] });
-      // Next pending change in chain order, else back to the chain.
-      const next = chain?.changes.find(
-        (c) =>
-          c.status === "pending" &&
-          c.position !== null &&
-          change.position !== null &&
-          c.position > change.position,
-      );
+      // Next pending member in path order, else back to the chain.
+      const here = chain?.path.find((c) => c.change_id === change.id);
+      const next =
+        here &&
+        chain?.path.find(
+          (c) => c.status === "pending" && c.position > here.position,
+        );
       if (next) {
-        void navigate(`/changes/${next.id}`);
+        void navigate(`/changes/${next.change_id}`);
       } else if (chain) {
-        void navigate(`/chains/${chain.id}`);
+        void navigate(`/chains/${chain.tip_change_id}`);
       } else {
         void navigate("/");
       }

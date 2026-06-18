@@ -17,6 +17,7 @@ const ctx: ReviewCtx = {
   changeId: 1,
   selected: 2,
   against: 1,
+  chains: [],
   editingTarget: null,
   setEditingTarget: () => false,
   setEditorDirty: () => undefined,

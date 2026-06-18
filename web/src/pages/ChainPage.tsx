@@ -1,48 +1,48 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { getChain } from "../api/client";
-import type { ChangeSummary } from "../api/types";
-import { StateBadge, StatusChip, PartialBadge } from "../components/badges";
-import { repoPath } from "../lib/repo";
-import { timeAgo } from "../lib/time";
+import type { PathEntry } from "../api/types";
+import {
+  StateBadge,
+  StatusChip,
+  PartialBadge,
+  NewerElsewhereBadge,
+} from "../components/badges";
 import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
 
-function ChangeRow({ change }: { change: ChangeSummary }) {
-  const rowNav = useRowNav(`/changes/${change.id}`);
-  const { counts } = change;
+function ChangeRow({ member }: { member: PathEntry }) {
+  const rowNav = useRowNav(`/changes/${member.change_id}`);
+  const { counts } = member;
   return (
     <tr {...rowNav}>
-      <td className="pos-cell mono">
-        {change.position !== null ? change.position + 1 : "—"}
-      </td>
+      <td className="pos-cell mono">{member.position}</td>
       <td className="subject-cell">
-        <Link to={`/changes/${change.id}`} className="subject">
-          {change.subject}
+        <Link to={`/changes/${member.change_id}`} className="subject">
+          {member.subject}
         </Link>
         <div className="meta">
-          <span className="mono sha">{change.short_sha}</span>
-          {change.last_reviewed_revision !== null &&
-          change.last_reviewed_revision < change.revision ? (
+          <span className="mono sha">{member.short_sha}</span>
+          {member.newer_elsewhere ? (
+            <NewerElsewhereBadge
+              revision={member.revision}
+              latest={member.latest_revision}
+            />
+          ) : null}
+          {member.merged_elsewhere ? (
             <span
-              className="badge badge-amber"
-              title={`New revision since your last review (r${change.last_reviewed_revision} → r${change.revision})`}
+              className="badge badge-gray"
+              title="A newer revision of this change landed on the canonical branch"
             >
-              UPDATED SINCE YOUR REVIEW ({change.last_reviewed_revision}→
-              {change.revision})
+              MERGED ELSEWHERE
             </span>
           ) : null}
         </div>
       </td>
       <td>
-        <StatusChip status={change.status} />
+        <StatusChip status={member.status} />
       </td>
-      <td className="count-cell mono">
-        r{change.revision}
-        {counts.revisions > 1 ? (
-          <span className="dim"> of {counts.revisions}</span>
-        ) : null}
-      </td>
+      <td className="count-cell mono">r{member.revision}</td>
       <td className="count-cell">
         <span className="counts">
           {counts.threads > 0 && (
@@ -69,10 +69,10 @@ function ChangeRow({ change }: { change: ChangeSummary }) {
 
 export default function ChainPage() {
   const { id } = useParams();
-  const chainId = Number(id);
+  const tipChangeId = Number(id);
   const query = useQuery({
-    queryKey: ["chain", chainId],
-    queryFn: () => getChain(chainId),
+    queryKey: ["chain", tipChangeId],
+    queryFn: () => getChain(tipChangeId),
     refetchInterval: 5_000,
   });
 
@@ -94,30 +94,20 @@ export default function ChainPage() {
   }
 
   const chain = query.data;
-  const live = chain.changes.filter((c) => c.status !== "orphaned");
-  const orphaned = chain.changes.filter((c) => c.status === "orphaned");
 
   return (
     <main className="page">
       <div className="chain-header">
-        <h1 className="mono">{chain.branch}</h1>
+        <h1 className="mono">{chain.name}</h1>
         <StateBadge state={chain.state} />
         {chain.partial ? <PartialBadge /> : null}
       </div>
       <p className="subtitle">
         <Link to={`/repos/${chain.repo_id}`} className="mono">
-          ← {repoPath(chain.git_dir)}
+          ← Repository
         </Link>{" "}
-        · base <span className="mono">{chain.base}</span> · updated{" "}
-        {timeAgo(chain.updated_at)}
+        · base <span className="mono">{chain.base_branch}</span>
       </p>
-
-      {chain.last_scan_error ? (
-        <div className="banner banner-error">
-          <strong>scan failed</strong>
-          <span className="banner-body">{chain.last_scan_error}</span>
-        </div>
-      ) : null}
 
       <table className="list changes-table">
         <thead>
@@ -130,36 +120,22 @@ export default function ChainPage() {
           </tr>
         </thead>
         <tbody>
-          {live.length === 0 ? (
+          {chain.path.length === 0 ? (
             <tr>
               <td colSpan={5}>
                 <div className="empty-state" style={{ border: "none" }}>
                   Chain is empty — the branch has no commits over{" "}
-                  <code>{chain.base}</code>.
+                  <code>{chain.base_branch}</code>.
                 </div>
               </td>
             </tr>
           ) : (
-            live.map((change) => <ChangeRow key={change.id} change={change} />)
+            chain.path.map((member) => (
+              <ChangeRow key={member.change_id} member={member} />
+            ))
           )}
         </tbody>
       </table>
-
-      {orphaned.length > 0 ? (
-        <details className="orphaned-block">
-          <summary>
-            {orphaned.length} orphaned change{orphaned.length > 1 ? "s" : ""} —
-            commits left the branch; comments preserved
-          </summary>
-          <table className="list changes-table">
-            <tbody>
-              {orphaned.map((change) => (
-                <ChangeRow key={change.id} change={change} />
-              ))}
-            </tbody>
-          </table>
-        </details>
-      ) : null}
     </main>
   );
 }

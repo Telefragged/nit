@@ -80,7 +80,15 @@ export const listChains = (
     `/chains?status=${status}${repo === undefined ? "" : `&repo=${repo}`}`,
   );
 
-export const getChain = (id: number) => request<Chain>("GET", `/chains/${id}`);
+/** The derived chain through a change's tip. `revision` selects which patchset
+ * of the change to root on (and hence the chain context). */
+export const getChain = (changeId: number, revision?: number) =>
+  request<Chain>(
+    "GET",
+    revision === undefined
+      ? `/chains/${changeId}`
+      : `/chains/${changeId}?revision=${revision}`,
+  );
 
 // ---------------------------------------------------------------------------
 // Changes

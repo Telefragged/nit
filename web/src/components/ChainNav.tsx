@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Chain } from "../api/types";
-import { StatusDot } from "./badges";
+import { NewerElsewhereBadge, StatusDot } from "./badges";
 
 /**
  * Chain navigation in the review sidebar, above the file list: one row per
- * change (status dot, position, subject, unresolved count), the current one
- * highlighted and siblings linking through. Sitting on top fixes its
+ * path member (status dot, position, subject, unresolved count), the current
+ * one highlighted and siblings linking through. Sitting on top fixes its
  * position so the rows stay put when you click between changes — the file
  * list below is the part whose length varies per change, so it (not the
  * chain) absorbs the reflow. A disclosure header collapses the list to give
  * the file list below more room; the list scrolls within its own height cap
  * when the chain itself is long (styles.css). The row layout mirrors the
- * file rail's, so the two stacked lists read as one.
+ * file rail's, so the two stacked lists read as one. A member pinned to an
+ * older revision than its latest carries a NEWER ELSEWHERE badge inline.
  */
 export default function ChainNav({
   chain,
@@ -24,10 +25,10 @@ export default function ChainNav({
   const [open, setOpen] = useState(true);
   if (!chain) return null;
 
-  const current = chain.changes.find((c) => c.id === currentId);
-  const posLabel = `${
-    current && current.position !== null ? current.position + 1 : "—"
-  }/${chain.changes.length}`;
+  const current = chain.path.find((c) => c.change_id === currentId);
+  const posLabel = `${current ? current.position + 1 : "—"}/${
+    chain.path.length
+  }`;
 
   return (
     <section className="chain-nav">
@@ -45,14 +46,20 @@ export default function ChainNav({
       </button>
       {open ? (
         <div className="chain-nav-list">
-          {chain.changes.map((c) => {
-            const pos = c.position !== null ? c.position + 1 : "—";
+          {chain.path.map((c) => {
+            const pos = c.position + 1;
             const title = `${pos}. ${c.subject} — ${c.status}`;
             const inner = (
               <>
                 <StatusDot status={c.status} />
                 <span className="pos mono dim">{pos}</span>
                 <span className="subj">{c.subject}</span>
+                {c.newer_elsewhere ? (
+                  <NewerElsewhereBadge
+                    revision={c.revision}
+                    latest={c.latest_revision}
+                  />
+                ) : null}
                 {c.counts.unresolved > 0 ? (
                   <span className="unresolved-count" title="unresolved threads">
                     {c.counts.unresolved} open
@@ -60,9 +67,9 @@ export default function ChainNav({
                 ) : null}
               </>
             );
-            return c.id === currentId ? (
+            return c.change_id === currentId ? (
               <div
-                key={c.id}
+                key={c.change_id}
                 className="chain-nav-row current"
                 aria-current="page"
                 title={`${title} (this change)`}
@@ -71,9 +78,9 @@ export default function ChainNav({
               </div>
             ) : (
               <Link
-                key={c.id}
+                key={c.change_id}
                 className="chain-nav-row"
-                to={`/changes/${c.id}`}
+                to={`/changes/${c.change_id}`}
                 title={title}
               >
                 {inner}

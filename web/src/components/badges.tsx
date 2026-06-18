@@ -8,7 +8,7 @@ const STATE_LABEL: Record<ChainState, string> = {
   agents_turn: "AGENT'S TURN",
   approved: "APPROVED",
   merged: "MERGED",
-  abandoned: "ABANDONED",
+  has_abandoned: "HAS ABANDONED",
 };
 
 const STATE_COLOR: Record<ChainState, string> = {
@@ -16,7 +16,7 @@ const STATE_COLOR: Record<ChainState, string> = {
   agents_turn: "blue",
   approved: "green",
   merged: "gray",
-  abandoned: "gray",
+  has_abandoned: "gray",
 };
 
 export function StateBadge({ state }: { state: ChainState }) {
@@ -35,12 +35,34 @@ export function PartialBadge() {
   return <span className="badge badge-gray">PARTIAL</span>;
 }
 
+/**
+ * A path member whose change has a newer patchset on another chain (the path
+ * pins an older revision). Informational — gray.
+ */
+export function NewerElsewhereBadge({
+  revision,
+  latest,
+}: {
+  revision: number;
+  latest: number;
+}) {
+  return (
+    <span
+      className="badge badge-gray"
+      title={`A newer revision (r${latest}) of this change lives on another chain; this chain pins r${revision}`}
+    >
+      NEWER ELSEWHERE
+    </span>
+  );
+}
+
 const STATUS_LABEL: Record<ChangeStatus, string> = {
   pending: "PENDING",
   approved: "APPROVED",
   changes_requested: "CHANGES REQUESTED",
   commented: "COMMENTED",
-  orphaned: "ORPHANED",
+  merged: "MERGED",
+  abandoned: "ABANDONED",
 };
 
 const STATUS_COLOR: Record<ChangeStatus, string> = {
@@ -48,7 +70,8 @@ const STATUS_COLOR: Record<ChangeStatus, string> = {
   approved: "green",
   changes_requested: "red",
   commented: "blue",
-  orphaned: "gray",
+  merged: "gray",
+  abandoned: "gray",
 };
 
 export function StatusChip({ status }: { status: ChangeStatus }) {

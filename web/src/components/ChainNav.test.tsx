@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Chain, ChangeStatus } from "../api/types";
+import type { Chain, ChangeStatus, PathEntry } from "../api/types";
 import ChainNav from "./ChainNav";
 
 afterEach(cleanup);
@@ -18,44 +18,47 @@ function must<T>(value: T | null | undefined, what: string): T {
   return value;
 }
 
-function change(
-  id: number,
+function member(
+  changeId: number,
   position: number,
   subject: string,
   status: ChangeStatus,
   unresolved = 0,
-) {
+  extra: Partial<PathEntry> = {},
+): PathEntry {
   return {
-    id,
+    change_id: changeId,
     position,
-    change_key: `I${id}`,
+    change_key: `I${changeId}`,
     subject,
     status,
     revision: 1,
-    last_reviewed_revision: null,
-    commit_sha: `sha${id}`,
-    short_sha: `sha${id}`,
-    counts: { revisions: 1, threads: 0, drafts: 0, unresolved },
+    latest_revision: 1,
+    newer_elsewhere: false,
+    merged_elsewhere: false,
+    commit_sha: `sha${changeId}`,
+    short_sha: `sha${changeId}`,
+    counts: { threads: 0, drafts: 0, unresolved },
+    ...extra,
   };
 }
 
 const chain: Chain = {
-  id: 1,
+  tip_change_id: 12,
   repo_id: 1,
-  git_dir: "/repo/.git",
-  branch: "feat/x",
-  base: "main",
-  status: "active",
+  name: "feat/x",
+  base_branch: "main",
   state: "waiting_for_review",
   partial: false,
-  last_scan_error: null,
-  web_url: "http://x/chains/1",
-  created_at: "2026-06-14T00:00:00Z",
-  updated_at: "2026-06-14T00:00:00Z",
-  changes: [
-    change(10, 0, "first change", "approved"),
-    change(11, 1, "second change", "changes_requested", 2),
-    change(12, 2, "third change", "pending"),
+  web_url: "http://x/chains/12",
+  path: [
+    member(10, 0, "first change", "approved"),
+    member(11, 1, "second change", "changes_requested", 2, {
+      newer_elsewhere: true,
+      revision: 1,
+      latest_revision: 3,
+    }),
+    member(12, 2, "third change", "pending"),
   ],
 };
 
@@ -78,9 +81,9 @@ describe("ChainNav", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("lists every change, links the siblings, and marks the current one", () => {
+  it("lists every member, links the siblings, and marks the current one", () => {
     renderNav(11);
-    // The header tracks the current change's 1-based position over the count.
+    // The header tracks the current member's 1-based position over the count.
     expect(screen.getByRole("button").textContent).toContain("2/3");
 
     expect(document.querySelectorAll(".chain-nav-row")).toHaveLength(3);
@@ -92,7 +95,7 @@ describe("ChainNav", () => {
       "/changes/12",
     ]);
 
-    // Current change: a non-link row, flagged for assistive tech, highlighted,
+    // Current member: a non-link row, flagged for assistive tech, highlighted,
     // and the only one carrying its open-thread count.
     const current = must(
       document.querySelector<HTMLElement>(".chain-nav-row.current"),
@@ -102,6 +105,17 @@ describe("ChainNav", () => {
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(within(current).getByText("2 open")).toBeTruthy();
     expect(document.querySelectorAll(".unresolved-count")).toHaveLength(1);
+  });
+
+  it("badges a member pinned to an older revision than its latest", () => {
+    renderNav(11);
+    // The current member pins r1 while r3 lives on another chain.
+    const current = must(
+      document.querySelector<HTMLElement>(".chain-nav-row.current"),
+      ".chain-nav-row.current",
+    );
+    expect(within(current).getByText("NEWER ELSEWHERE")).toBeTruthy();
+    expect(document.querySelectorAll(".badge")).toHaveLength(1);
   });
 
   it("collapses and expands the list from the disclosure header", () => {

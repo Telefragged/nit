@@ -3,19 +3,35 @@
 // so the whole UI (including drafts, resolve, review submission and 409s)
 // works without a backend. The data doubles as component-test fixtures.
 //
+// Chains are DERIVED, never stored: a tip is a (tip_change_id, repo) pair,
+// and its path is computed by walking the tip revision's parent_sha back to
+// the repo's base through the commit-sha → (change, revision) index (a
+// gerrit relation chain — docs/api.md "Chains", docs/data-model.md "Scan
+// algorithm"). A change's displayed status is per (change, revision): the
+// verdict of the latest review at that revision, else pending (terminal
+// merged/abandoned win).
+//
 // Coverage on purpose:
-//   chain 1  waiting_for_review — 3 changes; change 11 has 2 revisions
-//            (amended in place, interdiff available), a resolved thread,
-//            an unresolved thread, a thread on a line r2 rewrote (all
-//            pinned to r1, so they land on the left of the r1 → r2
+//   repo 1 (acme-runtime)
+//     tip change 12  waiting_for_review — 3 changes; change 11 has 2
+//            revisions (amended in place, interdiff available), a resolved
+//            thread, an unresolved thread, a thread on a line r2 rewrote
+//            (all pinned to r1, so they land on the left of the r1 → r2
 //            interdiff), 2 drafts, plus a resolved thread on its commit
 //            message (/COMMIT_MSG) and a reworded r2 message so the
 //            interdiff carries a real message diff; change 12's diff has a
 //            rename and a binary file.
-//   chain 2  agents_turn — a changes_requested change, mid-push (partial),
-//            plus a Change-Id-validation scan error.
-//   chain 3  approved — single approved change.
-//   chain 4  merged — only visible via ?status=all.
+//     tip change 40  merged — only visible via ?status=all.
+//   repo 2 (quarry)
+//     tip change 20  agents_turn — a changes_requested change, mid-push
+//            (partial).
+//     tip change 30  approved — single approved change.
+//   repo 3 (orbit)  the B-in-two-chains example (docs/api.md): one change
+//            (B = 51) reached by two tips at two patchsets — tip C (53) walks
+//            B at rev0, tip E (55) walks B at rev1. B's rev0 member carries
+//            newer_elsewhere (a newer patchset lives on E's chain) and its
+//            rev1 carries merged_elsewhere (a newer revision landed on main);
+//            ChangeDetail.chains lists both tips.
 //
 // Every stored diff leads with the synthetic /COMMIT_MSG file, like the
 // real server (docs/api.md "The commit message as a file").
@@ -24,11 +40,11 @@ import { ApiError } from "./client";
 import { COMMIT_MSG_PATH } from "./types";
 import type {
   Chain,
+  ChainRef,
   ChainState,
-  ChainStatus,
+  ChainSummary,
   ChangeDetail,
   ChangeStatus,
-  ChangeSummary,
   CommentRange,
   CommentSide,
   CreateDraftRequest,
@@ -36,6 +52,7 @@ import type {
   DiffFile,
   Draft,
   Line,
+  PathEntry,
   Repo,
   Review,
   Revision,
@@ -102,35 +119,51 @@ function msgFile(message: string): DiffFile {
 
 // ---------------------------------------------------------------------------
 // Mutable store shapes
-
-interface ChainRecord {
-  id: number;
-  repo_id: number;
-  git_dir: string;
-  branch: string;
-  base: string;
-  status: ChainStatus;
-  /** Sticky; set by push --partial, cleared by ready. */
-  partial: boolean;
-  last_scan_error: string | null;
-  created_at: string;
-  updated_at: string;
-  /** Change ids in chain order. */
-  change_ids: number[];
-}
+//
+// A change owns its revisions, reviews and diffs. It is no longer pinned to
+// a chain or a position — those are properties of a derived path. The
+// change's displayed status at a revision is derived from `reviews` (the
+// verdict of the latest review at that revision), unless `terminal` marks it
+// merged/abandoned change-wide.
 
 interface ChangeRecord {
   id: number;
-  chain_id: number;
+  repo_id: number;
   change_key: string;
-  position: number | null;
-  status: ChangeStatus;
   subject: string;
   last_reviewed_revision: number | null;
+  /** A terminal change-wide status (merged/abandoned); overrides reviews. */
+  terminal?: Extract<ChangeStatus, "merged" | "abandoned">;
+  /** A newer revision of this change landed on the canonical branch; drives
+   * `merged_elsewhere` on whichever path member pins an older revision. */
+  merged_revision?: number;
   revisions: Revision[];
   reviews: Review[];
   /** Keyed by diffKey(revision, against). */
   diffs: Record<string, Diff>;
+}
+
+/** A tip commit: the head of one derived chain. The set of these is the only
+ * thing the dashboard enumerates; the path is walked from `parent_sha`. */
+interface TipRecord {
+  tip_change_id: number;
+  repo_id: number;
+  /** The patchset of the tip change this tip pins (its head revision). */
+  revision: number;
+  /** Best-effort name (a branch ref in reality); fixtures store the label. */
+  name: string;
+  /** Sticky; set by push --partial, cleared by ready — on the tip's latest. */
+  partial: boolean;
+  /** Terminal tips (every member merged/abandoned) — off the dashboard's
+   * default `active` view. */
+  active: boolean;
+}
+
+/** A repo registry entry (docs/api.md "Repos"). */
+interface RepoRecord {
+  id: number;
+  git_dir: string;
+  base_branch: string;
 }
 
 /** A published thread (its anchor, rolled-up resolution and conversation) —
@@ -174,13 +207,22 @@ const diffKey = (revision: number, against?: number) =>
   against === undefined ? `r${revision}` : `r${against}..r${revision}`;
 
 // ---------------------------------------------------------------------------
-// Chain 1 — feat/token-rotation (waiting_for_review)
+// Repos
+
+const repos: RepoRecord[] = [
+  { id: 1, git_dir: "/home/vetle/src/acme-runtime/.git", base_branch: "main" },
+  { id: 2, git_dir: "/home/vetle/src/quarry/.git", base_branch: "main" },
+  { id: 3, git_dir: "/home/vetle/src/orbit/.git", base_branch: "main" },
+];
+
+// ---------------------------------------------------------------------------
+// repo 1 — acme-runtime: feat/token-rotation (tip change 12)
 
 const c10r1 = sha(101);
 const c11r1 = sha(111);
 const c11r2 = sha(112);
 const c12r1 = sha(121);
-const parent10 = sha(100);
+const parent10 = sha(100); // merge-base on main (not a change)
 
 const msg10r1 =
   "auth: add TokenStore schema and config plumbing\n\n" +
@@ -191,10 +233,8 @@ const msg10r1 =
 
 const change10: ChangeRecord = {
   id: 10,
-  chain_id: 1,
+  repo_id: 1,
   change_key: "I9a41c7e2b3d4f5a6",
-  position: 0,
-  status: "approved",
   subject: "auth: add TokenStore schema and config plumbing",
   last_reviewed_revision: 1,
   revisions: [
@@ -203,6 +243,8 @@ const change10: ChangeRecord = {
       commit_sha: c10r1,
       short_sha: short(c10r1),
       parent_sha: parent10,
+      base_sha: parent10,
+      partial: false,
       message: msg10r1,
       created_at: ago(26 * 60),
     },
@@ -302,10 +344,8 @@ const msg11r2 =
 
 const change11: ChangeRecord = {
   id: 11,
-  chain_id: 1,
+  repo_id: 1,
   change_key: "I3f2d8a91c0b7e514",
-  position: 1,
-  status: "pending",
   subject: "auth: rotate refresh tokens on use",
   last_reviewed_revision: 1,
   revisions: [
@@ -314,6 +354,8 @@ const change11: ChangeRecord = {
       commit_sha: c11r1,
       short_sha: short(c11r1),
       parent_sha: c10r1,
+      base_sha: parent10,
+      partial: false,
       message: msg11r1,
       created_at: ago(25 * 60),
     },
@@ -324,6 +366,8 @@ const change11: ChangeRecord = {
       commit_sha: c11r2,
       short_sha: short(c11r2),
       parent_sha: c10r1,
+      base_sha: parent10,
+      partial: false,
       message: msg11r2,
       created_at: ago(95),
     },
@@ -794,10 +838,8 @@ const msg12r1 =
 
 const change12: ChangeRecord = {
   id: 12,
-  chain_id: 1,
+  repo_id: 1,
   change_key: "I77b0e4f5a8123c9d",
-  position: 2,
-  status: "pending",
   subject: "auth: document rotation and ship flow diagram",
   last_reviewed_revision: null,
   revisions: [
@@ -806,6 +848,8 @@ const change12: ChangeRecord = {
       commit_sha: c12r1,
       short_sha: short(c12r1),
       parent_sha: c11r2,
+      base_sha: parent10,
+      partial: false,
       message: msg12r1,
       created_at: ago(90),
     },
@@ -866,7 +910,80 @@ const change12: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// Chain 2 — fix/wal-checkpoint (agents_turn)
+// repo 1 — build/rustls (tip change 40, merged; only with ?status=all)
+
+const c40r1 = sha(401);
+
+const msg40r1 =
+  "build: drop unused openssl feature\n\nChange-Id: I0d9c8b7a6f5e4321";
+
+const change40: ChangeRecord = {
+  id: 40,
+  repo_id: 1,
+  change_key: "I0d9c8b7a6f5e4321",
+  subject: "build: drop unused openssl feature",
+  last_reviewed_revision: 1,
+  terminal: "merged",
+  revisions: [
+    {
+      number: 1,
+      commit_sha: c40r1,
+      short_sha: short(c40r1),
+      parent_sha: sha(400),
+      base_sha: sha(400),
+      partial: false,
+      message: msg40r1,
+      created_at: ago(4 * 24 * 60),
+    },
+  ],
+  reviews: [
+    {
+      id: 8,
+      revision: 1,
+      verdict: "approve",
+      message: "",
+      created_at: ago(3 * 24 * 60),
+    },
+  ],
+  diffs: {
+    [diffKey(1)]: {
+      files: [
+        msgFile(msg40r1),
+        {
+          path: "Cargo.toml",
+          status: "modified",
+          binary: false,
+          additions: 1,
+          deletions: 1,
+          hunks: [
+            {
+              old_start: 14,
+              old_lines: 3,
+              new_start: 14,
+              new_lines: 3,
+              header: "[dependencies]",
+              lines: [
+                ctx(14, 14, 'serde = { version = "1", features = ["derive"] }'),
+                del(
+                  15,
+                  'reqwest = { version = "0.12", features = ["native-tls"] }',
+                ),
+                add(
+                  15,
+                  'reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }',
+                ),
+                ctx(16, 16, 'tokio = { version = "1", features = ["full"] }'),
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  },
+};
+
+// ---------------------------------------------------------------------------
+// repo 2 — quarry: fix/wal-checkpoint (tip change 20, agents_turn, partial)
 
 const c20r1 = sha(201);
 const parent20 = sha(200);
@@ -879,10 +996,8 @@ const msg20r1 =
 
 const change20: ChangeRecord = {
   id: 20,
-  chain_id: 2,
+  repo_id: 2,
   change_key: "Ib8d3e6f1a4c75290",
-  position: 0,
-  status: "changes_requested",
   subject: "wal: checkpoint on idle, not on every commit",
   last_reviewed_revision: 1,
   revisions: [
@@ -891,6 +1006,8 @@ const change20: ChangeRecord = {
       commit_sha: c20r1,
       short_sha: short(c20r1),
       parent_sha: parent20,
+      base_sha: parent20,
+      partial: true,
       message: msg20r1,
       created_at: ago(8 * 60),
     },
@@ -986,7 +1103,7 @@ const change20: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// Chain 3 — chore/dedupe-ci-cache (approved)
+// repo 2 — quarry: chore/dedupe-ci-cache (tip change 30, approved)
 
 const c30r1 = sha(301);
 
@@ -997,10 +1114,8 @@ const msg30r1 =
 
 const change30: ChangeRecord = {
   id: 30,
-  chain_id: 3,
+  repo_id: 2,
   change_key: "Ie1f4a7b2c5d80936",
-  position: 0,
-  status: "approved",
   subject: "ci: key caches on lockfile hash only",
   last_reviewed_revision: 1,
   revisions: [
@@ -1009,6 +1124,8 @@ const change30: ChangeRecord = {
       commit_sha: c30r1,
       short_sha: short(c30r1),
       parent_sha: sha(300),
+      base_sha: sha(300),
+      partial: false,
       message: msg30r1,
       created_at: ago(50 * 60),
     },
@@ -1058,138 +1175,234 @@ const change30: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// Chain 4 — merged (only listed with ?status=all)
+// repo 3 — orbit: the B-in-two-chains example (docs/api.md "Chains")
+//
+//   push 1:  m → A(50) → B(51) → C(53)      Change-Ids Ia, Ib, Ic
+//   push 2:  m → D(52) → B′(51) → E(55)     Change-Ids Id, Ib, Ie
+//
+// B is one change (51) with two patchsets: rev0 parent=A, rev1 parent=D.
+// Two tips, two chains: chains/53 walks B at rev0, chains/55 walks B at rev1.
+// Threads/reviews on B are shared (they belong to the change), each anchored
+// to the revision it was written against. Revisions are 0-based here (the new
+// API), so this scenario exercises rev0 / rev1 display directly.
 
-const c40r1 = sha(401);
+const mOrbit = sha(500); // merge-base on main
+const cA = sha(501);
+const cB0 = sha(510); // B rev0 (parent A)
+const cB1 = sha(511); // B rev1 (parent D)
+const cC = sha(530);
+const cD = sha(520);
+const cE = sha(550);
 
-const msg40r1 =
-  "build: drop unused openssl feature\n\nChange-Id: I0d9c8b7a6f5e4321";
+const msgA =
+  "orbit: extract the scheduler trait\n\n" +
+  "Pulls the run-queue behind a Scheduler trait so the fair and the\n" +
+  "deadline policies can share a driver.\n\n" +
+  "Change-Id: Iaa11bb22cc33dd44";
+const msgD =
+  "orbit: add a deadline clock source\n\n" +
+  "A monotonic clock the deadline scheduler reads; injectable in tests.\n\n" +
+  "Change-Id: Idd44cc33bb22aa11";
+const msgB =
+  "orbit: fair-share scheduler policy\n\n" +
+  "Weights each task by its recent CPU share and picks the lightest,\n" +
+  "so a busy task can't starve the queue.\n\n" +
+  "Change-Id: Ibb22cc33dd44ee55";
+const msgC =
+  "orbit: wire the fair policy into the runtime\n\n" +
+  "Change-Id: Icc33dd44ee55ff66";
+const msgE =
+  "orbit: deadline policy on top of fair-share\n\n" +
+  "Change-Id: Iee55ff66aa11bb22";
 
-const change40: ChangeRecord = {
-  id: 40,
-  chain_id: 4,
-  change_key: "I0d9c8b7a6f5e4321",
-  position: 0,
-  status: "approved",
-  subject: "build: drop unused openssl feature",
-  last_reviewed_revision: 1,
+function trivialDiff(message: string, path: string, line: string): Diff {
+  return {
+    files: [
+      msgFile(message),
+      {
+        path,
+        status: "modified",
+        binary: false,
+        additions: 1,
+        deletions: 0,
+        hunks: [
+          {
+            old_start: 1,
+            old_lines: 1,
+            new_start: 1,
+            new_lines: 2,
+            header: "",
+            lines: [ctx(1, 1, "// orbit"), add(2, line)],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+const changeA: ChangeRecord = {
+  id: 50,
+  repo_id: 3,
+  change_key: "Iaa11bb22cc33dd44",
+  subject: "orbit: extract the scheduler trait",
+  last_reviewed_revision: 0,
   revisions: [
     {
-      number: 1,
-      commit_sha: c40r1,
-      short_sha: short(c40r1),
-      parent_sha: sha(400),
-      message: msg40r1,
-      created_at: ago(4 * 24 * 60),
+      number: 0,
+      commit_sha: cA,
+      short_sha: short(cA),
+      parent_sha: mOrbit,
+      base_sha: mOrbit,
+      partial: false,
+      message: msgA,
+      created_at: ago(7 * 60),
     },
   ],
   reviews: [
     {
-      id: 8,
-      revision: 1,
+      id: 20,
+      revision: 0,
       verdict: "approve",
-      message: "",
-      created_at: ago(3 * 24 * 60),
+      message: "Clean extraction.",
+      created_at: ago(6 * 60),
     },
   ],
   diffs: {
-    [diffKey(1)]: {
-      files: [
-        msgFile(msg40r1),
-        {
-          path: "Cargo.toml",
-          status: "modified",
-          binary: false,
-          additions: 1,
-          deletions: 1,
-          hunks: [
-            {
-              old_start: 14,
-              old_lines: 3,
-              new_start: 14,
-              new_lines: 3,
-              header: "[dependencies]",
-              lines: [
-                ctx(14, 14, 'serde = { version = "1", features = ["derive"] }'),
-                del(
-                  15,
-                  'reqwest = { version = "0.12", features = ["native-tls"] }',
-                ),
-                add(
-                  15,
-                  'reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }',
-                ),
-                ctx(16, 16, 'tokio = { version = "1", features = ["full"] }'),
-              ],
-            },
-          ],
-        },
-      ],
+    [diffKey(0)]: trivialDiff(
+      msgA,
+      "src/sched/mod.rs",
+      "pub trait Scheduler {}",
+    ),
+  },
+};
+
+const changeD: ChangeRecord = {
+  id: 52,
+  repo_id: 3,
+  change_key: "Idd44cc33bb22aa11",
+  subject: "orbit: add a deadline clock source",
+  last_reviewed_revision: null,
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cD,
+      short_sha: short(cD),
+      parent_sha: mOrbit,
+      base_sha: mOrbit,
+      partial: false,
+      message: msgD,
+      created_at: ago(2 * 60),
     },
+  ],
+  reviews: [],
+  diffs: {
+    [diffKey(0)]: trivialDiff(msgD, "src/clock.rs", "pub struct Monotonic;"),
+  },
+};
+
+// B: two patchsets. rev0 (parent A) is approved and a newer rev landed on
+// main (merged_revision = 1) → its rev0 path member shows merged_elsewhere;
+// rev1 (parent D) is pending. From C's chain B sits at rev0 with a newer
+// patchset elsewhere (newer_elsewhere); from E's chain B sits at rev1.
+const changeB: ChangeRecord = {
+  id: 51,
+  repo_id: 3,
+  change_key: "Ibb22cc33dd44ee55",
+  subject: "orbit: fair-share scheduler policy",
+  last_reviewed_revision: 0,
+  merged_revision: 1,
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cB0,
+      short_sha: short(cB0),
+      parent_sha: cA,
+      base_sha: mOrbit,
+      partial: false,
+      message: msgB,
+      created_at: ago(6 * 60),
+    },
+    {
+      number: 1,
+      commit_sha: cB1,
+      short_sha: short(cB1),
+      parent_sha: cD,
+      base_sha: mOrbit,
+      partial: false,
+      message: msgB,
+      created_at: ago(90),
+    },
+  ],
+  reviews: [
+    {
+      id: 21,
+      revision: 0,
+      verdict: "approve",
+      message: "Weighting looks right; LGTM on this patchset.",
+      created_at: ago(5 * 60),
+    },
+  ],
+  diffs: {
+    [diffKey(0)]: trivialDiff(msgB, "src/sched/fair.rs", "// fair-share v0"),
+    [diffKey(1)]: trivialDiff(msgB, "src/sched/fair.rs", "// fair-share v1"),
+  },
+};
+
+const changeC: ChangeRecord = {
+  id: 53,
+  repo_id: 3,
+  change_key: "Icc33dd44ee55ff66",
+  subject: "orbit: wire the fair policy into the runtime",
+  last_reviewed_revision: null,
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cC,
+      short_sha: short(cC),
+      parent_sha: cB0,
+      base_sha: mOrbit,
+      partial: false,
+      message: msgC,
+      created_at: ago(5 * 60),
+    },
+  ],
+  reviews: [],
+  diffs: {
+    [diffKey(0)]: trivialDiff(
+      msgC,
+      "src/runtime.rs",
+      "use crate::sched::fair;",
+    ),
+  },
+};
+
+const changeE: ChangeRecord = {
+  id: 55,
+  repo_id: 3,
+  change_key: "Iee55ff66aa11bb22",
+  subject: "orbit: deadline policy on top of fair-share",
+  last_reviewed_revision: null,
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cE,
+      short_sha: short(cE),
+      parent_sha: cB1,
+      base_sha: mOrbit,
+      partial: false,
+      message: msgE,
+      created_at: ago(80),
+    },
+  ],
+  reviews: [],
+  diffs: {
+    [diffKey(0)]: trivialDiff(msgE, "src/sched/deadline.rs", "// deadline v0"),
   },
 };
 
 // ---------------------------------------------------------------------------
-// Chains
-
-const chains: ChainRecord[] = [
-  {
-    id: 1,
-    repo_id: 1,
-    git_dir: "/home/vetle/src/acme-runtime/.git",
-    branch: "feat/token-rotation",
-    base: "main",
-    status: "active",
-    partial: false,
-    last_scan_error: null,
-    created_at: ago(26 * 60),
-    updated_at: ago(85),
-    change_ids: [10, 11, 12],
-  },
-  {
-    id: 2,
-    repo_id: 2,
-    git_dir: "/home/vetle/src/quarry/.git",
-    branch: "fix/wal-checkpoint",
-    base: "main",
-    status: "active",
-    // The agent is mid-push (nit push --partial); exercises the PARTIAL badge.
-    partial: true,
-    // The latest push failed Change-Id validation; exercises the scan-error
-    // banner (prior state stays served).
-    last_scan_error:
-      "commits without a Change-Id trailer (9f3c21a4d2e1) — every commit needs one",
-    created_at: ago(9 * 60),
-    updated_at: ago(112),
-    change_ids: [20],
-  },
-  {
-    id: 3,
-    repo_id: 2,
-    git_dir: "/home/vetle/src/quarry/.git",
-    branch: "chore/dedupe-ci-cache",
-    base: "main",
-    status: "active",
-    partial: false,
-    last_scan_error: null,
-    created_at: ago(50 * 60),
-    updated_at: ago(40 * 60),
-    change_ids: [30],
-  },
-  {
-    id: 4,
-    repo_id: 1,
-    git_dir: "/home/vetle/src/acme-runtime/.git",
-    branch: "build/rustls",
-    base: "main",
-    status: "merged",
-    partial: false,
-    last_scan_error: null,
-    created_at: ago(5 * 24 * 60),
-    updated_at: ago(3 * 24 * 60),
-    change_ids: [40],
-  },
-];
+// The change set and the tip set (the only things the dashboard enumerates;
+// every chain path is derived from parent_sha — see `walkPath`).
 
 const changes: ChangeRecord[] = [
   change10,
@@ -1198,6 +1411,66 @@ const changes: ChangeRecord[] = [
   change20,
   change30,
   change40,
+  changeA,
+  changeB,
+  changeC,
+  changeD,
+  changeE,
+];
+
+const tips: TipRecord[] = [
+  // repo 1
+  {
+    tip_change_id: 12,
+    repo_id: 1,
+    revision: 1,
+    name: "feat/token-rotation",
+    partial: false,
+    active: true,
+  },
+  {
+    tip_change_id: 40,
+    repo_id: 1,
+    revision: 1,
+    name: "build/rustls",
+    partial: false,
+    active: false, // merged — only with ?status=all
+  },
+  // repo 2
+  {
+    tip_change_id: 20,
+    repo_id: 2,
+    revision: 1,
+    // The agent is mid-push (nit push --partial); exercises the PARTIAL badge.
+    name: "fix/wal-checkpoint",
+    partial: true,
+    active: true,
+  },
+  {
+    tip_change_id: 30,
+    repo_id: 2,
+    revision: 1,
+    name: "chore/dedupe-ci-cache",
+    partial: false,
+    active: true,
+  },
+  // repo 3 — two tips through the shared change B (51)
+  {
+    tip_change_id: 53,
+    repo_id: 3,
+    revision: 0,
+    name: "feat/fair-sched",
+    partial: false,
+    active: true,
+  },
+  {
+    tip_change_id: 55,
+    repo_id: 3,
+    revision: 0,
+    name: "feat/deadline-sched",
+    partial: false,
+    active: true,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1423,6 +1696,30 @@ const threads: ThreadRecord[] = [
     created_at: ago(3 * 60),
     updated_at: ago(3 * 60),
   },
+  // change 51 (B) — a shared thread on rev0, the patchset C's chain walks.
+  // It belongs to the change, so both chains see it; it renders against rev0.
+  {
+    id: 82,
+    change_id: 51,
+    revision: 0,
+    file: "src/sched/fair.rs",
+    line: 2,
+    side: "new",
+    line_text: "// fair-share v0",
+    resolved: false,
+    comments: [
+      {
+        author: "reviewer",
+        body:
+          "Recent-share window: is it EWMA or a fixed ring? Spell it out — it " +
+          "decides how fast a task recovers priority.",
+        review_id: 21,
+        created_at: ago(5 * 60),
+      },
+    ],
+    created_at: ago(5 * 60),
+    updated_at: ago(5 * 60),
+  },
 ];
 
 // change 11 — the reviewer's in-progress drafts on revision 2: two new
@@ -1484,99 +1781,237 @@ let nextThreadId = 300;
 let nextReviewId = 50;
 
 // ---------------------------------------------------------------------------
-// Derivations (counts, chain state) so mutations stay consistent
+// Derivations (status, counts, chain state, path) so mutations stay consistent
 
 const WEB_BASE = "http://127.0.0.1:8877";
 
-function chainState(chain: ChainRecord): ChainState {
-  if (chain.status === "merged") return "merged";
-  if (chain.status === "abandoned") return "abandoned";
-  const live = changes.filter(
-    (c) => c.chain_id === chain.id && c.status !== "orphaned",
-  );
-  if (
-    live.some(
-      (c) => c.status === "changes_requested" || c.status === "commented",
-    )
-  ) {
-    return "agents_turn";
-  }
-  if (live.some((c) => c.status === "pending")) return "waiting_for_review";
-  if (live.length > 0 && live.every((c) => c.status === "approved")) {
-    // All approved while partial is agents_turn, never approved — the
-    // agent is still pushing (api.md state table).
-    return chain.partial ? "agents_turn" : "approved";
-  }
-  return "agents_turn"; // empty chain
+/** The commit-sha → (change, revision) index — the basis for the SHA-walk
+ * that derives every chain path (docs/api.md "Chains"). */
+const shaIndex = new Map<
+  string,
+  { change: ChangeRecord; revision: Revision }
+>();
+for (const c of changes) {
+  for (const r of c.revisions)
+    shaIndex.set(r.commit_sha, { change: c, revision: r });
 }
 
-function changeSummary(c: ChangeRecord): ChangeSummary {
-  const ownThreads = threads.filter((x) => x.change_id === c.id);
-  const ownDrafts = drafts.filter((x) => x.change_id === c.id);
-  const latest = c.revisions[c.revisions.length - 1];
-  if (!latest) throw new Error(`change ${c.id} has no revisions`);
+const latestRevision = (c: ChangeRecord): Revision => {
+  const r = c.revisions[c.revisions.length - 1];
+  if (!r) throw new Error(`change ${c.id} has no revisions`);
+  return r;
+};
+
+/** A change's displayed status at a given revision (docs/api.md "State
+ * table"): terminal wins; else the verdict of the latest review at that
+ * revision, falling back to pending. */
+function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
+  if (c.terminal) return c.terminal;
+  const review = c.reviews
+    .filter((r) => r.revision === revision)
+    .sort((a, b) => a.id - b.id)
+    .at(-1);
+  if (!review) return "pending";
+  const byVerdict: Record<Verdict, ChangeStatus> = {
+    approve: "approved",
+    request_changes: "changes_requested",
+    comment: "commented",
+  };
+  return byVerdict[review.verdict];
+}
+
+/** Walk a tip back to base through parent_sha, oldest-first (base → tip).
+ * Each member pins the revision the tip walked through (the sha in the
+ * index); the walk stops at a parent_sha that is no change (the merge-base
+ * on the canonical branch). */
+function walkPath(
+  tip: TipRecord,
+): { change: ChangeRecord; revision: Revision }[] {
+  const tipChange = changes.find((c) => c.id === tip.tip_change_id);
+  if (!tipChange) throw new Error(`unknown tip change ${tip.tip_change_id}`);
+  const tipRev =
+    tipChange.revisions.find((r) => r.number === tip.revision) ??
+    latestRevision(tipChange);
+  const out: { change: ChangeRecord; revision: Revision }[] = [
+    { change: tipChange, revision: tipRev },
+  ];
+  let parent = tipRev.parent_sha;
+  for (
+    let member = shaIndex.get(parent);
+    member !== undefined;
+    member = shaIndex.get(parent)
+  ) {
+    out.push(member);
+    parent = member.revision.parent_sha;
+  }
+  return out.reverse(); // base → tip
+}
+
+function pathEntry(
+  member: { change: ChangeRecord; revision: Revision },
+  position: number,
+): PathEntry {
+  const { change: c, revision: rev } = member;
+  const ownThreads = threads.filter(
+    (t) => t.change_id === c.id && t.revision === rev.number,
+  );
+  const ownDrafts = drafts.filter(
+    (d) => d.change_id === c.id && d.revision === rev.number,
+  );
+  const latest = latestRevision(c).number;
   return {
-    id: c.id,
-    position: c.position,
+    change_id: c.id,
+    position,
     change_key: c.change_key,
+    revision: rev.number,
+    latest_revision: latest,
+    newer_elsewhere: latest > rev.number,
+    status: statusAt(c, rev.number),
+    merged_elsewhere:
+      c.merged_revision !== undefined && c.merged_revision > rev.number,
     subject: c.subject,
-    status: c.status,
-    revision: latest.number,
-    last_reviewed_revision: c.last_reviewed_revision,
-    commit_sha: latest.commit_sha,
-    short_sha: latest.short_sha,
+    commit_sha: rev.commit_sha,
+    short_sha: rev.short_sha,
     counts: {
-      revisions: c.revisions.length,
       threads: ownThreads.length,
       drafts: ownDrafts.length,
-      unresolved: ownThreads.filter((x) => !x.resolved).length,
+      unresolved: ownThreads.filter((t) => !t.resolved).length,
     },
   };
 }
 
-/** Derive the repo registry from the chain fixtures (grouped by repo_id),
- * mirroring the server's `GET /api/repos` shape. */
-function repoList(): Repo[] {
-  const seen = new Map<number, { git_dir: string; active_chains: number }>();
-  for (const c of chains) {
-    const entry = seen.get(c.repo_id) ?? {
-      git_dir: c.git_dir,
-      active_chains: 0,
-    };
-    if (c.status === "active") entry.active_chains += 1;
-    seen.set(c.repo_id, entry);
-  }
-  return [...seen.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([id, { git_dir, active_chains }]) => ({
-      id,
-      git_dir,
-      active_chains,
-    }));
+function derivePath(tip: TipRecord): PathEntry[] {
+  return walkPath(tip).map((m, i) => pathEntry(m, i));
 }
 
-function chainView(chain: ChainRecord): Chain {
+/** A chain's derived state from its path members (docs/api.md state table). */
+function chainState(tip: TipRecord, path: PathEntry[]): ChainState {
+  const live = path.filter(
+    (e) => e.status !== "merged" && e.status !== "abandoned",
+  );
+  if (path.length > 0 && live.length === 0) {
+    // Every member terminal: merged unless any abandoned.
+    return path.every((e) => e.status === "merged")
+      ? "merged"
+      : "has_abandoned";
+  }
+  if (path.some((e) => e.status === "abandoned")) return "has_abandoned";
+  if (
+    live.some(
+      (e) => e.status === "changes_requested" || e.status === "commented",
+    )
+  ) {
+    return "agents_turn";
+  }
+  if (live.some((e) => e.status === "pending")) return "waiting_for_review";
+  if (live.length > 0 && live.every((e) => e.status === "approved")) {
+    // All approved while partial is agents_turn, never approved — the agent
+    // is still pushing (api.md state table).
+    return tip.partial ? "agents_turn" : "approved";
+  }
+  return "agents_turn"; // empty tip
+}
+
+const newestEntryTime = (path: PathEntry[]): string => {
+  // The newest member-entry time across the path; fall back to the latest
+  // revision's created_at via the change set.
+  let newest = "";
+  for (const e of path) {
+    const c = changes.find((x) => x.id === e.change_id);
+    const rev = c?.revisions.find((r) => r.number === e.revision);
+    for (const t of [
+      rev?.created_at,
+      ...threads
+        .filter((th) => th.change_id === e.change_id)
+        .map((th) => th.updated_at),
+    ]) {
+      if (t && t > newest) newest = t;
+    }
+  }
+  return newest;
+};
+
+function chainSummary(tip: TipRecord): ChainSummary {
+  const path = derivePath(tip);
   return {
-    id: chain.id,
-    repo_id: chain.repo_id,
-    git_dir: chain.git_dir,
-    branch: chain.branch,
-    base: chain.base,
-    status: chain.status,
-    state: chainState(chain),
-    partial: chain.partial,
-    last_scan_error: chain.last_scan_error,
-    web_url: `${WEB_BASE}/chains/${chain.id}`,
-    created_at: chain.created_at,
-    updated_at: chain.updated_at,
-    changes: chain.change_ids
-      .map((id) => {
-        const c = changes.find((x) => x.id === id);
-        if (!c) throw new Error(`unknown change ${id}`);
-        return c;
-      })
-      .map(changeSummary),
+    tip_change_id: tip.tip_change_id,
+    repo_id: tip.repo_id,
+    name: tip.name,
+    state: chainState(tip, path),
+    partial: tip.partial,
+    web_url: `${WEB_BASE}/chains/${tip.tip_change_id}`,
+    updated_at: newestEntryTime(path),
+    path,
   };
+}
+
+function chainView(tip: TipRecord): Chain {
+  const path = derivePath(tip);
+  const repo = repos.find((r) => r.id === tip.repo_id);
+  return {
+    tip_change_id: tip.tip_change_id,
+    repo_id: tip.repo_id,
+    name: tip.name,
+    base_branch: repo?.base_branch ?? "main",
+    state: chainState(tip, path),
+    partial: tip.partial,
+    web_url: `${WEB_BASE}/chains/${tip.tip_change_id}`,
+    path,
+  };
+}
+
+/** Resolve `GET /chains/{change_id}?revision=N` to a tip (mirrors the backend's
+ * `tip_for`): a live tip whose path walks `changeId` at that revision, else the
+ * change as its own degenerate tip. So an INTERIOR change resolves to the tip
+ * that extends through it (the full chain), not a 404. */
+function resolveTip(
+  changeId: number,
+  revision?: number,
+): TipRecord | undefined {
+  const c = changes.find((x) => x.id === changeId);
+  if (!c) return undefined;
+  const rev = revision ?? latestRevision(c).number;
+  for (const tip of tips) {
+    const member = derivePath(tip).find((e) => e.change_id === changeId);
+    if (member && member.revision === rev) return tip;
+  }
+  // No live tip pins this (change, revision): the change is its own tip.
+  return {
+    tip_change_id: changeId,
+    repo_id: c.repo_id,
+    revision: rev,
+    name: c.change_key.slice(0, 8),
+    partial: false,
+    active: !c.terminal,
+  };
+}
+
+/** Every tip walking through a change, each with the patchset it pins there
+ * (docs/api.md `ChainRef`). */
+function chainsThrough(c: ChangeRecord): ChainRef[] {
+  const refs: ChainRef[] = [];
+  for (const tip of tips) {
+    const member = derivePath(tip).find((e) => e.change_id === c.id);
+    if (!member) continue;
+    refs.push({
+      tip_change_id: tip.tip_change_id,
+      revision: member.revision,
+      name: tip.name,
+      web_url: `${WEB_BASE}/chains/${tip.tip_change_id}`,
+    });
+  }
+  return refs;
+}
+
+/** Derive the repo registry (docs/api.md `GET /api/repos`). `active_chains`
+ * is the live tip count for the repo. */
+function repoList(): Repo[] {
+  return repos.map((r) => ({
+    id: r.id,
+    git_dir: r.git_dir,
+    base_branch: r.base_branch,
+    active_chains: tips.filter((t) => t.repo_id === r.id && t.active).length,
+  }));
 }
 
 /** A thread/draft record → its wire shape; anchors are served verbatim (the
@@ -1591,16 +2026,15 @@ function renderDraft(d: DraftRecord): Draft {
 function changeDetail(c: ChangeRecord): ChangeDetail {
   return {
     id: c.id,
-    chain_id: c.chain_id,
+    repo_id: c.repo_id,
     change_key: c.change_key,
-    position: c.position,
-    status: c.status,
     subject: c.subject,
     last_reviewed_revision: c.last_reviewed_revision,
     revisions: c.revisions,
     threads: threads.filter((x) => x.change_id === c.id).map(renderThread),
     drafts: drafts.filter((x) => x.change_id === c.id).map(renderDraft),
     reviews: c.reviews,
+    chains: chainsThrough(c),
   };
 }
 
@@ -1658,19 +2092,29 @@ export async function mockRequest(
   if (method === "GET" && p === "/chains") {
     const status = q.get("status") ?? "active";
     const repo = q.get("repo");
-    const listed = chains.filter(
-      (c) =>
-        (status === "all" || c.status === "active") &&
-        (repo === null || c.repo_id === Number(repo)),
+    const listed = tips.filter(
+      (t) =>
+        (status === "all" || t.active) &&
+        (repo === null || t.repo_id === Number(repo)),
     );
-    return { chains: listed.map(chainView) };
+    return { chains: listed.map(chainSummary) };
+  }
+
+  // The aggregated chain log is not in this cut (events return later); serve
+  // an empty timeline so the endpoint exists.
+  if ((m = /^\/chains\/(\d+)\/log$/.exec(p)) && method === "GET") {
+    const id = Number(m[1]);
+    if (!tips.some((t) => t.tip_change_id === id))
+      return notFound(`chain ${id}`);
+    return { entries: [] };
   }
 
   if ((m = /^\/chains\/(\d+)$/.exec(p)) && method === "GET") {
     const id = Number(m[1]);
-    const chain = chains.find((c) => c.id === id);
-    if (!chain) return notFound(`chain ${m[1] ?? ""}`);
-    return chainView(chain);
+    const revision = q.has("revision") ? Number(q.get("revision")) : undefined;
+    const tip = resolveTip(id, revision);
+    if (!tip) return notFound(`chain ${id}`);
+    return chainView(tip);
   }
 
   if ((m = /^\/changes\/(\d+)$/.exec(p)) && method === "GET") {
@@ -1718,7 +2162,7 @@ export async function mockRequest(
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "PATCH") {
     const id = Number(m[1]);
     const d = drafts.find((x) => x.id === id);
-    if (!d) return notFound(`draft ${m[1] ?? ""}`);
+    if (!d) return notFound(`draft ${id}`);
     const req = body as { body: string; resolved?: boolean };
     d.body = req.body;
     if (req.resolved !== undefined) d.resolved = req.resolved;
@@ -1729,7 +2173,7 @@ export async function mockRequest(
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "DELETE") {
     const id = Number(m[1]);
     const i = drafts.findIndex((x) => x.id === id);
-    if (i < 0) notFound(`draft ${m[1] ?? ""}`);
+    if (i < 0) notFound(`draft ${id}`);
     drafts.splice(i, 1);
     return undefined;
   }
@@ -1737,9 +2181,7 @@ export async function mockRequest(
   if ((m = /^\/changes\/(\d+)\/reviews$/.exec(p)) && method === "POST") {
     const c = getChange(Number(m[1]));
     const req = body as SubmitReviewRequest;
-    const latestRev = c.revisions[c.revisions.length - 1];
-    if (!latestRev) throw new Error(`change ${c.id} has no revisions`);
-    const latest = latestRev.number;
+    const latest = latestRevision(c).number;
     if (req.revision !== latest) {
       // The pure-rebase auto-retarget path can't occur in fixtures; any
       // stale revision is a real conflict here.
@@ -1813,18 +2255,10 @@ export async function mockRequest(
       }
       drafts.splice(drafts.indexOf(d), 1);
     }
-    const statusByVerdict: Record<Verdict, ChangeStatus> = {
-      approve: "approved",
-      request_changes: "changes_requested",
-      comment: "commented",
-    };
-    c.status = statusByVerdict[req.verdict];
     c.last_reviewed_revision = Math.max(
       c.last_reviewed_revision ?? 0,
       req.revision,
     );
-    const chain = chains.find((x) => x.id === c.chain_id);
-    if (chain) chain.updated_at = now;
     return { review, threads: [...touched.values()].map(renderThread) };
   }
 

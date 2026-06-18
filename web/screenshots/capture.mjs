@@ -61,11 +61,10 @@ const captures = [
   { name: "repos", path: "/" },
   // A repo's chain list (the old dashboard, now scoped to /repos/:id).
   { name: "dashboard", path: "/repos/2" },
-  { name: "chain-waiting", path: "/chains/1" },
-  // Chain 2 is partial (push --partial) and carries a scan error: covers the
-  // PARTIAL badge and the validation-error banner in the chain header here
-  // and on its dashboard row above.
-  { name: "chain-agents-turn", path: "/chains/2" },
+  // Chains are addressed by tip change id now: tip 12 (waiting), tip 20
+  // (agent's turn, partial). The chain page renders the derived path.
+  { name: "chain-waiting", path: "/chains/12" },
+  { name: "chain-agents-turn", path: "/chains/20" },
   // Change 11 has last_reviewed_revision 1 < latest 2 → interdiff by default.
   { name: "review-interdiff", path: "/changes/11" },
   // Long review cover message expanded via the "more" toggle. Viewport-only
@@ -479,9 +478,13 @@ async function liveCaptures(baseUrl) {
   const { chains } = await res.json();
   const caps = [{ name: "live-dashboard", path: "/" }];
   for (const chain of chains) {
-    caps.push({ name: `live-chain-${chain.id}`, path: `/chains/${chain.id}` });
-    for (const ch of chain.changes.slice(0, 2)) {
-      caps.push({ name: `live-change-${ch.id}`, path: `/changes/${ch.id}` });
+    const tip = chain.tip_change_id;
+    caps.push({ name: `live-chain-${tip}`, path: `/chains/${tip}` });
+    for (const ch of chain.path.slice(0, 2)) {
+      caps.push({
+        name: `live-change-${ch.change_id}`,
+        path: `/changes/${ch.change_id}`,
+      });
     }
   }
   return caps;

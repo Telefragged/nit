@@ -75,7 +75,7 @@ const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
 
 /** Resolve the ?against param into a diff base for the selected revision.
  * Grammar: "base" → explicit full diff vs parent; "M" → interdiff
- * rM → rSelected when 1 <= M < selected (junk falls back to full diff);
+ * rM → rSelected when 0 <= M < selected (junk falls back to full diff);
  * absent → implicit interdiff since the reviewer's last review when they
  * are behind on the latest revision (the only `implicit: true` case). */
 function deriveDiffBase(
@@ -86,7 +86,7 @@ function deriveDiffBase(
 ): { against: number | undefined; implicit: boolean } {
   if (raw !== null) {
     const m = Number(raw);
-    const valid = Number.isInteger(m) && m >= 1 && m < selected;
+    const valid = Number.isInteger(m) && m >= 0 && m < selected;
     return { against: valid ? m : undefined, implicit: false };
   }
   if (
@@ -228,11 +228,6 @@ export default function ReviewPage() {
   });
   const change = changeQ.data;
 
-  const chainQ = useQuery({
-    queryKey: ["chain", change?.chain_id],
-    queryFn: change ? () => getChain(change.chain_id) : skipToken,
-  });
-
   const [layout, setLayout] = useState<Layout>(() =>
     localStorage.getItem(LAYOUT_KEY) === "split" ? "split" : "unified",
   );
@@ -266,6 +261,14 @@ export default function ReviewPage() {
     revisions.find((r) => r.number === (revisionParam ?? latest?.number)) ??
     latest;
   const selected = selectedRev?.number ?? 1;
+
+  // The chain context is the derived chain through this change rooted at the
+  // viewed revision — the path whose ChainRef pins `selected`. Fetched with
+  // the revision so switching patchsets re-roots onto that revision's chain.
+  const chainQ = useQuery({
+    queryKey: ["chain", changeId, selected],
+    queryFn: change ? () => getChain(changeId, selected) : skipToken,
+  });
 
   const againstRaw = searchParams.get("against");
   const lastReviewed = change?.last_reviewed_revision ?? null;
@@ -323,6 +326,7 @@ export default function ReviewPage() {
       changeId,
       selected,
       against,
+      chains: change?.chains ?? [],
       editingTarget,
       // Moving or clearing the target unmounts the inline CommentEditor and
       // destroys its draft, so this is a discard path: confirm while dirty.
@@ -346,7 +350,7 @@ export default function ReviewPage() {
         editorDirty.current = dirty;
       },
     }),
-    [changeId, selected, against, editingTarget],
+    [changeId, selected, against, change?.chains, editingTarget],
   );
 
   // The reviewer's view of every thread: published threads merged with their
@@ -365,7 +369,7 @@ export default function ReviewPage() {
   );
 
   const navigate = useNavigate();
-  const chainChanges = chainQ.data?.changes;
+  const chainPath = chainQ.data?.path;
   const fileCount = files.length;
 
   // Change-level draft (no file/line anchor).
@@ -398,14 +402,13 @@ export default function ReviewPage() {
         );
         revealFile(next);
       } else if (e.key === "n" || e.key === "p") {
-        if (!chainChanges || !change || change.position === null) return;
-        const live = chainChanges
-          .filter((c) => c.position !== null)
-          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-        const idx = live.findIndex((c) => c.id === change.id);
+        // Prev/next path member in chain order, derived from the selected
+        // revision's chain context.
+        if (!chainPath) return;
+        const idx = chainPath.findIndex((c) => c.change_id === changeId);
         if (idx < 0) return;
-        const next = live[idx + (e.key === "n" ? 1 : -1)];
-        if (next) void navigate(`/changes/${next.id}`);
+        const next = chainPath[idx + (e.key === "n" ? 1 : -1)];
+        if (next) void navigate(`/changes/${next.change_id}`);
       } else if (e.key === "c") {
         // Draft a comment on the selected diff text (gerrit's c) — or on
         // the caret's line when the selection is collapsed.
@@ -437,8 +440,8 @@ export default function ReviewPage() {
     fileCount,
     activeFile,
     revealFile,
-    chainChanges,
-    change,
+    chainPath,
+    changeId,
     navigate,
     replyOpen,
     ctxValue,
@@ -513,7 +516,7 @@ export default function ReviewPage() {
   // File threads shown in the current diff range: a line comment whose
   // (revision, side) is one of the displayed columns, or a file-level
   // comment (no column to filter by). Everything pinned to another
-  // revision drops out — of the diff, the rail counts, and the orphan
+  // revision drops out — of the diff, the rail counts, and the leftover
   // group alike (docs/api.md "Comment placement").
   const threadsByFile = useMemo(() => {
     const map = new Map<string, UiThread[]>();
@@ -551,6 +554,9 @@ export default function ReviewPage() {
   }
 
   const chain = chainQ.data;
+  // This change's entry in the selected revision's chain — its position and
+  // displayed status now live on the path member, not on ChangeDetail.
+  const here = chain?.path.find((c) => c.change_id === change.id);
   const allFilesExpanded = allExpanded(expanded, files);
 
   /** Collapsing the section that hosts the open inline CommentEditor
@@ -621,13 +627,17 @@ export default function ReviewPage() {
       <main className="page-wide review-page">
         <div className="review-header">
           <div className="crumb-line">
-            <Link to={`/chains/${change.chain_id}`}>
-              {chain?.branch ?? `chain ${change.chain_id}`}
-            </Link>
+            <Link to={`/repos/${change.repo_id}`}>repo {change.repo_id}</Link>
+            <span className="sep">/</span>
+            {chain ? (
+              <Link to={`/chains/${chain.tip_change_id}`}>{chain.name}</Link>
+            ) : (
+              <span className="dim">chain</span>
+            )}
             <span className="sep">/</span>
             <span className="dim">
-              change {change.position !== null ? change.position + 1 : "—"}
-              {chain ? ` of ${chain.changes.length}` : ""}
+              change {here ? here.position + 1 : "—"}
+              {chain ? ` of ${chain.path.length}` : ""}
             </span>
             <span className="sep">·</span>
             <span className="mono dim" title={change.change_key}>
@@ -636,7 +646,7 @@ export default function ReviewPage() {
           </div>
           <div className="subject-line">
             <h1>{subjectLine}</h1>
-            <StatusChip status={change.status} />
+            {here ? <StatusChip status={here.status} /> : null}
           </div>
           <div className="meta-line">
             <span className="dim">

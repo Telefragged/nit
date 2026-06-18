@@ -14,6 +14,7 @@ function RepoRow({ repo }: { repo: Repo }) {
         <Link className="branch" to={`/repos/${repo.id}`}>
           {repoPath(repo.git_dir)}
         </Link>
+        <div className="repo">base {repo.base_branch}</div>
       </td>
       <td className="count-cell">
         {repo.active_chains} active{" "}
@@ -30,6 +31,7 @@ function SkeletonRows() {
         <tr key={i}>
           <td>
             <div className="skeleton" style={{ width: 240 }} />
+            <div className="skeleton" style={{ width: 110, marginTop: 6 }} />
           </td>
           <td>
             <div className="skeleton" style={{ width: 70 }} />

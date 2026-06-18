@@ -1,29 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { listChains, listRepos } from "../api/client";
-import type { Chain } from "../api/types";
+import type { ChainSummary } from "../api/types";
 import { StateBadge, StatusDot, PartialBadge } from "../components/badges";
 import { repoPath } from "../lib/repo";
 import { timeAgo } from "../lib/time";
 import { useRowNav } from "../lib/useRowNav";
 import { ErrorPanel } from "./NotFound";
 
-function ChainRow({ chain }: { chain: Chain }) {
-  const rowNav = useRowNav(`/chains/${chain.id}`);
+function ChainRow({ chain }: { chain: ChainSummary }) {
+  const rowNav = useRowNav(`/chains/${chain.tip_change_id}`);
   return (
     <tr {...rowNav}>
       <td className="branch-cell">
-        <div>
-          <Link className="branch" to={`/chains/${chain.id}`}>
-            {chain.branch}
-          </Link>
-          {chain.last_scan_error ? (
-            <span className="error-glyph" title={chain.last_scan_error}>
-              ✗ scan failed
-            </span>
-          ) : null}
-        </div>
-        <div className="repo">base {chain.base}</div>
+        <Link className="branch" to={`/chains/${chain.tip_change_id}`}>
+          {chain.name}
+        </Link>
       </td>
       <td>
         <div className="badge-group">
@@ -33,11 +25,11 @@ function ChainRow({ chain }: { chain: Chain }) {
       </td>
       <td>
         <div className="dots">
-          {chain.changes.map((change) => (
-            <Link key={change.id} to={`/changes/${change.id}`}>
+          {chain.path.map((member) => (
+            <Link key={member.change_id} to={`/changes/${member.change_id}`}>
               <StatusDot
-                status={change.status}
-                title={`${(change.position ?? 0) + 1}. ${change.subject} — ${change.status}`}
+                status={member.status}
+                title={`${member.position + 1}. ${member.subject} — ${member.status}`}
               />
             </Link>
           ))}
@@ -55,7 +47,6 @@ function SkeletonRows() {
         <tr key={i}>
           <td>
             <div className="skeleton" style={{ width: 180 }} />
-            <div className="skeleton" style={{ width: 110, marginTop: 6 }} />
           </td>
           <td>
             <div className="skeleton" style={{ width: 120 }} />
@@ -87,16 +78,22 @@ export default function Dashboard() {
   });
 
   const repo = reposQuery.data?.repos.find((r) => r.id === id);
-  const gitDir = repo?.git_dir ?? query.data?.chains[0]?.git_dir;
 
   return (
     <main className="page">
-      <h1 className="mono">{gitDir ? repoPath(gitDir) : "Repository"}</h1>
+      <h1 className="mono">{repo ? repoPath(repo.git_dir) : "Repository"}</h1>
       <p className="subtitle">
         <Link to="/" className="mono">
           ← Repositories
         </Link>{" "}
-        · active review chains in this repo.
+        · active review chains
+        {repo ? (
+          <>
+            {" "}
+            over <span className="mono">{repo.base_branch}</span>
+          </>
+        ) : null}
+        .
       </p>
       {query.isError ? (
         <ErrorPanel error={query.error} />
@@ -124,7 +121,7 @@ export default function Dashboard() {
               </tr>
             ) : (
               query.data.chains.map((chain) => (
-                <ChainRow key={chain.id} chain={chain} />
+                <ChainRow key={chain.tip_change_id} chain={chain} />
               ))
             )}
           </tbody>
