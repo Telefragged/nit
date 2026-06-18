@@ -5,8 +5,8 @@
 //!
 //! A chain is addressed by its **tip change id**. `nit status`/`nit log`
 //! resolve the cwd's tip change from local HEAD; `nit comment` targets a change
-//! directly. (The live followers `nit wait` / `nit log --follow` return in a
-//! later stage.)
+//! directly. The live followers `nit wait` / `nit log --follow` watch the
+//! cwd's chain over the websocket change stream (docs/api.md "Events").
 
 use std::path::{Path, PathBuf};
 
@@ -68,14 +68,37 @@ pub struct ReadyArgs {
 
 #[derive(clap::Args)]
 pub struct LogArgs {
-    /// Entry positions or half-open ranges into the aggregated chain log
-    /// (sorted by global seq): `3`, `5..9`, `5..`, `..9`, `..` (all).
-    /// Defaults to `..`.
+    /// Without `--follow`: entry positions or half-open ranges into the
+    /// aggregated chain log (sorted by global seq): `3`, `5..9`, `5..`, `..9`,
+    /// `..` (all, the default). With `--follow`: a single global `seq` cursor
+    /// to stream from.
     #[arg(default_value = "..")]
     pub ranges: Vec<String>,
     /// Chain to read, by its tip change id; overrides the cwd lookup.
     #[arg(long)]
     pub chain: Option<u64>,
+    /// Print a one-line digest per entry instead of full payloads
+    #[arg(long)]
+    pub oneline: bool,
+    /// Follow the log: replay from the cursor, then stream each new entry as it
+    /// lands — a parked monitor. Rides out restarts; runs until stopped.
+    #[arg(long)]
+    pub follow: bool,
+    /// With `--follow`, relay only reviewer activity worth acting on (the
+    /// `nit wait` wake rule): drop the agent's own entries and a comment-less
+    /// approve that leaves the chain short of `approved`.
+    #[arg(long, requires = "follow")]
+    pub reviewer_only: bool,
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
+    #[arg(long)]
+    pub server: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct WaitArgs {
+    /// Global `seq` cursor: the highest log seq already consumed (start at 0,
+    /// then pass the `cursor` each result prints; docs/agent-workflow.md).
+    pub cursor: u64,
     /// Print a one-line digest per entry instead of full payloads
     #[arg(long)]
     pub oneline: bool,
@@ -246,7 +269,7 @@ pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
     let change_id = match args.chain {
         Some(id) => id,
-        None => resolve_tip_change(&client)?,
+        None => resolve_tip_change(&client, Retry::No)?,
     };
     let chain = client.get(&format!("/api/chains/{change_id}"))?;
     if args.oneline {
@@ -263,9 +286,20 @@ pub fn status(args: StatusArgs) -> Result<()> {
 /// When a range is malformed or the server can't be reached.
 pub fn log(args: LogArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
+    if args.follow {
+        let [spec] = args.ranges.as_slice() else {
+            bail!("--follow takes a single starting seq cursor (e.g. `0` or `..`)");
+        };
+        let cursor = follow_cursor(spec)?;
+        let change_id = match args.chain {
+            Some(id) => id,
+            None => resolve_tip_change(&client, Retry::No)?,
+        };
+        return follow(&client, change_id, cursor, args.oneline, args.reviewer_only);
+    }
     let change_id = match args.chain {
         Some(id) => id,
-        None => resolve_tip_change(&client)?,
+        None => resolve_tip_change(&client, Retry::No)?,
     };
     let log = client.get(&format!("/api/chains/{change_id}/log"))?;
     let all = log["entries"].as_array().cloned().unwrap_or_default();
@@ -278,6 +312,202 @@ pub fn log(args: LogArgs) -> Result<()> {
         print_oneline_entries(&entries);
     } else {
         print_json(&json!({"entries": entries}))?;
+    }
+    Ok(())
+}
+
+/// Block until the chain's aggregated log holds something worth acting on past
+/// the `seq` cursor, then print `{cursor, entries, feedback}`. No timeout — the
+/// agent calls this only when it has nothing else to do.
+///
+/// Each pass **drains `(cursor, head]` from the log** (the log is the source of
+/// truth), applies the wake rule, and on a non-waking run blocks the websocket
+/// as a doorbell — block until any new entry lands, then re-drain. Reading from
+/// the log rather than the stream is what makes a single `wait` surface *every*
+/// entry since the cursor, not just the first. Rides out server restarts.
+///
+/// # Errors
+/// When the server returns a malformed response or a fatal client error.
+pub fn wait(args: WaitArgs) -> Result<()> {
+    let client = Client::new(server_url(args.server));
+    let retry = Retry::UntilUp;
+    let mut cursor = args.cursor;
+    loop {
+        let tip = resolve_tip_change(&client, retry)?;
+        let log = client.get_retry(&format!("/api/chains/{tip}/log"), retry)?;
+        let entries: Vec<Value> = log["entries"].as_array().cloned().unwrap_or_default();
+        let fresh: Vec<Value> = entries
+            .iter()
+            .filter(|e| e["seq"].as_u64().unwrap_or(0) > cursor)
+            .cloned()
+            .collect();
+        cursor = max_seq(&entries).max(cursor);
+
+        if !fresh.is_empty() {
+            let feedback = client.get_retry(&format!("/api/chains/{tip}"), retry)?;
+            let state = feedback["state"].as_str().unwrap_or("");
+            if fresh.iter().any(|e| event_wakes(e, state)) {
+                let resp = json!({"cursor": cursor, "entries": fresh, "feedback": feedback});
+                print_wait(&resp, args.oneline)?;
+                return Ok(());
+            }
+        }
+        // Nothing actionable: park on the websocket until the head advances.
+        wait_for_entry(&client, &entries, retry)?;
+    }
+}
+
+/// Park the websocket as a doorbell: subscribe the chain's changes at their
+/// current heads (no backlog replay) and block until the first live frame, then
+/// return so the caller re-drains the log. Rides out restarts.
+fn wait_for_entry(client: &Client, entries: &[Value], retry: Retry) -> Result<()> {
+    let subs = heads(entries);
+    loop {
+        let mut socket = client.ws_connect(&subs, retry)?;
+        loop {
+            match socket.read() {
+                Ok(tungstenite::Message::Text(_)) => return Ok(()), // an entry landed
+                Ok(tungstenite::Message::Ping(p)) => {
+                    let _ = socket.send(tungstenite::Message::Pong(p));
+                }
+                Ok(tungstenite::Message::Close(_)) | Err(_) => break, // reconnect
+                Ok(_) => {}
+            }
+        }
+    }
+}
+
+/// Follow the aggregated chain log as a parked monitor: replay `(cursor, head]`,
+/// then relay each new entry as it lands, until stopped. Rides out restarts
+/// (reconnect re-reads the gap from the log). `reviewer_only` drops the agent's
+/// own entries and applies the wake rule to the reviewer's.
+///
+/// # Errors
+/// When a connect fails fatally or stdout can't be written.
+fn follow(
+    client: &Client,
+    change_id: u64,
+    mut cursor: u64,
+    oneline: bool,
+    reviewer_only: bool,
+) -> Result<()> {
+    let retry = Retry::UntilUp;
+    loop {
+        // Re-derive the chain each connect: a new tip enters the watch set, a
+        // departed change goes quiet (self-healing, never needs new_parent).
+        let log = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
+        let entries: Vec<Value> = log["entries"].as_array().cloned().unwrap_or_default();
+        for e in &entries {
+            if e["seq"].as_u64().unwrap_or(0) > cursor {
+                cursor = cursor.max(e["seq"].as_u64().unwrap_or(cursor));
+                relay(e, oneline, reviewer_only)?;
+            }
+        }
+        let mut socket = client.ws_connect(&heads(&entries), retry)?;
+        loop {
+            match socket.read() {
+                Ok(tungstenite::Message::Text(text)) => {
+                    let Ok(entry) = serde_json::from_str::<Value>(text.as_str()) else {
+                        continue;
+                    };
+                    if entry.get("new_parent").is_some() {
+                        break; // re-derive the chain (picks up the new parent)
+                    }
+                    cursor = cursor.max(entry["seq"].as_u64().unwrap_or(cursor));
+                    relay(&entry, oneline, reviewer_only)?;
+                }
+                Ok(tungstenite::Message::Ping(p)) => {
+                    let _ = socket.send(tungstenite::Message::Pong(p));
+                }
+                Ok(tungstenite::Message::Close(_)) | Err(_) => break, // reconnect
+                Ok(_) => {}
+            }
+        }
+    }
+}
+
+/// Relay one streamed entry, honoring `--reviewer-only`.
+fn relay(entry: &Value, oneline: bool, reviewer_only: bool) -> Result<()> {
+    if reviewer_only && is_agent_echo(entry) {
+        return Ok(());
+    }
+    if oneline {
+        print_oneline_entries(std::slice::from_ref(entry));
+        Ok(())
+    } else {
+        print_json(entry)
+    }
+}
+
+/// Each change's head idx (max idx + 1) from the aggregated log — the
+/// from-idx to subscribe at so the backlog replay is empty (doorbell mode).
+fn heads(entries: &[Value]) -> std::collections::HashMap<u64, u64> {
+    let mut heads: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
+    for e in entries {
+        if let (Some(cid), Some(idx)) = (e["change_id"].as_u64(), e["idx"].as_u64()) {
+            heads
+                .entry(cid)
+                .and_modify(|h| *h = (*h).max(idx + 1))
+                .or_insert(idx + 1);
+        }
+    }
+    heads
+}
+
+fn max_seq(entries: &[Value]) -> u64 {
+    entries
+        .iter()
+        .filter_map(|e| e["seq"].as_u64())
+        .max()
+        .unwrap_or(0)
+}
+
+/// Parse the single `--follow` positional into a starting `seq` cursor: a bare
+/// `N` follows from `N`, `..` from `0`.
+fn follow_cursor(spec: &str) -> Result<u64> {
+    let spec = spec.trim();
+    if spec == ".." || spec.is_empty() {
+        return Ok(0);
+    }
+    spec.trim_end_matches("..")
+        .parse::<u64>()
+        .with_context(|| format!("bad seq cursor {spec:?}"))
+}
+
+/// Whether one entry should end a parked `nit wait`, given the chain's resulting
+/// `state`. Every entry wakes **except** a reviewer approve with no comments
+/// that did not bring the chain to `approved` (docs/data-model.md "Wake rule").
+fn event_wakes(entry: &Value, state: &str) -> bool {
+    !is_pure_approve(entry) || state == "approved"
+}
+
+/// A reviewer `approve` with no comments — the only suppressible entry.
+fn is_pure_approve(entry: &Value) -> bool {
+    entry["kind"] == "review"
+        && entry["payload"]["verdict"] == "approve"
+        && entry["payload"]["comments"]
+            .as_array()
+            .is_none_or(Vec::is_empty)
+}
+
+/// A log entry that echoes the agent's own action (`revision`/`comment`/
+/// `partial`), suppressed by `--reviewer-only`. Unrecognized kinds fail open.
+fn is_agent_echo(entry: &Value) -> bool {
+    matches!(
+        entry["kind"].as_str(),
+        Some("revision" | "comment" | "partial")
+    )
+}
+
+fn print_wait(resp: &Value, oneline: bool) -> Result<()> {
+    if !oneline {
+        return print_json(resp);
+    }
+    let cursor = resp["cursor"].as_u64().unwrap_or(0);
+    let state = resp["feedback"]["state"].as_str().unwrap_or("?");
+    println!("cursor={cursor} state={state}");
+    if let Some(arr) = resp["entries"].as_array() {
+        print_oneline_entries(arr);
     }
     Ok(())
 }
@@ -376,12 +606,13 @@ fn repo_move(args: &RepoMoveArgs, server: Option<String>) -> Result<()> {
 // Chain / change resolution (cwd → tip change id)
 
 /// The tip change id for the cwd's repo + branch HEAD: find the chain whose tip
-/// commit-sha equals the local HEAD, via `GET /api/chains?status=all`.
-fn resolve_tip_change(client: &Client) -> Result<u64> {
+/// commit-sha equals the local HEAD, via `GET /api/chains?status=all`. `retry`
+/// covers only the GETs — repo discovery and "not registered" stay fatal.
+fn resolve_tip_change(client: &Client, retry: Retry) -> Result<u64> {
     let (git_dir, repo) = discover_repo()?;
     let head = head_sha(&repo)?;
-    let repo_id = repo_id_for(client, &git_dir)?;
-    let list = client.get(&format!("/api/chains?repo={repo_id}&status=all"))?;
+    let repo_id = repo_id_for(client, &git_dir, retry)?;
+    let list = client.get_retry(&format!("/api/chains?repo={repo_id}&status=all"), retry)?;
     list["chains"]
         .as_array()
         .ok_or_else(|| anyhow!("malformed chain list: {list}"))?
@@ -399,7 +630,7 @@ fn resolve_tip_change(client: &Client) -> Result<u64> {
 
 /// The numeric change id for a `Change-Id` trailer on the cwd's chain.
 fn resolve_change(client: &Client, change_key: &str) -> Result<u64> {
-    let tip = resolve_tip_change(client)?;
+    let tip = resolve_tip_change(client, Retry::No)?;
     let chain = client.get(&format!("/api/chains/{tip}"))?;
     chain["path"]
         .as_array()
@@ -412,8 +643,8 @@ fn resolve_change(client: &Client, change_key: &str) -> Result<u64> {
 }
 
 /// The registry id of the repo at `git_dir`.
-fn repo_id_for(client: &Client, git_dir: &str) -> Result<u64> {
-    let list = client.get("/api/repos")?;
+fn repo_id_for(client: &Client, git_dir: &str, retry: Retry) -> Result<u64> {
+    let list = client.get_retry("/api/repos", retry)?;
     list["repos"]
         .as_array()
         .and_then(|rs| rs.iter().find(|r| r["git_dir"].as_str() == Some(git_dir)))
@@ -646,6 +877,40 @@ fn classify(err: ureq::Error, path: &str) -> CallError {
     }
 }
 
+/// Classify a websocket connect/read failure. A refused or reset connection is
+/// the server-restart signature and retries; `tungstenite` reports a refused
+/// connect as `Error::Io` **or** `Error::Url(UnableToConnect)` — both are
+/// transport, not a misconfiguration.
+fn classify_ws(err: &tungstenite::Error) -> CallError {
+    match err {
+        tungstenite::Error::Io(_)
+        | tungstenite::Error::Url(_)
+        | tungstenite::Error::ConnectionClosed
+        | tungstenite::Error::AlreadyClosed
+        | tungstenite::Error::Protocol(_) => CallError::Unreachable(anyhow!("websocket: {err}")),
+        other => CallError::Fatal(anyhow!("websocket: {other}")),
+    }
+}
+
+/// Retry policy while the server is unreachable. `Fatal` errors always fail
+/// immediately.
+#[derive(Clone, Copy)]
+enum Retry {
+    /// Fail fast (push/status/comment) — an immediate "is 'nit serve' running?"
+    /// beats hanging.
+    No,
+    /// Keep retrying with backoff (`nit wait`/`--follow` riding out a restart).
+    UntilUp,
+}
+
+/// Backoff between reconnect attempts: 1, 2, 4, 8, then 10s, capped.
+fn retry_delay(attempt: u32) -> std::time::Duration {
+    std::time::Duration::from_secs(1 << attempt.min(4)).min(std::time::Duration::from_secs(10))
+}
+
+/// A connected websocket to the nit server.
+type WsConn = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
+
 struct Client {
     agent: ureq::Agent,
     base: String,
@@ -664,6 +929,64 @@ impl Client {
 
     fn get(&self, path: &str) -> Result<Value> {
         self.get_raw(path).map_err(|e| e.into_error(&self.base))
+    }
+
+    /// GET, retrying with backoff while the server is unreachable (one stderr
+    /// notice per outage). `Fatal` always fails immediately.
+    fn get_retry(&self, path: &str, retry: Retry) -> Result<Value> {
+        let mut attempt = 0u32;
+        loop {
+            let cause = match self.get_raw(path) {
+                Ok(value) => return Ok(value),
+                Err(fatal @ CallError::Fatal(_)) => return Err(fatal.into_error(&self.base)),
+                Err(CallError::Unreachable(cause)) => cause,
+            };
+            if !matches!(retry, Retry::UntilUp) {
+                return Err(CallError::Unreachable(cause).into_error(&self.base));
+            }
+            if attempt == 0 {
+                eprintln!("nit: server unreachable ({cause}); retrying…");
+            }
+            std::thread::sleep(retry_delay(attempt));
+            attempt += 1;
+        }
+    }
+
+    /// Connect the change stream and `subscribe` `subs` (`change_id` →
+    /// from-idx), retrying the connect while the server is unreachable.
+    fn ws_connect(
+        &self,
+        subs: &std::collections::HashMap<u64, u64>,
+        retry: Retry,
+    ) -> Result<WsConn> {
+        let url = format!("{}/api/stream", self.base.replacen("http", "ws", 1));
+        let map: std::collections::HashMap<String, u64> =
+            subs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let sub = json!({ "subscribe": map }).to_string();
+        let mut attempt = 0u32;
+        loop {
+            let cause = match Self::try_ws(&url, &sub) {
+                Ok(socket) => return Ok(socket),
+                Err(fatal @ CallError::Fatal(_)) => return Err(fatal.into_error(&self.base)),
+                Err(CallError::Unreachable(cause)) => cause,
+            };
+            if !matches!(retry, Retry::UntilUp) {
+                return Err(CallError::Unreachable(cause).into_error(&self.base));
+            }
+            if attempt == 0 {
+                eprintln!("nit: server unreachable ({cause}); retrying…");
+            }
+            std::thread::sleep(retry_delay(attempt));
+            attempt += 1;
+        }
+    }
+
+    fn try_ws(url: &str, sub: &str) -> Result<WsConn, CallError> {
+        let (mut socket, _) = tungstenite::connect(url).map_err(|e| classify_ws(&e))?;
+        socket
+            .send(tungstenite::Message::Text(sub.to_string().into()))
+            .map_err(|e| classify_ws(&e))?;
+        Ok(socket)
     }
 
     fn post(&self, path: &str, body: &Value) -> Result<Value> {
@@ -809,5 +1132,53 @@ mod tests {
         if std::env::var("NIT_SERVER").is_err() {
             assert_eq!(server_url(None), DEFAULT_SERVER.to_string());
         }
+    }
+
+    #[test]
+    fn event_wakes_only_on_completing_pure_approve() {
+        let approve = |comments: Value| json!({"kind": "review", "payload": {"verdict": "approve", "comments": comments}});
+        // A comment-less approve wakes only when it brings the chain to approved.
+        assert!(!event_wakes(&approve(json!([])), "agents_turn"));
+        assert!(!event_wakes(&approve(json!([])), "waiting_for_review"));
+        assert!(event_wakes(&approve(json!([])), "approved"));
+        // An approve with comments wakes regardless of state.
+        assert!(event_wakes(
+            &approve(json!([{"body": "nit"}])),
+            "agents_turn"
+        ));
+        // Every other entry wakes unconditionally.
+        let request =
+            json!({"kind": "review", "payload": {"verdict": "request_changes", "comments": []}});
+        assert!(event_wakes(&request, "agents_turn"));
+        assert!(event_wakes(
+            &json!({"kind": "revision", "payload": {}}),
+            "waiting_for_review"
+        ));
+        assert!(event_wakes(
+            &json!({"kind": "lifecycle", "payload": {"action": "merged"}}),
+            "waiting_for_review"
+        ));
+    }
+
+    #[test]
+    fn agent_echoes_are_the_agents_own_writes() {
+        let echo = |kind: &str| is_agent_echo(&json!({"kind": kind, "payload": {}}));
+        assert!(echo("revision"));
+        assert!(echo("comment"));
+        assert!(echo("partial"));
+        // Reviewer activity and lifecycle always reach a --reviewer-only monitor.
+        assert!(!echo("review"));
+        assert!(!echo("lifecycle"));
+        // Unrecognized kinds fail open — relayed, never hidden.
+        assert!(!echo("some_future_kind"));
+    }
+
+    #[test]
+    fn follow_cursor_forms() {
+        assert_eq!(follow_cursor("0").expect("zero"), 0);
+        assert_eq!(follow_cursor("5").expect("five"), 5);
+        assert_eq!(follow_cursor("5..").expect("open"), 5);
+        assert_eq!(follow_cursor("..").expect("all"), 0);
+        assert!(follow_cursor("nope").is_err());
     }
 }

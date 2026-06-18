@@ -25,9 +25,11 @@ enum Cmd {
     Push(cli::PushArgs),
     /// Mark the chain complete: clear the partial flag and refresh (idempotent)
     Ready(cli::ReadyArgs),
+    /// Block until log entries land beyond the seq cursor; prints {cursor, entries, feedback}
+    Wait(cli::WaitArgs),
     /// Print the chain's status (--oneline for a digest)
     Status(cli::StatusArgs),
-    /// Print the aggregated chain log entries by position/range
+    /// Print the aggregated chain log, or stream it live with --follow
     Log(cli::LogArgs),
     /// Comment on a change (--change / --change-id): open a thread or reply (--thread)
     Comment(cli::CommentArgs),
@@ -49,6 +51,7 @@ fn main() -> Result<()> {
         Cmd::Serve(args) => server::run(args),
         Cmd::Push(args) => cli::push(args),
         Cmd::Ready(args) => cli::ready(args),
+        Cmd::Wait(args) => cli::wait(args),
         Cmd::Status(args) => cli::status(args),
         Cmd::Log(args) => cli::log(args),
         Cmd::Comment(args) => cli::comment(args),

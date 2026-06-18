@@ -11,7 +11,7 @@ workspace = true
 [dependencies]
 anyhow = "1"
 async-broadcast = "0.7"
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 clap = { version = "4", features = ["derive"] }
 futures-util = "0.3"
 git2 = { version = "0.20", default-features = false }
@@ -28,10 +28,12 @@ tokio = { version = "1", features = [
   "sync",
   "time",
 ] }
+tokio-stream = "0.1"
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
 tower-http = { version = "0.6.11", features = ["fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tungstenite = "0.29"
 ureq = { version = "3.3.0", default-features = false, features = ["json"] }
 
 [dev-dependencies]

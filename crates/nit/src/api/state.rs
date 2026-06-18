@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 use std::time::Instant;
 
+use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -26,7 +27,12 @@ use crate::db;
 use crate::enums::LogKind;
 use crate::review::{self, ChangeProj};
 
-use super::types;
+use super::types::{self, StreamMsg};
+
+/// Per-change live-event buffer. A follower lagging more than this many entries
+/// behind is dropped from the stream and reconnects + re-reads the gap from the
+/// log (the log is the source of truth). Far above any single review burst.
+const EVENTS_BUFFER: usize = 256;
 
 pub struct AppState {
     pub db_path: PathBuf,
@@ -70,18 +76,29 @@ impl RepoState {
     }
 }
 
-/// Per-change coordination: the folded state behind one `RwLock`. Appenders
-/// take it for `write` (which both serializes them and guards the fold);
-/// readers take it for `read`. Held only inside `spawn_blocking`, never across
-/// `.await`.
+/// Per-change coordination: the folded state behind one `RwLock` (appenders
+/// take it for `write`, which both serializes them and guards the fold;
+/// readers take it for `read`; held only inside `spawn_blocking`, never across
+/// `.await`) plus the live-event broadcast for websocket followers.
 pub struct ChangeEntry {
     pub proj: StdRwLock<ChangeProj>,
+    /// Live feed: each appended entry is published here for current followers.
+    events: Sender<StreamMsg>,
+    /// A parked receiver so the channel never closes for lack of followers.
+    events_keepalive: InactiveReceiver<StreamMsg>,
 }
 
 impl ChangeEntry {
     fn new(proj: ChangeProj) -> ChangeEntry {
+        let (mut events, rx) = async_broadcast::broadcast(EVENTS_BUFFER);
+        // Overflow rather than block: a publisher (holding no async lock) must
+        // never stall on a slow follower. An overflowed follower reconnects and
+        // re-reads the gap from the log.
+        events.set_overflow(true);
         ChangeEntry {
             proj: StdRwLock::new(proj),
+            events,
+            events_keepalive: rx.deactivate(),
         }
     }
 
@@ -91,6 +108,18 @@ impl ChangeEntry {
     /// When the projection lock is poisoned.
     pub fn read(&self) -> std::sync::RwLockReadGuard<'_, ChangeProj> {
         self.proj.read().expect("projection lock poisoned")
+    }
+
+    /// Publish a message to live followers. Best-effort: with none, the channel
+    /// is inactive and the message is dropped (it is durable in the log).
+    pub fn publish(&self, msg: StreamMsg) {
+        let _ = self.events.try_broadcast(msg);
+    }
+
+    /// An active subscription to this change's live feed. Arm it **before**
+    /// reading the backlog so no append slips the arm/read gap.
+    pub fn subscribe(&self) -> Receiver<StreamMsg> {
+        self.events_keepalive.activate_cloned()
     }
 }
 
@@ -349,9 +378,15 @@ pub fn append_to_change_with(
     tx.commit()?;
 
     // Apply to the held projection after the durable commit (validated above,
-    // so infallible).
+    // so infallible), then release it before publishing so readers unblock.
     for e in &applied {
         review::fold(&mut proj, e).expect("fold validated before commit");
+    }
+    drop(proj);
+    // Publish to live followers only after the durable commit + fold, so a
+    // follower reconciling against its backlog never sees a half-applied entry.
+    for e in &applied {
+        entry.publish(StreamMsg::Entry(super::views::log_entry_view(change_id, e)));
     }
     Ok(applied)
 }

@@ -354,3 +354,74 @@ pub fn wait_for<T>(timeout: Duration, mut predicate: impl FnMut() -> Option<T>) 
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Websocket change stream (WS /api/stream)
+
+pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
+
+/// Connect `WS /api/stream` and `subscribe` the given changes (`change_id` →
+/// from-idx), with a read timeout so `ws_read` never blocks the test forever.
+pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Duration) -> WsSock {
+    let url = format!("ws://{}/api/stream", server.addr);
+    let (mut socket, _) = tungstenite::connect(&url).expect("ws connect");
+    if let tungstenite::stream::MaybeTlsStream::Plain(s) = socket.get_ref() {
+        s.set_read_timeout(Some(read_timeout))
+            .expect("read timeout");
+    }
+    let map: std::collections::HashMap<String, u64> =
+        subs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+    let sub = json!({ "subscribe": map }).to_string();
+    socket
+        .send(tungstenite::Message::Text(sub.into()))
+        .expect("subscribe");
+    socket
+}
+
+/// The next Text frame parsed as JSON, or `None` on read timeout / close.
+pub fn ws_read(socket: &mut WsSock) -> Option<Value> {
+    loop {
+        match socket.read() {
+            Ok(tungstenite::Message::Text(t)) => return serde_json::from_str(t.as_str()).ok(),
+            Ok(tungstenite::Message::Ping(p)) => {
+                let _ = socket.send(tungstenite::Message::Pong(p));
+            }
+            Ok(_) => {}
+            Err(_) => return None, // timeout or close
+        }
+    }
+}
+
+/// Run the `nit` binary with a hard deadline — a `wait`/`--follow` that never
+/// wakes is killed and reported, never hangs the suite.
+pub fn nit_bounded(
+    server: &TestServer,
+    repo: &GitRepo,
+    args: &[&str],
+    deadline: Duration,
+) -> (bool, Value, String) {
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_nit"))
+        .args(args)
+        .current_dir(repo.workdir())
+        .env("NIT_SERVER", &server.base)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn nit");
+    let start = Instant::now();
+    loop {
+        if child.try_wait().expect("try_wait").is_some() {
+            let out = child.wait_with_output().expect("output");
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+            let value = serde_json::from_str(stdout.trim()).unwrap_or(Value::Null);
+            return (out.status.success(), value, stderr);
+        }
+        if start.elapsed() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("nit {args:?} did not finish within {deadline:?}");
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}

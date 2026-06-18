@@ -17,24 +17,30 @@ pub mod state;
 pub mod types;
 pub mod views;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use async_broadcast::Receiver;
 use axum::Json;
 use axum::Router;
 use axum::extract::State;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, patch, post};
 use git2::{Oid, Repository};
 use serde::Deserialize;
+use tokio_stream::{StreamExt, StreamMap};
 
 use crate::chain::RepoView;
 use crate::db;
 use crate::enums::{LifecycleAction, LogKind, Side};
 use crate::gitscan;
 use crate::review::{self, CommentInput, Lifecycle, RevisionPayload};
+
+use types::StreamMsg;
 
 pub use state::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change,
@@ -59,6 +65,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/changes/{id}/reviews", post(submit_review))
         .route("/api/changes/{id}/reopen", post(reopen_change))
         .route("/api/drafts/{id}", patch(edit_draft).delete(delete_draft))
+        .route("/api/stream", get(stream))
         .with_state(state)
 }
 
@@ -296,7 +303,7 @@ async fn push(
         }
 
         // Per commit, oldest-first: append a revision iff the content moved.
-        for (wc, t) in walk.commits.iter().zip(&targets) {
+        for (i, (wc, t)) in walk.commits.iter().zip(&targets).enumerate() {
             let prior = t.entry.read().latest_revision().cloned();
             if prior
                 .as_ref()
@@ -335,6 +342,20 @@ async fn push(
             )
             .map_err(map_busy)?;
             gitscan::maintain_keep_refs(&repo, &t.entry.read());
+
+            // An existing change that re-rooted onto a different parent tells
+            // its followers (advisory — they re-derive HEAD regardless).
+            if i > 0
+                && let Some(old) = &prior
+                && old.parent_sha != wc.parent_sha
+            {
+                t.entry.publish(StreamMsg::NewParent {
+                    new_parent: types::NewParent {
+                        of: t.change_id,
+                        parent: targets[i - 1].change_id,
+                    },
+                });
+            }
         }
 
         // The tip's partial flag (sticky). Re-stamp it when `req.partial`
@@ -1083,6 +1104,128 @@ async fn reopen_change(
         )?))
     })
     .await
+}
+
+// ---------------------------------------------------------------------------
+// Events (WS /api/stream)
+
+/// `WS /api/stream?repo={id}` — the client-driven change stream
+/// (docs/api.md "Events"). The `repo` query is accepted for symmetry and
+/// ignored; the server keys purely on the subscribed change ids.
+async fn stream(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+}
+
+/// Drive one follower's socket: subscribe/unsubscribe drive a keyed
+/// `StreamMap` of per-change feeds (dynamic membership); a `subscribe` arms the
+/// feed **before** replaying the change's `[from, head)` backlog and records an
+/// idx watermark so the arm/read overlap is deduped, never gapped.
+async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+    let mut feeds: StreamMap<u64, Receiver<StreamMsg>> = StreamMap::new();
+    let mut watermark: HashMap<u64, u64> = HashMap::new();
+    let mut shutdown = state.shutdown_watch();
+    loop {
+        tokio::select! {
+            incoming = socket.recv() => {
+                let Some(Ok(msg)) = incoming else { break };
+                match msg {
+                    Message::Text(text) => {
+                        let Ok(client) = serde_json::from_str::<types::ClientMsg>(&text) else {
+                            continue;
+                        };
+                        if apply_client_msg(&mut socket, &state, &mut feeds, &mut watermark, client)
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Message::Close(_) => break,
+                    _ => {} // ping/pong/binary: ignored
+                }
+            }
+            Some((change_id, msg)) = feeds.next(), if !feeds.is_empty() => {
+                // Drop a live entry the backlog replay already covered.
+                if let StreamMsg::Entry(ref e) = msg
+                    && e.idx < watermark.get(&change_id).copied().unwrap_or(0)
+                {
+                    continue;
+                }
+                if send_json(&mut socket, &msg).await.is_err() {
+                    break;
+                }
+            }
+            // The only change to the shutdown signal is false → true.
+            _ = shutdown.changed() => break,
+        }
+    }
+}
+
+/// Apply one client message; `Err(())` means the socket should close.
+async fn apply_client_msg(
+    socket: &mut WebSocket,
+    state: &Arc<AppState>,
+    feeds: &mut StreamMap<u64, Receiver<StreamMsg>>,
+    watermark: &mut HashMap<u64, u64>,
+    client: types::ClientMsg,
+) -> Result<(), ()> {
+    match client {
+        types::ClientMsg::Subscribe(map) => {
+            for (id_str, from) in map {
+                let Ok(change_id) = id_str.parse::<u64>() else {
+                    continue;
+                };
+                let Some(entry) = state.change_entry(change_id) else {
+                    continue;
+                };
+                // Arm the live feed BEFORE reading the backlog.
+                feeds.insert(change_id, entry.subscribe());
+                let backlog = read_backlog(state, change_id, from).await;
+                let mut next = from;
+                for e in &backlog {
+                    next = e.idx + 1;
+                    send_json(socket, &StreamMsg::Entry(e.clone())).await?;
+                }
+                watermark.insert(change_id, next);
+            }
+        }
+        types::ClientMsg::Unsubscribe(ids) => {
+            for id in ids {
+                feeds.remove(&id);
+                watermark.remove(&id);
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn send_json(socket: &mut WebSocket, msg: &StreamMsg) -> Result<(), ()> {
+    let text = serde_json::to_string(msg).map_err(|_| ())?;
+    socket
+        .send(Message::Text(text.into()))
+        .await
+        .map_err(|_| ())
+}
+
+/// A change's log slice `[from, head)` as tagged entries, for the backlog
+/// replay. Errors collapse to empty (the follower re-reads on reconnect).
+async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<types::LogEntry> {
+    let st = state.clone();
+    blocking(move || {
+        let conn = st.open_db()?;
+        let rows = db::log_entries(&conn, change_id, from, None)?;
+        rows.iter()
+            .map(|r| {
+                Ok(views::log_entry_view(
+                    change_id,
+                    &review::Entry::from_row(r)?,
+                ))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .map_err(Into::into)
+    })
+    .await
+    .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
