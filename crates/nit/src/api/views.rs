@@ -47,6 +47,7 @@ pub fn build_chain_summary(
     repo: &Repository,
     view: &RepoView,
     public_base: &str,
+    repo_id: u64,
     tip_sha: &str,
 ) -> Result<types::ChainSummary> {
     let path = view.path_from_tip(tip_sha);
@@ -54,6 +55,7 @@ pub fn build_chain_summary(
     let entries = path_entries(conn, view, &path)?;
     Ok(types::ChainSummary {
         tip_change_id,
+        repo_id,
         name: tip_name(repo, view, &path),
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
@@ -72,6 +74,7 @@ pub fn build_chain(
     repo: &Repository,
     view: &RepoView,
     public_base: &str,
+    repo_id: u64,
     base_branch: &str,
     tip_sha: &str,
 ) -> Result<types::Chain> {
@@ -80,6 +83,7 @@ pub fn build_chain(
     let entries = path_entries(conn, view, &path)?;
     Ok(types::Chain {
         tip_change_id,
+        repo_id,
         name: tip_name(repo, view, &path),
         base_branch: base_branch.to_string(),
         state: chain::derive_state(view, &path),

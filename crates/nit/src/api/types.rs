@@ -97,6 +97,8 @@ pub struct TipChange {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainSummary {
     pub tip_change_id: u64,
+    /// The repo this chain belongs to (registry id).
+    pub repo_id: u64,
     /// Best-effort, resolved at query time.
     pub name: String,
     pub state: ChainState,
@@ -117,6 +119,8 @@ pub struct ChainList {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chain {
     pub tip_change_id: u64,
+    /// The repo this chain belongs to (registry id).
+    pub repo_id: u64,
     pub name: String,
     pub base_branch: String,
     pub state: ChainState,

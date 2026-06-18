@@ -381,6 +381,7 @@ async fn push(
             &repo,
             &view,
             &state.public_base,
+            repo_row.id,
             &repo_row.base_branch,
             &tip_sha,
         )?;
@@ -445,6 +446,7 @@ async fn list_chains(
                     &repo,
                     &view,
                     &state.public_base,
+                    repo_id,
                     &tip,
                 )?);
             }
@@ -484,6 +486,7 @@ async fn get_chain(
             &repo,
             &view,
             &state.public_base,
+            repo_id,
             &base_branch,
             &tip_sha,
         )?))

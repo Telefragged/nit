@@ -125,6 +125,7 @@ derivation").
 ```json
 ChainSummary = {
   "tip_change_id": 12,
+  "repo_id": 1,                  // the repo this chain belongs to
   "name": "feat/x",              // best-effort, resolved at query time (below)
   "state": "waiting_for_review", // derived — see state table
   "partial": false,              // the tip's latest revision is partial
@@ -134,6 +135,7 @@ ChainSummary = {
 }
 Chain = {
   "tip_change_id": 12,
+  "repo_id": 1,
   "name": "feat/x",
   "base_branch": "main",
   "state": "waiting_for_review",
