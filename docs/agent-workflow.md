@@ -12,10 +12,9 @@ the human reviews separately.
 This doc is the **agent-driven** push/read/reply loop. Human-operator CLI
 conveniences belong in the `clap` help, not here.
 
-> **Live followers are deferred.** `nit wait` and `nit log --follow` are not
-> in this cut — they return over a websocket in a later stage. Today the agent
-> reads **one-shot** (`nit status`, `nit log`). Push, then poll those reads
-> until the chain settles.
+After the last commit, `nit wait` blocks on the websocket change stream
+(docs/api.md "Events") until the reviewer responds — no polling. `nit status`
+and `nit log` stay for one-shot reads.
 
 ## Conventions for your commits
 
@@ -108,20 +107,24 @@ return **no cursor** — an entry that lands between two of your own actions is
 caught only because you re-read the change's log run, not because a push told
 you about it. Advance a change's slot to its log `head` after you drain it.
 
-One-shot reads cover this today:
-
-- `nit status` — the derived **chain digest**: `state` plus, per member,
-  `position change_key status rN Nu subject`. Branch on `state` (below); for
-  each member it flags, drill into its log or change to act.
+- `nit wait` — **block** on the websocket until something past your cursor
+  should wake you, then print `{cursor, entries, feedback}` and exit. Call it
+  when you have nothing else to do; it derives its watch set from local HEAD,
+  rides out a server restart, and applies the wake rule (docs/data-model.md) so
+  a comment-less approve that doesn't complete the chain doesn't spin you. Pass
+  the printed `cursor` back next call.
+- `nit log --follow [--reviewer-only] <cursor>` — a **parked monitor** that
+  relays each new entry as it lands (raw, or filtered to reviewer activity with
+  `--reviewer-only`). Unlike `nit wait` it never exits — a long-lived watcher.
+- `nit status` — the derived **chain digest** for a one-shot read: `state`
+  plus, per member, `position change_key status rN Nu subject`.
 - `nit log` — the **aggregated chain log**: every member's entries merged and
-  sorted by the global `seq` (one timeline for the whole chain). Slice it by
-  position (`3`, `5..9`, `..`, half-open) and re-read past your last position
-  to pick up reviewer verdicts, comments, and lifecycle entries.
+  sorted by the global `seq`, sliced by position (`3`, `5..9`, `..`).
 
 Two coordinates sit on every entry (docs/api.md): the per-change `idx` (what a
 change's own cursor slot advances) and the global `seq` (the aggregated log's
-order). The live websocket follower that hands the server a cursor and streams
-the gap is **deferred to a later stage**; until then, re-read.
+order). `nit wait`/`--follow` own a **vector cursor** (`change_id → idx`) and
+subscribe their watch set over one websocket (docs/api.md "Events").
 
 ### Reading the chain state
 

@@ -58,10 +58,10 @@ repo into a `RepoView`, takes its tip set, and walks each tip's `parent_sha`
 to the fork on the canonical branch (`chain/` `path_from_tip`). Nothing about
 a chain is stored or scanned at read time.
 
-> **Events are deferred to a later stage.** The push/wait/follow loop is
-> one-shot today (`nit status`, `nit log`); the web polls. The live followers
-> (`nit wait`, `nit log --follow`) and a change stream return over a
-> websocket in a later stage.
+Live followers (`nit wait`, `nit log --follow`) watch a set of changes over
+one websocket (`WS /api/stream`); the server joins the subscribed changes'
+per-change broadcast channels in a `tokio-stream` `StreamMap`, and the wake
+rule is a client concern (docs/data-model.md). The web polls the same folds.
 
 ## Key decisions
 

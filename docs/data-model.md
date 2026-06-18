@@ -16,10 +16,9 @@ registry, the change-identity registry, reviewer drafts). git objects stay in
 the user's repo, pinned against `git gc` ("Keep refs"); diffs are computed on
 demand from the commit shas a revision carries, never stored ("Diffs").
 
-> **Events are deferred.** The live followers (a websocket change stream,
-> `nit wait`, `nit log --follow`) are reintroduced in a later stage. Today the
-> agent reads one-shot and the web polls; everything below is the model
-> without them.
+Live followers (`nit wait`, `nit log --follow`) watch a set of changes over
+one websocket (docs/api.md "Events"); which entries **wake** a parked wait is
+a client decision ("Wake rule" below). The web polls the same folds.
 
 ## Tables
 
@@ -393,6 +392,12 @@ no per-chain lock.
   first-seeing the same key race one SQLite-serialized statement, the loser is a
   no-op, both read the same `change_id`. No read-decide-insert, no owner routing,
   no per-repo lock.
+- **Live followers** subscribe to per-change broadcast channels. Each append
+  publishes its tagged entry **after** the durable commit and fold; the
+  websocket joins the subscribed changes' channels in a `tokio-stream`
+  `StreamMap` (dynamic membership), arming each before replaying the change's
+  backlog and watermark-deduping the arm/read overlap (docs/api.md "Events").
+  Publish is non-blocking, so a slow follower never stalls an appender.
 
 ## Keep refs
 
@@ -408,3 +413,24 @@ The revision's parent (the diff's old side) is reachable through it.
 `ensure_keep_ref` is idempotent. **GC/deletion is deferred in this cut** — refs
 accumulate (fail-safe: pinning more than necessary never drops an object the
 SHA-walk, a vs-parent diff, or the timer's `base_sha..canonical` walk needs).
+
+## Wake rule
+
+The server streams every tagged entry unfiltered; whether one **wakes** a
+parked `nit wait` is a **client** decision (the follower already derives its
+path and each member's pinned revision from local HEAD, so it folds the rule
+against its own chain-state — no server help). The default is **wake** — every
+entry ends the wait. The exceptions, both path-aware:
+
+- a `review` with verdict `approve`, **no comments**, that does **not** bring
+  the **chain** to `approved` — a reviewer approving change after change does
+  not wake each time. It is **not dropped**: the follower accumulates it and
+  hands it back with the next waking entry.
+- a `lifecycle` entry wakes when it changes the derived chain-state the agent
+  branches on — including a **prefix merge of an ancestor** (the agent may
+  rebase onto the advanced canonical branch).
+
+`nit log --follow --reviewer-only` additionally mutes the agent's own entries
+(`revision`/`comment`/`partial`) client-side, applying the same rule to the
+reviewer's. **Deferred:** muting a sibling-chain note on a revision the
+follower's path does not pin — the first cut wakes and lets the agent triage.

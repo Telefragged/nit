@@ -13,10 +13,10 @@ The unit of state is the **change** (a `Change-Id`, scoped to a repo); a
 **chain** is derived, never stored — a path walked from a tip back to the
 repo's canonical branch ([data-model.md](data-model.md), [api.md](api.md)
 "Chains"). The web reflects that: a change page reads `?revision` to pick a
-patchset, and `?revision` _is_ the choice of chain context. The web has no
-live updates in this cut — every page **polls** with react-query
-(`refetchInterval: 5000`). Events (the change websocket, `nit wait`,
-`nit log --follow`) are deferred to a later stage.
+patchset, and `?revision` _is_ the choice of chain context. The web **polls**
+with react-query (`refetchInterval: 5000`); it does not consume the change
+websocket (`WS /api/stream`), which serves the agent-side followers
+(`nit wait`, `nit log --follow`), not the UI.
 
 ## Pages
 

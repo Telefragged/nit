@@ -16,10 +16,9 @@ below is served from the in-memory fold; chains are assembled at read time
 from the per-change folds. Concurrency guarantees: docs/data-model.md
 ("Concurrency", normative).
 
-> **Events are not in this cut.** The websocket change stream (`WS
-/api/stream`) and the `nit wait` / `nit log --follow` followers are
-> reintroduced in a later stage. Today the agent reads one-shot
-> (`nit status`, `nit log`), and the web polls.
+A follower watches a **set** of changes over **one websocket** (`WS
+/api/stream`, "Events"); one-shot reads (`nit status`, `nit log`) and the web
+poll the same folds.
 
 ## Health
 
@@ -453,8 +452,9 @@ same way, through `nit comment --thread <id> --resolve` / `--unresolve`
 The agent drives the loop with a per-change cursor it owns (a vector of
 `change_id → idx`); `nit push`/`nit comment` return no index, so an entry
 that lands between two of its own actions is never skipped
-(docs/agent-workflow.md). One-shot reads (`nit status`, `nit log`) advance
-the cursor; the live followers return in a later stage.
+(docs/agent-workflow.md). One-shot reads (`nit status`, `nit log`) read the
+cursor's gap; the live followers (`nit wait`, `nit log --follow`) drive it
+over the websocket ("Events").
 
 - `POST /api/changes/{id}/comments` —
   `req: {"thread_id": null, "revision": 2, "file": "Cargo.toml", "line": 14, "side": "new", "range": CommentRange, "body": "…", "resolved": false}`
@@ -497,6 +497,58 @@ The API ships only the raw entry. The one-line digest behind `--oneline` is
 (`GET /api/chains/{change_id}/log`) returns these entries merged across the
 chain's members and sorted by `seq`; a one-change slice
 (`GET /api/changes/{id}/log`) returns one change's, ordered by `idx`.
+
+## Events
+
+A change owns a log; a chain is a path over a set of changes. A follower
+watches a **set** of changes over **one websocket**, choosing its own
+membership; the server tracks only the subscription set — no per-follower
+chain, no resubscribe bookkeeping.
+
+- `WS /api/stream?repo={id}` — the client-driven change stream. The client
+  drives membership over the open socket; the server emits **only** entries
+  for currently-subscribed changes.
+
+  ```jsonc
+  // client → server
+  {"subscribe":   {"10": 4, "11": 0}}   // change_id → from-idx: replay [from, head) then stream live
+  {"unsubscribe": [13]}                 // drop a change
+  // server → client
+  {"change_id": 10, "idx": 5, "seq": 412, "kind": "review", "created_at": "…", "payload": {…}}
+  {"new_parent": {"of": 10, "parent": 9}}    // out-of-log: 10's tip re-rooted onto change 9
+  ```
+
+  A `subscribe` arms the change's live feed **before** replaying its
+  `[from, head)` backlog, then drops live entries with
+  `idx < last_backlog_idx + 1` — the arm/read overlap is a duplicate the
+  watermark suppresses, never a gap. An `unsubscribe` drops the change from
+  the joined set. The server joins the subscribed changes' per-change feeds in
+  a keyed dynamic-membership map (`tokio-stream`'s `StreamMap`); there is no
+  per-chain channel and no server-side chain — following a whole chain is the
+  client subscribing to each member.
+
+  The **only** non-log message is `new_parent` (out-of-log, no `idx`/`seq`):
+  when a change's tip re-roots onto a new parent, the client re-derives its
+  logical chain and subscribes the new parent. It is **advisory and
+  idempotent** — the next HEAD re-derivation supersedes it, so a dropped one
+  costs nothing (a follower re-derives from local HEAD each pass anyway).
+
+```jsonc
+TaggedLogEntry = {"change_id": 10, "idx": 5, "seq": 412, "kind": "…", "created_at": "…", "payload": {…}}
+ClientMsg      = {"subscribe": {"<id>": <from-idx>, …}} | {"unsubscribe": [<id>, …]}
+NewParent      = {"new_parent": {"of": 10, "parent": 9}}
+```
+
+### The cursor
+
+The follower's resume state is a **vector** `change_id → idx` (the count of
+that change's entries consumed). An **absent key ⇒ 0**, so a change newly
+stacked into a chain replays from the start; a change that left the path keeps
+its (inert) key. `subscribe` is the vector handed to the server, expanded to
+explicit zeros. A `nit wait`/`nit log --follow` return prints the advanced
+vector; the agent passes it back next call. The wake rule (which entries end a
+parked `nit wait`) is a **client** concern (docs/data-model.md "Wake rule"):
+the server ships raw tagged entries.
 
 ### State table (normative)
 
