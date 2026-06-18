@@ -6,10 +6,20 @@ backend in `crates/nit/src/api/types.rs`. Change shapes here first.
 
 Errors: non-2xx with `{"error": "human readable message"}`.
 Times are RFC3339 strings. Shas are full 40-hex; `short_sha` is 12 chars.
-All read shapes below are served from the in-memory **fold** of each
-chain's event log (docs/data-model.md); the wire shapes are unchanged by
-that — only `events`/`log` expose the log directly. Concurrency guarantees:
-docs/data-model.md ("Concurrency", normative).
+
+The unit of state is the **change** (a `Change-Id`, scoped to a repo): it
+owns an append-only log whose fold is its reviewable state
+(docs/data-model.md). A **chain** is never stored — it is derived on demand
+by walking a tip commit back to the repo's canonical branch through each
+revision's recorded `parent_sha` (gerrit relation chains). Every read shape
+below is served from the in-memory fold; chains are assembled at read time
+from the per-change folds. Concurrency guarantees: docs/data-model.md
+("Concurrency", normative).
+
+> **Events are not in this cut.** The websocket change stream (`WS
+/api/stream`) and the `nit wait` / `nit log --follow` followers are
+> reintroduced in a later stage. Today the agent reads one-shot
+> (`nit status`, `nit log`), and the web polls.
 
 ## Health
 
@@ -17,14 +27,14 @@ docs/data-model.md ("Concurrency", normative).
 
 ## Repos
 
-A repo is the registry grouping for chains; its identity is the
+A repo is the registry grouping for changes; its identity is the
 **git-common-dir** (the `.git` dir, shared across worktrees), which is also
-its display name. The web main page lists repos, each linking to that repo's
-chains. Repos are created lazily by the first `nit push` from a repo; there
-is no separate registration step.
+its display name. A repo has exactly **one canonical branch** (`base_branch`)
+— mergedness is always tracked against it, there is no land-anywhere. The web
+main page lists repos, each linking to that repo's chains. Repos are created
+lazily by the first `nit push`; there is no separate registration step.
 
-- `GET /api/repos` → `{"repos": [Repo]}` — registration order. Runs the same
-  throttled rescans as the dashboard so `active_chains` is current.
+- `GET /api/repos` → `{"repos": [Repo]}` — registration order.
 - `PATCH /api/repos/{id}` — repoint a repo at a new git-common-dir after it
   moved on disk (`nit repo move`).
   ```json
@@ -33,103 +43,185 @@ is no separate registration step.
   ```
   `git_dir` is canonicalized and must open as a git repo. 404 if the repo is
   unknown, 400 if the new path can't be resolved, 409 if it already belongs
-  to another repo. The server repoints the registry row and refreshes the
-  in-memory chains so subsequent scans open the new path.
+  to another repo.
 
 ```json
 Repo = {
   "id": 1,
   "git_dir": "/abs/path/.git",   // canonical git-common-dir — identity + name
-  "active_chains": 2             // chains not merged/abandoned (computed, not stored)
+  "base_branch": "main",         // the one canonical branch; mergedness tracks it
+  "active_chains": 2             // live tip count (derived from the tip set)
 }
 ```
+
+## Push
+
+- `POST /api/push` — register a tip for review (idempotent; this is
+  `nit push`).
+
+  ```json
+  req:  {"git_dir": "/abs/path/.git", "tip": "feat/x", "base": "main",
+         "partial": true}
+  resp: PushResult (below)
+  ```
+
+  `git_dir` is the repo's canonical **git-common-dir** (`git rev-parse
+--git-common-dir`), canonicalized server-side; the `nit` CLI infers it from
+  `--repo`/the cwd. `base` configures the repo's canonical branch: it is
+  recorded on the repo's first push and must equal the stored `base_branch`
+  on every push after — a different base is a **400** (one canonical branch
+  per repo). `tip` is any ref or rev, resolved to a commit at push time; git
+  is the source of truth for branch position, nit stores no branch sha.
+
+  The server walks `merge-base(base, tip)..tip` oldest-first and, for each
+  commit, **upserts the change** (keyed by its `Change-Id`) and **appends a
+  `revision` entry iff the commit-sha moved** (a pure rebase — patch-id-equal
+  with an unchanged message — appends a revision but does not reset review
+  status). The walk is **all-or-nothing**: a `400` rejects the whole push on
+  any structural fault (a merge or root commit, a commit missing its
+  `Change-Id` trailer, a duplicate trailer within the walk, a `fixup!`/
+  `squash!` subject, or a commit-sha already recorded under a different
+  change). A push that would add a revision to an **abandoned** change is a
+  **409** — reopen it first (`nit reopen`).
+
+  `partial` is optional and sticky: `true` marks the tip's latest revision
+  partial (`nit push --partial`), `false` clears it (`nit ready`), absent
+  leaves it unchanged. A push that walks to nothing (`tip` is ancestor-or-equal
+  of `base`) is valid and records nothing. A re-push where nothing moved is
+  **idempotent** (200), so a crash-retry is safe.
+
+```json
+PushResult = {
+  "tip_change": {"change_id": 10, "change_key": "I3f2…",
+                 "revision": 2, "status": "pending"},
+  "chain": Chain    // tip-rooted: the derived path, each member at the
+                    // revision this push gave it (see "Chains")
+}
+```
+
+There is no chain id — a chain is addressed by its **tip change id** plus an
+optional `?revision` selecting the patchset (and hence the chain context).
 
 ## Chains
 
-- `POST /api/chains` — register or refresh (idempotent; this is `nit push`)
-  ```json
-  req:  {"git_dir": "/abs/path/.git", "branch": "feat/x", "base": "main",
-         "partial": true}
-  resp: Chain (below)
-  ```
-  `git_dir` is the repo's canonical **git-common-dir** (`git rev-parse
---git-common-dir`) — the chain's repo identity, shared by every worktree of
-  one repo; the `nit` CLI infers it from `--repo`/the cwd. It is canonicalized
-  server-side, and both the `repos` registry row (grouping key) and the chain
-  row are auto-created. 400 if the repo/branch/base can't be resolved at
-  registration. A scan failure on an
-  _existing_ chain is not an HTTP error: it appears as `last_scan_error`.
-  Every commit in `base..tip` must carry its own `Change-Id:` trailer and
-  must not be a `fixup!`/`squash!` commit — violations fail the scan
-  (docs/data-model.md "Change identity"). A scan that changes structure
-  appends one `revisions` log entry.
-  `partial` is optional and sticky across pushes: `true` marks the chain
-  partial (`nit push --partial`), `false` clears it (`nit ready`),
-  absent leaves it unchanged. A flip appends a `partial` entry. New chains
-  default to not-partial.
-- `GET /api/chains?status=active` → `{"chains": [Chain]}` — dashboard.
-  Runs (throttled) scans first; a chain whose scan fails is still listed
-  with its previous state plus `last_scan_error`. `status` defaults to
-  `active`; `all` includes merged/abandoned. `repo={id}` restricts the list
-  to one repo (the repo-scoped chain view).
-- `GET /api/chains/{id}` → Chain (throttled rescan first). 404 if unknown.
+A chain is the ordered path from the canonical branch up to a tip commit,
+each member pinned to the patchset that tip walked through. Nothing about a
+chain is stored: these endpoints compute it from the in-memory tip-commit set
+and the commit-sha → `(change, revision)` index (docs/data-model.md "Chain
+derivation").
+
+- `GET /api/chains?repo={id}` → `{"chains": [ChainSummary]}` — one entry per
+  known **tip commit** (the dashboard). `status` defaults to `active`; `all`
+  includes tips whose every member is terminal (merged/abandoned).
+- `GET /api/chains/{change_id}` → Chain — the derived path through that
+  change's tip commit. `?revision={n}` selects which patchset of the change to
+  root on (default: its latest); the selected revision's `parent_sha`
+  determines the path, so `?revision` _is_ the choice of chain context. 404 if
+  the change is unknown.
+- `GET /api/chains/{change_id}/log` → the **aggregated** chain log: every
+  member's log entries, merged and sorted by global `seq` (one timeline for
+  the whole chain). Behind `nit log`.
 
 ```json
-Chain = {
-  "id": 1, "repo_id": 1, "git_dir": "/abs/path/.git",  // repo registry id + git-common-dir
-  "branch": "feat/x", "base": "main",
-  "status": "active",            // active | merged | abandoned
-  "state": "waiting_for_review", // derived — see state table below
-  "partial": false,              // sticky; set by push --partial, cleared by ready
-  "last_scan_error": null,       // string when the last scan failed
-  "web_url": "http://127.0.0.1:8877/chains/1",
-  "created_at": "...", "updated_at": "...",  // updated_at = last entry's time
-  "changes": [ChangeSummary]     // chain order; orphaned ones last
+ChainSummary = {
+  "tip_change_id": 12,
+  "name": "feat/x",              // best-effort, resolved at query time (below)
+  "state": "waiting_for_review", // derived — see state table
+  "partial": false,              // the tip's latest revision is partial
+  "web_url": "http://127.0.0.1:8877/chains/12",
+  "updated_at": "…",             // newest member entry's time
+  "path": [PathEntry]            // oldest-first, base → tip
 }
-ChangeSummary = {
-  "id": 10, "position": 0,           // null while orphaned
+Chain = {
+  "tip_change_id": 12,
+  "name": "feat/x",
+  "base_branch": "main",
+  "state": "waiting_for_review",
+  "partial": false,
+  "web_url": "…",
+  "path": [PathEntry]
+}
+PathEntry = {
+  "change_id": 10, "position": 0,    // position is a property of THIS path
   "change_key": "I3f2…",
+  "revision": 2,                     // the patchset this path walks
+  "latest_revision": 3,              // the change's newest patchset anywhere
+  "newer_elsewhere": true,           // latest_revision > revision (badge driver)
+  "status": "pending",               // per (change, this revision)
+  "merged_elsewhere": false,         // a newer revision landed on the canonical branch
   "subject": "server: add health endpoint",
-  "status": "pending",  // pending | approved | changes_requested
-                        // | commented | orphaned
-  "revision": 2,                 // latest revision number
-  "last_reviewed_revision": 1,   // max revision with a review; null if none
   "commit_sha": "…", "short_sha": "abc123def456",
-  "counts": {"revisions": 2, "threads": 3, "drafts": 1,
-             "unresolved": 2}
+  "counts": {"threads": 3, "drafts": 1, "unresolved": 2}  // scoped to this revision
 }
 ```
 
-`id` on a change is the fold-assigned change id (stable across the
-chain's life); thread ids below are likewise fold-assigned, by fold order
-(docs/data-model.md "Identity within the log").
+`position`, `status`, `unresolved`, and `state` are read **at the path's
+pinned revision** — two tips placing the same change differently carry
+independent verdicts (a request_changes in one chain never overwrites an
+approve in another). `id` on a change is its stable fold id (the `change`
+rowid); thread ids are fold-assigned by fold order (docs/data-model.md
+"Identity").
+
+### Tip names
+
+A tip is named best-effort at query time (nit stores no branch key): a branch
+ref that `git branch --contains <tip>` keeps stable as the agent advances,
+else a tag, else the commit subject. A push that advances a tip keeps the same
+name; deleting a branch only drops a name, not the tip.
+
+### The B-in-two-chains example
+
+Two pushes in one repo, canonical `main` at merge-base `m`:
+
+- push 1: `m → A → B → C` (Change-Ids `Ia, Ib, Ic`)
+- push 2: `m → D → B′ → E` (`Id, Ib, Ie`, B re-parented onto D)
+
+`B` is one change with two patchsets: rev0 `parent=A`, rev1 `parent=D`. Two
+tips, two chains: `chains/Ic` walks B at rev0, `chains/Ie` walks B at rev1.
+Threads and reviews on B are **shared** (they belong to the change) and each
+is anchored to the revision it was written against; `?revision` selects which
+patchset — and chain context — you view.
 
 ## Changes
 
 - `GET /api/changes/{id}` — the change with every revision, every comment
-  thread, and the reviewer's open drafts; each thread carries its anchor
-  verbatim (no `revision` query — placement is the client's job, see
-  "Comment placement").
+  thread, and the reviewer's open drafts. Each thread carries its anchor
+  verbatim (no `revision` query — placement is the client's job, see "Comment
+  placement").
   ```json
   {
-    "id": 10, "chain_id": 1, "change_key": "I3f2…", "position": 0,
-    "status": "pending", "subject": "…",
+    "id": 10, "repo_id": 1, "change_key": "I3f2…",
+    "subject": "…",
     "last_reviewed_revision": 1,
     "revisions": [Revision],         // ascending
     "threads": [Thread],             // published threads, all revisions
     "drafts": [Draft],               // reviewer's unpublished comments
-    "reviews": [Review]
+    "reviews": [Review],             // each carries its revision
+    "chains": [ChainRef]             // every tip walking through this change
   }
   Revision = {"number": 2, "commit_sha": "…", "short_sha": "…",
-              "parent_sha": "…", "message": "full commit message\n…",
+              "parent_sha": "…", "base_sha": "…",
+              "partial": false, "message": "full commit message\n…",
               "created_at": "…"}
   Review   = {"id": 5, "revision": 2, "verdict": "request_changes",
               "message": "cover message", "created_at": "…"}
+  ChainRef = {"tip_change_id": 12, "revision": 2,
+              "name": "feat/x", "web_url": "…"}
   ```
+  There is no `chain_id` or `position` — both are properties of a path, not of
+  the change; read them from `chains` / a `PathEntry`. `reviews` and `threads`
+  are change-wide and carry their `revision`; a client viewing one patchset
+  MUST filter by the viewing `?revision`.
 - `GET /api/changes/{id}/revisions/{n}/diff` → Diff of revision n against
   its parent.
 - `GET /api/changes/{id}/revisions/{n}/diff?against={m}` → interdiff
   (revision m's tree → revision n's).
+- `GET /api/changes/{id}/log?from={a}&to={b}` → `{"head": 7, "entries":
+[LogEntry]}` — **one change's** log slice in `[from, to)` (both optional:
+  `from` defaults 0, `to` defaults `head`). `head` is the change's per-change
+  `idx` count. Read-only. References past the dataset are a **400**, not a
+  silent clamp — a `to` beyond `head`, an open `from` beyond `head`, or a
+  reversed/empty range (`to <= from`). Behind `nit status`'s one-change reads.
 
 ```json
 Diff = {"files": [DiffFile]}
@@ -167,9 +259,7 @@ never collide with a real file.
   `deletions` count message lines like any text file.
 
 Line comments on `/COMMIT_MSG` use `side: "new"` only; old-side drafts are
-rejected with 400. No UI state produces one (vs parent the message is
-all-`add`; an interdiff's old column shows message(m), which anchors a
-`new`-side comment on `m`), so the 400 only guards raw API clients.
+rejected with 400.
 
 ### Rebase-aware interdiffs
 
@@ -202,6 +292,9 @@ drift-processed — they are the plain diff byte-for-byte. When
   rebase of a change collapses to just its `/COMMIT_MSG`).
 - **Renamed/copied files are not drift-processed**; their edits all render
   as real.
+
+`parent(m) → parent(n)` for a change is exactly its **parent change's** own
+`m → n` interdiff — down a stack each change subtracts its parent's movement.
 
 ### Comment placement
 
@@ -340,29 +433,26 @@ same way, through `nit comment --thread <id> --resolve` / `--unresolve`
 
 - `POST /api/changes/{id}/reviews` —
   `req: {"revision": 2, "verdict": "approve" | "request_changes" | "comment", "message": "…"}`
-  Under the chain lock: drains the change's drafts (their staged `resolved`
+  Under the change lock: drains the change's drafts (their staged `resolved`
   decisions included), appends one `review` log entry (verdict + cover
-  message + the drained drafts), folds it (change status → the verdict's;
-  each draft applied to a new or existing thread; each thread's resolution →
-  its last decision), and emits it on the `/events` stream — no server-side
-  relevance judgement (docs/data-model.md "Wake rule").
-  - If `revision` is no longer latest but the latest is **patch-id-equal
-    with an unchanged commit message** (pure rebase), the review
-    auto-retargets to the latest revision and succeeds.
-  - Otherwise stale `revision` → 409; the UI must keep the cover message
-    and drafts, refetch, and re-offer submission.
+  message + the drained drafts), and folds it (the change's displayed status
+  at `revision` → the verdict's; each draft applied to a new or existing
+  thread; each thread's resolution → its last decision).
+  - `revision` must name a patchset some live tip currently pins; the verdict
+    lands on that `(change, revision)` pair. A truly detached patchset (walked
+    by no tip) → 409. There is no auto-retarget-to-latest — with two live
+    patchsets "latest" is not unique.
 
   → `{"review": Review, "threads": [Thread]}` — `threads` are the threads
-  this review created or added to (a resolution-only draft moves a thread's
-  state without adding a comment, but its thread is still listed).
+  this review created or added to.
 
 ## Agent endpoints
 
-The agent drives the loop with a **0-based cursor** it owns: the count of
-log entries it has already consumed. It never learns the cursor from a
-mutating call (`push`/`comment` return no index) — only `events`/`log`
-advance it — so an entry that lands between two of its own actions can't
-be skipped (docs/agent-workflow.md).
+The agent drives the loop with a per-change cursor it owns (a vector of
+`change_id → idx`); `nit push`/`nit comment` return no index, so an entry
+that lands between two of its own actions is never skipped
+(docs/agent-workflow.md). One-shot reads (`nit status`, `nit log`) advance
+the cursor; the live followers return in a later stage.
 
 - `POST /api/changes/{id}/comments` —
   `req: {"thread_id": null, "revision": 2, "file": "Cargo.toml", "line": 14, "side": "new", "range": CommentRange, "body": "…", "resolved": false}`
@@ -377,90 +467,62 @@ be skipped (docs/agent-workflow.md).
   this change (anchor fields ignored — the thread owns the anchor). `body` is
   required (non-empty), except a `thread_id` reply may carry an empty body when
   it only changes `resolved`. `resolved` is the thread-resolution decision: on a
-  new thread, `false`/omitted leaves it **open** (counting toward the change's
-  unresolved threads) and `true` opens it **already resolved**; on a reply,
-  `true` resolves / `false` reopens / omitted leaves it unchanged. An agent
-  comment never changes the change's review status (it is not a verdict).
-  Appends one `comment` log entry; returns no cursor. Used by `nit comment`.
-  (Why an agent comments at all: docs/agent-workflow.md "Annotate the choices
-  you make".)
-- `GET /api/chains/{id}/feedback` → Feedback (current fold, no blocking):
-  ```json
-  Feedback = {
-    "state": "agents_turn",   // see state table
-    "actionable": true,
-    "chain": {"id": 1, "branch": "feat/x", "base": "main", "web_url": "…",
-              "partial": false, "last_scan_error": null},
-    "changes": [               // live changes, chain order
-      {"change_id": 10, "change_key": "I3f2…", "subject": "…",
-       "commit_sha": "…", "revision": 2, "status": "changes_requested",
-       "unresolved": 2,
-       "review": {"verdict": "request_changes", "message": "…",
-                  "revision": 2},          // latest review, null if none
-       "threads": [Thread]}                // the latest review's threads,
-    ]                                      // plus still-unresolved threads
-  }                                        // from earlier reviews
-  ```
-- `GET /api/chains/{id}/events?cursor={c}` — a **Server-Sent Events**
-  stream of the chain's log from `cursor` onward (the source behind
-  `nit wait` and `nit log --follow`). `cursor` is the agent's 0-based offset (optional, defaults to
-  `0` = from the start; an agent always passes its tracked cursor). On
-  connect the server immediately replays every entry already
-  past `cursor` (the "missed" backlog), then streams each new entry as it is
-  appended; keep-alive comments hold the connection open while the chain is
-  quiet. Each event's `data` is one `LogEntry`:
-  ```
-  data: {"idx": 5, "kind": "review", "created_at": "…", "payload": {…}}
-  ```
-  The stream is **raw**: the server emits every entry and makes no
-  relevance judgement. Deciding which events matter — the **wake rule** — is
-  the client's job (data-model.md), so one endpoint serves `nit wait`,
-  `nit log --follow` (and its `--reviewer-only` filter, which mutes the
-  agent's own entries client-side), and a future event-driven UI. There is
-  no timeout and no server-side
-  filtering; the stream ends only on graceful shutdown or client
-  disconnect, and a client resumes by reconnecting with its advanced
-  `cursor` (nothing is skipped — the backlog replay covers the gap). The
-  agent-side `{head, entries, feedback}` view of `nit wait` is assembled by
-  the client from this stream plus `…/feedback`, not returned by the server.
-- `GET /api/chains/{id}/log?from={a}&to={b}` → `{"head": 7, "entries":
-[LogEntry]}` — the entries in `[from, to)` (both optional: `from`
-  defaults 0, `to` defaults `head`). Read-only; never advances any cursor.
-  References past the dataset are a **400**, not a silent clamp — a `to`
-  beyond `head`, an open `from` beyond `head`, or a reversed/empty range
-  (`to <= from`). A valid range that selects nothing (an open
-  `from == head`) returns an empty list. Behind `nit log`.
+  new thread, `false`/omitted leaves it **open** and `true` opens it **already
+  resolved**; on a reply, `true` resolves / `false` reopens / omitted leaves it
+  unchanged. An agent comment never changes the change's review status (it is
+  not a verdict). Appends one `comment` log entry; returns no cursor. Used by
+  `nit comment`. (Why an agent comments at all: docs/agent-workflow.md
+  "Annotate the choices you make".)
+- `POST /api/changes/{id}/reopen` → ChangeDetail — clear an `abandoned`
+  change back to its retained verdict status (`nit reopen`), so the agent may
+  push a new revision (which folds it to `pending`). Appends a
+  `lifecycle{reopened}` entry. A no-op on a non-abandoned change.
 
 ```json
 LogEntry = {
-  "idx": 5,                 // 0-based position in the chain's log
-  "kind": "review",         // revisions | review | comment | partial | chain_closed
+  "change_id": 10,          // which change's log this entry belongs to
+  "idx": 5,                 // 0-based position in THAT change's log
+  "seq": 412,               // global, monotone across the repo (cross-change order)
+  "kind": "review",         // revision | review | comment | lifecycle | partial
   "created_at": "…",
   "payload": { … }          // kind-specific; shapes in data-model.md "Payloads"
 }
 ```
 
-The API ships only the raw entry. The one-line digest behind `--oneline`
-is **not** an API field: it is a client display concern, derived from
-`kind` + `payload` on demand (in the CLI), so its wording can change
-without an API change and each client renders entries however it likes.
+The API ships only the raw entry. The one-line digest behind `--oneline` is
+**not** an API field: it is a client display concern, derived from `kind` +
+`payload` on demand (in the CLI). The aggregated chain log
+(`GET /api/chains/{change_id}/log`) returns these entries merged across the
+chain's members and sorted by `seq`; a one-change slice
+(`GET /api/changes/{id}/log`) returns one change's, ordered by `idx`.
 
 ### State table (normative)
 
-| state                | meaning                                                                                                                                                                | actionable |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `waiting_for_review` | reviewer's turn; nothing for the agent                                                                                                                                 | false      |
-| `agents_turn`        | request_changes/commented on a latest revision, empty chain, or all approved while `partial` (agent still pushing — `approved` is inexpressible while the flag is set) | true       |
-| `approved`           | every live change approved (≥1) and the chain is not `partial`                                                                                                         | true       |
-| `merged`             | chain closed: work is in the base                                                                                                                                      | true       |
-| `abandoned`          | chain closed: branch disappeared                                                                                                                                       | true       |
+A change's **displayed status** is per `(change, revision)`: the verdict of
+the latest review whose `revision` equals the patchset a path pins, falling
+back to `pending`. `merged`/`abandoned` are terminal.
 
-`actionable` ≡ `state != waiting_for_review`. `state` is informational on
-a `nit wait` return — the agent acts on the `entries` it received and the
-state together (docs/agent-workflow.md).
+```
+status:  pending | approved | changes_requested | commented | merged | abandoned
+```
+
+A chain's **derived state** is a pure read-time function of its members, each
+at the revision the tip pins:
+
+| state                | when                                                                                       | actionable |
+| -------------------- | ------------------------------------------------------------------------------------------ | ---------- |
+| `merged`             | every member merged at its pinned revision (off the main page)                             | true       |
+| `has_abandoned`      | else any member abandoned                                                                  | true       |
+| `agents_turn`        | else any member changes_requested/commented; or empty tip; or all approved while `partial` | true       |
+| `waiting_for_review` | else any member pending                                                                    | false      |
+| `approved`           | else all approved (≥1) and not `partial`                                                   | true       |
+
+`actionable` ≡ `state != waiting_for_review`. A chain drops off the main page
+iff **every** member is terminal — any one live member keeps a partially-landed
+stack visible.
 
 ## Static UI
 
 Everything outside `/api` serves the built SPA (`--web-dist`/`$NIT_WEB_DIST`),
-falling back to `index.html` for client-side routes (`/chains/1`,
+falling back to `index.html` for client-side routes (`/chains/12`,
 `/changes/10`).
