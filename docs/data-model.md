@@ -1,107 +1,129 @@
 # Data model
 
-Review state is an **append-only event log**: each chain owns a log, and
-its entire reviewable state (changes, revisions, comment threads, reviews,
-partial flag, open/closed status) is the **fold** of that log. Nothing is
-mutated or deleted — a correction is a new entry. The server holds the fold
-in memory, rebuilt by replaying the log on startup; SQLite stores only the
-log plus three non-history side tables (repo registry, chain registration,
-reviewer drafts). git objects stay in the user's repo (pinned — "GC
-safety"); diffs are computed on demand from the commit shas an entry
-carries, never stored ("Diffs").
+The unit of state is the **change** (a `Change-Id`, scoped to a repo). A
+change owns an **append-only log** whose **fold** is its entire reviewable
+state — revisions, comment threads, reviews, partial flag, lifecycle.
+Nothing is mutated or deleted; a correction is a new entry. The server holds
+each change's fold in memory, rebuilt by replaying its log on startup.
+
+A **chain is never stored** — not in SQLite, not in memory. It is derived at
+read time by walking a tip commit's `parent_sha` back to the repo's canonical
+base branch through each revision's recorded parent (gerrit relation chains).
+Order is a read-time walk, never stored state.
+
+SQLite stores only the per-change logs plus three side tables (the repo
+registry, the change-identity registry, reviewer drafts). git objects stay in
+the user's repo, pinned against `git gc` ("Keep refs"); diffs are computed on
+demand from the commit shas a revision carries, never stored ("Diffs").
+
+> **Events are deferred.** The live followers (a websocket change stream,
+> `nit wait`, `nit log --follow`) are reintroduced in a later stage. Today the
+> agent reads one-shot and the web polls; everything below is the model
+> without them.
 
 ## Tables
 
 ```sql
-repos   (id, git_dir, UNIQUE(git_dir))
-        -- repo registry: canonical git-common-dir → id, the grouping key
-        -- chains hang off. Stores nothing derivable from git (no branches,
-        -- bases, commits, timestamps — those live in .git). git_dir is the
-        -- repo's identity *and* display name; `nit repo move` repoints it.
+repos   (id, git_dir, base_branch, UNIQUE(git_dir))
+        -- the registry. git_dir is the canonical git-common-dir — the repo's
+        -- identity *and* display name; `nit repo move` repoints it. base_branch
+        -- is the repo's one canonical branch, recorded on first push; mergedness
+        -- always tracks it (there is no land-anywhere). Stores nothing else
+        -- derivable from git (no commits, timestamps — those live in .git).
 
-chains  (id, repo_id, branch, base, created_at, UNIQUE(repo_id, branch))
-        -- registration identity, grouped under a repo. The repo's git_dir
-        -- is the path every git op opens; all chain state (status, partial,
-        -- changes, comments…) is folded from its log, never stored here.
+changes (id, repo_id, change_key, created_at, UNIQUE(repo_id, change_key))
+        -- the identity registry: a (repo, Change-Id) → a stable rowid `id` that
+        -- everything carries. Never reused, so a cursor key is valid for the
+        -- life of the repo. All reviewable state is the fold of this change's
+        -- log, never stored here.
 
-log     (chain_id, idx, kind, payload, created_at,
-         PRIMARY KEY (chain_id, idx))
-        -- the append-only log. idx is 0-based and contiguous per chain.
-        -- payload is kind-specific JSON (below). head(chain) = entry count
-        -- = idx of the next entry to append.
+log     (seq, change_id, idx, kind, payload, created_at,
+         PRIMARY KEY (seq AUTOINCREMENT), UNIQUE(change_id, idx))
+        -- the append-only log, keyed on the change. Every entry carries TWO
+        -- coordinates: a per-change `idx` (0-based, contiguous) and a global
+        -- `seq` (the rowid, monotone across the whole repo). payload is
+        -- kind-specific JSON (below). head(change) = entry count = idx of the
+        -- next entry to append.
 
-drafts  (id, chain_id, change_key, revision, thread_id, file, line, side,
+drafts  (id, change_id, revision, thread_id, file, line, side,
          range_start_line, range_start_char, range_end_line, range_end_char,
          line_text, body, resolved, created_at, updated_at)
         -- reviewer-private unpublished comments. Mutable (PATCH/DELETE),
-        -- never in the log: publishing a review drains a change's drafts
-        -- into one `review` entry and deletes the rows. thread_id set =
-        -- reply to that thread; NULL = opens a new thread (file/line/side/
-        -- range anchor). side: old | new. range_*: all four set or all NULL
-        -- (docs/api.md "Range comments"). resolved: staged thread decision
-        -- (NULL = none; docs/api.md "Thread resolution"), applied on publish.
+        -- never in the log: publishing a review drains a change's drafts into
+        -- one `review` entry and deletes the rows. thread_id set = reply to that
+        -- thread; NULL = opens a new thread (file/line/side/range anchor). side:
+        -- old | new. range_*: all four set or all NULL (docs/api.md "Range
+        -- comments"). resolved: staged thread decision (NULL = none; docs/api.md
+        -- "Thread resolution"), applied on publish.
 ```
 
-That is the whole schema — no `changes`/`revisions`/`comments`/`reviews`/
-`events` tables; all of that is folded state, and the side tables hold only
-registration identity.
+That is the whole schema — **no `chains` table, no `revisions` table, no
+`comments`/`reviews`/`events` tables**. Revision data lives in `revision`-kind
+log entries; threads, reviews, status, lifecycle are all folded state; the
+side tables hold only registration identity and reviewer scratch.
+
+### The two coordinates
+
+`idx` orders one change in isolation — what a change's own cursor advances
+(consumed `[0, c)` ⇒ resume at `c`). `seq` total-orders entries drawn from
+_different_ changes: the aggregated chain log (docs/api.md "Chains") sorts by
+it. SQLite mints both in one append — `idx = MAX(idx)+1` for the change under
+its append lock, `seq` the autoincrement rowid.
 
 ## The log
 
-An entry is `(chain_id, idx, kind, payload, created_at)`. `idx` is 0-based
-and contiguous, so a cursor is just an offset: an agent that consumed
-`[0, c)` reconnects the `events` stream with `c` and gets `[c, head)` then
-the live tail (docs/api.md "events"). Five kinds:
+An entry is `(seq, change_id, idx, kind, payload, created_at)`. Five kinds:
 
-| kind           | appended by                                   |
-| -------------- | --------------------------------------------- |
-| `revisions`    | a scan that changed structure (push/rescan)   |
-| `review`       | reviewer submits a verdict (`POST …/reviews`) |
-| `comment`      | an agent posts a comment (`nit comment`)      |
-| `partial`      | `nit push --partial` / `nit ready` flips it   |
-| `chain_closed` | a scan finds the chain merged/abandoned       |
+| kind        | appended by                                              |
+| ----------- | -------------------------------------------------------- |
+| `revision`  | a push observes a new commit-sha for this change         |
+| `review`    | a reviewer verdict, draining the change's drafts         |
+| `comment`   | an agent comment (`nit comment`)                         |
+| `lifecycle` | the merge/abandon timer, and `nit reopen`                |
+| `partial`   | `nit ready` (or a push) re-stamps the tip's partial flag |
 
-Every entry streams to every `events` consumer unfiltered; whether one
-_wakes_ a parked `nit wait` is a client decision ("Wake rule").
+`push` is the only writer of `revision`; the background timer is the only
+writer of merged/abandoned `lifecycle` ("Lifecycle timer").
 
 ### Identity within the log
 
-Two kinds of fold-assigned id, opaque and stable across replays:
+Three kinds of id, all opaque and stable across replays:
 
-- **Change and review ids** come from a per-chain counter at append time,
-  written into the payload. Replay trusts the stored ids and resumes the
-  counter at `max(seen) + 1`; a draft's id is drawn from the same counter,
+- **`change_key`** — the `Change-Id:` trailer verbatim. The change's `id` is
+  the `changes` rowid the `UNIQUE(repo_id, change_key)` upsert assigns.
+- **Review ids** — minted from a process-global counter at append time and
+  written into the `review` payload. Replay trusts the stored id and resumes
+  the counter at `max(seen) + 1`; a draft's id is drawn from the same counter,
   so it never collides.
-- **Thread ids** are **not stored**. A thread is born when a comment folds
-  with no `thread_id`, numbered by creation order as the fold replays — a
-  pure function of the log, so every replay assigns the same id to the same
-  thread. Later comments (and reviewer drafts) join by carrying the
-  `thread_id`. The thread exists only as a fact of the fold.
+- **Revision numbers and thread ids** are **not stored** — they are minted
+  **in the fold** by creation order, a pure function of the log. Revision
+  numbers are 0-based, assigned to each `revision` entry as it folds; a thread
+  is numbered when a comment folds with no `thread_id`. Every replay assigns
+  the same id to the same revision/thread, so a concurrent shared-change push
+  cannot mint a duplicate.
 
 ### Payloads
 
 ```jsonc
-// revisions — the structural delta of one scan (see "Scan algorithm")
+// revision — one new commit-sha observed for this change. The revision
+// `number` is NOT carried; the fold mints it (0-based, by append order).
 {
-  // live changes, in order; change_id is fold-assigned (minted at append
-  // time for a new key, reused for an existing one)
-  "live": [{"change_key": "I3f2…", "change_id": 10, "position": 0}, …],
-  "added": [                                              // changes that got a NEW revision
-    {"change_key": "I3f2…", "number": 2, "commit_sha": "…",
-     "parent_sha": "…", "message": "full commit message\n…",
-     "resets_status": true}                               // false only for a pure rebase
-  ]
+  "commit_sha": "…",
+  "parent_sha": "…",          // the previous walked commit, or the fork for the first
+  "base_sha": "…",            // the walk's fork point on the canonical branch
+  "message": "full commit message\n…",
+  "partial": true,            // this push's partial flag
+  "resets_status": true       // false only for a pure rebase (patch-id-equal AND
+                              // message unchanged): the new revision then inherits
+                              // the prior revision's status instead of pending
 }
-// Orphaned = changes in the fold but absent from `live`; reattached = changes
-// in `live` that were orphaned. The fold derives both by diffing `live`.
 
-// review — one reviewer verdict on one change, draining its drafts. Each
-// comment opens a new thread (thread_id null, anchor used) or replies to an
-// existing one (thread_id set, anchor ignored).
+// review — one reviewer verdict on one change at one revision, draining its
+// drafts. Each comment opens a new thread (thread_id null, anchor used) or
+// replies to an existing one (thread_id set, anchor ignored).
 {
-  "change_key": "I3f2…",
-  "review_id": 5,                      // fold-assigned (stored), like change ids
-  "revision": 2,                       // the reviewed revision (post pure-rebase retarget)
+  "review_id": 5,                      // fold-assigned (stored)
+  "revision": 2,                       // the reviewed patchset (some live tip pins it)
   "verdict": "request_changes",        // approve | request_changes | comment
   "message": "cover note",
   "comments": [                        // the drained drafts, in draft order
@@ -116,7 +138,6 @@ Two kinds of fold-assigned id, opaque and stable across replays:
 // comment — one comment an agent posts (`nit comment`): opens a thread or
 // continues one. The agent-authored mirror of a single review comment.
 {
-  "change_key": "I3f2…",
   "thread_id": null,                   // null = open a new thread (anchor below); set = reply
   "revision": 2, "file": "Cargo.toml", "line": 14, "side": "new",
   "range": null, "line_text": "serde = …",         // anchor — used only for a new thread
@@ -124,164 +145,266 @@ Two kinds of fold-assigned id, opaque and stable across replays:
   "resolved": true                     // new thread: born resolved/open; reply: resolve/reopen; null = unchanged
 }
 
-// partial — sticky more-commits-coming flag
-{"partial": true}
+// lifecycle — the merge/abandon timer and `nit reopen`
+{"action": "merged", "revision": 2}    // merged | abandoned | reopened;
+                                       // `revision` set only for merged (which patchset landed)
 
-// chain_closed
-{"status": "merged"}                   // merged | abandoned
+// partial — re-stamp the tip change's latest-revision partial flag
+{"partial": true}
 ```
 
 ## The fold (log → state)
 
-Per change, the state holds its **threads** — each a located, resolvable
-conversation: an anchor (revision/file/line/side/range/line_text), a
-rolled-up `resolved` flag, and ordered comments (author + body). Replaying
-the log in order yields this. Each kind's effect:
+Per change, the fold holds its **revisions** (each with its shas, message,
+partial flag and `resets_status`), its **threads** (each a located, resolvable
+conversation: an anchor — revision/file/line/side/range/line_text — a rolled-up
+`resolved` flag, and ordered comments with author + body), its **reviews**, and
+its **lifecycle** (active / merged{revision} / abandoned). Replaying the log in
+order yields this. Each kind's effect:
 
-- **`revisions`** — per `added`: create the change if its key is new
-  (status `pending`), append the revision, set status `pending` when
-  `resets_status`. Apply `live`: set each change's `position` and clear its
-  orphaned flag; a change absent from `live` becomes **orphaned**
-  (`position = null`, threads/reviews kept, status retained); a
-  previously-orphaned change present in `live` is reattached.
-- **`review`** — apply each comment to the change's threads (below) as
-  `reviewer`, tagged with `review_id`; record the review (verdict, message,
-  reviewed revision); set status from the verdict (`approve`→approved,
-  `request_changes`→changes_requested, `comment`→commented).
+- **`revision`** — mint the next revision number (0-based) and push a revision
+  with the payload's shas/message/partial/`resets_status`.
+- **`review`** — record the review (id, verdict, message, reviewed revision),
+  then apply each comment to the change's threads (below) as `reviewer`, tagged
+  with `review_id`.
 - **`comment`** — apply the one comment as `agent`, no `review_id`. Adds no
   review and leaves status untouched — an agent note is not a verdict.
-- **`partial`** / **`chain_closed`** — set the partial flag / the
-  merged/abandoned status.
+- **`partial`** — set the latest revision's partial flag.
+- **`lifecycle`** — set the change's lifecycle: `merged{revision}`,
+  `abandoned`, or `reopened` (back to active).
 
-**Applying a comment** (shared by `review` and `comment`): with no
-`thread_id`, mint the next id and open a thread at the anchor — first
-comment = author + body, `resolved` from the comment's decision. With a
-`thread_id`, append author + body to that thread (empty body adds no
-comment, only the resolution) and apply the `resolved` decision
-(true→resolved, false→reopened, null→unchanged). Anchor and birth come from
-the first comment; later comments may only move the flag, so a thread ends
-at the **last** decision applied.
+**Applying a comment** (shared by `review` and `comment`): with no `thread_id`,
+mint the next id and open a thread at the comment's anchor — first comment =
+author + body, `resolved` from the comment's decision (a new thread needs a
+non-empty body; an empty one is dropped, never minting an id). With a
+`thread_id`, append author + body to that thread (empty body adds no comment,
+only the resolution) and apply the `resolved` decision (true→resolved,
+false→reopened, null→unchanged). The anchor and birth come from the first
+comment; later comments may only move the flag, so a thread ends at the **last**
+decision applied.
 
-A change's wire `status` is `orphaned` when flagged, else its retained
-status (`pending | approved | changes_requested | commented`); `position`
-is null while orphaned.
+### Per-change, per-revision status
+
+A change has **no status scalar**. Its **displayed status** is per
+`(change, revision)`: the lifecycle overlay over the verdict-derived review
+status of the patchset a path pins.
+
+```
+status:  pending | approved | changes_requested | commented | merged | abandoned
+```
+
+- **Review status at a revision** = the verdict of the latest review whose
+  `revision` is that patchset (`approve`→approved, `request_changes`→
+  changes_requested, `comment`→commented). No review there: a **pure-rebase**
+  revision (`resets_status == false`) carries the **prior** revision's status
+  forward; otherwise `pending`.
+- **Lifecycle overlay**: `abandoned` is terminal **change-wide** (every
+  revision). `merged` is terminal only for the **landed** patchset — a path
+  pinning a non-landed revision of a merged change shows that member live with
+  a "newer revision landed elsewhere" note (`merged_elsewhere`), not merged.
+
+Two tips pinning two patchsets carry two independent verdicts — an approve in
+one chain never overwrites a request_changes in another, because each is scoped
+to its `(change, revision)` pair.
 
 ### Change identity (`change_key`)
 
-The **`Change-Id:` trailer** (gerrit-style, any opaque token) is the
-identity, required and canonical: every commit in `base..tip` must carry
-its own, or the scan aborts (no entry appended, `last_scan_error`
-surfaced) — same for a duplicate trailer, a `fixup!`/`squash!` (squash
-locally first), or a merge commit. A change keeps its identity and thread
-history across sha changes (rebase, amend, reword); a new trailer is a new
-change. A change whose trailer leaves the walk becomes **orphaned**
-(lossless — threads and reviews kept, shown collapsed); the trailer
-returning reattaches it. Orphans keep transient git states (mid-rebase
-resets, dropped-and-restored commits) lossless.
+The **`Change-Id:` trailer** (gerrit-style, any opaque token) is the identity,
+required and canonical: every commit in `fork..tip` must carry its own, or the
+push is rejected whole (`400`, nothing recorded). A change keeps its `id` and
+its thread history across sha changes (rebase, amend, reword); a new trailer is
+a new change. The same trailer reached by two pushes on different parents is
+**one change with two patchsets** ("The B-in-two-chains example"), not a
+conflict. A change no tip reaches is simply off every path — its log and threads
+retained and pinned, reachable by id (there is no orphaned/position machinery;
+order is the SHA-walk).
 
-## Scan algorithm (push + throttled on reads, under the chain lock)
+## Chain derivation
 
-A scan reconciles git reality against the fold and **appends one
-`revisions` entry iff the structure changed** (so read-scans never bloat
-the log):
+A chain is a pure read-time function of the repo's per-change folds
+(`crate::chain::RepoView`). The view owns a snapshot of every change plus a
+`commit_sha → (change_id, revision number)` **index** built from their
+revisions; it holds no locks and touches no git.
 
-1. Open repo; resolve `base` and tip. Failure (repo moved, base gone) →
-   set `last_scan_error`, keep the fold, append nothing.
-   - Branch ref missing on **two consecutive scans ≥ 10s apart** →
-     `chain_closed{abandoned}` (the gap protects against mid-rebase
-     windows; the timer is in-memory, so a restart resets it — abandonment
-     is best-effort, delayed not wrong). The first miss is just the
-     `last_scan_error` marker.
-   - Merged test: tip is ancestor-or-equal of base **and** every live
-     change matches a commit in `fork..base` (_fork_ = `parent_sha` of the
-     first live change's latest revision). A change matches by Change-Id
-     first, then by diff patch-id; empty diffs match trivially but ≥1 real
-     match is required. No live changes → judge the orphans. Match →
-     `chain_closed{merged}`.
-   - A later scan that finds the branch alive reopens a merged/abandoned
-     chain.
-2. Walk `base..tip` oldest-first. A merge commit or a root commit in the
-   range aborts the scan ("rebase onto the base instead"); so does any
-   commit missing its `Change-Id:` or being a `fixup!`/`squash!` (kept fold
-   - `last_scan_error`).
-3. Diff the walk against the fold: a new key → `added` (number 1); a tip
-   sha that differs from the change's latest revision → `added`
-   (number + 1), with `resets_status = false` only for a **pure rebase**
-   (patch-id-equal **and** message unchanged), else `true` (a reword
-   counts — the message is reviewable as `/COMMIT_MSG`). Live ordering →
-   `live`; keys gone from the walk drop out (the fold orphans them).
-4. Append the `revisions` entry iff step 3 produced anything.
+- **Tips** are leaves over the latest revisions: each **non-terminal** change's
+  latest-revision `commit_sha` that **no** revision (of any change) records as a
+  `parent_sha`. A superseded patchset is never a tip; a terminal change is not a
+  tip but can still be an interior member of a live tip's path. (`all_tips`
+  drops the non-terminal filter — the `?status=all` view that still surfaces
+  recently merged/abandoned chains.)
+- **`path_from_tip(sha)`** walks back to the fork, oldest-first: resolve `sha`
+  through the index to `(change, revision)`, push it, then follow that
+  revision's `parent_sha` — stopping at the fork point (`parent_sha == base_sha`)
+  or an unresolved parent. The walk is **total**: an unresolved parent (below
+  the merge-base, or a torn push) truncates the path, never errors; a cycle
+  guard rides out bad data. Each member is pinned to the patchset the tip walked
+  through.
+- **`chains_through(change_id)`** returns every tip whose path walks that change,
+  with the revision that path pins on it — drives `ChangeDetail.chains`.
+
+### The B-in-two-chains example
+
+Two pushes in one repo, canonical `main` at merge-base `m`:
+
+- push 1: `m → A → B → C` (Change-Ids `Ia, Ib, Ic`)
+- push 2: `m → D → B′ → E` (`Id, Ib, Ie`, B re-parented onto D)
+
+`B` is one change with two patchsets: rev0 `parent=A`, rev1 `parent=D`. Two
+tips, two chains: the C-chain walks B at rev0, the E-chain walks B at rev1.
+Threads and reviews on B are **shared** (they belong to the change) and each is
+anchored to the revision it was written against; `?revision` selects which
+patchset — and which chain context — you view (rev0 ⇒ the C-chain, rev1 ⇒ the
+E-chain), because each revision records the parent that places B in exactly one
+chain.
+
+### Derived chain state
+
+`derive_state` folds the members' displayed status (each at its pinned
+revision) plus the tip's partial flag into the actionable state the agent
+branches on:
+
+```
+every member merged (at its pinned revision)    → merged        (off the main page)
+else any member abandoned                        → has_abandoned (shown, flagged)
+else any member changes_requested|commented      → agents_turn
+else any member pending                          → waiting_for_review
+else all approved (≥1) and tip partial           → agents_turn   (still pushing)
+else all approved (≥1)                           → approved
+else (no members)                                → agents_turn   (empty tip)
+```
+
+A chain is **partial** iff its **tip** change's latest revision is partial —
+the tip is the work frontier, so the most recent push's intent governs whether
+the chain may merge; a shared interior change carrying a stale partial from a
+sibling push does not hold an unrelated chain partial. A chain drops off the
+main page iff **every** member is terminal — any one live member keeps a
+partially-landed stack visible. The full actionable/feedback contract lives in
+[api.md](api.md).
+
+## Push
+
+`push` is the **only writer of revisions**. There is no chain entity, so no
+birth decision and no cross-chain routing — every commit is an independent
+upsert keyed by its `Change-Id`.
+
+1. Resolve the canonical `base` and `tip` (either failing to resolve is a
+   `400`). `base` must equal the repo's stored `base_branch` — a different base
+   is a `400` (one canonical branch per repo), recorded on the first push.
+2. `fork = merge-base(base, tip)`; walk `fork..tip` oldest-first
+   (`gitscan::walk_push`). The walk is **all-or-nothing** — a `400` rejects the
+   whole push on any structural fault: a merge or root commit, a commit missing
+   its `Change-Id`, a duplicate trailer within the walk, a `fixup!`/`squash!`
+   subject, or a commit-sha already recorded under a different change. A
+   half-valid walk would record a chain shape the reviewer can't trust; nothing
+   is recorded, the agent fixes locally and re-pushes.
+3. Pre-flight each change: upsert it (`INSERT … ON CONFLICT DO NOTHING`, keyed
+   by `(repo_id, change_key)` — idempotent and self-serializing) and **reject
+   `409`** any whose content moved while it is **abandoned** — an abandoned
+   change must be `nit reopen`'d first, so a stray re-push never silently
+   resurrects it.
+4. Per commit, oldest-first, with `parent_sha` = the previous walked commit (or
+   `fork` for the first): **append a `revision` entry iff the commit-sha moved**
+   (differs from the change's latest revision, or there is none). `resets_status`
+   is `false` only for a pure rebase (`gitscan::pure_rebase`: patch-id-equal
+   **and** message unchanged — a reword resets, it is reviewable as
+   `/COMMIT_MSG`). A keep ref is ensured for each new revision.
+
+A push that walks to nothing (`tip` ancestor-or-equal of `base`) is valid and
+records nothing. **Idempotency**: re-applying the same `(change_id, idx)` is a
+no-op at the storage layer, so a crash-retry is safe. `partial` is sticky:
+present, it re-stamps the tip's latest revision (a push where nothing moved but
+`partial` flips is exactly `nit ready`); absent, the tip inherits its prior
+revision's flag.
+
+A push touching N changes commits them in **N per-change transactions**,
+oldest-first — **not atomic across changes**. A crash or concurrent reader
+mid-push can see some changes recorded and others not; this is made safe by
+construction, because `path_from_tip` truncates on an unresolved `parent_sha`
+(a torn push renders a partial chain, never an error).
+
+## Lifecycle timer
+
+A per-repo background sweep (`run_lifecycle_timer`) is the **only writer** of
+merged/abandoned `lifecycle` entries — a push cannot observe the base advancing
+or a branch disappearing. It runs every `NIT_TIMER_INTERVAL_MS` (default 5s)
+and, for each **non-terminal** change of each repo:
+
+- **Merged** — `landed_revision` matches the change's latest revision against
+  the canonical branch over `base_sha..canonical`. First by **Change-Id**: a
+  commit there carrying this change's key whose patch-id equals the latest
+  revision's ⇒ landed; a key present but with a different patch-id is "landed
+  earlier, since amended" and the change stays open (no oscillation). Else by
+  **patch-id**: the latest revision's patch-id appears in the window (an empty
+  diff never alone counts). A match appends `lifecycle{merged, revision}` —
+  which patchset landed. Prefix merge falls out for free: landing A and B marks
+  them merged while C stays live, no chain-level gate.
+- **Abandoned** — when the change's latest revision is **unreachable from any
+  local branch ref** (nit's own `refs/nit/keep/*` are excluded, so they never
+  keep it alive) across **two consecutive sweeps ≥ `NIT_ABANDON_SECS` apart**
+  (default 10s). The gap rides out mid-rebase windows; the first-seen-unreachable
+  instant is in-memory (`unreachable_since`), so a restart resets it —
+  abandonment is best-effort, delayed not wrong. Reachability is refreshed each
+  sweep, so a re-reachable change clears its timer. A change shared by two chains
+  is reachable as long as **either** tip walks it.
+
+**Reopen is explicit.** `nit reopen` appends `lifecycle{reopened}`, clearing
+`abandoned` back to the retained verdict status and dropping the timer entry;
+the agent may then push a new revision (which folds it to `pending`). An
+abandoned change does not auto-reopen on bare re-reachability — keeping a
+transient rebase that briefly re-touches its commit from resurrecting it.
 
 ## Diffs
 
-Diffs are never stored. The fold holds each revision's `commit_sha` and
-`parent_sha`; the diff endpoint opens the repo and computes
+Diffs are never stored. The fold holds each revision's `commit_sha`,
+`parent_sha` and `base_sha`; the diff endpoint opens the repo and computes
 `parent_tree → commit_tree` (or `tree(m) → tree(n)` for an interdiff) with
 libgit2 per request. Commit messages render as the synthetic `/COMMIT_MSG`
-file (api.md).
-
-## Wake rule
-
-The server streams every entry on `events` unfiltered; the wake rule is a
-**client** concern. The default is **wake** — every event ends a parked
-`nit wait`: a reviewer verdict, a new `revisions`, `partial`,
-`chain_closed`, even the agent's own pushes and comments (skimmed with
-`--oneline`). One case is suppressed:
-
-> a `review` with verdict `approve`, **no comments**, that does **not**
-> complete the chain (does not reach `approved`).
-
-So a reviewer approving change after change doesn't wake the agent each
-time. It is **not dropped**: the client accumulates it and hands it back
-with the next waking event (a completing approve reaches `approved` and
-wakes; `nit wait` detects completion via `feedback.actionable`). A fresh
-`wait`/`log` from an earlier cursor still sees it. With no timeout, a
-suppressed approve never surfaces a wait on its own.
-
-## Derived chain state
-
-The fold yields the same actionable state the agent branches on:
-
-```
-change (wire):  orphaned  when the orphaned flag is set
-                else pending | approved | changes_requested | commented
-
-chain state (derived from the live changes):
-  status merged/abandoned                     → merged / abandoned
-  any live change changes_requested|commented → agents_turn
-  else any live change pending                → waiting_for_review
-  else all approved (≥1)                      → agents_turn if partial
-                                                (still pushing), else approved
-  else (no live changes)                      → agents_turn   (empty chain)
-```
-
-The full actionable/feedback contract lives in [api.md](api.md).
+file, and an interdiff across re-parented revisions is drift-processed
+(docs/api.md "Rebase-aware interdiffs").
 
 ## Concurrency (normative)
 
-- One **per-chain async mutex** serializes every appender (scan, review,
-  agent comment, partial flip). Under it the batch is fold-validated on a
-  throwaway copy, the log rows inserted in one `BEGIN IMMEDIATE`
-  transaction, the fold updated, and only then each entry published on the
-  chain's broadcast channel. Validate-before-commit keeps the log from
-  getting ahead of the fold; publish-after lets a subscriber reconcile the
-  channel against its backlog without seeing a half-applied entry.
-- An `/events` subscriber arms its subscription **before** reading the
-  backlog, then drops any streamed entry the backlog already covers — so
-  each entry reaches a live subscriber exactly once. One lagging past the
-  channel buffer is dropped with an overflow signal and reconnects at its
-  cursor.
-- Scans throttle: one that finished < 2s ago is not repeated; reads serve
-  the current fold instead of waiting on a running scan.
-- A failed scan **never** partially reconciles: no entry appended,
-  `last_scan_error` set, the prior fold served. One broken chain must not
-  affect the others.
+The unit of contention is **one change's log**. A chain owns no log and no
+lock. Each loaded change holds `proj: StdRwLock<ChangeProj>` (the fold) and a
+sync **append lock** (`StdMutex`) serializing its appenders — no async mutex,
+no per-chain lock.
 
-## GC safety
+- **Append** (`append_to_change`) runs inside `spawn_blocking` under the
+  change's append lock. It reads the committed `head` for the change's `idx`,
+  **validates the batch by folding it onto a throwaway probe copy** (a payload
+  that won't fold errors out with nothing written), then commits the log rows
+  under `BEGIN IMMEDIATE` (minting each `seq`), and only then folds the entries
+  into the live projection (infallible — already validated). A `review`'s draft
+  drain shares the same transaction, so either both land or neither does.
+  Validate-before-commit keeps the log from getting ahead of the fold; the held
+  guard spans only the in-memory fold (microseconds), never the blocking commit,
+  so a reader never stalls on a writer's I/O.
+- **Chain-view assembly** clones each change out from under its lock into an
+  owned `RepoView` snapshot, then walks it lock-free — never holding two change
+  guards at once, never blocking an append. It can observe B at rev1 while a
+  concurrent push appends B's rev2, which is correct (it reflects the tip that
+  was pushed).
+- **Cross-change appends never contend**: two changes hold two different guards
+  and two disjoint transactions. No appender ever holds two change guards at
+  once — the invariant that keeps a multi-change push deadlock-free. SQLite is
+  the single writer (WAL, `busy_timeout`); a `SQLITE_BUSY` from cross-change
+  write contention surfaces as a retryable 503, not a broken database.
+- **Creating a change** is the `UNIQUE(repo_id, change_key)` upsert: two pushes
+  first-seeing the same key race one SQLite-serialized statement, the loser is a
+  no-op, both read the same `change_id`. No read-decide-insert, no owner routing,
+  no per-repo lock.
 
-The commit objects review history points at must survive `git gc` and
-post-merge reflog expiry. After each scan, on active chains, nit maintains
-one ref per revision of every change (orphans included):
-`refs/nit/keep/<chain-id>/<change-id>/<revision-number>` → the revision's
-commit (its parent, the diff's old side, is reachable through it). Closing
-a chain deletes its refs.
+## Keep refs
+
+The commit objects review history points at must survive `git gc` and post-merge
+reflog expiry. After each push (and replay), nit maintains one ref per revision
+of a change, **keyed on the change** (a chain is not stored):
+
+```
+refs/nit/keep/<change-id>/<revision-number> → the revision's commit
+```
+
+The revision's parent (the diff's old side) is reachable through it.
+`ensure_keep_ref` is idempotent. **GC/deletion is deferred in this cut** — refs
+accumulate (fail-safe: pinning more than necessary never drops an object the
+SHA-walk, a vs-parent diff, or the timer's `base_sha..canonical` walk needs).
