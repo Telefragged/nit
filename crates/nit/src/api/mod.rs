@@ -555,6 +555,29 @@ async fn chain_log(
 // ---------------------------------------------------------------------------
 // Changes
 
+/// Rebuild the `ChangeDetail` for `id` from the current view (404 if it
+/// vanished) — the shared tail of the three change-detail handlers.
+fn change_detail_json(
+    conn: &rusqlite::Connection,
+    state: &Arc<AppState>,
+    entry: &ChangeEntry,
+    id: u64,
+) -> Result<Json<types::ChangeDetail>, Error> {
+    let (repo, _) = repo_of_change(state, entry)?;
+    let repo_id = entry.read().repo_id;
+    let view = state.repo_view(repo_id);
+    let change = view
+        .change(id)
+        .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
+    Ok(Json(views::build_change_detail(
+        conn,
+        &repo,
+        &view,
+        &state.public_base,
+        change,
+    )?))
+}
+
 async fn get_change_detail(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
@@ -562,19 +585,7 @@ async fn get_change_detail(
     let entry = change_or_404(&state, id)?;
     blocking(move || {
         let conn = state.open_db()?;
-        let (repo, _) = repo_of_change(&state, &entry)?;
-        let repo_id = entry.read().repo_id;
-        let view = state.repo_view(repo_id);
-        let change = view
-            .change(id)
-            .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
-        Ok(Json(views::build_change_detail(
-            &conn,
-            &repo,
-            &view,
-            &state.public_base,
-            change,
-        )?))
+        change_detail_json(&conn, &state, &entry, id)
     })
     .await
 }
@@ -1067,6 +1078,30 @@ async fn create_comment(
     .await
 }
 
+/// Append a guarded lifecycle entry (a no-op unless `guard` holds for the
+/// current state) then rebuild the change detail. Shared by abandon/reopen.
+fn set_lifecycle(
+    state: &Arc<AppState>,
+    entry: &ChangeEntry,
+    id: u64,
+    guard: fn(&Lifecycle) -> bool,
+    action: LifecycleAction,
+    message: Option<String>,
+) -> Result<Json<types::ChangeDetail>, Error> {
+    let mut conn = state.open_db()?;
+    if guard(&entry.read().lifecycle) {
+        let payload = serde_json::to_value(review::LifecyclePayload {
+            action,
+            revision: None,
+            message,
+        })
+        .map_err(anyhow::Error::from)?;
+        append_to_change(&mut conn, entry, id, vec![(LogKind::Lifecycle, payload)])
+            .map_err(map_busy)?;
+    }
+    change_detail_json(&conn, state, entry, id)
+}
+
 /// `POST /api/changes/{id}/abandon` — mark a live change abandoned
 /// (`nit abandon`): a reviewer/agent judgment, never automatic. Optional
 /// `message` records a reason. A no-op on an already-terminal change.
@@ -1077,30 +1112,14 @@ async fn abandon_change(
 ) -> Result<Json<types::ChangeDetail>, Error> {
     let entry = change_or_404(&state, id)?;
     blocking(move || {
-        let mut conn = state.open_db()?;
-        if matches!(entry.read().lifecycle, Lifecycle::Active) {
-            let payload = serde_json::to_value(review::LifecyclePayload {
-                action: LifecycleAction::Abandoned,
-                revision: None,
-                message: req.message,
-            })
-            .map_err(anyhow::Error::from)?;
-            append_to_change(&mut conn, &entry, id, vec![(LogKind::Lifecycle, payload)])
-                .map_err(map_busy)?;
-        }
-        let (repo, _) = repo_of_change(&state, &entry)?;
-        let repo_id = entry.read().repo_id;
-        let view = state.repo_view(repo_id);
-        let change = view
-            .change(id)
-            .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
-        Ok(Json(views::build_change_detail(
-            &conn,
-            &repo,
-            &view,
-            &state.public_base,
-            change,
-        )?))
+        set_lifecycle(
+            &state,
+            &entry,
+            id,
+            |l| matches!(l, Lifecycle::Active),
+            LifecycleAction::Abandoned,
+            req.message,
+        )
     })
     .await
 }
@@ -1113,30 +1132,14 @@ async fn reopen_change(
 ) -> Result<Json<types::ChangeDetail>, Error> {
     let entry = change_or_404(&state, id)?;
     blocking(move || {
-        let mut conn = state.open_db()?;
-        if matches!(entry.read().lifecycle, Lifecycle::Abandoned) {
-            let payload = serde_json::to_value(review::LifecyclePayload {
-                action: LifecycleAction::Reopened,
-                revision: None,
-                message: None,
-            })
-            .map_err(anyhow::Error::from)?;
-            append_to_change(&mut conn, &entry, id, vec![(LogKind::Lifecycle, payload)])
-                .map_err(map_busy)?;
-        }
-        let (repo, _) = repo_of_change(&state, &entry)?;
-        let repo_id = entry.read().repo_id;
-        let view = state.repo_view(repo_id);
-        let change = view
-            .change(id)
-            .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
-        Ok(Json(views::build_change_detail(
-            &conn,
-            &repo,
-            &view,
-            &state.public_base,
-            change,
-        )?))
+        set_lifecycle(
+            &state,
+            &entry,
+            id,
+            |l| matches!(l, Lifecycle::Abandoned),
+            LifecycleAction::Reopened,
+            None,
+        )
     })
     .await
 }
