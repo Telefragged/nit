@@ -587,7 +587,10 @@ chain, no resubscribe bookkeeping.
   per-change feeds in a keyed dynamic-membership map (`tokio-stream`'s
   `StreamMap`); there is no per-chain channel and no server-side chain —
   following a whole chain is the client subscribing to each member, and a
-  follower drops the whole set by closing the socket.
+  follower drops the whole set by closing the socket. A follower that falls
+  more than a feed's buffer behind **overflows**: the server closes the socket
+  rather than skip the gap, and the client reconnects and re-reads the missed
+  entries from the log.
 
   The **only** non-log message is `new_parent` (out-of-log, no `idx`/`seq`):
   it fires whenever a parent↔child edge `{of → parent}` is newly established —

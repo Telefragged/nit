@@ -19,10 +19,12 @@ pub mod views;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
-use async_broadcast::Receiver;
+use async_broadcast::{Receiver, RecvError};
 use axum::Json;
 use axum::Router;
 use axum::extract::State;
@@ -1308,12 +1310,29 @@ async fn stream(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> imp
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
+/// A per-change feed that **surfaces** broadcast overflow instead of silently
+/// skipping past it. `async_broadcast`'s own `Stream` impl swallows
+/// `Overflowed` (it `continue`s to the next slot), which would let a follower
+/// that fell more than `EVENTS_BUFFER` behind lose entries with no signal.
+/// Yielding the error lets `handle_socket` close the socket so the client
+/// reconnects and re-reads the gap from the log (docs/api.md "Events").
+struct Feed(Receiver<StreamMsg>);
+
+impl tokio_stream::Stream for Feed {
+    type Item = Result<StreamMsg, RecvError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.0).poll_recv(cx)
+    }
+}
+
 /// Drive one follower's socket: `subscribe` messages drive a keyed
 /// `StreamMap` of per-change feeds (dynamic membership); each arms the feed
 /// **before** replaying the change's `[from, head)` backlog and records an idx
-/// watermark so the arm/read overlap is deduped, never gapped.
+/// watermark so the arm/read overlap is deduped, never gapped. A feed that
+/// overflows closes the socket — the client reconnects and re-reads the log.
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
-    let mut feeds: StreamMap<u64, Receiver<StreamMsg>> = StreamMap::new();
+    let mut feeds: StreamMap<u64, Feed> = StreamMap::new();
     let mut watermark: HashMap<u64, u64> = HashMap::new();
     let mut shutdown = state.shutdown_watch();
     loop {
@@ -1336,7 +1355,10 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                     _ => {} // ping/pong/binary: ignored
                 }
             }
-            Some((change_id, msg)) = feeds.next(), if !feeds.is_empty() => {
+            Some((change_id, item)) = feeds.next(), if !feeds.is_empty() => {
+                // Overflow (or a closed feed): this follower fell behind. Close
+                // the socket so it reconnects and re-reads the gap from the log.
+                let Ok(msg) = item else { break };
                 // Drop a live entry the backlog replay already covered.
                 if let StreamMsg::Entry(ref e) = msg
                     && e.idx < watermark.get(&change_id).copied().unwrap_or(0)
@@ -1357,7 +1379,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 async fn apply_client_msg(
     socket: &mut WebSocket,
     state: &Arc<AppState>,
-    feeds: &mut StreamMap<u64, Receiver<StreamMsg>>,
+    feeds: &mut StreamMap<u64, Feed>,
     watermark: &mut HashMap<u64, u64>,
     client: types::ClientMsg,
 ) -> Result<(), ()> {
@@ -1371,7 +1393,7 @@ async fn apply_client_msg(
                     continue;
                 };
                 // Arm the live feed BEFORE reading the backlog.
-                feeds.insert(change_id, entry.subscribe());
+                feeds.insert(change_id, Feed(entry.subscribe()));
                 let backlog = read_backlog(state, change_id, from).await;
                 let mut next = from;
                 for e in &backlog {
@@ -1513,5 +1535,29 @@ fn append_lifecycle(
         vec![(LogKind::Lifecycle, payload)],
     ) {
         tracing::warn!(change_id, "lifecycle append failed: {e:#}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `Feed` surfaces broadcast overflow as `Err` rather than silently
+    /// skipping the gap — the signal `handle_socket` turns into a socket close.
+    #[tokio::test]
+    async fn feed_surfaces_overflow() {
+        let (mut tx, rx) = async_broadcast::broadcast::<StreamMsg>(2);
+        tx.set_overflow(true);
+        let mut feed = Feed(rx);
+        // Capacity 2, three sends: the oldest is dropped, overflowing the reader.
+        for of in 0..3 {
+            let _ = tx.try_broadcast(StreamMsg::NewParent {
+                new_parent: types::NewParent { of, parent: 0 },
+            });
+        }
+        assert!(matches!(
+            feed.next().await,
+            Some(Err(RecvError::Overflowed(_)))
+        ));
     }
 }
