@@ -59,14 +59,19 @@ const expandAllFiles = async (page) => {
 const captures = [
   // Main page: the repo registry, one row per repository.
   { name: "repos", path: "/" },
-  // A repo's chains, each a collapsible drawer; all collapsed by default
-  // (repo 2 = quarry: a request_changes partial + an approved chain).
+  // The repo dashboard: one spine-centered change graph over main — open
+  // changes ascending above the HEAD anchor, merged history descending and
+  // fading below it (docs/api.md "Graph"). Repo 2 = quarry: two separate
+  // chains — one off HEAD, one forked two commits behind (the dashed "behind"
+  // edge) — over a history window that includes a merge commit.
   { name: "dashboard", path: "/repos/2" },
-  // A chain drilled into in place: `#chain-<tip>` opens that drawer to its
-  // changes. Tip 12 (repo 1, waiting); tip 20 (repo 2, partial / agent's
-  // turn) — the other drawer in repo 2 stays collapsed beside it.
-  { name: "chain-waiting", path: "/repos/1#chain-12" },
-  { name: "chain-agents-turn", path: "/repos/2#chain-20" },
+  // Repo 1: a chain whose base is older than the shown window — its lineage
+  // dangles into the "earlier history hidden" marker the spine descends into.
+  // The Activity column carries change 11's drafts and change 12's decision.
+  { name: "change-graph-earlier", path: "/repos/1" },
+  // Repo 3: the B-in-two-chains fan-out — a change shared by two tips appears
+  // once, with the lane splitting above it.
+  { name: "change-graph-fanout", path: "/repos/3" },
   // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
   { name: "review-interdiff", path: "/changes/11?against=0" },
   // Long review cover message expanded via the "more" toggle. Viewport-only

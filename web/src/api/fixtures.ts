@@ -52,9 +52,11 @@ import type {
   Diff,
   DiffFile,
   Draft,
+  GraphNode,
   Line,
   PathEntry,
   Repo,
+  RepoGraph,
   Review,
   Revision,
   StageDecisionRequest,
@@ -2093,6 +2095,223 @@ function repoList(): Repo[] {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// Graph (docs/api.md "Graph"). The open region is the real chain derivation
+// (active tips, unioned and deduped by sha); the canonical history below HEAD
+// is synthetic — the mock has no git history to walk, like the backend reads
+// from git. Includes a merge commit and (per repo) a behind-HEAD base.
+
+interface HistNode {
+  sha: string;
+  subject: string;
+  parents: string[];
+}
+
+const graphHistory: HistNode[] = [
+  {
+    sha: sha(900),
+    subject: "feat: make the push base optional",
+    parents: [sha(901)],
+  },
+  {
+    sha: sha(901),
+    subject: "feat: decouple display fields",
+    parents: [sha(902)],
+  },
+  {
+    sha: sha(902),
+    subject: "merge: release-1.8 into main",
+    parents: [sha(903), sha(904)],
+  },
+  {
+    sha: sha(903),
+    subject: "fix: reject an already-merged push",
+    parents: [sha(905)],
+  },
+  {
+    sha: sha(904),
+    subject: "feat: truncate the short sha",
+    parents: [sha(905)],
+  },
+  { sha: sha(905), subject: "chore: decouple base detection", parents: [] },
+];
+
+// A deeper synthetic history (the earlier-demo repo): its root sits below a
+// 5-commit window, so the window truncates and a chain can fork below it.
+const deepHistory: HistNode[] = [
+  ...graphHistory.slice(0, 5),
+  {
+    sha: sha(905),
+    subject: "chore: decouple base detection",
+    parents: [sha(906)],
+  },
+  {
+    sha: sha(906),
+    subject: "refactor: extract the base resolver",
+    parents: [sha(907)],
+  },
+  { sha: sha(907), subject: "chore: tidy up ref parsing", parents: [] },
+];
+
+// Per-repo graph scenario: which synthetic canonical history to show, plus an
+// optional open change re-rooted behind HEAD at a history depth. A depth inside
+// the window draws a behind edge to that node; a depth below it dangles into
+// the collapsed "earlier history hidden" marker.
+const graphScenarios: Record<
+  number,
+  { history: HistNode[]; behind?: { change_id: number; depth: number } }
+> = {
+  1: { history: deepHistory, behind: { change_id: 10, depth: 6 } }, // forks below the window
+  2: { history: graphHistory, behind: { change_id: 30, depth: 2 } }, // two chains: off-HEAD + 2-behind
+  3: { history: graphHistory }, // fan-out
+};
+
+/** Topological row order, children before parents — mirrors the backend's
+ * chain::graph_row_order (rank = longest path to a leaf, ties by input). */
+function graphRowOrder(nodes: GraphNode[]): GraphNode[] {
+  const index = new Map<string, number>();
+  nodes.forEach((nd, i) => index.set(nd.commit_sha, i));
+  const children: number[][] = nodes.map(() => []);
+  nodes.forEach((nd, i) => {
+    for (const p of nd.parents) {
+      const pi = index.get(p);
+      if (pi !== undefined) children[pi]?.push(i);
+    }
+  });
+  const memo = new Array<number | undefined>(nodes.length).fill(undefined);
+  const onStack = new Array<boolean>(nodes.length).fill(false);
+  const rank = (i: number): number => {
+    const cached = memo[i];
+    if (cached !== undefined) return cached;
+    if (onStack[i]) return 0;
+    onStack[i] = true;
+    const kids = children[i] ?? [];
+    const r = kids.length > 0 ? 1 + Math.max(...kids.map(rank)) : 0;
+    onStack[i] = false;
+    memo[i] = r;
+    return r;
+  };
+  const ranks = nodes.map((_, i) => rank(i));
+  return nodes
+    .map((nd, i) => ({ nd, i }))
+    .sort((a, b) => (ranks[a.i] ?? 0) - (ranks[b.i] ?? 0) || a.i - b.i)
+    .map((x) => x.nd);
+}
+
+function buildGraph(repoId: number, window: number): RepoGraph {
+  const repo = repos.find((r) => r.id === repoId) ?? notFound(`repo ${repoId}`);
+  const scenario = graphScenarios[repoId] ?? { history: graphHistory };
+  const fullHistory = scenario.history;
+  const history = fullHistory.slice(0, window + 1);
+  const historyTruncated = fullHistory.length > window + 1;
+  const anchorSha = history[0]?.sha ?? "";
+
+  const nodes: GraphNode[] = history.map((h, depth) => ({
+    commit_sha: h.sha,
+    section: depth === 0 ? "head" : "history",
+    subject: h.subject,
+    status: "merged",
+    parents: h.parents,
+    change_id: null,
+    change_key: null,
+    revision: null,
+    counts: { threads: 0, drafts: 0, unresolved: 0 },
+    draft_decision: null,
+  }));
+  const present = new Set(nodes.map((nd) => nd.commit_sha));
+
+  // Walk tips in tip-sha order, mirroring the backend's leaves_where sort
+  // (chain.rs) so the open-node input order — and thus the lane assignment —
+  // matches production, not just the fixture declaration order.
+  const activeTips = tips
+    .filter((t) => t.repo_id === repoId && t.active)
+    .slice()
+    .sort((a, b) => {
+      const sa = changes.find((c) => c.id === a.tip_change_id);
+      const sb = changes.find((c) => c.id === b.tip_change_id);
+      const ka = sa ? latestRevision(sa).commit_sha : "";
+      const kb = sb ? latestRevision(sb).commit_sha : "";
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+  const seen = new Set<string>();
+  for (const tip of activeTips) {
+    for (const m of walkPath(tip)) {
+      const csha = m.revision.commit_sha;
+      if (seen.has(csha)) continue;
+      seen.add(csha);
+      const { change: c, revision: rev } = m;
+      const ownThreads = threads.filter(
+        (t) => t.change_id === c.id && t.revision === rev.number,
+      );
+      const ownDrafts = drafts.filter(
+        (d) => d.change_id === c.id && d.revision === rev.number,
+      );
+      nodes.push({
+        commit_sha: csha,
+        section: "open",
+        subject: c.subject,
+        status: statusAt(c, rev.number),
+        parents: [rev.parent_sha],
+        change_id: c.id,
+        change_key: c.change_key,
+        revision: rev.number,
+        counts: {
+          threads: ownThreads.length,
+          drafts: ownDrafts.length,
+          unresolved: ownThreads.filter((t) => !t.resolved).length,
+        },
+        draft_decision: draftReviews.get(c.id)?.decision ?? null,
+      });
+      present.add(csha);
+    }
+  }
+
+  // An open chain's root parents onto the anchor unless its real base is in
+  // the graph (e.g. a behind-HEAD fork onto a merged commit, below).
+  for (const nd of nodes) {
+    if (nd.section === "open" && !nd.parents.some((p) => present.has(p))) {
+      nd.parents = [anchorSha];
+    }
+  }
+  const behind = scenario.behind;
+  if (behind) {
+    const target = nodes.find(
+      (nd) => nd.section === "open" && nd.change_id === behind.change_id,
+    );
+    // Reference the FULL history: a depth beyond the window slice is a base
+    // older than the window, which dangles into the collapsed marker.
+    const base = fullHistory[behind.depth];
+    if (target && base) target.parents = [base.sha];
+  }
+
+  // Row order (mirrors build_graph): the open region ascends above HEAD, so
+  // order it topologically among itself; the HEAD anchor + history keep the
+  // canonical-walk order below it.
+  const openNodes = nodes.filter((nd) => nd.section === "open");
+  const rest = nodes.filter((nd) => nd.section !== "open");
+  const openShas = new Set(openNodes.map((nd) => nd.commit_sha));
+  const openOrder = graphRowOrder(
+    openNodes.map((nd) => ({
+      ...nd,
+      parents: nd.parents.filter((p) => openShas.has(p)),
+    })),
+  );
+  const orderIndex = new Map(openOrder.map((nd, i) => [nd.commit_sha, i]));
+  openNodes.sort(
+    (a, b) =>
+      (orderIndex.get(a.commit_sha) ?? 0) - (orderIndex.get(b.commit_sha) ?? 0),
+  );
+
+  return {
+    repo_id: repoId,
+    base_branch: repo.base_branch,
+    anchor: anchorSha,
+    merged_window: window,
+    history_truncated: historyTruncated,
+    nodes: [...openNodes, ...rest],
+  };
+}
+
 /** A thread/draft record → its wire shape; anchors are served verbatim (the
  * client places them by diff range, docs/api.md "Comment placement"). */
 function renderThread(t: ThreadRecord): Thread {
@@ -2162,6 +2381,13 @@ export async function mockRequest(
 
   if (method === "GET" && p === "/repos") {
     return { repos: repoList() };
+  }
+
+  if ((m = /^\/repos\/(\d+)\/graph$/.exec(p)) && method === "GET") {
+    const id = Number(m[1]);
+    if (!repos.some((r) => r.id === id)) return notFound(`repo ${id}`);
+    const window = q.has("merged_window") ? Number(q.get("merged_window")) : 5;
+    return buildGraph(id, window);
   }
 
   if (method === "GET" && p === "/chains") {
