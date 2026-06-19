@@ -1,6 +1,6 @@
 // Review page collapse behavior, rendered against the mock fixtures
 // (VITE_MOCK is set by the vitest config). Change 11 at ?against=base is
-// the full r2 diff: /COMMIT_MSG, src/auth/rotate.rs, src/auth/store.rs,
+// the full r1 diff: /COMMIT_MSG, src/auth/rotate.rs, src/auth/store.rs,
 // tests/rotation.rs — i.e. file-0 .. file-3.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -240,24 +240,34 @@ describe("collapse with an open dirty comment editor", () => {
 // reviewer sees where discussion sits before switching the diff range.
 describe("comment counts in the diff-range dropdowns", () => {
   it("tags each revision option with its thread count", async () => {
-    renderReview(); // full r2 diff; the counts are range-independent anyway
+    renderReview(); // full r1 diff; the counts are range-independent anyway
     await railItem("src/auth/store.rs");
 
-    // change 11: r1 carries 5 root threads, r2 the 3 drafts on it. Replies
+    // change 11: r0 carries 5 root threads, r1 the 3 drafts on it. Replies
     // ride with their thread and are not counted separately.
     const revSelect = screen.getByLabelText<HTMLSelectElement>("Revision");
     expect(Array.from(revSelect.options).map((o) => o.textContent)).toEqual([
-      "r1 · 5 comments",
-      "r2 · 3 comments",
+      "r0 · 5 comments",
+      "r1 · 3 comments",
     ]);
 
     // The base picker counts the same way; its extra "Base" option has none.
     const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");
     expect(Array.from(baseSelect.options).map((o) => o.textContent)).toEqual([
       "Base",
-      "r1 · 5 comments",
-      "r2 · 3 comments",
+      "r0 · 5 comments",
+      "r1 · 3 comments",
     ]);
+  });
+
+  it("honors r0 as an explicit diff base instead of snapping to Base", async () => {
+    // Regression: revisions are 0-based, but a leftover 1-based guard
+    // (M >= 1) rejected r0 and reset the picker to "base". r0 is a real
+    // interdiff base — selecting it must stick.
+    renderReview("/changes/11?against=0");
+    await railItem("src/auth/store.rs");
+    const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");
+    expect(baseSelect.value).toBe("0");
   });
 });
 
@@ -268,27 +278,27 @@ describe("comment counts in the file headers", () => {
     section(i).querySelector(".fcomments")?.textContent ?? null;
 
   it("counts only this file's threads visible in the current range", async () => {
-    // base → r2: the r1 threads are pinned away, so only the r2 drafts show.
+    // base → r1: the r0 threads are pinned away, so only the r1 drafts show.
     renderReview("/changes/11?against=base");
     await railItem("src/auth/store.rs");
 
-    // rotate.rs (file-1): two drafts on r2 — one new-side, one old-side.
+    // rotate.rs (file-1): two drafts on r1 — one new-side, one old-side.
     expect(fcomments(1)).toBe("2 comments");
-    // tests/rotation.rs (file-3): a single r2 draft.
+    // tests/rotation.rs (file-3): a single r1 draft.
     expect(fcomments(3)).toBe("1 comment");
-    // store.rs (file-2) and /COMMIT_MSG (file-0): only r1 threads, all
+    // store.rs (file-2) and /COMMIT_MSG (file-0): only r0 threads, all
     // pinned to a revision this range does not show — no badge.
     expect(fcomments(2)).toBeNull();
     expect(fcomments(0)).toBeNull();
   });
 
-  it("follows the range: the r1 → r2 interdiff surfaces the r1 threads", async () => {
-    // The left column is r1's own tree, so r1-pinned threads reappear there.
-    renderReview("/changes/11?against=1");
+  it("follows the range: the r0 → r1 interdiff surfaces the r0 threads", async () => {
+    // The left column is r0's own tree, so r0-pinned threads reappear there.
+    renderReview("/changes/11?against=0");
     await railItem("src/auth/rotate.rs");
 
-    // rotate.rs: three r1 threads (lines 21/22/23) on the left + one r2
-    // draft on the right; the old-side r2 draft has no column here.
+    // rotate.rs: three r0 threads (lines 21/22/23) on the left + one r1
+    // draft on the right; the old-side r1 draft has no column here.
     expect(fcomments(1)).toBe("4 comments");
   });
 });

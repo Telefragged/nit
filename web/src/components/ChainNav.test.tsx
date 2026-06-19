@@ -32,8 +32,8 @@ function member(
     change_key: `I${changeId}`,
     subject,
     status,
-    revision: 1,
-    latest_revision: 1,
+    revision: 0,
+    latest_revision: 0,
     newer_elsewhere: false,
     merged_elsewhere: false,
     commit_sha: `sha${changeId}`,
@@ -55,8 +55,8 @@ const chain: Chain = {
     member(10, 0, "first change", "approved"),
     member(11, 1, "second change", "changes_requested", 2, {
       newer_elsewhere: true,
-      revision: 1,
-      latest_revision: 3,
+      revision: 0,
+      latest_revision: 2,
     }),
     member(12, 2, "third change", "pending"),
   ],
@@ -109,7 +109,7 @@ describe("ChainNav", () => {
 
   it("badges a member pinned to an older revision than its latest", () => {
     renderNav(11);
-    // The current member pins r1 while r3 lives on another chain.
+    // The current member pins r0 while r2 lives on another chain.
     const current = must(
       document.querySelector<HTMLElement>(".chain-nav-row.current"),
       ".chain-nav-row.current",

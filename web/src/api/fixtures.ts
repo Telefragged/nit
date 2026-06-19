@@ -15,10 +15,10 @@
 //   repo 1 (acme-runtime)
 //     tip change 12  waiting_for_review — 3 changes; change 11 has 2
 //            revisions (amended in place, interdiff available), a resolved
-//            thread, an unresolved thread, a thread on a line r2 rewrote
-//            (all pinned to r1, so they land on the left of the r1 → r2
+//            thread, an unresolved thread, a thread on a line r1 rewrote
+//            (all pinned to r0, so they land on the left of the r0 → r1
 //            interdiff), 2 drafts, plus a resolved thread on its commit
-//            message (/COMMIT_MSG) and a reworded r2 message so the
+//            message (/COMMIT_MSG) and a reworded r1 message so the
 //            interdiff carries a real message diff; change 12's diff has a
 //            rename and a binary file.
 //     tip change 40  merged — only visible via ?status=all.
@@ -236,10 +236,10 @@ const change10: ChangeRecord = {
   repo_id: 1,
   change_key: "I9a41c7e2b3d4f5a6",
   subject: "auth: add TokenStore schema and config plumbing",
-  last_reviewed_revision: 1,
+  last_reviewed_revision: 0,
   revisions: [
     {
-      number: 1,
+      number: 0,
       commit_sha: c10r1,
       short_sha: short(c10r1),
       parent_sha: parent10,
@@ -252,7 +252,7 @@ const change10: ChangeRecord = {
   reviews: [
     {
       id: 4,
-      revision: 1,
+      revision: 0,
       verdict: "approve",
       message:
         "Schema is right, hash-keyed lookup avoids the timing leak. LGTM.",
@@ -260,7 +260,7 @@ const change10: ChangeRecord = {
     },
   ],
   diffs: {
-    [diffKey(1)]: {
+    [diffKey(0)]: {
       files: [
         msgFile(msg10r1),
         {
@@ -332,8 +332,8 @@ const msg11r1 =
   "old row is marked rotated, so a stolen token stops working the\n" +
   "moment the legitimate client refreshes.\n\n" +
   "Change-Id: I3f2d8a91c0b7e514";
-// r2 rewords the message (answering the /COMMIT_MSG thread below), so
-// the r1 → r2 interdiff carries a real message diff.
+// r1 rewords the message (answering the /COMMIT_MSG thread below), so
+// the r0 → r1 interdiff carries a real message diff.
 const msg11r2 =
   "auth: rotate refresh tokens on use\n\n" +
   "Every presented refresh token is exchanged for a fresh one and the\n" +
@@ -347,10 +347,10 @@ const change11: ChangeRecord = {
   repo_id: 1,
   change_key: "I3f2d8a91c0b7e514",
   subject: "auth: rotate refresh tokens on use",
-  last_reviewed_revision: 1,
+  last_reviewed_revision: 0,
   revisions: [
     {
-      number: 1,
+      number: 0,
       commit_sha: c11r1,
       short_sha: short(c11r1),
       parent_sha: c10r1,
@@ -359,10 +359,10 @@ const change11: ChangeRecord = {
       message: msg11r1,
       created_at: ago(25 * 60),
     },
-    // r2 is the commit amended in place: same Change-Id, same parent,
+    // r1 is the commit amended in place: same Change-Id, same parent,
     // new sha.
     {
-      number: 2,
+      number: 1,
       commit_sha: c11r2,
       short_sha: short(c11r2),
       parent_sha: c10r1,
@@ -375,7 +375,7 @@ const change11: ChangeRecord = {
   reviews: [
     {
       id: 5,
-      revision: 1,
+      revision: 0,
       verdict: "request_changes",
       message:
         "Rotation flow is right, but the unwrap is a production panic and " +
@@ -384,8 +384,8 @@ const change11: ChangeRecord = {
     },
   ],
   diffs: {
-    // Full diff of revision 1 (parent -> rev1 tree).
-    [diffKey(1)]: {
+    // Full diff of revision 0 (parent -> rev0 tree).
+    [diffKey(0)]: {
       files: [
         msgFile(msg11r1),
         {
@@ -477,8 +477,8 @@ const change11: ChangeRecord = {
         },
       ],
     },
-    // Full diff of revision 2 (parent -> rev2 tree).
-    [diffKey(2)]: {
+    // Full diff of revision 1 (parent -> rev1 tree).
+    [diffKey(1)]: {
       files: [
         msgFile(msg11r2),
         {
@@ -638,7 +638,7 @@ const change11: ChangeRecord = {
     },
     // Interdiff: effective tree of rev 1 -> effective tree of rev 2,
     // message(1) -> message(2) for /COMMIT_MSG.
-    [diffKey(2, 1)]: {
+    [diffKey(1, 0)]: {
       files: [
         {
           path: COMMIT_MSG_PATH,
@@ -844,7 +844,7 @@ const change12: ChangeRecord = {
   last_reviewed_revision: null,
   revisions: [
     {
-      number: 1,
+      number: 0,
       commit_sha: c12r1,
       short_sha: short(c12r1),
       parent_sha: c11r2,
@@ -856,7 +856,7 @@ const change12: ChangeRecord = {
   ],
   reviews: [],
   diffs: {
-    [diffKey(1)]: {
+    [diffKey(0)]: {
       files: [
         msgFile(msg12r1),
         {
@@ -922,11 +922,11 @@ const change40: ChangeRecord = {
   repo_id: 1,
   change_key: "I0d9c8b7a6f5e4321",
   subject: "build: drop unused openssl feature",
-  last_reviewed_revision: 1,
+  last_reviewed_revision: 0,
   terminal: "merged",
   revisions: [
     {
-      number: 1,
+      number: 0,
       commit_sha: c40r1,
       short_sha: short(c40r1),
       parent_sha: sha(400),
@@ -939,14 +939,14 @@ const change40: ChangeRecord = {
   reviews: [
     {
       id: 8,
-      revision: 1,
+      revision: 0,
       verdict: "approve",
       message: "",
       created_at: ago(3 * 24 * 60),
     },
   ],
   diffs: {
-    [diffKey(1)]: {
+    [diffKey(0)]: {
       files: [
         msgFile(msg40r1),
         {
@@ -999,10 +999,10 @@ const change20: ChangeRecord = {
   repo_id: 2,
   change_key: "Ib8d3e6f1a4c75290",
   subject: "wal: checkpoint on idle, not on every commit",
-  last_reviewed_revision: 1,
+  last_reviewed_revision: 0,
   revisions: [
     {
-      number: 1,
+      number: 0,
       commit_sha: c20r1,
       short_sha: short(c20r1),
       parent_sha: parent20,
@@ -1015,7 +1015,7 @@ const change20: ChangeRecord = {
   reviews: [
     {
       id: 6,
-      revision: 1,
+      revision: 0,
       verdict: "request_changes",
       message:
         "Threshold needs to be configurable and the deleted backoff still " +
@@ -1024,7 +1024,7 @@ const change20: ChangeRecord = {
     },
   ],
   diffs: {
-    [diffKey(1)]: {
+    [diffKey(0)]: {
       files: [
         msgFile(msg20r1),
         {
@@ -1117,10 +1117,10 @@ const change30: ChangeRecord = {
   repo_id: 2,
   change_key: "Ie1f4a7b2c5d80936",
   subject: "ci: key caches on lockfile hash only",
-  last_reviewed_revision: 1,
+  last_reviewed_revision: 0,
   revisions: [
     {
-      number: 1,
+      number: 0,
       commit_sha: c30r1,
       short_sha: short(c30r1),
       parent_sha: sha(300),
@@ -1133,14 +1133,14 @@ const change30: ChangeRecord = {
   reviews: [
     {
       id: 7,
-      revision: 1,
+      revision: 0,
       verdict: "approve",
       message: "Nice catch.",
       created_at: ago(40 * 60),
     },
   ],
   diffs: {
-    [diffKey(1)]: {
+    [diffKey(0)]: {
       files: [
         msgFile(msg30r1),
         {
@@ -1423,7 +1423,7 @@ const tips: TipRecord[] = [
   {
     tip_change_id: 12,
     repo_id: 1,
-    revision: 1,
+    revision: 0,
     name: "feat/token-rotation",
     partial: false,
     active: true,
@@ -1431,7 +1431,7 @@ const tips: TipRecord[] = [
   {
     tip_change_id: 40,
     repo_id: 1,
-    revision: 1,
+    revision: 0,
     name: "build/rustls",
     partial: false,
     active: false, // merged — only with ?status=all
@@ -1440,7 +1440,7 @@ const tips: TipRecord[] = [
   {
     tip_change_id: 20,
     repo_id: 2,
-    revision: 1,
+    revision: 0,
     // The agent is mid-push (nit push --partial); exercises the PARTIAL badge.
     name: "fix/wal-checkpoint",
     partial: true,
@@ -1449,7 +1449,7 @@ const tips: TipRecord[] = [
   {
     tip_change_id: 30,
     repo_id: 2,
-    revision: 1,
+    revision: 0,
     name: "chore/dedupe-ci-cache",
     partial: false,
     active: true,
@@ -1483,7 +1483,7 @@ const threads: ThreadRecord[] = [
   {
     id: 70,
     change_id: 10,
-    revision: 1,
+    revision: 0,
     file: null,
     line: null,
     side: "new",
@@ -1504,7 +1504,7 @@ const threads: ThreadRecord[] = [
   {
     id: 71,
     change_id: 11,
-    revision: 1,
+    revision: 0,
     file: "src/auth/rotate.rs",
     line: 22,
     side: "new",
@@ -1535,7 +1535,7 @@ const threads: ThreadRecord[] = [
   {
     id: 73,
     change_id: 11,
-    revision: 1,
+    revision: 0,
     file: "src/auth/store.rs",
     line: 58,
     side: "new",
@@ -1569,7 +1569,7 @@ const threads: ThreadRecord[] = [
   {
     id: 79,
     change_id: 11,
-    revision: 1,
+    revision: 0,
     file: "src/auth/rotate.rs",
     line: 23,
     side: "new",
@@ -1589,12 +1589,12 @@ const threads: ThreadRecord[] = [
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
   },
-  // change 11 — resolved thread on a line rewritten in r2; it stays pinned
-  // to r1 and shows on the left of the r1 → r2 interdiff.
+  // change 11 — resolved thread on a line rewritten in r1; it stays pinned
+  // to r0 and shows on the left of the r0 → r1 interdiff.
   {
     id: 75,
     change_id: 11,
-    revision: 1,
+    revision: 0,
     file: "src/auth/rotate.rs",
     line: 21,
     side: "new",
@@ -1621,12 +1621,12 @@ const threads: ThreadRecord[] = [
     created_at: ago(21 * 60),
     updated_at: ago(100),
   },
-  // change 11 — resolved thread on the commit message: the r2 reword
+  // change 11 — resolved thread on the commit message: the r1 reword
   // answers it; the anchored line survives unchanged (no shift needed).
   {
     id: 77,
     change_id: 11,
-    revision: 1,
+    revision: 0,
     file: COMMIT_MSG_PATH,
     line: 5,
     side: "new",
@@ -1659,7 +1659,7 @@ const threads: ThreadRecord[] = [
   {
     id: 80,
     change_id: 20,
-    revision: 1,
+    revision: 0,
     file: "src/wal.rs",
     line: 94,
     side: "new",
@@ -1679,7 +1679,7 @@ const threads: ThreadRecord[] = [
   {
     id: 81,
     change_id: 20,
-    revision: 1,
+    revision: 0,
     file: "src/wal/backoff.rs",
     line: 3,
     side: "old",
@@ -1722,16 +1722,16 @@ const threads: ThreadRecord[] = [
   },
 ];
 
-// change 11 — the reviewer's in-progress drafts on revision 2: two new
+// change 11 — the reviewer's in-progress drafts on revision 1: two new
 // threads on the new side, plus one on the old (red) side — a remark on the
-// pre-change code, which the old column of the base → r2 diff is for
+// pre-change code, which the old column of the base → r1 diff is for
 // (docs/api.md "Comment placement"). All open new threads (thread_id null).
 const drafts: DraftRecord[] = [
   {
     id: 100,
     change_id: 11,
     thread_id: null,
-    revision: 2,
+    revision: 1,
     file: "src/auth/rotate.rs",
     line: 26,
     side: "new",
@@ -1741,13 +1741,13 @@ const drafts: DraftRecord[] = [
     resolved: false,
     created_at: ago(30),
     updated_at: ago(30),
-    // The anchored line does not exist in revision 1's tree.
+    // The anchored line does not exist in revision 0's tree.
   },
   {
     id: 101,
     change_id: 11,
     thread_id: null,
-    revision: 2,
+    revision: 1,
     file: "tests/rotation.rs",
     line: 13,
     side: "new",
@@ -1756,13 +1756,13 @@ const drafts: DraftRecord[] = [
     resolved: false,
     created_at: ago(25),
     updated_at: ago(25),
-    // tests/rotation.rs does not exist at revision 1.
+    // tests/rotation.rs does not exist at revision 0.
   },
   {
     id: 102,
     change_id: 11,
     thread_id: null,
-    revision: 2,
+    revision: 1,
     file: "src/auth/rotate.rs",
     line: 20,
     side: "old",

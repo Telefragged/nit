@@ -65,7 +65,7 @@ const captures = [
   // (agent's turn, partial). The chain page renders the derived path.
   { name: "chain-waiting", path: "/chains/12" },
   { name: "chain-agents-turn", path: "/chains/20" },
-  // Change 11 has last_reviewed_revision 1 < latest 2 → interdiff by default.
+  // Change 11 has last_reviewed_revision 0 < latest 1 → interdiff by default.
   { name: "review-interdiff", path: "/changes/11" },
   // Long review cover message expanded via the "more" toggle. Viewport-only
   // so the header text stays at full resolution.
@@ -115,8 +115,8 @@ const captures = [
     },
   },
   // The synthetic "Commit message" file with its resolved inline thread —
-  // the thread is pinned to r1, so it shows in the r1 → r2 interdiff (its
-  // line 5 is a context line there), not in the base → r2 diff.
+  // the thread is pinned to r0, so it shows in the r0 → r1 interdiff (its
+  // line 5 is a context line there), not in the base → r1 diff.
   {
     name: "review-commit-msg",
     path: "/changes/11",
@@ -165,7 +165,7 @@ const captures = [
       await page.waitForSelector(".comment-resolution-only");
     },
   },
-  // Side-by-side, base → r2: new-side drafts sit under the right column,
+  // Side-by-side, base → r1: new-side drafts sit under the right column,
   // the old-side draft under the left (docs/api.md "Comment placement").
   {
     name: "review-split",
@@ -214,8 +214,8 @@ const captures = [
       await page.waitForTimeout(150);
     },
   },
-  // Side-by-side interdiff r1 → r2: comments pinned to r1 land under the
-  // left column (FROM revision's content), drafts on r2 under the right.
+  // Side-by-side interdiff r0 → r1: comments pinned to r0 land under the
+  // left column (FROM revision's content), drafts on r1 under the right.
   {
     name: "review-split-interdiff",
     path: "/changes/11",
@@ -225,7 +225,7 @@ const captures = [
       await page.waitForTimeout(200);
     },
   },
-  // Rebase drift contained: in the r1 → r2 interdiff, src/auth/store.rs
+  // Rebase drift contained: in the r0 → r1 interdiff, src/auth/store.rs
   // carries the agent's real edit (green/red) beside grey, uncounted lines
   // a rebase pulled in — the file count is the real edit only (docs/api.md
   // "Rebase-aware interdiffs").
@@ -279,10 +279,10 @@ const captures = [
       await page.waitForTimeout(200);
     },
   },
-  // Old revision selected: full diff of r1, threads at their written lines.
+  // Old revision selected: full diff of r0, threads at their written lines.
   {
-    name: "review-rev1",
-    path: "/changes/11?revision=1",
+    name: "review-rev0",
+    path: "/changes/11?revision=0",
     actions: expandAllFiles,
   },
   // Explicit interdiff picked via the base dropdown (no "since your
@@ -292,7 +292,7 @@ const captures = [
     path: "/changes/11?against=base",
     fullPage: false,
     actions: async (page) => {
-      await page.getByLabel("Diff base").selectOption("1");
+      await page.getByLabel("Diff base").selectOption("0");
       await page.waitForTimeout(200);
     },
   },
@@ -355,8 +355,8 @@ const captures = [
     },
   },
   // Published range threads: the multi-line selection on rotate.rs and the
-  // partial-line one on the commit message. They are pinned to r1, so the
-  // r1 → r2 interdiff renders them tinted on the left column (docs/api.md
+  // partial-line one on the commit message. They are pinned to r0, so the
+  // r0 → r1 interdiff renders them tinted on the left column (docs/api.md
   // "Range comments" / "Comment placement").
   {
     name: "review-range-comments",
@@ -400,10 +400,10 @@ const captures = [
         .fill("This whole reuse branch deserves its own unit test.");
     },
   },
-  // Commenting on the OLD column of an interdiff: r1 → r2 side-by-side, a
+  // Commenting on the OLD column of an interdiff: r0 → r1 side-by-side, a
   // caret on the pre-change signature (left column) + c opens the editor
   // there. Previously blocked ("old side of an interdiff isn't
-  // commentable"); now it anchors a new-side comment on r1 (lib/comments).
+  // commentable"); now it anchors a new-side comment on r0 (lib/comments).
   {
     name: "review-old-side-draft",
     path: "/changes/11",
@@ -449,7 +449,7 @@ const captures = [
   // stays open with drafts + message kept.
   {
     name: "review-409",
-    path: "/changes/11?revision=1",
+    path: "/changes/11?revision=0",
     fullPage: false,
     actions: async (page) => {
       await page.getByRole("button", { name: "Review (a)" }).click();
