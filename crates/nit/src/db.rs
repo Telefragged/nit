@@ -1,11 +1,11 @@
 //! `SQLite` persistence layer.
 //!
-//! Schema contract: `docs/data-model.md` ("Tables"). Four tables: the
+//! Schema contract: `docs/data-model.md` ("Tables"). Five tables: the
 //! `repos` registry, the `changes` identity registry, the append-only event
-//! `log` (keyed on the change, with a global `seq`), and reviewer `drafts`.
-//! All reviewable state is the fold of the per-change logs (`crate::review`),
-//! held in memory and rebuilt by replay. Nothing in the log is ever mutated
-//! or deleted.
+//! `log` (keyed on the change, with a global `seq`), and the reviewer's
+//! `draft_comments` and staged `draft_reviews`. All reviewable state is the
+//! fold of the per-change logs (`crate::review`), held in memory and rebuilt
+//! by replay. Nothing in the log is ever mutated or deleted.
 //!
 //! [`open`] applies pragmas (WAL, `busy_timeout`, foreign keys ON) and runs
 //! `PRAGMA user_version` migrations. Row structs and focused query helpers
@@ -18,7 +18,7 @@ use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
-use crate::enums::Side;
+use crate::enums::{Decision, Side};
 
 /// RFC3339 timestamp for "now" (UTC), the format stored in every
 /// `created_at`/`updated_at` column.
@@ -98,7 +98,7 @@ const MIGRATIONS: &[&str] = &[
       created_at TEXT NOT NULL,
       UNIQUE (change_id, idx)
     );
-    CREATE TABLE drafts (
+    CREATE TABLE draft_comments (
       id               INTEGER PRIMARY KEY,
       change_id        INTEGER NOT NULL REFERENCES changes(id),
       revision         INTEGER NOT NULL,
@@ -115,6 +115,11 @@ const MIGRATIONS: &[&str] = &[
       resolved         INTEGER,
       created_at       TEXT NOT NULL,
       updated_at       TEXT NOT NULL
+    );
+    CREATE TABLE draft_reviews (
+      change_id INTEGER PRIMARY KEY REFERENCES changes(id),  -- one staged decision per change
+      decision  TEXT NOT NULL,   -- a Decision: approve | request_changes | comment | abandon | reopen
+      message   TEXT NOT NULL    -- cover note (verdict) or reason (abandon)
     );
     ",
 ];
@@ -167,6 +172,15 @@ fn col_u64_opt(v: Option<i64>) -> rusqlite::Result<Option<u64>> {
 /// db↔domain boundary, like [`col_u64`]). A value that is neither `old` nor
 /// `new` means external corruption, surfaced as a conversion error.
 fn col_side(s: &str) -> rusqlite::Result<Side> {
+    s.parse().map_err(|e: String| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
+    })
+}
+
+/// Parse a stored `decision` TEXT column into a [`Decision`] (the read half of
+/// the db↔domain boundary, like [`col_side`]). An unknown value means external
+/// corruption, surfaced as a conversion error.
+fn col_decision(s: &str) -> rusqlite::Result<Decision> {
     s.parse().map_err(|e: String| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
     })
@@ -522,7 +536,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
     let thread_id = d.thread_id.map(i64::try_from).transpose()?;
     let line = d.line.map(i64::try_from).transpose()?;
     conn.execute(
-        "INSERT INTO drafts (id, change_id, revision, thread_id, file, line, side,
+        "INSERT INTO draft_comments (id, change_id, revision, thread_id, file, line, side,
             range_start_line, range_start_char, range_end_line, range_end_char,
             line_text, body, resolved, created_at, updated_at)
          VALUES (?14, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?15, ?13, ?13)",
@@ -552,7 +566,8 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
 /// # Errors
 /// On a database failure.
 pub fn max_draft_id(conn: &Connection) -> Result<u64> {
-    let max: Option<i64> = conn.query_row("SELECT MAX(id) FROM drafts", [], |r| r.get(0))?;
+    let max: Option<i64> =
+        conn.query_row("SELECT MAX(id) FROM draft_comments", [], |r| r.get(0))?;
     Ok(match max {
         Some(m) => col_u64(m)?,
         None => 0,
@@ -563,7 +578,7 @@ pub fn max_draft_id(conn: &Connection) -> Result<u64> {
 /// On a database failure.
 pub fn get_draft(conn: &Connection, id: u64) -> Result<Option<DraftRow>> {
     conn.query_row(
-        "SELECT * FROM drafts WHERE id = ?1",
+        "SELECT * FROM draft_comments WHERE id = ?1",
         params![i64::try_from(id)?],
         map_draft,
     )
@@ -583,7 +598,7 @@ pub fn update_draft(
     now: &str,
 ) -> Result<()> {
     conn.execute(
-        "UPDATE drafts SET body = ?1, resolved = ?4, updated_at = ?2 WHERE id = ?3",
+        "UPDATE draft_comments SET body = ?1, resolved = ?4, updated_at = ?2 WHERE id = ?3",
         params![body, now, i64::try_from(id)?, resolved.map(i64::from)],
     )?;
     Ok(())
@@ -593,7 +608,7 @@ pub fn update_draft(
 /// On a database failure.
 pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
     conn.execute(
-        "DELETE FROM drafts WHERE id = ?1",
+        "DELETE FROM draft_comments WHERE id = ?1",
         params![i64::try_from(id)?],
     )?;
     Ok(())
@@ -604,7 +619,7 @@ pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
 /// # Errors
 /// On a database failure.
 pub fn drafts_for_change(conn: &Connection, change_id: u64) -> Result<Vec<DraftRow>> {
-    let mut stmt = conn.prepare("SELECT * FROM drafts WHERE change_id = ?1 ORDER BY id")?;
+    let mut stmt = conn.prepare("SELECT * FROM draft_comments WHERE change_id = ?1 ORDER BY id")?;
     let rows = stmt
         .query_map(params![i64::try_from(change_id)?], map_draft)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -617,7 +632,74 @@ pub fn drafts_for_change(conn: &Connection, change_id: u64) -> Result<Vec<DraftR
 /// On a database failure.
 pub fn delete_drafts_for_change(conn: &Connection, change_id: u64) -> Result<()> {
     conn.execute(
-        "DELETE FROM drafts WHERE change_id = ?1",
+        "DELETE FROM draft_comments WHERE change_id = ?1",
+        params![i64::try_from(change_id)?],
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Draft reviews (the reviewer's staged DECISION; one row per change, never
+// in the log — docs/data-model.md "Reviewer decisions")
+
+/// A reviewer's staged decision on a change.
+#[derive(Debug, Clone)]
+pub struct DraftReviewRow {
+    pub change_id: u64,
+    pub decision: Decision,
+    /// Cover note (for a verdict) or reason (for `abandon`).
+    pub message: String,
+}
+
+fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
+    Ok(DraftReviewRow {
+        change_id: col_u64(row.get("change_id")?)?,
+        decision: col_decision(&row.get::<_, String>("decision")?)?,
+        message: row.get("message")?,
+    })
+}
+
+/// Stage (or overwrite) a change's draft decision. One row per change: a later
+/// stage replaces the prior decision and message.
+///
+/// # Errors
+/// On a database failure.
+pub fn upsert_draft_review(
+    conn: &Connection,
+    change_id: u64,
+    decision: Decision,
+    message: &str,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO draft_reviews (change_id, decision, message) VALUES (?1, ?2, ?3)
+         ON CONFLICT (change_id) DO UPDATE SET decision = ?2, message = ?3",
+        params![i64::try_from(change_id)?, decision.as_str(), message],
+    )?;
+    Ok(())
+}
+
+/// The change's staged decision, if any.
+///
+/// # Errors
+/// On a database failure.
+pub fn get_draft_review(conn: &Connection, change_id: u64) -> Result<Option<DraftReviewRow>> {
+    conn.query_row(
+        "SELECT * FROM draft_reviews WHERE change_id = ?1",
+        params![i64::try_from(change_id)?],
+        map_draft_review,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+/// Discard a change's staged decision (called when it publishes, or on an
+/// explicit clear). A no-op when nothing is staged.
+///
+/// # Errors
+/// On a database failure.
+pub fn delete_draft_review(conn: &Connection, change_id: u64) -> Result<()> {
+    conn.execute(
+        "DELETE FROM draft_reviews WHERE change_id = ?1",
         params![i64::try_from(change_id)?],
     )?;
     Ok(())
@@ -746,5 +828,28 @@ mod tests {
         assert_eq!(edited.resolved, Some(true));
         delete_drafts_for_change(&conn, c).expect("drain");
         assert!(drafts_for_change(&conn, c).expect("list").is_empty());
+    }
+
+    #[test]
+    fn draft_review_upsert_get_delete() {
+        let conn = mem();
+        let c = change(&conn);
+        assert!(get_draft_review(&conn, c).expect("get").is_none());
+
+        upsert_draft_review(&conn, c, Decision::RequestChanges, "fix this").expect("stage");
+        let staged = get_draft_review(&conn, c).expect("get").expect("some");
+        assert_eq!(staged.decision, Decision::RequestChanges);
+        assert_eq!(staged.message, "fix this");
+
+        // A second stage overwrites (one row per change).
+        upsert_draft_review(&conn, c, Decision::Approve, "lgtm").expect("restage");
+        let staged = get_draft_review(&conn, c).expect("get").expect("some");
+        assert_eq!(staged.decision, Decision::Approve);
+        assert_eq!(staged.message, "lgtm");
+
+        delete_draft_review(&conn, c).expect("clear");
+        assert!(get_draft_review(&conn, c).expect("get").is_none());
+        // Deleting again is a no-op.
+        delete_draft_review(&conn, c).expect("clear again");
     }
 }

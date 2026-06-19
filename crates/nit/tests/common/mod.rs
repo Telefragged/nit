@@ -289,6 +289,10 @@ pub fn http_patch(url: &str, body: &Value) -> (u16, Value) {
     read(agent().patch(url).send_json(body).unwrap())
 }
 
+pub fn http_put(url: &str, body: &Value) -> (u16, Value) {
+    read(agent().put(url).send_json(body).unwrap())
+}
+
 pub fn http_delete(url: &str) -> (u16, Value) {
     read(agent().delete(url).call().unwrap())
 }

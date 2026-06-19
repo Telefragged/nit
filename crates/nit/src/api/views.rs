@@ -156,6 +156,7 @@ fn path_entry(
             drafts,
             unresolved: u64::try_from(change.unresolved_at(revision)).unwrap_or(u64::MAX),
         },
+        draft_decision: db::get_draft_review(conn, change.id)?.map(|r| r.decision),
     })
 }
 
@@ -292,6 +293,10 @@ pub fn build_change_detail(
             ),
         })
         .collect();
+    let draft_decision = db::get_draft_review(conn, change.id)?.map(|r| types::StagedDecision {
+        decision: r.decision,
+        message: r.message,
+    });
     Ok(types::ChangeDetail {
         id: change.id,
         repo_id: change.repo_id,
@@ -303,6 +308,7 @@ pub fn build_change_detail(
         drafts,
         reviews,
         chains,
+        draft_decision,
     })
 }
 

@@ -45,7 +45,7 @@ log     (seq, change_id, idx, kind, payload, created_at,
         -- kind-specific JSON (below). head(change) = entry count = idx of the
         -- next entry to append.
 
-drafts  (id, change_id, revision, thread_id, file, line, side,
+draft_comments (id, change_id, revision, thread_id, file, line, side,
          range_start_line, range_start_char, range_end_line, range_end_char,
          line_text, body, resolved, created_at, updated_at)
         -- reviewer-private unpublished comments. Mutable (PATCH/DELETE),

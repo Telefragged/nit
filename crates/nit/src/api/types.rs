@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 pub use crate::enums::{
-    Author, ChainState, ChangeStatus, FileStatus, LineKind, LogKind, Side, Verdict,
+    Author, ChainState, ChangeStatus, Decision, FileStatus, LineKind, LogKind, Side, Verdict,
 };
 
 // ---------------------------------------------------------------------------
@@ -159,6 +159,10 @@ pub struct PathEntry {
     pub short_sha: String,
     /// Scoped to this revision.
     pub counts: ChangeCounts,
+    /// The reviewer's staged decision for this change, or `None`. Change-wide
+    /// (one per change), so the same value shows on every chain the change is
+    /// in — drives the dashboard's draft-state count and batch-submit enable.
+    pub draft_decision: Option<Decision>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,6 +204,18 @@ pub struct ChangeDetail {
     pub reviews: Vec<Review>,
     /// Every tip walking through this change, each with the patchset it pins.
     pub chains: Vec<ChainRef>,
+    /// The reviewer's staged decision for this change, or `None`.
+    pub draft_decision: Option<StagedDecision>,
+}
+
+/// A reviewer's staged decision plus its cover note/reason (docs/api.md
+/// "Reviewer decisions"). The body of [`ChangeDetail::draft_decision`] and the
+/// `PUT /api/changes/{id}/decision` request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StagedDecision {
+    pub decision: Decision,
+    #[serde(default)]
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -376,6 +392,22 @@ pub struct SubmitReviewResponse {
     pub review: Review,
     /// The threads this review created or added to.
     pub threads: Vec<Thread>,
+}
+
+/// `POST /api/chains/{id}/submit` response — the outcome of publishing every
+/// chain member's staged decision (docs/api.md "Chains").
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchSubmitResult {
+    /// Members whose staged decision published.
+    pub submitted: u64,
+    /// Members skipped (stale/terminal); their staged decision is kept.
+    pub errors: Vec<SubmitError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitError {
+    pub change_id: u64,
+    pub message: String,
 }
 
 // ---------------------------------------------------------------------------

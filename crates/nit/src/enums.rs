@@ -134,6 +134,88 @@ pub enum Verdict {
     Comment,
 }
 
+/// A reviewer's **staged** decision on a change (docs/api.md "Reviewer
+/// decisions"): the review modal's single set of choices, drafted in
+/// `draft_reviews` and published on batch submit. A superset of [`Verdict`]
+/// with the two lifecycle actions, so abandonment is a decision rather than a
+/// separate button; it translates back to a [`Verdict`] or a
+/// [`LifecycleAction`] at publish time ([`as_verdict`], [`as_lifecycle`]).
+///
+/// [`as_verdict`]: Decision::as_verdict
+/// [`as_lifecycle`]: Decision::as_lifecycle
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Decision {
+    Approve,
+    RequestChanges,
+    Comment,
+    Abandon,
+    Reopen,
+}
+
+impl Decision {
+    /// The review verdict this decision publishes as, or `None` for the
+    /// lifecycle actions (`abandon`/`reopen`).
+    #[must_use]
+    pub fn as_verdict(self) -> Option<Verdict> {
+        match self {
+            Decision::Approve => Some(Verdict::Approve),
+            Decision::RequestChanges => Some(Verdict::RequestChanges),
+            Decision::Comment => Some(Verdict::Comment),
+            Decision::Abandon | Decision::Reopen => None,
+        }
+    }
+
+    /// The lifecycle transition this decision publishes as, or `None` for a
+    /// verdict.
+    #[must_use]
+    pub fn as_lifecycle(self) -> Option<LifecycleAction> {
+        match self {
+            Decision::Abandon => Some(LifecycleAction::Abandoned),
+            Decision::Reopen => Some(LifecycleAction::Reopened),
+            Decision::Approve | Decision::RequestChanges | Decision::Comment => None,
+        }
+    }
+
+    /// The persisted/wire spelling — the `draft_reviews.decision` column value
+    /// (the db↔domain boundary; mirrors the serde renaming).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Decision::Approve => "approve",
+            Decision::RequestChanges => "request_changes",
+            Decision::Comment => "comment",
+            Decision::Abandon => "abandon",
+            Decision::Reopen => "reopen",
+        }
+    }
+}
+
+impl From<Verdict> for Decision {
+    fn from(verdict: Verdict) -> Decision {
+        match verdict {
+            Verdict::Approve => Decision::Approve,
+            Verdict::RequestChanges => Decision::RequestChanges,
+            Verdict::Comment => Decision::Comment,
+        }
+    }
+}
+
+impl std::str::FromStr for Decision {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Decision, String> {
+        match s {
+            "approve" => Ok(Decision::Approve),
+            "request_changes" => Ok(Decision::RequestChanges),
+            "comment" => Ok(Decision::Comment),
+            "abandon" => Ok(Decision::Abandon),
+            "reopen" => Ok(Decision::Reopen),
+            other => Err(format!("unknown decision {other:?}")),
+        }
+    }
+}
+
 /// A change's displayed status at a pinned revision (docs/api.md state
 /// table): the verdict-derived value (the [`Verdict`] arms) under the
 /// lifecycle overlay (`merged` for the landed patchset, `abandoned`
