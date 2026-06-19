@@ -21,35 +21,15 @@ use crate::enums::{Author, ChangeStatus, LifecycleAction, LogKind, Side, Verdict
 // ---------------------------------------------------------------------------
 // Enums
 
-/// A change's retained review status at a revision — the four verdict-derived
-/// values, before the lifecycle overlay (`merged`/`abandoned`). The wire
-/// [`ChangeStatus`] adds those two ([`ChangeProj::status_at`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Status {
-    Pending,
-    Approved,
-    ChangesRequested,
-    Commented,
-}
-
-impl From<Verdict> for Status {
-    /// The status a verdict produces (docs/data-model.md "The fold").
-    fn from(verdict: Verdict) -> Status {
+impl From<Verdict> for ChangeStatus {
+    /// The review status a verdict produces, before the lifecycle overlay
+    /// (`merged`/`abandoned`) that [`ChangeProj::status_at`] layers on top
+    /// (docs/data-model.md "The fold").
+    fn from(verdict: Verdict) -> ChangeStatus {
         match verdict {
-            Verdict::Approve => Status::Approved,
-            Verdict::RequestChanges => Status::ChangesRequested,
-            Verdict::Comment => Status::Commented,
-        }
-    }
-}
-
-impl From<Status> for ChangeStatus {
-    fn from(status: Status) -> ChangeStatus {
-        match status {
-            Status::Pending => ChangeStatus::Pending,
-            Status::Approved => ChangeStatus::Approved,
-            Status::ChangesRequested => ChangeStatus::ChangesRequested,
-            Status::Commented => ChangeStatus::Commented,
+            Verdict::Approve => ChangeStatus::Approved,
+            Verdict::RequestChanges => ChangeStatus::ChangesRequested,
+            Verdict::Comment => ChangeStatus::Commented,
         }
     }
 }
@@ -384,7 +364,7 @@ impl ChangeProj {
         {
             return ChangeStatus::Merged;
         }
-        self.review_status_at(revision).into()
+        self.review_status_at(revision)
     }
 
     /// A newer revision of this change landed on the canonical branch, but the
@@ -396,21 +376,21 @@ impl ChangeProj {
 
     /// The verdict-derived status at a revision: the latest review on it, else
     /// the prior revision's status when this one is a pure rebase, else
-    /// pending.
-    fn review_status_at(&self, revision: u64) -> Status {
+    /// pending. Never the lifecycle-overlay values (`merged`/`abandoned`).
+    fn review_status_at(&self, revision: u64) -> ChangeStatus {
         if let Some(rv) = self
             .reviews
             .iter()
             .filter(|r| r.revision == revision)
             .max_by_key(|r| r.id)
         {
-            return Status::from(rv.verdict);
+            return rv.verdict.into();
         }
         // No review here: a pure-rebase revision carries the prior one forward.
         if revision > 0 && self.revision(revision).is_some_and(|r| !r.resets_status) {
             return self.review_status_at(revision - 1);
         }
-        Status::Pending
+        ChangeStatus::Pending
     }
 }
 

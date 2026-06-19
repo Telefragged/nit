@@ -124,8 +124,8 @@ pub enum LifecycleAction {
     Reopened,
 }
 
-/// A reviewer's verdict on one change (docs/api.md "Reviews"). Maps to a
-/// change [`Status`](crate::review::Status) when folded.
+/// A reviewer's verdict on one change (docs/api.md "Reviews"). Folds to the
+/// matching [`ChangeStatus`] (`From<Verdict>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
@@ -135,7 +135,7 @@ pub enum Verdict {
 }
 
 /// A change's displayed status at a pinned revision (docs/api.md state
-/// table): the verdict-derived [`Status`](crate::review::Status) under the
+/// table): the verdict-derived value (the [`Verdict`] arms) under the
 /// lifecycle overlay (`merged` for the landed patchset, `abandoned`
 /// change-wide). Per `(change, revision)`, never a change-wide scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
