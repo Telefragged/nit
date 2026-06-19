@@ -110,9 +110,8 @@ you about it. Advance a change's slot to its log `head` after you drain it.
 - `nit wait` — **block** on the websocket until something past your cursor
   should wake you, then print `{cursor, entries, feedback}` and exit. Call it
   when you have nothing else to do; it derives its watch set from local HEAD,
-  rides out a server restart, and applies the wake rule (docs/data-model.md) so
-  a comment-less approve that doesn't complete the chain doesn't spin you. Pass
-  the printed `cursor` back next call.
+  rides out a server restart, and wakes on any new entry past your cursor
+  (docs/data-model.md "Wake rule"). Pass the printed `cursor` back next call.
 - `nit log --follow [--reviewer-only] <cursor>` — a **parked monitor** that
   relays each new entry as it lands (raw, or filtered to reviewer activity with
   `--reviewer-only`). Unlike `nit wait` it never exits — a long-lived watcher.

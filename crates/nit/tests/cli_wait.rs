@@ -1,5 +1,5 @@
-//! `nit wait` over the websocket: it drains the log, applies the wake rule, and
-//! parks on the stream until reviewer activity lands (docs/agent-workflow.md).
+//! `nit wait` over the websocket: it drains the log, waking on any new entry,
+//! and parks on the stream until fresh activity lands (docs/agent-workflow.md).
 
 mod common;
 
@@ -26,8 +26,8 @@ fn push_head(server: &TestServer, g: &GitRepo) -> Value {
     res
 }
 
-/// `nit wait 0` wakes immediately on existing activity (the agent's own push
-/// revision wakes — only a comment-less non-completing approve is suppressed).
+/// `nit wait 0` wakes immediately on any existing activity past the cursor
+/// (here, the agent's own push revision).
 #[test]
 fn wait_returns_existing_activity() {
     let g = GitRepo::new();

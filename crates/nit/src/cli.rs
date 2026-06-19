@@ -84,9 +84,8 @@ pub struct LogArgs {
     /// lands — a parked monitor. Rides out restarts; runs until stopped.
     #[arg(long)]
     pub follow: bool,
-    /// With `--follow`, relay only reviewer activity worth acting on (the
-    /// `nit wait` wake rule): drop the agent's own entries and a comment-less
-    /// approve that leaves the chain short of `approved`.
+    /// With `--follow`, relay only the reviewer's activity: drop the agent's
+    /// own entries (`revision`/`comment`/`partial`).
     #[arg(long, requires = "follow")]
     pub reviewer_only: bool,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
@@ -341,8 +340,8 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// agent calls this only when it has nothing else to do.
 ///
 /// Each pass **drains `(cursor, head]` from the log** (the log is the source of
-/// truth), applies the wake rule, and on a non-waking run blocks the websocket
-/// as a doorbell — block until any new entry lands, then re-drain. Reading from
+/// truth) and returns it if non-empty; otherwise it blocks the websocket as a
+/// doorbell — until any new entry lands, then re-drains. Reading from
 /// the log rather than the stream is what makes a single `wait` surface *every*
 /// entry since the cursor, not just the first. Rides out server restarts.
 ///
@@ -365,14 +364,11 @@ pub fn wait(args: WaitArgs) -> Result<()> {
 
         if !fresh.is_empty() {
             let feedback = client.get_retry(&format!("/api/chains/{tip}"), retry)?;
-            let state = feedback["state"].as_str().unwrap_or("");
-            if fresh.iter().any(|e| event_wakes(e, state)) {
-                let resp = json!({"cursor": cursor, "entries": fresh, "feedback": feedback});
-                print_wait(&resp, args.oneline)?;
-                return Ok(());
-            }
+            let resp = json!({"cursor": cursor, "entries": fresh, "feedback": feedback});
+            print_wait(&resp, args.oneline)?;
+            return Ok(());
         }
-        // Nothing actionable: park on the websocket until the head advances.
+        // Nothing new: park on the websocket until the head advances.
         wait_for_entry(&client, &entries, retry)?;
     }
 }
@@ -400,7 +396,7 @@ fn wait_for_entry(client: &Client, entries: &[Value], retry: Retry) -> Result<()
 /// Follow the aggregated chain log as a parked monitor: replay `(cursor, head]`,
 /// then relay each new entry as it lands, until stopped. Rides out restarts
 /// (reconnect re-reads the gap from the log). `reviewer_only` drops the agent's
-/// own entries and applies the wake rule to the reviewer's.
+/// own entries (`revision`/`comment`/`partial`).
 ///
 /// # Errors
 /// When a connect fails fatally or stdout can't be written.
@@ -492,22 +488,6 @@ fn follow_cursor(spec: &str) -> Result<u64> {
     spec.trim_end_matches("..")
         .parse::<u64>()
         .with_context(|| format!("bad seq cursor {spec:?}"))
-}
-
-/// Whether one entry should end a parked `nit wait`, given the chain's resulting
-/// `state`. Every entry wakes **except** a reviewer approve with no comments
-/// that did not bring the chain to `approved` (docs/data-model.md "Wake rule").
-fn event_wakes(entry: &Value, state: &str) -> bool {
-    !is_pure_approve(entry) || state == "approved"
-}
-
-/// A reviewer `approve` with no comments — the only suppressible entry.
-fn is_pure_approve(entry: &Value) -> bool {
-    entry["kind"] == "review"
-        && entry["payload"]["verdict"] == "approve"
-        && entry["payload"]["comments"]
-            .as_array()
-            .is_none_or(Vec::is_empty)
 }
 
 /// A log entry that echoes the agent's own action (`revision`/`comment`/
@@ -1172,32 +1152,6 @@ mod tests {
         if std::env::var("NIT_SERVER").is_err() {
             assert_eq!(server_url(None), DEFAULT_SERVER.to_string());
         }
-    }
-
-    #[test]
-    fn event_wakes_only_on_completing_pure_approve() {
-        let approve = |comments: Value| json!({"kind": "review", "payload": {"verdict": "approve", "comments": comments}});
-        // A comment-less approve wakes only when it brings the chain to approved.
-        assert!(!event_wakes(&approve(json!([])), "agents_turn"));
-        assert!(!event_wakes(&approve(json!([])), "waiting_for_review"));
-        assert!(event_wakes(&approve(json!([])), "approved"));
-        // An approve with comments wakes regardless of state.
-        assert!(event_wakes(
-            &approve(json!([{"body": "nit"}])),
-            "agents_turn"
-        ));
-        // Every other entry wakes unconditionally.
-        let request =
-            json!({"kind": "review", "payload": {"verdict": "request_changes", "comments": []}});
-        assert!(event_wakes(&request, "agents_turn"));
-        assert!(event_wakes(
-            &json!({"kind": "revision", "payload": {}}),
-            "waiting_for_review"
-        ));
-        assert!(event_wakes(
-            &json!({"kind": "lifecycle", "payload": {"action": "merged"}}),
-            "waiting_for_review"
-        ));
     }
 
     #[test]

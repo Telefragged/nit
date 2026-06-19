@@ -422,21 +422,13 @@ SHA-walk, a vs-parent diff, or the timer's `base_sha..canonical` walk needs).
 
 ## Wake rule
 
-The server streams every tagged entry unfiltered; whether one **wakes** a
-parked `nit wait` is a **client** decision (the follower already derives its
-path and each member's pinned revision from local HEAD, so it folds the rule
-against its own chain-state — no server help). The default is **wake** — every
-entry ends the wait. The exceptions, both path-aware:
+The server streams every tagged entry unfiltered; a parked `nit wait` wakes on
+**every** new entry past its cursor. A reviewer action reaches the agent the
+moment it lands — no client-side filtering (the agent's own pushes sit behind
+the cursor it passes back, so they never wake it). The return hands back the
+whole gap since the cursor plus the derived chain-state (`feedback`).
 
-- a `review` with verdict `approve`, **no comments**, that does **not** bring
-  the **chain** to `approved` — a reviewer approving change after change does
-  not wake each time. It is **not dropped**: the follower accumulates it and
-  hands it back with the next waking entry.
-- a `lifecycle` entry wakes when it changes the derived chain-state the agent
-  branches on — including a **prefix merge of an ancestor** (the agent may
-  rebase onto the advanced canonical branch).
-
-`nit log --follow --reviewer-only` additionally mutes the agent's own entries
-(`revision`/`comment`/`partial`) client-side, applying the same rule to the
-reviewer's. **Deferred:** muting a sibling-chain note on a revision the
-follower's path does not pin — the first cut wakes and lets the agent triage.
+`nit log --follow --reviewer-only` mutes the agent's own entries
+(`revision`/`comment`/`partial`) client-side, relaying only the reviewer's.
+**Deferred:** muting a sibling-chain note on a revision the follower's path
+does not pin — the first cut wakes and lets the agent triage.
