@@ -10,7 +10,6 @@ import type {
   CreateDraftRequest,
   Diff,
   Draft,
-  Health,
   RepoList,
   SubmitReviewRequest,
   SubmitReviewResponse,
@@ -58,11 +57,6 @@ async function request<T = void>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
-
-// ---------------------------------------------------------------------------
-// Health
-
-export const getHealth = () => request<Health>("GET", "/health");
 
 // ---------------------------------------------------------------------------
 // Repos

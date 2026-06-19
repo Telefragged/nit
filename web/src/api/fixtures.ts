@@ -2073,10 +2073,6 @@ export async function mockRequest(
   const q = url.searchParams;
   let m: RegExpExecArray | null;
 
-  if (method === "GET" && p === "/health") {
-    return { status: "ok", version: "0.1.0-mock" };
-  }
-
   if (method === "GET" && p === "/repos") {
     return { repos: repoList() };
   }

@@ -3,14 +3,6 @@
 // and crates/nit/src/api/types.rs together.
 
 // ---------------------------------------------------------------------------
-// Health
-
-export interface Health {
-  status: "ok";
-  version: string;
-}
-
-// ---------------------------------------------------------------------------
 // Repos
 
 export interface Repo {
