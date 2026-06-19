@@ -168,13 +168,13 @@ cursor via `nit log <ranges>`. Branch on `state`:
   - On a partial chain, `agents_turn` with none of the above (every pushed
     change approved) is not an error and not feedback — the reviewer is
     caught up. Keep building, or `nit ready` when the branch is done.
-- **`approved`** — every change approved. nit's job ends here; what to do
-  with an approved chain is **the project's approve action**, not part of
-  the loop — run it as the project defines it (recipe: docs/dev.md "The
-  approve action", covering the rebase, ordering, and the worktree
-  caveat). If the landing isn't yours to drive (main lives in another
-  checkout a coordinator owns), stop at `approved` and report to the
-  coordinator.
+- **`approved`** — every change approved. This is the cue to **land it**:
+  run the project's approve action (recipe: docs/dev.md "The approve
+  action", covering the rebase, the re-record push, and the primary-checkout
+  merge) and drive the chain all the way to `merged`. Landing is yours — a
+  moving `main` or a parallel agent means rebase-and-land, not hand off; stop
+  only if it is **fundamentally impossible** (an unresolvable rebase, or you
+  genuinely cannot write to `main`), and then say so explicitly.
 - **`merged` / `abandoned`** — chain is closed; stop.
 - **`waiting_for_review`** — nothing actionable: `nit wait` woke on your
   own just-pushed entries. Advance the cursor and wait again.

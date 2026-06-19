@@ -176,24 +176,35 @@ running server (normally `main`'s: `nit` on PATH, else
 
 nit derives `approved` (every live change approved, chain not `partial`)
 but doesn't prescribe landing — each project defines that. Here it's a
-fast-forward-only merge to `main` (no merge commits — golden rule 2):
+fast-forward-only merge to `main` (no merge commits — golden rule 2). The
+agent that built the chain **drives it all the way to `merged`**: reaching
+`approved` is the cue to land, never to hand off.
 
 ```sh
 # if main moved: rebase onto it, re-formatting each replayed commit
 git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' main
-git checkout main && git merge --ff-only <branch>
-git branch -d <branch>
+nit push                                       # re-record the rebased revisions (see below)
+git -C <primary> merge --ff-only <branch>      # never `git checkout main` inside a worktree
+git worktree remove <worktree> && git branch -d <branch>
 ```
 
-The background lifecycle timer records the chain `merged` once its commits
-land on `main` — it matches each change by Change-Id/patch-id against the
-canonical branch, so no closing push is needed (pushing the merged tip is a
-409, the empty walk). Always close an approved chain:
-`--ff-only` keeps `main` linear, it doesn't gate the work, so a non-ff
-branch is a rebase to do, not a reason to pause. In a worktree, rebase
-there but run the merge from the primary checkout (`git -C <primary> merge
---ff-only <branch>`) — never `git checkout main` in the worktree. Stop at
-`approved` only if another agent owns that checkout.
+The lifecycle timer marks the chain `merged` once the commits are on `main`,
+matching each change's latest revision patch-id against the canonical branch
+— so the `nit push` after the rebase matters: it re-records each revision at
+its rebased sha. A pure rebase keeps its patch-id (and its approval), so the
+push just adds a no-op revision; a rebase that **resolved conflicts** changed
+those patch-ids, and without the push the timer never matches them, so they
+never flip to `merged`. Don't push _after_ the ff-merge — the tip is on
+`main` then, an empty walk, a 409.
+
+Landing is the agent's responsibility **all the way to `merged`; you stop
+only when it is fundamentally impossible** — an unresolvable rebase, or you
+genuinely cannot write to `main`. `--ff-only` keeps `main` linear; a non-ff
+branch is a rebase to do, not a reason to pause. `main` moving under you
+(another agent landing in parallel) is the same: rebase onto it and land —
+coordinate, never abandon the chain. A conflict-resolving rebase that resets
+a change to `pending` is still yours to land; the content was approved and
+the resolution is mechanical.
 
 ### Review exemptions
 
