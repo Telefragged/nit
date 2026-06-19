@@ -65,8 +65,9 @@ nit push                   # amended commits = new revisions
 ```
 
 `nit push`/`nit ready` are the only writers of revisions and the partial flag.
-The reviewer's verdicts, the merge/abandon timer, and your own comments all
-land in the log independently — so after a push you **re-read** to see them.
+The reviewer's verdicts and abandon/reopen, the merge timer, and your own
+comments all land in the log independently — so after a push you **re-read** to
+see them.
 
 ### Partial vs ready
 
@@ -196,10 +197,11 @@ you there directly.
 
 ## Abandoned changes
 
-The background lifecycle timer (docs/data-model.md "Lifecycle") marks a change
-`abandoned` when its latest revision is unreachable from any branch ref for the
-abandonment window — typically because you deleted or force-moved its branch
-past it. Abandonment is **change-wide** and terminal until cleared.
+A change is `abandoned` only when a reviewer or agent **explicitly** marks it
+dead — `nit abandon` (or the reviewer's abandon decision in the UI). The
+lifecycle timer never abandons: deleting or force-moving a branch leaves its
+changes live, not abandoned. Abandonment is **change-wide** and terminal until
+cleared.
 
 A push that would add a revision to an abandoned change is a **409** — reopen
 it explicitly first:
@@ -210,9 +212,9 @@ nit push                               # the new revision folds it to pending
 ```
 
 Reopen clears `abandoned` back to the change's retained verdict status; the next
-push's revision folds it to `pending`. (The timer also writes `merged` when a
-change's patch lands on the canonical branch — a push never observes that
-itself.)
+push's revision folds it to `pending`. (The timer's one job is `merged` — it
+writes that when a change's patch lands on the canonical branch; a push never
+observes that itself.)
 
 ## Command reference
 
