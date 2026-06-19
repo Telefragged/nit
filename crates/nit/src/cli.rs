@@ -30,18 +30,13 @@ fn server_url(flag: Option<String>) -> String {
 
 #[derive(clap::Args)]
 pub struct PushArgs {
-    /// Worktree of the branch to push. Required — there is no cwd fallback.
-    /// The repo identity is its git-common-dir (shared across worktrees);
-    /// passing it explicitly keeps a push from the wrong checkout from
-    /// targeting the wrong repo.
+    /// The commit to push: any rev (sha, tag, branch). Defaults to the
+    /// checked-out commit (HEAD) of the cwd — a detached HEAD or tag included.
+    pub commit: Option<String>,
+    /// The repo's canonical base branch. Detected server-side (`main` or
+    /// `master`) when omitted; pass it when neither or both exist.
     #[arg(long)]
-    pub repo: PathBuf,
-    /// Branch (tip) to push
-    #[arg(long)]
-    pub branch: String,
-    /// The repo's canonical base branch (recorded on first push)
-    #[arg(long, default_value = "main")]
-    pub base: String,
+    pub base: Option<String>,
     /// Mark the tip partial: review can start, merging cannot; sticky until
     /// `nit ready`
     #[arg(long)]
@@ -53,15 +48,11 @@ pub struct PushArgs {
 
 #[derive(clap::Args)]
 pub struct ReadyArgs {
-    /// Worktree of the branch to mark ready (required; see `nit push`)
+    /// The commit to mark ready (see `nit push`); defaults to the cwd's HEAD.
+    pub commit: Option<String>,
+    /// The repo's canonical base branch (see `nit push`).
     #[arg(long)]
-    pub repo: PathBuf,
-    /// Branch (tip) to mark ready
-    #[arg(long)]
-    pub branch: String,
-    /// The repo's canonical base branch
-    #[arg(long, default_value = "main")]
-    pub base: String,
+    pub base: Option<String>,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -235,16 +226,16 @@ pub struct RepoMoveArgs {
 // ---------------------------------------------------------------------------
 // Commands
 
-/// Register/refresh `--branch` of `--repo` for review; idempotent.
+/// Push the cwd's checked-out commit (or an explicit rev) for review;
+/// idempotent.
 ///
 /// # Errors
-/// When the repo path can't be resolved, the server is unreachable, or the
-/// push is rejected.
+/// When the cwd is not a git repo, the rev can't be resolved, the server is
+/// unreachable, or the push is rejected.
 pub fn push(args: PushArgs) -> Result<()> {
     do_push(
-        &args.repo,
-        &args.branch,
-        &args.base,
+        args.commit.as_deref(),
+        args.base,
         args.server,
         args.partial.then_some(true),
     )
@@ -255,32 +246,43 @@ pub fn push(args: PushArgs) -> Result<()> {
 /// # Errors
 /// Same as [`push`].
 pub fn ready(args: ReadyArgs) -> Result<()> {
-    do_push(
-        &args.repo,
-        &args.branch,
-        &args.base,
-        args.server,
-        Some(false),
-    )
+    do_push(args.commit.as_deref(), args.base, args.server, Some(false))
 }
 
-/// Shared push/ready core: `POST /api/push`, sending `partial` only when an
-/// override is given (absent leaves the sticky flag unchanged).
+/// Shared push/ready core: resolve the cwd's repo + the commit to push, then
+/// `POST /api/push`. `base` is sent only when given (else the server detects
+/// it); `partial` only when an override is given (absent leaves it unchanged).
 fn do_push(
-    repo: &Path,
-    branch: &str,
-    base: &str,
+    commit: Option<&str>,
+    base: Option<String>,
     server: Option<String>,
     partial: Option<bool>,
 ) -> Result<()> {
-    let git_dir = repo_git_dir(repo)?;
+    let (git_dir, repo) = discover_repo()?;
+    let tip = resolve_tip(&repo, commit)?;
     let client = Client::new(server_url(server));
-    let mut body = json!({"git_dir": git_dir, "tip": branch, "base": base});
+    let mut body = json!({"git_dir": git_dir, "tip": tip});
+    if let Some(base) = base {
+        body["base"] = json!(base);
+    }
     if let Some(partial) = partial {
         body["partial"] = json!(partial);
     }
     let result = client.post("/api/push", &body)?;
     print_json(&result)
+}
+
+/// The full sha of the commit to push: the given rev, or the cwd's checked-out
+/// commit (HEAD) — a detached HEAD or tag resolved the same way.
+fn resolve_tip(repo: &Repository, commit: Option<&str>) -> Result<String> {
+    match commit {
+        Some(rev) => repo
+            .revparse_single(rev)
+            .and_then(|obj| obj.peel_to_commit())
+            .map(|c| c.id().to_string())
+            .map_err(|e| anyhow!("cannot resolve '{rev}': {}", e.message())),
+        None => head_sha(repo),
+    }
 }
 
 /// Print the chain's status: the derived state plus one line per member.

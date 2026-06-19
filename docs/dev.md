@@ -182,12 +182,13 @@ fast-forward-only merge to `main` (no merge commits — golden rule 2):
 # if main moved: rebase onto it, re-formatting each replayed commit
 git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' main
 git checkout main && git merge --ff-only <branch>
-nit push --repo <worktree> --branch <branch>   # scan records the chain merged
 git branch -d <branch>
 ```
 
-The scan must see the merge while the branch ref still exists, or it
-records `abandoned` instead of `merged`. Always close an approved chain:
+The background lifecycle timer records the chain `merged` once its commits
+land on `main` — it matches each change by Change-Id/patch-id against the
+canonical branch, so no closing push is needed (pushing the merged tip is a
+409, the empty walk). Always close an approved chain:
 `--ff-only` keeps `main` linear, it doesn't gate the work, so a non-ff
 branch is a rebase to do, not a reason to pause. In a worktree, rebase
 there but run the merge from the primary checkout (`git -C <primary> merge

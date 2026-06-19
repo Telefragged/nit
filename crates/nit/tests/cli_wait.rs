@@ -8,20 +8,10 @@ use std::time::Duration;
 use common::{GitRepo, TestServer, http_get, http_post, http_put, msg, nit, nit_bounded};
 use serde_json::{Value, json};
 
-/// `nit push` from the cwd HEAD, returning its `PushResult`.
+/// `nit push` from the cwd HEAD (no args — resolves the checked-out commit),
+/// returning its `PushResult`.
 fn push_head(server: &TestServer, g: &GitRepo) -> Value {
-    let workdir = g.workdir();
-    let (ok, res, err) = nit(
-        server,
-        g,
-        &[
-            "push",
-            "--repo",
-            workdir.to_str().unwrap(),
-            "--branch",
-            "feat",
-        ],
-    );
+    let (ok, res, err) = nit(server, g, &["push"]);
     assert!(ok, "push failed: {err}");
     res
 }

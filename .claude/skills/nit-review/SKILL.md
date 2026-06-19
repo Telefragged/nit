@@ -91,21 +91,20 @@ stop.
 
 ```sh
 cursor=0            # 0-based: the count of log entries you've consumed
-repo=$(pwd); branch=$(git branch --show-current)   # push/ready need both
 # after EVERY completed commit (green, treefmt-clean, one concern, Change-Id'd):
-nit push --partial --repo "$repo" --branch "$branch"  # register/refresh, partial
-# → FIRST push starts review on commit one, not when the branch is done
+nit push --partial  # push the cwd's checked-out commit; base auto-detected
+# → FIRST push: report web_url to the user now — review starts on
+#   commit one, not when the branch is done
 # after the LAST commit:
-nit ready --repo "$repo" --branch "$branch"   # clears partial; reach approved
+nit ready           # clears partial; reach approved
 nit wait $cursor    # blocks until entries land beyond $cursor; prints JSON
 ```
 
-`--repo`/`--branch` are required — push has no cwd fallback (a stray push
-from the wrong checkout would fork a duplicate chain). `nit log` selects
-its chain differently: by `--chain <id>`, or absent it the cwd's
-repo+branch — it does **not** accept `--repo`/`--branch`. Pass `--chain
-<id>` for a monitor, whose long-lived command can't rely on an ambient
-cwd. **Prefer the follow-monitor**: run
+`nit push`/`nit ready` resolve the repo + tip from the cwd (the checked-out
+commit, or an explicit `[<commit>]` rev), so run them from inside the
+worktree. `nit log` selects its chain by `--chain <id>`, or absent it the
+cwd's tip. Pass `--chain <id>` for a monitor, whose long-lived command can't
+rely on an ambient cwd. **Prefer the follow-monitor**: run
 `nit log --follow --oneline --reviewer-only --chain <id> $cursor` under
 the **Monitor tool** (`persistent: true`) instead of polling
 `nit wait` — Monitor turns each relayed line into a notification, so you

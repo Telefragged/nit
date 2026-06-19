@@ -243,7 +243,8 @@ pub fn nit(server: &TestServer, repo: &GitRepo, args: &[&str]) -> (bool, Value, 
     (out.status.success(), value, stderr)
 }
 
-/// `nit push` / `nit ready` with the repo path and branch passed explicitly.
+/// `nit push <branch>` / `nit ready <branch>` from inside the repo: the branch
+/// is the positional commit (resolved locally), base auto-detected server-side.
 /// `cmd` is `"push"` or `"ready"`; `extra` carries flags like `--partial`.
 pub fn nit_register(
     server: &TestServer,
@@ -252,9 +253,7 @@ pub fn nit_register(
     branch: &str,
     extra: &[&str],
 ) -> (bool, Value, String) {
-    let workdir = repo.workdir();
-    let workdir = workdir.to_str().expect("workdir path is valid UTF-8");
-    let mut args = vec![cmd, "--repo", workdir, "--branch", branch];
+    let mut args = vec![cmd, branch];
     args.extend_from_slice(extra);
     nit(server, repo, &args)
 }

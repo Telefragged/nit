@@ -25,7 +25,7 @@ fn push_prints_result_then_status_and_log_read_it_back() {
     g.repo.set_head("refs/heads/feat").unwrap(); // the agent's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // push: repo + branch explicit, base defaults to main. The result carries
+    // push <branch> from the cwd, base auto-detected (main). The result carries
     // the tip change at rev 0 (0-based) and the tip-rooted chain.
     let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
@@ -300,15 +300,8 @@ fn push_to_a_dead_server_reports_unreachable() {
     let base = dead.base.clone();
     drop(dead);
 
-    let workdir = g.workdir();
     let out = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args([
-            "push",
-            "--repo",
-            workdir.to_str().unwrap(),
-            "--branch",
-            "feat",
-        ])
+        .args(["push", "feat"])
         .current_dir(g.workdir())
         .env("NIT_SERVER", &base)
         .output()
@@ -318,25 +311,32 @@ fn push_to_a_dead_server_reports_unreachable() {
     assert!(stderr.contains("is 'nit serve' running?"), "{stderr}");
 }
 
-/// push has no cwd fallback: `--repo` and `--branch` are both required, so being
-/// inside a checkout is not enough — clap rejects the call before any HTTP, the
-/// guard against a stray push forking a duplicate chain off the wrong path.
+/// Bare `nit push` (no args) resolves the cwd's checked-out commit — the agent
+/// commits and simply pushes, with the base detected server-side.
 #[test]
-fn push_requires_repo_and_branch() {
+fn bare_push_resolves_head() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let out = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(["push"])
-        .current_dir(g.workdir())
-        .env("NIT_SERVER", &server.base)
-        .output()
-        .unwrap();
-    assert!(!out.status.success(), "bare push must not fall back to cwd");
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("--repo"), "{stderr}");
-    assert!(stderr.contains("--branch"), "{stderr}");
+    let (ok, push, stderr) = nit(&server, &g, &["push"]);
+    assert!(ok, "bare push resolves HEAD: {stderr}");
+    assert_eq!(push["tip_change"]["change_key"], "Ia");
+    assert_eq!(push["chain"]["base_branch"], "main");
+}
+
+/// A detached HEAD has no branch name, yet bare `nit push` resolves the
+/// checked-out commit just the same.
+#[test]
+fn push_resolves_detached_head() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    g.repo.set_head_detached(c1).unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (ok, push, stderr) = nit(&server, &g, &["push"]);
+    assert!(ok, "detached HEAD resolves: {stderr}");
+    assert_eq!(push["tip_change"]["change_key"], "Ia");
 }

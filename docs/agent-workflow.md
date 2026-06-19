@@ -50,19 +50,17 @@ verification) never holds a push — post-push amends become new revisions by
 design. The only thing that delays a push is the commit not being done.
 
 ```sh
-repo=$(pwd); branch=$(git branch --show-current)   # both required on push
-
 # after EVERY completed commit (green, formatter-clean, one concern, Change-Id'd):
-nit push --partial --repo "$repo" --branch "$branch"   # register/refresh
+nit push --partial         # push the checked-out commit; base auto-detected
 #   first push creates the change(s) and the chain — review starts here, on commit one
-nit ready --repo "$repo" --branch "$branch"            # last commit done: clears partial
+nit ready                  # last commit done: clears partial
 
 # then read the chain and act on feedback:
 nit status                 # the derived chain digest (state + one line per change)
 #   for each change changes_requested/commented: fix by amending the commit it
 #     targets (fixup! + autosquash), or answer its thread:
 #     nit comment --change-id <Change-Id> --thread <id> [--resolve] -m "…"
-nit push --repo "$repo" --branch "$branch"   # amended commits = new revisions
+nit push                   # amended commits = new revisions
 #   re-read until state=approved, then run the project's approve action
 ```
 
@@ -86,8 +84,9 @@ push does not hold an unrelated chain partial.
 ### Rebasing onto a moved base
 
 `base` configures the repo's **one canonical branch**, recorded on the repo's
-first push; every later push must name the same base or it is a 400. To rebase
-a chain onto a moved canonical branch, rebase locally first (no server call),
+first push (auto-detected, or set with `--base`); a later push naming a
+_different_ base is a 400. To rebase a chain onto a moved canonical branch (the
+same base, advanced), rebase locally first (no server call),
 then push — the walk re-forks at the new merge-base and appends a revision to
 each change whose sha moved (pure rebases keep their status). A change whose
 ancestor has landed shows live with a "newer revision landed elsewhere" note
@@ -207,7 +206,7 @@ it explicitly first:
 
 ```sh
 nit reopen --change-id <Change-Id>     # or --change <numeric id>
-nit push --repo "$repo" --branch "$branch"   # the new revision folds it to pending
+nit push                               # the new revision folds it to pending
 ```
 
 Reopen clears `abandoned` back to the change's retained verdict status; the next
@@ -217,17 +216,18 @@ itself.)
 
 ## Command reference
 
-- `nit push --repo <path> --branch <name> [--partial] [--base <ref>] [--server <url>]`
-  — `--repo` (a worktree path) and `--branch` are required: the repo identity is
-  the git-common-dir, the branch is the tip; no cwd fallback, or a stray push
-  forks against the wrong repo. Defaults: base `main`, server `$NIT_SERVER` or
+- `nit push [<commit>] [--partial] [--base <ref>] [--server <url>]` — push the
+  cwd's checked-out commit (HEAD — a detached HEAD or tag included), or an
+  explicit `<commit>` (any rev). The repo is the cwd's git-common-dir. `--base`
+  is the canonical branch, auto-detected (`main`/`master`) when omitted — pass
+  it when neither or both exist. Server defaults to `$NIT_SERVER` or
   `http://127.0.0.1:8877`. Prints the `PushResult` (the tip change + the derived
   chain). Idempotent — a re-push where nothing moved records
   nothing and succeeds (200); a structural fault is a 400, a revision to an
-  abandoned change a 409. `--partial` is sticky (a plain push never clears it).
-  No cursor returned.
-- `nit ready --repo <path> --branch <name> [--base <ref>] [--server <url>]` —
-  clears the partial flag and refreshes. Idempotent.
+  abandoned change or an already-merged tip a 409. `--partial` is sticky (a
+  plain push never clears it). No cursor returned.
+- `nit ready [<commit>] [--base <ref>] [--server <url>]` — clears the partial
+  flag and refreshes. Idempotent.
 - `nit status [--chain <tip-change-id>] [--oneline] [--server <url>]` — the
   derived `Chain` for the cwd's tip (or `--chain`), no blocking. `--oneline`
   prints a `state=` header plus one line per member
