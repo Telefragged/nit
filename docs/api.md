@@ -122,6 +122,25 @@ derivation").
 - `GET /api/chains/{change_id}/log` → the **aggregated** chain log: every
   member's log entries, merged and sorted by global `seq` (one timeline for
   the whole chain). Behind `nit log`.
+- `POST /api/chains/{change_id}/submit` → BatchSubmitResult — **publish every
+  member's staged decision** for this chain (docs/data-model.md "Reviewer
+  decisions"). `?revision={n}` picks the chain context exactly like
+  `GET /api/chains/{change_id}` (default: the change's latest). The path is
+  re-derived at submit time; for each member carrying a staged decision it
+  publishes that decision **at the revision this path pins on the member** (not
+  a stored revision), in that member's own per-change transaction (atomic per
+  change, **not** atomic across the chain — like `nit push`). A member with no
+  staged decision is left untouched (its comment drafts stay drafts). The
+  per-change publish deletes the member's `draft_reviews` row, so re-submitting
+  finishes a torn batch without double-publishing — submit is idempotent.
+
+  ```json
+  resp: BatchSubmitResult = {
+    "submitted": 2,                       // members whose decision published
+    "errors": [SubmitError]               // members skipped (stale/terminal)
+  }
+  SubmitError = {"change_id": 11, "message": "change is abandoned — stage Reopen"}
+  ```
 
 ```json
 ChainSummary = {
@@ -154,7 +173,10 @@ PathEntry = {
   "merged_elsewhere": false,         // a newer revision landed on the canonical branch
   "subject": "server: add health endpoint",
   "commit_sha": "…", "short_sha": "abc123def456",
-  "counts": {"threads": 3, "drafts": 1, "unresolved": 2}  // scoped to this revision
+  "counts": {"threads": 3, "drafts": 1, "unresolved": 2}, // scoped to this revision
+  "draft_decision": "approve"        // the change's staged decision (Decision),
+                                     // or null; change-wide (one per change),
+                                     // so it shows on every chain the change is in
 }
 ```
 
@@ -164,6 +186,12 @@ independent verdicts (a request_changes in one chain never overwrites an
 approve in another). `id` on a change is its stable fold id (the `change`
 rowid); thread ids are fold-assigned by fold order (docs/data-model.md
 "Identity").
+
+`draft_decision` is the one exception to "read at the pinned revision": a draft
+decision is **change-wide** (one per change), so the same value appears on every
+chain the change is a member of. The dashboard counts a member as having
+reviewer draft state when `counts.drafts > 0` **or** `draft_decision != null`,
+and enables a chain's batch submit when any member carries a `draft_decision`.
 
 ### Tip names
 
@@ -200,7 +228,8 @@ patchset — and chain context — you view.
     "threads": [Thread],             // published threads, all revisions
     "drafts": [Draft],               // reviewer's unpublished comments
     "reviews": [Review],             // each carries its revision
-    "chains": [ChainRef]             // every tip walking through this change
+    "chains": [ChainRef],            // every tip walking through this change
+    "draft_decision": StagedDecision // the reviewer's staged decision, or null
   }
   Revision = {"number": 2, "commit_sha": "…", "short_sha": "…",
               "parent_sha": "…", "base_sha": "…",
@@ -210,6 +239,8 @@ patchset — and chain context — you view.
               "message": "cover message", "created_at": "…"}
   ChainRef = {"tip_change_id": 12, "revision": 2,
               "name": "feat/x", "web_url": "…"}
+  StagedDecision = {"decision": "approve",   // Decision: approve | request_changes
+                    "message": "cover note"} //   | comment | abandon | reopen
   ```
   There is no `chain_id` or `position` — both are properties of a path, not of
   the change; read them from `chains` / a `PathEntry`. `reviews` and `threads`
@@ -432,12 +463,47 @@ the thread without adding a visible comment. An agent stages resolution the
 same way, through `nit comment --thread <id> --resolve` / `--unresolve`
 (below).
 
+## Reviewer decisions (drafts)
+
+Like comment threads, a reviewer's **decision** on a change is **drafted, not
+immediate** (docs/data-model.md "Reviewer decisions"): the review modal stages a
+`Decision` and a cover message in the `draft_reviews` side table (one mutable
+row per change, reviewer-private, never in the log), and the chain-level batch
+submit (`POST /api/chains/{id}/submit`, "Chains") publishes every member's
+staged decision at once. A `Decision` is a verdict (`approve`,
+`request_changes`, `comment`) **or** a lifecycle action (`abandon`, `reopen`),
+so the modal offers all of them in one place — abandonment is a decision, not a
+separate button.
+
+- `PUT /api/changes/{id}/decision` —
+  `req: {"decision": "approve" | "request_changes" | "comment" | "abandon" | "reopen", "message": "…"}`
+  → StagedDecision. Stages (or overwrites) the change's draft decision. `message`
+  is optional (the cover note for a verdict, the reason for `abandon`). Validated
+  only as an enum value — legality against the change's lifecycle is checked at
+  submit time, since a draft is reviewer scratch. 404 if the change is unknown.
+- `DELETE /api/changes/{id}/decision` → 204 — discard the staged decision. 404
+  if the change is unknown (a no-op when nothing is staged is still 204).
+
+On batch submit each staged decision publishes **at the revision its chain path
+pins on the member** (the path is the authority — a change-wide decision row
+stores no revision, so the B-in-two-chains member publishes at rev0 from one
+chain and rev1 from the other): a verdict drains the change's comment drafts
+into one `review` entry (below); `abandon`/`reopen` append a `lifecycle` entry,
+and any comment drafts on the change still drain into a `comment` review in the
+**same** per-change transaction so they are never stranded. A member whose
+staged decision is illegal for its current lifecycle (a verdict on a
+merged/abandoned change, a `reopen` on a live one) is skipped into
+`BatchSubmitResult.errors` and keeps its row.
+
 ## Reviews
 
 - `POST /api/changes/{id}/reviews` —
   `req: {"revision": 2, "verdict": "approve" | "request_changes" | "comment", "message": "…"}`
-  Under the change lock: drains the change's drafts (their staged `resolved`
-  decisions included), appends one `review` log entry (verdict + cover
+  The **immediate** per-change publish primitive, shared with batch submit (the
+  reviewer UI stages a decision and batch-submits instead; this endpoint is the
+  programmatic single-change path). Under the change lock: drains the change's
+  drafts (their staged `resolved` decisions included) **and any staged
+  `draft_reviews` row**, appends one `review` log entry (verdict + cover
   message + the drained drafts), and folds it (the change's displayed status
   at `revision` → the verdict's; each draft applied to a new or existing
   thread; each thread's resolution → its last decision).

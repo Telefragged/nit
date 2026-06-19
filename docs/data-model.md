@@ -11,10 +11,11 @@ read time by walking a tip commit's `parent_sha` back to the repo's canonical
 base branch through each revision's recorded parent (gerrit relation chains).
 Order is a read-time walk, never stored state.
 
-SQLite stores only the per-change logs plus three side tables (the repo
-registry, the change-identity registry, reviewer drafts). git objects stay in
-the user's repo, pinned against `git gc` ("Keep refs"); diffs are computed on
-demand from the commit shas a revision carries, never stored ("Diffs").
+SQLite stores only the per-change logs plus four side tables (the repo
+registry, the change-identity registry, reviewer comment drafts, and reviewer
+decision drafts). git objects stay in the user's repo, pinned against `git gc`
+("Keep refs"); diffs are computed on demand from the commit shas a revision
+carries, never stored ("Diffs").
 
 Live followers (`nit wait`, `nit log --follow`) watch a set of changes over
 one websocket (docs/api.md "Events"); which entries **wake** a parked wait is
@@ -54,6 +55,16 @@ drafts  (id, change_id, revision, thread_id, file, line, side,
         -- old | new. range_*: all four set or all NULL (docs/api.md "Range
         -- comments"). resolved: staged thread decision (NULL = none; docs/api.md
         -- "Thread resolution"), applied on publish.
+
+draft_reviews (change_id PRIMARY KEY, decision, message)
+        -- reviewer-private staged DECISION, one mutable row per change (PUT
+        -- overwrites, DELETE clears), never in the log — the decision analogue of
+        -- a comment draft. decision is a `Decision` (approve | request_changes |
+        -- comment | abandon | reopen); message is the cover note / abandon reason.
+        -- No revision column: a decision is change-wide, and the chain path
+        -- supplies the revision at publish time (docs/api.md "Reviewer
+        -- decisions"). Drained + deleted in the same per-change transaction as
+        -- the publish it produces.
 ```
 
 That is the whole schema — **no `chains` table, no `revisions` table, no
@@ -207,6 +218,32 @@ status:  pending | approved | changes_requested | commented | merged | abandoned
 Two tips pinning two patchsets carry two independent verdicts — an approve in
 one chain never overwrites a request_changes in another, because each is scoped
 to its `(change, revision)` pair.
+
+### Reviewer decisions (staged, then batch-submitted)
+
+A reviewer's **decision** on a change is reviewer-private scratch, exactly like
+a comment draft: it lives in `draft_reviews` (one mutable row per change), never
+in the log, and only becomes a fact when published. A `Decision` is a verdict
+(`approve`/`request_changes`/`comment`) **or** a lifecycle action
+(`abandon`/`reopen`) — abandonment is a staged decision, not a separate button.
+
+The reviewer stages decisions across a chain's members, then **batch submits the
+chain** (docs/api.md "Chains" → submit): per member with a staged decision, in
+that member's own per-change transaction (atomic per change, never across the
+chain — like push), nit publishes the decision **at the revision this chain's
+path pins on the member**. The decision row stores no revision, so the
+B-in-two-chains member (one change on two chains at two patchsets) publishes at
+rev0 from one chain and rev1 from the other — the path is the authority, never a
+stored coordinate. A verdict drains the change's comment drafts into one
+`review` entry (so a verdict and its comments are inseparable, as before);
+`abandon`/`reopen` write a `lifecycle` entry and still drain any comment drafts
+into a `comment` review in the same transaction, so staged comments are never
+stranded. Publishing deletes the member's `draft_reviews` row, so re-submitting
+a batch torn by a transient `SQLITE_BUSY` finishes the rest without
+double-publishing. A staged decision illegal for the change's current lifecycle
+(a verdict on a terminal change, a `reopen` on a live one) is reported back and
+left staged. The immediate `POST /reviews` (docs/api.md "Reviews") shares this
+publish path for the single-change case.
 
 ### Change identity (`change_key`)
 

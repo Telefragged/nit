@@ -104,9 +104,12 @@ tip)..tip` oldest-first, upserts each change by its `Change-Id`, and appends
   patchset style), pinned against `git gc` by
   `refs/nit/keep/<change-id>/<revision-number>` refs — one per revision,
   idempotent (GC/deletion is deferred in this cut; refs accumulate, fail-safe).
-- **Drafts live server-side** so the reviewer can move between commits and
-  sessions without losing them — the one mutable state outside the log,
-  publishing atomically into one `review` entry.
+- **Reviewer drafts live server-side** so the reviewer can move between commits
+  and sessions without losing them — the mutable state outside the log. Comment
+  drafts and a per-change **staged decision** (`draft_reviews`: a verdict or an
+  abandon/reopen) both publish atomically: a chain's batch submit folds each
+  member's decision and drained comment drafts into one per-change transaction
+  (docs/data-model.md "Reviewer decisions").
 - **The per-change append lock, no async mutex**: each loaded change holds
   `proj: RwLock<ChangeProj>` (the fold) and a synchronous append lock
   (`StdMutex`) serializing its appenders. An append validates the fold on a
