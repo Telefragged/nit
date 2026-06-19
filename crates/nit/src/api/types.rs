@@ -460,9 +460,10 @@ pub enum StreamMsg {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct NewParent {
-    /// The change whose tip re-rooted.
+    /// The child end of the newly established edge (a re-rooted change, or a
+    /// brand-new child stacked on `parent`).
     pub of: u64,
-    /// The change it re-rooted onto.
+    /// The parent `of` now sits on.
     pub parent: u64,
 }
 

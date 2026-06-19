@@ -340,18 +340,26 @@ async fn push(
             .map_err(map_busy)?;
             gitscan::maintain_keep_refs(&repo, &t.entry.read());
 
-            // An existing change that re-rooted onto a different parent tells
-            // its followers (advisory — they re-derive HEAD regardless).
-            if i > 0
-                && let Some(old) = &prior
-                && old.parent_sha != wc.parent_sha
-            {
-                t.entry.publish(StreamMsg::NewParent {
-                    new_parent: types::NewParent {
-                        of: t.change_id,
-                        parent: targets[i - 1].change_id,
-                    },
-                });
+            // A newly established parent↔child edge tells followers to
+            // re-derive (advisory — they re-derive HEAD regardless). Publish on
+            // the edge's *pre-existing* endpoint, the only feed a follower can
+            // already hold: a re-rooted existing change on its own feed; a
+            // brand-new child stacked on an existing parent, on the parent's.
+            if i > 0 {
+                let parent = &targets[i - 1];
+                let feed = match &prior {
+                    Some(old) if old.parent_sha != wc.parent_sha => Some(&t.entry),
+                    None => Some(&parent.entry),
+                    _ => None,
+                };
+                if let Some(feed) = feed {
+                    feed.publish(StreamMsg::NewParent {
+                        new_parent: types::NewParent {
+                            of: t.change_id,
+                            parent: parent.change_id,
+                        },
+                    });
+                }
             }
         }
 
