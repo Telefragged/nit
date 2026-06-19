@@ -75,7 +75,10 @@ pub struct PushRequest {
     /// Any ref or rev, resolved to a commit at push time.
     pub tip: String,
     /// The repo's canonical branch (recorded on first push; must match after).
-    pub base: String,
+    /// Optional: omitted, it is reused from the registered repo, or detected
+    /// (`main`/`master`) on first push.
+    #[serde(default)]
+    pub base: Option<String>,
     /// Sticky: true marks the tip's revision partial (`nit push --partial`),
     /// false clears it (`nit ready`), absent leaves it unchanged.
     #[serde(default)]

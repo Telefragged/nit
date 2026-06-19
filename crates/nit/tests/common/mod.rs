@@ -316,6 +316,15 @@ pub fn push(
     http_post(&server.url("/api/push"), &body)
 }
 
+/// `POST /api/push` with no `base` — exercises the server's base detection
+/// (reuse the registered repo's, else auto-detect `main`/`master`).
+pub fn push_no_base(server: &TestServer, repo: &GitRepo, tip: &str) -> (u16, Value) {
+    http_post(
+        &server.url("/api/push"),
+        &json!({"git_dir": repo.git_dir(), "tip": tip}),
+    )
+}
+
 /// Publish a verdict on a change through the only publish path — stage the
 /// decision, then batch-submit the change's chain (docs/api.md "Reviewer
 /// decisions"). The change is its own tip for a single-commit chain; for a

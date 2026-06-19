@@ -330,7 +330,10 @@ upsert keyed by its `Change-Id`.
 
 1. Resolve the canonical `base` and `tip` (either failing to resolve is a
    `400`). `base` must equal the repo's stored `base_branch` — a different base
-   is a `400` (one canonical branch per repo), recorded on the first push.
+   is a `400` (one canonical branch per repo), recorded on the first push. An
+   omitted `base` is reused from the registered repo, or auto-detected on the
+   first push: the local `main` or `master`, with neither/both a `400` asking
+   the caller to specify `base`.
 2. `fork = merge-base(base, tip)`; walk `fork..tip` oldest-first
    (`gitscan::walk_push`). The walk is **all-or-nothing** — a `400` rejects the
    whole push on any structural fault: a merge or root commit, a commit missing

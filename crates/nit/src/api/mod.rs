@@ -30,7 +30,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, patch, post, put};
-use git2::{Oid, Repository};
+use git2::{BranchType, Oid, Repository};
 use serde::Deserialize;
 use tokio_stream::{StreamExt, StreamMap};
 
@@ -255,20 +255,14 @@ async fn push(
     blocking(move || {
         let conn = state.open_db()?;
         let canonical = canonical_git_dir(&req.git_dir)?;
+        let repo = Repository::open(&canonical)
+            .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
 
-        // One canonical branch per repo: a later push naming a different base
-        // is a 400.
-        if let Some(existing) = db::find_repo(&conn, &canonical)?
-            && existing.base_branch != req.base
-        {
-            return Err(Error::bad_request(format!(
-                "repo's canonical branch is '{}', not '{}' — a repo has one base",
-                existing.base_branch, req.base
-            )));
-        }
+        // The repo's one canonical branch: the stored one for a known repo
+        // (an explicit base must match it), else auto-detected on first push.
+        let base = resolve_base(&repo, &conn, &canonical, req.base.as_deref())?;
 
-        let walk =
-            gitscan::walk_push(&canonical, &req.base, &req.tip).map_err(Error::bad_request)?;
+        let walk = gitscan::walk_push(&canonical, &base, &req.tip).map_err(Error::bad_request)?;
         // A tip that is ancestor-or-equal of the base walks to nothing: the work
         // already landed (or you pushed the base itself). Reject it loudly rather
         // than recording nothing, so a stray push of a merged commit is a visible
@@ -277,13 +271,11 @@ async fn push(
             return Err(Error::conflict(format!(
                 "tip {} is already merged into '{}' — no commits to review",
                 gitscan::short_sha(&walk.fork_sha),
-                req.base
+                base
             )));
         }
-        let repo_row = db::get_or_create_repo(&conn, &canonical, &req.base)?;
+        let repo_row = db::get_or_create_repo(&conn, &canonical, &base)?;
         state.ensure_repo(&repo_row);
-        let repo = Repository::open(&canonical)
-            .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
 
         // Pre-flight: ensure every change exists, and reject (409) a push that
         // would add a revision to an abandoned change.
@@ -424,6 +416,44 @@ fn map_busy(err: anyhow::Error) -> Error {
         Error::unavailable("database is busy (another change is being written) — retry shortly")
     } else {
         err.into()
+    }
+}
+
+/// The repo's one canonical base branch for this push. A known repo reuses its
+/// stored branch (an explicit `base` must match it, else a 400 — one base per
+/// repo). A fresh repo takes an explicit `base` as given, or auto-detects when
+/// none is passed.
+fn resolve_base(
+    repo: &Repository,
+    conn: &rusqlite::Connection,
+    canonical: &str,
+    requested: Option<&str>,
+) -> Result<String, Error> {
+    match (requested, db::find_repo(conn, canonical)?) {
+        (Some(req), Some(row)) if req != row.base_branch => Err(Error::bad_request(format!(
+            "repo's canonical branch is '{}', not '{req}' — a repo has one base",
+            row.base_branch
+        ))),
+        (Some(req), _) => Ok(req.to_string()),
+        (None, Some(row)) => Ok(row.base_branch),
+        (None, None) => detect_base(repo),
+    }
+}
+
+/// Auto-detect the canonical branch on a repo's first push: the local `main` or
+/// `master`, whichever exists. Neither or both is ambiguous — a 400 asking the
+/// caller to specify `base` (which client surfaces that is the client's affair).
+fn detect_base(repo: &Repository) -> Result<String, Error> {
+    let has = |name| repo.find_branch(name, BranchType::Local).is_ok();
+    match (has("main"), has("master")) {
+        (true, false) => Ok("main".to_string()),
+        (false, true) => Ok("master".to_string()),
+        (true, true) => Err(Error::bad_request(
+            "repo has both 'main' and 'master' — specify the base branch explicitly",
+        )),
+        (false, false) => Err(Error::bad_request(
+            "no 'main' or 'master' branch found — specify the base branch explicitly",
+        )),
     }
 }
 

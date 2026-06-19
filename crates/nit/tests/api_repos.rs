@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use common::{
     GitRepo, TestServer, fast_timer, http_get, http_patch, http_post, member_id, msg, push,
-    wait_for,
+    push_no_base, wait_for,
 };
 use serde_json::json;
 
@@ -136,6 +136,73 @@ fn base_branch_is_pinned_by_the_first_push() {
     let (st, _) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200);
     assert_eq!(repo_base(&server, id), "main");
+}
+
+#[test]
+fn base_auto_detected_on_first_push() {
+    // No `base` in the request: a fresh repo with only `main` auto-detects it,
+    // and a registered repo then reuses its stored base on later baseless pushes.
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, res) = push_no_base(&server, &g, "feat");
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(res["chain"]["base_branch"], "main");
+    assert_eq!(repo_base(&server, first_repo(&server)), "main");
+
+    // A second baseless push reuses the recorded base — still 200, still main.
+    let (st, _) = push_no_base(&server, &g, "feat");
+    assert_eq!(st, 200);
+    assert_eq!(repo_base(&server, first_repo(&server)), "main");
+}
+
+#[test]
+fn ambiguous_base_requires_explicit_flag() {
+    // Both `main` and `master` exist: detection is ambiguous, so a baseless
+    // first push is a 400 asking the caller to specify the base.
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    g.branch("master", g.root);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, e) = push_no_base(&server, &g, "feat");
+    assert_eq!(st, 400, "{e}");
+    assert!(
+        e["error"].as_str().unwrap().contains("specify the base"),
+        "{e}"
+    );
+
+    // Naming the base explicitly resolves the ambiguity.
+    let (st, _) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 200);
+}
+
+#[test]
+fn missing_base_branch_requires_explicit_flag() {
+    // Neither `main` nor `master`: a baseless push cannot guess, so it is a 400
+    // asking the caller to specify the base.
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("base: one", "Ib1"), &[("a.rs", "a\n")]);
+    g.branch("trunk", c1);
+    let c2 = g.commit(&[c1], &msg("core: two", "Ic2"), &[("b.rs", "b\n")]);
+    g.branch("feat", c2);
+    g.delete_branch("main");
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, e) = push_no_base(&server, &g, "feat");
+    assert_eq!(st, 400, "{e}");
+    assert!(
+        e["error"].as_str().unwrap().contains("specify the base"),
+        "{e}"
+    );
+
+    // With the base named, the same push succeeds against `trunk`.
+    let (st, res) = push(&server, &g, "feat", "trunk", None);
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(res["chain"]["base_branch"], "trunk");
 }
 
 #[test]
