@@ -941,12 +941,17 @@ impl Client {
         self.get_raw(path).map_err(|e| e.into_error(&self.base))
     }
 
-    /// GET, retrying with backoff while the server is unreachable (one stderr
-    /// notice per outage). `Fatal` always fails immediately.
-    fn get_retry(&self, path: &str, retry: Retry) -> Result<Value> {
+    /// Run `op`, retrying with backoff while the server is unreachable (one
+    /// stderr notice per outage). `Fatal` always fails immediately; `Retry::No`
+    /// fails on the first unreachable error.
+    fn retry_loop<T>(
+        &self,
+        retry: Retry,
+        mut op: impl FnMut() -> Result<T, CallError>,
+    ) -> Result<T> {
         let mut attempt = 0u32;
         loop {
-            let cause = match self.get_raw(path) {
+            let cause = match op() {
                 Ok(value) => return Ok(value),
                 Err(fatal @ CallError::Fatal(_)) => return Err(fatal.into_error(&self.base)),
                 Err(CallError::Unreachable(cause)) => cause,
@@ -962,6 +967,11 @@ impl Client {
         }
     }
 
+    /// GET, retrying with backoff while the server is unreachable.
+    fn get_retry(&self, path: &str, retry: Retry) -> Result<Value> {
+        self.retry_loop(retry, || self.get_raw(path))
+    }
+
     /// Connect the change stream and `subscribe` `subs` (`change_id` →
     /// from-idx), retrying the connect while the server is unreachable.
     fn ws_connect(
@@ -973,22 +983,7 @@ impl Client {
         let map: std::collections::HashMap<String, u64> =
             subs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
         let sub = json!({ "subscribe": map }).to_string();
-        let mut attempt = 0u32;
-        loop {
-            let cause = match Self::try_ws(&url, &sub) {
-                Ok(socket) => return Ok(socket),
-                Err(fatal @ CallError::Fatal(_)) => return Err(fatal.into_error(&self.base)),
-                Err(CallError::Unreachable(cause)) => cause,
-            };
-            if !matches!(retry, Retry::UntilUp) {
-                return Err(CallError::Unreachable(cause).into_error(&self.base));
-            }
-            if attempt == 0 {
-                eprintln!("nit: server unreachable ({cause}); retrying…");
-            }
-            std::thread::sleep(retry_delay(attempt));
-            attempt += 1;
-        }
+        self.retry_loop(retry, || Self::try_ws(&url, &sub))
     }
 
     fn try_ws(url: &str, sub: &str) -> Result<WsConn, CallError> {
