@@ -161,21 +161,24 @@ async fn health() -> Json<types::Health> {
 // ---------------------------------------------------------------------------
 // Repos
 
+/// A repo row plus its derived live-tip count, as the wire `Repo`.
+fn repo_json(state: &AppState, row: db::RepoRow) -> types::Repo {
+    let active = u64::try_from(state.repo_view(row.id).tips().len()).unwrap_or(u64::MAX);
+    types::Repo {
+        id: row.id,
+        git_dir: row.git_dir,
+        base_branch: row.base_branch,
+        active_chains: active,
+    }
+}
+
 /// List every registered repo with its live-tip count (derived, never stored).
 async fn list_repos(State(state): State<Arc<AppState>>) -> Result<Json<types::RepoList>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
         let repos = db::all_repos(&conn)?
             .into_iter()
-            .map(|r| {
-                let active = u64::try_from(state.repo_view(r.id).tips().len()).unwrap_or(u64::MAX);
-                types::Repo {
-                    id: r.id,
-                    git_dir: r.git_dir,
-                    base_branch: r.base_branch,
-                    active_chains: active,
-                }
-            })
+            .map(|r| repo_json(&state, r))
             .collect();
         Ok(Json(types::RepoList { repos }))
     })
@@ -219,17 +222,11 @@ async fn relocate_repo(
         db::update_repo_git_dir(&conn, repo_id, &canonical)?;
         let row = db::RepoRow {
             id: repo_id,
-            git_dir: canonical.clone(),
-            base_branch: existing.base_branch.clone(),
-        };
-        state.ensure_repo(&row);
-        let active = u64::try_from(state.repo_view(repo_id).tips().len()).unwrap_or(u64::MAX);
-        Ok(Json(types::Repo {
-            id: repo_id,
             git_dir: canonical,
             base_branch: existing.base_branch,
-            active_chains: active,
-        }))
+        };
+        state.ensure_repo(&row);
+        Ok(Json(repo_json(&state, row)))
     })
     .await
 }
