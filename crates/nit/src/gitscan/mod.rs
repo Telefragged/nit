@@ -21,6 +21,12 @@ use crate::review::ChangeProj;
 /// Documented push error for chains containing merge commits.
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
+/// A commit sha truncated to 12 chars — the canonical short form for display.
+#[must_use]
+pub fn short_sha(sha: &str) -> String {
+    sha.chars().take(12).collect()
+}
+
 /// One commit the push walk recorded, oldest-first. `parent_sha` is its first
 /// parent (the previous member, or the fork for the first); `base_sha` is the
 /// whole walk's fork point on the canonical branch.
@@ -75,7 +81,7 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
         .collect();
     let short_shas: Vec<String> = commits
         .iter()
-        .map(|c| c.id().to_string()[..12].to_string())
+        .map(|c| short_sha(&c.id().to_string()))
         .collect();
     let keys = identity::require_keys(&messages, &short_shas)?;
 

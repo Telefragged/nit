@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 
 use crate::api::types::{CommentRange, NewComment};
 use crate::enums::Side;
+use crate::gitscan::short_sha;
 
 pub const DEFAULT_SERVER: &str = "http://127.0.0.1:8877";
 
@@ -751,10 +752,6 @@ fn entry_summary(entry: &Value) -> String {
         "lifecycle" => format!("change {change} {}", p["action"].as_str().unwrap_or("?")),
         other => format!("{other} entry"),
     }
-}
-
-fn short_sha(sha: &str) -> String {
-    sha.chars().take(12).collect()
 }
 
 /// Compact one-line-per-change digest of a `Chain` for `nit status --oneline`.

@@ -10,15 +10,10 @@ use rusqlite::Connection;
 use crate::chain::{self, PathMember, RepoView};
 use crate::db;
 use crate::enums::Side;
-use crate::gitscan::{self, identity::subject_of};
+use crate::gitscan::{self, identity::subject_of, short_sha};
 use crate::review::{self, Anchor, ChangeProj, Entry, ThreadComment, ThreadProj};
 
 use super::types;
-
-#[must_use]
-pub fn short_sha(sha: &str) -> String {
-    sha.chars().take(12).collect()
-}
 
 // ---------------------------------------------------------------------------
 // Chains (derived)
