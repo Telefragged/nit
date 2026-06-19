@@ -119,18 +119,36 @@ pub struct StatusArgs {
     pub server: Option<String>,
 }
 
+/// The shared `--change` / `--change-id` selector for change-scoped commands.
 #[derive(clap::Args)]
-pub struct CommentArgs {
-    /// The change to comment on, by its numeric id.
+pub struct ChangeTarget {
+    /// The change, by its numeric id.
     #[arg(
         long,
         conflicts_with = "change_id",
         required_unless_present = "change_id"
     )]
     pub change: Option<u64>,
-    /// The change to comment on, by its `Change-Id:` trailer.
+    /// The change, by its `Change-Id:` trailer.
     #[arg(long)]
     pub change_id: Option<String>,
+}
+
+impl ChangeTarget {
+    /// Resolve to a numeric change id, querying the server for a `Change-Id:`.
+    fn resolve(&self, client: &Client) -> Result<u64> {
+        match (self.change, self.change_id.as_deref()) {
+            (Some(id), _) => Ok(id),
+            (None, Some(key)) => resolve_change(client, key),
+            (None, None) => bail!("pass --change <id> or --change-id <Change-Id>"),
+        }
+    }
+}
+
+#[derive(clap::Args)]
+pub struct CommentArgs {
+    #[command(flatten)]
+    pub target: ChangeTarget,
     /// Reply to an existing thread on the change (by id) instead of opening
     /// a new one.
     #[arg(long)]
@@ -167,16 +185,8 @@ pub struct CommentArgs {
 
 #[derive(clap::Args)]
 pub struct ReopenArgs {
-    /// The change to reopen, by its numeric id.
-    #[arg(
-        long,
-        conflicts_with = "change_id",
-        required_unless_present = "change_id"
-    )]
-    pub change: Option<u64>,
-    /// The change to reopen, by its `Change-Id:` trailer.
-    #[arg(long)]
-    pub change_id: Option<String>,
+    #[command(flatten)]
+    pub target: ChangeTarget,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
     #[arg(long)]
     pub server: Option<String>,
@@ -184,16 +194,8 @@ pub struct ReopenArgs {
 
 #[derive(clap::Args)]
 pub struct AbandonArgs {
-    /// The change to abandon, by its numeric id.
-    #[arg(
-        long,
-        conflicts_with = "change_id",
-        required_unless_present = "change_id"
-    )]
-    pub change: Option<u64>,
-    /// The change to abandon, by its `Change-Id:` trailer.
-    #[arg(long)]
-    pub change_id: Option<String>,
+    #[command(flatten)]
+    pub target: ChangeTarget,
     /// Optional reason recorded on the abandonment.
     #[arg(long, short = 'm')]
     pub message: Option<String>,
@@ -518,11 +520,7 @@ fn print_wait(resp: &Value, oneline: bool) -> Result<()> {
 /// When the server can't be reached or the arguments name no change.
 pub fn comment(args: CommentArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    let change_id = match (args.change, args.change_id.as_deref()) {
-        (Some(id), _) => id,
-        (None, Some(key)) => resolve_change(&client, key)?,
-        (None, None) => bail!("pass --change <id> or --change-id <Change-Id>"),
-    };
+    let change_id = args.target.resolve(&client)?;
     let resolved = if args.resolve {
         Some(true)
     } else if args.unresolve {
@@ -557,11 +555,7 @@ pub fn comment(args: CommentArgs) -> Result<()> {
 /// When the server can't be reached or the arguments name no change.
 pub fn reopen(args: ReopenArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    let change_id = match (args.change, args.change_id.as_deref()) {
-        (Some(id), _) => id,
-        (None, Some(key)) => resolve_change(&client, key)?,
-        (None, None) => bail!("pass --change <id> or --change-id <Change-Id>"),
-    };
+    let change_id = args.target.resolve(&client)?;
     let detail = client.post(&format!("/api/changes/{change_id}/reopen"), &json!({}))?;
     print_json(&detail)
 }
@@ -573,11 +567,7 @@ pub fn reopen(args: ReopenArgs) -> Result<()> {
 /// When the server can't be reached or the arguments name no change.
 pub fn abandon(args: AbandonArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    let change_id = match (args.change, args.change_id.as_deref()) {
-        (Some(id), _) => id,
-        (None, Some(key)) => resolve_change(&client, key)?,
-        (None, None) => bail!("pass --change <id> or --change-id <Change-Id>"),
-    };
+    let change_id = args.target.resolve(&client)?;
     let body = match args.message {
         Some(message) => json!({ "message": message }),
         None => json!({}),
