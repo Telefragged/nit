@@ -149,14 +149,6 @@ pub enum ChangeStatus {
     Abandoned,
 }
 
-impl ChangeStatus {
-    /// Terminal for review (the lifecycle closed it).
-    #[must_use]
-    pub fn is_terminal(self) -> bool {
-        matches!(self, ChangeStatus::Merged | ChangeStatus::Abandoned)
-    }
-}
-
 /// A chain's derived, actionable state (docs/api.md state table). Computed
 /// at read time from the path's members ([`derive_state`](crate::chain::derive_state));
 /// it is informational on the wire, never stored. Abandonment is
@@ -169,14 +161,6 @@ pub enum ChainState {
     AgentsTurn,
     WaitingForReview,
     Approved,
-}
-
-impl ChainState {
-    /// Whether the agent has something to act on (`!= waiting_for_review`).
-    #[must_use]
-    pub fn actionable(self) -> bool {
-        self != ChainState::WaitingForReview
-    }
 }
 
 /// `DiffFile.status` — how a file changed between the two diffed trees

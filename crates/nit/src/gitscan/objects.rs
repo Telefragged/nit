@@ -12,7 +12,7 @@ pub const EMPTY_PATCH_ID: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
 ///
 /// # Errors
 /// When git can't diff the trees or compute the patch-id.
-pub fn tree_patch_id(repo: &Repository, old: &Tree, new: &Tree) -> Result<String> {
+fn tree_patch_id(repo: &Repository, old: &Tree, new: &Tree) -> Result<String> {
     let diff = repo.diff_tree_to_tree(Some(old), Some(new), None)?;
     if diff.deltas().len() == 0 {
         return Ok(EMPTY_PATCH_ID.to_string());

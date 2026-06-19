@@ -178,22 +178,6 @@ impl AppState {
             .cloned()
     }
 
-    /// Loaded change ids, ascending.
-    ///
-    /// # Panics
-    /// When the change map mutex is poisoned.
-    pub fn change_ids(&self) -> Vec<u64> {
-        let mut ids: Vec<u64> = self
-            .changes
-            .lock()
-            .expect("change map poisoned")
-            .keys()
-            .copied()
-            .collect();
-        ids.sort_unstable();
-        ids
-    }
-
     /// The cached repo state, if loaded.
     ///
     /// # Panics

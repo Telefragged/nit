@@ -319,11 +319,6 @@ impl ChangeProj {
             .count()
     }
 
-    #[must_use]
-    pub fn latest_review(&self) -> Option<&ReviewProj> {
-        self.reviews.iter().max_by_key(|r| r.id)
-    }
-
     /// The highest revision number that carries a review, else `None`.
     #[must_use]
     pub fn last_reviewed_revision(&self) -> Option<u64> {
