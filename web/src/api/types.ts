@@ -56,7 +56,6 @@ export interface PathEntry {
   merged_elsewhere: boolean;
   subject: string;
   commit_sha: string;
-  short_sha: string;
   /** Scoped to this revision. */
   counts: ChangeCounts;
   /** The reviewer's staged decision for this change, or null. Change-wide
@@ -136,7 +135,6 @@ export interface ChangeDetail {
 export interface Revision {
   number: number;
   commit_sha: string;
-  short_sha: string;
   parent_sha: string;
   base_sha: string;
   partial: boolean;

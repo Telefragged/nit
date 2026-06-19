@@ -79,7 +79,6 @@ function sha(seed: number): string {
   }
   return out;
 }
-const short = (full: string) => full.slice(0, 12);
 
 const ctx = (old: number, nw: number, text: string): Line => ({
   kind: "context",
@@ -240,7 +239,6 @@ const change10: ChangeRecord = {
     {
       number: 0,
       commit_sha: c10r1,
-      short_sha: short(c10r1),
       parent_sha: parent10,
       base_sha: parent10,
       partial: false,
@@ -350,7 +348,6 @@ const change11: ChangeRecord = {
     {
       number: 0,
       commit_sha: c11r1,
-      short_sha: short(c11r1),
       parent_sha: c10r1,
       base_sha: parent10,
       partial: false,
@@ -362,7 +359,6 @@ const change11: ChangeRecord = {
     {
       number: 1,
       commit_sha: c11r2,
-      short_sha: short(c11r2),
       parent_sha: c10r1,
       base_sha: parent10,
       partial: false,
@@ -843,7 +839,6 @@ const change12: ChangeRecord = {
     {
       number: 0,
       commit_sha: c12r1,
-      short_sha: short(c12r1),
       parent_sha: c11r2,
       base_sha: parent10,
       partial: false,
@@ -924,7 +919,6 @@ const change40: ChangeRecord = {
     {
       number: 0,
       commit_sha: c40r1,
-      short_sha: short(c40r1),
       parent_sha: sha(400),
       base_sha: sha(400),
       partial: false,
@@ -999,7 +993,6 @@ const change20: ChangeRecord = {
     {
       number: 0,
       commit_sha: c20r1,
-      short_sha: short(c20r1),
       parent_sha: parent20,
       base_sha: parent20,
       partial: true,
@@ -1116,7 +1109,6 @@ const change30: ChangeRecord = {
     {
       number: 0,
       commit_sha: c30r1,
-      short_sha: short(c30r1),
       parent_sha: sha(300),
       base_sha: sha(300),
       partial: false,
@@ -1243,7 +1235,6 @@ const changeA: ChangeRecord = {
     {
       number: 0,
       commit_sha: cA,
-      short_sha: short(cA),
       parent_sha: mOrbit,
       base_sha: mOrbit,
       partial: false,
@@ -1278,7 +1269,6 @@ const changeD: ChangeRecord = {
     {
       number: 0,
       commit_sha: cD,
-      short_sha: short(cD),
       parent_sha: mOrbit,
       base_sha: mOrbit,
       partial: false,
@@ -1306,7 +1296,6 @@ const changeB: ChangeRecord = {
     {
       number: 0,
       commit_sha: cB0,
-      short_sha: short(cB0),
       parent_sha: cA,
       base_sha: mOrbit,
       partial: false,
@@ -1316,7 +1305,6 @@ const changeB: ChangeRecord = {
     {
       number: 1,
       commit_sha: cB1,
-      short_sha: short(cB1),
       parent_sha: cD,
       base_sha: mOrbit,
       partial: false,
@@ -1348,7 +1336,6 @@ const changeC: ChangeRecord = {
     {
       number: 0,
       commit_sha: cC,
-      short_sha: short(cC),
       parent_sha: cB0,
       base_sha: mOrbit,
       partial: false,
@@ -1375,7 +1362,6 @@ const changeE: ChangeRecord = {
     {
       number: 0,
       commit_sha: cE,
-      short_sha: short(cE),
       parent_sha: cB1,
       base_sha: mOrbit,
       partial: false,
@@ -1975,7 +1961,6 @@ function pathEntry(
       c.merged_revision !== undefined && c.merged_revision > rev.number,
     subject: c.subject,
     commit_sha: rev.commit_sha,
-    short_sha: rev.short_sha,
     counts: {
       threads: ownThreads.length,
       drafts: ownDrafts.length,

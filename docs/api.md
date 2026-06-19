@@ -5,7 +5,8 @@ truth for shapes**: the frontend mirrors it in `web/src/api/types.ts`, the
 backend in `crates/nit/src/api/types.rs`. Change shapes here first.
 
 Errors: non-2xx with `{"error": "human readable message"}`.
-Times are RFC3339 strings. Shas are full 40-hex; `short_sha` is 12 chars.
+Times are RFC3339 strings. Shas are full 40-hex; clients truncate for
+display (12 chars, the canonical short form).
 
 The unit of state is the **change** (a `Change-Id`, scoped to a repo): it
 owns an append-only log whose fold is its reviewable state
@@ -170,7 +171,7 @@ PathEntry = {
   "status": "pending",               // per (change, this revision)
   "merged_elsewhere": false,         // a newer revision landed on the canonical branch
   "subject": "server: add health endpoint",
-  "commit_sha": "…", "short_sha": "abc123def456",
+  "commit_sha": "…",
   "counts": {"threads": 3, "drafts": 1, "unresolved": 2}, // scoped to this revision
   "draft_decision": "approve"        // the change's staged decision (Decision),
                                      // or null; change-wide (one per change),
@@ -228,7 +229,7 @@ patchset — and chain context — you view.
     "chains": [ChainRef],            // every tip walking through this change
     "draft_decision": StagedDecision // the reviewer's staged decision, or null
   }
-  Revision = {"number": 2, "commit_sha": "…", "short_sha": "…",
+  Revision = {"number": 2, "commit_sha": "…",
               "parent_sha": "…", "base_sha": "…",
               "partial": false, "message": "full commit message\n…",
               "created_at": "…"}

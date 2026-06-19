@@ -28,7 +28,7 @@ function ChangeRow({ member }: { member: PathEntry }) {
           {member.subject}
         </Link>
         <div className="meta">
-          <span className="mono sha">{member.short_sha}</span>
+          <span className="mono sha">{member.commit_sha.slice(0, 12)}</span>
           {member.latest_revision > member.revision ? (
             <NewerElsewhereBadge
               revision={member.revision}

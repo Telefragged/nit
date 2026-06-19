@@ -153,7 +153,6 @@ pub struct PathEntry {
     pub merged_elsewhere: bool,
     pub subject: String,
     pub commit_sha: String,
-    pub short_sha: String,
     /// Scoped to this revision.
     pub counts: ChangeCounts,
     /// The reviewer's staged decision for this change, or `None`. Change-wide
@@ -217,7 +216,6 @@ pub struct StagedDecision {
 pub struct Revision {
     pub number: u64,
     pub commit_sha: String,
-    pub short_sha: String,
     pub parent_sha: String,
     pub base_sha: String,
     pub partial: bool,

@@ -630,7 +630,10 @@ export default function ReviewPage() {
           </div>
           <div className="meta-line">
             <span className="dim">
-              commit <span className="mono">{selectedRev.short_sha}</span>
+              commit{" "}
+              <span className="mono">
+                {selectedRev.commit_sha.slice(0, 12)}
+              </span>
             </span>
             <span className="dim">
               parent{" "}

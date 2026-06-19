@@ -36,7 +36,6 @@ function member(
     latest_revision: 0,
     merged_elsewhere: false,
     commit_sha: `sha${changeId}`,
-    short_sha: `sha${changeId}`,
     counts: { threads: 0, drafts: 0, unresolved },
     draft_decision: null,
     ...extra,

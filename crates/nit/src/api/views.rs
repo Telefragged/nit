@@ -145,7 +145,6 @@ fn path_entry(
         merged_elsewhere: change.merged_elsewhere(revision),
         subject,
         commit_sha: member.commit_sha.clone(),
-        short_sha: short_sha(&member.commit_sha),
         counts: types::ChangeCounts {
             threads,
             drafts,
@@ -306,7 +305,6 @@ pub fn revision_json(rev: &review::RevisionProj) -> types::Revision {
     types::Revision {
         number: rev.number,
         commit_sha: rev.commit_sha.clone(),
-        short_sha: short_sha(&rev.commit_sha),
         parent_sha: rev.parent_sha.clone(),
         base_sha: rev.base_sha.clone(),
         partial: rev.partial,
