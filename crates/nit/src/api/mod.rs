@@ -63,7 +63,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/changes/{id}/log", get(change_log))
         .route("/api/changes/{id}/drafts", post(create_draft))
         .route("/api/changes/{id}/comments", post(create_comment))
-        .route("/api/changes/{id}/reviews", post(submit_review))
         .route(
             "/api/changes/{id}/decision",
             put(stage_decision).delete(clear_decision),
@@ -994,81 +993,6 @@ fn lifecycle_payload(
         message,
     })
     .map_err(|e| anyhow::Error::from(e).into())
-}
-
-/// `POST /api/changes/{id}/reviews` — the immediate per-change publish (the
-/// reviewer UI stages a decision and batch-submits instead). Verifies the
-/// target revision is pinned by a live tip, then publishes via [`publish_member`].
-async fn submit_review(
-    State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
-    AppJson(req): AppJson<types::SubmitReview>,
-) -> Result<Json<types::SubmitReviewResponse>, Error> {
-    let entry = change_or_404(&state, id)?;
-    blocking(move || {
-        let mut conn = state.open_db()?;
-        // The threads this review will touch, captured before the publish: the
-        // reply targets (drafts with a thread_id) and the first not-yet-minted id.
-        let (reply_thread_ids, first_new_thread) = {
-            let repo_id = entry.read().repo_id;
-            let view = state.repo_view(repo_id);
-            let proj = entry.read();
-            if matches!(
-                proj.lifecycle,
-                Lifecycle::Abandoned | Lifecycle::Merged { .. }
-            ) {
-                return Err(Error::conflict(
-                    "change is terminal (merged/abandoned) — cannot review",
-                ));
-            }
-            proj.revision(req.revision).ok_or_else(|| {
-                Error::bad_request(format!("revision {} not found", req.revision))
-            })?;
-            // The revision must be walked by some live tip (not a detached patchset).
-            let pinned = view
-                .chains_through(id)
-                .iter()
-                .any(|h| h.revision == req.revision);
-            if !pinned {
-                return Err(Error::conflict(format!(
-                    "revision {} is not pinned by any live chain — refetch and resubmit",
-                    req.revision
-                )));
-            }
-            let reply_thread_ids: Vec<u64> = db::drafts_for_change(&conn, id)?
-                .iter()
-                .filter_map(|d| d.thread_id)
-                .collect();
-            (reply_thread_ids, proj.next_thread_id)
-        };
-
-        publish_member(
-            &mut conn,
-            &state,
-            &entry,
-            id,
-            req.verdict.into(),
-            &req.message,
-            req.revision,
-        )?;
-
-        let proj = entry.read();
-        let review = proj
-            .reviews
-            .last()
-            .ok_or_else(|| Error::internal("review vanished after fold"))?;
-        let threads: Vec<types::Thread> = proj
-            .threads
-            .iter()
-            .filter(|t| t.id >= first_new_thread || reply_thread_ids.contains(&t.id))
-            .map(|t| views::thread_view(t, id))
-            .collect();
-        Ok(Json(types::SubmitReviewResponse {
-            review: views::review_json(review),
-            threads,
-        }))
-    })
-    .await
 }
 
 /// `PUT /api/changes/{id}/decision` — stage (or overwrite) the change's draft

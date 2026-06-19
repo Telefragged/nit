@@ -12,8 +12,7 @@ mod common;
 
 use std::process::Command;
 
-use common::{GitRepo, TestServer, http_post, msg, nit, nit_register};
-use serde_json::json;
+use common::{GitRepo, TestServer, msg, nit, nit_register, review};
 
 /// `nit push` prints a `PushResult` (`tip_change` + the derived chain) and
 /// registers the chain; `nit status`/`nit log` then read it back, resolved from
@@ -121,13 +120,9 @@ fn partial_push_then_ready_clears_it() {
     assert_eq!(push["chain"]["state"], "waiting_for_review");
     let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
 
-    // Reviewer approves the only change (over HTTP, as the browser would). The
-    // verdict lands on rev 0.
-    let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reviews")),
-        &json!({"revision": 0, "verdict": "approve", "message": "lgtm"}),
-    );
-    assert_eq!(st, 200);
+    // Reviewer approves the only change (stage a decision + submit the chain,
+    // as the browser would). The verdict lands on rev 0.
+    review(&server, change_id, "approve", "lgtm");
 
     // Approved but still partial: agents_turn, never approved.
     let (ok, status, stderr) = nit(&server, &g, &["status"]);

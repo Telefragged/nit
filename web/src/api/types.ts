@@ -310,19 +310,9 @@ export interface UpdateDraftRequest {
 }
 
 // ---------------------------------------------------------------------------
-// Reviews
-
-export interface SubmitReviewRequest {
-  revision: number;
-  verdict: Verdict;
-  message: string;
-}
-
-export interface SubmitReviewResponse {
-  review: Review;
-  /** The threads this review created or added to. */
-  threads: Thread[];
-}
+// Reviewer decisions — staged per change, published per chain (the batch
+// submit). StagedDecision (above) is both the stage request body and the
+// ChangeDetail field; the reviewer UI never submits a single review directly.
 
 /** `PUT /api/changes/{id}/decision` request — stage (or overwrite) the
  * change's draft decision. */

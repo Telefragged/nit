@@ -242,8 +242,8 @@ stranded. Publishing deletes the member's `draft_reviews` row, so re-submitting
 a batch torn by a transient `SQLITE_BUSY` finishes the rest without
 double-publishing. A staged decision illegal for the change's current lifecycle
 (a verdict on a terminal change, a `reopen` on a live one) is reported back and
-left staged. The immediate `POST /reviews` (docs/api.md "Reviews") shares this
-publish path for the single-change case.
+left staged. Batch submit is the only path a reviewer verdict reaches the log —
+there is no immediate single-change submit.
 
 ### Change identity (`change_key`)
 

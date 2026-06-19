@@ -5,7 +5,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{GitRepo, TestServer, http_get, http_post, msg, nit, nit_bounded};
+use common::{GitRepo, TestServer, http_get, http_post, http_put, msg, nit, nit_bounded};
 use serde_json::{Value, json};
 
 /// `nit push` from the cwd HEAD, returning its `PushResult`.
@@ -72,14 +72,20 @@ fn wait_blocks_then_wakes_on_a_review() {
         .max()
         .unwrap();
 
-    // A reviewer posts a request_changes shortly after the wait parks.
-    let url = server.url(&format!("/api/changes/{change_id}/reviews"));
+    // A reviewer stages request_changes and submits the chain shortly after the
+    // wait parks (owned URLs so the thread needs no borrow of `server`). The
+    // stage is a side-table write (no log entry); the submit appends the
+    // `review` that wakes the parked wait.
+    let decision_url = server.url(&format!("/api/changes/{change_id}/decision"));
+    let submit_url = server.url(&format!("/api/chains/{change_id}/submit"));
     let reviewer = std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(400));
-        let (st, _) = http_post(
-            &url,
-            &json!({"revision": 0, "verdict": "request_changes", "message": "fix the unwrap"}),
+        let (st, _) = http_put(
+            &decision_url,
+            &json!({"decision": "request_changes", "message": "fix the unwrap"}),
         );
+        assert_eq!(st, 200);
+        let (st, _) = http_post(&submit_url, &json!({}));
         assert_eq!(st, 200);
     });
 

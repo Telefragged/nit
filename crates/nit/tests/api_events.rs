@@ -5,8 +5,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{GitRepo, TestServer, http_post, member_id, msg, push, ws_read, ws_subscribe};
-use serde_json::json;
+use common::{GitRepo, TestServer, member_id, msg, push, review, ws_read, ws_subscribe};
 
 const READ: Duration = Duration::from_secs(3);
 
@@ -28,12 +27,10 @@ fn subscribe_replays_backlog_then_streams_live() {
     assert_eq!(backlog["idx"], 0);
     assert_eq!(backlog["kind"], "revision");
 
-    // A live review entry streams in past the backlog.
-    let (rst, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reviews")),
-        &json!({"revision": 0, "verdict": "request_changes", "message": "fix"}),
-    );
-    assert_eq!(rst, 200);
+    // A live review entry streams in past the backlog. review() stages a
+    // decision (a side-table write, no log entry/frame) then submits, which
+    // appends the `review` at idx 1 and broadcasts it.
+    review(&server, change_id, "request_changes", "fix");
     let live = ws_read(&mut socket).expect("live review entry");
     assert_eq!(live["kind"], "review");
     assert_eq!(live["idx"], 1);
@@ -59,11 +56,7 @@ fn subscribe_at_head_skips_backlog() {
     assert!(ws_read(&mut socket).is_none(), "no backlog at head");
 
     // Resubscribe is not needed; the live append on this socket arrives.
-    let (rst, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reviews")),
-        &json!({"revision": 0, "verdict": "approve", "message": "lgtm"}),
-    );
-    assert_eq!(rst, 200);
+    review(&server, change_id, "approve", "lgtm");
     let live = ws_read(&mut socket).expect("live entry after head subscribe");
     assert_eq!(live["kind"], "review");
     assert_eq!(live["idx"], 1);
@@ -84,11 +77,7 @@ fn unsubscribed_changes_are_silent() {
     // Subscribe only to change one, at its head.
     let mut socket = ws_subscribe(&server, &[(one, 1)], Duration::from_millis(400));
     // Activity on change two must not reach this socket.
-    let (rst, _) = http_post(
-        &server.url(&format!("/api/changes/{two}/reviews")),
-        &json!({"revision": 0, "verdict": "approve", "message": "ok"}),
-    );
-    assert_eq!(rst, 200);
+    review(&server, two, "approve", "ok");
     assert!(
         ws_read(&mut socket).is_none(),
         "change two is not subscribed"

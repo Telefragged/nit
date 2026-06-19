@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use common::{
     GitRepo, TestServer, fast_timer, first_repo_id, http_get, http_post, member_id, msg, push,
-    wait_for,
+    review, wait_for,
 };
 use serde_json::json;
 
@@ -160,11 +160,7 @@ fn reopen_clears_abandoned_to_retained_status() {
     let change_id = member_id(&res, "I001");
 
     // Approve, then abandon: the verdict is retained, masked by the overlay.
-    let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reviews")),
-        &json!({"revision": 0, "verdict": "approve", "message": "lgtm"}),
-    );
-    assert_eq!(st, 200);
+    review(&server, change_id, "approve", "lgtm");
     abandon(&server, change_id);
 
     // Reopen restores the retained verdict (approved), not pending.

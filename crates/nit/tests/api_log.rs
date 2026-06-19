@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push};
+use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push, review};
 use serde_json::Value;
 
 /// The `idx` column of a `{entries}` log body, in order.
@@ -41,13 +41,10 @@ fn change_log_ranges_slice_and_reject_out_of_bounds() {
     let change_id = member_id(&res, "Ia");
 
     // The push wrote one `revision` entry (idx 0). Two reviews on rev 0 take
-    // the log to head 3 (idx 0, 1, 2).
+    // the log to head 3 (idx 0, 1, 2) — each review() stages a decision (no log
+    // entry) then submits, appending one `review`.
     for _ in 0..2 {
-        let (st, _) = http_post(
-            &server.url(&format!("/api/changes/{change_id}/reviews")),
-            &serde_json::json!({"revision": 0, "verdict": "comment", "message": "m"}),
-        );
-        assert_eq!(st, 200);
+        review(&server, change_id, "comment", "m");
     }
     let log = |q: &str| http_get(&server.url(&format!("/api/changes/{change_id}/log?{q}")));
 

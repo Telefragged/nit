@@ -488,32 +488,15 @@ On batch submit each staged decision publishes **at the revision its chain path
 pins on the member** (the path is the authority — a change-wide decision row
 stores no revision, so the B-in-two-chains member publishes at rev0 from one
 chain and rev1 from the other): a verdict drains the change's comment drafts
-into one `review` entry (below); `abandon`/`reopen` append a `lifecycle` entry,
-and any comment drafts on the change still drain into a `comment` review in the
+(their staged `resolved` decisions included) into one `review` log entry, sets
+the `(change, revision)` status to the verdict, and applies each thread's
+resolution in draft order; `abandon`/`reopen` append a `lifecycle` entry, and
+any comment drafts on the change still drain into a `comment` review in the
 **same** per-change transaction so they are never stranded. A member whose
 staged decision is illegal for its current lifecycle (a verdict on a
 merged/abandoned change, a `reopen` on a live one) is skipped into
-`BatchSubmitResult.errors` and keeps its row.
-
-## Reviews
-
-- `POST /api/changes/{id}/reviews` —
-  `req: {"revision": 2, "verdict": "approve" | "request_changes" | "comment", "message": "…"}`
-  The **immediate** per-change publish primitive, shared with batch submit (the
-  reviewer UI stages a decision and batch-submits instead; this endpoint is the
-  programmatic single-change path). Under the change lock: drains the change's
-  drafts (their staged `resolved` decisions included) **and any staged
-  `draft_reviews` row**, appends one `review` log entry (verdict + cover
-  message + the drained drafts), and folds it (the change's displayed status
-  at `revision` → the verdict's; each draft applied to a new or existing
-  thread; each thread's resolution → its last decision).
-  - `revision` must name a patchset some live tip currently pins; the verdict
-    lands on that `(change, revision)` pair. A truly detached patchset (walked
-    by no tip) → 409. There is no auto-retarget-to-latest — with two live
-    patchsets "latest" is not unique.
-
-  → `{"review": Review, "threads": [Thread]}` — `threads` are the threads
-  this review created or added to.
+`BatchSubmitResult.errors` and keeps its row. Batch submit is the **only** way
+a reviewer verdict reaches the log — there is no immediate single-change submit.
 
 ## Agent endpoints
 

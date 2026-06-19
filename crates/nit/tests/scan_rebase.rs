@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push};
+use common::{GitRepo, TestServer, http_get, member_id, msg, push, review};
 use serde_json::Value;
 
 /// `GET /api/changes/{id}`.
@@ -31,13 +31,9 @@ fn path_status(server: &TestServer, tip_change_id: u64, change_key: &str) -> Str
         .to_string()
 }
 
-/// Approve a change at a pinned revision.
-fn approve(server: &TestServer, change_id: u64, revision: u64) {
-    let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reviews")),
-        &serde_json::json!({"revision": revision, "verdict": "approve", "message": "lgtm"}),
-    );
-    assert_eq!(st, 200);
+/// Approve a change at its live pinned revision.
+fn approve(server: &TestServer, change_id: u64) {
+    review(server, change_id, "approve", "lgtm");
 }
 
 /// A pure rebase (same patch-id + same message, new parent) appends a revision
@@ -60,7 +56,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     assert_eq!(pr["tip_change"]["revision"], 0, "first revision is rev 0");
 
     // Approve the tip change Ib at rev 0.
-    approve(&server, tip_id, 0);
+    approve(&server, tip_id);
     assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
 
     // main moves on; the agent rebases the whole chain onto it. Same diffs and
@@ -126,7 +122,7 @@ fn re_push_of_an_unchanged_tip_is_idempotent() {
     let (st, pr) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{pr}");
     let change_id = member_id(&pr, "Ic");
-    approve(&server, change_id, 0);
+    approve(&server, change_id);
 
     // Push the same tip again — nothing moved.
     let (st, pr) = push(&server, &g, "feat", "main", None);
@@ -156,11 +152,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     assert_eq!(st, 200, "{pr}");
     let change_id = member_id(&pr, "Ix");
 
-    let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reviews")),
-        &serde_json::json!({"revision": 0, "verdict": "request_changes", "message": "rename"}),
-    );
-    assert_eq!(st, 200);
+    review(&server, change_id, "request_changes", "rename");
     assert_eq!(path_status(&server, change_id, "Ix"), "changes_requested");
 
     // Pure rebase onto a moved base.

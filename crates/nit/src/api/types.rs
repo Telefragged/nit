@@ -376,23 +376,9 @@ pub struct EditDraft {
 }
 
 // ---------------------------------------------------------------------------
-// Reviews
-
-/// `POST /api/changes/{id}/reviews` request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubmitReview {
-    pub revision: u64,
-    pub verdict: Verdict,
-    #[serde(default)]
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubmitReviewResponse {
-    pub review: Review,
-    /// The threads this review created or added to.
-    pub threads: Vec<Thread>,
-}
+// Reviewer decisions — staged per change (docs/api.md "Reviewer decisions"),
+// published per chain (the batch submit below). `StagedDecision` (above) is
+// both the stage request and the change-detail field.
 
 /// `POST /api/chains/{id}/submit` response — the outcome of publishing every
 /// chain member's staged decision (docs/api.md "Chains").

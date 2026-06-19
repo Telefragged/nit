@@ -58,7 +58,6 @@ import type {
   Review,
   Revision,
   StageDecisionRequest,
-  SubmitReviewRequest,
   Thread,
   ThreadComment,
   Verdict,
@@ -2317,36 +2316,6 @@ export async function mockRequest(
     if (i < 0) notFound(`draft ${id}`);
     drafts.splice(i, 1);
     return undefined;
-  }
-
-  if ((m = /^\/changes\/(\d+)\/reviews$/.exec(p)) && method === "POST") {
-    const c = getChange(Number(m[1]));
-    const req = body as SubmitReviewRequest;
-    const latest = latestRevision(c).number;
-    if (req.revision !== latest) {
-      // The pure-rebase auto-retarget path can't occur in fixtures; any
-      // stale revision is a real conflict here.
-      throw new ApiError(
-        409,
-        `revision ${req.revision} is no longer latest (now ${latest})`,
-      );
-    }
-    const now = new Date().toISOString();
-    const review: Review = {
-      id: nextReviewId++,
-      revision: req.revision,
-      verdict: req.verdict,
-      message: req.message,
-      created_at: now,
-    };
-    c.reviews.push(review);
-    const touched = drainComments(c, review, now);
-    c.last_reviewed_revision = Math.max(
-      c.last_reviewed_revision ?? 0,
-      req.revision,
-    );
-    draftReviews.delete(c.id); // an immediate review supersedes any staged decision
-    return { review, threads: touched.map(renderThread) };
   }
 
   // Stage / clear a reviewer decision (drafted like a comment; published by the

@@ -1,6 +1,7 @@
-//! The review + drafts + comments flow over HTTP (docs/api.md "Comments",
-//! "Reviews", "Agent endpoints"). A change owns its threads/drafts/reviews;
-//! drafts are reviewer-private until a review drains them into one log entry,
+//! The drafts + comments + review flow over HTTP (docs/api.md "Comments",
+//! "Reviewer decisions", "Agent endpoints"). A change owns its
+//! threads/drafts/reviews; comment drafts are reviewer-private until a staged
+//! decision's chain submit (`common::review`) drains them into one log entry,
 //! sets the per-(change, revision) status to the verdict, and applies each
 //! thread's staged resolution in draft order. Revisions are 0-based: the first
 //! push is rev 0, an amend is rev 1.
@@ -19,10 +20,6 @@ fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_key: &str) -> u6
 
 fn drafts_url(server: &TestServer, change_id: u64) -> String {
     server.url(&format!("/api/changes/{change_id}/drafts"))
-}
-
-fn reviews_url(server: &TestServer, change_id: u64) -> String {
-    server.url(&format!("/api/changes/{change_id}/reviews"))
 }
 
 fn detail(server: &TestServer, change_id: u64) -> Value {
@@ -79,17 +76,10 @@ fn review_drains_drafts_and_sets_status() {
     assert!(pre["threads"].as_array().unwrap().is_empty(), "unpublished");
     assert!(pre["reviews"].as_array().unwrap().is_empty());
 
-    // Submit drains both drafts into one review and returns {review, threads}.
-    let (st, out) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "request_changes", "message": "a few nits"}),
-    );
-    assert_eq!(st, 200, "{out}");
-    assert_eq!(out["review"]["revision"], 0);
-    assert_eq!(out["review"]["verdict"], "request_changes");
-    assert_eq!(out["review"]["message"], "a few nits");
-    let returned = out["threads"].as_array().unwrap();
-    assert_eq!(returned.len(), 2, "both new threads returned");
+    // Stage the verdict and submit the chain (the only publish path): the
+    // drafts drain into one review on this change.
+    let out = review(&server, id, "request_changes", "a few nits");
+    assert_eq!(out["submitted"], 1, "{out}");
 
     let post = detail(&server, id);
     assert!(
@@ -98,6 +88,9 @@ fn review_drains_drafts_and_sets_status() {
     );
     assert_eq!(post["threads"].as_array().unwrap().len(), 2);
     assert_eq!(post["reviews"].as_array().unwrap().len(), 1);
+    assert_eq!(post["reviews"][0]["revision"], 0);
+    assert_eq!(post["reviews"][0]["verdict"], "request_changes");
+    assert_eq!(post["reviews"][0]["message"], "a few nits");
     assert_eq!(post["last_reviewed_revision"], 0);
     // The verdict is the displayed status at (change, rev 0): visible on the path.
     let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
@@ -126,12 +119,8 @@ fn reply_draft_appends_to_thread() {
         &drafts_url(&server, id),
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "root question"}),
     );
-    let (st, out) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "comment"}),
-    );
-    assert_eq!(st, 200, "{out}");
-    let thread_id = out["threads"][0]["id"].as_u64().unwrap();
+    review(&server, id, "comment", "");
+    let thread_id = detail(&server, id)["threads"][0]["id"].as_u64().unwrap();
 
     // A reply draft references the thread; anchor fields are owned by the thread.
     let (st, reply) = http_post(
@@ -140,15 +129,8 @@ fn reply_draft_appends_to_thread() {
     );
     assert_eq!(st, 200, "{reply}");
     assert_eq!(reply["thread_id"], thread_id);
-    let (st, out) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "comment"}),
-    );
-    assert_eq!(st, 200);
-    // The published reply lands in the same thread, which is returned as touched.
-    assert_eq!(out["threads"].as_array().unwrap().len(), 1);
-    assert_eq!(out["threads"][0]["id"].as_u64(), Some(thread_id));
-
+    review(&server, id, "comment", "");
+    // The published reply lands in the same thread.
     let t = thread_of(&server, id, thread_id);
     let comments = t["comments"].as_array().unwrap();
     assert_eq!(comments.len(), 2);
@@ -340,12 +322,8 @@ fn drafted_thread_resolution() {
         &url,
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "why?"}),
     );
-    let (st, out) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "comment"}),
-    );
-    assert_eq!(st, 200, "{out}");
-    let thread_id = out["threads"][0]["id"].as_u64().unwrap();
+    review(&server, id, "comment", "");
+    let thread_id = detail(&server, id)["threads"][0]["id"].as_u64().unwrap();
 
     let is_resolved = |server: &TestServer| -> bool {
         let t = thread_of(server, id, thread_id);
@@ -369,11 +347,7 @@ fn drafted_thread_resolution() {
     );
     assert_eq!(st, 200, "{res_draft}");
     assert_eq!(res_draft["resolved"], true);
-    let (st, _) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "comment"}),
-    );
-    assert_eq!(st, 200);
+    review(&server, id, "comment", "");
     assert!(is_resolved(&server), "drafted resolve applied on publish");
 
     // Reopen: stage resolved=false, then publish.
@@ -382,11 +356,7 @@ fn drafted_thread_resolution() {
         &json!({"revision": 0, "thread_id": thread_id, "body": "", "resolved": false}),
     );
     assert_eq!(st, 200);
-    let (st, _) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "comment"}),
-    );
-    assert_eq!(st, 200);
+    review(&server, id, "comment", "");
     assert!(!is_resolved(&server), "drafted reopen applied on publish");
 }
 
@@ -405,11 +375,8 @@ fn resolution_applied_in_draft_order() {
         &url,
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "q"}),
     );
-    let (_, out) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "comment"}),
-    );
-    let thread_id = out["threads"][0]["id"].as_u64().unwrap();
+    review(&server, id, "comment", "");
+    let thread_id = detail(&server, id)["threads"][0]["id"].as_u64().unwrap();
 
     // Two resolution drafts on the same thread, last says reopen (false).
     let (st, _) = http_post(
@@ -422,11 +389,7 @@ fn resolution_applied_in_draft_order() {
         &json!({"revision": 0, "thread_id": thread_id, "body": "still unsure", "resolved": false}),
     );
     assert_eq!(st, 200);
-    let (st, _) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "comment"}),
-    );
-    assert_eq!(st, 200);
+    review(&server, id, "comment", "");
 
     let t = thread_of(&server, id, thread_id);
     assert_eq!(t["resolved"], false, "the last drafted decision wins");
@@ -435,83 +398,7 @@ fn resolution_applied_in_draft_order() {
 }
 
 // ---------------------------------------------------------------------------
-// Per-(change, revision) status independence + detached-patchset 409
-
-/// A review pins to one (change, revision); a later revision starts pending
-/// again (the verdict does not carry to a non-rebase revision). A review
-/// against a superseded patchset that no live tip walks is a 409.
-#[test]
-fn review_targets_one_revision_and_rejects_detached() {
-    let g = GitRepo::new();
-    let c0 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a1\na2\n")]);
-    g.branch("feat", c0);
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
-
-    // Approve rev 0.
-    let (st, out) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "approve", "message": "lgtm"}),
-    );
-    assert_eq!(st, 200, "{out}");
-    assert_eq!(out["review"]["revision"], 0);
-
-    // Amend (a real content change → reword/edit, not a pure rebase): rev 1.
-    let c1 = g.commit(
-        &[g.root],
-        &msg("core: a", "Ia"),
-        &[("a.txt", "a1\na2\na3\n")],
-    );
-    g.branch("feat", c1);
-    let id2 = push_one(&server, &g, "feat", "Ia");
-    assert_eq!(id2, id, "same change across the amend");
-
-    let d = detail(&server, id);
-    assert_eq!(d["revisions"].as_array().unwrap().len(), 2);
-    assert_eq!(d["revisions"][1]["number"], 1);
-    // rev 0 keeps approved; rev 1 is back to pending (independent per revision).
-    let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
-    let tip_member = chain["path"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["change_id"].as_u64() == Some(id))
-        .unwrap();
-    assert_eq!(tip_member["revision"], 1);
-    assert_eq!(
-        tip_member["status"], "pending",
-        "the new revision is unreviewed"
-    );
-
-    // rev 0 is now detached — no live tip walks it → reviewing it is a 409.
-    let (st, e) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "approve", "message": "stale"}),
-    );
-    assert_eq!(st, 409, "{e}");
-    assert!(
-        e["error"]
-            .as_str()
-            .unwrap()
-            .contains("not pinned by any live chain")
-    );
-
-    // rev 1 (the pinned patchset) reviews fine and sets its own status.
-    let (st, out) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 1, "verdict": "request_changes", "message": "one more"}),
-    );
-    assert_eq!(st, 200, "{out}");
-    assert_eq!(out["review"]["revision"], 1);
-    let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
-    let tip_member = chain["path"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["change_id"].as_u64() == Some(id))
-        .unwrap();
-    assert_eq!(tip_member["status"], "changes_requested");
-}
+// Per-(change, revision) status: a pure rebase carries the verdict forward
 
 /// A pure rebase (same patch-id + message, new parent) appends a revision but
 /// carries the verdict forward; reviewing the new revision still works because
@@ -525,11 +412,7 @@ fn pure_rebase_carries_status_forward() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let id = push_one(&server, &g, "feat", "Ia");
 
-    let (st, _) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "approve", "message": "lgtm"}),
-    );
-    assert_eq!(st, 200);
+    review(&server, id, "approve", "lgtm");
 
     // Move main, re-parent the same patch onto it: same content, new sha.
     let m1 = g.commit(&[g.root], "mainline: unrelated\n", &[("b.txt", "b\n")]);
@@ -646,11 +529,7 @@ fn reviewer_replies_to_agent_thread() {
         &json!({"revision": 0, "thread_id": thread_id, "body": "ack, thanks", "resolved": true}),
     );
     assert_eq!(st, 200);
-    let (st, out) = http_post(
-        &reviews_url(&server, id),
-        &json!({"revision": 0, "verdict": "comment"}),
-    );
-    assert_eq!(st, 200, "{out}");
+    review(&server, id, "comment", "");
 
     let t = thread_of(&server, id, thread_id);
     assert_eq!(t["resolved"], true);
@@ -659,38 +538,4 @@ fn reviewer_replies_to_agent_thread() {
     assert_eq!(comments[0]["author"], "agent");
     assert_eq!(comments[1]["author"], "reviewer");
     assert_eq!(comments[1]["body"], "ack, thanks");
-}
-
-// ---------------------------------------------------------------------------
-// Review request validation
-
-/// Review request faults: a malformed verdict is a 400 (enum deserialize), an
-/// unknown revision is a 400, and a terminal/detached target is a 409.
-#[test]
-fn review_request_validation() {
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
-    g.branch("feat", c1);
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ix");
-    let url = reviews_url(&server, id);
-
-    // A malformed verdict can't deserialize → AppJson maps it to 400 (not 422).
-    let (st, _) = http_post(
-        &url,
-        &json!({"revision": 0, "verdict": "maybe", "message": ""}),
-    );
-    assert_eq!(st, 400, "bad verdict");
-    // Unknown revision: a runtime check (the body deserializes fine).
-    let (st, _) = http_post(
-        &url,
-        &json!({"revision": 9, "verdict": "approve", "message": ""}),
-    );
-    assert_eq!(st, 400, "unknown revision");
-    // Reviewing an unknown change is a 404.
-    let (st, _) = http_post(
-        &server.url("/api/changes/99999/reviews"),
-        &json!({"revision": 0, "verdict": "approve", "message": ""}),
-    );
-    assert_eq!(st, 404, "unknown change");
 }
