@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { listChains, listRepos } from "../api/client";
+import { listChains, listRepos, submitChain } from "../api/client";
 import type { ChainSummary, PathEntry } from "../api/types";
 import {
   NewerElsewhereBadge,
@@ -67,6 +67,14 @@ function ChangeRow({ member }: { member: PathEntry }) {
               {counts.unresolved} open
             </span>
           )}
+          {member.draft_decision && (
+            <span
+              className="draft-count"
+              title="your staged decision (not yet submitted)"
+            >
+              ✎ {member.draft_decision}
+            </span>
+          )}
         </span>
       </td>
     </tr>
@@ -86,11 +94,31 @@ function ChainDrawer({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const ref = useRef<HTMLElement>(null);
+  const queryClient = useQueryClient();
 
   // A deep-linked drawer scrolls itself into view once it mounts open.
   useEffect(() => {
     if (defaultOpen) ref.current?.scrollIntoView({ block: "start" });
   }, [defaultOpen]);
+
+  // Changes carrying unsubmitted reviewer work — a comment draft or a staged
+  // decision (docs/api.md "Reviewer decisions"); a change counts once however
+  // many comments it has. The staged-decision subset is what Submit publishes.
+  const withDrafts = chain.path.filter(
+    (m) => m.counts.drafts > 0 || m.draft_decision !== null,
+  ).length;
+  const stagedCount = chain.path.filter(
+    (m) => m.draft_decision !== null,
+  ).length;
+
+  const submit = useMutation({
+    mutationFn: () =>
+      submitChain(chain.tip_change_id, chain.path.at(-1)?.revision),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["chains"] });
+      void queryClient.invalidateQueries({ queryKey: ["chain"] });
+    },
+  });
 
   return (
     <section
@@ -98,32 +126,55 @@ function ChainDrawer({
       id={`chain-${chain.tip_change_id}`}
       ref={ref}
     >
-      <button
-        type="button"
-        className="chain-drawer-head"
-        aria-expanded={open}
-        onClick={() => {
-          setOpen((v) => !v);
-        }}
-      >
-        <span className="fchevron">{open ? "▾" : "▸"}</span>
-        <span className="chain-name mono">{chain.name}</span>
-        <span className="badge-group">
-          <StateBadge state={chain.state} />
-          {chain.partial ? <PartialBadge /> : null}
-        </span>
-        <span className="spacer" />
-        <span className="dots">
-          {chain.path.map((member) => (
-            <StatusDot
-              key={member.change_id}
-              status={member.status}
-              title={`${member.position}. ${member.subject} — ${member.status}`}
-            />
-          ))}
-        </span>
-        <span className="time-cell">{timeAgo(chain.updated_at)}</span>
-      </button>
+      <div className="chain-drawer-head">
+        <button
+          type="button"
+          className="chain-drawer-toggle"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen((v) => !v);
+          }}
+        >
+          <span className="fchevron">{open ? "▾" : "▸"}</span>
+          <span className="chain-name mono">{chain.name}</span>
+          <span className="badge-group">
+            <StateBadge state={chain.state} />
+            {chain.partial ? <PartialBadge /> : null}
+          </span>
+          <span className="spacer" />
+          {withDrafts > 0 ? (
+            <span
+              className="draft-count chain-drawer-drafts"
+              title="changes with unsubmitted reviewer drafts (comments or a staged decision)"
+            >
+              ✎ {withDrafts} draft{withDrafts === 1 ? "" : "s"}
+            </span>
+          ) : null}
+          <span className="dots">
+            {chain.path.map((member) => (
+              <StatusDot
+                key={member.change_id}
+                status={member.status}
+                title={`${member.position}. ${member.subject} — ${member.status}`}
+              />
+            ))}
+          </span>
+          <span className="time-cell">{timeAgo(chain.updated_at)}</span>
+        </button>
+        {stagedCount > 0 ? (
+          <button
+            type="button"
+            className="chain-submit"
+            disabled={submit.isPending}
+            title="Publish every staged decision in this chain"
+            onClick={() => {
+              submit.mutate();
+            }}
+          >
+            Submit ({stagedCount})
+          </button>
+        ) : null}
+      </div>
       {open ? (
         <table className="list changes-table">
           <thead>

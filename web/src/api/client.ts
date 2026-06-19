@@ -3,7 +3,7 @@
 // contract-true fixtures in fixtures.ts instead of the network.
 
 import type {
-  AbandonRequest,
+  BatchSubmitResult,
   Chain,
   ChainList,
   ChangeDetail,
@@ -11,8 +11,8 @@ import type {
   Diff,
   Draft,
   RepoList,
-  SubmitReviewRequest,
-  SubmitReviewResponse,
+  StagedDecision,
+  StageDecisionRequest,
   UpdateDraftRequest,
 } from "./types";
 
@@ -26,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 async function request<T = void>(
   method: Method,
@@ -111,16 +111,23 @@ export const updateDraft = (id: number, req: UpdateDraftRequest) =>
 export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 
 // ---------------------------------------------------------------------------
-// Reviews
+// Reviewer decisions (staged like comment drafts, published per chain)
 
-export const submitReview = (changeId: number, review: SubmitReviewRequest) =>
-  request<SubmitReviewResponse>("POST", `/changes/${changeId}/reviews`, review);
+/** Stage (or overwrite) a change's draft decision — a verdict or an
+ * abandon/reopen (docs/api.md "Reviewer decisions"). */
+export const stageDecision = (changeId: number, req: StageDecisionRequest) =>
+  request<StagedDecision>("PUT", `/changes/${changeId}/decision`, req);
 
-// ---------------------------------------------------------------------------
-// Lifecycle (abandon / reopen — explicit reviewer/agent actions)
+/** Discard a change's staged decision. */
+export const clearDecision = (changeId: number) =>
+  request("DELETE", `/changes/${changeId}/decision`);
 
-export const abandonChange = (changeId: number, req: AbandonRequest = {}) =>
-  request<ChangeDetail>("POST", `/changes/${changeId}/abandon`, req);
-
-export const reopenChange = (changeId: number) =>
-  request<ChangeDetail>("POST", `/changes/${changeId}/reopen`, {});
+/** Publish every member's staged decision for the chain rooted at `tipChangeId`.
+ * `revision` picks the chain context (the tip's patchset), like getChain. */
+export const submitChain = (tipChangeId: number, revision?: number) =>
+  request<BatchSubmitResult>(
+    "POST",
+    revision === undefined
+      ? `/chains/${tipChangeId}/submit`
+      : `/chains/${tipChangeId}/submit?revision=${revision}`,
+  );

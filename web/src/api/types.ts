@@ -60,6 +60,10 @@ export interface PathEntry {
   short_sha: string;
   /** Scoped to this revision. */
   counts: ChangeCounts;
+  /** The reviewer's staged decision for this change, or null. Change-wide
+   * (one per change): the same value shows on every chain the change is in —
+   * drives the dashboard's draft-state count and batch-submit enable. */
+  draft_decision: Decision | null;
 }
 
 export interface ChangeCounts {
@@ -130,6 +134,8 @@ export interface ChangeDetail {
   reviews: Review[];
   /** Every tip walking through this change, each with the patchset it pins. */
   chains: ChainRef[];
+  /** The reviewer's staged decision for this change, or null. */
+  draft_decision: StagedDecision | null;
 }
 
 export interface Revision {
@@ -145,6 +151,18 @@ export interface Revision {
 }
 
 export type Verdict = "approve" | "request_changes" | "comment";
+
+/** A reviewer's staged decision (docs/api.md "Reviewer decisions"): the review
+ * modal's single set of choices — a verdict, or a lifecycle action, so
+ * abandonment is a decision rather than a separate button. */
+export type Decision = Verdict | "abandon" | "reopen";
+
+/** A staged decision plus its cover note/reason — the body of
+ * `ChangeDetail.draft_decision` and the PUT /changes/{id}/decision request. */
+export interface StagedDecision {
+  decision: Decision;
+  message: string;
+}
 
 export interface Review {
   id: number;
@@ -304,6 +322,26 @@ export interface SubmitReviewResponse {
   review: Review;
   /** The threads this review created or added to. */
   threads: Thread[];
+}
+
+/** `PUT /api/changes/{id}/decision` request — stage (or overwrite) the
+ * change's draft decision. */
+export interface StageDecisionRequest {
+  decision: Decision;
+  message: string;
+}
+
+/** `POST /api/chains/{id}/submit` response (docs/api.md "Chains"). */
+export interface BatchSubmitResult {
+  /** Members whose staged decision published. */
+  submitted: number;
+  /** Members skipped (stale/terminal); their staged decision is kept. */
+  errors: SubmitError[];
+}
+
+export interface SubmitError {
+  change_id: number;
+  message: string;
 }
 
 /** `POST /api/changes/{id}/abandon` body (`nit abandon`). The optional

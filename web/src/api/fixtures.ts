@@ -48,6 +48,7 @@ import type {
   CommentRange,
   CommentSide,
   CreateDraftRequest,
+  Decision,
   Diff,
   DiffFile,
   Draft,
@@ -56,6 +57,7 @@ import type {
   Repo,
   Review,
   Revision,
+  StageDecisionRequest,
   SubmitReviewRequest,
   Thread,
   ThreadComment,
@@ -1780,6 +1782,128 @@ let nextDraftId = 200;
 let nextThreadId = 300;
 let nextReviewId = 50;
 
+// Reviewer decision drafts (docs/api.md "Reviewer decisions"): one staged
+// decision per change, mutable, published on chain batch submit — the mock of
+// the server's draft_reviews side table. Seed one so the dashboard drawer's
+// submit button + draft-state pill and the change-page staged chip render.
+const draftReviews = new Map<number, { decision: Decision; message: string }>();
+draftReviews.set(12, {
+  decision: "request_changes",
+  message: "Inline the sequence diagram as text — the PNG won't review.",
+});
+
+/** Drain a change's comment drafts into `review`, opening or updating their
+ * threads; returns the threads it touched. Shared by the immediate POST
+ * /reviews and the batch submit (docs/api.md "Thread resolution"). */
+function drainComments(
+  c: ChangeRecord,
+  review: Review,
+  now: string,
+): ThreadRecord[] {
+  const touched = new Map<number, ThreadRecord>();
+  const changeDrafts = drafts
+    .filter((x) => x.change_id === c.id)
+    .sort((a, b) => a.id - b.id);
+  for (const d of changeDrafts) {
+    const hasBody = d.body.trim() !== "";
+    if (d.thread_id !== null) {
+      const thread = threads.find((x) => x.id === d.thread_id);
+      if (thread) {
+        thread.resolved = d.resolved;
+        thread.updated_at = now;
+        if (hasBody) {
+          thread.comments.push({
+            author: "reviewer",
+            body: d.body,
+            review_id: review.id,
+            created_at: now,
+          });
+        }
+        touched.set(thread.id, thread);
+      }
+    } else if (hasBody) {
+      const thread: ThreadRecord = {
+        id: nextThreadId++,
+        change_id: c.id,
+        revision: d.revision,
+        file: d.file,
+        line: d.line,
+        side: d.side,
+        range: d.range ?? null,
+        line_text: d.line_text,
+        resolved: d.resolved,
+        comments: [
+          {
+            author: "reviewer",
+            body: d.body,
+            review_id: review.id,
+            created_at: now,
+          },
+        ],
+        created_at: now,
+        updated_at: now,
+      };
+      threads.push(thread);
+      touched.set(thread.id, thread);
+    }
+    drafts.splice(drafts.indexOf(d), 1);
+  }
+  return [...touched.values()];
+}
+
+/** Why a staged decision can't publish against the change's lifecycle, or null
+ * (mirrors the server's decision_block). */
+function decisionBlock(c: ChangeRecord, decision: Decision): string | null {
+  if (c.terminal === "merged") return "change is merged — nothing to submit";
+  if (c.terminal === "abandoned") {
+    return decision === "reopen"
+      ? null
+      : "change is abandoned — stage Reopen first";
+  }
+  return decision === "reopen"
+    ? "change is live — Reopen does not apply"
+    : null;
+}
+
+/** Publish one staged decision (mirrors the server's publish_member): an
+ * optional reopen, a review draining comment drafts (the decision's verdict, or
+ * `comment` to carry staged comments under a lifecycle decision), then an
+ * optional abandon. */
+function publishMember(
+  c: ChangeRecord,
+  decision: Decision,
+  message: string,
+  revision: number,
+  now: string,
+): void {
+  if (decision === "reopen") c.terminal = undefined;
+  const hasComments = drafts.some((d) => d.change_id === c.id);
+  const verdict: Verdict | null =
+    decision === "approve" ||
+    decision === "request_changes" ||
+    decision === "comment"
+      ? decision
+      : hasComments
+        ? "comment"
+        : null;
+  if (verdict) {
+    const review: Review = {
+      id: nextReviewId++,
+      revision,
+      verdict,
+      message: decision === verdict ? message : "",
+      created_at: now,
+    };
+    c.reviews.push(review);
+    drainComments(c, review, now);
+    c.last_reviewed_revision = Math.max(
+      c.last_reviewed_revision ?? 0,
+      revision,
+    );
+  }
+  if (decision === "abandon") c.terminal ??= "abandoned";
+}
+
 // ---------------------------------------------------------------------------
 // Derivations (status, counts, chain state, path) so mutations stay consistent
 
@@ -1877,6 +2001,7 @@ function pathEntry(
       drafts: ownDrafts.length,
       unresolved: ownThreads.filter((t) => !t.resolved).length,
     },
+    draft_decision: draftReviews.get(c.id)?.decision ?? null,
   };
 }
 
@@ -2027,6 +2152,7 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
     drafts: drafts.filter((x) => x.change_id === c.id).map(renderDraft),
     reviews: c.reviews,
     chains: chainsThrough(c),
+    draft_decision: draftReviews.get(c.id) ?? null,
   };
 }
 
@@ -2103,6 +2229,33 @@ export async function mockRequest(
     const tip = resolveTip(id, revision);
     if (!tip) return notFound(`chain ${id}`);
     return chainView(tip);
+  }
+
+  // Batch submit: publish every chain member's staged decision at the revision
+  // the path pins, each independently (docs/api.md "Chains").
+  if ((m = /^\/chains\/(\d+)\/submit$/.exec(p)) && method === "POST") {
+    const id = Number(m[1]);
+    const revision = q.has("revision") ? Number(q.get("revision")) : undefined;
+    const tip = resolveTip(id, revision);
+    if (!tip) return notFound(`chain ${id}`);
+    const now = new Date().toISOString();
+    let submitted = 0;
+    const errors: { change_id: number; message: string }[] = [];
+    for (const member of derivePath(tip)) {
+      const staged = draftReviews.get(member.change_id);
+      if (!staged) continue; // no decision — leave the member's comment drafts
+      const c = changes.find((x) => x.id === member.change_id);
+      if (!c) continue;
+      const block = decisionBlock(c, staged.decision);
+      if (block) {
+        errors.push({ change_id: c.id, message: block });
+        continue;
+      }
+      publishMember(c, staged.decision, staged.message, member.revision, now);
+      draftReviews.delete(c.id);
+      submitted++;
+    }
+    return { submitted, errors };
   }
 
   if ((m = /^\/changes\/(\d+)$/.exec(p)) && method === "GET") {
@@ -2187,67 +2340,29 @@ export async function mockRequest(
       created_at: now,
     };
     c.reviews.push(review);
-    // The threads this review created or added to, in touch order.
-    const touched = new Map<number, ThreadRecord>();
-    // Drain drafts in creation order: a reply appends to its thread and
-    // restages its resolution (last wins); a new-thread draft opens a thread;
-    // an empty-body draft resolves without leaving a comment (docs/api.md
-    // "Thread resolution").
-    const changeDrafts = drafts
-      .filter((x) => x.change_id === c.id)
-      .sort((a, b) => a.id - b.id);
-    for (const d of changeDrafts) {
-      const hasBody = d.body.trim() !== "";
-      if (d.thread_id !== null) {
-        // Reply to a published thread: restage its resolution, optionally add
-        // the message.
-        const thread = threads.find((x) => x.id === d.thread_id);
-        if (thread) {
-          thread.resolved = d.resolved;
-          thread.updated_at = now;
-          if (hasBody) {
-            thread.comments.push({
-              author: "reviewer",
-              body: d.body,
-              review_id: review.id,
-              created_at: now,
-            });
-          }
-          touched.set(thread.id, thread);
-        }
-      } else if (hasBody) {
-        // A new thread: opens open-or-resolved per its staged decision.
-        const thread: ThreadRecord = {
-          id: nextThreadId++,
-          change_id: c.id,
-          revision: d.revision,
-          file: d.file,
-          line: d.line,
-          side: d.side,
-          range: d.range ?? null,
-          line_text: d.line_text,
-          resolved: d.resolved,
-          comments: [
-            {
-              author: "reviewer",
-              body: d.body,
-              review_id: review.id,
-              created_at: now,
-            },
-          ],
-          created_at: now,
-          updated_at: now,
-        };
-        threads.push(thread);
-        touched.set(thread.id, thread);
-      }
-      drafts.splice(drafts.indexOf(d), 1);
-    }
+    const touched = drainComments(c, review, now);
     c.last_reviewed_revision = Math.max(
       c.last_reviewed_revision ?? 0,
       req.revision,
     );
-    return { review, threads: [...touched.values()].map(renderThread) };
+    draftReviews.delete(c.id); // an immediate review supersedes any staged decision
+    return { review, threads: touched.map(renderThread) };
+  }
+
+  // Stage / clear a reviewer decision (drafted like a comment; published by the
+  // chain batch submit above) — docs/api.md "Reviewer decisions".
+  if ((m = /^\/changes\/(\d+)\/decision$/.exec(p)) && method === "PUT") {
+    const c = getChange(Number(m[1]));
+    const req = body as StageDecisionRequest;
+    const staged = { decision: req.decision, message: req.message };
+    draftReviews.set(c.id, staged);
+    return staged;
+  }
+
+  if ((m = /^\/changes\/(\d+)\/decision$/.exec(p)) && method === "DELETE") {
+    const c = getChange(Number(m[1]));
+    draftReviews.delete(c.id);
+    return undefined;
   }
 
   if ((m = /^\/changes\/(\d+)\/abandon$/.exec(p)) && method === "POST") {

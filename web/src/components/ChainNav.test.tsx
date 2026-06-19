@@ -39,6 +39,7 @@ function member(
     commit_sha: `sha${changeId}`,
     short_sha: `sha${changeId}`,
     counts: { threads: 0, drafts: 0, unresolved },
+    draft_decision: null,
     ...extra,
   };
 }

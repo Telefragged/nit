@@ -433,9 +433,10 @@ const captures = [
         );
     },
   },
-  // Reply modal opened via the `a` shortcut, cover message typed. Typed
-  // key by key (not fill, which replaces content) so a shortcut keystroke
-  // leaking into the autofocused textarea would show up in the capture.
+  // Review modal opened via `a`: it STAGES a decision rather than publishing —
+  // the three verdicts plus Abandon (abandonment is a decision under the modal,
+  // not a separate button), with the cover message typed key by key (not fill,
+  // which replaces content) so a leaked shortcut keystroke would show up.
   {
     name: "review-modal",
     path: "/changes/11?against=base",
@@ -443,23 +444,20 @@ const captures = [
     actions: async (page) => {
       await page.keyboard.press("a");
       await page
-        .getByPlaceholder("Cover message (published with the verdict)…")
+        .getByPlaceholder("Cover message (saved with your decision)…")
         .pressSequentially("Nice cleanup — two nits inline, otherwise ready.");
     },
   },
-  // Submitting against a stale revision → 409 inside the modal, which
-  // stays open with drafts + message kept.
+  // A change with a staged decision (change 12, seeded request_changes): the
+  // bottom bar shows the staged chip and an enabled "Submit chain", and the
+  // modal pre-fills the staged decision (✎ on Request changes) + its message.
   {
-    name: "review-409",
-    path: "/changes/11?revision=0",
+    name: "review-staged",
+    path: "/changes/12",
     fullPage: false,
     actions: async (page) => {
       await page.getByRole("button", { name: "Review (a)" }).click();
-      await page
-        .getByPlaceholder("Cover message (published with the verdict)…")
-        .fill("Looks good overall, minor nits.");
-      await page.getByRole("button", { name: "Comment", exact: true }).click();
-      await page.waitForSelector(".review-conflict");
+      await page.waitForSelector(".reply-modal");
     },
   },
   // Rename + binary file in one diff.

@@ -1,23 +1,41 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ApiError,
-  abandonChange,
-  reopenChange,
-  submitReview,
-} from "../api/client";
-import type { Chain, ChangeDetail, Verdict } from "../api/types";
+import { clearDecision, stageDecision, submitChain } from "../api/client";
+import type { Chain, ChangeDetail, Decision } from "../api/types";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
 
+/** Human label for a staged decision (the bar chip + the modal's current state). */
+const DECISION_LABEL: Record<Decision, string> = {
+  approve: "Approve",
+  request_changes: "Request changes",
+  comment: "Comment",
+  abandon: "Abandon",
+  reopen: "Reopen",
+};
+
+/** The decisions the modal offers for the change's current lifecycle: an
+ * abandoned change can only be reopened; a live one takes the three verdicts or
+ * an abandon. Abandonment is a decision here, not a separate button. */
+function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
+  return abandoned
+    ? [{ decision: "reopen", cls: "btn-approve" }]
+    : [
+        { decision: "approve", cls: "btn-approve" },
+        { decision: "request_changes", cls: "btn-request" },
+        { decision: "comment", cls: "" },
+        { decision: "abandon", cls: "btn-lifecycle" },
+      ];
+}
+
 /**
- * Slim sticky bottom bar (counts + a Review button) and the gerrit-style
- * reply modal it opens (also bound to `a` in ReviewPage): cover message,
- * verdict buttons, conflict/error banners. Submitting publishes all drafts
- * atomically (docs/api.md). On a 409 (agent pushed meanwhile) the modal
- * stays open with the cover message and drafts kept, data is refetched and
- * submission is re-offered against the new latest revision.
+ * Slim sticky bottom bar and the review modal it opens (`a`). A decision is
+ * drafted, not published: the modal stages a verdict — or an abandon/reopen —
+ * into the change's `draft_decision` (docs/api.md "Reviewer decisions"), and
+ * the bar's **Submit chain** publishes every member's staged decision at once.
+ * The bar shows the draft/unresolved counts plus the staged decision so the
+ * reviewer can see and submit pending work without leaving the diff.
  */
 export default function ReviewBar({
   change,
@@ -28,7 +46,7 @@ export default function ReviewBar({
   onReplyOpenChange,
 }: {
   change: ChangeDetail;
-  /** The selected revision's chain context, for next-change navigation. */
+  /** The selected revision's chain context, for submit + next-change nav. */
   chain: Chain | undefined;
   selectedRevision: number;
   /** Threads that would stay open once the staged drafts publish — computed
@@ -38,7 +56,7 @@ export default function ReviewBar({
   onReplyOpenChange: (open: boolean) => void;
 }) {
   const [message, setMessage] = useState("");
-  const [conflict, setConflict] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
@@ -47,89 +65,107 @@ export default function ReviewBar({
   useAutosize(textareaRef, message);
 
   const drafts = change.drafts.length;
+  const staged = change.draft_decision;
+  // This change's path member carries its displayed status (per (change, rev)).
+  const here = chain?.path.find((c) => c.change_id === change.id);
+  const abandoned = here?.status === "abandoned";
+  // Members of this chain that carry a staged decision — what Submit publishes.
+  const stagedInChain =
+    chain?.path.filter((c) => c.draft_decision !== null).length ?? 0;
 
-  const submit = useMutation({
-    mutationFn: (verdict: Verdict) =>
-      submitReview(change.id, {
-        revision: selectedRevision,
-        verdict,
-        message: message.trim(),
-      }),
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["change", change.id] });
+    void queryClient.invalidateQueries({ queryKey: ["chain"] });
+    void queryClient.invalidateQueries({ queryKey: ["chains"] });
+  };
+
+  // Stage a decision (does not publish): saves it server-side, closes the
+  // modal, then advances to the next member still missing a decision so the
+  // reviewer can sweep the chain before submitting.
+  const stage = useMutation({
+    mutationFn: (decision: Decision) =>
+      stageDecision(change.id, { decision, message: message.trim() }),
     onSuccess: () => {
-      setConflict(null);
-      setMessage("");
+      setError(null);
       onReplyOpenChange(false);
-      void queryClient.invalidateQueries({ queryKey: ["change", change.id] });
-      void queryClient.invalidateQueries({ queryKey: ["chain"] });
-      void queryClient.invalidateQueries({ queryKey: ["chains"] });
-      // Next pending member in path order, else back to the repo page with
-      // this chain's drawer expanded.
-      const here = chain?.path.find((c) => c.change_id === change.id);
+      invalidate();
       const next =
         here &&
         chain?.path.find(
-          (c) => c.status === "pending" && c.position > here.position,
+          (c) => c.draft_decision === null && c.position > here.position,
         );
-      if (next) {
-        void navigate(`/changes/${next.change_id}`);
+      if (next) void navigate(`/changes/${next.change_id}`);
+    },
+    onError: (e) => {
+      setError(e instanceof Error ? e.message : String(e));
+    },
+  });
+
+  const clear = useMutation({
+    mutationFn: () => clearDecision(change.id),
+    onSuccess: () => {
+      setError(null);
+      onReplyOpenChange(false);
+      invalidate();
+    },
+  });
+
+  // Publish every staged decision in this chain. Best-effort per change: a
+  // member skipped for a stale/terminal lifecycle comes back in `errors` and
+  // keeps the modal-equivalent banner; a clean run returns to the chain drawer.
+  const submit = useMutation({
+    mutationFn: () => {
+      if (!chain) throw new Error("no chain context to submit");
+      return submitChain(chain.tip_change_id, chain.path.at(-1)?.revision);
+    },
+    onSuccess: (result) => {
+      invalidate();
+      if (result.errors.length > 0) {
+        setError(
+          `${result.submitted} submitted; ${result.errors.length} skipped: ` +
+            result.errors.map((e) => e.message).join("; "),
+        );
       } else if (chain) {
         void navigate(`/repos/${chain.repo_id}#chain-${chain.tip_change_id}`);
-      } else {
-        void navigate("/");
       }
     },
-    onError: (err) => {
-      if (err instanceof ApiError && err.status === 409) {
-        // Keep message + drafts; refetch so the new revision shows up.
-        setConflict(err.message);
-        void queryClient.invalidateQueries({ queryKey: ["change", change.id] });
-        void queryClient.invalidateQueries({ queryKey: ["diff", change.id] });
-      } else {
-        setConflict(null);
-      }
+    onError: (e) => {
+      setError(e instanceof Error ? e.message : String(e));
     },
   });
 
-  // Abandon/reopen — an explicit lifecycle judgment, reversible. The change's
-  // terminal state rides on its path member (status is per (change, revision)).
-  const here = chain?.path.find((c) => c.change_id === change.id);
-  const abandoned = here?.status === "abandoned";
-  const lifecycle = useMutation({
-    mutationFn: () =>
-      abandoned ? reopenChange(change.id) : abandonChange(change.id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["change", change.id] });
-      void queryClient.invalidateQueries({ queryKey: ["chain"] });
-      void queryClient.invalidateQueries({ queryKey: ["chains"] });
-    },
-  });
+  // Seed the cover message from the staged decision when the modal opens —
+  // adjust-during-render on the false→true edge (not an effect), so the staged
+  // text is in the textarea the frame it mounts and no cascading render fires.
+  const [wasOpen, setWasOpen] = useState(false);
+  if (replyOpen !== wasOpen) {
+    setWasOpen(replyOpen);
+    if (replyOpen) {
+      setMessage(staged?.message ?? "");
+      setError(null);
+    }
+  }
 
   // showModal() puts the dialog in the top layer and makes the rest of the
-  // page inert: real focus containment behind the dialog role, and Escape
-  // arrives as the `cancel` event no matter where focus sits (it can land
-  // on <body> after a click on non-focusable dialog text). Layout effect so
-  // the dialog is visible the same frame it mounts; focus the textarea
-  // explicitly since React's autoFocus fires before showModal opens it.
+  // page inert; Escape arrives as the `cancel` event wherever focus sits. Layout
+  // effect so the dialog is visible the frame it mounts; focus the textarea
+  // explicitly (React's autoFocus fires before showModal opens it).
   useLayoutEffect(() => {
     if (!replyOpen) return;
     dialogRef.current?.showModal();
     textareaRef.current?.focus();
   }, [replyOpen]);
 
-  // Closing only discards the cover message (after confirmation when it
-  // would be lost) — drafts live server-side and are kept. Inert while a
-  // submit is in flight (like the Cancel button): dismissing then would
-  // clear the message while the request still completes and navigates.
+  // Closing discards only the typed cover message (after confirmation when it
+  // diverges from what is staged) — the staged decision lives server-side.
   const requestClose = () => {
-    if (submit.isPending) return;
-    if (!confirmDiscard(message.trim().length > 0, "reply")) return;
-    setMessage("");
-    setConflict(null);
-    submit.reset();
+    if (stage.isPending || clear.isPending) return;
+    const dirty = message.trim() !== (staged?.message ?? "");
+    if (!confirmDiscard(dirty, "cover message")) return;
+    setError(null);
     onReplyOpenChange(false);
   };
 
-  // Draft/unresolved counts + revision, shown in the bar and the modal.
   const stats = (
     <span className="review-stats">
       <span className={drafts > 0 ? "draft-count" : "dim"}>
@@ -138,6 +174,14 @@ export default function ReviewBar({
       <span className={unresolved > 0 ? "unresolved-count" : "dim"}>
         {unresolved} unresolved
       </span>
+      {staged ? (
+        <span
+          className="draft-count"
+          title="Your staged decision (not yet submitted)"
+        >
+          ✎ {DECISION_LABEL[staged.decision]}
+        </span>
+      ) : null}
       <span className="dim mono">r{selectedRevision}</span>
     </span>
   );
@@ -148,18 +192,18 @@ export default function ReviewBar({
         {stats}
         <div className="review-bar-actions">
           <button
-            className="btn-lifecycle"
-            disabled={lifecycle.isPending}
+            className="btn-primary"
+            disabled={submit.isPending || stagedInChain === 0}
             title={
-              abandoned
-                ? "Reopen this change for review"
-                : "Mark this change abandoned (reversible)"
+              stagedInChain === 0
+                ? "Stage a decision first (Review)"
+                : "Publish every staged decision in this chain"
             }
             onClick={() => {
-              lifecycle.mutate();
+              submit.mutate();
             }}
           >
-            {abandoned ? "Reopen" : "Abandon"}
+            Submit chain{stagedInChain > 0 ? ` (${stagedInChain})` : ""}
           </button>
           <button
             className="btn-primary"
@@ -172,97 +216,85 @@ export default function ReviewBar({
         </div>
       </div>
       {replyOpen ? (
-        // The native modal dialog is its own full-bleed backdrop; the
-        // mousedown below dismisses on a backdrop press. Escape is the
-        // keyboard equivalent (onCancel), so the interaction is reachable
-        // without a pointer — but jsx-a11y can't see that cross-handler.
+        // The native modal dialog is its own full-bleed backdrop; the mousedown
+        // below dismisses on a backdrop press. Escape is the keyboard
+        // equivalent (onCancel), reachable without a pointer.
         // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- keyboard dismiss is onCancel (Escape)
         <dialog
           ref={dialogRef}
           className="modal-backdrop"
-          aria-label="Reply"
-          // The full-bleed dialog is its own backdrop, so presses outside
-          // the inner box hit the dialog element itself. mousedown, not
-          // click: a select-drag started inside the dialog and released on
-          // the backdrop must not count as a backdrop click.
+          aria-label="Review"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) requestClose();
           }}
-          // Escape: route the native close request through confirmDiscard.
           onCancel={(e) => {
             e.preventDefault();
             requestClose();
           }}
-          // The browser can still force-close (close-watcher rules let a
-          // repeated Escape bypass cancel); sync state so the bar button
-          // can reopen — the typed message is kept.
           onClose={() => {
             onReplyOpenChange(false);
           }}
         >
           <div className="reply-modal">
             <div className="reply-modal-head">
-              <strong>Reply</strong>
+              <strong>Review</strong>
               {stats}
             </div>
-            {conflict ? (
-              <div className="banner banner-warn review-conflict">
-                <strong>new revision landed</strong>
-                <span className="banner-body">
-                  {conflict} — your drafts and cover message were kept; review
-                  the update and submit again.
-                </span>
-              </div>
-            ) : null}
-            {submit.isError && !conflict ? (
+            <div className="dim reply-modal-hint">
+              Your decision is staged, not published — submit the chain to
+              publish every member&apos;s decision at once.
+            </div>
+            {error ? (
               <div className="banner banner-error review-conflict">
-                <strong>submit failed</strong>
-                <span className="banner-body">
-                  {submit.error instanceof Error
-                    ? submit.error.message
-                    : String(submit.error)}
-                </span>
+                <strong>action failed</strong>
+                <span className="banner-body">{error}</span>
               </div>
             ) : null}
             <textarea
               ref={textareaRef}
-              placeholder="Cover message (published with the verdict)…"
+              placeholder="Cover message (saved with your decision)…"
               value={message}
               onChange={(e) => {
                 setMessage(e.target.value);
               }}
             />
             <div className="reply-modal-actions">
-              <button onClick={requestClose} disabled={submit.isPending}>
+              <button
+                onClick={requestClose}
+                disabled={stage.isPending || clear.isPending}
+              >
                 Cancel
               </button>
+              {staged ? (
+                <button
+                  className="linkish"
+                  disabled={stage.isPending || clear.isPending}
+                  onClick={() => {
+                    clear.mutate();
+                  }}
+                >
+                  Clear staged
+                </button>
+              ) : null}
               <span className="spacer" />
-              <button
-                className="btn-approve"
-                disabled={submit.isPending}
-                onClick={() => {
-                  submit.mutate("approve");
-                }}
-              >
-                Approve
-              </button>
-              <button
-                className="btn-request"
-                disabled={submit.isPending}
-                onClick={() => {
-                  submit.mutate("request_changes");
-                }}
-              >
-                Request changes
-              </button>
-              <button
-                disabled={submit.isPending}
-                onClick={() => {
-                  submit.mutate("comment");
-                }}
-              >
-                Comment
-              </button>
+              {offered(abandoned).map(({ decision, cls }) => (
+                <button
+                  key={decision}
+                  className={cls}
+                  disabled={stage.isPending}
+                  title={
+                    staged?.decision === decision
+                      ? "Currently staged"
+                      : undefined
+                  }
+                  onClick={() => {
+                    stage.mutate(decision);
+                  }}
+                >
+                  {staged?.decision === decision ? "✎ " : ""}
+                  {DECISION_LABEL[decision]}
+                </button>
+              ))}
             </div>
           </div>
         </dialog>

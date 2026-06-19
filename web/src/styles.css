@@ -350,8 +350,8 @@ table.list tbody tr:hover {
   white-space: nowrap;
 }
 
-/* ------------------------------------------------------- chain drawers */
-/* A repo's chains as collapsible drawers: a summary header expands in place
+/* ------------------------------------------------------- chain drawers
+   A repo's chains as collapsible drawers: a summary header expands in place
    to the chain's changes (the former chain page). */
 
 .chain-list {
@@ -369,28 +369,64 @@ table.list tbody tr:hover {
 .chain-drawer-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 12px;
-  font: inherit;
-  color: var(--text);
-  text-align: left;
   background: var(--bg-raised);
-  border: none;
-  cursor: pointer;
 }
 
 .chain-drawer-head:hover {
   background: var(--bg-hover);
 }
 
-.chain-drawer-head .chain-name {
+/* The expandable part of the header (the Submit button sits beside it, so the
+   toggle can't be the whole row — a button can't nest a button). */
+.chain-drawer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.chain-drawer-toggle .chain-name {
   font-size: 12.5px;
   font-weight: 600;
 }
 
-.chain-drawer-head .spacer {
+.chain-drawer-toggle .spacer {
   flex: 1;
+}
+
+/* Staged-decision count on the drawer header, and the batch-submit button. */
+.chain-drawer-drafts {
+  white-space: nowrap;
+}
+
+.chain-submit {
+  margin-right: 10px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--bg);
+  background: var(--blue);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chain-submit:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.chain-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* The drawer already frames the changes; drop the table's own border and
@@ -1508,6 +1544,11 @@ table.list tbody tr:hover {
 }
 
 /* review bar + reply modal */
+
+.reply-modal-hint {
+  margin: -2px 0 8px;
+  font-size: 12px;
+}
 
 .review-bar {
   position: fixed;
