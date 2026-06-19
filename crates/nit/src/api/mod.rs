@@ -182,6 +182,15 @@ async fn list_repos(State(state): State<Arc<AppState>>) -> Result<Json<types::Re
     .await
 }
 
+/// Canonicalize a git-dir path to a UTF-8 string, or a 400.
+fn canonical_git_dir(raw: &str) -> Result<String, Error> {
+    Ok(std::fs::canonicalize(raw)
+        .map_err(|e| Error::bad_request(format!("cannot resolve git dir {raw}: {e}")))?
+        .to_str()
+        .ok_or_else(|| Error::bad_request("git dir is not valid UTF-8"))?
+        .to_string())
+}
+
 /// Repoint a repo at a new git-common-dir after it moved on disk.
 async fn relocate_repo(
     State(state): State<Arc<AppState>>,
@@ -192,13 +201,7 @@ async fn relocate_repo(
         let conn = state.open_db()?;
         let existing = db::get_repo(&conn, repo_id)?
             .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;
-        let canonical = std::fs::canonicalize(&req.git_dir)
-            .map_err(|e| {
-                Error::bad_request(format!("cannot resolve git dir {}: {e}", req.git_dir))
-            })?
-            .to_str()
-            .ok_or_else(|| Error::bad_request("git dir is not valid UTF-8"))?
-            .to_string();
+        let canonical = canonical_git_dir(&req.git_dir)?;
         Repository::open(&canonical).map_err(|e| {
             Error::bad_request(format!(
                 "not a git repository at {canonical}: {}",
@@ -250,13 +253,7 @@ async fn push(
 ) -> Result<Json<types::PushResult>, Error> {
     blocking(move || {
         let conn = state.open_db()?;
-        let canonical = std::fs::canonicalize(&req.git_dir)
-            .map_err(|e| {
-                Error::bad_request(format!("cannot resolve git dir {}: {e}", req.git_dir))
-            })?
-            .to_str()
-            .ok_or_else(|| Error::bad_request("git dir is not valid UTF-8"))?
-            .to_string();
+        let canonical = canonical_git_dir(&req.git_dir)?;
 
         // One canonical branch per repo: a later push naming a different base
         // is a 400.
