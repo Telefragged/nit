@@ -289,10 +289,7 @@ fn do_push(
 /// When the server can't be reached or no chain matches the current branch.
 pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
-    let change_id = match args.chain {
-        Some(id) => id,
-        None => resolve_tip_change(&client, Retry::No)?,
-    };
+    let change_id = resolve_chain(&client, args.chain, Retry::No)?;
     let chain = client.get(&format!("/api/chains/{change_id}"))?;
     if args.oneline {
         print!("{}", chain_oneline(&chain));
@@ -313,16 +310,10 @@ pub fn log(args: LogArgs) -> Result<()> {
             bail!("--follow takes a single starting seq cursor (e.g. `0` or `..`)");
         };
         let cursor = follow_cursor(spec)?;
-        let change_id = match args.chain {
-            Some(id) => id,
-            None => resolve_tip_change(&client, Retry::No)?,
-        };
+        let change_id = resolve_chain(&client, args.chain, Retry::No)?;
         return follow(&client, change_id, cursor, args.oneline, args.reviewer_only);
     }
-    let change_id = match args.chain {
-        Some(id) => id,
-        None => resolve_tip_change(&client, Retry::No)?,
-    };
+    let change_id = resolve_chain(&client, args.chain, Retry::No)?;
     let log = client.get(&format!("/api/chains/{change_id}/log"))?;
     let all = log["entries"].as_array().cloned().unwrap_or_default();
     let mut entries: Vec<Value> = Vec::new();
@@ -354,8 +345,10 @@ pub fn wait(args: WaitArgs) -> Result<()> {
     let client = Client::new(server_url(args.server));
     let retry = Retry::UntilUp;
     let mut cursor = args.cursor;
+    // HEAD is fixed for this command's lifetime, so the tip change id (the
+    // chain's stable identity) resolves once, not every loop pass.
+    let tip = resolve_tip_change(&client, retry)?;
     loop {
-        let tip = resolve_tip_change(&client, retry)?;
         let log = client.get_retry(&format!("/api/chains/{tip}/log"), retry)?;
         let entries: Vec<Value> = log["entries"].as_array().cloned().unwrap_or_default();
         let fresh: Vec<Value> = entries
@@ -637,6 +630,15 @@ fn resolve_tip_change(client: &Client, retry: Retry) -> Result<u64> {
         })
         .and_then(|c| c["tip_change_id"].as_u64())
         .ok_or_else(|| anyhow!("HEAD is not registered with nit — run 'nit push' first"))
+}
+
+/// The chain's tip change id: the explicit `--chain` when given, else the
+/// cwd's tip change.
+fn resolve_chain(client: &Client, explicit: Option<u64>, retry: Retry) -> Result<u64> {
+    match explicit {
+        Some(id) => Ok(id),
+        None => resolve_tip_change(client, retry),
+    }
 }
 
 /// The numeric change id for a `Change-Id` trailer on the cwd's chain.
