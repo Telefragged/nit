@@ -10,6 +10,7 @@ import type {
   CreateDraftRequest,
   Diff,
   Draft,
+  RepoGraph,
   RepoList,
   StagedDecision,
   StageDecisionRequest,
@@ -83,6 +84,17 @@ export const getChain = (changeId: number, revision?: number) =>
     revision === undefined
       ? `/chains/${changeId}`
       : `/chains/${changeId}?revision=${revision}`,
+  );
+
+/** The repo's spine-centered change graph (docs/api.md "Graph"): the source
+ * for the dashboard. `mergedWindow` overrides how many merged commits below
+ * HEAD to include (default 5 server-side). */
+export const getRepoGraph = (repoId: number, mergedWindow?: number) =>
+  request<RepoGraph>(
+    "GET",
+    mergedWindow === undefined
+      ? `/repos/${repoId}/graph`
+      : `/repos/${repoId}/graph?merged_window=${mergedWindow}`,
   );
 
 // ---------------------------------------------------------------------------

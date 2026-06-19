@@ -112,6 +112,54 @@ export interface ChainRef {
 }
 
 // ---------------------------------------------------------------------------
+// Graph (the spine-centered DAG; docs/api.md "Graph")
+
+/** Which region of the change graph a node sits in: `open` ascends above the
+ * canonical HEAD, `head` is the HEAD anchor, `history` descends below it. */
+export type GraphSection = "open" | "head" | "history";
+
+/** One repo's change graph: a single commit-sha-keyed DAG over the canonical
+ * branch. Nodes are in topological row order (top → bottom): open changes
+ * ascending, the HEAD anchor, then the merged-history window descending. */
+export interface RepoGraph {
+  repo_id: number;
+  base_branch: string;
+  /** The HEAD node's commit_sha — the anchor every region pivots on. */
+  anchor: string;
+  /** How many merged commits below HEAD the history region requested. */
+  merged_window: number;
+  /** The canonical branch has merged commits below the displayed window — the
+   * client shows an "earlier history hidden" marker and dangles deep forks to it. */
+  history_truncated: boolean;
+  /** Row order, top → bottom: open (top) → head → history (bottom). */
+  nodes: GraphNode[];
+}
+
+/** One node of the change graph, keyed by its commit_sha. Edges are its
+ * `parents` (an edge is drawn to each present in the node set; length > 1 is
+ * a merge). */
+export interface GraphNode {
+  /** The node's stable id — a full 40-hex commit-sha; the client truncates. */
+  commit_sha: string;
+  section: GraphSection;
+  subject: string;
+  /** ChangeStatus at the pinned revision; the client styles by section
+   * (head/history render as merged). */
+  status: ChangeStatus;
+  /** Parent commit-shas; an edge is drawn to each present in the node set. */
+  parents: string[];
+  /** The backing change, or null for a bare git commit (merge / pre-nit). */
+  change_id: number | null;
+  change_key: string | null;
+  /** The pinned patchset (open nodes); null off the open region. */
+  revision: number | null;
+  /** Activity at the pinned revision (zeros off the open region). */
+  counts: ChangeCounts;
+  /** The change's staged decision, or null. Change-wide. */
+  draft_decision: Decision | null;
+}
+
+// ---------------------------------------------------------------------------
 // Changes
 
 export interface ChangeDetail {
