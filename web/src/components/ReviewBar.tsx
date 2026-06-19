@@ -62,7 +62,8 @@ export default function ReviewBar({
       void queryClient.invalidateQueries({ queryKey: ["change", change.id] });
       void queryClient.invalidateQueries({ queryKey: ["chain"] });
       void queryClient.invalidateQueries({ queryKey: ["chains"] });
-      // Next pending member in path order, else back to the chain.
+      // Next pending member in path order, else back to the repo page with
+      // this chain's drawer expanded.
       const here = chain?.path.find((c) => c.change_id === change.id);
       const next =
         here &&
@@ -72,7 +73,7 @@ export default function ReviewBar({
       if (next) {
         void navigate(`/changes/${next.change_id}`);
       } else if (chain) {
-        void navigate(`/chains/${chain.tip_change_id}`);
+        void navigate(`/repos/${chain.repo_id}#chain-${chain.tip_change_id}`);
       } else {
         void navigate("/");
       }

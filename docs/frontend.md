@@ -23,23 +23,25 @@ websocket (`WS /api/stream`), which serves the agent-side followers
 - `/` **Repos** — table of registered repos: git-common-dir path (its
   identity _and_ name), its `base_branch`, and a live **active-chain count**
   (the repo's tip-commit count, derived). Click through to a repo's chains.
-- `/repos/:id` **Dashboard** — the repo's chains, one row per derived
-  **tip**: best-effort name (resolved server-side at query time), state badge
-  (`WAITING FOR REVIEW` amber / `AGENT'S TURN` blue / `APPROVED` green / `HAS
-ABANDONED` gray, plus a gray `PARTIAL` while the agent is still pushing),
-  per-member status dots in path order (each linking to its change), and the
-  updated time. A row is `GET /api/chains?status=active`; merged/abandoned
-  tips drop off (visible only with `status=all`). A partially-landed stack
-  stays — any one live member keeps it on the page.
-- `/chains/:tip_change_id` **Chain** — the derived path through that tip,
-  one row per member: position (0-based), subject, short sha, status chip,
-  the pinned revision (`r{n}`), and activity counts (comments / drafts /
-  unresolved). A member pinned to an older patchset than its latest carries a
-  `NEWER ELSEWHERE` badge; one whose newer revision landed on the canonical
-  branch carries `MERGED ELSEWHERE`. Header is the tip name + state badge +
-  `PARTIAL`; the subtitle links back via `repo_id` and shows `base_branch`.
-  There is no orphaned-changes section — a change no tip reaches is simply off
-  every path (reachable by id).
+- `/repos/:id` **Dashboard** — the repo's chains as collapsible drawers, one
+  per derived **tip**. The drawer header is the summary: best-effort name
+  (resolved server-side at query time), state badge (`WAITING FOR REVIEW`
+  amber / `AGENT'S TURN` blue / `APPROVED` green / `MERGED` gray, plus a gray
+  `PARTIAL` while the agent is still pushing), a status-dot preview of the
+  path in order, and the updated time. Expanding a drawer reveals the chain's
+  changes in place — one row per member: position (0-based), subject, short
+  sha, status chip, the pinned revision (`r{n}`), and activity counts
+  (comments / drafts / unresolved). A member pinned to an older patchset than
+  its latest carries a `NEWER ELSEWHERE` badge; one whose newer revision
+  landed on the canonical branch carries `MERGED ELSEWHERE`. The list is `GET
+/api/chains?status=active`, whose `ChainSummary.path` already carries every
+  member entry — the drawer renders from it with no further fetch.
+  Merged/abandoned tips drop off (visible only with `status=all`); a
+  partially-landed stack stays — any one live member keeps it on the page. A
+  drawer opens (and scrolls into view) when deep-linked as `#chain-<tip>` —
+  the review breadcrumb's chain link and the post-review "back to the chain"
+  jump both target it. There is no orphaned-changes section — a change no tip
+  reaches is simply off every path (reachable by id).
 - `/changes/:id` **Review** (the core view):
   - **Revision & chain context**: the page reads `?revision=N` (default: the
     change's latest). The selected patchset's `parent_sha` determines the

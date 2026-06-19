@@ -130,7 +130,7 @@ ChainSummary = {
   "name": "feat/x",              // best-effort, resolved at query time (below)
   "state": "waiting_for_review", // derived — see state table
   "partial": false,              // the tip's latest revision is partial
-  "web_url": "http://127.0.0.1:8877/chains/12",
+  "web_url": "http://127.0.0.1:8877/repos/1#chain-12", // repo page, drawer open
   "updated_at": "…",             // newest member entry's time
   "path": [PathEntry]            // oldest-first, base → tip
 }
@@ -590,5 +590,5 @@ stack visible.
 ## Static UI
 
 Everything outside `/api` serves the built SPA (`--web-dist`/`$NIT_WEB_DIST`),
-falling back to `index.html` for client-side routes (`/chains/12`,
+falling back to `index.html` for client-side routes (`/repos/1`,
 `/changes/10`).

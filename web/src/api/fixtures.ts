@@ -1931,7 +1931,7 @@ function chainSummary(tip: TipRecord): ChainSummary {
     name: tip.name,
     state: chainState(tip, path),
     partial: tip.partial,
-    web_url: `${WEB_BASE}/chains/${tip.tip_change_id}`,
+    web_url: `${WEB_BASE}/repos/${tip.repo_id}#chain-${tip.tip_change_id}`,
     updated_at: newestEntryTime(path),
     path,
   };
@@ -1947,7 +1947,7 @@ function chainView(tip: TipRecord): Chain {
     base_branch: repo?.base_branch ?? "main",
     state: chainState(tip, path),
     partial: tip.partial,
-    web_url: `${WEB_BASE}/chains/${tip.tip_change_id}`,
+    web_url: `${WEB_BASE}/repos/${tip.repo_id}#chain-${tip.tip_change_id}`,
     path,
   };
 }
@@ -1989,7 +1989,7 @@ function chainsThrough(c: ChangeRecord): ChainRef[] {
       tip_change_id: tip.tip_change_id,
       revision: member.revision,
       name: tip.name,
-      web_url: `${WEB_BASE}/chains/${tip.tip_change_id}`,
+      web_url: `${WEB_BASE}/repos/${c.repo_id}#chain-${tip.tip_change_id}`,
     });
   }
   return refs;

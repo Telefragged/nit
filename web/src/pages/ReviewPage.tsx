@@ -630,7 +630,9 @@ export default function ReviewPage() {
             <Link to={`/repos/${change.repo_id}`}>repo {change.repo_id}</Link>
             <span className="sep">/</span>
             {chain ? (
-              <Link to={`/chains/${chain.tip_change_id}`}>{chain.name}</Link>
+              <Link to={`/repos/${chain.repo_id}#chain-${chain.tip_change_id}`}>
+                {chain.name}
+              </Link>
             ) : (
               <span className="dim">chain</span>
             )}

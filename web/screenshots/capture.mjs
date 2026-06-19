@@ -59,12 +59,14 @@ const expandAllFiles = async (page) => {
 const captures = [
   // Main page: the repo registry, one row per repository.
   { name: "repos", path: "/" },
-  // A repo's chain list (the old dashboard, now scoped to /repos/:id).
+  // A repo's chains, each a collapsible drawer; all collapsed by default
+  // (repo 2 = quarry: a request_changes partial + an approved chain).
   { name: "dashboard", path: "/repos/2" },
-  // Chains are addressed by tip change id now: tip 12 (waiting), tip 20
-  // (agent's turn, partial). The chain page renders the derived path.
-  { name: "chain-waiting", path: "/chains/12" },
-  { name: "chain-agents-turn", path: "/chains/20" },
+  // A chain drilled into in place: `#chain-<tip>` opens that drawer to its
+  // changes. Tip 12 (repo 1, waiting); tip 20 (repo 2, partial / agent's
+  // turn) — the other drawer in repo 2 stays collapsed beside it.
+  { name: "chain-waiting", path: "/repos/1#chain-12" },
+  { name: "chain-agents-turn", path: "/repos/2#chain-20" },
   // Change 11 has last_reviewed_revision 0 < latest 1 → interdiff by default.
   { name: "review-interdiff", path: "/changes/11" },
   // Long review cover message expanded via the "more" toggle. Viewport-only
@@ -479,7 +481,10 @@ async function liveCaptures(baseUrl) {
   const caps = [{ name: "live-dashboard", path: "/" }];
   for (const chain of chains) {
     const tip = chain.tip_change_id;
-    caps.push({ name: `live-chain-${tip}`, path: `/chains/${tip}` });
+    caps.push({
+      name: `live-chain-${tip}`,
+      path: `/repos/${chain.repo_id}#chain-${tip}`,
+    });
     for (const ch of chain.path.slice(0, 2)) {
       caps.push({
         name: `live-change-${ch.change_id}`,

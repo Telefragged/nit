@@ -350,16 +350,55 @@ table.list tbody tr:hover {
   white-space: nowrap;
 }
 
-/* ----------------------------------------------------------- chain page */
+/* ------------------------------------------------------- chain drawers */
+/* A repo's chains as collapsible drawers: a summary header expands in place
+   to the chain's changes (the former chain page). */
 
-.chain-header {
+.chain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chain-drawer {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.chain-drawer-head {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  background: var(--bg-raised);
+  border: none;
+  cursor: pointer;
 }
 
-.chain-header h1 {
-  font-family: var(--mono);
+.chain-drawer-head:hover {
+  background: var(--bg-hover);
+}
+
+.chain-drawer-head .chain-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.chain-drawer-head .spacer {
+  flex: 1;
+}
+
+/* The drawer already frames the changes; drop the table's own border and
+   round corners, keeping only the seam under the header. */
+.chain-drawer .changes-table {
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
 }
 
 .pos-cell {

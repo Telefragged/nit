@@ -5,7 +5,6 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import App from "./App.tsx";
 import RepoList from "./pages/RepoList.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
-import ChainPage from "./pages/ChainPage.tsx";
 import ReviewPage from "./pages/ReviewPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import "./styles.css";
@@ -27,7 +26,6 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <RepoList /> },
       { path: "repos/:repoId", element: <Dashboard /> },
-      { path: "chains/:id", element: <ChainPage /> },
       { path: "changes/:id", element: <ReviewPage /> },
       { path: "*", element: <NotFound /> },
     ],
