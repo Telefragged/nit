@@ -1309,7 +1309,7 @@ fn sweep_lifecycle(state: &Arc<AppState>) {
             continue;
         };
         let view = state.repo_view(repo_id);
-        for change_id in live_change_ids(&view, repo_id) {
+        for change_id in live_change_ids(&view) {
             let Some(entry) = state.change_entry(change_id) else {
                 continue;
             };
@@ -1329,14 +1329,11 @@ fn sweep_lifecycle(state: &Arc<AppState>) {
     }
 }
 
-/// Change ids of `repo_id` that are not terminal (the timer's working set).
-fn live_change_ids(view: &RepoView, repo_id: u64) -> Vec<u64> {
+/// Change ids in `view` that are not terminal (the timer's working set).
+fn live_change_ids(view: &RepoView) -> Vec<u64> {
     view.change_ids()
         .into_iter()
-        .filter(|id| {
-            view.change(*id)
-                .is_some_and(|c| c.repo_id == repo_id && !c.is_terminal())
-        })
+        .filter(|id| view.change(*id).is_some_and(|c| !c.is_terminal()))
         .collect()
 }
 
