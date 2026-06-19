@@ -1,37 +1,7 @@
-import type { ChainState, ChangeStatus } from "../api/types";
+import type { ChangeStatus } from "../api/types";
 
 // Color discipline (docs/frontend.md): amber = needs reviewer, blue = agent
 // working, green = approved/ready, red = changes requested, gray = inert.
-
-const STATE_LABEL: Record<ChainState, string> = {
-  waiting_for_review: "WAITING FOR REVIEW",
-  agents_turn: "AGENT'S TURN",
-  approved: "APPROVED",
-  merged: "MERGED",
-};
-
-const STATE_COLOR: Record<ChainState, string> = {
-  waiting_for_review: "amber",
-  agents_turn: "blue",
-  approved: "green",
-  merged: "gray",
-};
-
-export function StateBadge({ state }: { state: ChainState }) {
-  return (
-    <span className={`badge badge-${STATE_COLOR[state]}`}>
-      {STATE_LABEL[state]}
-    </span>
-  );
-}
-
-/**
- * Sticky partial-chain marker: the agent is still pushing commits.
- * Informational, not a call to action — gray, never amber.
- */
-export function PartialBadge() {
-  return <span className="badge badge-gray">PARTIAL</span>;
-}
 
 /**
  * A path member whose change has a newer patchset on another chain (the path
