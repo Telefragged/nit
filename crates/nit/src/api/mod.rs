@@ -138,19 +138,14 @@ fn change_or_404(state: &Arc<AppState>, change_id: u64) -> Result<Arc<ChangeEntr
         .ok_or_else(|| Error::not_found(format!("change {change_id} not found")))
 }
 
-/// The repo handle + canonical branch for a change.
-fn repo_of_change(
-    state: &Arc<AppState>,
-    entry: &ChangeEntry,
-) -> Result<(Repository, String), Error> {
+/// The git handle for a change's repo.
+fn repo_of_change(state: &Arc<AppState>, entry: &ChangeEntry) -> Result<Repository, Error> {
     let repo_id = entry.read().repo_id;
     let repo = state
         .repo_state(repo_id)
         .ok_or_else(|| Error::internal(format!("repo {repo_id} not loaded")))?;
-    let git_dir = repo.git_dir();
-    let handle = Repository::open(&git_dir)
-        .map_err(|e| Error::internal(format!("cannot open the repository: {e}")))?;
-    Ok((handle, repo.base_branch.clone()))
+    Repository::open(repo.git_dir())
+        .map_err(|e| Error::internal(format!("cannot open the repository: {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -491,8 +486,13 @@ async fn get_chain(
     let entry = change_or_404(&state, change_id)?;
     blocking(move || {
         let conn = state.open_db()?;
-        let (repo, base_branch) = repo_of_change(&state, &entry)?;
+        let repo = repo_of_change(&state, &entry)?;
         let repo_id = entry.read().repo_id;
+        let base_branch = state
+            .repo_state(repo_id)
+            .ok_or_else(|| Error::internal(format!("repo {repo_id} not loaded")))?
+            .base_branch
+            .clone();
         let view = state.repo_view(repo_id);
         let revision = q
             .revision
@@ -563,7 +563,7 @@ fn change_detail_json(
     entry: &ChangeEntry,
     id: u64,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    let (repo, _) = repo_of_change(state, entry)?;
+    let repo = repo_of_change(state, entry)?;
     let repo_id = entry.read().repo_id;
     let view = state.repo_view(repo_id);
     let change = view
