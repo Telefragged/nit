@@ -35,8 +35,6 @@ const EVENTS_BUFFER: usize = 256;
 
 pub struct AppState {
     pub db_path: PathBuf,
-    /// `http://<listen addr>` — prefix of every `web_url`.
-    pub public_base: String,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
     changes: StdMutex<HashMap<u64, Arc<ChangeEntry>>>,
     /// Process-global allocator for fold-assigned ids (reviews, drafts). Change
@@ -125,7 +123,7 @@ impl AppState {
     ///
     /// # Errors
     /// When the database can't be opened or a log fails to replay.
-    pub fn load(db_path: PathBuf, public_base: String) -> anyhow::Result<Arc<Self>> {
+    pub fn load(db_path: PathBuf) -> anyhow::Result<Arc<Self>> {
         let conn = db::open(&db_path)?;
         let mut max_id = db::max_draft_id(&conn)?;
         let mut changes = HashMap::new();
@@ -142,7 +140,6 @@ impl AppState {
         let (shutdown, _) = watch::channel(false);
         Ok(Arc::new(AppState {
             db_path,
-            public_base,
             repos: StdMutex::new(repos),
             changes: StdMutex::new(changes),
             next_id: AtomicU64::new(max_id + 1),

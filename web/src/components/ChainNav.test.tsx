@@ -51,7 +51,6 @@ const chain: Chain = {
   base_branch: "main",
   state: "waiting_for_review",
   partial: false,
-  web_url: "http://x/repos/1#chain-12",
   path: [
     member(10, 0, "first change", "approved"),
     member(11, 1, "second change", "changes_requested", 2, {

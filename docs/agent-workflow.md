@@ -54,7 +54,7 @@ repo=$(pwd); branch=$(git branch --show-current)   # both required on push
 
 # after EVERY completed commit (green, formatter-clean, one concern, Change-Id'd):
 nit push --partial --repo "$repo" --branch "$branch"   # register/refresh
-#   first push creates the change(s) and the chain — report the chain web_url now
+#   first push creates the change(s) and the chain — review starts here, on commit one
 nit ready --repo "$repo" --branch "$branch"            # last commit done: clears partial
 
 # then read the chain and act on feedback:
@@ -222,7 +222,7 @@ itself.)
   the git-common-dir, the branch is the tip; no cwd fallback, or a stray push
   forks against the wrong repo. Defaults: base `main`, server `$NIT_SERVER` or
   `http://127.0.0.1:8877`. Prints the `PushResult` (the tip change + the derived
-  chain with its `web_url`). Idempotent — a re-push where nothing moved records
+  chain). Idempotent — a re-push where nothing moved records
   nothing and succeeds (200); a structural fault is a 400, a revision to an
   abandoned change a 409. `--partial` is sticky (a plain push never clears it).
   No cursor returned.

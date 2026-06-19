@@ -94,8 +94,7 @@ cursor=0            # 0-based: the count of log entries you've consumed
 repo=$(pwd); branch=$(git branch --show-current)   # push/ready need both
 # after EVERY completed commit (green, treefmt-clean, one concern, Change-Id'd):
 nit push --partial --repo "$repo" --branch "$branch"  # register/refresh, partial
-# → FIRST push: report web_url to the user now — review starts on
-#   commit one, not when the branch is done
+# → FIRST push starts review on commit one, not when the branch is done
 # after the LAST commit:
 nit ready --repo "$repo" --branch "$branch"   # clears partial; reach approved
 nit wait $cursor    # blocks until entries land beyond $cursor; prints JSON

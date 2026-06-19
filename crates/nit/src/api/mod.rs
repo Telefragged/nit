@@ -118,7 +118,7 @@ pub async fn serve_on(
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
-    let state = AppState::load(db_path, format!("http://{addr}"))?;
+    let state = AppState::load(db_path)?;
     tracing::info!("listening on http://{addr}");
     let timer = tokio::spawn(run_lifecycle_timer(state.clone()));
     let st = state.clone();
@@ -395,7 +395,6 @@ async fn push(
             &conn,
             &repo,
             &view,
-            &state.public_base,
             repo_row.id,
             &repo_row.base_branch,
             &tip_sha,
@@ -457,12 +456,7 @@ async fn list_chains(
             };
             for tip in tips {
                 chains.push(views::build_chain_summary(
-                    &conn,
-                    &repo,
-                    &view,
-                    &state.public_base,
-                    repo_id,
-                    &tip,
+                    &conn, &repo, &view, repo_id, &tip,
                 )?);
             }
         }
@@ -505,7 +499,6 @@ async fn get_chain(
             &conn,
             &repo,
             &view,
-            &state.public_base,
             repo_id,
             &base_branch,
             &tip_sha,
@@ -568,11 +561,7 @@ fn change_detail_json(
         .change(id)
         .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
     Ok(Json(views::build_change_detail(
-        conn,
-        &repo,
-        &view,
-        &state.public_base,
-        change,
+        conn, &repo, &view, change,
     )?))
 }
 

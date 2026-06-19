@@ -149,7 +149,6 @@ ChainSummary = {
   "name": "feat/x",              // best-effort, resolved at query time (below)
   "state": "waiting_for_review", // derived — see state table
   "partial": false,              // the tip's latest revision is partial
-  "web_url": "http://127.0.0.1:8877/repos/1#chain-12", // repo page, drawer open
   "updated_at": "…",             // newest member entry's time
   "path": [PathEntry]            // oldest-first, base → tip
 }
@@ -160,7 +159,6 @@ Chain = {
   "base_branch": "main",
   "state": "waiting_for_review",
   "partial": false,
-  "web_url": "…",
   "path": [PathEntry]
 }
 PathEntry = {
@@ -237,8 +235,7 @@ patchset — and chain context — you view.
               "created_at": "…"}
   Review   = {"id": 5, "revision": 2, "verdict": "request_changes",
               "message": "cover message", "created_at": "…"}
-  ChainRef = {"tip_change_id": 12, "revision": 2,
-              "name": "feat/x", "web_url": "…"}
+  ChainRef = {"tip_change_id": 12, "revision": 2, "name": "feat/x"}
   StagedDecision = {"decision": "approve",   // Decision: approve | request_changes
                     "message": "cover note"} //   | comment | abandon | reopen
   ```

@@ -84,7 +84,6 @@ export interface ChainSummary {
   state: ChainState;
   /** The tip's latest revision is partial. */
   partial: boolean;
-  web_url: string;
   /** Newest member-entry time across the path. */
   updated_at: string;
   /** Oldest-first, base → tip. */
@@ -104,7 +103,6 @@ export interface Chain {
   base_branch: string;
   state: ChainState;
   partial: boolean;
-  web_url: string;
   path: PathEntry[];
 }
 
@@ -113,7 +111,6 @@ export interface ChainRef {
   tip_change_id: number;
   revision: number;
   name: string;
-  web_url: string;
 }
 
 // ---------------------------------------------------------------------------

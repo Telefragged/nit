@@ -1906,8 +1906,6 @@ function publishMember(
 // ---------------------------------------------------------------------------
 // Derivations (status, counts, chain state, path) so mutations stay consistent
 
-const WEB_BASE = "http://127.0.0.1:8877";
-
 /** The commit-sha → (change, revision) index — the basis for the SHA-walk
  * that derives every chain path (docs/api.md "Chains"). */
 const shaIndex = new Map<
@@ -2055,7 +2053,6 @@ function chainSummary(tip: TipRecord): ChainSummary {
     name: tip.name,
     state: chainState(tip, path),
     partial: tip.partial,
-    web_url: `${WEB_BASE}/repos/${tip.repo_id}#chain-${tip.tip_change_id}`,
     updated_at: newestEntryTime(path),
     path,
   };
@@ -2071,7 +2068,6 @@ function chainView(tip: TipRecord): Chain {
     base_branch: repo?.base_branch ?? "main",
     state: chainState(tip, path),
     partial: tip.partial,
-    web_url: `${WEB_BASE}/repos/${tip.repo_id}#chain-${tip.tip_change_id}`,
     path,
   };
 }
@@ -2113,7 +2109,6 @@ function chainsThrough(c: ChangeRecord): ChainRef[] {
       tip_change_id: tip.tip_change_id,
       revision: member.revision,
       name: tip.name,
-      web_url: `${WEB_BASE}/repos/${c.repo_id}#chain-${tip.tip_change_id}`,
     });
   }
   return refs;

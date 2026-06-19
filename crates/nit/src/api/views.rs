@@ -41,7 +41,6 @@ pub fn build_chain_summary(
     conn: &Connection,
     repo: &Repository,
     view: &RepoView,
-    public_base: &str,
     repo_id: u64,
     tip_sha: &str,
 ) -> Result<types::ChainSummary> {
@@ -54,7 +53,6 @@ pub fn build_chain_summary(
         name: tip_name(repo, view, &path),
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
-        web_url: format!("{public_base}/repos/{repo_id}#chain-{tip_change_id}"),
         updated_at: path_updated_at(view, &path),
         path: entries,
     })
@@ -68,7 +66,6 @@ pub fn build_chain(
     conn: &Connection,
     repo: &Repository,
     view: &RepoView,
-    public_base: &str,
     repo_id: u64,
     base_branch: &str,
     tip_sha: &str,
@@ -83,7 +80,6 @@ pub fn build_chain(
         base_branch: base_branch.to_string(),
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
-        web_url: format!("{public_base}/repos/{repo_id}#chain-{tip_change_id}"),
         path: entries,
     })
 }
@@ -262,7 +258,6 @@ pub fn build_change_detail(
     conn: &Connection,
     repo: &Repository,
     view: &RepoView,
-    public_base: &str,
     change: &ChangeProj,
 ) -> Result<types::ChangeDetail> {
     let revisions: Vec<types::Revision> = change.revisions.iter().map(revision_json).collect();
@@ -287,10 +282,6 @@ pub fn build_change_detail(
             tip_change_id: hit.tip_change_id,
             revision: hit.revision,
             name: tip_name(repo, view, &hit.path),
-            web_url: format!(
-                "{public_base}/repos/{}#chain-{}",
-                change.repo_id, hit.tip_change_id
-            ),
         })
         .collect();
     let draft_decision = db::get_draft_review(conn, change.id)?.map(|r| types::StagedDecision {

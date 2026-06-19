@@ -112,7 +112,6 @@ pub struct ChainSummary {
     pub state: ChainState,
     /// The tip's latest revision is partial.
     pub partial: bool,
-    pub web_url: String,
     /// Newest member-entry time across the path.
     pub updated_at: String,
     /// Oldest-first, base → tip.
@@ -133,7 +132,6 @@ pub struct Chain {
     pub base_branch: String,
     pub state: ChainState,
     pub partial: bool,
-    pub web_url: String,
     pub path: Vec<PathEntry>,
 }
 
@@ -180,7 +178,6 @@ pub struct ChainRef {
     pub tip_change_id: u64,
     pub revision: u64,
     pub name: String,
-    pub web_url: String,
 }
 
 // ---------------------------------------------------------------------------
