@@ -282,14 +282,11 @@ pub fn build_change_detail(
     let chains = view
         .chains_through(change.id)
         .into_iter()
-        .map(|hit| {
-            let path = view.path_from_tip(&tip_sha_of(view, hit.tip_change_id));
-            types::ChainRef {
-                tip_change_id: hit.tip_change_id,
-                revision: hit.revision,
-                name: tip_name(repo, view, &path),
-                web_url: format!("{public_base}/chains/{}", hit.tip_change_id),
-            }
+        .map(|hit| types::ChainRef {
+            tip_change_id: hit.tip_change_id,
+            revision: hit.revision,
+            name: tip_name(repo, view, &hit.path),
+            web_url: format!("{public_base}/chains/{}", hit.tip_change_id),
         })
         .collect();
     Ok(types::ChangeDetail {
@@ -304,14 +301,6 @@ pub fn build_change_detail(
         reviews,
         chains,
     })
-}
-
-/// The tip commit-sha of a tip change (its latest revision).
-fn tip_sha_of(view: &RepoView, tip_change_id: u64) -> String {
-    view.change(tip_change_id)
-        .and_then(ChangeProj::latest_revision)
-        .map(|r| r.commit_sha.clone())
-        .unwrap_or_default()
 }
 
 #[must_use]

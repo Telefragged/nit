@@ -19,11 +19,13 @@ pub struct PathMember {
 }
 
 /// A tip whose path walks through some change, plus the revision it pins there
-/// — drives `ChangeDetail.chains`.
-#[derive(Debug, Clone, Copy)]
+/// and the path the walk produced (so callers needn't re-walk) — drives
+/// `ChangeDetail.chains`.
+#[derive(Debug, Clone)]
 pub struct ChainHit {
     pub tip_change_id: u64,
     pub revision: u64,
+    pub path: Vec<PathMember>,
 }
 
 /// A read-time view over one repo's changes: owned snapshots plus the
@@ -148,13 +150,18 @@ impl RepoView {
         let mut hits = Vec::new();
         for tip in self.enumerable_tips() {
             let path = self.path_from_tip(&tip);
-            let Some(member) = path.iter().find(|m| m.change_id == change_id) else {
+            let Some(revision) = path
+                .iter()
+                .find(|m| m.change_id == change_id)
+                .map(|m| m.revision)
+            else {
                 continue;
             };
             let tip_change_id = path.last().map_or(change_id, |m| m.change_id);
             hits.push(ChainHit {
                 tip_change_id,
-                revision: member.revision,
+                revision,
+                path,
             });
         }
         hits
