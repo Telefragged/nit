@@ -28,6 +28,17 @@ pub struct ChainHit {
     pub path: Vec<PathMember>,
 }
 
+/// One node of the graph's open region: an active change pinned at the
+/// revision its tip walked, plus the commit it parents onto (docs/api.md
+/// "Graph").
+#[derive(Debug, Clone)]
+pub struct OpenNode {
+    pub change_id: u64,
+    pub revision: u64,
+    pub commit_sha: String,
+    pub parent_sha: String,
+}
+
 /// A read-time view over one repo's changes: owned snapshots plus the
 /// commit-sha → `(change_id, revision number)` index built from them. All
 /// chain derivation is a pure function of this view, so it holds no locks and
@@ -143,6 +154,42 @@ impl RepoView {
         path
     }
 
+    /// A change by its `Change-Id` key — the graph enriches a merged history
+    /// commit from its commit-message trailer.
+    #[must_use]
+    pub fn change_by_key(&self, key: &str) -> Option<&ChangeProj> {
+        self.changes.values().find(|c| c.change_key == key)
+    }
+
+    /// The graph's **open region** (docs/api.md "Graph"): every active tip
+    /// walked back to its fork, unioned and **deduplicated by commit-sha** —
+    /// a change shared by two tips appears once, while the rare B-in-two-chains
+    /// case (one change live at two revisions) stays two nodes (two shas). In
+    /// tip-walk order, which seeds the graph's row-order tie-break.
+    #[must_use]
+    pub fn open_nodes(&self) -> Vec<OpenNode> {
+        let mut seen = HashSet::new();
+        let mut out = Vec::new();
+        for tip in self.tips() {
+            for m in self.path_from_tip(&tip) {
+                if !seen.insert(m.commit_sha.clone()) {
+                    continue;
+                }
+                let parent_sha = self
+                    .change(m.change_id)
+                    .and_then(|c| c.revision(m.revision))
+                    .map_or_else(String::new, |r| r.parent_sha.clone());
+                out.push(OpenNode {
+                    change_id: m.change_id,
+                    revision: m.revision,
+                    commit_sha: m.commit_sha,
+                    parent_sha,
+                });
+            }
+        }
+        out
+    }
+
     /// The tips whose path walks through `change_id`, each with the revision
     /// that path pins on it.
     #[must_use]
@@ -213,6 +260,67 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     } else {
         ChainState::Approved
     }
+}
+
+/// Row order for the change graph (docs/api.md "Graph"): a topological order
+/// in which every node precedes its parents — children ascend, parents
+/// descend, so the canonical HEAD sits between its open descendants and its
+/// merged ancestors. `nodes` is `(commit_sha, in-set parent shas)` in a stable
+/// input order; the returned shas are top → bottom.
+///
+/// A node's rank is `0` for a leaf, else `1 + max(child rank)`; nodes sort by
+/// `(rank, input order)`. Rank places every parent strictly below its
+/// children and groups a fan-out's branches adjacently; the input-order
+/// tie-break keeps it deterministic.
+#[must_use]
+pub fn graph_row_order(nodes: &[(String, Vec<String>)]) -> Vec<String> {
+    // rank(i) = 0 if no children, else 1 + max(child rank); memoized, cycle-safe.
+    fn rank(
+        i: usize,
+        children: &[Vec<usize>],
+        memo: &mut [Option<u64>],
+        on_stack: &mut [bool],
+    ) -> u64 {
+        if let Some(r) = memo[i] {
+            return r;
+        }
+        if on_stack[i] {
+            return 0; // cycle guard against bad data
+        }
+        on_stack[i] = true;
+        let r = children[i]
+            .iter()
+            .map(|&c| rank(c, children, memo, on_stack))
+            .max()
+            .map_or(0, |m| m + 1);
+        on_stack[i] = false;
+        memo[i] = Some(r);
+        r
+    }
+
+    let index: HashMap<&str, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, (sha, _))| (sha.as_str(), i))
+        .collect();
+    // Invert parents → children, over in-set ids only.
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
+    for (i, (_, parents)) in nodes.iter().enumerate() {
+        for p in parents {
+            if let Some(&pi) = index.get(p.as_str()) {
+                children[pi].push(i);
+            }
+        }
+    }
+
+    let mut memo = vec![None; nodes.len()];
+    let mut on_stack = vec![false; nodes.len()];
+    let ranks: Vec<u64> = (0..nodes.len())
+        .map(|i| rank(i, &children, &mut memo, &mut on_stack))
+        .collect();
+    let mut order: Vec<usize> = (0..nodes.len()).collect();
+    order.sort_by_key(|&i| (ranks[i], i));
+    order.into_iter().map(|i| nodes[i].0.clone()).collect()
 }
 
 #[cfg(test)]
@@ -303,6 +411,71 @@ mod tests {
         let c = change(3, "Ic", vec![rev(0, "C", "B", "m")]);
         let view = RepoView::new(vec![a, b, c]);
         assert_eq!(view.tips(), vec!["C".to_string()]);
+    }
+
+    #[test]
+    fn open_nodes_dedupes_shared_change_keeps_two_revisions() {
+        // The b_in_two_chains topology: B is one change at two patchsets under
+        // two live tips. Open nodes dedupe by sha, so B@rev0 (sha "B") and
+        // B@rev1 (sha "Bp") are two nodes — different commits, different parents.
+        let ca = change(10, "Ia", vec![rev(0, "A", "m", "m")]);
+        let cb = change(
+            11,
+            "Ib",
+            vec![rev(0, "B", "A", "m"), rev(1, "Bp", "D", "m")],
+        );
+        let cc = change(12, "Ic", vec![rev(0, "C", "B", "m")]);
+        let cd = change(13, "Id", vec![rev(0, "D", "m", "m")]);
+        let ce = change(14, "Ie", vec![rev(0, "E", "Bp", "m")]);
+        let view = RepoView::new(vec![ca, cb, cc, cd, ce]);
+
+        let mut shas: Vec<String> = view
+            .open_nodes()
+            .iter()
+            .map(|n| n.commit_sha.clone())
+            .collect();
+        shas.sort();
+        assert_eq!(shas, vec!["A", "B", "Bp", "C", "D", "E"]);
+        // Change 11 (B) appears as two distinct nodes, at rev0 and rev1.
+        let b_nodes: Vec<u64> = view
+            .open_nodes()
+            .iter()
+            .filter(|n| n.change_id == 11)
+            .map(|n| n.revision)
+            .collect();
+        assert_eq!(b_nodes.len(), 2);
+        assert!(b_nodes.contains(&0) && b_nodes.contains(&1));
+    }
+
+    #[test]
+    fn graph_row_order_is_topological_children_before_parents() {
+        // The change-graph mock topology: two open tips (A1, A2) fanning from
+        // A3 → A4 → HEAD, then merged history H → G1 → G2(merge of G3,G4) → G5.
+        let pairs = vec![
+            ("A1".to_string(), vec!["A3".to_string()]),
+            ("A2".to_string(), vec!["A3".to_string()]),
+            ("A3".to_string(), vec!["A4".to_string()]),
+            ("A4".to_string(), vec!["H".to_string()]),
+            ("H".to_string(), vec!["G1".to_string()]),
+            ("G1".to_string(), vec!["G2".to_string()]),
+            ("G2".to_string(), vec!["G3".to_string(), "G4".to_string()]),
+            ("G3".to_string(), vec!["G5".to_string()]),
+            ("G4".to_string(), vec!["G5".to_string()]),
+            ("G5".to_string(), vec![]),
+        ];
+        assert_eq!(
+            graph_row_order(&pairs),
+            vec!["A1", "A2", "A3", "A4", "H", "G1", "G2", "G3", "G4", "G5"]
+        );
+        // Every node precedes each of its parents (None < Some keeps the
+        // comparison honest if a sha is ever missing).
+        let order = graph_row_order(&pairs);
+        let pos = |s: &str| order.iter().position(|x| x == s);
+        for (child, parents) in &pairs {
+            for p in parents {
+                assert!(pos(child) < pos(p), "{child} should precede parent {p}");
+            }
+        }
     }
 
     #[test]

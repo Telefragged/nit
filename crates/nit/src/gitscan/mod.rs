@@ -207,6 +207,63 @@ pub fn landed_revision(repo: &Repository, base_branch: &str, change: &ChangeProj
     }
 }
 
+/// One commit on the canonical branch, for the graph's HEAD anchor and merged
+/// history (docs/api.md "Graph"). `parents` are all parent shas (a merge keeps
+/// both); `change_key` is the commit's `Change-Id` trailer when present, used
+/// to enrich the node from the matching change.
+#[derive(Debug, Clone)]
+pub struct HistoryCommit {
+    pub sha: String,
+    pub parents: Vec<String>,
+    pub subject: String,
+    pub change_key: Option<String>,
+}
+
+/// Walk the canonical branch from its HEAD: the HEAD commit (the graph anchor)
+/// followed by up to `window` ancestor commits, newest-first — the merged
+/// history that descends below HEAD. Topological, so every commit precedes its
+/// parents; a merge keeps both parents (the client draws edges only to the
+/// parents inside the window). The returned bool is `truncated`: the branch has
+/// at least one more merged commit below the window (the client shows an
+/// "earlier history hidden" marker and dangles deep forks to it).
+///
+/// # Errors
+/// When the canonical branch can't be resolved or the walk fails.
+pub fn canonical_history(
+    repo: &Repository,
+    base_branch: &str,
+    window: u64,
+) -> Result<(Vec<HistoryCommit>, bool), String> {
+    let head = resolve_commit(repo, base_branch)?;
+    let mut walk = repo.revwalk().map_err(|e| e.to_string())?;
+    walk.push(head).map_err(|e| e.to_string())?;
+    walk.set_sorting(Sort::TOPOLOGICAL)
+        .map_err(|e| e.to_string())?;
+    // The anchor plus `window` merged commits below it; one more means the
+    // history is truncated.
+    let take = usize::try_from(window)
+        .unwrap_or(usize::MAX)
+        .saturating_add(1);
+    let mut out = Vec::new();
+    let mut truncated = false;
+    for oid in walk {
+        let oid = oid.map_err(|e| e.to_string())?;
+        if out.len() >= take {
+            truncated = true;
+            break;
+        }
+        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+        let message = String::from_utf8_lossy(commit.message_bytes());
+        out.push(HistoryCommit {
+            sha: oid.to_string(),
+            parents: commit.parent_ids().map(|p| p.to_string()).collect(),
+            subject: identity::subject_of(&message),
+            change_key: identity::change_id_trailer(&message),
+        });
+    }
+    Ok((out, truncated))
+}
+
 /// Best-effort display name for a tip commit (docs/data-model.md "Tips"): a
 /// local branch pointing exactly at it, else one that contains it, else
 /// `None` (the caller falls back to the commit subject). nit stores no branch

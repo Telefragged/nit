@@ -55,6 +55,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health", get(health))
         .route("/api/repos", get(list_repos))
         .route("/api/repos/{id}", patch(relocate_repo))
+        .route("/api/repos/{id}/graph", get(repo_graph))
         .route("/api/push", post(push))
         .route("/api/chains", get(list_chains))
         .route("/api/chains/{id}", get(get_chain))
@@ -516,6 +517,41 @@ async fn list_chains(
             }
         }
         Ok(Json(types::ChainList { chains }))
+    })
+    .await
+}
+
+/// Default merged-history window for the change graph (docs/api.md "Graph").
+const DEFAULT_MERGED_WINDOW: u64 = 5;
+
+#[derive(Deserialize)]
+struct GraphQuery {
+    merged_window: Option<u64>,
+}
+
+/// The repo's spine-centered change graph (docs/api.md "Graph").
+async fn repo_graph(
+    State(state): State<Arc<AppState>>,
+    AppPath(repo_id): AppPath<u64>,
+    AppQuery(q): AppQuery<GraphQuery>,
+) -> Result<Json<types::RepoGraph>, Error> {
+    blocking(move || {
+        let repo_state = state
+            .repo_state(repo_id)
+            .ok_or_else(|| Error::not_found(format!("no such repo: {repo_id}")))?;
+        let conn = state.open_db()?;
+        let repo = Repository::open(repo_state.git_dir())
+            .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
+        let view = state.repo_view(repo_id);
+        let window = q.merged_window.unwrap_or(DEFAULT_MERGED_WINDOW);
+        Ok(Json(views::build_graph(
+            &conn,
+            &repo,
+            &view,
+            repo_id,
+            &repo_state.base_branch,
+            window,
+        )?))
     })
     .await
 }
