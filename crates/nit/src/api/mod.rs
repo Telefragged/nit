@@ -269,6 +269,17 @@ async fn push(
 
         let walk =
             gitscan::walk_push(&canonical, &req.base, &req.tip).map_err(Error::bad_request)?;
+        // A tip that is ancestor-or-equal of the base walks to nothing: the work
+        // already landed (or you pushed the base itself). Reject it loudly rather
+        // than recording nothing, so a stray push of a merged commit is a visible
+        // mistake, not a silent no-op (docs/data-model.md "Push").
+        if walk.commits.is_empty() {
+            return Err(Error::conflict(format!(
+                "tip {} is already merged into '{}' — no commits to review",
+                gitscan::short_sha(&walk.fork_sha),
+                req.base
+            )));
+        }
         let repo_row = db::get_or_create_repo(&conn, &canonical, &req.base)?;
         state.ensure_repo(&repo_row);
         let repo = Repository::open(&canonical)
@@ -373,20 +384,24 @@ async fn push(
             }
         }
 
-        // Build the result from the derived chain rooted at the tip.
+        // Build the result from the derived chain rooted at the tip. The
+        // empty-walk guard above guarantees at least one target.
         let view = state.repo_view(repo_row.id);
-        let tip_change = targets.last().map(|t| {
-            let proj = t.entry.read();
+        let tip = targets
+            .last()
+            .expect("the empty-walk guard guarantees at least one target");
+        let tip_change = {
+            let proj = tip.entry.read();
             let rev = proj.latest_revision();
             types::TipChange {
-                change_id: t.change_id,
+                change_id: tip.change_id,
                 change_key: proj.change_key.clone(),
                 revision: rev.map_or(0, |r| r.number),
                 status: rev.map_or(crate::enums::ChangeStatus::Pending, |r| {
                     proj.status_at(r.number)
                 }),
             }
-        });
+        };
         let tip_sha = walk
             .commits
             .last()

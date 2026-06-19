@@ -84,9 +84,9 @@ pub struct PushRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushResult {
-    /// The pushed tip change, at the revision this push gave it. `None` when
-    /// the push walked to nothing (tip ancestor-or-equal of base).
-    pub tip_change: Option<TipChange>,
+    /// The pushed tip change, at the revision this push gave it. Always
+    /// present — a push that walks to nothing is rejected (409).
+    pub tip_change: TipChange,
     /// The derived path, tip-rooted (each member at this push's revision).
     pub chain: Chain,
 }

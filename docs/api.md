@@ -87,8 +87,9 @@ Repo = {
   `partial` is optional and sticky: `true` marks the tip's latest revision
   partial (`nit push --partial`), `false` clears it (`nit ready`), absent
   leaves it unchanged. A push that walks to nothing (`tip` is ancestor-or-equal
-  of `base`) is valid and records nothing. A re-push where nothing moved is
-  **idempotent** (200), so a crash-retry is safe.
+  of `base`) is a **409** — the tip is already merged into the base (or is the
+  base itself), so there is nothing to review. A re-push where the walk is
+  non-empty but nothing moved is **idempotent** (200), so a crash-retry is safe.
 
 ```json
 PushResult = {

@@ -350,8 +350,10 @@ upsert keyed by its `Change-Id`.
    **and** message unchanged — a reword resets, it is reviewable as
    `/COMMIT_MSG`). A keep ref is ensured for each new revision.
 
-A push that walks to nothing (`tip` ancestor-or-equal of `base`) is valid and
-records nothing. **Idempotency**: re-applying the same `(change_id, idx)` is a
+A push that walks to nothing (`tip` ancestor-or-equal of `base`) is a **409**:
+the tip is already merged into the base (or is the base itself), so there is
+nothing to review — a stray push of a landed commit is a visible error, not a
+silent no-op. **Idempotency**: re-applying the same `(change_id, idx)` is a
 no-op at the storage layer, so a crash-retry is safe. `partial` is sticky:
 present, it re-stamps the tip's latest revision (a push where nothing moved but
 `partial` flips is exactly `nit ready`); absent, the tip inherits its prior

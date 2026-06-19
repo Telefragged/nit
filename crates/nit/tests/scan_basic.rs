@@ -204,6 +204,29 @@ fn merge_commit_rejects_the_push() {
 }
 
 #[test]
+fn already_merged_commit_rejects_the_push() {
+    // A tip that is ancestor-or-equal of the base walks to nothing — the work
+    // already landed. The push fails (409) rather than silently recording
+    // nothing (docs/data-model.md "Push").
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    // The commit has landed: the canonical branch and the tip both point at it.
+    g.branch("main", c1);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, e) = push(&server, &g, "feat", "main", None);
+    assert_eq!(st, 409, "{e}");
+    assert!(
+        e["error"].as_str().unwrap().contains("already merged"),
+        "{e}"
+    );
+    // All-or-nothing: nothing — not even the repo — was recorded.
+    let (_, list) = http_get(&server.url("/api/chains"));
+    assert!(list["chains"].as_array().unwrap().is_empty(), "{list}");
+}
+
+#[test]
 fn missing_change_id_rejects_the_push() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], "no trailer here\n", &[("a.rs", "a\n")]);
