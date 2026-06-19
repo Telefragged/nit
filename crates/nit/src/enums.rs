@@ -245,6 +245,19 @@ pub enum ChainState {
     Approved,
 }
 
+/// Which region of the change graph a node sits in (docs/api.md "Graph"):
+/// `open` ascends above the canonical HEAD, `head` is the HEAD anchor, and
+/// `history` descends below it (merged commits, fading with depth). The client
+/// styles a node by its `section` first (head → ring, history → grey/fade),
+/// falling back to its `ChangeStatus` for open nodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphSection {
+    Open,
+    Head,
+    History,
+}
+
 /// `DiffFile.status` — how a file changed between the two diffed trees
 /// (docs/api.md "Diff").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
