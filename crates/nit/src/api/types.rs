@@ -452,13 +452,12 @@ pub struct NewParent {
     pub parent: u64,
 }
 
-/// A client → server websocket message: subscribe a set of changes (each from
-/// an idx) or unsubscribe some. Externally tagged. The subscribe map keys are
-/// **strings** — serde cannot deserialize integer map keys through the
-/// content-buffering an internally-tagged/untagged enum needs.
+/// A client → server websocket message: subscribe a set of changes, each from
+/// an idx. Externally tagged. The map keys are **strings** — serde cannot
+/// deserialize integer map keys through the content-buffering an
+/// internally-tagged/untagged enum needs.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ClientMsg {
     Subscribe(std::collections::HashMap<String, u64>),
-    Unsubscribe(Vec<u64>),
 }

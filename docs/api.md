@@ -517,13 +517,12 @@ membership; the server tracks only the subscription set — no per-follower
 chain, no resubscribe bookkeeping.
 
 - `WS /api/stream?repo={id}` — the client-driven change stream. The client
-  drives membership over the open socket; the server emits **only** entries
-  for currently-subscribed changes.
+  builds its subscription over the open socket; the server emits **only**
+  entries for currently-subscribed changes.
 
   ```jsonc
   // client → server
-  {"subscribe":   {"10": 4, "11": 0}}   // change_id → from-idx: replay [from, head) then stream live
-  {"unsubscribe": [13]}                 // drop a change
+  {"subscribe": {"10": 4, "11": 0}}   // change_id → from-idx: replay [from, head) then stream live
   // server → client
   {"change_id": 10, "idx": 5, "seq": 412, "kind": "review", "created_at": "…", "payload": {…}}
   {"new_parent": {"of": 10, "parent": 9}}    // out-of-log: 10's tip re-rooted onto change 9
@@ -532,11 +531,11 @@ chain, no resubscribe bookkeeping.
   A `subscribe` arms the change's live feed **before** replaying its
   `[from, head)` backlog, then drops live entries with
   `idx < last_backlog_idx + 1` — the arm/read overlap is a duplicate the
-  watermark suppresses, never a gap. An `unsubscribe` drops the change from
-  the joined set. The server joins the subscribed changes' per-change feeds in
-  a keyed dynamic-membership map (`tokio-stream`'s `StreamMap`); there is no
-  per-chain channel and no server-side chain — following a whole chain is the
-  client subscribing to each member.
+  watermark suppresses, never a gap. The server joins the subscribed changes'
+  per-change feeds in a keyed dynamic-membership map (`tokio-stream`'s
+  `StreamMap`); there is no per-chain channel and no server-side chain —
+  following a whole chain is the client subscribing to each member, and a
+  follower drops the whole set by closing the socket.
 
   The **only** non-log message is `new_parent` (out-of-log, no `idx`/`seq`):
   when a change's tip re-roots onto a new parent, the client re-derives its
@@ -546,7 +545,7 @@ chain, no resubscribe bookkeeping.
 
 ```jsonc
 TaggedLogEntry = {"change_id": 10, "idx": 5, "seq": 412, "kind": "…", "created_at": "…", "payload": {…}}
-ClientMsg      = {"subscribe": {"<id>": <from-idx>, …}} | {"unsubscribe": [<id>, …]}
+ClientMsg      = {"subscribe": {"<id>": <from-idx>, …}}
 NewParent      = {"new_parent": {"of": 10, "parent": 9}}
 ```
 

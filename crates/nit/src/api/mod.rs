@@ -1148,10 +1148,10 @@ async fn stream(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> imp
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-/// Drive one follower's socket: subscribe/unsubscribe drive a keyed
-/// `StreamMap` of per-change feeds (dynamic membership); a `subscribe` arms the
-/// feed **before** replaying the change's `[from, head)` backlog and records an
-/// idx watermark so the arm/read overlap is deduped, never gapped.
+/// Drive one follower's socket: `subscribe` messages drive a keyed
+/// `StreamMap` of per-change feeds (dynamic membership); each arms the feed
+/// **before** replaying the change's `[from, head)` backlog and records an idx
+/// watermark so the arm/read overlap is deduped, never gapped.
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let mut feeds: StreamMap<u64, Receiver<StreamMsg>> = StreamMap::new();
     let mut watermark: HashMap<u64, u64> = HashMap::new();
@@ -1219,12 +1219,6 @@ async fn apply_client_msg(
                     send_json(socket, &StreamMsg::Entry(e.clone())).await?;
                 }
                 watermark.insert(change_id, next);
-            }
-        }
-        types::ClientMsg::Unsubscribe(ids) => {
-            for id in ids {
-                feeds.remove(&id);
-                watermark.remove(&id);
             }
         }
     }
