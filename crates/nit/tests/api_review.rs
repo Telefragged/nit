@@ -91,7 +91,6 @@ fn review_drains_drafts_and_sets_status() {
     assert_eq!(post["reviews"][0]["revision"], 0);
     assert_eq!(post["reviews"][0]["verdict"], "request_changes");
     assert_eq!(post["reviews"][0]["message"], "a few nits");
-    assert_eq!(post["last_reviewed_revision"], 0);
     // The verdict is the displayed status at (change, rev 0): visible on the path.
     let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
     let member = chain["path"]

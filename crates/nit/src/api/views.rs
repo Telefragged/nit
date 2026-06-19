@@ -293,7 +293,6 @@ pub fn build_change_detail(
         repo_id: change.repo_id,
         change_key: change.change_key.clone(),
         subject,
-        last_reviewed_revision: change.last_reviewed_revision(),
         revisions,
         threads,
         drafts,

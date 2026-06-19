@@ -121,7 +121,6 @@ export interface ChangeDetail {
   repo_id: number;
   change_key: string;
   subject: string;
-  last_reviewed_revision: number | null;
   /** Ascending. */
   revisions: Revision[];
   /** Published threads, all revisions; clients filter by the viewing revision. */

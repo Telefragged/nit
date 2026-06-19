@@ -132,7 +132,6 @@ interface ChangeRecord {
   repo_id: number;
   change_key: string;
   subject: string;
-  last_reviewed_revision: number | null;
   /** A terminal change-wide status (merged/abandoned); overrides reviews. */
   terminal?: Extract<ChangeStatus, "merged" | "abandoned">;
   /** A newer revision of this change landed on the canonical branch; drives
@@ -237,7 +236,6 @@ const change10: ChangeRecord = {
   repo_id: 1,
   change_key: "I9a41c7e2b3d4f5a6",
   subject: "auth: add TokenStore schema and config plumbing",
-  last_reviewed_revision: 0,
   revisions: [
     {
       number: 0,
@@ -348,7 +346,6 @@ const change11: ChangeRecord = {
   repo_id: 1,
   change_key: "I3f2d8a91c0b7e514",
   subject: "auth: rotate refresh tokens on use",
-  last_reviewed_revision: 0,
   revisions: [
     {
       number: 0,
@@ -842,7 +839,6 @@ const change12: ChangeRecord = {
   repo_id: 1,
   change_key: "I77b0e4f5a8123c9d",
   subject: "auth: document rotation and ship flow diagram",
-  last_reviewed_revision: null,
   revisions: [
     {
       number: 0,
@@ -923,7 +919,6 @@ const change40: ChangeRecord = {
   repo_id: 1,
   change_key: "I0d9c8b7a6f5e4321",
   subject: "build: drop unused openssl feature",
-  last_reviewed_revision: 0,
   terminal: "merged",
   revisions: [
     {
@@ -1000,7 +995,6 @@ const change20: ChangeRecord = {
   repo_id: 2,
   change_key: "Ib8d3e6f1a4c75290",
   subject: "wal: checkpoint on idle, not on every commit",
-  last_reviewed_revision: 0,
   revisions: [
     {
       number: 0,
@@ -1118,7 +1112,6 @@ const change30: ChangeRecord = {
   repo_id: 2,
   change_key: "Ie1f4a7b2c5d80936",
   subject: "ci: key caches on lockfile hash only",
-  last_reviewed_revision: 0,
   revisions: [
     {
       number: 0,
@@ -1246,7 +1239,6 @@ const changeA: ChangeRecord = {
   repo_id: 3,
   change_key: "Iaa11bb22cc33dd44",
   subject: "orbit: extract the scheduler trait",
-  last_reviewed_revision: 0,
   revisions: [
     {
       number: 0,
@@ -1282,7 +1274,6 @@ const changeD: ChangeRecord = {
   repo_id: 3,
   change_key: "Idd44cc33bb22aa11",
   subject: "orbit: add a deadline clock source",
-  last_reviewed_revision: null,
   revisions: [
     {
       number: 0,
@@ -1310,7 +1301,6 @@ const changeB: ChangeRecord = {
   repo_id: 3,
   change_key: "Ibb22cc33dd44ee55",
   subject: "orbit: fair-share scheduler policy",
-  last_reviewed_revision: 0,
   merged_revision: 1,
   revisions: [
     {
@@ -1354,7 +1344,6 @@ const changeC: ChangeRecord = {
   repo_id: 3,
   change_key: "Icc33dd44ee55ff66",
   subject: "orbit: wire the fair policy into the runtime",
-  last_reviewed_revision: null,
   revisions: [
     {
       number: 0,
@@ -1382,7 +1371,6 @@ const changeE: ChangeRecord = {
   repo_id: 3,
   change_key: "Iee55ff66aa11bb22",
   subject: "orbit: deadline policy on top of fair-share",
-  last_reviewed_revision: null,
   revisions: [
     {
       number: 0,
@@ -1895,10 +1883,6 @@ function publishMember(
     };
     c.reviews.push(review);
     drainComments(c, review, now);
-    c.last_reviewed_revision = Math.max(
-      c.last_reviewed_revision ?? 0,
-      revision,
-    );
   }
   if (decision === "abandon") c.terminal ??= "abandoned";
 }
@@ -2140,7 +2124,6 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
     repo_id: c.repo_id,
     change_key: c.change_key,
     subject: c.subject,
-    last_reviewed_revision: c.last_reviewed_revision,
     revisions: c.revisions,
     threads: threads.filter((x) => x.change_id === c.id).map(renderThread),
     drafts: drafts.filter((x) => x.change_id === c.id).map(renderDraft),

@@ -67,13 +67,13 @@ const captures = [
   // turn) — the other drawer in repo 2 stays collapsed beside it.
   { name: "chain-waiting", path: "/repos/1#chain-12" },
   { name: "chain-agents-turn", path: "/repos/2#chain-20" },
-  // Change 11 has last_reviewed_revision 0 < latest 1 → interdiff by default.
-  { name: "review-interdiff", path: "/changes/11" },
+  // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
+  { name: "review-interdiff", path: "/changes/11?against=0" },
   // Long review cover message expanded via the "more" toggle. Viewport-only
   // so the header text stays at full resolution.
   {
     name: "review-cover-expanded",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
       await page.locator(".review-item .review-more").click();
@@ -121,7 +121,7 @@ const captures = [
   // line 5 is a context line there), not in the base → r1 diff.
   {
     name: "review-commit-msg",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     fullPage: false,
   },
   // The resolve editor: Reply on the resolved commit-message thread opens the
@@ -129,7 +129,7 @@ const captures = [
   // state) beside Cancel / Save draft.
   {
     name: "review-resolve-editor",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
       await page.getByRole("button", { name: "Reply" }).first().click();
@@ -142,7 +142,7 @@ const captures = [
   // hint, and the "Reopening this thread" draft are all visible.
   {
     name: "review-resolve-drafted",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
       await page.getByRole("button", { name: "Reopen" }).first().click();
@@ -157,7 +157,7 @@ const captures = [
   // a single click.
   {
     name: "review-resolve-oneclick",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     actions: async (page) => {
       await expandAllFiles(page);
       await page
@@ -220,7 +220,7 @@ const captures = [
   // left column (FROM revision's content), drafts on r1 under the right.
   {
     name: "review-split-interdiff",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     actions: async (page) => {
       await expandAllFiles(page);
       await page.getByRole("button", { name: "Side-by-side" }).click();
@@ -233,7 +233,7 @@ const captures = [
   // "Rebase-aware interdiffs").
   {
     name: "review-drift",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
       await expandAllFiles(page);
@@ -362,7 +362,7 @@ const captures = [
   // "Range comments" / "Comment placement").
   {
     name: "review-range-comments",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     actions: expandAllFiles,
   },
   // Selecting diff text and pressing c: the inline editor opens on the
@@ -408,7 +408,7 @@ const captures = [
   // commentable"); now it anchors a new-side comment on r0 (lib/comments).
   {
     name: "review-old-side-draft",
-    path: "/changes/11",
+    path: "/changes/11?against=0",
     actions: async (page) => {
       await expandAllFiles(page);
       await page.getByRole("button", { name: "Side-by-side" }).click();

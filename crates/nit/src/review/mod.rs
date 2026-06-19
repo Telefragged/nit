@@ -319,12 +319,6 @@ impl ChangeProj {
             .count()
     }
 
-    /// The highest revision number that carries a review, else `None`.
-    #[must_use]
-    pub fn last_reviewed_revision(&self) -> Option<u64> {
-        self.reviews.iter().map(|r| r.revision).max()
-    }
-
     #[must_use]
     pub fn is_terminal(&self) -> bool {
         !matches!(self.lifecycle, Lifecycle::Active)

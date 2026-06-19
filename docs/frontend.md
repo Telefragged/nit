@@ -60,8 +60,8 @@ websocket (`WS /api/stream`), which serves the agent-side followers
     `Base|rM → rN`. The right select is the revision under review (the
     new/TO side, the `revision` URL param); the left drives `?against=` —
     `base` (full diff vs parent) or an earlier `rM` (interdiff `rM → rN`).
-    Default: the interdiff `last_reviewed → latest` when
-    `last_reviewed_revision` is behind, else Base → latest. Each `rN` option
+    Default: `Base → rN` (the full diff vs parent); the reviewer picks an
+    interdiff from the dropdown. Each `rN` option
     shows its own thread count. The two selects are independent coordinates;
     switching the revision preserves a still-valid numeric base, resets an
     invalid one to Base.

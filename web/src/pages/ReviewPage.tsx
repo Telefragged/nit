@@ -74,31 +74,16 @@ const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
 };
 
 /** Resolve the ?against param into a diff base for the selected revision.
- * Grammar: "base" → explicit full diff vs parent; "M" → interdiff
- * rM → rSelected when 0 <= M < selected (junk falls back to full diff);
- * absent → implicit interdiff since the reviewer's last review when they
- * are behind on the latest revision (the only `implicit: true` case). */
+ * Grammar: "base" or absent → full diff vs parent; "M" → interdiff
+ * rM → rSelected when 0 <= M < selected (junk falls back to the full diff). */
 function deriveDiffBase(
   raw: string | null,
   selected: number,
-  lastReviewed: number | null,
-  latestNumber: number | undefined,
-): { against: number | undefined; implicit: boolean } {
-  if (raw !== null) {
-    const m = Number(raw);
-    const valid = Number.isInteger(m) && m >= 0 && m < selected;
-    return { against: valid ? m : undefined, implicit: false };
-  }
-  if (
-    lastReviewed !== null &&
-    latestNumber !== undefined &&
-    lastReviewed < latestNumber &&
-    selected === latestNumber
-  ) {
-    // Reviewer is behind: default to the interdiff since their review.
-    return { against: lastReviewed, implicit: true };
-  }
-  return { against: undefined, implicit: false };
+): number | undefined {
+  if (raw === null) return undefined;
+  const m = Number(raw);
+  const valid = Number.isInteger(m) && m >= 0 && m < selected;
+  return valid ? m : undefined;
 }
 
 /** Gerrit-style diff range: [Base|rM] → [rN]. Left picks the diff base,
@@ -271,13 +256,7 @@ export default function ReviewPage() {
   });
 
   const againstRaw = searchParams.get("against");
-  const lastReviewed = change?.last_reviewed_revision ?? null;
-  const { against, implicit } = deriveDiffBase(
-    againstRaw,
-    selected,
-    lastReviewed,
-    latest?.number,
-  );
+  const against = deriveDiffBase(againstRaw, selected);
 
   const diffQ = useQuery({
     queryKey: ["diff", changeId, selected, against ?? null],
@@ -608,8 +587,7 @@ export default function ReviewPage() {
     if (
       againstRaw !== null &&
       againstRaw !== "base" &&
-      deriveDiffBase(againstRaw, n, lastReviewed, latest.number).against ===
-        undefined
+      deriveDiffBase(againstRaw, n) === undefined
     )
       patch.against = null; // numeric base not valid for the viewed rev
     switchRange(patch);
@@ -675,9 +653,6 @@ export default function ReviewPage() {
               onLeft={onLeft}
               onRight={onRight}
             />
-            {implicit ? (
-              <span className="dim">— changes since your review</span>
-            ) : null}
           </div>
           <div className="diffbar-toggles">
             {selectionMiss ? (
