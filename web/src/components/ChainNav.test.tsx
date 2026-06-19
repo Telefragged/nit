@@ -34,7 +34,6 @@ function member(
     status,
     revision: 0,
     latest_revision: 0,
-    newer_elsewhere: false,
     merged_elsewhere: false,
     commit_sha: `sha${changeId}`,
     short_sha: `sha${changeId}`,
@@ -54,7 +53,6 @@ const chain: Chain = {
   path: [
     member(10, 0, "first change", "approved"),
     member(11, 1, "second change", "changes_requested", 2, {
-      newer_elsewhere: true,
       revision: 0,
       latest_revision: 2,
     }),

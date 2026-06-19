@@ -141,9 +141,9 @@ resolved/unresolved threads, a `/COMMIT_MSG` thread answered by a reword,
 drafts, a rebase-drift file) plus a merged tip behind `status=all`; repo 2
 (quarry) a `request_changes` partial chain and an `approved` chain; repo 3
 (orbit) the **B-in-two-chains** scenario — one change `B` reached by two tips
-at two patchsets (tip C walks `B` at rev0, tip E at rev1), so
-`newer_elsewhere` / `merged_elsewhere`, the badges, and
-`ChangeDetail.chains` / `ChainRef` all render. Revisions are 0-based, so the
+at two patchsets (tip C walks `B` at rev0, tip E at rev1), so the
+newer-elsewhere badge (`latest_revision` > `revision`), `merged_elsewhere`,
+and `ChangeDetail.chains` / `ChainRef` all render. Revisions are 0-based, so the
 fixtures exercise rev0/rev1 display directly. Keep fixtures contract-true.
 
 ## Checking your work

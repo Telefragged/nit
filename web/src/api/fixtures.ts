@@ -28,8 +28,8 @@
 //     tip change 30  approved — single approved change.
 //   repo 3 (orbit)  the B-in-two-chains example (docs/api.md): one change
 //            (B = 51) reached by two tips at two patchsets — tip C (53) walks
-//            B at rev0, tip E (55) walks B at rev1. B's rev0 member carries
-//            newer_elsewhere (a newer patchset lives on E's chain) and its
+//            B at rev0, tip E (55) walks B at rev1. B's rev0 member shows the
+//            newer-elsewhere badge (a newer patchset lives on E's chain) and its
 //            rev1 carries merged_elsewhere (a newer revision landed on main);
 //            ChangeDetail.chains lists both tips.
 //
@@ -1295,7 +1295,7 @@ const changeD: ChangeRecord = {
 // B: two patchsets. rev0 (parent A) is approved and a newer rev landed on
 // main (merged_revision = 1) → its rev0 path member shows merged_elsewhere;
 // rev1 (parent D) is pending. From C's chain B sits at rev0 with a newer
-// patchset elsewhere (newer_elsewhere); from E's chain B sits at rev1.
+// patchset elsewhere (latest_revision > revision); from E's chain B sits at rev1.
 const changeB: ChangeRecord = {
   id: 51,
   repo_id: 3,
@@ -1970,7 +1970,6 @@ function pathEntry(
     change_key: c.change_key,
     revision: rev.number,
     latest_revision: latest,
-    newer_elsewhere: latest > rev.number,
     status: statusAt(c, rev.number),
     merged_elsewhere:
       c.merged_revision !== undefined && c.merged_revision > rev.number,

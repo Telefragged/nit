@@ -144,10 +144,9 @@ pub struct PathEntry {
     pub change_key: String,
     /// The patchset this path walks.
     pub revision: u64,
-    /// The change's newest patchset anywhere.
+    /// The change's newest patchset anywhere; `> revision` drives the client's
+    /// "newer elsewhere" badge.
     pub latest_revision: u64,
-    /// `latest_revision > revision` (badge driver).
-    pub newer_elsewhere: bool,
     /// Per `(change, this revision)`.
     pub status: ChangeStatus,
     /// A newer revision of this change landed on the canonical branch.

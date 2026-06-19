@@ -29,7 +29,7 @@ function ChangeRow({ member }: { member: PathEntry }) {
         </Link>
         <div className="meta">
           <span className="mono sha">{member.short_sha}</span>
-          {member.newer_elsewhere ? (
+          {member.latest_revision > member.revision ? (
             <NewerElsewhereBadge
               revision={member.revision}
               latest={member.latest_revision}

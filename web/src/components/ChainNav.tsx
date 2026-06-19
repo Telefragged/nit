@@ -54,7 +54,7 @@ export default function ChainNav({
                 <StatusDot status={c.status} />
                 <span className="pos mono dim">{pos}</span>
                 <span className="subj">{c.subject}</span>
-                {c.newer_elsewhere ? (
+                {c.latest_revision > c.revision ? (
                   <NewerElsewhereBadge
                     revision={c.revision}
                     latest={c.latest_revision}

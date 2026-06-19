@@ -47,10 +47,9 @@ export interface PathEntry {
   change_key: string;
   /** The patchset this path walks. */
   revision: number;
-  /** The change's newest patchset anywhere. */
+  /** The change's newest patchset anywhere; `> revision` drives the client's
+   * "newer elsewhere" badge. */
   latest_revision: number;
-  /** latest_revision > revision (badge driver). */
-  newer_elsewhere: boolean;
   /** Per (change, this revision). */
   status: ChangeStatus;
   /** A newer revision of this change landed on the canonical branch. */

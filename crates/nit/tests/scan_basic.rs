@@ -100,7 +100,6 @@ fn chains_lists_one_ordered_tip() {
         assert_eq!(m["position"], i as u64, "0-based position");
         assert_eq!(m["revision"], 0);
         assert_eq!(m["latest_revision"], 0);
-        assert_eq!(m["newer_elsewhere"], false);
         assert_eq!(m["status"], "pending");
     }
     assert_eq!(path[2]["commit_sha"], c3.to_string());

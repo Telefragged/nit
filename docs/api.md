@@ -165,8 +165,8 @@ PathEntry = {
   "change_id": 10, "position": 0,    // position is a property of THIS path
   "change_key": "I3f2…",
   "revision": 2,                     // the patchset this path walks
-  "latest_revision": 3,              // the change's newest patchset anywhere
-  "newer_elsewhere": true,           // latest_revision > revision (badge driver)
+  "latest_revision": 3,              // newest patchset anywhere; > revision drives
+                                     // the client's "newer elsewhere" badge
   "status": "pending",               // per (change, this revision)
   "merged_elsewhere": false,         // a newer revision landed on the canonical branch
   "subject": "server: add health endpoint",

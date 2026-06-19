@@ -141,7 +141,6 @@ fn path_entry(
         change_key: change.change_key.clone(),
         revision,
         latest_revision,
-        newer_elsewhere: latest_revision > revision,
         status: change.status_at(revision),
         merged_elsewhere: change.merged_elsewhere(revision),
         subject,
