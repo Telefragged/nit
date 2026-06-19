@@ -263,8 +263,10 @@ impl AppState {
         };
         let changes: Vec<ChangeProj> = entries
             .iter()
-            .map(|e| e.read().clone())
-            .filter(|c| c.repo_id == repo_id)
+            .filter_map(|e| {
+                let proj = e.read();
+                (proj.repo_id == repo_id).then(|| proj.clone())
+            })
             .collect();
         RepoView::new(changes)
     }
