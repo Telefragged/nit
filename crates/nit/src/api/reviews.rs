@@ -171,15 +171,7 @@ pub(super) async fn submit_chain(
         let mut conn = state.open_db()?;
         let repo_id = entry.read().repo_id;
         let view = state.repo_view(repo_id);
-        let revision = q
-            .revision
-            .or_else(|| {
-                view.change(change_id)
-                    .and_then(|c| c.latest_revision().map(|r| r.number))
-            })
-            .ok_or_else(|| Error::not_found(format!("change {change_id} has no revisions")))?;
-        let tip_sha = views::tip_for(&view, change_id, revision)
-            .ok_or_else(|| Error::not_found(format!("revision {revision} not found")))?;
+        let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
 
         let mut submitted = 0u64;
         let mut errors = Vec::new();

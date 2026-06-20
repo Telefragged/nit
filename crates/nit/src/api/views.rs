@@ -15,7 +15,7 @@ use crate::enums::{ChangeStatus, Side};
 use crate::gitscan::{self, identity::subject_of, short_sha};
 use crate::review::{self, Anchor, ChangeProj, Entry, ThreadComment, ThreadProj};
 
-use super::types;
+use super::{Error, types};
 
 // ---------------------------------------------------------------------------
 // Chains (derived)
@@ -312,6 +312,29 @@ pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<String>
     view.change(change_id)
         .and_then(|c| c.revision(revision))
         .map(|r| r.commit_sha.clone())
+}
+
+/// Resolve the `(revision, tip_sha)` a chain handler operates on: the
+/// explicitly `requested` revision, else the change's latest. The path-walking
+/// tip is found via [`tip_for`].
+///
+/// # Errors
+/// 404 if the change has no revisions, or if `requested` names a revision with
+/// no enclosing tip.
+pub fn resolve_revision_tip(
+    view: &RepoView,
+    change_id: u64,
+    requested: Option<u64>,
+) -> Result<(u64, String), Error> {
+    let revision = requested
+        .or_else(|| {
+            view.change(change_id)
+                .and_then(|c| c.latest_revision().map(|r| r.number))
+        })
+        .ok_or_else(|| Error::not_found(format!("change {change_id} has no revisions")))?;
+    let tip_sha = tip_for(view, change_id, revision)
+        .ok_or_else(|| Error::not_found(format!("revision {revision} not found")))?;
+    Ok((revision, tip_sha))
 }
 
 // ---------------------------------------------------------------------------
