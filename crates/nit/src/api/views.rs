@@ -289,7 +289,6 @@ pub fn build_graph(
         repo_id,
         base_branch: base_branch.to_string(),
         anchor,
-        merged_window,
         history_truncated,
         nodes,
     })

@@ -230,9 +230,10 @@ merge commits are first-class. Like a chain, nothing about it is stored — it
 is assembled at read time from the same in-memory folds + sha index, plus a
 git walk of the canonical branch for the merged history.
 
-- `GET /api/repos/{id}/graph?merged_window={n}` → RepoGraph. `merged_window`
-  is optional (default 5): how many merged commits below the canonical HEAD to
-  include in the history region. 404 if the repo is unknown.
+- `GET /api/repos/{id}/graph` → RepoGraph. 404 if the repo is unknown. The
+  history region is a fixed window of merged commits below the canonical HEAD
+  (5); there is no client knob — paging deeper is a future paginated endpoint,
+  not a refetch of the whole graph.
 
 The graph has three regions around the **canonical HEAD** anchor — resolved
 live from `base_branch`, never assumed equal to any one chain's recorded
@@ -250,7 +251,7 @@ live from `base_branch`, never assumed equal to any one chain's recorded
   `parents`; the client draws that as a distinct edge (to the base node when it
   is within the window, else down into the truncation marker below).
 - **head** — the canonical HEAD commit, the anchor (one node).
-- **history** — up to `merged_window` merged commits descending below HEAD, a
+- **history** — up to a fixed window (5) of merged commits descending below HEAD, a
   git walk of the canonical branch. A commit mapping to a known change (by its
   `Change-Id` trailer) is enriched with that `change_id`/`change_key`; a merge
   or pre-nit commit is a bare node (subject from the commit message, no
@@ -270,7 +271,6 @@ RepoGraph = {
   "repo_id": 1,
   "base_branch": "main",
   "anchor": "9f12c0a…",        // the head node's commit_sha
-  "merged_window": 5,
   "history_truncated": false,  // more merged commits exist below the window
   "nodes": [GraphNode]         // row order: open (top) → head → history (bottom)
 }

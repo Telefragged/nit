@@ -126,8 +126,6 @@ export interface RepoGraph {
   base_branch: string;
   /** The HEAD node's commit_sha — the anchor every region pivots on. */
   anchor: string;
-  /** How many merged commits below HEAD the history region requested. */
-  merged_window: number;
   /** The canonical branch has merged commits below the displayed window — the
    * client shows an "earlier history hidden" marker and dangles deep forks to it. */
   history_truncated: boolean;

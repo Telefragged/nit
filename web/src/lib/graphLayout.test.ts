@@ -52,7 +52,6 @@ function mockGraph(): RepoGraph {
     repo_id: 1,
     base_branch: "main",
     anchor: "H",
-    merged_window: 5,
     history_truncated: false,
     nodes: [
       node("A1", "open", "pending", ["A3"]),
@@ -142,7 +141,6 @@ describe("layoutGraph behind-HEAD base (in window)", () => {
       repo_id: 1,
       base_branch: "main",
       anchor: "H",
-      merged_window: 5,
       history_truncated: false,
       nodes: [
         node("J", "open", "pending", ["H"]),
@@ -169,7 +167,6 @@ describe("layoutGraph behind-HEAD base (below window)", () => {
       repo_id: 1,
       base_branch: "main",
       anchor: "H",
-      merged_window: 2,
       history_truncated: true,
       nodes: [
         node("X", "open", "pending", ["DEEP"]), // DEEP is below the window

@@ -90,15 +90,9 @@ export const getChain = (changeId: number, revision?: number) =>
   );
 
 /** The repo's spine-centered change graph (docs/api.md "Graph"): the source
- * for the dashboard. `mergedWindow` overrides how many merged commits below
- * HEAD to include (default 5 server-side). */
-export const getRepoGraph = (repoId: number, mergedWindow?: number) =>
-  request<RepoGraph>(
-    "GET",
-    mergedWindow === undefined
-      ? `/repos/${repoId}/graph`
-      : `/repos/${repoId}/graph?merged_window=${mergedWindow}`,
-  );
+ * for the dashboard. The merged-history window is fixed server-side. */
+export const getRepoGraph = (repoId: number) =>
+  request<RepoGraph>("GET", `/repos/${repoId}/graph`);
 
 // ---------------------------------------------------------------------------
 // Changes

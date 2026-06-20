@@ -535,19 +535,15 @@ async fn list_chains(
     .await
 }
 
-/// Default merged-history window for the change graph (docs/api.md "Graph").
-const DEFAULT_MERGED_WINDOW: u64 = 5;
-
-#[derive(Deserialize)]
-struct GraphQuery {
-    merged_window: Option<u64>,
-}
+/// The merged-history window for the change graph (docs/api.md "Graph"): a
+/// fixed depth, not a client knob. `pub` so the HTTP truncation test can build
+/// exactly this many commits.
+pub const MERGED_WINDOW: u64 = 5;
 
 /// The repo's spine-centered change graph (docs/api.md "Graph").
 async fn repo_graph(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
-    AppQuery(q): AppQuery<GraphQuery>,
 ) -> Result<Json<types::RepoGraph>, Error> {
     blocking(move || {
         let repo_state = state
@@ -557,14 +553,13 @@ async fn repo_graph(
         let repo = Repository::open(repo_state.git_dir())
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
         let view = state.repo_view(repo_id);
-        let window = q.merged_window.unwrap_or(DEFAULT_MERGED_WINDOW);
         Ok(Json(views::build_graph(
             &conn,
             &repo,
             &view,
             repo_id,
             &repo_state.base_branch,
-            window,
+            MERGED_WINDOW,
         )?))
     })
     .await

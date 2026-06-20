@@ -2198,6 +2198,9 @@ function graphRowOrder(nodes: GraphNode[]): GraphNode[] {
     .map((x) => x.nd);
 }
 
+/** The fixed merged-history window (mirrors the backend's MERGED_WINDOW). */
+const MERGED_WINDOW = 5;
+
 function buildGraph(repoId: number, window: number): RepoGraph {
   const repo = repos.find((r) => r.id === repoId) ?? notFound(`repo ${repoId}`);
   const scenario = graphScenarios[repoId] ?? { history: graphHistory };
@@ -2306,7 +2309,6 @@ function buildGraph(repoId: number, window: number): RepoGraph {
     repo_id: repoId,
     base_branch: repo.base_branch,
     anchor: anchorSha,
-    merged_window: window,
     history_truncated: historyTruncated,
     nodes: [...openNodes, ...rest],
   };
@@ -2391,8 +2393,7 @@ export async function mockRequest(
   if ((m = /^\/repos\/(\d+)\/graph$/.exec(p)) && method === "GET") {
     const id = Number(m[1]);
     if (!repos.some((r) => r.id === id)) return notFound(`repo ${id}`);
-    const window = q.has("merged_window") ? Number(q.get("merged_window")) : 5;
-    return buildGraph(id, window);
+    return buildGraph(id, MERGED_WINDOW);
   }
 
   if (method === "GET" && p === "/chains") {

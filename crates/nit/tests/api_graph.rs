@@ -9,13 +9,12 @@
 mod common;
 
 use common::{GitRepo, TestServer, first_repo_id, http_get, msg, push};
+use nit::api::MERGED_WINDOW;
 use serde_json::Value;
 
-/// GET the repo's graph at `window`, asserting 200.
-fn get_graph(server: &TestServer, repo_id: u64, window: u64) -> Value {
-    let (st, g) = http_get(&server.url(&format!(
-        "/api/repos/{repo_id}/graph?merged_window={window}"
-    )));
+/// GET the repo's graph, asserting 200.
+fn get_graph(server: &TestServer, repo_id: u64) -> Value {
+    let (st, g) = http_get(&server.url(&format!("/api/repos/{repo_id}/graph")));
     assert_eq!(st, 200, "{g}");
     g
 }
@@ -52,7 +51,7 @@ fn open_fork_behind_head_orders_above_anchor_and_keeps_its_base() {
     let (st, res) = push(&server, &g, "topic", "main", None);
     assert_eq!(st, 200, "{res}");
     let repo_id = first_repo_id(&server);
-    let graph = get_graph(&server, repo_id, 5);
+    let graph = get_graph(&server, repo_id);
     let (topic, c1, c3) = (topic.to_string(), c1.to_string(), c3.to_string());
 
     // The HEAD anchor is main's tip c3; the topic is its own open section.
@@ -76,28 +75,43 @@ fn open_fork_behind_head_orders_above_anchor_and_keeps_its_base() {
     assert_eq!(node(&graph, &c1)["section"], "history");
 }
 
-// `history_truncated` is true exactly when the canonical branch has more merged
-// commits below HEAD than the window shows. main is root→c1→c2→c3 (three below
-// HEAD): window 2 hides one (truncated), window 3 shows them all (not).
-#[test]
-fn history_truncated_flips_at_the_window_boundary() {
+/// Build a repo whose main has exactly `below` merged commits beneath HEAD,
+/// push a topic forked at HEAD, and return the graph's `history_truncated`.
+fn truncated_with_history(below: u64) -> bool {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("main: one", "Im1"), &[("m1", "1\n")]);
-    let c2 = g.commit(&[c1], &msg("main: two", "Im2"), &[("m2", "2\n")]);
-    let c3 = g.commit(&[c2], &msg("main: three", "Im3"), &[("m3", "3\n")]);
-    g.branch("main", c3);
-    let topic = g.commit(&[c3], &msg("topic: at HEAD", "Itopic"), &[("t", "t\n")]);
+    // `below` commits on top of the root leaves the root plus `below - 1`
+    // intermediates beneath HEAD — `below` merged commits in all.
+    let mut head = g.root;
+    for i in 0..below {
+        head = g.commit(
+            &[head],
+            &msg(&format!("main: {i}"), &format!("Im{i}")),
+            &[("m", "x\n")],
+        );
+    }
+    g.branch("main", head);
+    let topic = g.commit(&[head], &msg("topic: at HEAD", "Itopic"), &[("t", "t\n")]);
     g.branch("topic", topic);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "topic", "main", None);
     assert_eq!(st, 200, "{res}");
     let repo_id = first_repo_id(&server);
+    get_graph(&server, repo_id)["history_truncated"]
+        .as_bool()
+        .expect("history_truncated is a bool")
+}
 
-    // window 2: HEAD + 2 below shown, root hidden → truncated.
-    let g2 = get_graph(&server, repo_id, 2);
-    assert_eq!(g2["history_truncated"], true, "{g2}");
-
-    // window 3: HEAD + all 3 below shown, nothing hidden → not truncated.
-    let g3 = get_graph(&server, repo_id, 3);
-    assert_eq!(g3["history_truncated"], false, "{g3}");
+// `history_truncated` is true exactly when the canonical branch has more merged
+// commits below HEAD than the fixed `MERGED_WINDOW` shows: at the window it is
+// all visible, one deeper hides the oldest.
+#[test]
+fn history_truncated_flips_at_the_window_boundary() {
+    assert!(
+        !truncated_with_history(MERGED_WINDOW),
+        "exactly MERGED_WINDOW below HEAD: nothing hidden"
+    );
+    assert!(
+        truncated_with_history(MERGED_WINDOW + 1),
+        "one deeper than the window: the oldest is hidden"
+    );
 }

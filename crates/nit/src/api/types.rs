@@ -187,8 +187,6 @@ pub struct RepoGraph {
     pub base_branch: String,
     /// The HEAD node's `commit_sha` — the anchor every region pivots on.
     pub anchor: String,
-    /// How many merged commits below HEAD the history region requested.
-    pub merged_window: u64,
     /// The canonical branch has merged commits below the displayed window — the
     /// client shows an "earlier history hidden" marker and dangles deep forks
     /// to it.
