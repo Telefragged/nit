@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { getRepoGraph, listRepos } from "../api/client";
+import { getRepo, getRepoGraph } from "../api/client";
 import ChangeGraph from "../components/ChangeGraph";
 import { repoPath } from "../lib/repo";
 import { ErrorPanel } from "./NotFound";
@@ -14,10 +14,11 @@ export default function Dashboard() {
   const { repoId } = useParams();
   const id = Number(repoId);
 
-  const reposQuery = useQuery({
-    queryKey: ["repos"],
-    queryFn: listRepos,
-    refetchInterval: 5_000,
+  // The repo's path (its name) is fixed for the page's lifetime, so fetch it
+  // once by id — only the graph polls for changes as they land.
+  const repoQuery = useQuery({
+    queryKey: ["repo", id],
+    queryFn: () => getRepo(id),
   });
   const graphQuery = useQuery({
     queryKey: ["graph", id],
@@ -25,7 +26,7 @@ export default function Dashboard() {
     refetchInterval: 5_000,
   });
 
-  const repo = reposQuery.data?.repos.find((r) => r.id === id);
+  const repo = repoQuery.data;
 
   // Restore the review breadcrumb's #chain-<tip> scroll: react-router doesn't
   // scroll to a fragment, and the target row only exists once the async graph
