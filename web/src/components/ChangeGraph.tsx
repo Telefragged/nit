@@ -94,7 +94,8 @@ function GraphRow({ ln }: { ln: LaidNode }) {
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
       className={`graph-row${isHistory ? " is-history" : ""}${to ? " is-clickable" : ""}`}
-      // The breadcrumb's `#chain-<tip>` scroll target — only the tip (a leaf in
+      // The post-submit navigate's `#chain-<tip>` scroll target (ReviewBar
+      // lands here after publishing a chain's review) — only the tip (a leaf in
       // the open region) carries it, so a change live at two revisions
       // (B-in-two-chains) never emits a duplicate id.
       id={

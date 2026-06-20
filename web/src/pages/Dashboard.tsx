@@ -28,9 +28,9 @@ export default function Dashboard() {
 
   const repo = repoQuery.data;
 
-  // Restore the review breadcrumb's #chain-<tip> scroll: react-router doesn't
-  // scroll to a fragment, and the target row only exists once the async graph
-  // query resolves.
+  // Honor the post-submit navigate's #chain-<tip> scroll (ReviewBar lands here
+  // after publishing a chain's review): react-router doesn't scroll to a
+  // fragment, and the target row only exists once the async graph query resolves.
   const { hash } = useLocation();
   useEffect(() => {
     if (!hash || !graphQuery.data) return;
