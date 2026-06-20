@@ -144,7 +144,8 @@ with every new page or state. The npm `@playwright/test` version must match
   history.
 - Every commit treefmt-clean (re-format after a rebase — "Formatting").
 - Never mix refactors with behavior changes.
-- **Every change starts in its own worktree** on a `track/*` branch, so
+- **Every change starts in its own worktree** on a `track/*` branch — the
+  default for _all_ work unless the user has explicitly said otherwise — so
   `main` stays put and chains never serialize on a shared branch:
 
   ```sh
@@ -208,10 +209,19 @@ the resolution is mechanical.
 
 ### Review exemptions
 
-Changes matching an entry here may land on `main` directly (same
-discipline, still green):
+**The default is unconditional: unless the user has said otherwise, every
+change runs through nit.** Start it in a worktree and drive the review loop —
+regardless of size, triviality, or whether it "looks self-contained." This is
+not an agent judgement call; a one-line docs fix takes the same path as a
+feature.
+
+A change may land on `main` directly **only** with an explicit, up-front
+instruction for that change — the user saying "skip nit" / "land directly" —
+or under a standing entry in the list below. Absent that, route through nit.
+You do not get to reclassify a change as exempt after the fact, and "I already
+edited `main`" is never a justification — move it to a worktree. When in
+doubt, review.
+
+Standing exemptions (same discipline, still green):
 
 - _(none yet)_
-
-Ad-hoc: the user saying "skip nit" / "land directly". When in doubt,
-review.
