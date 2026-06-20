@@ -1676,6 +1676,11 @@ table.list tbody tr:hover {
   position: absolute;
   inset: 0 auto 0 0;
   pointer-events: none;
+  /* Always paint above the rows so a row's hover highlight stays under the
+     rail. Merged rows fade via an inline opacity, and opacity < 1 makes a row
+     its own stacking context — without this the rail would slip beneath those
+     rows' hover while staying above the opaque (HEAD/open) ones. */
+  z-index: 1;
 }
 
 .graph-row {
