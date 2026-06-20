@@ -1,8 +1,7 @@
 // The change-graph layout pass — pure, kept separate from the render so the
-// geometry stays unit-testable and adding a layout variant (or merge support)
-// is a config-only change. Input: a RepoGraph (nodes already in topological
-// row order, docs/api.md "Graph"). Output: positioned nodes and edge paths,
-// ready for the SVG renderer.
+// geometry stays unit-testable. Input: a RepoGraph (nodes already in
+// topological row order, docs/api.md "Graph"). Output: positioned nodes and
+// edge paths, ready for the SVG renderer.
 //
 // Lanes are assigned gleisbau-style (git-graph 0.7's interval-graph coloring):
 // the canonical spine is pinned to lane 0 (the center column), every other
@@ -14,37 +13,26 @@
 
 import type { GraphNode, RepoGraph } from "../api/types";
 
-/** Visual constants for a layout variant. LAYOUT_B is the approved design
- * (trunk & branches: dense rows, hollow ringed nodes, elbow connectors). */
-export interface GraphLayoutConfig {
+/** Visual constants for the change-graph layout (the approved "trunk &
+ * branches" design: dense rows, hollow ringed nodes, elbow connectors). */
+export const LAYOUT_B = {
   /** Row height; the SVG node centers align to each table row's center. */
-  rowH: number;
-  /** Center of lane 0 (the canonical spine) from the rail's left edge. */
-  railPadL: number;
-  /** Horizontal gap between lane centers. */
-  laneGap: number;
-  /** Padding right of the last lane. */
-  railPadR: number;
-  /** Node radius. */
-  nodeR: number;
-  /** Extra radius for a merge node. */
-  mergeBump: number;
-  /** Elbow quarter-circle radius for a cross-lane connector. */
-  elbow: number;
-  /** Per-row opacity falloff for merged history, and its floor. */
-  fadeStep: number;
-  fadeFloor: number;
-}
-
-export const LAYOUT_B: GraphLayoutConfig = {
   rowH: 46,
+  /** Center of lane 0 (the canonical spine) from the rail's left edge. */
   railPadL: 42,
+  /** Horizontal gap between lane centers. */
   laneGap: 42,
+  /** Padding right of the last lane. */
   railPadR: 26,
+  /** Node radius. */
   nodeR: 5,
+  /** Extra radius for a merge node. */
   mergeBump: 1.5,
+  /** Elbow quarter-circle radius for a cross-lane connector. */
   elbow: 9,
+  /** Per-row opacity falloff for merged history. */
   fadeStep: 0.13,
+  /** Opacity floor for faded merged history. */
   fadeFloor: 0.3,
 };
 
@@ -102,10 +90,7 @@ interface Branch {
 }
 
 /** Lay a repo graph out for rendering. Pure: never mutates `graph`. */
-export function layoutGraph(
-  graph: RepoGraph,
-  cfg: GraphLayoutConfig = LAYOUT_B,
-): GraphLayout {
+export function layoutGraph(graph: RepoGraph): GraphLayout {
   const nodes = graph.nodes;
   const n = nodes.length;
 
@@ -215,16 +200,16 @@ export function layoutGraph(
 
   // 4. Coordinates, nodes, edges.
   const laneAt = (i: number): number => lane[i] ?? 0;
-  const cx = (l: number): number => cfg.railPadL + l * cfg.laneGap;
-  const cy = (r: number): number => r * cfg.rowH + cfg.rowH / 2;
+  const cx = (l: number): number => LAYOUT_B.railPadL + l * LAYOUT_B.laneGap;
+  const cy = (r: number): number => r * LAYOUT_B.rowH + LAYOUT_B.rowH / 2;
   const fade = (depth: number): number =>
-    Math.max(cfg.fadeFloor, 1 - depth * cfg.fadeStep);
+    Math.max(LAYOUT_B.fadeFloor, 1 - depth * LAYOUT_B.fadeStep);
   const maxLane = lane.reduce((m, l) => Math.max(m, l), 0);
 
   // An edge from child (top) to parent (bottom): straight in-lane, else an elbow.
   const edgePath = (x0: number, y0: number, x1: number, y1: number): string => {
     if (x0 === x1) return `M ${x0} ${y0} L ${x1} ${y1}`;
-    const b = cfg.elbow;
+    const b = LAYOUT_B.elbow;
     const sign = x1 > x0 ? 1 : -1;
     return `M ${x0} ${y0} L ${x0} ${y1 - b} Q ${x0} ${y1} ${x0 + sign * b} ${y1} L ${x1} ${y1}`;
   };
@@ -240,7 +225,7 @@ export function layoutGraph(
       lane: laneAt(i),
       cx: cx(laneAt(i)),
       cy: cy(i),
-      r: cfg.nodeR + (isMerge ? cfg.mergeBump : 0),
+      r: LAYOUT_B.nodeR + (isMerge ? LAYOUT_B.mergeBump : 0),
       isHead,
       isMerge,
       depth,
@@ -326,9 +311,10 @@ export function layoutGraph(
   return {
     nodes: laidNodes,
     edges,
-    railWidth: cfg.railPadL + maxLane * cfg.laneGap + cfg.railPadR,
-    height: totalRows * cfg.rowH,
-    rowH: cfg.rowH,
+    railWidth:
+      LAYOUT_B.railPadL + maxLane * LAYOUT_B.laneGap + LAYOUT_B.railPadR,
+    height: totalRows * LAYOUT_B.rowH,
+    rowH: LAYOUT_B.rowH,
     anchorRow,
     collapsed,
   };
