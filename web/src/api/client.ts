@@ -13,7 +13,6 @@ import type {
   RepoGraph,
   RepoList,
   StagedDecision,
-  StageDecisionRequest,
   UpdateDraftRequest,
 } from "./types";
 
@@ -114,7 +113,7 @@ export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 
 /** Stage (or overwrite) a change's draft decision — a verdict or an
  * abandon/reopen (docs/api.md "Reviewer decisions"). */
-export const stageDecision = (changeId: number, req: StageDecisionRequest) =>
+export const stageDecision = (changeId: number, req: StagedDecision) =>
   request<StagedDecision>("PUT", `/changes/${changeId}/decision`, req);
 
 /** Discard a change's staged decision. */

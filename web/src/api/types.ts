@@ -346,15 +346,9 @@ export interface UpdateDraftRequest {
 
 // ---------------------------------------------------------------------------
 // Reviewer decisions — staged per change, published per chain (the batch
-// submit). StagedDecision (above) is both the stage request body and the
-// ChangeDetail field; the reviewer UI never submits a single review directly.
-
-/** `PUT /api/changes/{id}/decision` request — stage (or overwrite) the
- * change's draft decision. */
-export interface StageDecisionRequest {
-  decision: Decision;
-  message: string;
-}
+// submit). StagedDecision (above) is both the stage request body (PUT
+// /changes/{id}/decision) and the ChangeDetail field; the reviewer UI never
+// submits a single review directly.
 
 /** `POST /api/chains/{id}/submit` response (docs/api.md "Chains"). */
 export interface BatchSubmitResult {

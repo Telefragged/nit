@@ -26,7 +26,7 @@ import type {
   RepoGraph,
   Review,
   Revision,
-  StageDecisionRequest,
+  StagedDecision,
   Thread,
   Verdict,
 } from "../types";
@@ -736,7 +736,7 @@ export async function mockRequest(
   // chain batch submit above) — docs/api.md "Reviewer decisions".
   if ((m = /^\/changes\/(\d+)\/decision$/.exec(p)) && method === "PUT") {
     const c = getChange(Number(m[1]));
-    const req = body as StageDecisionRequest;
+    const req = body as StagedDecision;
     const staged = { decision: req.decision, message: req.message };
     draftReviews.set(c.id, staged);
     return staged;
