@@ -471,6 +471,8 @@ the cursor it passes back, so they never wake it). The return hands back the
 whole gap since the cursor plus the derived chain-state (`feedback`).
 
 `nit log --follow --reviewer-only` mutes the agent's own entries
-(`revision`/`comment`/`partial`) client-side, relaying only the reviewer's.
+(`revision`/`comment`/`partial`) and the automatic `merged` lifecycle (the
+timer's, not the reviewer's) client-side, relaying only reviewer activity —
+verdicts plus the `abandoned`/`reopened` decisions.
 **Deferred:** muting a sibling-chain note on a revision the follower's path
 does not pin — the first cut wakes and lets the agent triage.

@@ -77,7 +77,8 @@ pub struct LogArgs {
     #[arg(long)]
     pub follow: bool,
     /// With `--follow`, relay only the reviewer's activity: drop the agent's
-    /// own entries (`revision`/`comment`/`partial`).
+    /// own entries (`revision`/`comment`/`partial`) and the automatic `merged`
+    /// lifecycle.
     #[arg(long, requires = "follow")]
     pub reviewer_only: bool,
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
@@ -442,7 +443,7 @@ fn follow(
 
 /// Relay one streamed entry, honoring `--reviewer-only`.
 fn relay(entry: &Value, oneline: bool, reviewer_only: bool) -> Result<()> {
-    if reviewer_only && is_agent_echo(entry) {
+    if reviewer_only && muted_by_reviewer_only(entry) {
         return Ok(());
     }
     if oneline {
@@ -488,13 +489,17 @@ fn follow_cursor(spec: &str) -> Result<u64> {
         .with_context(|| format!("bad seq cursor {spec:?}"))
 }
 
-/// A log entry that echoes the agent's own action (`revision`/`comment`/
-/// `partial`), suppressed by `--reviewer-only`. Unrecognized kinds fail open.
-fn is_agent_echo(entry: &Value) -> bool {
-    matches!(
-        entry["kind"].as_str(),
-        Some("revision" | "comment" | "partial")
-    )
+/// A log entry `--reviewer-only` suppresses: the agent's own echoes
+/// (`revision`/`comment`/`partial`) and the automatic `merged` lifecycle
+/// (written by the merge timer, not the reviewer). Reviewer verdicts and the
+/// reviewer-driven `abandoned`/`reopened` lifecycle always reach the monitor.
+/// Unrecognized kinds fail open.
+fn muted_by_reviewer_only(entry: &Value) -> bool {
+    match entry["kind"].as_str() {
+        Some("revision" | "comment" | "partial") => true,
+        Some("lifecycle") => entry["payload"]["action"].as_str() == Some("merged"),
+        _ => false,
+    }
 }
 
 fn print_wait(resp: &Value, oneline: bool) -> Result<()> {
@@ -1141,16 +1146,23 @@ mod tests {
     }
 
     #[test]
-    fn agent_echoes_are_the_agents_own_writes() {
-        let echo = |kind: &str| is_agent_echo(&json!({"kind": kind, "payload": {}}));
-        assert!(echo("revision"));
-        assert!(echo("comment"));
-        assert!(echo("partial"));
-        // Reviewer activity and lifecycle always reach a --reviewer-only monitor.
-        assert!(!echo("review"));
-        assert!(!echo("lifecycle"));
+    fn reviewer_only_mutes_agent_echoes_and_auto_merge() {
+        let kind = |k: &str| muted_by_reviewer_only(&json!({"kind": k, "payload": {}}));
+        let life = |a: &str| {
+            muted_by_reviewer_only(&json!({"kind": "lifecycle", "payload": {"action": a}}))
+        };
+        // The agent's own writes.
+        assert!(kind("revision"));
+        assert!(kind("comment"));
+        assert!(kind("partial"));
+        // The automatic merge is the timer's, not reviewer activity.
+        assert!(life("merged"));
+        // Reviewer activity and reviewer-driven lifecycle reach the monitor.
+        assert!(!kind("review"));
+        assert!(!life("abandoned"));
+        assert!(!life("reopened"));
         // Unrecognized kinds fail open — relayed, never hidden.
-        assert!(!echo("some_future_kind"));
+        assert!(!kind("some_future_kind"));
     }
 
     #[test]
