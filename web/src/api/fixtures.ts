@@ -2383,6 +2383,11 @@ export async function mockRequest(
     return { repos: repoList() };
   }
 
+  if ((m = /^\/repos\/(\d+)$/.exec(p)) && method === "GET") {
+    const id = Number(m[1]);
+    return repoList().find((r) => r.id === id) ?? notFound(`repo ${id}`);
+  }
+
   if ((m = /^\/repos\/(\d+)\/graph$/.exec(p)) && method === "GET") {
     const id = Number(m[1]);
     if (!repos.some((r) => r.id === id)) return notFound(`repo ${id}`);

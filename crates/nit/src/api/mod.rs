@@ -54,7 +54,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health))
         .route("/api/repos", get(list_repos))
-        .route("/api/repos/{id}", patch(relocate_repo))
+        .route("/api/repos/{id}", get(get_repo).patch(relocate_repo))
         .route("/api/repos/{id}/graph", get(repo_graph))
         .route("/api/push", post(push))
         .route("/api/chains", get(list_chains))
@@ -188,6 +188,20 @@ async fn list_repos(State(state): State<Arc<AppState>>) -> Result<Json<types::Re
             .map(|r| repo_json(&state, r))
             .collect();
         Ok(Json(types::RepoList { repos }))
+    })
+    .await
+}
+
+/// One repo by id, with its live-tip count (404 if unknown).
+async fn get_repo(
+    State(state): State<Arc<AppState>>,
+    AppPath(repo_id): AppPath<u64>,
+) -> Result<Json<types::Repo>, Error> {
+    blocking(move || {
+        let conn = state.open_db()?;
+        let row = db::get_repo(&conn, repo_id)?
+            .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;
+        Ok(Json(repo_json(&state, row)))
     })
     .await
 }

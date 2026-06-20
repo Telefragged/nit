@@ -267,6 +267,29 @@ fn relocate_repo_endpoint() {
 }
 
 #[test]
+fn get_repo_by_id_endpoint() {
+    let a = GitRepo::new();
+    let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
+    a.branch("feat", a1);
+    let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
+    let (st, _) = push(&server, &a, "feat", "main", None);
+    assert_eq!(st, 200);
+    let repo_id = first_repo(&server);
+
+    // The by-id repo carries the same shape the list reports for that row.
+    let (st, repo) = http_get(&server.url(&format!("/api/repos/{repo_id}")));
+    assert_eq!(st, 200, "{repo}");
+    assert_eq!(repo["id"].as_u64(), Some(repo_id));
+    assert_eq!(repo["git_dir"].as_str().unwrap(), a.git_dir());
+    assert_eq!(repo["base_branch"], "main");
+    assert_eq!(repo["active_chains"].as_u64(), Some(1));
+
+    // Unknown id → 404.
+    let (st, _) = http_get(&server.url("/api/repos/9999"));
+    assert_eq!(st, 404);
+}
+
+#[test]
 fn nit_repo_move_cli() {
     let a = GitRepo::new();
     let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);

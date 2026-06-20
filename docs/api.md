@@ -35,6 +35,7 @@ main page lists repos, each linking to that repo's chains. Repos are created
 lazily by the first `nit push`; there is no separate registration step.
 
 - `GET /api/repos` → `{"repos": [Repo]}` — registration order.
+- `GET /api/repos/{id}` → Repo — one repo by id; 404 if unknown.
 - `PATCH /api/repos/{id}` — repoint a repo at a new git-common-dir after it
   moved on disk (`nit repo move`).
   ```json

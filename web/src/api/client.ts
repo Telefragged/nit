@@ -10,6 +10,7 @@ import type {
   CreateDraftRequest,
   Diff,
   Draft,
+  Repo,
   RepoGraph,
   RepoList,
   StagedDecision,
@@ -63,6 +64,8 @@ async function request<T = void>(
 // Repos
 
 export const listRepos = () => request<RepoList>("GET", "/repos");
+
+export const getRepo = (id: number) => request<Repo>("GET", `/repos/${id}`);
 
 // ---------------------------------------------------------------------------
 // Chains
