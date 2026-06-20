@@ -19,7 +19,13 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { createDraft, getChain, getChange, getDiff } from "../api/client";
+import {
+  createDraft,
+  getChain,
+  getChange,
+  getDiff,
+  getRepo,
+} from "../api/client";
 import type { ChangeDetail, Review, Revision, Verdict } from "../api/types";
 import { StatusChip } from "../components/badges";
 import ChainNav from "../components/ChainNav";
@@ -48,6 +54,7 @@ import {
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { displayPath, fileDomId } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
+import { repoPath } from "../lib/repo";
 import { activeIndexAt } from "../lib/scrollspy";
 import type { SelectionMiss } from "../lib/selection";
 import { selectionAnchorSide, selectionTarget } from "../lib/selection";
@@ -212,6 +219,13 @@ export default function ReviewPage() {
     queryFn: () => getChange(changeId),
   });
   const change = changeQ.data;
+
+  // The repo behind this change — the crumb shows its path. Fetched by id
+  // once the change loads; skipToken holds the hook's place until then.
+  const repoQ = useQuery({
+    queryKey: ["repo", change?.repo_id],
+    queryFn: change ? () => getRepo(change.repo_id) : skipToken,
+  });
 
   const [layout, setLayout] = useState<Layout>(() =>
     localStorage.getItem(LAYOUT_KEY) === "split" ? "split" : "unified",
@@ -533,6 +547,7 @@ export default function ReviewPage() {
   }
 
   const chain = chainQ.data;
+  const repo = repoQ.data;
   // This change's entry in the selected revision's chain — its position and
   // displayed status now live on the path member, not on ChangeDetail.
   const here = chain?.path.find((c) => c.change_id === change.id);
@@ -605,7 +620,9 @@ export default function ReviewPage() {
       <main className="page-wide review-page">
         <div className="review-header">
           <div className="crumb-line">
-            <Link to={`/repos/${change.repo_id}`}>repo {change.repo_id}</Link>
+            <Link to={`/repos/${change.repo_id}`}>
+              {repo ? repoPath(repo.git_dir) : `repo ${change.repo_id}`}
+            </Link>
             <span className="sep">/</span>
             <span className="dim">
               change {here ? here.position + 1 : "—"}
