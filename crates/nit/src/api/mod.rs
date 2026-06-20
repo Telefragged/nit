@@ -63,7 +63,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/chains/{id}/submit", post(submit_chain))
         .route("/api/changes/{id}", get(get_change_detail))
         .route("/api/changes/{id}/revisions/{n}/diff", get(revision_diff))
-        .route("/api/changes/{id}/log", get(change_log))
         .route("/api/changes/{id}/drafts", post(create_draft))
         .route("/api/changes/{id}/comments", post(create_comment))
         .route(
@@ -774,52 +773,6 @@ fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Result<git2::Tree<'r>, Er
 
 fn parse_oid(sha: &str) -> Result<Oid, Error> {
     Oid::from_str(sha).map_err(|e| Error::internal(format!("bad sha {sha:?}: {e}")))
-}
-
-#[derive(Deserialize)]
-struct LogQuery {
-    from: Option<u64>,
-    to: Option<u64>,
-}
-
-/// Read-only single-change log slice `[from, to)` (docs/api.md). References
-/// past the dataset are a 400, not a silent clamp.
-async fn change_log(
-    State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
-    AppQuery(q): AppQuery<LogQuery>,
-) -> Result<Json<types::LogResponse>, Error> {
-    let entry = change_or_404(&state, id)?;
-    blocking(move || {
-        let conn = state.open_db()?;
-        let head = entry.read().head;
-        let from = q.from.unwrap_or(0);
-        let to = match q.to {
-            Some(to) if to <= from => {
-                return Err(Error::bad_request(format!(
-                    "empty or reversed range [{from}, {to}): the end must exceed the start"
-                )));
-            }
-            Some(to) if to > head => {
-                return Err(Error::bad_request(format!(
-                    "requested entries up to {to} but the change has {head} (valid 0..{head})"
-                )));
-            }
-            Some(to) => to,
-            None if from > head => {
-                return Err(Error::bad_request(format!(
-                    "index {from} is past the log head {head} (valid 0..{head})"
-                )));
-            }
-            None => head,
-        };
-        let entries = db::log_entries(&conn, id, from, Some(to))?
-            .iter()
-            .map(|row| Ok(views::log_entry_view(id, &review::Entry::from_row(row)?)))
-            .collect::<anyhow::Result<Vec<_>>>()?;
-        Ok(Json(types::LogResponse { head, entries }))
-    })
-    .await
 }
 
 // ---------------------------------------------------------------------------

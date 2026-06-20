@@ -328,12 +328,6 @@ null on a bare git commit, and `revision` is null on the head node.
   its parent.
 - `GET /api/changes/{id}/revisions/{n}/diff?against={m}` → interdiff
   (revision m's tree → revision n's).
-- `GET /api/changes/{id}/log?from={a}&to={b}` → `{"head": 7, "entries":
-[LogEntry]}` — **one change's** log slice in `[from, to)` (both optional:
-  `from` defaults 0, `to` defaults `head`). `head` is the change's per-change
-  `idx` count. Read-only. References past the dataset are a **400**, not a
-  silent clamp — a `to` beyond `head`, an open `from` beyond `head`, or a
-  reversed/empty range (`to <= from`). Behind `nit status`'s one-change reads.
 
 ```json
 Diff = {"files": [DiffFile]}
@@ -633,8 +627,7 @@ The API ships only the raw entry. The one-line digest behind `--oneline` is
 **not** an API field: it is a client display concern, derived from `kind` +
 `payload` on demand (in the CLI). The aggregated chain log
 (`GET /api/chains/{change_id}/log`) returns these entries merged across the
-chain's members and sorted by `seq`; a one-change slice
-(`GET /api/changes/{id}/log`) returns one change's, ordered by `idx`.
+chain's members and sorted by `seq`.
 
 ## Events
 

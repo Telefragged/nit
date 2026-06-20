@@ -46,7 +46,7 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     );
 
     // The reason is recorded on the lifecycle entry.
-    let (_, log) = http_get(&server.url(&format!("/api/changes/{change_id}/log")));
+    let (_, log) = http_get(&server.url(&format!("/api/chains/{change_id}/log")));
     let abandoned = log["entries"]
         .as_array()
         .expect("entries")

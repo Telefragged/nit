@@ -477,14 +477,6 @@ pub struct LogEntry {
     pub payload: serde_json::Value,
 }
 
-/// `GET /api/changes/{id}/log` response — one change's slice. `head` is the
-/// change's per-change `idx` count.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogResponse {
-    pub head: u64,
-    pub entries: Vec<LogEntry>,
-}
-
 /// `GET /api/chains/{change_id}/log` response — the aggregated chain log,
 /// merged across members and sorted by global `seq`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
