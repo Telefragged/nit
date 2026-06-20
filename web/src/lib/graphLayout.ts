@@ -65,7 +65,7 @@ export interface LaidNode {
   opacity: number;
 }
 
-export type EdgeKind = "open" | "history" | "behind";
+type EdgeKind = "open" | "history" | "behind";
 
 export interface LaidEdge {
   key: string;

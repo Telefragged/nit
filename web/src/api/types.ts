@@ -64,7 +64,7 @@ export interface PathEntry {
   draft_decision: Decision | null;
 }
 
-export interface ChangeCounts {
+interface ChangeCounts {
   /** Published comment threads at this revision. */
   threads: number;
   drafts: number;
@@ -86,10 +86,6 @@ export interface ChainSummary {
   updated_at: string;
   /** Oldest-first, base → tip. */
   path: PathEntry[];
-}
-
-export interface ChainList {
-  chains: ChainSummary[];
 }
 
 /** The full chain for one tip (the chain page / a change's chain context). */
@@ -222,7 +218,7 @@ export interface Review {
  */
 export const COMMIT_MSG_PATH = "/COMMIT_MSG";
 
-export type FileStatus = "added" | "deleted" | "modified" | "renamed";
+type FileStatus = "added" | "deleted" | "modified" | "renamed";
 
 export interface Diff {
   files: DiffFile[];
@@ -250,7 +246,7 @@ export interface Hunk {
   lines: Line[];
 }
 
-export type LineKind = "context" | "add" | "del";
+type LineKind = "context" | "add" | "del";
 
 export interface Line {
   kind: LineKind;
@@ -267,7 +263,7 @@ export interface Line {
 // ---------------------------------------------------------------------------
 // Comments
 
-export type CommentAuthor = "reviewer" | "agent";
+type CommentAuthor = "reviewer" | "agent";
 export type CommentSide = "old" | "new";
 
 /**
@@ -368,48 +364,7 @@ export interface BatchSubmitResult {
   errors: SubmitError[];
 }
 
-export interface SubmitError {
+interface SubmitError {
   change_id: number;
   message: string;
-}
-
-/** `POST /api/changes/{id}/abandon` body (`nit abandon`). The optional
- * `message` records a reason; an absent body abandons without one. */
-export interface AbandonRequest {
-  message?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Log (one-shot reads; the live stream returns in a later stage)
-
-/** One log entry (docs/api.md `LogEntry`). */
-export interface LogEntry {
-  change_id: number;
-  /** 0-based position in that change's log. */
-  idx: number;
-  /** Global, monotone across the repo. */
-  seq: number;
-  /** revision | review | comment | lifecycle | partial */
-  kind: string;
-  created_at: string;
-  /** Kind-specific; shapes in data-model.md "Payloads". */
-  payload: unknown;
-}
-
-/** `GET /api/changes/{id}/log` response — one change's slice. */
-export interface LogResponse {
-  head: number;
-  entries: LogEntry[];
-}
-
-/** `GET /api/chains/{change_id}/log` response — aggregated, sorted by seq. */
-export interface ChainLog {
-  entries: LogEntry[];
-}
-
-// ---------------------------------------------------------------------------
-// Errors
-
-export interface ApiErrorBody {
-  error: string;
 }

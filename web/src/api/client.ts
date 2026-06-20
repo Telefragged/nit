@@ -5,7 +5,6 @@
 import type {
   BatchSubmitResult,
   Chain,
-  ChainList,
   ChangeDetail,
   CreateDraftRequest,
   Diff,
@@ -69,15 +68,6 @@ export const getRepo = (id: number) => request<Repo>("GET", `/repos/${id}`);
 
 // ---------------------------------------------------------------------------
 // Chains
-
-export const listChains = (
-  status: "active" | "all" = "active",
-  repo?: number,
-) =>
-  request<ChainList>(
-    "GET",
-    `/chains?status=${status}${repo === undefined ? "" : `&repo=${repo}`}`,
-  );
 
 /** The derived chain through a change's tip. `revision` selects which patchset
  * of the change to root on (and hence the chain context). */
