@@ -218,10 +218,6 @@ pub struct GraphNode {
     pub change_key: Option<String>,
     /// The pinned patchset (open nodes); `None` off the open region.
     pub revision: Option<u64>,
-    /// Activity at the pinned revision (zeros off the open region).
-    pub counts: ChangeCounts,
-    /// The change's staged decision, or `None`. Change-wide.
-    pub draft_decision: Option<Decision>,
 }
 
 /// A tip walking through a change, plus the patchset it pins there.

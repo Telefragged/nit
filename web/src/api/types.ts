@@ -145,10 +145,6 @@ export interface GraphNode {
   change_key: string | null;
   /** The pinned patchset (open nodes); null off the open region. */
   revision: number | null;
-  /** Activity at the pinned revision (zeros off the open region). */
-  counts: ChangeCounts;
-  /** The change's staged decision, or null. Change-wide. */
-  draft_decision: Decision | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -436,8 +436,6 @@ function buildGraph(repoId: number, window: number): RepoGraph {
     change_id: null,
     change_key: null,
     revision: null,
-    counts: { threads: 0, drafts: 0, unresolved: 0 },
-    draft_decision: null,
   }));
   const present = new Set(nodes.map((nd) => nd.commit_sha));
 
@@ -461,12 +459,6 @@ function buildGraph(repoId: number, window: number): RepoGraph {
       if (seen.has(csha)) continue;
       seen.add(csha);
       const { change: c, revision: rev } = m;
-      const ownThreads = threads.filter(
-        (t) => t.change_id === c.id && t.revision === rev.number,
-      );
-      const ownDrafts = drafts.filter(
-        (d) => d.change_id === c.id && d.revision === rev.number,
-      );
       nodes.push({
         commit_sha: csha,
         section: "open",
@@ -476,12 +468,6 @@ function buildGraph(repoId: number, window: number): RepoGraph {
         change_id: c.id,
         change_key: c.change_key,
         revision: rev.number,
-        counts: {
-          threads: ownThreads.length,
-          drafts: ownDrafts.length,
-          unresolved: ownThreads.filter((t) => !t.resolved).length,
-        },
-        draft_decision: draftReviews.get(c.id)?.decision ?? null,
       });
       present.add(csha);
     }

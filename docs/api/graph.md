@@ -62,12 +62,13 @@ GraphNode = {
   "parents": ["7b0c784…"],     // parent commit-shas; edges to those present; len>1 is a merge
   "change_id": 10,             // null for a bare git commit (merge / pre-nit)
   "change_key": "I3f2…",       // null with change_id
-  "revision": 2,               // the pinned patchset (open nodes); null off the open region
-  "counts": {"threads": 3, "drafts": 1, "unresolved": 2}, // activity; zeros off the open region
-  "draft_decision": "approve"  // the change's staged decision (Decision), or null
+  "revision": 2                // the pinned patchset (open nodes); null off the open region
 }
 ```
 
-`status`, `counts`, and `draft_decision` are read at the node's pinned
-revision, exactly as a `PathEntry`. `change_id`/`change_key`/`revision` are
-null on a bare git commit, and `revision` is null on the head node.
+`status` is read at the node's pinned revision, exactly as a `PathEntry`. A
+node carries no per-change review activity (comment/draft counts, the staged
+decision): a client fetches that from `GET /api/changes/{id}` per change —
+concurrently for the changes it shows — so the graph stays a pure structural
+snapshot (and needs no database read). `change_id`/`change_key`/`revision`
+are null on a bare git commit, and `revision` is null on the head node.

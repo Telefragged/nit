@@ -74,12 +74,10 @@ pub(super) async fn repo_graph(
         let repo_state = state
             .repo_state(repo_id)
             .ok_or_else(|| Error::not_found(format!("no such repo: {repo_id}")))?;
-        let conn = state.open_db()?;
         let repo = Repository::open(repo_state.git_dir())
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
         let view = state.repo_view(repo_id);
         Ok(Json(views::build_graph(
-            &conn,
             &repo,
             &view,
             repo_id,

@@ -174,9 +174,8 @@ fn path_entry(
 /// deduplicated by commit-sha). Nodes are returned in topological row order.
 ///
 /// # Errors
-/// When the canonical branch can't be walked or reading drafts fails.
+/// When the canonical branch can't be walked.
 pub fn build_graph(
-    conn: &Connection,
     repo: &Repository,
     view: &RepoView,
     repo_id: u64,
@@ -209,12 +208,6 @@ pub fn build_graph(
             change_id: change.map(|c| c.id),
             change_key: change.map(|c| c.change_key.clone()),
             revision: None,
-            counts: types::ChangeCounts {
-                threads: 0,
-                drafts: 0,
-                unresolved: 0,
-            },
-            draft_decision: None,
         });
         shas.insert(h.sha.clone());
     }
@@ -240,8 +233,6 @@ pub fn build_graph(
             change_id: Some(change.id),
             change_key: Some(change.change_key.clone()),
             revision: Some(node.revision),
-            counts: change_counts(conn, change, node.revision)?,
-            draft_decision: db::get_draft_review(conn, change.id)?.map(|r| r.decision),
         });
     }
 

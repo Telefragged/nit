@@ -28,8 +28,6 @@ function node(
     change_id: section === "open" ? 1 : null,
     change_key: section === "open" ? `I${sha}` : null,
     revision: section === "open" ? 0 : null,
-    counts: { threads: 0, drafts: 0, unresolved: 0 },
-    draft_decision: null,
   };
 }
 
