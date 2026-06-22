@@ -54,9 +54,12 @@ nit repo create --base <branch>
 ```
 
 `--base` is **required** and must name an existing branch — nit never guesses
-it. Confirm the branch with the user (usually `main` or `master`; check
-`git branch` if unsure). A 409 means the repo is already registered — nothing
-to do.
+it, and **neither do you**. You **MUST ask the user (AskUserQuestion) to choose
+the base branch** before registering — never assume or infer it, not even when
+the repo has a single branch. Detect the likely candidates (the current
+branch, `main`/`master`, `git symbolic-ref refs/remotes/origin/HEAD`) and offer
+them as the suggested options, but the choice is the user's. A 409 means the
+repo is already registered — nothing to do.
 
 ## 4. Make sure commits get a Change-Id
 
