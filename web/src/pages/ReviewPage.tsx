@@ -276,23 +276,26 @@ export default function ReviewPage() {
     queryFn: change ? () => getChain(changeId, selected) : skipToken,
   });
 
-  // Each chain member's staged decision is read from its own change detail
+  // Each chain member's per-change state is read from its own change detail
   // (GET /api/changes/{id}), fetched concurrently, rather than denormalized
   // onto the chain path. Keyed ["change", id] so it shares the cache with the
-  // change query above (the current member is a warm hit). The review bar uses
-  // these for its chain-wide "Submit (k)" count and next-undecided nav.
+  // change query above (the current member is a warm hit). ChainNav reads each
+  // member's unresolved/latest-revision from these; the review bar reads each
+  // member's staged decision for its chain-wide "Submit (k)" count + nav.
   const memberQueries = useQueries({
     queries: (chainQ.data?.path ?? []).map((m) => ({
       queryKey: ["change", m.change_id],
       queryFn: () => getChange(m.change_id),
     })),
   });
-  const memberDecisions = new Map<number, Decision | null>();
+  const memberDetails = new Map<number, ChangeDetail>();
   (chainQ.data?.path ?? []).forEach((m, i) => {
     const detail = memberQueries[i]?.data;
-    if (detail) {
-      memberDecisions.set(m.change_id, detail.draft_decision?.decision ?? null);
-    }
+    if (detail) memberDetails.set(m.change_id, detail);
+  });
+  const memberDecisions = new Map<number, Decision | null>();
+  memberDetails.forEach((detail, id) => {
+    memberDecisions.set(id, detail.draft_decision?.decision ?? null);
   });
 
   const againstRaw = searchParams.get("against");
@@ -737,7 +740,11 @@ export default function ReviewPage() {
 
         <div className="review-layout">
           <aside className="review-sidebar">
-            <ChainNav chain={chain} currentId={changeId} />
+            <ChainNav
+              chain={chain}
+              currentId={changeId}
+              memberDetails={memberDetails}
+            />
             <FileRail
               files={files}
               threadsByFile={threadsByFile}

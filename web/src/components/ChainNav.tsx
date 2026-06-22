@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { Chain } from "../api/types";
+import type { Chain, ChangeDetail } from "../api/types";
+import { revisionActivity } from "../lib/comments";
 import { NewerElsewhereBadge, StatusDot } from "./badges";
 
 /**
@@ -18,9 +19,14 @@ import { NewerElsewhereBadge, StatusDot } from "./badges";
 export default function ChainNav({
   chain,
   currentId,
+  memberDetails,
 }: {
   chain: Chain | undefined;
   currentId: number;
+  /** Each member's change detail (GET /api/changes/{id}), fetched per member
+   * by ReviewPage — the source for the unresolved count and newer-elsewhere
+   * badge, which are no longer carried on the chain path. */
+  memberDetails: Map<number, ChangeDetail>;
 }) {
   const [open, setOpen] = useState(true);
   if (!chain) return null;
@@ -49,20 +55,26 @@ export default function ChainNav({
           {chain.path.map((c) => {
             const pos = c.position + 1;
             const title = `${pos}. ${c.subject} — ${c.status}`;
+            // Per-change state from the member's own snapshot (revisions are
+            // ascending, so the last is the latest patchset); absent until the
+            // fan-out resolves, in which case nothing extra renders.
+            const detail = memberDetails.get(c.change_id);
+            const latest = detail?.revisions.at(-1)?.number ?? c.revision;
+            const unresolved = detail
+              ? revisionActivity(detail.threads, detail.drafts, c.revision)
+                  .unresolved
+              : 0;
             const inner = (
               <>
                 <StatusDot status={c.status} />
                 <span className="pos mono dim">{pos}</span>
                 <span className="subj">{c.subject}</span>
-                {c.latest_revision > c.revision ? (
-                  <NewerElsewhereBadge
-                    revision={c.revision}
-                    latest={c.latest_revision}
-                  />
+                {latest > c.revision ? (
+                  <NewerElsewhereBadge revision={c.revision} latest={latest} />
                 ) : null}
-                {c.counts.unresolved > 0 ? (
+                {unresolved > 0 ? (
                   <span className="unresolved-count" title="unresolved threads">
-                    {c.counts.unresolved} open
+                    {unresolved} open
                   </span>
                 ) : null}
               </>

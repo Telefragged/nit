@@ -7,7 +7,12 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Chain, ChangeStatus, PathEntry } from "../api/types";
+import type {
+  Chain,
+  ChangeDetail,
+  ChangeStatus,
+  PathEntry,
+} from "../api/types";
 import ChainNav from "./ChainNav";
 
 afterEach(cleanup);
@@ -23,8 +28,6 @@ function member(
   position: number,
   subject: string,
   status: ChangeStatus,
-  unresolved = 0,
-  extra: Partial<PathEntry> = {},
 ): PathEntry {
   return {
     change_id: changeId,
@@ -35,9 +38,52 @@ function member(
     revision: 0,
     latest_revision: 0,
     commit_sha: `sha${changeId}`,
-    counts: { threads: 0, drafts: 0, unresolved },
+    counts: { threads: 0, drafts: 0, unresolved: 0 },
     draft_decision: null,
-    ...extra,
+  };
+}
+
+/** A member's change snapshot: `latest`+1 revisions and `unresolved` open
+ * threads on r0 — the state ChainNav now reads off the snapshot, not the
+ * path. The path entries above carry none of it, so these assertions pass
+ * only because ChainNav reads from here. */
+function detail(
+  changeId: number,
+  latest: number,
+  unresolved: number,
+): ChangeDetail {
+  return {
+    id: changeId,
+    repo_id: 1,
+    change_key: `I${changeId}`,
+    subject: "",
+    revisions: Array.from({ length: latest + 1 }, (_, n) => ({
+      number: n,
+      commit_sha: `sha${changeId}r${n}`,
+      parent_sha: "",
+      base_sha: "",
+      partial: false,
+      message: "",
+      created_at: "",
+    })),
+    threads: Array.from({ length: unresolved }, (_, i) => ({
+      id: i,
+      change_id: changeId,
+      revision: 0,
+      file: null,
+      line: null,
+      side: "new",
+      range: null,
+      line_text: null,
+      resolved: false,
+      comments: [],
+      created_at: "",
+      updated_at: "",
+    })),
+    drafts: [],
+    reviews: [],
+    chains: [],
+    draft_decision: null,
   };
 }
 
@@ -50,18 +96,26 @@ const chain: Chain = {
   partial: false,
   path: [
     member(10, 0, "first change", "approved"),
-    member(11, 1, "second change", "changes_requested", 2, {
-      revision: 0,
-      latest_revision: 2,
-    }),
+    member(11, 1, "second change", "changes_requested"),
     member(12, 2, "third change", "pending"),
   ],
 };
 
+// Change 11 pins r0 but has r2 elsewhere (newer-elsewhere) and 2 open threads.
+const memberDetails = new Map<number, ChangeDetail>([
+  [10, detail(10, 0, 0)],
+  [11, detail(11, 2, 2)],
+  [12, detail(12, 0, 0)],
+]);
+
 const renderNav = (currentId: number) =>
   render(
     <MemoryRouter>
-      <ChainNav chain={chain} currentId={currentId} />
+      <ChainNav
+        chain={chain}
+        currentId={currentId}
+        memberDetails={memberDetails}
+      />
     </MemoryRouter>,
   );
 
@@ -71,7 +125,7 @@ describe("ChainNav", () => {
   it("renders nothing without a chain", () => {
     const { container } = render(
       <MemoryRouter>
-        <ChainNav chain={undefined} currentId={11} />
+        <ChainNav chain={undefined} currentId={11} memberDetails={new Map()} />
       </MemoryRouter>,
     );
     expect(container.firstChild).toBeNull();
