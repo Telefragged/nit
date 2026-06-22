@@ -1,0 +1,13 @@
+{
+  "name": "nit",
+  "owner": {
+    "name": "Telefragged"
+  },
+  "plugins": [
+    {
+      "name": "nit",
+      "source": "./plugins/nit",
+      "description": "Drive code review through nit — push commits for review, annotate decisions instead of blocking on questions, fork variations, and plan as reviewable commits."
+    }
+  ]
+}

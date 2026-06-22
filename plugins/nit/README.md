@@ -6,6 +6,20 @@ stalling on open questions, agents push each completed commit for review and
 keep the whole conversation — decisions, questions, alternatives — inside nit,
 anchored to the exact lines it concerns.
 
+## Install
+
+The [nit repo](https://github.com/Telefragged/nit) doubles as a Claude Code
+plugin marketplace. Add it, then install the plugin:
+
+```
+/plugin marketplace add Telefragged/nit
+/plugin install nit@nit
+```
+
+`/plugin list` confirms it's enabled and the `/nit:*` skills and commands are
+available; pin a branch or tag with `Telefragged/nit@<ref>`. Then run
+`/nit:install` once to set nit up for your project (see Prerequisites).
+
 ## Skills — the base behavior
 
 These drive nit on their own. Once the plugin is enabled, an agent can take a
