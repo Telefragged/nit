@@ -43,7 +43,27 @@
       craneScopeFor =
         pkgs:
         let
-          craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
+          rustToolchain = rustToolchainFor pkgs;
+          # crane builds its internal `crane-utils` helper with nixpkgs'
+          # default Rust, pulling a second full toolchain (plus LLVM) into the
+          # build closure beside our pinned one. Point it at the pinned
+          # toolchain and skip the SBOM (auditable) build it does not need.
+          craneUtilsRustPlatform =
+            let
+              base = pkgs.makeRustPlatform {
+                cargo = rustToolchain;
+                rustc = rustToolchain;
+              };
+            in
+            base
+            // {
+              buildRustPackage = args: base.buildRustPackage (args // { auditable = false; });
+            };
+          craneLib = ((crane.mkLib pkgs).overrideToolchain rustToolchain).overrideScope (
+            _final: prev: {
+              craneUtils = prev.craneUtils.override { rustPlatform = craneUtilsRustPlatform; };
+            }
+          );
           commonArgs = {
             # The workspace root Cargo.toml has no [package], so crane cannot
             # infer a name from it; set it here for every crane derivation
