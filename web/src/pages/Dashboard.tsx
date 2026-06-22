@@ -24,7 +24,6 @@ export default function Dashboard() {
   const graphQuery = useQuery({
     queryKey: ["graph", id],
     queryFn: () => getRepoGraph(id),
-    refetchInterval: 5_000,
   });
 
   // Each open node carries a change; fetch its detail concurrently so the
@@ -43,7 +42,6 @@ export default function Dashboard() {
     queries: activityIds.map((changeId) => ({
       queryKey: ["change", changeId],
       queryFn: () => getChange(changeId),
-      refetchInterval: 5_000,
     })),
   });
   const activity = new Map<number, ChangeDetail>();
