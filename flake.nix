@@ -147,11 +147,7 @@
           nit-web = pkgs.buildNpmPackage {
             pname = "nit-web";
             inherit (webArgs) version src npmDepsHash;
-            installPhase = ''
-              runHook preInstall
-              cp -r dist $out
-              runHook postInstall
-            '';
+            installPhase = "cp -r dist $out";
           };
 
           nit-unwrapped = craneLib.buildPackage (
