@@ -143,30 +143,6 @@ a.graph-subject:hover {
   stroke-dasharray: 5 4;
 }
 
-.graph-edge.lane-0 {
-  stroke: var(--graph-lane-0);
-}
-
-.graph-edge.lane-1 {
-  stroke: var(--graph-lane-1);
-}
-
-.graph-edge.lane-2 {
-  stroke: var(--graph-lane-2);
-}
-
-.graph-edge.lane-3 {
-  stroke: var(--graph-lane-3);
-}
-
-.graph-edge.lane-4 {
-  stroke: var(--graph-lane-4);
-}
-
-.graph-edge.lane-5 {
-  stroke: var(--graph-lane-5);
-}
-
 .graph-node {
   fill: var(--graph-node-bg);
   stroke-width: 2;
@@ -180,27 +156,35 @@ a.graph-subject:hover {
   stroke: var(--graph-head);
 }
 
-/* Open nodes carry their branch (lane) color, matching the edges. */
+/* Lane palette: each branch's edge and its open node share one color,
+   keyed off the --graph-lane-N tokens. (An edge is either history or a
+   lane; a behind fork keeps its lane color and only adds the dash above.) */
+.graph-edge.lane-0,
 .graph-node.node-lane-0 {
   stroke: var(--graph-lane-0);
 }
 
+.graph-edge.lane-1,
 .graph-node.node-lane-1 {
   stroke: var(--graph-lane-1);
 }
 
+.graph-edge.lane-2,
 .graph-node.node-lane-2 {
   stroke: var(--graph-lane-2);
 }
 
+.graph-edge.lane-3,
 .graph-node.node-lane-3 {
   stroke: var(--graph-lane-3);
 }
 
+.graph-edge.lane-4,
 .graph-node.node-lane-4 {
   stroke: var(--graph-lane-4);
 }
 
+.graph-edge.lane-5,
 .graph-node.node-lane-5 {
   stroke: var(--graph-lane-5);
 }
