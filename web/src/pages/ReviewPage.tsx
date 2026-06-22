@@ -1,6 +1,7 @@
 import {
   skipToken,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -26,7 +27,13 @@ import {
   getDiff,
   getRepo,
 } from "../api/client";
-import type { ChangeDetail, Review, Revision, Verdict } from "../api/types";
+import type {
+  ChangeDetail,
+  Decision,
+  Review,
+  Revision,
+  Verdict,
+} from "../api/types";
 import { StatusChip } from "../components/badges";
 import ChainNav from "../components/ChainNav";
 import CommentEditor from "../components/CommentEditor";
@@ -267,6 +274,25 @@ export default function ReviewPage() {
   const chainQ = useQuery({
     queryKey: ["chain", changeId, selected],
     queryFn: change ? () => getChain(changeId, selected) : skipToken,
+  });
+
+  // Each chain member's staged decision is read from its own change detail
+  // (GET /api/changes/{id}), fetched concurrently, rather than denormalized
+  // onto the chain path. Keyed ["change", id] so it shares the cache with the
+  // change query above (the current member is a warm hit). The review bar uses
+  // these for its chain-wide "Submit (k)" count and next-undecided nav.
+  const memberQueries = useQueries({
+    queries: (chainQ.data?.path ?? []).map((m) => ({
+      queryKey: ["change", m.change_id],
+      queryFn: () => getChange(m.change_id),
+    })),
+  });
+  const memberDecisions = new Map<number, Decision | null>();
+  (chainQ.data?.path ?? []).forEach((m, i) => {
+    const detail = memberQueries[i]?.data;
+    if (detail) {
+      memberDecisions.set(m.change_id, detail.draft_decision?.decision ?? null);
+    }
   });
 
   const againstRaw = searchParams.get("against");
@@ -838,6 +864,7 @@ export default function ReviewPage() {
         <ReviewBar
           change={change}
           chain={chain}
+          memberDecisions={memberDecisions}
           selectedRevision={selected}
           unresolved={pendingUnresolvedCount(threads)}
           replyOpen={replyOpen}

@@ -40,6 +40,7 @@ function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
 export default function ReviewBar({
   change,
   chain,
+  memberDecisions,
   selectedRevision,
   unresolved,
   replyOpen,
@@ -48,6 +49,10 @@ export default function ReviewBar({
   change: ChangeDetail;
   /** The selected revision's chain context, for submit + next-change nav. */
   chain: Chain | undefined;
+  /** Each chain member's staged decision (or null), keyed by change id —
+   * fetched per member by ReviewPage from GET /api/changes/{id}. The source
+   * for the chain-wide submit count and the next-undecided sweep. */
+  memberDecisions: Map<number, Decision | null>;
   selectedRevision: number;
   /** Threads that would stay open once the staged drafts publish — computed
    * by ReviewPage from the same assembled threads it already holds. */
@@ -71,12 +76,15 @@ export default function ReviewBar({
   const abandoned = here?.status === "abandoned";
   // Members of this chain that carry a staged decision — what Submit publishes.
   const stagedInChain =
-    chain?.path.filter((c) => c.draft_decision !== null).length ?? 0;
+    chain?.path.filter(
+      (c) => (memberDecisions.get(c.change_id) ?? null) !== null,
+    ).length ?? 0;
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ["change", change.id] });
+    // The chain-wide count reads every member's decision, so refresh all loaded
+    // change details, not only this one (each member is keyed ["change", id]).
+    void queryClient.invalidateQueries({ queryKey: ["change"] });
     void queryClient.invalidateQueries({ queryKey: ["chain"] });
-    void queryClient.invalidateQueries({ queryKey: ["chains"] });
   };
 
   // Stage a decision (does not publish): saves it server-side, closes the
@@ -92,7 +100,9 @@ export default function ReviewBar({
       const next =
         here &&
         chain?.path.find(
-          (c) => c.draft_decision === null && c.position > here.position,
+          (c) =>
+            (memberDecisions.get(c.change_id) ?? null) === null &&
+            c.position > here.position,
         );
       if (next) void navigate(`/changes/${next.change_id}`);
     },
