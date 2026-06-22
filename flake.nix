@@ -87,6 +87,14 @@
         {
           inherit craneLib commonArgs cargoArtifacts;
         };
+      # Shared by the web build (nit-web) and its lint check (web-lint):
+      # one source tree and one npm dependency closure (npmDepsHash), two
+      # scripts. System-independent, so it lives outside forAllSystems.
+      webArgs = {
+        version = "0.1.0";
+        src = ./web;
+        npmDepsHash = "sha256-7NKAoi4RpVq50ZjjeMTk/3//FA4qNNiQRt4zTKG4vrI=";
+      };
     in
     {
       devShells = forAllSystems (
@@ -138,9 +146,7 @@
         rec {
           nit-web = pkgs.buildNpmPackage {
             pname = "nit-web";
-            version = "0.1.0";
-            src = ./web;
-            npmDepsHash = "sha256-7NKAoi4RpVq50ZjjeMTk/3//FA4qNNiQRt4zTKG4vrI=";
+            inherit (webArgs) version src npmDepsHash;
             installPhase = ''
               runHook preInstall
               cp -r dist $out
@@ -206,6 +212,18 @@
               '';
             }
           );
+          # The frontend lint (eslint + stylelint + knip) as a validator, the
+          # web counterpart to clippy — it mirrors the devShell `npm run lint`.
+          # Shares nit-web's source and npm dependency closure (webArgs) but
+          # runs the lint in place of the build, so a stylelint, eslint, or
+          # knip regression fails `nix flake check` instead of slipping in.
+          # The lint report is the derivation's output.
+          web-lint = pkgs.buildNpmPackage {
+            pname = "nit-web-lint";
+            inherit (webArgs) version src npmDepsHash;
+            dontNpmBuild = true;
+            installPhase = "npm run lint > $out";
+          };
         }
       );
 
