@@ -25,8 +25,8 @@ fn push_prints_result_then_status_and_log_read_it_back() {
     g.repo.set_head("refs/heads/feat").unwrap(); // the agent's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // push <branch> from the cwd, base auto-detected (main). The result carries
-    // the tip change at rev 0 (0-based) and the tip-rooted chain.
+    // push <branch> from the cwd (base `main`). The result carries the tip
+    // change at rev 0 (0-based) and the tip-rooted chain.
     let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
@@ -321,7 +321,7 @@ fn bare_push_resolves_head() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _, stderr) = nit(&server, &g, &["repo", "create"]);
+    let (ok, _, stderr) = nit(&server, &g, &["repo", "create", "--base", "main"]);
     assert!(ok, "repo create: {stderr}");
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "bare push resolves HEAD: {stderr}");
@@ -338,7 +338,7 @@ fn push_resolves_detached_head() {
     g.repo.set_head_detached(c1).unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _, stderr) = nit(&server, &g, &["repo", "create"]);
+    let (ok, _, stderr) = nit(&server, &g, &["repo", "create", "--base", "main"]);
     assert!(ok, "repo create: {stderr}");
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "detached HEAD resolves: {stderr}");

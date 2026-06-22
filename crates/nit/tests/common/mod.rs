@@ -246,7 +246,7 @@ pub fn nit(server: &TestServer, repo: &GitRepo, args: &[&str]) -> (bool, Value, 
 /// `nit push <branch>` / `nit ready <branch>` from inside the repo: the branch
 /// is the positional commit (resolved locally). `cmd` is `"push"` or `"ready"`;
 /// `extra` carries flags like `--partial`. Registers the repo first
-/// (`nit repo create`, base auto-detected) so the push has somewhere to land;
+/// (`nit repo create --base main`) so the push has somewhere to land;
 /// a repeat create just errors, which is ignored.
 pub fn nit_register(
     server: &TestServer,
@@ -255,7 +255,7 @@ pub fn nit_register(
     branch: &str,
     extra: &[&str],
 ) -> (bool, Value, String) {
-    let _ = nit(server, repo, &["repo", "create"]);
+    let _ = nit(server, repo, &["repo", "create", "--base", "main"]);
     let mut args = vec![cmd, branch];
     args.extend_from_slice(extra);
     nit(server, repo, &args)
@@ -303,12 +303,9 @@ pub fn http_delete(url: &str) -> (u16, Value) {
 // Change-centric helpers (push + chain navigation)
 
 /// `POST /api/repos` over HTTP (≡ `nit repo create`). `base` pins the canonical
-/// branch, or is auto-detected when `None`. Returns `(status, Repo)`.
-pub fn create_repo(server: &TestServer, repo: &GitRepo, base: Option<&str>) -> (u16, Value) {
-    let mut body = json!({"git_dir": repo.git_dir()});
-    if let Some(b) = base {
-        body["base"] = json!(b);
-    }
+/// branch (it must name an existing branch). Returns `(status, Repo)`.
+pub fn create_repo(server: &TestServer, repo: &GitRepo, base: &str) -> (u16, Value) {
+    let body = json!({"git_dir": repo.git_dir(), "base": base});
     http_post(&server.url("/api/repos"), &body)
 }
 
@@ -324,7 +321,7 @@ pub fn push(
     base: &str,
     partial: Option<bool>,
 ) -> (u16, Value) {
-    let (st, body) = create_repo(server, repo, Some(base));
+    let (st, body) = create_repo(server, repo, base);
     if st != 200 && st != 409 {
         return (st, body);
     }
@@ -333,20 +330,6 @@ pub fn push(
         body["partial"] = json!(p);
     }
     http_post(&server.url("/api/push"), &body)
-}
-
-/// `POST /api/push` registering the repo with no base — exercises create's
-/// `main`/`master` auto-detection. A detection failure (ambiguous/missing) is
-/// returned as-is, so a test can assert it.
-pub fn push_no_base(server: &TestServer, repo: &GitRepo, tip: &str) -> (u16, Value) {
-    let (st, body) = create_repo(server, repo, None);
-    if st != 200 && st != 409 {
-        return (st, body);
-    }
-    http_post(
-        &server.url("/api/push"),
-        &json!({"git_dir": repo.git_dir(), "tip": tip}),
-    )
 }
 
 /// Publish a verdict on a change through the only publish path — stage the

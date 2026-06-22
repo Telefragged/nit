@@ -50,8 +50,8 @@ verification) never holds a push — post-push amends become new revisions by
 design. The only thing that delays a push is the commit not being done.
 
 ```sh
-nit repo create            # once per repo: register it, pinning the canonical
-#   branch (auto-detected, or --base <branch>); a push into an unregistered repo is a 404
+nit repo create --base <branch>   # once per repo: register it, pinning the canonical
+#   branch; a push into an unregistered repo is a 404
 # after EVERY completed commit (green, formatter-clean, one concern, Change-Id'd):
 nit push --partial         # push the checked-out commit; base comes from the repo
 #   first push creates the change(s) and the chain — review starts here, on commit one
@@ -86,8 +86,8 @@ push does not hold an unrelated chain partial.
 
 ### Rebasing onto a moved base
 
-The repo's **one canonical branch** is set at `nit repo create` (auto-detected,
-or `--base`); push neither takes nor configures a base. To rebase a chain onto a moved canonical branch (the
+The repo's **one canonical branch** is set at `nit repo create` (`--base`);
+push neither takes nor configures a base. To rebase a chain onto a moved canonical branch (the
 same base, advanced), rebase locally first (no server call),
 then push — the walk re-forks at the new merge-base and appends a revision to
 each change whose sha moved (pure rebases keep their status). A change whose
@@ -219,11 +219,11 @@ observes that itself.)
 
 ## Command reference
 
-- `nit repo create [--base <ref>] [--server <url>]` — register the cwd's repo
-  (once per repo), pinning its canonical branch: `--base` names it (it must
-  exist), else the local `main`/`master` is auto-detected — pass `--base` when
-  neither or both exist. 409 if the repo is already registered. Prints the
-  `Repo`. A `nit push` into an unregistered repo is a 404.
+- `nit repo create --base <ref> [--server <url>]` — register the cwd's repo
+  (once per repo), pinning its canonical branch: `--base` is required and must
+  name an existing branch (400 otherwise); nit never guesses it. 409 if the
+  repo is already registered. Prints the `Repo`. A `nit push` into an
+  unregistered repo is a 404.
 - `nit push [<commit>] [--partial] [--server <url>]` — push the
   cwd's checked-out commit (HEAD — a detached HEAD or tag included), or an
   explicit `<commit>` (any rev). The repo is the cwd's git-common-dir and must

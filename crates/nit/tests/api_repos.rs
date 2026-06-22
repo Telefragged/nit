@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use common::{
     GitRepo, TestServer, create_repo, fast_timer, http_get, http_patch, http_post, member_id, msg,
-    push, push_no_base, wait_for,
+    push, wait_for,
 };
 use serde_json::json;
 
@@ -109,51 +109,9 @@ fn repos_list_shape_base_branch_and_scoped_chains() {
 }
 
 #[test]
-fn base_auto_detected_at_create() {
-    // No `base`: a repo with only `main` auto-detects it at create time, and the
-    // registered repo then carries that base on every push.
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
-    g.branch("feat", c1);
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-
-    let (st, res) = push_no_base(&server, &g, "feat");
-    assert_eq!(st, 200, "{res}");
-    assert_eq!(res["chain"]["base_branch"], "main");
-    assert_eq!(repo_base(&server, first_repo(&server)), "main");
-
-    // A second push reuses the recorded base — still 200, still main.
-    let (st, _) = push_no_base(&server, &g, "feat");
-    assert_eq!(st, 200);
-    assert_eq!(repo_base(&server, first_repo(&server)), "main");
-}
-
-#[test]
-fn ambiguous_base_requires_explicit_flag() {
-    // Both `main` and `master` exist: detection is ambiguous, so a baseless
-    // create is a 400 asking the caller to specify the base.
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
-    g.branch("feat", c1);
-    g.branch("master", g.root);
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-
-    let (st, e) = push_no_base(&server, &g, "feat");
-    assert_eq!(st, 400, "{e}");
-    assert!(
-        e["error"].as_str().unwrap().contains("specify the base"),
-        "{e}"
-    );
-
-    // Naming the base explicitly resolves the ambiguity.
-    let (st, _) = push(&server, &g, "feat", "main", None);
-    assert_eq!(st, 200);
-}
-
-#[test]
-fn missing_base_branch_requires_explicit_flag() {
-    // Neither `main` nor `master`: a baseless create cannot guess, so it is a
-    // 400 asking the caller to specify the base.
+fn base_can_be_any_branch() {
+    // The base is whatever `--base` names — nit never assumes `main`/`master`.
+    // A repo without either registers fine against an arbitrary `trunk`.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("base: one", "Ib1"), &[("a.rs", "a\n")]);
     g.branch("trunk", c1);
@@ -162,17 +120,10 @@ fn missing_base_branch_requires_explicit_flag() {
     g.delete_branch("main");
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, e) = push_no_base(&server, &g, "feat");
-    assert_eq!(st, 400, "{e}");
-    assert!(
-        e["error"].as_str().unwrap().contains("specify the base"),
-        "{e}"
-    );
-
-    // With the base named, the same push succeeds against `trunk`.
     let (st, res) = push(&server, &g, "feat", "trunk", None);
     assert_eq!(st, 200, "{res}");
     assert_eq!(res["chain"]["base_branch"], "trunk");
+    assert_eq!(repo_base(&server, first_repo(&server)), "trunk");
 }
 
 #[test]
@@ -186,7 +137,7 @@ fn create_repo_registers_and_pins_base() {
 
     // An explicit base registers the repo and pins its canonical branch; no
     // push has happened, so it carries no live tips.
-    let (st, repo) = create_repo(&server, &g, Some("main"));
+    let (st, repo) = create_repo(&server, &g, "main");
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
     assert_eq!(repo["base_branch"], "main");
@@ -195,7 +146,7 @@ fn create_repo_registers_and_pins_base() {
 
     // Re-registering is a 409 even when it names a different base — create means
     // create, and the pinned base is fixed (one canonical branch per repo).
-    let (st, err) = create_repo(&server, &g, Some("trunk"));
+    let (st, err) = create_repo(&server, &g, "trunk");
     assert_eq!(st, 409, "{err}");
     assert!(
         err["error"]
@@ -234,29 +185,21 @@ fn push_into_unregistered_repo_is_404() {
     );
 
     // After create, the same push lands.
-    let (st, _) = create_repo(&server, &g, Some("main"));
+    let (st, _) = create_repo(&server, &g, "main");
     assert_eq!(st, 200);
     let (st, res) = unregistered("feat");
     assert_eq!(st, 200, "{res}");
 }
 
 #[test]
-fn create_repo_detects_base_and_rejects_unknown() {
+fn create_repo_rejects_unknown_base() {
+    // Naming a branch the repo doesn't have is a 400 — nit never guesses a base.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // No base: the lone `main` is auto-detected at create time.
-    let (st, repo) = create_repo(&server, &g, None);
-    assert_eq!(st, 200, "{repo}");
-    assert_eq!(repo["base_branch"], "main");
-
-    // A second, distinct repo: naming a branch it doesn't have is a 400.
-    let h = GitRepo::new();
-    let h1 = h.commit(&[h.root], &msg("core: one", "Ih1"), &[("b.rs", "b\n")]);
-    h.branch("feat", h1);
-    let (st, err) = create_repo(&server, &h, Some("nope"));
+    let (st, err) = create_repo(&server, &g, "nope");
     assert_eq!(st, 400, "{err}");
     assert!(err["error"].as_str().unwrap().contains("nope"), "{err}");
 }
@@ -269,13 +212,20 @@ fn nit_repo_create_cli() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // `nit repo create` from inside the repo registers the cwd's git dir.
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(["repo", "create"])
-        .current_dir(g.workdir())
-        .env("NIT_SERVER", &server.base)
-        .output()
-        .expect("running nit repo create");
+    let run = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_nit"))
+            .args(args)
+            .current_dir(g.workdir())
+            .env("NIT_SERVER", &server.base)
+            .output()
+            .expect("running nit repo create")
+    };
+
+    // `--base` is required: a bare create can't even parse.
+    assert!(!run(&["repo", "create"]).status.success());
+
+    // `nit repo create --base main` from inside the repo registers the git dir.
+    let out = run(&["repo", "create", "--base", "main"]);
     assert!(
         out.status.success(),
         "stderr: {}",

@@ -14,10 +14,10 @@ registered explicitly with `nit repo create` (`POST /api/repos`); a
   req:  {"git_dir": "/abs/path/.git", "base": "main"}
   resp: Repo
   ```
-  `git_dir` is canonicalized and must open as a git repo. `base` is optional:
-  given, it must name an existing branch; omitted, the local `main` or
-  `master` is auto-detected — a **400** asking for an explicit base when
-  neither or both exist. **409** if the git dir is already registered.
+  `git_dir` is canonicalized and must open as a git repo. `base` is
+  required and must name an existing branch — a **400** otherwise; nit
+  never guesses the canonical branch. **409** if the git dir is already
+  registered.
 - `GET /api/repos` → `{"repos": [Repo]}` — registration order.
 - `GET /api/repos/{id}` → Repo — one repo by id; 404 if unknown.
 - `PATCH /api/repos/{id}` — repoint a repo at a new git-common-dir after it

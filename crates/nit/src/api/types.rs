@@ -52,13 +52,11 @@ pub struct RepoList {
 }
 
 /// `POST /api/repos` request — register a repo (`nit repo create`). `base`
-/// configures the one canonical branch; omitted, it is auto-detected
-/// (`main`/`master`).
+/// configures the one canonical branch; it must name an existing branch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateRepo {
     pub git_dir: String,
-    #[serde(default)]
-    pub base: Option<String>,
+    pub base: String,
 }
 
 /// `PATCH /api/repos/{id}` request — repoint a moved repo at its new

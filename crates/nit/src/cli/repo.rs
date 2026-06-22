@@ -30,10 +30,9 @@ pub enum RepoCmd {
 
 #[derive(clap::Args)]
 pub struct RepoCreateArgs {
-    /// The repo's canonical base branch. Auto-detected (`main`/`master`) when
-    /// omitted; pass it when neither or both exist.
+    /// The repo's canonical base branch (must name an existing branch).
     #[arg(long)]
-    pub base: Option<String>,
+    pub base: String,
 }
 
 #[derive(clap::Args)]
@@ -64,10 +63,7 @@ pub fn repo(args: RepoArgs) -> Result<()> {
 fn repo_create(args: &RepoCreateArgs, server: Option<String>) -> Result<()> {
     let (git_dir, _repo) = discover_repo()?;
     let client = Client::new(server_url(server));
-    let mut body = json!({"git_dir": git_dir});
-    if let Some(base) = &args.base {
-        body["base"] = json!(base);
-    }
+    let body = json!({"git_dir": git_dir, "base": args.base});
     print_json(&client.post("/api/repos", &body)?)
 }
 
