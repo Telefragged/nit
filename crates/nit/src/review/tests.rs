@@ -108,12 +108,9 @@ fn merged_is_per_revision() {
             serde_json::json!({"action": "merged", "revision": 1}),
         ),
     ]);
-    // Only the landed revision shows merged; older ones show their status +
-    // merged_elsewhere.
+    // Only the landed revision shows merged; older ones show their own status.
     assert_eq!(c.status_at(1), ChangeStatus::Merged);
     assert_eq!(c.status_at(0), ChangeStatus::Approved);
-    assert!(c.merged_elsewhere(0));
-    assert!(!c.merged_elsewhere(1));
     assert!(c.is_terminal());
 }
 

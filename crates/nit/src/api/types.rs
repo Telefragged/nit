@@ -158,8 +158,6 @@ pub struct PathEntry {
     pub latest_revision: u64,
     /// Per `(change, this revision)`.
     pub status: ChangeStatus,
-    /// A newer revision of this change landed on the canonical branch.
-    pub merged_elsewhere: bool,
     pub subject: String,
     pub commit_sha: String,
     /// Scoped to this revision.

@@ -52,8 +52,6 @@ export interface PathEntry {
   latest_revision: number;
   /** Per (change, this revision). */
   status: ChangeStatus;
-  /** A newer revision of this change landed on the canonical branch. */
-  merged_elsewhere: boolean;
   subject: string;
   commit_sha: string;
   /** Scoped to this revision. */

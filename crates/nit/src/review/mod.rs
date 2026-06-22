@@ -356,13 +356,6 @@ impl ChangeProj {
         self.review_status_at(revision)
     }
 
-    /// A newer revision of this change landed on the canonical branch, but the
-    /// pinned revision is not it — the path member shows live with a note.
-    #[must_use]
-    pub fn merged_elsewhere(&self, revision: u64) -> bool {
-        matches!(self.lifecycle, Lifecycle::Merged { revision: landed } if landed != revision)
-    }
-
     /// The verdict-derived status at a revision: the latest review on it, else
     /// the prior revision's status when this one is a pure rebase, else
     /// pending. Never the lifecycle-overlay values (`merged`/`abandoned`).

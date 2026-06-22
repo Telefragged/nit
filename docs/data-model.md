@@ -213,7 +213,7 @@ status:  pending | approved | changes_requested | commented | merged | abandoned
 - **Lifecycle overlay**: `abandoned` is terminal **change-wide** (every
   revision). `merged` is terminal only for the **landed** patchset — a path
   pinning a non-landed revision of a merged change shows that member live with
-  a "newer revision landed elsewhere" note (`merged_elsewhere`), not merged.
+  its own review status, not `merged`.
 
 Two tips pinning two patchsets carry two independent verdicts — an approve in
 one chain never overwrites a request_changes in another, because each is scoped

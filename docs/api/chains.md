@@ -65,7 +65,6 @@ PathEntry = {
   "latest_revision": 3,              // newest patchset anywhere; > revision drives
                                      // the client's "newer elsewhere" badge
   "status": "pending",               // per (change, this revision)
-  "merged_elsewhere": false,         // a newer revision landed on the canonical branch
   "subject": "server: add health endpoint",
   "commit_sha": "…",
   "counts": {"threads": 3, "drafts": 1, "unresolved": 2}, // scoped to this revision

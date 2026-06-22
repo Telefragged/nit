@@ -32,8 +32,7 @@ websocket (`WS /api/stream`), which serves the agent-side followers
   changes in place — one row per member: position (0-based), subject, short
   sha, status chip, the pinned revision (`r{n}`), and activity counts
   (comments / drafts / unresolved). A member pinned to an older patchset than
-  its latest carries a `NEWER ELSEWHERE` badge; one whose newer revision
-  landed on the canonical branch carries `MERGED ELSEWHERE`. The list is `GET
+  its latest carries a `NEWER ELSEWHERE` badge. The list is `GET
 /api/chains?status=active`, whose `ChainSummary.path` already carries every
   member entry — the drawer renders from it with no further fetch.
   Merged/abandoned tips drop off (visible only with `status=all`); a
@@ -119,7 +118,7 @@ Expert-dense, dark-first (single dark theme for v1). Background
 `components/badges.tsx`: amber = needs reviewer, blue = agent working,
 green = approved/ready, red = changes requested/deletions, gray =
 informational. The gray-not-amber rule is deliberate — `PARTIAL`, `NEWER
-ELSEWHERE`, `MERGED ELSEWHERE` and the terminal states are inert markers, so
+ELSEWHERE` and the terminal states are inert markers, so
 amber stays reserved for "needs reviewer". Compact, no marketing fluff.
 Keyboard shortcuts (`[`/`]` file nav, `n`/`p` change nav, `c` comment, `a`
 reply modal) are optional in v1.
@@ -142,8 +141,8 @@ drafts, a rebase-drift file) plus a merged tip behind `status=all`; repo 2
 (quarry) a `request_changes` partial chain and an `approved` chain; repo 3
 (orbit) the **B-in-two-chains** scenario — one change `B` reached by two tips
 at two patchsets (tip C walks `B` at rev0, tip E at rev1), so the
-newer-elsewhere badge (`latest_revision` > `revision`), `merged_elsewhere`,
-and `ChangeDetail.chains` / `ChainRef` all render. Revisions are 0-based, so the
+newer-elsewhere badge (`latest_revision` > `revision`) and
+`ChangeDetail.chains` / `ChainRef` all render. Revisions are 0-based, so the
 fixtures exercise rev0/rev1 display directly. Keep fixtures contract-true.
 
 ## Checking your work

@@ -158,7 +158,6 @@ fn path_entry(
         revision,
         latest_revision,
         status: change.status_at(revision),
-        merged_elsewhere: change.merged_elsewhere(revision),
         subject,
         commit_sha: member.commit_sha.clone(),
         counts: change_counts(conn, change, revision)?,

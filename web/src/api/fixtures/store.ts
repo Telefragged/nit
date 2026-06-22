@@ -24,9 +24,6 @@ export interface ChangeRecord {
   subject: string;
   /** A terminal change-wide status (merged/abandoned); overrides reviews. */
   terminal?: Extract<ChangeStatus, "merged" | "abandoned">;
-  /** A newer revision of this change landed on the canonical branch; drives
-   * `merged_elsewhere` on whichever path member pins an older revision. */
-  merged_revision?: number;
   revisions: Revision[];
   reviews: Review[];
   /** Keyed by diffKey(revision, against). */

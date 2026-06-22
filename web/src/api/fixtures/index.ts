@@ -244,8 +244,6 @@ function pathEntry(
     revision: rev.number,
     latest_revision: latest,
     status: statusAt(c, rev.number),
-    merged_elsewhere:
-      c.merged_revision !== undefined && c.merged_revision > rev.number,
     subject: c.subject,
     commit_sha: rev.commit_sha,
     counts: {
