@@ -53,9 +53,16 @@ notification you act on. `--reviewer-only` mutes your own echoes;
 streams from the start (resume after a restart by passing the last seq you
 saw). Re-point the monitor at the new tip as you stack more commits.
 
-Each relayed line is a doorbell: read the full picture with `nit status` (and
-`nit log` for the entry detail), act on all of it, and let the monitor keep
-streaming.
+Each relayed line is a doorbell: read the full picture with `nit status`, and
+use `nit log` for entry detail. Its positional argument is a range of log
+positions, not a single index — a bare `N` reads only position `N`:
+
+```sh
+nit log --chain <tip_change_id> N..   # all log entries from index N on
+```
+
+`..` (the default) reads everything. Act on all of it, then let the monitor
+keep streaming.
 
 ## Acting on state
 
