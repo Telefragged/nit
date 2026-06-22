@@ -6,10 +6,45 @@ on:
     branches: [main]
 
 jobs:
-  nix:
+  # Enumerate the commits to check: every commit the event introduces, oldest
+  # first. For a pull request that is base..head; for a push it is the range
+  # the push advanced (before..after), falling back to just the tip when the
+  # before-sha is unknown (e.g. a brand-new branch).
+  commits:
+    runs-on: ubuntu-latest
+    outputs:
+      shas: ${{ steps.list.outputs.shas }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: list
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            shas=$(git rev-list --reverse "$BASE..$HEAD" | jq -R . | jq -cs .)
+          else
+            shas=$(git rev-list -n 1 "$HEAD" | jq -R . | jq -cs .)
+          fi
+          echo "shas=$shas" >> "$GITHUB_OUTPUT"
+
+  # Build and run the full check suite on each commit, in parallel — one runner
+  # per commit. fail-fast is off so every commit is reported, not just the
+  # first to break.
+  check:
+    needs: commits
+    if: ${{ needs.commits.outputs.shas != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        sha: ${{ fromJSON(needs.commits.outputs.shas) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.sha }}
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: nix-community/cache-nix-action@v7
         with:
@@ -18,3 +53,19 @@ jobs:
           gc-max-store-size: 6G
       - run: nix build
       - run: nix flake check
+
+  # Single stable status check — the name branch protection requires — green
+  # only when every per-commit leg above passed (or there was nothing to
+  # check).
+  nix:
+    if: always()
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          result='${{ needs.check.result }}'
+          echo "per-commit checks: $result"
+          case "$result" in
+            success | skipped) ;;
+            *) exit 1 ;;
+          esac
