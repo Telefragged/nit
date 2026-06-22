@@ -208,7 +208,7 @@ export default function DiffFileView({
   });
 
   // Split layout only: while a drag is in flight, lock selection to the
-  // side it started on (styles.css `sel-old`/`sel-new` set the other column
+  // side it started on (styles/diff.css `sel-old`/`sel-new` set the other column
   // user-select: none) so a cross-column drag yields one side's contiguous
   // text — the shape a comment range needs. This bounds the *captured* text
   // in engines that honor user-select across a spanning selection; the

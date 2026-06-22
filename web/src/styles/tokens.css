@@ -1,0 +1,50 @@
+/* nit — dark, dense, reviewer-grade. Single theme. */
+
+:root {
+  --bg: #0d1117;
+  --bg-raised: #131922;
+  --bg-inset: #0a0e14;
+  --bg-hover: #171f29;
+  --border: #212833;
+  --border-strong: #303a47;
+  --text: #cdd5de;
+  --text-dim: #8b949e;
+  --text-faint: #636e7b;
+  --amber: #d29922;
+  --blue: #58a6ff;
+  --green: #3fb950;
+  --red: #f85149;
+  --gray: #6e7681;
+  --amber-dim: rgb(210 153 34 / 15%);
+  --blue-dim: rgb(88 166 255 / 13%);
+  --green-dim: rgb(63 185 80 / 14%);
+  --red-dim: rgb(248 81 73 / 13%);
+  --gray-dim: rgb(110 118 129 / 16%);
+  --add-bg: rgb(63 185 80 / 10%);
+  --add-gutter: rgb(63 185 80 / 18%);
+  --add-intraline: rgb(63 185 80 / 30%);
+  --del-bg: rgb(248 81 73 / 9%);
+  --del-gutter: rgb(248 81 73 / 16%);
+  --del-intraline: rgb(248 81 73 / 28%);
+  --drift-bg: rgb(110 118 129 / 13%);
+  --drift-gutter: rgb(110 118 129 / 22%);
+
+  /* change graph (docs/api.md "Graph"): the HEAD ring, the merged-history
+     edge, and a per-lane branch palette (gleisbau-style — a whole branch
+     carries one color). Node/status colors reuse the palette above. */
+  --graph-node-bg: var(--bg-raised);
+  --graph-head: #aebbd0;
+  --graph-hist-edge: #4e576a;
+  --graph-lane-0: #a98a3e;
+  --graph-lane-1: #7e93cf;
+  --graph-lane-2: #a07cc4;
+  --graph-lane-3: #5fae8e;
+  --graph-lane-4: #c0894e;
+  --graph-lane-5: #c47e9e;
+  --mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", menlo, consolas,
+    "Liberation Mono", monospace;
+  --sans:
+    -apple-system, blinkmacsystemfont, "Segoe UI", inter, roboto,
+    "Helvetica Neue", sans-serif;
+}

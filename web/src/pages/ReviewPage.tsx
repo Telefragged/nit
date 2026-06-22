@@ -441,7 +441,7 @@ export default function ReviewPage() {
   ]);
 
   // Side-by-side selection paint: tag the diff column with the side the
-  // current selection's anchor sits in, so styles.css can blank the other
+  // current selection's anchor sits in, so styles/diff.css can blank the other
   // column's ::selection. The interleaved subgrid makes a one-column drag's
   // DOM range sweep the other column's cells too — without this they light
   // up even though they are not part of the selected text. Cleared when the
@@ -470,7 +470,7 @@ export default function ReviewPage() {
   // Scroll spy: keep activeFile — the rail highlight and the [ / ] cursor —
   // on the file section currently under the sticky chrome. The threshold is
   // the sections' scroll-margin-top, read from computed style so the sticky
-  // offsets live only in styles.css; it is the exact line scrollIntoView
+  // offsets live only in styles/review.css; it is the exact line scrollIntoView
   // targets, so a rail click / keystroke and the spy agree on the
   // destination file instead of fighting (+1 absorbs fractional scrolls).
   // During smooth programmatic scrolls the highlight follows live rather

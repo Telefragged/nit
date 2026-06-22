@@ -1,0 +1,377 @@
+/* threads + comments */
+
+.thread {
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  margin: 8px 12px 10px 58px;
+  max-width: 760px;
+  font-family: var(--sans);
+}
+
+.thread-draft {
+  border-style: dashed;
+  border-color: rgb(210 153 34 / 55%);
+}
+
+.thread-resolved {
+  opacity: 0.72;
+}
+
+.comment {
+  padding: 7px 11px 8px;
+}
+
+.comment + .comment {
+  border-top: 1px solid var(--border);
+}
+
+.comment-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 10.5px;
+  margin-bottom: 3px;
+}
+
+.author {
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.author-reviewer {
+  color: var(--text-dim);
+}
+
+.author-agent {
+  color: var(--blue);
+}
+
+.comment-time {
+  color: var(--text-faint);
+}
+
+.comment-tools {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+}
+
+.comment-body {
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+.thread-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 5px 11px;
+  border-top: 1px solid var(--border);
+}
+
+.thread-actions .spacer {
+  flex: 1;
+}
+
+.linkish {
+  background: none;
+  border: none;
+  color: var(--blue);
+  padding: 0;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.linkish:hover:not(:disabled) {
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+
+.linkish-danger {
+  color: var(--red);
+}
+
+/* editors */
+
+.editor {
+  margin: 8px 12px 10px 58px;
+  max-width: 760px;
+}
+
+.comment .editor,
+.thread .editor {
+  margin: 6px 0 2px;
+}
+
+.editor textarea {
+  width: 100%;
+  min-height: 64px;
+
+  /* useAutosize fits the height to the content, so manual resize is
+     redundant; cap very long bodies with a scroll instead of an endless box. */
+  resize: none;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.editor-actions .spacer {
+  flex: 1;
+}
+
+/* gerrit-style resolve checkbox beside the editor's buttons */
+.resolve-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.resolve-check input {
+  cursor: pointer;
+}
+
+/* an empty-body draft that only stages a resolve/reopen */
+.comment-resolution-only {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-dim);
+}
+
+.btn-primary {
+  border-color: rgb(88 166 255 / 55%);
+  color: var(--blue);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--blue-dim);
+}
+
+/* outdated / leftover groups */
+
+.outdated-group {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-inset);
+  padding: 8px 12px 2px;
+}
+
+.outdated-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+}
+
+.outdated-item {
+  margin-bottom: 10px;
+}
+
+.outdated-item .thread,
+.outdated-item .editor {
+  margin: 6px 0 0 24px;
+}
+
+.line-excerpt {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  padding: 3px 8px;
+  border-radius: 3px;
+  white-space: pre-wrap;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.excerpt-line {
+  color: var(--text-faint);
+  flex: none;
+}
+
+.change-threads {
+  margin-bottom: 14px;
+}
+
+.change-threads .thread {
+  margin-left: 0;
+}
+
+.leftover-threads {
+  margin-bottom: 14px;
+}
+
+.leftover-file {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: var(--bg-inset);
+}
+
+.leftover-path {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.leftover-file .thread,
+.leftover-file .editor {
+  margin: 6px 0 0 24px;
+}
+
+/* review bar + reply modal */
+
+.reply-modal-hint {
+  margin: -2px 0 8px;
+  font-size: 12px;
+}
+
+.review-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border-strong);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-lifecycle {
+  color: var(--text-dim);
+}
+
+.btn-lifecycle:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.review-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Full-bleed <dialog>: it paints the dim itself and is its own backdrop,
+   so backdrop presses hit the dialog element (not the inner box). Rendered
+   in the top layer by showModal(), hence no z-index. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: rgb(1 4 9 / 62%);
+}
+
+.modal-backdrop[open] {
+  /* gate on [open] so the UA's display:none for a closed dialog holds */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-backdrop::backdrop {
+  background: transparent;
+}
+
+.reply-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 560px;
+  max-width: calc(100vw - 48px);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 36px rgb(0 0 0 / 60%);
+}
+
+.reply-modal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.review-conflict {
+  margin-bottom: 0;
+}
+
+.reply-modal .banner strong {
+  flex: none; /* keep the banner label on one line in the narrow dialog */
+}
+
+.reply-modal textarea {
+  width: 100%;
+  min-height: 96px;
+
+  /* autosizes like the inline editor (see .editor textarea). */
+  resize: none;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.reply-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reply-modal-actions .spacer {
+  flex: 1;
+}
+
+.btn-approve {
+  border-color: rgb(63 185 80 / 55%);
+  color: var(--green);
+}
+
+.btn-approve:hover:not(:disabled) {
+  background: var(--green-dim);
+}
+
+.btn-request {
+  border-color: rgb(248 81 73 / 55%);
+  color: var(--red);
+}
+
+.btn-request:hover:not(:disabled) {
+  background: var(--red-dim);
+}

@@ -7,7 +7,7 @@ import RepoList from "./pages/RepoList.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import ReviewPage from "./pages/ReviewPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
-import "./styles.css";
+import "./styles/index.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

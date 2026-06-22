@@ -1,0 +1,15 @@
+/* nit stylesheet — split by area, one global cascade. Imported once
+   (main.tsx). Order is the cascade: tokens first, then the element base,
+   then chrome and the review/diff/comment surfaces, the syntax theme, and
+   the change graph. The classes stay global (no CSS Modules) on purpose —
+   the diff selection logic coordinates across components through shared
+   selectors (diff.css `sel-old`/`sel-new`, the `[data-sel-side]` ::selection
+   rules), which a scoped sheet would fight. */
+@import url("./tokens.css");
+@import url("./base.css");
+@import url("./chrome.css");
+@import url("./review.css");
+@import url("./diff.css");
+@import url("./comments.css");
+@import url("./highlight.css");
+@import url("./graph.css");

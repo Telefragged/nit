@@ -1,0 +1,212 @@
+/* change graph — one spine-centered DAG over the canonical branch
+   (docs/frontend.md, docs/api.md "Graph"). A left SVG rail (lanes + nodes)
+   beside per-row change cards: GRAPH | CHANGE | STATUS | REV | ACTIVITY. */
+.change-graph {
+  /* Rows sit on the page background, like table.list; only the header (and the
+     border) is raised. */
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.graph-colhead {
+  display: grid;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 18px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.graph-body {
+  position: relative;
+}
+
+.graph-rail {
+  position: absolute;
+  inset: 0 auto 0 0;
+  pointer-events: none;
+
+  /* Always paint above the rows so a row's hover highlight stays under the
+     rail. Merged rows fade via an inline opacity, and opacity < 1 makes a row
+     its own stacking context — without this the rail would slip beneath those
+     rows' hover while staying above the opaque (HEAD/open) ones. */
+  z-index: 1;
+}
+
+.graph-row {
+  display: grid;
+  grid-template-columns: var(--graph-cols);
+  align-items: center;
+  gap: 16px;
+  height: var(--row-h);
+  padding: 0 18px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.graph-row:last-child {
+  border-bottom: none;
+}
+
+/* Clickable rows highlight on hover (like the repo list), the rest stay flat. */
+.graph-row.is-clickable:hover {
+  background: var(--bg-hover);
+}
+
+.graph-cell-rail {
+  width: var(--rail-w);
+}
+
+.graph-cell-change {
+  min-width: 0;
+}
+
+.graph-subject {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+a.graph-subject:hover {
+  color: var(--blue);
+}
+
+.graph-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 3px;
+}
+
+.graph-row.is-history .graph-subject {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* The "earlier history hidden" marker row when the window is truncated. Grey
+   matches the merged-history subjects (--text-dim); the row's opacity (set
+   inline to the next fade step) carries it one gradient further. */
+.graph-collapsed-label {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.graph-chevron {
+  fill: none;
+  stroke: var(--graph-hist-edge);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.graph-plain-status {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.graph-cell-rev {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.graph-cell-activity {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* rail SVG */
+.graph-edge {
+  fill: none;
+  stroke-width: 2.2;
+}
+
+.graph-edge.edge-history {
+  stroke: var(--graph-hist-edge);
+}
+
+/* A behind fork keeps its branch color but dashes to flag the older base. */
+.graph-edge.edge-behind {
+  stroke-dasharray: 5 4;
+}
+
+.graph-edge.lane-0 {
+  stroke: var(--graph-lane-0);
+}
+
+.graph-edge.lane-1 {
+  stroke: var(--graph-lane-1);
+}
+
+.graph-edge.lane-2 {
+  stroke: var(--graph-lane-2);
+}
+
+.graph-edge.lane-3 {
+  stroke: var(--graph-lane-3);
+}
+
+.graph-edge.lane-4 {
+  stroke: var(--graph-lane-4);
+}
+
+.graph-edge.lane-5 {
+  stroke: var(--graph-lane-5);
+}
+
+.graph-node {
+  fill: var(--graph-node-bg);
+  stroke-width: 2;
+}
+
+.graph-node.node-gray {
+  stroke: var(--gray);
+}
+
+.graph-node.node-head {
+  stroke: var(--graph-head);
+}
+
+/* Open nodes carry their branch (lane) color, matching the edges. */
+.graph-node.node-lane-0 {
+  stroke: var(--graph-lane-0);
+}
+
+.graph-node.node-lane-1 {
+  stroke: var(--graph-lane-1);
+}
+
+.graph-node.node-lane-2 {
+  stroke: var(--graph-lane-2);
+}
+
+.graph-node.node-lane-3 {
+  stroke: var(--graph-lane-3);
+}
+
+.graph-node.node-lane-4 {
+  stroke: var(--graph-lane-4);
+}
+
+.graph-node.node-lane-5 {
+  stroke: var(--graph-lane-5);
+}
+
+.graph-node-ring {
+  fill: none;
+  stroke: var(--graph-head);
+  stroke-width: 2;
+}

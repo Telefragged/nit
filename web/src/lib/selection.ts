@@ -120,7 +120,7 @@ export function selectionAnchorSide(anchor: Node | null): CommentSide | null {
  * new column `side: "new"`; the caller maps that to a stored
  * (revision, side) for the current diff range (lib/comments). In split
  * view the swept DOM region covers both columns; cells of the other side
- * are dropped here, so a one-column drag (which styles.css `sel-old`/
+ * are dropped here, so a one-column drag (which styles/diff.css `sel-old`/
  * `sel-new` also bias toward where the engine honors user-select) maps to
  * that column's contiguous lines. A collapsed
  * selection inside a single cell degrades to a plain line comment on that

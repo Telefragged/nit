@@ -1,0 +1,83 @@
+/* ------------------------------------------------- hljs tokens (dark) */
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-tag {
+  color: #ff7b72;
+}
+
+.hljs-string,
+.hljs-regexp {
+  color: #a5d6ff;
+}
+
+.hljs-number,
+.hljs-literal {
+  color: #79c0ff;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.hljs-title,
+.hljs-title.function_ {
+  color: #d2a8ff;
+}
+
+.hljs-title.class_,
+.hljs-type,
+.hljs-built_in {
+  color: #ffa657;
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-selector-attr {
+  color: #79c0ff;
+}
+
+.hljs-meta {
+  color: #d2a8ff;
+}
+
+.hljs-params {
+  color: inherit;
+}
+
+.hljs-section {
+  color: #79c0ff;
+  font-weight: 600;
+}
+
+.hljs-bullet {
+  color: #ffa657;
+}
+
+.hljs-variable,
+.hljs-template-variable {
+  color: #ffa657;
+}
+
+.hljs-symbol {
+  color: #a5d6ff;
+}
+
+.hljs-addition {
+  color: #aff5b4;
+}
+
+.hljs-deletion {
+  color: #ffdcd7;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}

@@ -11,7 +11,7 @@ import { NewerElsewhereBadge, StatusDot } from "./badges";
  * list below is the part whose length varies per change, so it (not the
  * chain) absorbs the reflow. A disclosure header collapses the list to give
  * the file list below more room; the list scrolls within its own height cap
- * when the chain itself is long (styles.css). The row layout mirrors the
+ * when the chain itself is long (styles/review.css). The row layout mirrors the
  * file rail's, so the two stacked lists read as one. A member pinned to an
  * older revision than its latest carries a NEWER ELSEWHERE badge inline.
  */

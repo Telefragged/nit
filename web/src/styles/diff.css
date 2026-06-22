@@ -1,0 +1,248 @@
+/* diff grid — a CSS grid, not a table. Table-mode selection is
+   cell-quantized: a mouse drag snaps to whole cells and bleeds across
+   columns, so a partial or single-side selection is impossible. Laid out
+   with grid + subgrid the diff selects like normal text, which is what
+   lib/selection.ts maps to a comment range. */
+
+.diff-grid {
+  display: grid;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diff-grid-unified {
+  grid-template-columns:
+    minmax(44px, max-content) minmax(44px, max-content)
+    minmax(0, 1fr);
+}
+
+.diff-grid-split {
+  grid-template-columns:
+    minmax(44px, max-content) minmax(0, 1fr)
+    minmax(44px, max-content) minmax(0, 1fr);
+}
+
+/* Each row spans all columns and re-exposes them through subgrid, so every
+   row's cells share one set of column tracks — the alignment the table
+   gave, without the table. */
+.line-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
+.line-row .g {
+  padding: 0 8px;
+  text-align: right;
+  color: var(--text-faint);
+  user-select: none;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.line-row .code {
+  white-space: pre-wrap;
+
+  /* Break long lines at word boundaries when possible (never mid-token
+     unless unavoidable), and give wrapped continuations a hanging indent
+     so they read as continuations, not as fresh source lines. min-width:0
+     lets the 1fr track shrink below content so wrapping actually happens. */
+  overflow-wrap: anywhere;
+  padding: 0 10px 0 24px;
+  text-indent: -20px;
+  min-width: 0;
+}
+
+.line-row .code.half {
+  border-right: 1px solid var(--border);
+}
+
+/* While a split-view drag runs, mark the side it did not start on
+   user-select: none (DiffFileView sets sel-old/sel-new on mousedown). In
+   engines that honor user-select across a spanning selection this keeps a
+   cross-column drag's captured text to one column — the shape a comment
+   range needs. Blink ignores it for the paint (and largely for the text),
+   so the visual highlight is suppressed separately by the data-sel-side
+   rule below. */
+.diff-grid.sel-old [data-side="new"],
+.diff-grid.sel-new [data-side="old"] {
+  user-select: none;
+}
+
+/* A split selection belongs to one column, but the interleaved subgrid
+   makes its DOM range sweep the other column's cells in document order, so
+   the browser paints them too. ReviewPage tags the diff column with the
+   anchor's side; blank the opposite column's selection — its code/gutter
+   cells (data-side) and its inline-comment column (meta-col-*) alike — so
+   only the dragged side highlights. (user-select: none above governs which
+   text is captured, not whether the paint shows.) The descendant ::selection
+   is what bites: the selected text lives in nested hljs token / comment
+   spans, not as direct children of the column element. */
+.diff-column[data-sel-side="old"]
+  :is([data-side="new"], .meta-col-new)
+  ::selection,
+.diff-column[data-sel-side="new"]
+  :is([data-side="old"], .meta-col-old)
+  ::selection {
+  background: transparent;
+}
+
+.sign {
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.code.add .sign {
+  color: var(--green);
+}
+
+.code.del .sign {
+  color: var(--red);
+}
+
+.code.add {
+  background: var(--add-bg);
+}
+
+.g.add {
+  background: var(--add-gutter);
+}
+
+.code.del {
+  background: var(--del-bg);
+}
+
+.g.del {
+  background: var(--del-gutter);
+}
+
+.code.void,
+.g.void {
+  background: var(--bg-inset);
+}
+
+/* Rebase drift: lines changed by the base moving, not the agent
+   (docs/api.md "Rebase-aware interdiffs"). Tinted neutral grey so they read
+   as background movement — distinct from the agent's green/red edits — and
+   dimmed, since they do not count toward the diff. The triple class beats
+   the .code.add / .code.del background above. */
+.code.add.drift,
+.code.del.drift {
+  background: var(--drift-bg);
+}
+
+.g.add.drift,
+.g.del.drift {
+  background: var(--drift-gutter);
+}
+
+.code.drift .code-text {
+  opacity: 0.6;
+}
+
+.code.drift .sign {
+  color: var(--text-faint);
+}
+
+/* Intraline (word-level) emphasis inside modified line pairs. */
+.code.add .intraline {
+  background: var(--add-intraline);
+  border-radius: 2px;
+}
+
+.code.del .intraline {
+  background: var(--del-intraline);
+  border-radius: 2px;
+}
+
+/* Drift lines stay uniformly grey — neutralise the add/del intraline tint
+   (this rule follows them, so equal specificity resolves in its favour). */
+.code.drift .intraline {
+  background: var(--gray-dim);
+}
+
+/* Commented text ranges (docs/api.md "Range comments"). Amber = needs
+   reviewer attention, kept translucent so syntax colors read through;
+   overlapping ranges nest and the rgba stacks darker. The dotted rule
+   points at the thread below the range's last line. */
+.code-text .comment-range {
+  background: rgb(210 153 34 / 18%);
+  border-bottom: 1px dotted rgb(210 153 34 / 70%);
+}
+
+.code-text .comment-range-active {
+  background: rgb(210 153 34 / 32%);
+  border-bottom-style: solid;
+}
+
+/* Transient "why c did nothing" notice in the diffbar. */
+.selection-miss {
+  color: var(--amber);
+  font-size: 12px;
+}
+
+.hunk-row {
+  grid-column: 1 / -1;
+  background: rgb(88 166 255 / 5%);
+  color: var(--text-faint);
+  font-size: 11px;
+  padding: 3px 12px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  user-select: none; /* separator chrome stays out of copied code */
+}
+
+.diff-grid > .hunk-row:first-child {
+  border-top: none;
+}
+
+.hunk-skip {
+  margin-right: 12px;
+  color: var(--text-faint);
+}
+
+.hunk-header {
+  color: var(--blue);
+  opacity: 0.75;
+}
+
+.meta-row {
+  grid-column: 1 / -1;
+  background: var(--bg-inset);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Side-by-side: a row's threads sit under the column they were made on —
+   old-side left, new-side right (docs/api.md "Comment placement") — by
+   re-exposing the diff's columns through subgrid and spanning each half. */
+.meta-row.meta-split {
+  display: grid;
+  grid-template-columns: subgrid;
+}
+
+.meta-col {
+  min-width: 0;
+}
+
+.meta-col-old {
+  grid-column: 1 / 3;
+}
+
+.meta-col-new {
+  grid-column: 3 / 5;
+  border-left: 1px solid var(--border);
+}
+
+/* Inside a split half the thread clears one gutter, not the unified row's
+   pair, so it needs far less indent than the full-width default below. */
+.meta-col .thread,
+.meta-col .editor {
+  margin-left: 12px;
+  margin-right: 10px;
+  max-width: none;
+}
