@@ -50,8 +50,10 @@ verification) never holds a push — post-push amends become new revisions by
 design. The only thing that delays a push is the commit not being done.
 
 ```sh
+nit repo create            # once per repo: register it, pinning the canonical
+#   branch (auto-detected, or --base <branch>); a push into an unregistered repo is a 404
 # after EVERY completed commit (green, formatter-clean, one concern, Change-Id'd):
-nit push --partial         # push the checked-out commit; base auto-detected
+nit push --partial         # push the checked-out commit; base comes from the repo
 #   first push creates the change(s) and the chain — review starts here, on commit one
 nit ready                  # last commit done: clears partial
 
@@ -84,9 +86,8 @@ push does not hold an unrelated chain partial.
 
 ### Rebasing onto a moved base
 
-`base` configures the repo's **one canonical branch**, recorded on the repo's
-first push (auto-detected, or set with `--base`); a later push naming a
-_different_ base is a 400. To rebase a chain onto a moved canonical branch (the
+The repo's **one canonical branch** is set at `nit repo create` (auto-detected,
+or `--base`); push neither takes nor configures a base. To rebase a chain onto a moved canonical branch (the
 same base, advanced), rebase locally first (no server call),
 then push — the walk re-forks at the new merge-base and appends a revision to
 each change whose sha moved (pure rebases keep their status). A change whose
@@ -218,17 +219,22 @@ observes that itself.)
 
 ## Command reference
 
-- `nit push [<commit>] [--partial] [--base <ref>] [--server <url>]` — push the
+- `nit repo create [--base <ref>] [--server <url>]` — register the cwd's repo
+  (once per repo), pinning its canonical branch: `--base` names it (it must
+  exist), else the local `main`/`master` is auto-detected — pass `--base` when
+  neither or both exist. 409 if the repo is already registered. Prints the
+  `Repo`. A `nit push` into an unregistered repo is a 404.
+- `nit push [<commit>] [--partial] [--server <url>]` — push the
   cwd's checked-out commit (HEAD — a detached HEAD or tag included), or an
-  explicit `<commit>` (any rev). The repo is the cwd's git-common-dir. `--base`
-  is the canonical branch, auto-detected (`main`/`master`) when omitted — pass
-  it when neither or both exist. Server defaults to `$NIT_SERVER` or
+  explicit `<commit>` (any rev). The repo is the cwd's git-common-dir and must
+  already be registered (`nit repo create`); the canonical branch is the repo's
+  stored one. Server defaults to `$NIT_SERVER` or
   `http://127.0.0.1:8877`. Prints the `PushResult` (the tip change + the derived
   chain). Idempotent — a re-push where nothing moved records
-  nothing and succeeds (200); a structural fault is a 400, a revision to an
-  abandoned change or an already-merged tip a 409. `--partial` is sticky (a
-  plain push never clears it). No cursor returned.
-- `nit ready [<commit>] [--base <ref>] [--server <url>]` — clears the partial
+  nothing and succeeds (200); an unregistered repo is a 404, a structural fault
+  a 400, a revision to an abandoned change or an already-merged tip a 409.
+  `--partial` is sticky (a plain push never clears it). No cursor returned.
+- `nit ready [<commit>] [--server <url>]` — clears the partial
   flag and refreshes. Idempotent.
 - `nit status [--chain <tip-change-id>] [--oneline] [--server <url>]` — the
   derived `Chain` for the cwd's tip (or `--chain`), no blocking. `--oneline`

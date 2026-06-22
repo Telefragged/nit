@@ -1,10 +1,10 @@
-//! Repo endpoints: list, fetch, and relocate registered repos.
+//! Repo endpoints: create, list, fetch, and relocate registered repos.
 
 use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
-use git2::Repository;
+use git2::{BranchType, Repository};
 
 use crate::db;
 
@@ -20,6 +20,61 @@ fn repo_json(state: &AppState, row: db::RepoRow) -> types::Repo {
         git_dir: row.git_dir,
         base_branch: row.base_branch,
         active_chains: active,
+    }
+}
+
+/// Register a repo (`nit repo create`), configuring its one canonical branch.
+/// `base` is taken as given (it must name an existing branch) or auto-detected
+/// (`main`/`master`) when omitted. 409 if the git dir is already registered.
+pub(super) async fn create_repo(
+    State(state): State<Arc<AppState>>,
+    AppJson(req): AppJson<types::CreateRepo>,
+) -> Result<Json<types::Repo>, Error> {
+    blocking(move || {
+        let conn = state.open_db()?;
+        let canonical = canonical_git_dir(&req.git_dir)?;
+        let repo = Repository::open(&canonical).map_err(|e| {
+            Error::bad_request(format!(
+                "not a git repository at {canonical}: {}",
+                e.message()
+            ))
+        })?;
+        if let Some(existing) = db::find_repo(&conn, &canonical)? {
+            return Err(Error::conflict(format!(
+                "{canonical} is already registered as repo {}",
+                existing.id
+            )));
+        }
+        let base = match req.base.as_deref() {
+            Some(b) if repo.find_branch(b, BranchType::Local).is_ok() => b.to_string(),
+            Some(b) => {
+                return Err(Error::bad_request(format!(
+                    "no '{b}' branch found — name an existing branch as the base"
+                )));
+            }
+            None => detect_base(&repo)?,
+        };
+        let row = db::create_repo(&conn, &canonical, &base)?;
+        state.ensure_repo(&row);
+        Ok(Json(repo_json(&state, row)))
+    })
+    .await
+}
+
+/// Auto-detect a fresh repo's canonical branch: the local `main` or `master`,
+/// whichever exists. Neither or both is ambiguous — a 400 asking the caller to
+/// specify the base.
+pub(super) fn detect_base(repo: &Repository) -> Result<String, Error> {
+    let has = |name| repo.find_branch(name, BranchType::Local).is_ok();
+    match (has("main"), has("master")) {
+        (true, false) => Ok("main".to_string()),
+        (false, true) => Ok("master".to_string()),
+        (true, true) => Err(Error::bad_request(
+            "repo has both 'main' and 'master' — specify the base branch explicitly",
+        )),
+        (false, false) => Err(Error::bad_request(
+            "no 'main' or 'master' branch found — specify the base branch explicitly",
+        )),
     }
 }
 

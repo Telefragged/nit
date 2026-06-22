@@ -1,20 +1,20 @@
-//! The repo registry over HTTP (docs/api.md "Repos"). A repo is created
-//! lazily by the first `nit push`; its identity is the git-common-dir and it
-//! carries exactly one canonical `base_branch` (the first push's base — a
-//! later push naming a different base is a 400). `GET /api/repos` lists each
-//! repo with its live-tip `active_chains` count, which excludes a fully
-//! merged/abandoned chain (decided only by the background timer).
-//! `GET /api/chains?repo={id}` scopes the chain list to one repo, and
-//! `PATCH /api/repos/{id}` (≡ `nit repo move`) repoints a repo after a disk
-//! move (404 unknown, 400 unresolvable, 409 collision).
+//! The repo registry over HTTP (docs/api.md "Repos"). A repo is registered
+//! explicitly with `nit repo create` (`POST /api/repos`), pinning its one
+//! canonical `base_branch`; its identity is the git-common-dir, and a push
+//! into an unregistered repo is a 404. `GET /api/repos` lists each repo with
+//! its live-tip `active_chains` count, which excludes a fully merged/abandoned
+//! chain (decided only by the background timer). `GET /api/chains?repo={id}`
+//! scopes the chain list to one repo, and `PATCH /api/repos/{id}`
+//! (≡ `nit repo move`) repoints a repo after a disk move (404 unknown, 400
+//! unresolvable, 409 collision).
 
 mod common;
 
 use std::time::Duration;
 
 use common::{
-    GitRepo, TestServer, fast_timer, http_get, http_patch, http_post, member_id, msg, push,
-    push_no_base, wait_for,
+    GitRepo, TestServer, create_repo, fast_timer, http_get, http_patch, http_post, member_id, msg,
+    push, push_no_base, wait_for,
 };
 use serde_json::json;
 
@@ -60,7 +60,7 @@ fn repos_list_shape_base_branch_and_scoped_chains() {
 
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
 
-    // Repos are created lazily by the first push; `base` is recorded then.
+    // The `push` helper registers each repo first (base `main`), then pushes.
     let (st, _) = push(&server, &a, "feat", "main", None);
     assert_eq!(st, 200);
     // Two independent tips off main → two live chains in repo b.
@@ -86,7 +86,7 @@ fn repos_list_shape_base_branch_and_scoped_chains() {
     let id_b = repo_b["id"].as_u64().unwrap();
     assert_ne!(id_a, id_b, "distinct git dirs are distinct repos");
 
-    // Repo shape: id, git_dir, base_branch (the first push's base), active_chains.
+    // Repo shape: id, git_dir, base_branch (set at create), active_chains.
     assert_eq!(repo_a["base_branch"], "main");
     assert_eq!(repo_b["base_branch"], "main");
     assert_eq!(active_chains(&server, id_a), 1);
@@ -109,39 +109,9 @@ fn repos_list_shape_base_branch_and_scoped_chains() {
 }
 
 #[test]
-fn base_branch_is_pinned_by_the_first_push() {
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
-    g.branch("feat", c1);
-    // A second canonical branch candidate, identical to main here.
-    g.branch("trunk", g.root);
-
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-
-    // First push records `main` as the repo's one canonical branch.
-    let (st, _) = push(&server, &g, "feat", "main", None);
-    assert_eq!(st, 200);
-    let id = first_repo(&server);
-    assert_eq!(repo_base(&server, id), "main");
-
-    // A later push naming a different base is a 400 — one base per repo.
-    let (st, err) = push(&server, &g, "feat", "trunk", None);
-    assert_eq!(st, 400, "{err}");
-    assert!(
-        err["error"].as_str().unwrap_or("").contains("canonical"),
-        "{err}"
-    );
-
-    // Re-pushing the original base still works, and the base is unchanged.
-    let (st, _) = push(&server, &g, "feat", "main", None);
-    assert_eq!(st, 200);
-    assert_eq!(repo_base(&server, id), "main");
-}
-
-#[test]
-fn base_auto_detected_on_first_push() {
-    // No `base` in the request: a fresh repo with only `main` auto-detects it,
-    // and a registered repo then reuses its stored base on later baseless pushes.
+fn base_auto_detected_at_create() {
+    // No `base`: a repo with only `main` auto-detects it at create time, and the
+    // registered repo then carries that base on every push.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
@@ -152,7 +122,7 @@ fn base_auto_detected_on_first_push() {
     assert_eq!(res["chain"]["base_branch"], "main");
     assert_eq!(repo_base(&server, first_repo(&server)), "main");
 
-    // A second baseless push reuses the recorded base — still 200, still main.
+    // A second push reuses the recorded base — still 200, still main.
     let (st, _) = push_no_base(&server, &g, "feat");
     assert_eq!(st, 200);
     assert_eq!(repo_base(&server, first_repo(&server)), "main");
@@ -161,7 +131,7 @@ fn base_auto_detected_on_first_push() {
 #[test]
 fn ambiguous_base_requires_explicit_flag() {
     // Both `main` and `master` exist: detection is ambiguous, so a baseless
-    // first push is a 400 asking the caller to specify the base.
+    // create is a 400 asking the caller to specify the base.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
@@ -182,8 +152,8 @@ fn ambiguous_base_requires_explicit_flag() {
 
 #[test]
 fn missing_base_branch_requires_explicit_flag() {
-    // Neither `main` nor `master`: a baseless push cannot guess, so it is a 400
-    // asking the caller to specify the base.
+    // Neither `main` nor `master`: a baseless create cannot guess, so it is a
+    // 400 asking the caller to specify the base.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("base: one", "Ib1"), &[("a.rs", "a\n")]);
     g.branch("trunk", c1);
@@ -203,6 +173,121 @@ fn missing_base_branch_requires_explicit_flag() {
     let (st, res) = push(&server, &g, "feat", "trunk", None);
     assert_eq!(st, 200, "{res}");
     assert_eq!(res["chain"]["base_branch"], "trunk");
+}
+
+#[test]
+fn create_repo_registers_and_pins_base() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    // A second canonical-branch candidate, to prove a re-create can't switch it.
+    g.branch("trunk", g.root);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    // An explicit base registers the repo and pins its canonical branch; no
+    // push has happened, so it carries no live tips.
+    let (st, repo) = create_repo(&server, &g, Some("main"));
+    assert_eq!(st, 200, "{repo}");
+    assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
+    assert_eq!(repo["base_branch"], "main");
+    assert_eq!(repo["active_chains"].as_u64(), Some(0));
+    let id = first_repo(&server);
+
+    // Re-registering is a 409 even when it names a different base — create means
+    // create, and the pinned base is fixed (one canonical branch per repo).
+    let (st, err) = create_repo(&server, &g, Some("trunk"));
+    assert_eq!(st, 409, "{err}");
+    assert!(
+        err["error"]
+            .as_str()
+            .unwrap()
+            .contains("already registered"),
+        "{err}"
+    );
+    assert_eq!(repo_base(&server, id), "main");
+}
+
+#[test]
+fn push_into_unregistered_repo_is_404() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    // No `nit repo create` first: the push is rejected and nothing is recorded.
+    let unregistered = |tip: &str| {
+        http_post(
+            &server.url("/api/push"),
+            &json!({"git_dir": g.git_dir(), "tip": tip}),
+        )
+    };
+    let (st, err) = unregistered("feat");
+    assert_eq!(st, 404, "{err}");
+    assert!(
+        err["error"].as_str().unwrap().contains("not registered"),
+        "{err}"
+    );
+    let (_, list) = http_get(&server.url("/api/repos"));
+    assert!(
+        list["repos"].as_array().unwrap().is_empty(),
+        "a rejected push registers nothing: {list}"
+    );
+
+    // After create, the same push lands.
+    let (st, _) = create_repo(&server, &g, Some("main"));
+    assert_eq!(st, 200);
+    let (st, res) = unregistered("feat");
+    assert_eq!(st, 200, "{res}");
+}
+
+#[test]
+fn create_repo_detects_base_and_rejects_unknown() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    // No base: the lone `main` is auto-detected at create time.
+    let (st, repo) = create_repo(&server, &g, None);
+    assert_eq!(st, 200, "{repo}");
+    assert_eq!(repo["base_branch"], "main");
+
+    // A second, distinct repo: naming a branch it doesn't have is a 400.
+    let h = GitRepo::new();
+    let h1 = h.commit(&[h.root], &msg("core: one", "Ih1"), &[("b.rs", "b\n")]);
+    h.branch("feat", h1);
+    let (st, err) = create_repo(&server, &h, Some("nope"));
+    assert_eq!(st, 400, "{err}");
+    assert!(err["error"].as_str().unwrap().contains("nope"), "{err}");
+}
+
+#[test]
+fn nit_repo_create_cli() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    // `nit repo create` from inside the repo registers the cwd's git dir.
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_nit"))
+        .args(["repo", "create"])
+        .current_dir(g.workdir())
+        .env("NIT_SERVER", &server.base)
+        .output()
+        .expect("running nit repo create");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let repo: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
+    assert_eq!(repo["base_branch"], "main");
+
+    // The repo now shows up in `nit repo list` (≡ GET /api/repos).
+    let (_, list) = http_get(&server.url("/api/repos"));
+    assert_eq!(list["repos"][0]["git_dir"].as_str().unwrap(), g.git_dir());
 }
 
 #[test]

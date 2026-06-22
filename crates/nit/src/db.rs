@@ -207,18 +207,13 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
     })
 }
 
-/// Register or look up a repo by its canonical git-common-dir. Idempotent:
-/// the same `git_dir` always maps to the same id. `base_branch` is recorded
-/// on the **first** push and never changed here — the row's stored value is
-/// returned unchanged on re-registration (the push handler enforces that a
-/// later push naming a different base is a 400).
+/// Register a fresh repo by its canonical git-common-dir, returning the new
+/// row. The caller has already rejected an existing `git_dir` (409); the
+/// `UNIQUE(git_dir)` index is the backstop on a race.
 ///
 /// # Errors
-/// On a database failure.
-pub fn get_or_create_repo(conn: &Connection, git_dir: &str, base_branch: &str) -> Result<RepoRow> {
-    if let Some(existing) = find_repo(conn, git_dir)? {
-        return Ok(existing);
-    }
+/// On a database failure, including the `UNIQUE(git_dir)` clash.
+pub fn create_repo(conn: &Connection, git_dir: &str, base_branch: &str) -> Result<RepoRow> {
     conn.execute(
         "INSERT INTO repos (git_dir, base_branch) VALUES (?1, ?2)",
         params![git_dir, base_branch],
@@ -718,28 +713,28 @@ mod tests {
 
     /// A repo + one change on it (the common setup).
     fn change(conn: &Connection) -> u64 {
-        let repo = get_or_create_repo(conn, "/r/.git", "main").expect("repo");
+        let repo = create_repo(conn, "/r/.git", "main").expect("repo");
         upsert_change(conn, repo.id, "I1").expect("change")
     }
 
     #[test]
-    fn repo_upsert_is_idempotent_and_keeps_base() {
+    fn create_repo_registers_and_find_locates() {
         let conn = mem();
-        let a = get_or_create_repo(&conn, "/r/.git", "main").expect("create");
-        // Re-registering with a different base does not change the stored one
-        // (the push handler rejects a base mismatch; the row is canonical).
-        let again = get_or_create_repo(&conn, "/r/.git", "develop").expect("re-register");
-        assert_eq!(a.id, again.id);
-        assert_eq!(again.base_branch, "main");
+        let a = create_repo(&conn, "/r/.git", "main").expect("create");
+        assert_eq!(a.base_branch, "main");
+        // The same git dir is found by `find_repo` (and the row carries its base).
+        let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
+        assert_eq!(found.id, a.id);
+        assert_eq!(found.base_branch, "main");
         // A different git dir is a distinct repo.
-        let b = get_or_create_repo(&conn, "/other/.git", "main").expect("create");
+        let b = create_repo(&conn, "/other/.git", "main").expect("create");
         assert_ne!(a.id, b.id);
     }
 
     #[test]
     fn change_upsert_is_idempotent() {
         let conn = mem();
-        let repo = get_or_create_repo(&conn, "/r/.git", "main").expect("repo");
+        let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
         let a = upsert_change(&conn, repo.id, "Iabc").expect("create");
         let again = upsert_change(&conn, repo.id, "Iabc").expect("re-upsert");
         assert_eq!(a, again);
@@ -789,7 +784,7 @@ mod tests {
     #[test]
     fn seq_is_global_across_changes() {
         let conn = mem();
-        let repo = get_or_create_repo(&conn, "/r/.git", "main").expect("repo");
+        let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
         let a = upsert_change(&conn, repo.id, "Ia").expect("a");
         let b = upsert_change(&conn, repo.id, "Ib").expect("b");
         let sa = append_log(&conn, a, 0, "comment", &serde_json::json!({}), "t0").expect("a0");

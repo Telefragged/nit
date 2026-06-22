@@ -27,7 +27,7 @@ a client decision ("Wake rule" below). The web polls the same folds.
 repos   (id, git_dir, base_branch, UNIQUE(git_dir))
         -- the registry. git_dir is the canonical git-common-dir — the repo's
         -- identity *and* display name; `nit repo move` repoints it. base_branch
-        -- is the repo's one canonical branch, recorded on first push; mergedness
+        -- is the repo's one canonical branch, set at `nit repo create`; mergedness
         -- always tracks it (there is no land-anywhere). Stores nothing else
         -- derivable from git (no commits, timestamps — those live in .git).
 
@@ -328,12 +328,10 @@ partially-landed stack visible. The full actionable/feedback contract lives in
 birth decision and no cross-chain routing — every commit is an independent
 upsert keyed by its `Change-Id`.
 
-1. Resolve the canonical `base` and `tip` (either failing to resolve is a
-   `400`). `base` must equal the repo's stored `base_branch` — a different base
-   is a `400` (one canonical branch per repo), recorded on the first push. An
-   omitted `base` is reused from the registered repo, or auto-detected on the
-   first push: the local `main` or `master`, with neither/both a `400` asking
-   the caller to specify `base`.
+1. Look up the repo by its `git_dir`; an unregistered repo is a `404`
+   (`nit repo create` first). The canonical `base` is the repo's stored
+   `base_branch` (set at create — push neither takes nor configures a base);
+   `base` and `tip` failing to resolve is a `400`.
 2. `fork = merge-base(base, tip)`; walk `fork..tip` oldest-first
    (`gitscan::walk_push`). The walk is **all-or-nothing** — a `400` rejects the
    whole push on any structural fault: a merge or root commit, a commit missing

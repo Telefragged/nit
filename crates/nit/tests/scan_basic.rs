@@ -283,25 +283,3 @@ fn fixup_subject_rejects_the_push() {
         "{e}"
     );
 }
-
-#[test]
-fn wrong_base_rejects_the_push() {
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    g.branch("feat", c1);
-    // A second base ref the repo could be pushed against, but must not be.
-    g.branch("trunk", g.root);
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-
-    // First push records `main` as the repo's canonical base.
-    let (st, _) = push(&server, &g, "feat", "main", None);
-    assert_eq!(st, 200);
-
-    // A later push naming a different base is a 400 (one base per repo).
-    let (st, e) = push(&server, &g, "feat", "trunk", None);
-    assert_eq!(st, 400, "{e}");
-    assert!(
-        e["error"].as_str().unwrap().contains("canonical branch"),
-        "{e}"
-    );
-}

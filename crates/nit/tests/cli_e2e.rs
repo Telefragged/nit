@@ -312,7 +312,7 @@ fn push_to_a_dead_server_reports_unreachable() {
 }
 
 /// Bare `nit push` (no args) resolves the cwd's checked-out commit — the agent
-/// commits and simply pushes, with the base detected server-side.
+/// registers the repo, commits, and simply pushes.
 #[test]
 fn bare_push_resolves_head() {
     let g = GitRepo::new();
@@ -321,6 +321,8 @@ fn bare_push_resolves_head() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
+    let (ok, _, stderr) = nit(&server, &g, &["repo", "create"]);
+    assert!(ok, "repo create: {stderr}");
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "bare push resolves HEAD: {stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
@@ -336,6 +338,8 @@ fn push_resolves_detached_head() {
     g.repo.set_head_detached(c1).unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
+    let (ok, _, stderr) = nit(&server, &g, &["repo", "create"]);
+    assert!(ok, "repo create: {stderr}");
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "detached HEAD resolves: {stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");

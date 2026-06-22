@@ -51,6 +51,16 @@ pub struct RepoList {
     pub repos: Vec<Repo>,
 }
 
+/// `POST /api/repos` request — register a repo (`nit repo create`). `base`
+/// configures the one canonical branch; omitted, it is auto-detected
+/// (`main`/`master`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRepo {
+    pub git_dir: String,
+    #[serde(default)]
+    pub base: Option<String>,
+}
+
 /// `PATCH /api/repos/{id}` request — repoint a moved repo at its new
 /// git-common-dir (`nit repo move`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,17 +79,14 @@ pub struct AbandonRequest {
 // ---------------------------------------------------------------------------
 // Push
 
-/// `POST /api/push` request (this is `nit push`).
+/// `POST /api/push` request (this is `nit push`). The repo must already be
+/// registered (`nit repo create`); the canonical branch is its stored
+/// `base_branch`, so push takes no base.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushRequest {
     pub git_dir: String,
     /// Any ref or rev, resolved to a commit at push time.
     pub tip: String,
-    /// The repo's canonical branch (recorded on first push; must match after).
-    /// Optional: omitted, it is reused from the registered repo, or detected
-    /// (`main`/`master`) on first push.
-    #[serde(default)]
-    pub base: Option<String>,
     /// Sticky: true marks the tip's revision partial (`nit push --partial`),
     /// false clears it (`nit ready`), absent leaves it unchanged.
     #[serde(default)]

@@ -50,7 +50,10 @@ pub use state::{
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health))
-        .route("/api/repos", get(repos::list_repos))
+        .route(
+            "/api/repos",
+            get(repos::list_repos).post(repos::create_repo),
+        )
         .route(
             "/api/repos/{id}",
             get(repos::get_repo).patch(repos::relocate_repo),

@@ -9,8 +9,10 @@ use common::{GitRepo, TestServer, http_get, http_post, http_put, msg, nit, nit_b
 use serde_json::{Value, json};
 
 /// `nit push` from the cwd HEAD (no args — resolves the checked-out commit),
-/// returning its `PushResult`.
+/// returning its `PushResult`. Registers the repo first so the push lands.
 fn push_head(server: &TestServer, g: &GitRepo) -> Value {
+    let (ok, _, err) = nit(server, g, &["repo", "create"]);
+    assert!(ok, "repo create failed: {err}");
     let (ok, res, err) = nit(server, g, &["push"]);
     assert!(ok, "push failed: {err}");
     res
