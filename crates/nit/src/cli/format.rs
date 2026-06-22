@@ -2,6 +2,8 @@
 //! chains — plus the `--change` / `--change-id` selector flattened into every
 //! change-scoped Args struct.
 
+use std::collections::HashMap;
+
 use anyhow::{Result, bail};
 use serde_json::Value;
 
@@ -80,13 +82,17 @@ fn entry_summary(entry: &Value) -> String {
 }
 
 /// Compact one-line-per-change digest of a `Chain` for `nit status --oneline`.
-pub(crate) fn chain_oneline(chain: &Value) -> String {
+/// `unresolved` maps a member's `change_id` to its open-thread count, composed
+/// by the caller from the change snapshots (the path itself carries only
+/// structure).
+pub(crate) fn chain_oneline(chain: &Value, unresolved: &HashMap<u64, u64>) -> String {
     use std::fmt::Write;
     let mut out = String::new();
     let inf = "write to String is infallible";
     writeln!(out, "state={}", chain["state"].as_str().unwrap_or("?")).expect(inf);
     let path = chain["path"].as_array().map_or(&[][..], Vec::as_slice);
     for m in path {
+        let change_id = m["change_id"].as_u64().unwrap_or(0);
         writeln!(
             out,
             "{}\t{}\t{}\tr{}\t{}u\t{}",
@@ -94,7 +100,7 @@ pub(crate) fn chain_oneline(chain: &Value) -> String {
             short_key(m["change_key"].as_str().unwrap_or("")),
             m["status"].as_str().unwrap_or("?"),
             m["revision"].as_u64().unwrap_or(0),
-            m["counts"]["unresolved"].as_u64().unwrap_or(0),
+            unresolved.get(&change_id).copied().unwrap_or(0),
             m["subject"].as_str().unwrap_or(""),
         )
         .expect(inf);
@@ -129,17 +135,21 @@ mod tests {
 
     #[test]
     fn chain_oneline_digests_each_member() {
+        // The path carries only structure; the unresolved counts are composed
+        // separately (from the change snapshots) and keyed by change_id.
         let chain = json!({
             "state": "agents_turn",
             "path": [
-                {"position": 0, "change_key": "I0123456789abc", "status": "changes_requested",
-                 "revision": 2, "counts": {"unresolved": 3}, "subject": "server: add health endpoint"},
-                {"position": 1, "change_key": "Iabcdef0123456", "status": "approved",
-                 "revision": 1, "counts": {"unresolved": 0}, "subject": "web: render the diff"},
+                {"change_id": 1, "position": 0, "change_key": "I0123456789abc",
+                 "status": "changes_requested", "revision": 2,
+                 "subject": "server: add health endpoint"},
+                {"change_id": 2, "position": 1, "change_key": "Iabcdef0123456",
+                 "status": "approved", "revision": 1, "subject": "web: render the diff"},
             ]
         });
+        let unresolved = HashMap::from([(1, 3), (2, 0)]);
         assert_eq!(
-            chain_oneline(&chain),
+            chain_oneline(&chain, &unresolved),
             "state=agents_turn\n\
              0\tI01234567\tchanges_requested\tr2\t3u\tserver: add health endpoint\n\
              1\tIabcdef01\tapproved\tr1\t0u\tweb: render the diff\n"
