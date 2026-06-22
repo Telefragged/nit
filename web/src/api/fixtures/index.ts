@@ -230,28 +230,14 @@ function pathEntry(
   position: number,
 ): PathEntry {
   const { change: c, revision: rev } = member;
-  const ownThreads = threads.filter(
-    (t) => t.change_id === c.id && t.revision === rev.number,
-  );
-  const ownDrafts = drafts.filter(
-    (d) => d.change_id === c.id && d.revision === rev.number,
-  );
-  const latest = latestRevision(c).number;
   return {
     change_id: c.id,
     position,
     change_key: c.change_key,
     revision: rev.number,
-    latest_revision: latest,
     status: statusAt(c, rev.number),
     subject: c.subject,
     commit_sha: rev.commit_sha,
-    counts: {
-      threads: ownThreads.length,
-      drafts: ownDrafts.length,
-      unresolved: ownThreads.filter((t) => !t.resolved).length,
-    },
-    draft_decision: draftReviews.get(c.id)?.decision ?? null,
   };
 }
 

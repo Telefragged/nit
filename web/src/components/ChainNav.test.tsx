@@ -36,10 +36,7 @@ function member(
     subject,
     status,
     revision: 0,
-    latest_revision: 0,
     commit_sha: `sha${changeId}`,
-    counts: { threads: 0, drafts: 0, unresolved: 0 },
-    draft_decision: null,
   };
 }
 

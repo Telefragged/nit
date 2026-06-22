@@ -1109,8 +1109,8 @@ const changeD: ChangeRecord = {
 };
 
 // B: two patchsets. rev0 (parent A) is approved; rev1 (parent D) is pending.
-// From C's chain B sits at rev0 with a newer patchset elsewhere
-// (latest_revision > revision); from E's chain B sits at rev1.
+// From C's chain B sits at rev0, older than its latest patchset rev1 (the
+// newer-elsewhere badge); from E's chain B sits at rev1.
 const changeB: ChangeRecord = {
   id: 51,
   repo_id: 3,

@@ -62,30 +62,25 @@ PathEntry = {
   "change_id": 10, "position": 0,    // position is a property of THIS path
   "change_key": "I3f2…",
   "revision": 2,                     // the patchset this path walks
-  "latest_revision": 3,              // newest patchset anywhere; > revision drives
-                                     // the client's "newer elsewhere" badge
   "status": "pending",               // per (change, this revision)
   "subject": "server: add health endpoint",
-  "commit_sha": "…",
-  "counts": {"threads": 3, "drafts": 1, "unresolved": 2}, // scoped to this revision
-  "draft_decision": "approve"        // the change's staged decision (Decision),
-                                     // or null; change-wide (one per change),
-                                     // so it shows on every chain the change is in
+  "commit_sha": "…"
 }
 ```
 
-`position`, `status`, `unresolved`, and `state` are read **at the path's
-pinned revision** — two tips placing the same change differently carry
-independent verdicts (a request_changes in one chain never overwrites an
-approve in another). `id` on a change is its stable fold id (the `change`
-rowid); thread ids are fold-assigned by fold order (docs/data-model.md
-"Identity").
+A path entry is **structure only** — identity, position, the pinned revision,
+its displayed `status`, and the row label. Per-change review state (comment and
+draft counts, the unresolved count, the newest patchset, the reviewer's staged
+decision) is **not** on the path: a client reads it from `GET /api/changes/{id}`
+per member, fetched concurrently for the members it shows. The folded state is
+in memory, so each read is cheap, and a chain consumer that doesn't need that
+state never carries it.
 
-`draft_decision` is the one exception to "read at the pinned revision": a draft
-decision is **change-wide** (one per change), so the same value appears on every
-chain the change is a member of. The dashboard counts a member as having
-reviewer draft state when `counts.drafts > 0` **or** `draft_decision != null`,
-and enables a chain's batch submit when any member carries a `draft_decision`.
+`position`, `status`, and `state` are read **at the path's pinned revision** —
+two tips placing the same change differently carry independent verdicts (a
+request_changes in one chain never overwrites an approve in another). `id` on a
+change is its stable fold id (the `change` rowid); thread ids are fold-assigned
+by fold order (docs/data-model.md "Identity").
 
 ### Tip names
 

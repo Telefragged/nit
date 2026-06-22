@@ -36,7 +36,6 @@ pub(super) async fn list_chains(
     AppQuery(q): AppQuery<ListChainsQuery>,
 ) -> Result<Json<types::ChainList>, Error> {
     blocking(move || {
-        let conn = state.open_db()?;
         let include_terminal = matches!(q.status, ChainFilter::All);
         let mut chains = Vec::new();
         for repo_id in state.repo_ids() {
@@ -55,9 +54,7 @@ pub(super) async fn list_chains(
                 view.tips()
             };
             for tip in tips {
-                chains.push(views::build_chain_summary(
-                    &conn, &repo, &view, repo_id, &tip,
-                )?);
+                chains.push(views::build_chain_summary(&repo, &view, repo_id, &tip));
             }
         }
         Ok(Json(types::ChainList { chains }))
@@ -95,7 +92,6 @@ pub(super) async fn get_chain(
 ) -> Result<Json<types::Chain>, Error> {
     let entry = change_or_404(&state, change_id)?;
     blocking(move || {
-        let conn = state.open_db()?;
         let repo = repo_of_change(&state, &entry)?;
         let repo_id = entry.read().repo_id;
         let base_branch = state
@@ -106,13 +102,12 @@ pub(super) async fn get_chain(
         let view = state.repo_view(repo_id);
         let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
         Ok(Json(views::build_chain(
-            &conn,
             &repo,
             &view,
             repo_id,
             &base_branch,
             &tip_sha,
-        )?))
+        )))
     })
     .await
 }

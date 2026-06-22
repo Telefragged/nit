@@ -144,7 +144,9 @@ pub struct Chain {
     pub path: Vec<PathEntry>,
 }
 
-/// One member of a derived path, read at the revision the path pins.
+/// One member of a derived path: structure only, read at the revision the path
+/// pins. Per-change review state (counts, staged decision, the newest patchset)
+/// is not here — a client reads it from `GET /api/changes/{id}` per member.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathEntry {
     pub change_id: u64,
@@ -153,28 +155,10 @@ pub struct PathEntry {
     pub change_key: String,
     /// The patchset this path walks.
     pub revision: u64,
-    /// The change's newest patchset anywhere; `> revision` drives the client's
-    /// "newer elsewhere" badge.
-    pub latest_revision: u64,
     /// Per `(change, this revision)`.
     pub status: ChangeStatus,
     pub subject: String,
     pub commit_sha: String,
-    /// Scoped to this revision.
-    pub counts: ChangeCounts,
-    /// The reviewer's staged decision for this change, or `None`. Change-wide
-    /// (one per change), so the same value shows on every chain the change is
-    /// in — drives the dashboard's draft-state count and batch-submit enable.
-    pub draft_decision: Option<Decision>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChangeCounts {
-    /// Published comment threads at this revision.
-    pub threads: u64,
-    pub drafts: u64,
-    /// Unresolved threads at this revision.
-    pub unresolved: u64,
 }
 
 // ---------------------------------------------------------------------------

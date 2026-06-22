@@ -39,7 +39,9 @@ export type ChangeStatus =
   | "merged"
   | "abandoned";
 
-/** One member of a derived path, read at the revision the path pins. */
+/** One member of a derived path: structure only, read at the revision the path
+ * pins. Per-change review state (counts, staged decision, the newest patchset)
+ * is read from `GET /api/changes/{id}` per member, not carried here. */
 export interface PathEntry {
   change_id: number;
   /** Position in THIS path (0-based). */
@@ -47,27 +49,10 @@ export interface PathEntry {
   change_key: string;
   /** The patchset this path walks. */
   revision: number;
-  /** The change's newest patchset anywhere; `> revision` drives the client's
-   * "newer elsewhere" badge. */
-  latest_revision: number;
   /** Per (change, this revision). */
   status: ChangeStatus;
   subject: string;
   commit_sha: string;
-  /** Scoped to this revision. */
-  counts: ChangeCounts;
-  /** The reviewer's staged decision for this change, or null. Change-wide
-   * (one per change): the same value shows on every chain the change is in —
-   * drives the dashboard's draft-state count and batch-submit enable. */
-  draft_decision: Decision | null;
-}
-
-interface ChangeCounts {
-  /** Published comment threads at this revision. */
-  threads: number;
-  drafts: number;
-  /** Unresolved threads at this revision. */
-  unresolved: number;
 }
 
 /** A dashboard entry: one per known tip commit. */

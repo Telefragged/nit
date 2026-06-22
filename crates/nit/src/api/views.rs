@@ -36,54 +36,46 @@ pub fn tip_name(repo: &Repository, view: &RepoView, path: &[PathMember]) -> Stri
 }
 
 /// Build a chain summary from a tip commit-sha (the dashboard entry).
-///
-/// # Errors
-/// When reading drafts from the database fails.
+#[must_use]
 pub fn build_chain_summary(
-    conn: &Connection,
     repo: &Repository,
     view: &RepoView,
     repo_id: u64,
     tip_sha: &str,
-) -> Result<types::ChainSummary> {
+) -> types::ChainSummary {
     let path = view.path_from_tip(tip_sha);
     let tip_change_id = path.last().map_or(0, |m| m.change_id);
-    let entries = path_entries(conn, view, &path)?;
-    Ok(types::ChainSummary {
+    types::ChainSummary {
         tip_change_id,
         repo_id,
         name: tip_name(repo, view, &path),
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
         updated_at: path_updated_at(view, &path),
-        path: entries,
-    })
+        path: path_entries(view, &path),
+    }
 }
 
 /// Build the full `Chain` for one tip commit-sha (the chain page / push result).
-///
-/// # Errors
-/// When reading drafts from the database fails.
+#[must_use]
 pub fn build_chain(
-    conn: &Connection,
     repo: &Repository,
     view: &RepoView,
     repo_id: u64,
     base_branch: &str,
     tip_sha: &str,
-) -> Result<types::Chain> {
+) -> types::Chain {
     let path = view.path_from_tip(tip_sha);
     let tip_change_id = path.last().map_or(0, |m| m.change_id);
-    let entries = path_entries(conn, view, &path)?;
-    Ok(types::Chain {
+    types::Chain {
         tip_change_id,
         repo_id,
         name: tip_name(repo, view, &path),
         base_branch: base_branch.to_string(),
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
-        path: entries,
-    })
+        path: path_entries(view, &path),
+    }
 }
 
 /// The newest member `updated_at` across a path.
@@ -96,73 +88,31 @@ fn path_updated_at(view: &RepoView, path: &[PathMember]) -> String {
 }
 
 /// One `PathEntry` per member, read at the revision the path pins.
-fn path_entries(
-    conn: &Connection,
-    view: &RepoView,
-    path: &[PathMember],
-) -> Result<Vec<types::PathEntry>> {
+fn path_entries(view: &RepoView, path: &[PathMember]) -> Vec<types::PathEntry> {
     path.iter()
         .enumerate()
         .filter_map(|(position, m)| {
             view.change(m.change_id)
-                .map(|c| path_entry(conn, c, m, u64::try_from(position).unwrap_or(u64::MAX)))
+                .map(|c| path_entry(c, m, u64::try_from(position).unwrap_or(u64::MAX)))
         })
         .collect()
 }
 
-/// Activity at a revision — published threads, the reviewer's drafts, and the
-/// unresolved count — shared by a path entry and a graph node.
-fn change_counts(
-    conn: &Connection,
-    change: &ChangeProj,
-    revision: u64,
-) -> Result<types::ChangeCounts> {
-    let drafts = u64::try_from(
-        db::drafts_for_change(conn, change.id)?
-            .iter()
-            .filter(|d| d.revision == revision)
-            .count(),
-    )
-    .unwrap_or(u64::MAX);
-    let threads = u64::try_from(
-        change
-            .threads
-            .iter()
-            .filter(|t| t.revision == revision)
-            .count(),
-    )
-    .unwrap_or(u64::MAX);
-    Ok(types::ChangeCounts {
-        threads,
-        drafts,
-        unresolved: u64::try_from(change.unresolved_at(revision)).unwrap_or(u64::MAX),
-    })
-}
-
-fn path_entry(
-    conn: &Connection,
-    change: &ChangeProj,
-    member: &PathMember,
-    position: u64,
-) -> Result<types::PathEntry> {
+fn path_entry(change: &ChangeProj, member: &PathMember, position: u64) -> types::PathEntry {
     let revision = member.revision;
-    let latest_revision = change.latest_revision().map_or(revision, |r| r.number);
     let subject = change
         .revision(revision)
         .map(|r| subject_of(&r.message))
         .unwrap_or_default();
-    Ok(types::PathEntry {
+    types::PathEntry {
         change_id: change.id,
         position,
         change_key: change.change_key.clone(),
         revision,
-        latest_revision,
         status: change.status_at(revision),
         subject,
         commit_sha: member.commit_sha.clone(),
-        counts: change_counts(conn, change, revision)?,
-        draft_decision: db::get_draft_review(conn, change.id)?.map(|r| r.decision),
-    })
+    }
 }
 
 // ---------------------------------------------------------------------------

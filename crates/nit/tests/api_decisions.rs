@@ -81,9 +81,6 @@ fn stage_surfaces_then_clears() {
     let d = detail(&server, id);
     assert_eq!(d["draft_decision"]["decision"], "approve");
     assert_eq!(d["draft_decision"]["message"], "lgtm");
-    // Change-wide: visible on the chain path member too.
-    let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
-    assert_eq!(chain["path"][0]["draft_decision"], "approve");
 
     // Staging again overwrites.
     stage(&server, id, "request_changes", "actually, no");

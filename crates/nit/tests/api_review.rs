@@ -91,7 +91,8 @@ fn review_drains_drafts_and_sets_status() {
     assert_eq!(post["reviews"][0]["revision"], 0);
     assert_eq!(post["reviews"][0]["verdict"], "request_changes");
     assert_eq!(post["reviews"][0]["message"], "a few nits");
-    // The verdict is the displayed status at (change, rev 0): visible on the path.
+    // The verdict is the displayed status at (change, rev 0): visible on the
+    // path (the thread count is read from the change snapshot, above).
     let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
     let member = chain["path"]
         .as_array()
@@ -100,7 +101,6 @@ fn review_drains_drafts_and_sets_status() {
         .find(|m| m["change_id"].as_u64() == Some(id))
         .unwrap();
     assert_eq!(member["status"], "changes_requested");
-    assert_eq!(member["counts"]["threads"], 2);
 }
 
 /// A reply draft (`thread_id`) appends to a published thread, keeping the
