@@ -11,5 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
+      - uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size: 6G
       - run: nix build
       - run: nix flake check
