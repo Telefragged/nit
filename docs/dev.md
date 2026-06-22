@@ -135,10 +135,15 @@ with every new page or state. The npm `@playwright/test` version must match
 
 ## Commit & branch discipline
 
-- Small commits, one concern each. The subject states the _what_ (for
-  indexing); the body explains _why_, wrapped at 72 columns. Keep messages
-  **timeless** — no process narration ("rebased onto X", branch ordering);
-  that goes in the `nit` reply or terminal, not git history.
+- Small commits, one concern each.
+- **Hard-wrap the commit message at 72 columns.** This is not optional and is
+  checked in review. The subject is a single line stating the _what_ (for
+  indexing); after a blank line, the body explains _why_ as 72-column-wrapped
+  prose — each line broken at ≤72 like a paragraph, **never one long line you
+  let the terminal soft-wrap**. With `git commit`, write the body across real
+  newlines (a `-m` per paragraph, lines pre-wrapped), not a single sentence.
+- Keep messages **timeless** — no process narration ("rebased onto X", branch
+  ordering); that goes in the `nit` reply or terminal, not git history.
 - Code comments are stricter: a comment says what the code **is**, never
   how it got there (no "now / no longer / replaced"). git blame holds the
   history.

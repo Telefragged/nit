@@ -10,9 +10,12 @@ identity across rewrites. Product spec: `nit.md`.
 
 1. **All dev runs in the nix devShell** — `nix develop -c <cmd>`, never
    system toolchains. `nix build` stays green.
-2. **Small, single-purpose commits**, one concern each. No merge commits —
-   an approved chain lands via the approve action, rebase + fast-forward
-   only (docs/dev.md "The approve action").
+2. **Small, single-purpose commits**, one concern each, with the message
+   **hard-wrapped at 72 columns** — a one-line subject, then a body of
+   72-column-wrapped prose, never a single long line (docs/dev.md "Commit &
+   branch discipline"). No merge commits — an approved chain lands via the
+   approve action, rebase + fast-forward only (docs/dev.md "The approve
+   action").
 3. **Every commit treefmt-clean** — `nix develop -c treefmt` before each
    commit, and re-format every rewritten commit after a rebase (not just
    the tip), especially after conflict resolution (docs/dev.md
