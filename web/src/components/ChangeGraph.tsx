@@ -1,6 +1,7 @@
 import { type CSSProperties, useMemo } from "react";
 import { Link } from "react-router-dom";
-import type { RepoGraph } from "../api/types";
+import type { ChangeDetail, GraphNode, RepoGraph } from "../api/types";
+import { revisionActivity } from "../lib/comments";
 import type { LaidEdge, LaidNode } from "../lib/graphLayout";
 import { layoutGraph } from "../lib/graphLayout";
 import { useRowNav } from "../lib/useRowNav";
@@ -34,46 +35,63 @@ function nodeColor(ln: LaidNode): string {
   return `lane-${ln.lane % LANE_COLORS}`;
 }
 
-function Activity({ ln }: { ln: LaidNode }) {
-  const { counts, draft_decision } = ln.node;
-  if (
-    counts.threads === 0 &&
-    counts.drafts === 0 &&
-    counts.unresolved === 0 &&
-    !draft_decision
-  ) {
+// A node's activity badges, derived from the change's own detail (fetched per
+// change off the dashboard) rather than denormalized onto the graph node:
+// comment/draft/unresolved counts at the node's pinned revision plus the
+// reviewer's staged decision. `detail` is undefined until that fetch resolves.
+function Activity({
+  node,
+  detail,
+}: {
+  node: GraphNode;
+  detail: ChangeDetail | undefined;
+}) {
+  if (!detail || node.revision === null) return null;
+  const { threads, drafts, unresolved } = revisionActivity(
+    detail.threads,
+    detail.drafts,
+    node.revision,
+  );
+  const decision = detail.draft_decision?.decision ?? null;
+  if (threads === 0 && drafts === 0 && unresolved === 0 && !decision) {
     return null;
   }
   return (
     <span className="counts">
-      {counts.threads > 0 && (
+      {threads > 0 && (
         <span title="published comments">
-          {counts.threads} comment{counts.threads > 1 ? "s" : ""}
+          {threads} comment{threads > 1 ? "s" : ""}
         </span>
       )}
-      {counts.drafts > 0 && (
+      {drafts > 0 && (
         <span className="draft-count" title="your drafts">
-          {counts.drafts} draft{counts.drafts > 1 ? "s" : ""}
+          {drafts} draft{drafts > 1 ? "s" : ""}
         </span>
       )}
-      {counts.unresolved > 0 && (
+      {unresolved > 0 && (
         <span className="unresolved-count" title="unresolved threads">
-          {counts.unresolved} open
+          {unresolved} open
         </span>
       )}
-      {draft_decision && (
+      {decision && (
         <span
           className="draft-count"
           title="your staged decision (not yet submitted)"
         >
-          ✎ {draft_decision}
+          ✎ {decision}
         </span>
       )}
     </span>
   );
 }
 
-function GraphRow({ ln }: { ln: LaidNode }) {
+function GraphRow({
+  ln,
+  detail,
+}: {
+  ln: LaidNode;
+  detail: ChangeDetail | undefined;
+}) {
   const { node } = ln;
   const isOpen = node.section === "open";
   const isHistory = node.section === "history";
@@ -126,13 +144,21 @@ function GraphRow({ ln }: { ln: LaidNode }) {
         {isOpen && node.revision !== null ? `r${node.revision}` : ""}
       </div>
       <div className="graph-cell-activity">
-        <Activity ln={ln} />
+        <Activity node={node} detail={detail} />
       </div>
     </div>
   );
 }
 
-export default function ChangeGraph({ graph }: { graph: RepoGraph }) {
+export default function ChangeGraph({
+  graph,
+  activity,
+}: {
+  graph: RepoGraph;
+  /** Per-change detail, keyed by change id, fetched concurrently by the
+   * dashboard — the source for each node's activity badges. */
+  activity: Map<number, ChangeDetail>;
+}) {
   const layout = useMemo(() => layoutGraph(graph), [graph]);
   const cols = `${layout.railWidth}px minmax(0, 1fr) 168px 52px 184px`;
   const bodyStyle = {
@@ -194,7 +220,15 @@ export default function ChangeGraph({ graph }: { graph: RepoGraph }) {
           )}
         </svg>
         {layout.nodes.map((ln) => (
-          <GraphRow key={ln.node.commit_sha} ln={ln} />
+          <GraphRow
+            key={ln.node.commit_sha}
+            ln={ln}
+            detail={
+              ln.node.change_id !== null
+                ? activity.get(ln.node.change_id)
+                : undefined
+            }
+          />
         ))}
         {collapsed && (
           <div

@@ -155,6 +155,30 @@ export function commentCountLabel(n: number): string {
   return `${n} comment${n === 1 ? "" : "s"}`;
 }
 
+/** A change's published activity at one revision: the comment/draft/unresolved
+ * counts an aggregate row (a graph node, a chain-nav member) shows. Recomputed
+ * client-side from a change's threads + drafts so those aggregate rows need not
+ * denormalize it — the mirror of the server's `change_counts` / `unresolved_at`
+ * (docs/api.md), pinned to `revision`. */
+export interface RevisionActivity {
+  threads: number;
+  drafts: number;
+  unresolved: number;
+}
+
+export function revisionActivity(
+  threads: readonly Thread[],
+  drafts: readonly Draft[],
+  revision: number,
+): RevisionActivity {
+  const atRevision = threads.filter((t) => t.revision === revision);
+  return {
+    threads: atRevision.length,
+    drafts: drafts.filter((d) => d.revision === revision).length,
+    unresolved: atRevision.filter((t) => !t.resolved).length,
+  };
+}
+
 /**
  * A thread's resolution as it *would* be after the reviewer's pending drafts
  * publish (docs/api.md "Thread resolution"): the newest draft on the thread

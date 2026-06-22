@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { getRepo, getRepoGraph } from "../api/client";
+import { getChange, getRepo, getRepoGraph } from "../api/client";
+import type { ChangeDetail } from "../api/types";
 import ChangeGraph from "../components/ChangeGraph";
 import { repoPath } from "../lib/repo";
 import { ErrorPanel } from "./NotFound";
@@ -24,6 +25,31 @@ export default function Dashboard() {
     queryKey: ["graph", id],
     queryFn: () => getRepoGraph(id),
     refetchInterval: 5_000,
+  });
+
+  // Each open node carries a change; fetch its detail concurrently so the
+  // per-change activity (comment/draft counts, staged decision) is read from
+  // GET /api/changes/{id} rather than denormalized onto the graph node. Keyed
+  // ["change", id] so the fetch shares react-query's cache with the review
+  // page — opening a change off the dashboard is then a warm read.
+  const activityIds = useMemo(
+    () =>
+      (graphQuery.data?.nodes ?? []).flatMap((n) =>
+        n.section === "open" && n.change_id !== null ? [n.change_id] : [],
+      ),
+    [graphQuery.data],
+  );
+  const changeQueries = useQueries({
+    queries: activityIds.map((changeId) => ({
+      queryKey: ["change", changeId],
+      queryFn: () => getChange(changeId),
+      refetchInterval: 5_000,
+    })),
+  });
+  const activity = new Map<number, ChangeDetail>();
+  activityIds.forEach((changeId, i) => {
+    const detail = changeQueries[i]?.data;
+    if (detail) activity.set(changeId, detail);
   });
 
   const repo = repoQuery.data;
@@ -63,7 +89,7 @@ export default function Dashboard() {
           a change for review.
         </div>
       ) : (
-        <ChangeGraph graph={graphQuery.data} />
+        <ChangeGraph graph={graphQuery.data} activity={activity} />
       )}
     </main>
   );

@@ -1,8 +1,9 @@
 // The repo dashboard renders the spine-centered change graph (docs/api.md
 // "Graph") against the mock fixtures (VITE_MOCK is set by the vitest config).
-// Repo 1's open changes ascend above HEAD; the preserved Activity column
-// carries each change's draft state — change 12 has a seeded request_changes
-// decision, so its row shows "✎ request_changes".
+// Repo 1's open changes ascend above HEAD; the Activity column carries each
+// change's draft state, fetched per node from GET /api/changes/{id} — change
+// 12 has a seeded request_changes decision, so its row shows
+// "✎ request_changes" once that fetch resolves.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, within } from "@testing-library/react";
@@ -42,9 +43,10 @@ describe("repo dashboard change graph", () => {
 
     // The Activity column header is preserved from the per-chain table.
     expect(screen.getByText("Activity")).toBeTruthy();
-    // Change 12's seeded staged decision shows in its activity cell.
+    // Change 12's seeded staged decision shows in its activity cell — it
+    // arrives from the per-change fetch, so await it rather than reading sync.
     const row = document.getElementById("chain-12");
     if (!(row instanceof HTMLElement)) throw new Error("no row for change 12");
-    expect(within(row).getByText("✎ request_changes")).toBeTruthy();
+    expect(await within(row).findByText("✎ request_changes")).toBeTruthy();
   });
 });

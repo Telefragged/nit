@@ -8,6 +8,7 @@ import {
   draftAnchor,
   pendingResolved,
   pendingUnresolvedCount,
+  revisionActivity,
   threadCountByRevision,
 } from "./comments";
 
@@ -279,5 +280,32 @@ describe("commentCountLabel", () => {
   it("pluralizes everything else", () => {
     expect(commentCountLabel(0)).toBe("0 comments");
     expect(commentCountLabel(3)).toBe("3 comments");
+  });
+});
+
+describe("revisionActivity", () => {
+  it("counts threads, drafts and unresolved at the pinned revision only", () => {
+    const a = revisionActivity(
+      [
+        thread({ id: 1, revision: 2, resolved: false }),
+        thread({ id: 2, revision: 2, resolved: true }),
+        thread({ id: 3, revision: 1, resolved: false }), // a different revision
+      ],
+      [
+        draft({ id: 11, revision: 2 }),
+        draft({ id: 12, revision: 1 }), // a different revision
+      ],
+      2,
+    );
+    // unresolved excludes the resolved thread; the rev-1 thread/draft are out.
+    expect(a).toEqual({ threads: 2, drafts: 1, unresolved: 1 });
+  });
+
+  it("is all-zero for a revision with no activity", () => {
+    expect(revisionActivity([], [], 0)).toEqual({
+      threads: 0,
+      drafts: 0,
+      unresolved: 0,
+    });
   });
 });
