@@ -118,7 +118,8 @@ knows to route work through review. Pick the file:
 - Else if `AGENTS.md` exists, append to it.
 - Else ask the user which to create.
 
-Append (filling in their approve action verbatim):
+Append (filling in `<base>` with the registered base branch and their approve
+action verbatim):
 
 ```markdown
 ## Reviewing changes with nit
@@ -129,6 +130,10 @@ completed commit with `nit push --partial`, answer reviewer feedback by
 amending in place and pushing again, and keep questions and decisions in nit
 as comments. Say "drive it through nit" to take a change through the loop; the
 `/nit:goal`, `/nit:fork`, and `/nit:plan` commands are opinionated shortcuts.
+
+Never build a change you'll push for review on `<base>` itself — that is the
+canonical branch nit watches for landings, so pushed commits must not live on
+it.
 
 **Approve action** — when a change reaches the `approved` state, land it by:
 
