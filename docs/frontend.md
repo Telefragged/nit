@@ -1,7 +1,7 @@
 # Frontend
 
 React 19 + TypeScript, Vite, in `web/`. Libraries: `react-router-dom`,
-`@tanstack/react-query` (fetching/polling/cache), `highlight.js` (diff
+`@tanstack/react-query` (fetching + caching), `highlight.js` (diff
 syntax highlighting). Keep the dependency list short; justify additions in
 the commit message.
 
@@ -13,10 +13,12 @@ The unit of state is the **change** (a `Change-Id`, scoped to a repo); a
 **chain** is derived, never stored — a path walked from a tip back to the
 repo's canonical branch ([data-model.md](data-model.md), [api.md](api.md)
 "Chains"). The web reflects that: a change page reads `?revision` to pick a
-patchset, and `?revision` _is_ the choice of chain context. The web **polls**
-with react-query (`refetchInterval: 5000`); it does not consume the change
-websocket (`WS /api/stream`), which serves the agent-side followers
-(`nit wait`, `nit log --follow`), not the UI.
+patchset, and `?revision` _is_ the choice of chain context. The web fetches
+with react-query — on mount, on window focus, and on mutation invalidation; a
+reviewer action invalidates the affected queries so its result shows at once. It
+does not (yet) consume the change websocket (`WS /api/stream`), which serves the
+agent-side followers (`nit wait`, `nit log --follow`); moving the UI onto those
+events is the planned replacement for live refresh.
 
 ## Pages
 

@@ -46,7 +46,6 @@ export default function RepoList() {
   const query = useQuery({
     queryKey: ["repos"],
     queryFn: listRepos,
-    refetchInterval: 5_000,
   });
 
   return (
