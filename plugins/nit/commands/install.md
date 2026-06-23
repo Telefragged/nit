@@ -5,10 +5,17 @@ description: Set nit up for this project — make the nit CLI reachable (install
 
 # /nit:install — onboard this project to nit
 
-Setup the user initiates. Walk through the decisions below, then write the
-result into the project's agent config. This is the interactive command — it
-asks the user directly, unlike `/nit:goal`, `/nit:fork`, and `/nit:plan`, which
-never ask and route everything through `nit comment`.
+Setup the user initiates. This is the interactive command — it asks the user
+directly, unlike `/nit:goal`, `/nit:fork`, and `/nit:plan`, which never ask
+and route everything through `nit comment`.
+
+**Work the steps below in order, one at a time** — don't read ahead and batch
+the decisions into one upfront plan or a single multi-question prompt. Do a
+step, and when it needs a choice ask exactly one AskUserQuestion for it, wait
+for the answer, act on it, then move to the next step. Later steps depend on
+earlier answers — the CLI choice threads through every command below, the file
+you write depends on the scope you pick — so a question often can't even be
+framed until you reach it.
 
 ## 1. Make the `nit` CLI reachable
 
