@@ -111,12 +111,20 @@ steps to take once a change reaches the `approved` state — how this project
 lands approved work (e.g. rebase-and-fast-forward, merge the PR, run a deploy
 script). This is project-specific; nit does not prescribe it.
 
-Then write a short section into the project's agent config so every agent
-knows to route work through review. Pick the file:
+Then write a short section into agent config so every agent knows to route
+work through review. First ask the user (AskUserQuestion) **where** to install
+it — the same three scopes a Claude Code plugin installs at:
 
-- If `CLAUDE.md` exists, append to it.
-- Else if `AGENTS.md` exists, append to it.
-- Else ask the user which to create.
+- **Project (shared)** — checked into the repo, applies for everyone who
+  clones it. Append to `CLAUDE.md` if it exists, else `AGENTS.md` if it
+  exists, else ask which of the two to create.
+- **Project (just you)** — this repo, only your machine, not checked in.
+  Append to `CLAUDE.local.md`.
+- **User (all your projects)** — your machine, every project you open. Append
+  to `~/.claude/CLAUDE.md`.
+
+The `<base>` branch and approve action below are this project's, so at the
+**User** scope flag that they describe the repo you ran setup in.
 
 Append (filling in `<base>` with the registered base branch and their approve
 action verbatim):
