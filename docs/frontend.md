@@ -36,7 +36,9 @@ websocket (`WS /api/stream`), which serves the agent-side followers
 /api/chains?status=active`, whose `ChainSummary.path` already carries every
   member entry — the drawer renders from it with no further fetch.
   Merged/abandoned tips drop off (visible only with `status=all`); a
-  partially-landed stack stays — any one live member keeps it on the page. A
+  partially-landed stack stays — any one live member keeps it on the page,
+  while a member that has landed leaves the path (the walk stops at the
+  canonical branch), so the drawer shows only the open members. A
   drawer opens (and scrolls into view) when deep-linked as `#chain-<tip>` —
   the review breadcrumb's chain link and the post-review "back to the chain"
   jump both target it. There is no orphaned-changes section — a change no tip

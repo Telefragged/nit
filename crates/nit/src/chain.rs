@@ -124,10 +124,12 @@ impl RepoView {
         self.leaves_where(|c| !c.is_merged())
     }
 
-    /// Walk a tip commit-sha back to the canonical base through each revision's
-    /// recorded `parent`, returning the path oldest-first. **Total**: an
-    /// unresolved parent (below the merge-base, or a torn push) truncates the
-    /// path, never errors.
+    /// Walk a tip commit-sha back to the canonical branch through each
+    /// revision's recorded `parent`, returning the path oldest-first. The walk
+    /// stops at the branch: the recorded fork (`parent_sha == base_sha`), or the
+    /// first parent that has since merged — so a partially-landed stack derives
+    /// to its open members alone. **Total**: an unresolved parent (below the
+    /// merge-base, or a torn push) truncates the path, never errors.
     #[must_use]
     pub fn path_from_tip(&self, tip_sha: &str) -> Vec<PathMember> {
         let mut path = Vec::new();
@@ -145,13 +147,21 @@ impl RepoView {
             let Some(rev) = self.change(change_id).and_then(|c| c.revision(number)) else {
                 break;
             };
-            if rev.parent_sha == rev.base_sha {
-                break; // the fork point on the canonical branch
+            if rev.parent_sha == rev.base_sha || self.is_merged(&rev.parent_sha) {
+                break; // reached the canonical branch (recorded fork, or a landed parent)
             }
             sha.clone_from(&rev.parent_sha);
         }
         path.reverse();
         path
+    }
+
+    /// Whether `sha` is a change that has landed on the canonical branch.
+    fn is_merged(&self, sha: &str) -> bool {
+        self.index
+            .get(sha)
+            .and_then(|&(id, _)| self.change(id))
+            .is_some_and(ChangeProj::is_merged)
     }
 
     /// A change by its `Change-Id` key — the graph enriches a merged history
@@ -328,7 +338,7 @@ mod tests {
     use super::*;
     use crate::db::ChangeRow;
     use crate::enums::Verdict;
-    use crate::review::{ChangeProj, ReviewProj, RevisionProj};
+    use crate::review::{ChangeProj, Lifecycle, ReviewProj, RevisionProj};
 
     fn row(id: u64, key: &str) -> ChangeRow {
         ChangeRow {
@@ -401,6 +411,31 @@ mod tests {
             hits.iter().map(|h| (h.tip_change_id, h.revision)).collect();
         pairs.sort_unstable();
         assert_eq!(pairs, vec![(12, 0), (14, 1)]);
+    }
+
+    #[test]
+    fn walk_stops_at_a_merged_ancestor() {
+        // A → B forked from "m"; A has since landed (merged). The walk stops at
+        // the canonical branch, so B's path is the open member alone — the
+        // merged ancestor sits below the branch now, not in the chain.
+        let mut a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);
+        a.lifecycle = Lifecycle::Merged { revision: 0 };
+        let b = change(2, "Ib", vec![rev(0, "B", "A", "m")]);
+        let view = RepoView::new(vec![a, b]);
+
+        let path: Vec<u64> = view
+            .path_from_tip("B")
+            .iter()
+            .map(|m| m.change_id)
+            .collect();
+        assert_eq!(
+            path,
+            vec![2],
+            "the merged ancestor is below the canonical branch"
+        );
+        // The graph's open region inherits the stop — no merged node leaks in.
+        let open: Vec<u64> = view.open_nodes().iter().map(|n| n.change_id).collect();
+        assert_eq!(open, vec![2]);
     }
 
     #[test]

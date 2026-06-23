@@ -270,13 +270,16 @@ revisions; it holds no locks and touches no git.
   tip but can still be an interior member of a live tip's path. (`all_tips`
   drops the non-terminal filter — the `?status=all` view that still surfaces
   recently merged/abandoned chains.)
-- **`path_from_tip(sha)`** walks back to the fork, oldest-first: resolve `sha`
-  through the index to `(change, revision)`, push it, then follow that
-  revision's `parent_sha` — stopping at the fork point (`parent_sha == base_sha`)
-  or an unresolved parent. The walk is **total**: an unresolved parent (below
-  the merge-base, or a torn push) truncates the path, never errors; a cycle
-  guard rides out bad data. Each member is pinned to the patchset the tip walked
-  through.
+- **`path_from_tip(sha)`** walks back to the canonical branch, oldest-first:
+  resolve `sha` through the index to `(change, revision)`, push it, then follow
+  that revision's `parent_sha` — stopping at the branch (the recorded fork
+  `parent_sha == base_sha`, or the first parent that has since **merged**) or an
+  unresolved parent. Stopping at a merged parent keeps a partially-landed stack
+  deriving to its open members alone: as members land, the branch advances past
+  the recorded `base_sha` and the walk follows it. The walk is **total**: an
+  unresolved parent (below the merge-base, or a torn push) truncates the path,
+  never errors; a cycle guard rides out bad data. Each member is pinned to the
+  patchset the tip walked through.
 - **`chains_through(change_id)`** returns every tip whose path walks that change,
   with the revision that path pins on it — drives `ChangeDetail.chains`.
 

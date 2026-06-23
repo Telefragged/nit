@@ -98,16 +98,25 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     // The tip change is untouched; it never landed.
     assert_eq!(status_at(&server, tip, 0).as_deref(), Some("pending"));
 
-    // One live member keeps the partially-landed stack on the active list.
+    // One live member keeps the partially-landed stack on the active list, but
+    // the walk stops at the canonical branch: the ancestor has landed, so it
+    // drops out of the path — only the open tip remains.
     let repo = first_repo_id(&server);
     let (_, active) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=active")));
     let chains = active["chains"].as_array().unwrap();
     assert_eq!(chains.len(), 1, "stack stays visible: {active}");
     let path = chains[0]["path"].as_array().unwrap();
-    let ancestor_entry = path.iter().find(|m| m["change_id"] == ancestor).unwrap();
-    let tip_entry = path.iter().find(|m| m["change_id"] == tip).unwrap();
-    assert_eq!(ancestor_entry["status"], "merged");
-    assert_eq!(tip_entry["status"], "pending");
+    assert_eq!(
+        path.len(),
+        1,
+        "the merged ancestor drops from the path: {active}"
+    );
+    assert_eq!(path[0]["change_id"], tip);
+    assert_eq!(path[0]["status"], "pending");
+    assert!(
+        path.iter().all(|m| m["change_id"] != ancestor),
+        "the merged ancestor sits below the canonical branch now: {active}"
+    );
 }
 
 /// Abandon a change via the action.
