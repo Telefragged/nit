@@ -29,13 +29,12 @@ identity across rewrites. Product spec: `nit.md`.
 6. **Changes land through nit itself — the default for _every_ change
    unless the user says otherwise.** Start in a worktree (`.worktrees/<slug>`
    on a `track/<slug>` branch), then drive the review loop with the
-   `nit-review` skill (`.claude/skills/nit-review/SKILL.md`). Size,
-   triviality, or "it's self-contained" never lower the bar — a one-line
-   docs fix takes the same path as a feature. Direct-to-main requires an
-   explicit, up-front "skip nit" / "land directly" from the user (or a
-   docs/dev.md exemption); it is never a call you make yourself, and never a
-   label you apply after the fact to work already started on `main`. When in
-   doubt, worktree.
+   `nit:lifecycle` skill. Size, triviality, or "it's self-contained" never
+   lower the bar — a one-line docs fix takes the same path as a feature.
+   Direct-to-main requires an explicit, up-front "skip nit" / "land
+   directly" from the user (or a docs/dev.md exemption); it is never a call
+   you make yourself, and never a label you apply after the fact to work
+   already started on `main`. When in doubt, worktree.
 7. **`nit push --partial` after every completed commit** — pushing
    finishes a commit, like treefmt and the Change-Id; no later pass
    (cleanup, self-review, verification) delays it. Push now, amend later —
