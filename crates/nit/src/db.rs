@@ -122,6 +122,11 @@ const MIGRATIONS: &[&str] = &[
       message   TEXT NOT NULL    -- cover note (verdict) or reason (abandon)
     );
     ",
+    // v2: the merge timer's baseline — the canonical-branch HEAD it last
+    // reconciled against, so each sweep scans only the new commits and resumes
+    // across restarts (docs/data-model.md "Lifecycle timer"). NULL until the
+    // first observation; set at `nit repo create` to the branch's then-HEAD.
+    "ALTER TABLE repos ADD COLUMN base_head TEXT;",
 ];
 
 fn migrate(conn: &Connection) -> Result<()> {
@@ -197,6 +202,9 @@ pub struct RepoRow {
     pub git_dir: String,
     /// The repo's one canonical branch; mergedness always tracks it.
     pub base_branch: String,
+    /// The canonical-branch HEAD the merge timer last reconciled against
+    /// (docs/data-model.md "Lifecycle timer"); `None` until first observed.
+    pub base_head: Option<String>,
 }
 
 fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
@@ -204,6 +212,7 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
         id: col_u64(row.get("id")?)?,
         git_dir: row.get("git_dir")?,
         base_branch: row.get("base_branch")?,
+        base_head: row.get("base_head")?,
     })
 }
 
@@ -222,6 +231,7 @@ pub fn create_repo(conn: &Connection, git_dir: &str, base_branch: &str) -> Resul
         id: col_u64(conn.last_insert_rowid())?,
         git_dir: git_dir.to_string(),
         base_branch: base_branch.to_string(),
+        base_head: None,
     })
 }
 
@@ -271,6 +281,20 @@ pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<
     conn.execute(
         "UPDATE repos SET git_dir = ?1 WHERE id = ?2",
         params![git_dir, i64::try_from(id)?],
+    )?;
+    Ok(())
+}
+
+/// Record the canonical-branch HEAD the merge timer last reconciled against,
+/// so the next sweep scans only newer commits (docs/data-model.md "Lifecycle
+/// timer").
+///
+/// # Errors
+/// On a database failure.
+pub fn update_repo_base_head(conn: &Connection, id: u64, base_head: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE repos SET base_head = ?1 WHERE id = ?2",
+        params![base_head, i64::try_from(id)?],
     )?;
     Ok(())
 }
@@ -729,6 +753,16 @@ mod tests {
         // A different git dir is a distinct repo.
         let b = create_repo(&conn, "/other/.git", "main").expect("create");
         assert_ne!(a.id, b.id);
+    }
+
+    #[test]
+    fn base_head_starts_null_and_round_trips() {
+        let conn = mem();
+        let a = create_repo(&conn, "/r/.git", "main").expect("create");
+        assert_eq!(a.base_head, None, "no baseline until first observed");
+        update_repo_base_head(&conn, a.id, "deadbeef").expect("record");
+        let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
+        assert_eq!(found.base_head.as_deref(), Some("deadbeef"));
     }
 
     #[test]

@@ -44,7 +44,9 @@ pub struct AppState {
 }
 
 /// Cached repo registry row: identity, the one canonical branch, and the git
-/// dir (mutable on `nit repo move`).
+/// dir (mutable on `nit repo move`). The merge timer's baseline is not cached
+/// here — it lives only in `repos.base_head` (docs/data-model.md "Lifecycle
+/// timer").
 pub struct RepoState {
     pub id: u64,
     pub base_branch: String,

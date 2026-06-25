@@ -52,6 +52,15 @@ pub(super) async fn create_repo(
             )));
         }
         let row = db::create_repo(&conn, &canonical, &req.base)?;
+        // Seed the merge timer's baseline at the branch's current HEAD, so the
+        // first landing after registration shows up in a delta scan rather than
+        // being swallowed as pre-tracking history (docs/data-model.md).
+        if let Ok(commit) = repo
+            .revparse_single(&req.base)
+            .and_then(|o| o.peel_to_commit())
+        {
+            db::update_repo_base_head(&conn, row.id, &commit.id().to_string())?;
+        }
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, row)))
     })
@@ -117,6 +126,7 @@ pub(super) async fn relocate_repo(
             id: repo_id,
             git_dir: canonical,
             base_branch: existing.base_branch,
+            base_head: existing.base_head,
         };
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, row)))

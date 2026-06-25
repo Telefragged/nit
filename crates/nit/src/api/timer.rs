@@ -1,15 +1,17 @@
 //! The background lifecycle timer: detect merged changes and append
 //! `lifecycle{merged}` entries (the only writer of `merged`).
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use git2::Repository;
 
 use crate::chain::RepoView;
+use crate::db;
 use crate::enums::{LifecycleAction, LogKind};
 use crate::gitscan;
-use crate::review;
+use crate::review::{self, ChangeProj};
 
 use super::{AppState, ChangeEntry, append_to_change, blocking};
 
@@ -44,7 +46,15 @@ pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
     }
 }
 
+/// One sweep: for each repo whose canonical branch has moved since the last
+/// sweep, scan only the new commits for landings, append `lifecycle{merged}`,
+/// and record the new HEAD as the baseline. The baseline lives only in the DB
+/// (`repos.base_head`) — the single source of truth — so a repo whose branch is
+/// unchanged costs one ref resolution and one indexed row read.
 fn sweep_lifecycle(state: &Arc<AppState>) {
+    let Ok(conn) = state.open_db() else {
+        return;
+    };
     for repo_id in state.repo_ids() {
         let Some(repo_state) = state.repo_state(repo_id) else {
             continue;
@@ -52,32 +62,51 @@ fn sweep_lifecycle(state: &Arc<AppState>) {
         let Ok(repo) = Repository::open(repo_state.git_dir()) else {
             continue;
         };
-        let view = state.repo_view(repo_id);
-        for change_id in live_change_ids(&view) {
-            let Some(entry) = state.change_entry(change_id) else {
-                continue;
-            };
-            let snapshot = entry.read().clone();
-            if let Some(landed) =
-                gitscan::landed_revision(&repo, &repo_state.base_branch, &snapshot)
-            {
-                append_lifecycle(
-                    state,
-                    &entry,
-                    change_id,
-                    LifecycleAction::Merged,
-                    Some(landed),
-                );
+        let Some(head) = gitscan::resolve_head(&repo, &repo_state.base_branch) else {
+            continue;
+        };
+        let recorded = db::get_repo(&conn, repo_id)
+            .ok()
+            .flatten()
+            .and_then(|r| r.base_head);
+        if recorded.as_deref() == Some(head.as_str()) {
+            continue; // the canonical branch has not moved — nothing to scan
+        }
+        // With a recorded baseline, scan the new commits for landings; the first
+        // observation has none, so it only adopts one (landings that predate
+        // tracking are not this timer's concern).
+        if let Some(since) = &recorded {
+            let view = state.repo_view(repo_id);
+            let open = open_changes_by_key(&view);
+            for (change_id, revision) in gitscan::detect_landings(&repo, since, &head, &open) {
+                if let Some(entry) = state.change_entry(change_id) {
+                    append_lifecycle(
+                        state,
+                        &entry,
+                        change_id,
+                        LifecycleAction::Merged,
+                        Some(revision),
+                    );
+                }
             }
+        }
+        // Record the baseline last: a crash before this re-scans the same delta
+        // next time, which is harmless — a change merged above is terminal, so
+        // it has already dropped out of the open set.
+        if let Err(e) = db::update_repo_base_head(&conn, repo_id, &head) {
+            tracing::warn!(repo_id, "recording base head failed: {e:#}");
         }
     }
 }
 
-/// Change ids in `view` that are not terminal (the timer's working set).
-fn live_change_ids(view: &RepoView) -> Vec<u64> {
+/// The repo's non-terminal changes keyed by `Change-Id` — the sweep's working
+/// set, looked up once per new commit.
+fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
     view.change_ids()
         .into_iter()
-        .filter(|id| view.change(*id).is_some_and(|c| !c.is_terminal()))
+        .filter_map(|id| view.change(id))
+        .filter(|c| !c.is_terminal())
+        .map(|c| (c.change_key.clone(), c))
         .collect()
 }
 

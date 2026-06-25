@@ -24,12 +24,15 @@ a client decision ("Wake rule" below). The web polls the same folds.
 ## Tables
 
 ```sql
-repos   (id, git_dir, base_branch, UNIQUE(git_dir))
+repos   (id, git_dir, base_branch, base_head, UNIQUE(git_dir))
         -- the registry. git_dir is the canonical git-common-dir — the repo's
         -- identity *and* display name; `nit repo move` repoints it. base_branch
         -- is the repo's one canonical branch, set at `nit repo create`; mergedness
-        -- always tracks it (there is no land-anywhere). Stores nothing else
-        -- derivable from git (no commits, timestamps — those live in .git).
+        -- always tracks it (there is no land-anywhere). base_head is the merge
+        -- timer's baseline — the canonical-branch HEAD it last reconciled against
+        -- ("Lifecycle timer"), the one stored value that is observation state,
+        -- not git-derivable. Stores nothing else derivable from git (no commits,
+        -- timestamps — those live in .git).
 
 changes (id, repo_id, change_key, created_at, UNIQUE(repo_id, change_key))
         -- the identity registry: a (repo, Change-Id) → a stable rowid `id` that
@@ -373,18 +376,30 @@ construction, because `path_from_tip` truncates on an unresolved `parent_sha`
 
 A background sweep (`run_lifecycle_timer`) is the **only writer** of `merged`
 `lifecycle` entries — a push cannot observe the base advancing. It runs every
-`NIT_TIMER_INTERVAL_MS` (default 5s) and, for each **non-terminal** change of
-each repo, detects:
+`NIT_TIMER_INTERVAL_MS` (default 5s) and is **edge-triggered on the canonical
+branch**: each repo records the branch HEAD it last reconciled against
+(`repos.base_head`, persisted), and a sweep does work only when that HEAD has
+moved. A repo whose branch is idle costs one ref resolution and nothing else —
+no per-change walk, no diffs.
 
-- **Merged** — `landed_revision` matches the change's latest revision against
-  the canonical branch over `base_sha..canonical`. First by **Change-Id**: a
-  commit there carrying this change's key whose patch-id equals the latest
-  revision's ⇒ landed; a key present but with a different patch-id is "landed
-  earlier, since amended" and the change stays open (no oscillation). Else by
-  **patch-id**: the latest revision's patch-id appears in the window (an empty
-  diff never alone counts). A match appends `lifecycle{merged, revision}` —
-  which patchset landed. Prefix merge falls out for free: landing A and B marks
-  them merged while C stays live, no chain-level gate.
+When the branch has moved, `detect_landings` walks only the **new** commits
+`base_head..HEAD` (one walk for the whole repo) and, for each commit carrying a
+non-terminal change's `Change-Id` whose patch-id equals that change's latest
+revision, appends `lifecycle{merged, revision}` — which patchset landed. A key
+present with a _different_ patch-id is "landed earlier, since amended": the
+change stays open. An empty diff never counts. Then the sweep records `HEAD` as
+the new baseline. Prefix merge falls out for free: in one delta, landing A and B
+marks them merged while C — not in the delta — stays live, no chain-level gate.
+
+The baseline is seeded at `nit repo create` to the branch's then-HEAD, so the
+first landing after registration shows up in a delta. Persisting it means a
+restart resumes from the last reconciled HEAD and still catches landings that
+happened while nit was down; a baseline that no longer resolves (a rewritten
+branch) is re-adopted with nothing detected that sweep. **Detection is by
+`Change-Id` only** — a landing that _stripped_ its trailer is not detected. nit's
+own approve action preserves the trailer through rebase + fast-forward, and
+chasing keyless landings is what would force an unbounded per-change diff every
+sweep; a missed keyless landing is recoverable by re-push or manual abandon.
 
 The sweep skips already-terminal changes (merged or abandoned) — there is no
 point merge-checking a dead change. It never abandons: **abandonment is an
