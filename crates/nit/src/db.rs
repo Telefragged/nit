@@ -19,7 +19,7 @@ use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
-use crate::enums::{Decision, Side};
+use crate::enums::{ChangeStatus, Decision, Side};
 
 /// RFC3339 timestamp for "now" (UTC), the format stored in every
 /// `created_at`/`updated_at` column.
@@ -143,6 +143,15 @@ const MIGRATIONS: &[&str] = &[
     // across restarts (docs/data-model.md "Lifecycle timer"). NULL until the
     // first observation; set at `nit repo create` to the branch's then-HEAD.
     "ALTER TABLE repos ADD COLUMN base_head TEXT;",
+    // v3: a denormalized cache of each change's current status — the displayed
+    // status at its latest revision (`review::ChangeProj::current_status`). The
+    // fold of the change's log stays authoritative; this column exists so a
+    // query can filter/scan changes by status without replaying every log
+    // (docs/data-model.md "Tables"). Re-stamped inside every append's
+    // transaction and reconciled against the fold on startup (rewritten only
+    // when it has drifted); NULL only for a change that has never appended (a
+    // torn push), until its next append or restart.
+    "ALTER TABLE changes ADD COLUMN status TEXT;",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -202,6 +211,15 @@ fn col_side(s: &str) -> rusqlite::Result<Side> {
 /// the db↔domain boundary, like [`col_side`]). An unknown value means external
 /// corruption, surfaced as a conversion error.
 fn col_decision(s: &str) -> rusqlite::Result<Decision> {
+    s.parse().map_err(|e: String| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
+    })
+}
+
+/// Parse a stored `status` TEXT column into a [`ChangeStatus`] (the read half
+/// of the db↔domain boundary, like [`col_decision`]). An unknown value means
+/// external corruption, surfaced as a conversion error.
+fn col_change_status(s: &str) -> rusqlite::Result<ChangeStatus> {
     s.parse().map_err(|e: String| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
     })
@@ -323,6 +341,9 @@ pub struct ChangeRow {
     pub id: u64,
     pub repo_id: u64,
     pub change_key: String,
+    /// The denormalized status cache (docs/data-model.md "Tables"); `None`
+    /// before the change's first append. Authoritative state is the fold.
+    pub status: Option<ChangeStatus>,
     pub created_at: String,
 }
 
@@ -331,6 +352,10 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
         id: col_u64(row.get("id")?)?,
         repo_id: col_u64(row.get("repo_id")?)?,
         change_key: row.get("change_key")?,
+        status: row
+            .get::<_, Option<String>>("status")?
+            .map(|s| col_change_status(&s))
+            .transpose()?,
         created_at: row.get("created_at")?,
     })
 }
@@ -354,6 +379,22 @@ pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &str) -> Resul
         |r| r.get(0),
     )?;
     Ok(col_u64(id)?)
+}
+
+/// Re-stamp a change's denormalized `status` (docs/data-model.md "Tables") —
+/// the fold's current status, cached so a query need not replay the log. The
+/// change's log stays the source of truth; this is called inside the same
+/// transaction as the append that moved the fold, and on startup to backfill
+/// from replay.
+///
+/// # Errors
+/// On a database failure.
+pub fn update_change_status(conn: &Connection, id: u64, status: ChangeStatus) -> Result<()> {
+    conn.execute(
+        "UPDATE changes SET status = ?1 WHERE id = ?2",
+        params![status.as_str(), i64::try_from(id)?],
+    )?;
+    Ok(())
 }
 
 /// # Errors
@@ -794,6 +835,37 @@ mod tests {
         assert_eq!(
             get_change(&conn, a).expect("get").expect("some").change_key,
             "Iabc"
+        );
+    }
+
+    #[test]
+    fn change_status_round_trips() {
+        let conn = mem();
+        let c = change(&conn);
+        let status = |conn: &Connection| -> Option<String> {
+            conn.query_row(
+                "SELECT status FROM changes WHERE id = ?1",
+                params![i64::try_from(c).expect("id fits i64")],
+                |r| r.get(0),
+            )
+            .expect("query status")
+        };
+        // NULL until first stamped (a change that has never appended), and the
+        // typed row reads it back as None.
+        assert_eq!(status(&conn), None);
+        assert_eq!(
+            get_change(&conn, c).expect("get").expect("row").status,
+            None
+        );
+        update_change_status(&conn, c, ChangeStatus::Approved).expect("stamp");
+        assert_eq!(status(&conn).as_deref(), Some("approved"));
+        // Re-stamping overwrites with the new status' wire spelling, and the
+        // typed row parses it back through `col_change_status`.
+        update_change_status(&conn, c, ChangeStatus::ChangesRequested).expect("restamp");
+        assert_eq!(status(&conn).as_deref(), Some("changes_requested"));
+        assert_eq!(
+            get_change(&conn, c).expect("get").expect("row").status,
+            Some(ChangeStatus::ChangesRequested)
         );
     }
 

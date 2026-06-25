@@ -231,6 +231,39 @@ pub enum ChangeStatus {
     Abandoned,
 }
 
+impl ChangeStatus {
+    /// The persisted/wire spelling — the value of the denormalized
+    /// `changes.status` column (the db↔domain boundary; mirrors the serde
+    /// renaming).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ChangeStatus::Pending => "pending",
+            ChangeStatus::Approved => "approved",
+            ChangeStatus::ChangesRequested => "changes_requested",
+            ChangeStatus::Commented => "commented",
+            ChangeStatus::Merged => "merged",
+            ChangeStatus::Abandoned => "abandoned",
+        }
+    }
+}
+
+impl std::str::FromStr for ChangeStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<ChangeStatus, String> {
+        match s {
+            "pending" => Ok(ChangeStatus::Pending),
+            "approved" => Ok(ChangeStatus::Approved),
+            "changes_requested" => Ok(ChangeStatus::ChangesRequested),
+            "commented" => Ok(ChangeStatus::Commented),
+            "merged" => Ok(ChangeStatus::Merged),
+            "abandoned" => Ok(ChangeStatus::Abandoned),
+            other => Err(format!("unknown change status {other:?}")),
+        }
+    }
+}
+
 /// A chain's derived, actionable state (docs/api.md state table). Computed
 /// at read time from the path's members ([`derive_state`](crate::chain::derive_state));
 /// it is informational on the wire, never stored. Abandonment is

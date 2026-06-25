@@ -340,6 +340,7 @@ mod tests {
             id,
             repo_id: 1,
             change_key: key.to_string(),
+            status: None,
             created_at: "t0".to_string(),
         });
         proj.revisions.push(RevisionProj {

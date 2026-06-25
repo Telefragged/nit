@@ -143,6 +143,13 @@ impl AppState {
                     let rows = db::log_entries(conn, row.id, 0, None)?;
                     max_id = max_id.max(review::max_assigned_id(&rows)?);
                     let proj = review::replay(&row, &rows)?;
+                    // Reconcile the cached status, writing only when it has
+                    // drifted from the fold — an unchanged restart rewrites no
+                    // rows.
+                    let status = proj.current_status();
+                    if row.status != Some(status) {
+                        db::update_change_status(conn, row.id, status)?;
+                    }
                     changes.insert(row.id, Arc::new(ChangeEntry::new(proj)));
                 }
                 let repos: HashMap<u64, Arc<RepoState>> = db::all_repos(conn)?
@@ -399,6 +406,9 @@ pub fn append_to_change_with(
         let seq = db::append_log(&tx, change_id, e.idx, e.kind.as_str(), &e.payload, &now)?;
         applied.push(review::Entry { seq, ..e });
     }
+    // Re-stamp the denormalized status from the validated projection, in the
+    // same transaction as the appends (docs/data-model.md "Tables").
+    db::update_change_status(&tx, change_id, next.current_status())?;
     tx.commit()?;
 
     // Install the validated projection after the durable commit, then release

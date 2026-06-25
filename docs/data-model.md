@@ -13,9 +13,12 @@ Order is a read-time walk, never stored state.
 
 SQLite stores only the per-change logs plus four side tables (the repo
 registry, the change-identity registry, reviewer comment drafts, and reviewer
-decision drafts). git objects stay in the user's repo, pinned against `git gc`
-("Keep refs"); diffs are computed on demand from the commit shas a revision
-carries, never stored ("Diffs").
+decision drafts). The lone piece of derived state stored is a denormalized
+`status` on each change row — a cache of the fold's current status (below) so a
+query can filter changes without replaying logs; the log stays authoritative.
+git objects stay in the user's repo, pinned against `git gc` ("Keep refs");
+diffs are computed on demand from the commit shas a revision carries, never
+stored ("Diffs").
 
 Live followers (`nit wait`, `nit log --follow`) watch a set of changes over
 one websocket (docs/api.md "Events"); which entries **wake** a parked wait is
@@ -34,11 +37,16 @@ repos   (id, git_dir, base_branch, base_head, UNIQUE(git_dir))
         -- not git-derivable. Stores nothing else derivable from git (no commits,
         -- timestamps — those live in .git).
 
-changes (id, repo_id, change_key, created_at, UNIQUE(repo_id, change_key))
+changes (id, repo_id, change_key, status, created_at, UNIQUE(repo_id, change_key))
         -- the identity registry: a (repo, Change-Id) → a stable rowid `id` that
         -- everything carries. Never reused, so a cursor key is valid for the
-        -- life of the repo. All reviewable state is the fold of this change's
-        -- log, never stored here.
+        -- life of the repo. Reviewable state is the fold of this change's log,
+        -- not stored here — except `status`, a denormalized cache of the fold's
+        -- current status (the displayed status at the latest revision) so a
+        -- query can filter/scan changes without replaying logs. The log stays
+        -- authoritative: `status` is re-stamped in each append's transaction and
+        -- reconciled against the fold on startup (rewritten only when it has
+        -- drifted); NULL only before a change's first append (a torn push).
 
 log     (seq, change_id, idx, kind, payload, created_at,
          PRIMARY KEY (seq AUTOINCREMENT), UNIQUE(change_id, idx))
@@ -73,7 +81,8 @@ draft_reviews (change_id PRIMARY KEY, decision, message)
 That is the whole schema — **no `chains` table, no `revisions` table, no
 `comments`/`reviews`/`events` tables**. Revision data lives in `revision`-kind
 log entries; threads, reviews, status, lifecycle are all folded state; the
-side tables hold only registration identity and reviewer scratch.
+side tables hold only registration identity and reviewer scratch — save the
+denormalized `changes.status` cache (above), a query index the fold owns.
 
 ### The two coordinates
 
@@ -200,9 +209,12 @@ decision applied.
 
 ### Per-change, per-revision status
 
-A change has **no status scalar**. Its **displayed status** is per
-`(change, revision)`: the lifecycle overlay over the verdict-derived review
-status of the patchset a path pins.
+A change's authoritative status is per `(change, revision)` — its **displayed
+status**: the lifecycle overlay over the verdict-derived review status of the
+patchset a path pins. (The `changes.status` column denormalizes one coarse
+scalar from this — the displayed status at the **latest** revision — as a query
+index; chain derivation and every status read still compute the per-revision
+value below, never consult the column.)
 
 ```
 status:  pending | approved | changes_requested | commented | merged | abandoned

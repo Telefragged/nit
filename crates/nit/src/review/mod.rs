@@ -339,6 +339,15 @@ impl ChangeProj {
         self.latest_revision().is_some_and(|r| r.partial)
     }
 
+    /// The change's current status: [`status_at`](Self::status_at) its latest
+    /// revision (pending when it has none). The denormalized `changes.status`
+    /// column caches this so a query can filter changes without folding their
+    /// logs (docs/data-model.md "Tables").
+    #[must_use]
+    pub fn current_status(&self) -> ChangeStatus {
+        self.status_at(self.latest_revision().map_or(0, |r| r.number))
+    }
+
     /// The displayed status at a pinned revision: the lifecycle overlay
     /// (`abandoned` change-wide, `merged` only for the landed patchset) over
     /// the verdict-derived review status (docs/data-model.md "Per-change,

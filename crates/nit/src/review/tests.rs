@@ -6,6 +6,7 @@ fn change_row() -> db::ChangeRow {
         id: 1,
         repo_id: 1,
         change_key: "Iabc".to_string(),
+        status: None,
         created_at: "t0".to_string(),
     }
 }
@@ -95,6 +96,37 @@ fn reword_resets_status() {
         ("revision", revision("B", "base", "base", true)),
     ]);
     assert_eq!(c.status_at(1), ChangeStatus::Pending);
+}
+
+#[test]
+fn current_status_tracks_the_latest_revision() {
+    // No revisions yet: the cached value is pending.
+    assert_eq!(
+        ChangeProj::empty(&change_row()).current_status(),
+        ChangeStatus::Pending
+    );
+    // current_status is the displayed status at the latest revision: r1 has no
+    // review, so pending — even though r0 was approved.
+    let c = folded(&[
+        ("revision", revision("A", "base", "base", true)),
+        ("review", review(0, "approve")),
+        ("revision", revision("B", "base", "base", true)),
+    ]);
+    assert_eq!(c.status_at(0), ChangeStatus::Approved);
+    assert_eq!(c.current_status(), ChangeStatus::Pending);
+    // A verdict on the latest revision moves the current status.
+    let c = folded(&[
+        ("revision", revision("A", "base", "base", true)),
+        ("review", review(0, "approve")),
+    ]);
+    assert_eq!(c.current_status(), ChangeStatus::Approved);
+    // The lifecycle overlay wins change-wide: abandoned regardless of revision.
+    let c = folded(&[
+        ("revision", revision("A", "base", "base", true)),
+        ("review", review(0, "approve")),
+        ("lifecycle", serde_json::json!({"action": "abandoned"})),
+    ]);
+    assert_eq!(c.current_status(), ChangeStatus::Abandoned);
 }
 
 #[test]
