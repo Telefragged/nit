@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { ChainRef, CommentRange, CommentSide } from "../api/types";
+import type { CommentRange, CommentSide } from "../api/types";
 
 /** Anchor of the draft editor currently open in the diff. */
 export interface DraftTarget {
@@ -35,10 +35,6 @@ export interface ReviewCtx {
   selected: number;
   /** The FROM side: undefined = base, else the interdiff's left revision. */
   against: number | undefined;
-  /** Every tip walking through this change, each pinning a patchset — the
-   * chain context for the viewed revision is the ref whose `revision`
-   * matches `selected`. */
-  chains: ChainRef[];
   editingTarget: DraftTarget | null;
   /** Guarded: moving or clearing the target unmounts the inline editor, so
    * this confirms first while `editorDirty` is set, returning whether the

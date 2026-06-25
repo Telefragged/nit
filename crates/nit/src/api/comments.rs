@@ -114,7 +114,7 @@ fn set_lifecycle(
         append_to_change(&mut conn, entry, id, vec![(LogKind::Lifecycle, payload)])
             .map_err(map_busy)?;
     }
-    change_detail_json(&conn, state, entry, id)
+    change_detail_json(&conn, entry)
 }
 
 /// `POST /api/changes/{id}/abandon` — mark a live change abandoned

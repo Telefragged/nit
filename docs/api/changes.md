@@ -12,7 +12,6 @@
     "threads": [Thread],             // published threads, all revisions
     "drafts": [Draft],               // reviewer's unpublished comments
     "reviews": [Review],             // each carries its revision
-    "chains": [ChainRef],            // every tip walking through this change
     "draft_decision": StagedDecision // the reviewer's staged decision, or null
   }
   Revision = {"number": 2, "commit_sha": "…",
@@ -21,14 +20,20 @@
               "created_at": "…"}
   Review   = {"id": 5, "revision": 2, "verdict": "request_changes",
               "message": "cover message", "created_at": "…"}
-  ChainRef = {"tip_change_id": 12, "revision": 2}
   StagedDecision = {"decision": "approve",   // Decision: approve | request_changes
                     "message": "cover note"} //   | comment | abandon | reopen
   ```
   There is no `chain_id` or `position` — both are properties of a path, not of
-  the change; read them from `chains` / a `PathEntry`. `reviews` and `threads`
-  are change-wide and carry their `revision`; a client viewing one patchset
-  MUST filter by the viewing `?revision`.
+  the change; read them from `GET /api/changes/{id}/chains` / a `PathEntry`.
+  `reviews` and `threads` are change-wide and carry their `revision`; a client
+  viewing one patchset MUST filter by the viewing `?revision`.
+- `GET /api/changes/{id}/chains` — every tip walking through this change, each
+  pinned to the patchset that path walks. Kept separate from the change detail
+  so a change read builds no repo view.
+  ```json
+  {"chains": [ChainRef]}
+  ChainRef = {"tip_change_id": 12, "revision": 2}
+  ```
 - `GET /api/changes/{id}/revisions/{n}/diff` → Diff of revision n against
   its parent.
 - `GET /api/changes/{id}/revisions/{n}/diff?against={m}` → interdiff

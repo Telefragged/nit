@@ -348,7 +348,6 @@ export default function ReviewPage() {
       changeId,
       selected,
       against,
-      chains: change?.chains ?? [],
       editingTarget,
       // Moving or clearing the target unmounts the inline CommentEditor and
       // destroys its draft, so this is a discard path: confirm while dirty.
@@ -372,7 +371,7 @@ export default function ReviewPage() {
         editorDirty.current = dirty;
       },
     }),
-    [changeId, selected, against, change?.chains, editingTarget],
+    [changeId, selected, against, editingTarget],
   );
 
   // The reviewer's view of every thread: published threads merged with their

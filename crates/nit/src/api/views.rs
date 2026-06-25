@@ -327,16 +327,14 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Draft {
 // ---------------------------------------------------------------------------
 // Change detail
 
-/// Change detail JSON: every revision, every published thread, the reviewer's
-/// open drafts, every review, and the tips that walk through this change.
+/// Change detail JSON for **one** change: every revision, every published
+/// thread, the reviewer's open drafts, every review, and the staged decision.
+/// A pure read of the single fold — the chains a change sits on come from a
+/// separate request ([`chains_through_view`]), so a change read builds no view.
 ///
 /// # Errors
 /// When reading drafts fails.
-pub fn build_change_detail(
-    conn: &Connection,
-    view: &RepoView,
-    change: &ChangeProj,
-) -> Result<types::ChangeDetail> {
+pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<types::ChangeDetail> {
     let revisions: Vec<types::Revision> = change.revisions.iter().map(revision_json).collect();
     let threads: Vec<types::Thread> = change
         .threads
@@ -352,14 +350,6 @@ pub fn build_change_detail(
         .latest_revision()
         .map(|r| subject_of(&r.message))
         .unwrap_or_default();
-    let chains = view
-        .chains_through(change.id)
-        .into_iter()
-        .map(|hit| types::ChainRef {
-            tip_change_id: hit.tip_change_id,
-            revision: hit.revision,
-        })
-        .collect();
     let draft_decision = db::get_draft_review(conn, change.id)?.map(|r| types::StagedDecision {
         decision: r.decision,
         message: r.message,
@@ -373,9 +363,22 @@ pub fn build_change_detail(
         threads,
         drafts,
         reviews,
-        chains,
         draft_decision,
     })
+}
+
+/// The tips walking through `change_id` (the `GET /api/changes/{id}/chains`
+/// body), each pinned to the patchset that path walks. Derived from a view, so
+/// it lives apart from [`build_change_detail`].
+#[must_use]
+pub fn chains_through_view(view: &RepoView, change_id: u64) -> Vec<types::ChainRef> {
+    view.chains_through(change_id)
+        .into_iter()
+        .map(|hit| types::ChainRef {
+            tip_change_id: hit.tip_change_id,
+            revision: hit.revision,
+        })
+        .collect()
 }
 
 #[must_use]

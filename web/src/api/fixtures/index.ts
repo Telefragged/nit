@@ -11,7 +11,6 @@
 import { ApiError } from "../client";
 import type {
   Chain,
-  ChainRef,
   ChainState,
   ChainSummary,
   ChangeDetail,
@@ -334,21 +333,6 @@ function resolveTip(
   };
 }
 
-/** Every tip walking through a change, each with the patchset it pins there
- * (docs/api.md `ChainRef`). */
-function chainsThrough(c: ChangeRecord): ChainRef[] {
-  const refs: ChainRef[] = [];
-  for (const tip of tips) {
-    const member = derivePath(tip).find((e) => e.change_id === c.id);
-    if (!member) continue;
-    refs.push({
-      tip_change_id: tip.tip_change_id,
-      revision: member.revision,
-    });
-  }
-  return refs;
-}
-
 /** Derive the repo registry (docs/api.md `GET /api/repos`). `active_chains`
  * is the live tip count for the repo. */
 function repoList(): Repo[] {
@@ -519,7 +503,6 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
     threads: threads.filter((x) => x.change_id === c.id).map(renderThread),
     drafts: drafts.filter((x) => x.change_id === c.id).map(renderDraft),
     reviews: c.reviews,
-    chains: chainsThrough(c),
     draft_decision: draftReviews.get(c.id) ?? null,
   };
 }

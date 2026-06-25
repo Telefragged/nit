@@ -65,6 +65,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/chains/{id}/log", get(chains::chain_log))
         .route("/api/chains/{id}/submit", post(reviews::submit_chain))
         .route("/api/changes/{id}", get(changes::get_change_detail))
+        .route("/api/changes/{id}/chains", get(changes::change_chains))
         .route(
             "/api/changes/{id}/revisions/{n}/diff",
             get(changes::revision_diff),
@@ -194,20 +195,14 @@ struct ChainQuery {
     revision: Option<u64>,
 }
 
-/// Rebuild the `ChangeDetail` for `id` from the current view (404 if it
-/// vanished) — the shared tail of the three change-detail handlers.
+/// Build the `ChangeDetail` from one change's fold — a pure single-change read,
+/// no repo view. The shared tail of the three change-detail handlers.
 fn change_detail_json(
     conn: &rusqlite::Connection,
-    state: &Arc<AppState>,
     entry: &ChangeEntry,
-    id: u64,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    let repo_id = entry.read().repo_id;
-    let view = state.repo_view(repo_id);
-    let change = view
-        .change(id)
-        .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
-    Ok(Json(views::build_change_detail(conn, &view, change)?))
+    let change = entry.read();
+    Ok(Json(views::build_change_detail(conn, &change)?))
 }
 
 /// The "Range comments" rules of docs/api.md.

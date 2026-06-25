@@ -80,12 +80,6 @@ export interface Chain {
   path: PathEntry[];
 }
 
-/** A tip walking through a change, plus the patchset it pins there. */
-export interface ChainRef {
-  tip_change_id: number;
-  revision: number;
-}
-
 // ---------------------------------------------------------------------------
 // Graph (the spine-centered DAG; docs/api.md "Graph")
 
@@ -143,8 +137,6 @@ export interface ChangeDetail {
   /** The reviewer's unpublished comments (drafts), all revisions. */
   drafts: Draft[];
   reviews: Review[];
-  /** Every tip walking through this change, each with the patchset it pins. */
-  chains: ChainRef[];
   /** The reviewer's staged decision for this change, or null. */
   draft_decision: StagedDecision | null;
 }

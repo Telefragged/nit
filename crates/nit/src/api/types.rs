@@ -226,10 +226,16 @@ pub struct ChangeDetail {
     /// The reviewer's unpublished comments (drafts), all revisions.
     pub drafts: Vec<Draft>,
     pub reviews: Vec<Review>,
-    /// Every tip walking through this change, each with the patchset it pins.
-    pub chains: Vec<ChainRef>,
     /// The reviewer's staged decision for this change, or `None`.
     pub draft_decision: Option<StagedDecision>,
+}
+
+/// `GET /api/changes/{id}/chains` response: every tip walking through this
+/// change, each with the patchset it pins there. Derived separately from the
+/// change detail so a change read never builds a repo view.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainsThrough {
+    pub chains: Vec<ChainRef>,
 }
 
 /// A reviewer's staged decision plus its cover note/reason (docs/api.md

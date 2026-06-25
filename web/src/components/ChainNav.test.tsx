@@ -79,7 +79,6 @@ function detail(
     })),
     drafts: [],
     reviews: [],
-    chains: [],
     draft_decision: null,
   };
 }
