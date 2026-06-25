@@ -28,7 +28,6 @@ poll the same folds.
 - [Repos](api/repos.md)
 - [Push](api/push.md)
 - [Chains](api/chains.md)
-  - [Tip names](api/chains.md#tip-names)
   - [The B-in-two-chains example](api/chains.md#the-b-in-two-chains-example)
 - [Graph](api/graph.md)
 - [Changes](api/changes.md)

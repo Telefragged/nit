@@ -12,7 +12,7 @@ use rusqlite::Connection;
 use crate::chain::{self, PathMember, RepoView};
 use crate::db;
 use crate::enums::{ChangeStatus, Side};
-use crate::gitscan::{self, identity::subject_of, short_sha};
+use crate::gitscan::{self, identity::subject_of};
 use crate::review::{self, Anchor, ChangeProj, Entry, ThreadComment, ThreadProj};
 
 use super::{Error, types};
@@ -20,35 +20,14 @@ use super::{Error, types};
 // ---------------------------------------------------------------------------
 // Chains (derived)
 
-/// A tip's display name: a query-time branch ref, else the tip change's
-/// subject (docs/data-model.md "Tips").
-#[must_use]
-pub fn tip_name(repo: &Repository, view: &RepoView, path: &[PathMember]) -> String {
-    let Some(tip) = path.last() else {
-        return "(empty)".to_string();
-    };
-    if let Some(name) = gitscan::tip_name(repo, &tip.commit_sha) {
-        return name;
-    }
-    view.change(tip.change_id)
-        .and_then(|c| c.revision(tip.revision))
-        .map_or_else(|| short_sha(&tip.commit_sha), |r| subject_of(&r.message))
-}
-
 /// Build a chain summary from a tip commit-sha (the dashboard entry).
 #[must_use]
-pub fn build_chain_summary(
-    repo: &Repository,
-    view: &RepoView,
-    repo_id: u64,
-    tip_sha: &str,
-) -> types::ChainSummary {
+pub fn build_chain_summary(view: &RepoView, repo_id: u64, tip_sha: &str) -> types::ChainSummary {
     let path = view.path_from_tip(tip_sha);
     let tip_change_id = path.last().map_or(0, |m| m.change_id);
     types::ChainSummary {
         tip_change_id,
         repo_id,
-        name: tip_name(repo, view, &path),
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
         updated_at: path_updated_at(view, &path),
@@ -59,7 +38,6 @@ pub fn build_chain_summary(
 /// Build the full `Chain` for one tip commit-sha (the chain page / push result).
 #[must_use]
 pub fn build_chain(
-    repo: &Repository,
     view: &RepoView,
     repo_id: u64,
     base_branch: &str,
@@ -70,7 +48,6 @@ pub fn build_chain(
     types::Chain {
         tip_change_id,
         repo_id,
-        name: tip_name(repo, view, &path),
         base_branch: base_branch.to_string(),
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
@@ -357,7 +334,6 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Draft {
 /// When reading drafts fails.
 pub fn build_change_detail(
     conn: &Connection,
-    repo: &Repository,
     view: &RepoView,
     change: &ChangeProj,
 ) -> Result<types::ChangeDetail> {
@@ -382,7 +358,6 @@ pub fn build_change_detail(
         .map(|hit| types::ChainRef {
             tip_change_id: hit.tip_change_id,
             revision: hit.revision,
-            name: tip_name(repo, view, &hit.path),
         })
         .collect();
     let draft_decision = db::get_draft_review(conn, change.id)?.map(|r| types::StagedDecision {

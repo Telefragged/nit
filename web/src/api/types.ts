@@ -60,8 +60,6 @@ export interface ChainSummary {
   tip_change_id: number;
   /** The repo this chain belongs to (registry id). */
   repo_id: number;
-  /** Best-effort, resolved at query time. */
-  name: string;
   state: ChainState;
   /** The tip's latest revision is partial. */
   partial: boolean;
@@ -76,7 +74,6 @@ export interface Chain {
   tip_change_id: number;
   /** The repo this chain belongs to (registry id). */
   repo_id: number;
-  name: string;
   base_branch: string;
   state: ChainState;
   partial: boolean;
@@ -87,7 +84,6 @@ export interface Chain {
 export interface ChainRef {
   tip_change_id: number;
   revision: number;
-  name: string;
 }
 
 // ---------------------------------------------------------------------------

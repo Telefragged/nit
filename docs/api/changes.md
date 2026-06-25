@@ -21,7 +21,7 @@
               "created_at": "…"}
   Review   = {"id": 5, "revision": 2, "verdict": "request_changes",
               "message": "cover message", "created_at": "…"}
-  ChainRef = {"tip_change_id": 12, "revision": 2, "name": "feat/x"}
+  ChainRef = {"tip_change_id": 12, "revision": 2}
   StagedDecision = {"decision": "approve",   // Decision: approve | request_changes
                     "message": "cover note"} //   | comment | abandon | reopen
   ```

@@ -116,8 +116,6 @@ pub struct ChainSummary {
     pub tip_change_id: u64,
     /// The repo this chain belongs to (registry id).
     pub repo_id: u64,
-    /// Best-effort, resolved at query time.
-    pub name: String,
     pub state: ChainState,
     /// The tip's latest revision is partial.
     pub partial: bool,
@@ -137,7 +135,6 @@ pub struct Chain {
     pub tip_change_id: u64,
     /// The repo this chain belongs to (registry id).
     pub repo_id: u64,
-    pub name: String,
     pub base_branch: String,
     pub state: ChainState,
     pub partial: bool,
@@ -209,7 +206,6 @@ pub struct GraphNode {
 pub struct ChainRef {
     pub tip_change_id: u64,
     pub revision: u64,
-    pub name: String,
 }
 
 // ---------------------------------------------------------------------------

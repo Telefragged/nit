@@ -1,6 +1,6 @@
-//! The git layer: the push walk, merged/abandoned detection for the
-//! background timer, and tip-name resolution — docs/data-model.md
-//! ("Push", "Lifecycle") is the contract.
+//! The git layer: the push walk and merged/abandoned detection for the
+//! background timer — docs/data-model.md ("Push", "Lifecycle") is the
+//! contract.
 //!
 //! Everything here is pure with respect to the database: it reads git and
 //! returns values the caller (the api layer) folds into the per-change logs.
@@ -14,7 +14,7 @@ pub mod objects;
 
 use std::collections::{HashMap, HashSet};
 
-use git2::{BranchType, Commit, Oid, Repository, Sort};
+use git2::{Commit, Oid, Repository, Sort};
 
 use crate::review::ChangeProj;
 
@@ -282,32 +282,6 @@ pub fn canonical_history(
         });
     }
     Ok((out, truncated))
-}
-
-/// Best-effort display name for a tip commit (docs/data-model.md "Tips"): a
-/// local branch pointing exactly at it, else one that contains it, else
-/// `None` (the caller falls back to the commit subject). nit stores no branch
-/// key — names are resolved here at query time.
-#[must_use]
-pub fn tip_name(repo: &Repository, tip_sha: &str) -> Option<String> {
-    let oid = Oid::from_str(tip_sha).ok()?;
-    let branches = repo.branches(Some(BranchType::Local)).ok()?;
-    let mut contains: Option<String> = None;
-    for branch in branches.flatten() {
-        let Some(name) = branch.0.name().ok().flatten().map(str::to_string) else {
-            continue;
-        };
-        let Ok(target) = branch.0.get().peel_to_commit().map(|c| c.id()) else {
-            continue;
-        };
-        if target == oid {
-            return Some(name);
-        }
-        if contains.is_none() && repo.graph_descendant_of(target, oid).unwrap_or(false) {
-            contains = Some(name);
-        }
-    }
-    contains
 }
 
 /// The keep-ref maintenance for one change's revisions — idempotent

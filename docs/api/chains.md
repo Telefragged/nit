@@ -43,7 +43,6 @@ derivation").
 ChainSummary = {
   "tip_change_id": 12,
   "repo_id": 1,                  // the repo this chain belongs to
-  "name": "feat/x",              // best-effort, resolved at query time (below)
   "state": "waiting_for_review", // derived — see state table
   "partial": false,              // the tip's latest revision is partial
   "updated_at": "…",             // newest member entry's time
@@ -52,7 +51,6 @@ ChainSummary = {
 Chain = {
   "tip_change_id": 12,
   "repo_id": 1,
-  "name": "feat/x",
   "base_branch": "main",
   "state": "waiting_for_review",
   "partial": false,
@@ -81,13 +79,6 @@ two tips placing the same change differently carry independent verdicts (a
 request_changes in one chain never overwrites an approve in another). `id` on a
 change is its stable fold id (the `change` rowid); thread ids are fold-assigned
 by fold order (docs/data-model.md "Identity").
-
-### Tip names
-
-A tip is named best-effort at query time (nit stores no branch key): a branch
-ref that `git branch --contains <tip>` keeps stable as the agent advances,
-else a tag, else the commit subject. A push that advances a tip keeps the same
-name; deleting a branch only drops a name, not the tip.
 
 ### The B-in-two-chains example
 

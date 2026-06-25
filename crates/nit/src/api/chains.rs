@@ -13,7 +13,7 @@ use crate::review;
 use super::types;
 use super::views;
 use super::{AppPath, AppQuery, AppState, Error, blocking};
-use super::{ChainQuery, MERGED_WINDOW, change_or_404, repo_of_change};
+use super::{ChainQuery, MERGED_WINDOW, change_or_404};
 
 /// `?status=` filter: active-only (default) or all (includes terminal chains).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -42,11 +42,6 @@ pub(super) async fn list_chains(
             if q.repo.is_some_and(|r| r != repo_id) {
                 continue;
             }
-            let Some(repo_state) = state.repo_state(repo_id) else {
-                continue;
-            };
-            let repo = Repository::open(repo_state.git_dir())
-                .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
             let view = state.repo_view(repo_id);
             let tips = if include_terminal {
                 view.all_tips()
@@ -54,7 +49,7 @@ pub(super) async fn list_chains(
                 view.tips()
             };
             for tip in tips {
-                chains.push(views::build_chain_summary(&repo, &view, repo_id, &tip));
+                chains.push(views::build_chain_summary(&view, repo_id, &tip));
             }
         }
         Ok(Json(types::ChainList { chains }))
@@ -92,7 +87,6 @@ pub(super) async fn get_chain(
 ) -> Result<Json<types::Chain>, Error> {
     let entry = change_or_404(&state, change_id)?;
     blocking(move || {
-        let repo = repo_of_change(&state, &entry)?;
         let repo_id = entry.read().repo_id;
         let base_branch = state
             .repo_state(repo_id)
@@ -102,7 +96,6 @@ pub(super) async fn get_chain(
         let view = state.repo_view(repo_id);
         let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
         Ok(Json(views::build_chain(
-            &repo,
             &view,
             repo_id,
             &base_branch,

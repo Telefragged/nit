@@ -289,7 +289,6 @@ function chainSummary(tip: TipRecord): ChainSummary {
   return {
     tip_change_id: tip.tip_change_id,
     repo_id: tip.repo_id,
-    name: tip.name,
     state: chainState(tip, path),
     partial: tip.partial,
     updated_at: newestEntryTime(path),
@@ -303,7 +302,6 @@ function chainView(tip: TipRecord): Chain {
   return {
     tip_change_id: tip.tip_change_id,
     repo_id: tip.repo_id,
-    name: tip.name,
     base_branch: repo?.base_branch ?? "main",
     state: chainState(tip, path),
     partial: tip.partial,
@@ -331,7 +329,6 @@ function resolveTip(
     tip_change_id: changeId,
     repo_id: c.repo_id,
     revision: rev,
-    name: c.change_key.slice(0, 8),
     partial: false,
     active: !c.terminal,
   };
@@ -347,7 +344,6 @@ function chainsThrough(c: ChangeRecord): ChainRef[] {
     refs.push({
       tip_change_id: tip.tip_change_id,
       revision: member.revision,
-      name: tip.name,
     });
   }
   return refs;

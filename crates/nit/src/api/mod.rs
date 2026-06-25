@@ -153,16 +153,6 @@ fn change_or_404(state: &Arc<AppState>, change_id: u64) -> Result<Arc<ChangeEntr
         .ok_or_else(|| Error::not_found(format!("change {change_id} not found")))
 }
 
-/// The git handle for a change's repo.
-fn repo_of_change(state: &Arc<AppState>, entry: &ChangeEntry) -> Result<Repository, Error> {
-    let repo_id = entry.read().repo_id;
-    let repo = state
-        .repo_state(repo_id)
-        .ok_or_else(|| Error::internal(format!("repo {repo_id} not loaded")))?;
-    Repository::open(repo.git_dir())
-        .map_err(|e| Error::internal(format!("cannot open the repository: {e}")))
-}
-
 /// Canonicalize a git-dir path to a UTF-8 string, or a 400.
 fn canonical_git_dir(raw: &str) -> Result<String, Error> {
     Ok(std::fs::canonicalize(raw)
@@ -208,15 +198,12 @@ fn change_detail_json(
     entry: &ChangeEntry,
     id: u64,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    let repo = repo_of_change(state, entry)?;
     let repo_id = entry.read().repo_id;
     let view = state.repo_view(repo_id);
     let change = view
         .change(id)
         .ok_or_else(|| Error::not_found(format!("change {id} not found")))?;
-    Ok(Json(views::build_change_detail(
-        conn, &repo, &view, change,
-    )?))
+    Ok(Json(views::build_change_detail(conn, &view, change)?))
 }
 
 /// The "Range comments" rules of docs/api.md.

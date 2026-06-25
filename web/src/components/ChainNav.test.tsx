@@ -87,7 +87,6 @@ function detail(
 const chain: Chain = {
   tip_change_id: 12,
   repo_id: 1,
-  name: "feat/x",
   base_branch: "main",
   state: "waiting_for_review",
   partial: false,

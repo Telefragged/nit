@@ -37,8 +37,6 @@ export interface TipRecord {
   repo_id: number;
   /** The patchset of the tip change this tip pins (its head revision). */
   revision: number;
-  /** Best-effort name (a branch ref in reality); fixtures store the label. */
-  name: string;
   /** Sticky; set by push --partial, cleared by ready — on the tip's latest. */
   partial: boolean;
   /** Terminal tips (every member merged/abandoned) — off the dashboard's
