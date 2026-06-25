@@ -68,7 +68,27 @@ branch, `main`/`master`, `git symbolic-ref refs/remotes/origin/HEAD`) and offer
 them as the suggested options, but the choice is the user's. A 409 means the
 repo is already registered — nothing to do.
 
-## 4. Make sure commits get a Change-Id
+## 4. Choose where agent instructions live
+
+Steps 5 and 6 record nit's conventions into agent config — the Change-Id
+convention (when you document it rather than hook it) and the approve action.
+Pick that file now, once, so every later write targets the same place.
+
+Ask the user (AskUserQuestion) **where** to install it — the same three scopes
+a Claude Code plugin installs at:
+
+- **Project (shared)** — checked into the repo, applies for everyone who
+  clones it. Append to `CLAUDE.md` if it exists, else `AGENTS.md` if it
+  exists, else ask which of the two to create.
+- **Project (just you)** — this repo, only your machine, not checked in.
+  Append to `CLAUDE.local.md`.
+- **User (all your projects)** — your machine, every project you open. Append
+  to `~/.claude/CLAUDE.md`.
+
+At the **User** scope, the `<base>` branch and approve action recorded later
+are still this project's — flag that they describe the repo you ran setup in.
+
+## 5. Make sure commits get a Change-Id
 
 nit identifies a change by a `Change-Id` trailer on its commit — the stable
 id that survives amends and rebases — so every pushed commit needs one. It
@@ -103,38 +123,24 @@ If nothing adds one, ask the user (AskUserQuestion) which they'd prefer:
   ```
 
 - **Document it in the agent instructions** — if a hook isn't wanted, append
-  to CLAUDE.md/AGENTS.md that every commit needs a `Change-Id: I…` trailer in
-  its final trailer block (no blank line splitting that block), generated
-  with:
+  to the file you chose in step 4 that every commit needs a `Change-Id: I…`
+  trailer in its final trailer block (no blank line splitting that block),
+  generated with:
 
   ```sh
   python3 -c 'import secrets; print("I"+secrets.token_hex(20))'
   ```
 
-## 5. Record the approve action
+## 6. Record the approve action
 
 Ask the user (AskUserQuestion) for this project's **approve action**: the
 steps to take once a change reaches the `approved` state — how this project
 lands approved work (e.g. rebase-and-fast-forward, merge the PR, run a deploy
 script). This is project-specific; nit does not prescribe it.
 
-Then write a short section into agent config so every agent knows to route
-work through review. First ask the user (AskUserQuestion) **where** to install
-it — the same three scopes a Claude Code plugin installs at:
-
-- **Project (shared)** — checked into the repo, applies for everyone who
-  clones it. Append to `CLAUDE.md` if it exists, else `AGENTS.md` if it
-  exists, else ask which of the two to create.
-- **Project (just you)** — this repo, only your machine, not checked in.
-  Append to `CLAUDE.local.md`.
-- **User (all your projects)** — your machine, every project you open. Append
-  to `~/.claude/CLAUDE.md`.
-
-The `<base>` branch and approve action below are this project's, so at the
-**User** scope flag that they describe the repo you ran setup in.
-
-Append (filling in `<base>` with the registered base branch and their approve
-action verbatim):
+Then append a short section to the file you chose in step 4, so every agent
+knows to route work through review (filling in `<base>` with the registered
+base branch and their approve action verbatim):
 
 ```markdown
 ## Reviewing changes with nit
@@ -155,7 +161,7 @@ it.
 <the approve action the user described>
 ```
 
-## 6. Confirm
+## 7. Confirm
 
 Report back: how `nit` is reachable, whether the server answered, that the
 repo is registered (and its base branch), how Change-Ids are provided, and
