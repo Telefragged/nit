@@ -5,7 +5,8 @@
 //! - [`views`] — the per-change folds + chain derivation → wire shapes.
 //! - [`state`] — the in-memory fold, the append primitive, errors.
 //!
-//! All rusqlite/git2 work runs in `spawn_blocking`; every appender to one
+//! All rusqlite/git2 work runs off the async runtime; database work goes
+//! through a pooled connection ([`state::with_conn`]). Every appender to one
 //! change serializes through its projection write lock and folds in lock-step
 //! (docs/data-model.md "Concurrency"). A chain owns nothing — it is derived at
 //! read time. Merged/abandoned detection runs in a background timer
@@ -43,7 +44,7 @@ use crate::review;
 
 pub use state::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change,
-    append_to_change_with, blocking,
+    append_to_change_with, with_conn,
 };
 
 /// The `/api` router. Static UI serving is layered on top in [`app`].
@@ -130,7 +131,7 @@ pub async fn serve_on(
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
-    let state = AppState::load(db_path)?;
+    let state = AppState::load(db_path).await?;
     tracing::info!("listening on http://{addr}");
     let timer = tokio::spawn(timer::run_lifecycle_timer(state.clone()));
     let st = state.clone();
@@ -150,11 +151,15 @@ pub async fn serve_on(
 
 /// Resolve a change to its coordination entry (404 if unknown), loading it from
 /// the DB log on a cache miss (an evicted terminal change). The lookup may
-/// replay one change off disk, so every caller resolves it **inside**
-/// `blocking`.
-fn change_or_404(state: &Arc<AppState>, change_id: u64) -> Result<Arc<ChangeEntry>, Error> {
+/// replay one change off disk, so every caller resolves it on its pooled
+/// connection inside [`with_conn`].
+fn change_or_404(
+    state: &Arc<AppState>,
+    conn: &rusqlite::Connection,
+    change_id: u64,
+) -> Result<Arc<ChangeEntry>, Error> {
     state
-        .load_change(change_id)?
+        .load_change(conn, change_id)?
         .ok_or_else(|| Error::not_found(format!("change {change_id} not found")))
 }
 

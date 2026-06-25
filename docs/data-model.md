@@ -432,8 +432,8 @@ lock. Each loaded change holds `proj: StdRwLock<ChangeProj>` (the fold) and a
 sync **append lock** (`StdMutex`) serializing its appenders — no async mutex,
 no per-chain lock.
 
-- **Append** (`append_to_change`) runs inside `spawn_blocking` under the
-  change's append lock. It reads the committed `head` for the change's `idx`,
+- **Append** (`append_to_change`) runs off the async runtime on a pooled
+  connection under the change's append lock. It reads the committed `head` for the change's `idx`,
   **validates the batch by folding it onto a throwaway probe copy** (a payload
   that won't fold errors out with nothing written), then commits the log rows
   under `BEGIN IMMEDIATE` (minting each `seq`), and only then folds the entries

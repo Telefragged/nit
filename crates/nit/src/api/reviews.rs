@@ -14,7 +14,7 @@ use crate::review::{self, CommentInput, Lifecycle};
 use super::types;
 use super::views;
 use super::{
-    AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change_with, blocking,
+    AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change_with, with_conn,
 };
 use super::{ChainQuery, change_or_404, map_busy};
 
@@ -130,10 +130,9 @@ pub(super) async fn stage_decision(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::StagedDecision>,
 ) -> Result<Json<types::StagedDecision>, Error> {
-    blocking(move || {
-        change_or_404(&state, id)?;
-        let conn = state.open_db()?;
-        db::upsert_draft_review(&conn, id, req.decision, &req.message)?;
+    with_conn(state.pool(), move |conn| {
+        change_or_404(&state, conn, id)?;
+        db::upsert_draft_review(conn, id, req.decision, &req.message)?;
         Ok(Json(req))
     })
     .await
@@ -145,10 +144,9 @@ pub(super) async fn clear_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
 ) -> Result<StatusCode, Error> {
-    blocking(move || {
-        change_or_404(&state, id)?;
-        let conn = state.open_db()?;
-        db::delete_draft_review(&conn, id)?;
+    with_conn(state.pool(), move |conn| {
+        change_or_404(&state, conn, id)?;
+        db::delete_draft_review(conn, id)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await
@@ -166,9 +164,8 @@ pub(super) async fn submit_chain(
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::BatchSubmitResult>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, change_id)?;
-        let mut conn = state.open_db()?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, change_id)?;
         let repo_id = entry.read().repo_id;
         let view = state.repo_view(repo_id);
         let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
@@ -176,7 +173,7 @@ pub(super) async fn submit_chain(
         let mut submitted = 0u64;
         let mut errors = Vec::new();
         for member in view.path_from_tip(&tip_sha) {
-            let Some(staged) = db::get_draft_review(&conn, member.change_id)? else {
+            let Some(staged) = db::get_draft_review(conn, member.change_id)? else {
                 continue; // no decision on this member — leave its comment drafts
             };
             let Some(member_entry) = state.change_entry(member.change_id) else {
@@ -191,7 +188,7 @@ pub(super) async fn submit_chain(
                 continue;
             }
             match publish_member(
-                &mut conn,
+                conn,
                 &state,
                 &member_entry,
                 member.change_id,

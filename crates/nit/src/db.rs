@@ -15,6 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
+use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
@@ -50,27 +51,42 @@ fn data_dir(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> Result<Pat
         .ok_or_else(|| anyhow!("cannot determine data directory: $HOME is not set"))
 }
 
-/// Open (creating if needed) the database at `path`, apply pragmas and
-/// run migrations. Parent directories are created.
+/// A connection pool for the database at `path`, creating parent directories.
+/// Every pooled connection is prepared with [`prepare`] (WAL, busy timeout,
+/// foreign keys) by a post-create hook; the schema is migrated once at startup
+/// by [`migrate`], run on the first pooled connection in `AppState::load`.
 ///
 /// # Errors
-/// When the directory or database can't be created or opened, a
-/// pragma fails, or a migration fails (including a negative
-/// `user_version`).
-pub fn open(path: &Path) -> Result<Connection> {
+/// When the parent directory can't be created.
+pub fn pool(path: &Path) -> Result<Pool> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
     {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating {}", parent.display()))?;
     }
-    let conn =
-        Connection::open(path).with_context(|| format!("opening database {}", path.display()))?;
+    let pool = Config::new(path)
+        .builder(Runtime::Tokio1)?
+        .post_create(Hook::async_fn(|conn, _| {
+            Box::pin(async move {
+                conn.interact(prepare)
+                    .await
+                    .map_err(|e| HookError::message(e.to_string()))?
+                    .map_err(HookError::Backend)
+            })
+        }))
+        .build()?;
+    Ok(pool)
+}
+
+/// Per-connection setup applied to every pooled connection: WAL journaling (a
+/// persistent, idempotent database property), a 5-second busy timeout, and
+/// foreign keys ON.
+fn prepare(conn: &mut Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
-    migrate(&conn)?;
-    Ok(conn)
+    Ok(())
 }
 
 const MIGRATIONS: &[&str] = &[
@@ -129,7 +145,7 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE repos ADD COLUMN base_head TEXT;",
 ];
 
-fn migrate(conn: &Connection) -> Result<()> {
+pub(crate) fn migrate(conn: &Connection) -> Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     let version = usize::try_from(version).context("PRAGMA user_version is negative")?;
     for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {

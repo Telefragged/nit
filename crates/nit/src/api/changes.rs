@@ -11,17 +11,16 @@ use super::diff;
 use super::rebase;
 use super::types;
 use super::views;
-use super::{AppPath, AppQuery, AppState, Error, blocking};
+use super::{AppPath, AppQuery, AppState, Error, with_conn};
 use super::{change_detail_json, change_or_404};
 
 pub(super) async fn get_change_detail(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
-        let entry = change_or_404(&state, id)?;
-        change_detail_json(&conn, &entry)
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
+        change_detail_json(conn, &entry)
     })
     .await
 }
@@ -33,8 +32,8 @@ pub(super) async fn change_chains(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
 ) -> Result<Json<types::ChainsThrough>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, id)?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
         let repo_id = entry.read().repo_id;
         let view = state.repo_view(repo_id);
         let chains = views::chains_through_view(&view, id);
@@ -59,8 +58,8 @@ pub(super) async fn revision_diff(
     AppPath((id, n)): AppPath<(u64, u64)>,
     AppQuery(q): AppQuery<DiffQuery>,
 ) -> Result<Json<types::Diff>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, id)?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
         let (git_dir, new_sha, new_msg, parent_sha, against): (
             String,
             String,

@@ -4,13 +4,14 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
+use rusqlite::Connection;
 
 use crate::enums::{LifecycleAction, LogKind};
 use crate::review::{self, CommentInput, Lifecycle};
 
 use super::types;
 use super::views;
-use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, blocking};
+use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{change_detail_json, change_or_404, map_busy, snapshot_line_text, validate_anchor};
 
 pub(super) async fn create_comment(
@@ -18,9 +19,8 @@ pub(super) async fn create_comment(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::NewComment>,
 ) -> Result<Json<types::Thread>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, id)?;
-        let mut conn = state.open_db()?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
         if req.body.trim().is_empty() && !resolution_only {
             return Err(Error::bad_request("an agent comment needs a body"));
@@ -81,8 +81,7 @@ pub(super) async fn create_comment(
         let target_thread = comment.thread_id;
         let payload = serde_json::to_value(review::CommentPayload { comment })
             .map_err(anyhow::Error::from)?;
-        append_to_change(&mut conn, &entry, id, vec![(LogKind::Comment, payload)])
-            .map_err(map_busy)?;
+        append_to_change(conn, &entry, id, vec![(LogKind::Comment, payload)]).map_err(map_busy)?;
         let thread_id = target_thread.unwrap_or(first_new_thread);
         let proj = entry.read();
         let thread = proj
@@ -96,14 +95,13 @@ pub(super) async fn create_comment(
 /// Append a guarded lifecycle entry (a no-op unless `guard` holds for the
 /// current state) then rebuild the change detail. Shared by abandon/reopen.
 fn set_lifecycle(
-    state: &Arc<AppState>,
+    conn: &mut Connection,
     entry: &ChangeEntry,
     id: u64,
     guard: fn(&Lifecycle) -> bool,
     action: LifecycleAction,
     message: Option<String>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    let mut conn = state.open_db()?;
     if guard(&entry.read().lifecycle) {
         let payload = serde_json::to_value(review::LifecyclePayload {
             action,
@@ -111,10 +109,9 @@ fn set_lifecycle(
             message,
         })
         .map_err(anyhow::Error::from)?;
-        append_to_change(&mut conn, entry, id, vec![(LogKind::Lifecycle, payload)])
-            .map_err(map_busy)?;
+        append_to_change(conn, entry, id, vec![(LogKind::Lifecycle, payload)]).map_err(map_busy)?;
     }
-    change_detail_json(&conn, entry)
+    change_detail_json(conn, entry)
 }
 
 /// `POST /api/changes/{id}/abandon` — mark a live change abandoned
@@ -125,10 +122,10 @@ pub(super) async fn abandon_change(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::AbandonRequest>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, id)?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
         set_lifecycle(
-            &state,
+            conn,
             &entry,
             id,
             |l| matches!(l, Lifecycle::Active),
@@ -145,10 +142,10 @@ pub(super) async fn reopen_change(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, id)?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
         set_lifecycle(
-            &state,
+            conn,
             &entry,
             id,
             |l| matches!(l, Lifecycle::Abandoned),

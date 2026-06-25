@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use git2::Repository;
+use rusqlite::Connection;
 
 use crate::chain::RepoView;
 use crate::db;
@@ -13,7 +14,7 @@ use crate::enums::{LifecycleAction, LogKind};
 use crate::gitscan;
 use crate::review::{self, ChangeProj};
 
-use super::{AppState, ChangeEntry, append_to_change, blocking};
+use super::{AppState, ChangeEntry, append_to_change, with_conn};
 
 /// Interval between timer sweeps, env-configurable for tests.
 fn timer_interval() -> Duration {
@@ -38,8 +39,8 @@ pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
             _ = shutdown.wait_for(|&s| s) => break,
         }
         let st = state.clone();
-        let _ = blocking(move || {
-            sweep_lifecycle(&st);
+        let _ = with_conn(state.pool(), move |conn| {
+            sweep_lifecycle(&st, conn);
             Ok(())
         })
         .await;
@@ -51,10 +52,7 @@ pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
 /// and record the new HEAD as the baseline. The baseline lives only in the DB
 /// (`repos.base_head`) — the single source of truth — so a repo whose branch is
 /// unchanged costs one ref resolution and one indexed row read.
-fn sweep_lifecycle(state: &Arc<AppState>) {
-    let Ok(conn) = state.open_db() else {
-        return;
-    };
+fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
     for repo_id in state.repo_ids() {
         let Some(repo_state) = state.repo_state(repo_id) else {
             continue;
@@ -65,7 +63,7 @@ fn sweep_lifecycle(state: &Arc<AppState>) {
         let Some(head) = gitscan::resolve_head(&repo, &repo_state.base_branch) else {
             continue;
         };
-        let recorded = db::get_repo(&conn, repo_id)
+        let recorded = db::get_repo(conn, repo_id)
             .ok()
             .flatten()
             .and_then(|r| r.base_head);
@@ -81,7 +79,7 @@ fn sweep_lifecycle(state: &Arc<AppState>) {
             for (change_id, revision) in gitscan::detect_landings(&repo, since, &head, &open) {
                 if let Some(entry) = state.change_entry(change_id) {
                     append_lifecycle(
-                        state,
+                        conn,
                         &entry,
                         change_id,
                         LifecycleAction::Merged,
@@ -93,7 +91,7 @@ fn sweep_lifecycle(state: &Arc<AppState>) {
         // Record the baseline last: a crash before this re-scans the same delta
         // next time, which is harmless — a change merged above is terminal, so
         // it has already dropped out of the open set.
-        if let Err(e) = db::update_repo_base_head(&conn, repo_id, &head) {
+        if let Err(e) = db::update_repo_base_head(conn, repo_id, &head) {
             tracing::warn!(repo_id, "recording base head failed: {e:#}");
         }
     }
@@ -111,7 +109,7 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
 }
 
 fn append_lifecycle(
-    state: &Arc<AppState>,
+    conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
     action: LifecycleAction,
@@ -128,15 +126,7 @@ fn append_lifecycle(
             return;
         }
     };
-    let Ok(mut conn) = state.open_db() else {
-        return;
-    };
-    if let Err(e) = append_to_change(
-        &mut conn,
-        entry,
-        change_id,
-        vec![(LogKind::Lifecycle, payload)],
-    ) {
+    if let Err(e) = append_to_change(conn, entry, change_id, vec![(LogKind::Lifecycle, payload)]) {
         tracing::warn!(change_id, "lifecycle append failed: {e:#}");
     }
 }

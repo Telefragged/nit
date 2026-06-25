@@ -10,7 +10,7 @@ use crate::db;
 
 use super::canonical_git_dir;
 use super::types;
-use super::{AppJson, AppPath, AppState, Error, blocking};
+use super::{AppJson, AppPath, AppState, Error, with_conn};
 
 /// A repo row plus its derived live-tip count, as the wire `Repo`.
 fn repo_json(state: &AppState, row: db::RepoRow) -> types::Repo {
@@ -30,8 +30,7 @@ pub(super) async fn create_repo(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<types::CreateRepo>,
 ) -> Result<Json<types::Repo>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
+    with_conn(state.pool(), move |conn| {
         let canonical = canonical_git_dir(&req.git_dir)?;
         let repo = Repository::open(&canonical).map_err(|e| {
             Error::bad_request(format!(
@@ -39,7 +38,7 @@ pub(super) async fn create_repo(
                 e.message()
             ))
         })?;
-        if let Some(existing) = db::find_repo(&conn, &canonical)? {
+        if let Some(existing) = db::find_repo(conn, &canonical)? {
             return Err(Error::conflict(format!(
                 "{canonical} is already registered as repo {}",
                 existing.id
@@ -51,7 +50,7 @@ pub(super) async fn create_repo(
                 req.base
             )));
         }
-        let row = db::create_repo(&conn, &canonical, &req.base)?;
+        let row = db::create_repo(conn, &canonical, &req.base)?;
         // Seed the merge timer's baseline at the branch's current HEAD, so the
         // first landing after registration shows up in a delta scan rather than
         // being swallowed as pre-tracking history (docs/data-model.md).
@@ -59,7 +58,7 @@ pub(super) async fn create_repo(
             .revparse_single(&req.base)
             .and_then(|o| o.peel_to_commit())
         {
-            db::update_repo_base_head(&conn, row.id, &commit.id().to_string())?;
+            db::update_repo_base_head(conn, row.id, &commit.id().to_string())?;
         }
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, row)))
@@ -71,9 +70,8 @@ pub(super) async fn create_repo(
 pub(super) async fn list_repos(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<types::RepoList>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
-        let repos = db::all_repos(&conn)?
+    with_conn(state.pool(), move |conn| {
+        let repos = db::all_repos(conn)?
             .into_iter()
             .map(|r| repo_json(&state, r))
             .collect();
@@ -87,9 +85,8 @@ pub(super) async fn get_repo(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
 ) -> Result<Json<types::Repo>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
-        let row = db::get_repo(&conn, repo_id)?
+    with_conn(state.pool(), move |conn| {
+        let row = db::get_repo(conn, repo_id)?
             .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;
         Ok(Json(repo_json(&state, row)))
     })
@@ -102,9 +99,8 @@ pub(super) async fn relocate_repo(
     AppPath(repo_id): AppPath<u64>,
     AppJson(req): AppJson<types::RelocateRepo>,
 ) -> Result<Json<types::Repo>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
-        let existing = db::get_repo(&conn, repo_id)?
+    with_conn(state.pool(), move |conn| {
+        let existing = db::get_repo(conn, repo_id)?
             .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;
         let canonical = canonical_git_dir(&req.git_dir)?;
         Repository::open(&canonical).map_err(|e| {
@@ -113,7 +109,7 @@ pub(super) async fn relocate_repo(
                 e.message()
             ))
         })?;
-        if let Some(other) = db::find_repo(&conn, &canonical)?
+        if let Some(other) = db::find_repo(conn, &canonical)?
             && other.id != repo_id
         {
             return Err(Error::conflict(format!(
@@ -121,7 +117,7 @@ pub(super) async fn relocate_repo(
                 other.id
             )));
         }
-        db::update_repo_git_dir(&conn, repo_id, &canonical)?;
+        db::update_repo_git_dir(conn, repo_id, &canonical)?;
         let row = db::RepoRow {
             id: repo_id,
             git_dir: canonical,

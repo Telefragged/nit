@@ -12,7 +12,7 @@ use crate::review;
 
 use super::types;
 use super::views;
-use super::{AppPath, AppQuery, AppState, Error, blocking};
+use super::{AppPath, AppQuery, AppState, Error, with_conn};
 use super::{ChainQuery, MERGED_WINDOW, change_or_404};
 
 /// `?status=` filter: active-only (default) or all (includes terminal chains).
@@ -35,7 +35,7 @@ pub(super) async fn list_chains(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<ListChainsQuery>,
 ) -> Result<Json<types::ChainList>, Error> {
-    blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let include_terminal = matches!(q.status, ChainFilter::All);
         let mut chains = Vec::new();
         for repo_id in state.repo_ids() {
@@ -52,9 +52,10 @@ pub(super) async fn list_chains(
                 chains.push(views::build_chain_summary(&view, repo_id, &tip));
             }
         }
-        Ok(Json(types::ChainList { chains }))
+        Json(types::ChainList { chains })
     })
     .await
+    .map_err(|e| Error::internal(format!("chain list task panicked: {e}")))
 }
 
 /// The repo's spine-centered change graph (docs/api.md "Graph").
@@ -62,7 +63,7 @@ pub(super) async fn repo_graph(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
 ) -> Result<Json<types::RepoGraph>, Error> {
-    blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let repo_state = state
             .repo_state(repo_id)
             .ok_or_else(|| Error::not_found(format!("no such repo: {repo_id}")))?;
@@ -78,6 +79,7 @@ pub(super) async fn repo_graph(
         )?))
     })
     .await
+    .map_err(|e| Error::internal(format!("repo graph task panicked: {e}")))?
 }
 
 pub(super) async fn get_chain(
@@ -85,8 +87,8 @@ pub(super) async fn get_chain(
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::Chain>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, change_id)?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, change_id)?;
         let repo_id = entry.read().repo_id;
         let base_branch = state
             .repo_state(repo_id)
@@ -111,16 +113,15 @@ pub(super) async fn chain_log(
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::ChainLog>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, change_id)?;
-        let conn = state.open_db()?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, change_id)?;
         let repo_id = entry.read().repo_id;
         let view = state.repo_view(repo_id);
         let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
         let path = view.path_from_tip(&tip_sha);
         let mut entries = Vec::new();
         for member in &path {
-            for row in db::log_entries(&conn, member.change_id, 0, None)? {
+            for row in db::log_entries(conn, member.change_id, 0, None)? {
                 entries.push(views::log_entry_view(
                     member.change_id,
                     &review::Entry::from_row(&row)?,

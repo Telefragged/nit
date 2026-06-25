@@ -17,7 +17,7 @@ use crate::review;
 use super::types;
 use super::types::StreamMsg;
 use super::views;
-use super::{AppState, blocking};
+use super::{AppState, with_conn};
 
 /// `WS /api/stream?repo={id}` — the client-driven change stream
 /// (docs/api.md "Events"). The `repo` query is accepted for symmetry and
@@ -137,10 +137,8 @@ async fn send_json(socket: &mut WebSocket, msg: &StreamMsg) -> Result<(), ()> {
 /// A change's log slice `[from, head)` as tagged entries, for the backlog
 /// replay. Errors collapse to empty (the follower re-reads on reconnect).
 async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<types::LogEntry> {
-    let st = state.clone();
-    blocking(move || {
-        let conn = st.open_db()?;
-        let rows = db::log_entries(&conn, change_id, from, None)?;
+    with_conn(state.pool(), move |conn| {
+        let rows = db::log_entries(conn, change_id, from, None)?;
         rows.iter()
             .map(|r| {
                 Ok(views::log_entry_view(

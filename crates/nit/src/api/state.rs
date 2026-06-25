@@ -17,6 +17,7 @@ use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use deadpool_sqlite::Pool;
 use rusqlite::{Connection, TransactionBehavior};
 use serde_json::Value;
 use tokio::sync::watch;
@@ -34,7 +35,7 @@ use super::types::{self, StreamMsg};
 const EVENTS_BUFFER: usize = 256;
 
 pub struct AppState {
-    pub db_path: PathBuf,
+    pool: Pool,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
     changes: StdMutex<HashMap<u64, Arc<ChangeEntry>>>,
     /// Process-global allocator for fold-assigned ids (reviews, drafts). Change
@@ -120,28 +121,41 @@ impl ChangeEntry {
 }
 
 impl AppState {
-    /// Open the database, replay every change's log into memory, cache the repo
-    /// registry, and seed the id allocator above every fold id in use.
+    /// Build the connection pool, migrate the schema once, replay every
+    /// change's log into memory, cache the repo registry, and seed the id
+    /// allocator above every fold id in use.
     ///
     /// # Errors
-    /// When the database can't be opened or a log fails to replay.
-    pub fn load(db_path: PathBuf) -> anyhow::Result<Arc<Self>> {
-        let conn = db::open(&db_path)?;
-        let mut max_id = db::max_draft_id(&conn)?;
-        let mut changes = HashMap::new();
-        for row in db::all_changes(&conn)? {
-            let rows = db::log_entries(&conn, row.id, 0, None)?;
-            max_id = max_id.max(review::max_assigned_id(&rows)?);
-            let proj = review::replay(&row, &rows)?;
-            changes.insert(row.id, Arc::new(ChangeEntry::new(proj)));
-        }
-        let repos = db::all_repos(&conn)?
-            .into_iter()
-            .map(|r| (r.id, Arc::new(RepoState::new(&r))))
-            .collect();
+    /// When the pool can't be built, the schema migration fails, or a log fails
+    /// to replay.
+    pub async fn load(db_path: PathBuf) -> anyhow::Result<Arc<Self>> {
+        let pool = db::pool(&db_path)?;
+        let conn = pool
+            .get()
+            .await
+            .map_err(|e| anyhow::anyhow!("database pool: {e}"))?;
+        let (changes, repos, max_id) = conn
+            .interact(|conn| -> anyhow::Result<_> {
+                db::migrate(conn)?;
+                let mut max_id = db::max_draft_id(conn)?;
+                let mut changes = HashMap::new();
+                for row in db::all_changes(conn)? {
+                    let rows = db::log_entries(conn, row.id, 0, None)?;
+                    max_id = max_id.max(review::max_assigned_id(&rows)?);
+                    let proj = review::replay(&row, &rows)?;
+                    changes.insert(row.id, Arc::new(ChangeEntry::new(proj)));
+                }
+                let repos: HashMap<u64, Arc<RepoState>> = db::all_repos(conn)?
+                    .into_iter()
+                    .map(|r| (r.id, Arc::new(RepoState::new(&r))))
+                    .collect();
+                Ok((changes, repos, max_id))
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("database init: {e}"))??;
         let (shutdown, _) = watch::channel(false);
         Ok(Arc::new(AppState {
-            db_path,
+            pool,
             repos: StdMutex::new(repos),
             changes: StdMutex::new(changes),
             next_id: AtomicU64::new(max_id + 1),
@@ -255,19 +269,23 @@ impl AppState {
     /// working set; the replayed entry has its own (follower-less) event feed,
     /// which is fine because a terminal change takes no further appends. The
     /// allocator was already seeded past this change's ids at startup, so no
-    /// reseed is needed. Touches the DB only on a miss — run inside `blocking`.
+    /// reseed is needed. Touches the DB only on a miss — pass the caller's
+    /// pooled connection.
     ///
     /// # Errors
     /// When the DB read or replay fails.
-    pub fn load_change(&self, change_id: u64) -> anyhow::Result<Option<Arc<ChangeEntry>>> {
+    pub fn load_change(
+        &self,
+        conn: &Connection,
+        change_id: u64,
+    ) -> anyhow::Result<Option<Arc<ChangeEntry>>> {
         if let Some(existing) = self.change_entry(change_id) {
             return Ok(Some(existing));
         }
-        let conn = self.open_db()?;
-        let Some(row) = db::get_change(&conn, change_id)? else {
+        let Some(row) = db::get_change(conn, change_id)? else {
             return Ok(None);
         };
-        let rows = db::log_entries(&conn, row.id, 0, None)?;
+        let rows = db::log_entries(conn, row.id, 0, None)?;
         let proj = review::replay(&row, &rows)?;
         Ok(Some(Arc::new(ChangeEntry::new(proj))))
     }
@@ -293,12 +311,10 @@ impl AppState {
         RepoView::new(changes)
     }
 
-    /// Open a database connection (blocking — call inside `spawn_blocking`).
-    ///
-    /// # Errors
-    /// See [`db::open`].
-    pub fn open_db(&self) -> anyhow::Result<Connection> {
-        db::open(&self.db_path)
+    /// A handle to the connection pool (cheaply cloned — it is `Arc`-backed).
+    #[must_use]
+    pub fn pool(&self) -> Pool {
+        self.pool.clone()
     }
 }
 
@@ -397,18 +413,26 @@ pub fn append_to_change_with(
     Ok(applied)
 }
 
-/// Run blocking (rusqlite / git2) work off the async threads.
+/// Acquire a pooled connection and run blocking rusqlite/git2 work on it, off
+/// the async runtime — deadpool's `interact` hands the closure a
+/// `&mut Connection` on a blocking thread. The per-request connection accessor
+/// every handler routes its work through.
 ///
 /// # Errors
-/// Whatever `f` returns; a panicked task maps to a 500.
-pub async fn blocking<T, F>(f: F) -> Result<T, Error>
+/// When the pool can't hand out a connection, the blocking task is cancelled or
+/// panics, or `f` itself returns an error.
+pub async fn with_conn<T, F>(pool: Pool, f: F) -> Result<T, Error>
 where
     T: Send + 'static,
-    F: FnOnce() -> Result<T, Error> + Send + 'static,
+    F: FnOnce(&mut Connection) -> Result<T, Error> + Send + 'static,
 {
-    tokio::task::spawn_blocking(f)
+    let conn = pool
+        .get()
         .await
-        .map_err(|e| Error::internal(format!("blocking task panicked: {e}")))?
+        .map_err(|e| Error::internal(format!("database pool: {e}")))?;
+    conn.interact(f)
+        .await
+        .map_err(|e| Error::internal(format!("database task: {e}")))?
 }
 
 // ---------------------------------------------------------------------------

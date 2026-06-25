@@ -10,7 +10,7 @@ use crate::db;
 
 use super::types;
 use super::views;
-use super::{AppJson, AppPath, AppState, Error, blocking};
+use super::{AppJson, AppPath, AppState, Error, with_conn};
 use super::{change_or_404, snapshot_line_text, validate_anchor};
 
 pub(super) async fn create_draft(
@@ -18,9 +18,8 @@ pub(super) async fn create_draft(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::NewDraft>,
 ) -> Result<Json<types::Draft>, Error> {
-    blocking(move || {
-        let entry = change_or_404(&state, id)?;
-        let conn = state.open_db()?;
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
         let proj = entry.read();
         let rev = proj
             .revision(req.revision)
@@ -49,7 +48,7 @@ pub(super) async fn create_draft(
         drop(proj);
         let draft_id = state.alloc_id();
         let row = db::insert_draft(
-            &conn,
+            conn,
             draft_id,
             &db::NewDraft {
                 change_id: id,
@@ -75,10 +74,9 @@ pub(super) async fn edit_draft(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::EditDraft>,
 ) -> Result<Json<types::Draft>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
-        db::update_draft(&conn, id, &req.body, req.resolved, &db::now_rfc3339())?;
-        let updated = db::get_draft(&conn, id)?
+    with_conn(state.pool(), move |conn| {
+        db::update_draft(conn, id, &req.body, req.resolved, &db::now_rfc3339())?;
+        let updated = db::get_draft(conn, id)?
             .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
         Ok(Json(views::draft_view(&updated, updated.change_id)))
     })
@@ -89,12 +87,11 @@ pub(super) async fn delete_draft(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
 ) -> Result<StatusCode, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
-        if db::get_draft(&conn, id)?.is_none() {
+    with_conn(state.pool(), move |conn| {
+        if db::get_draft(conn, id)?.is_none() {
             return Err(Error::not_found(format!("draft {id} not found")));
         }
-        db::delete_draft(&conn, id)?;
+        db::delete_draft(conn, id)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

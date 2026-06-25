@@ -15,7 +15,7 @@ use crate::review::{self, Lifecycle, RevisionPayload};
 use super::types;
 use super::types::StreamMsg;
 use super::views;
-use super::{AppJson, AppState, ChangeEntry, Error, append_to_change, blocking};
+use super::{AppJson, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{canonical_git_dir, map_busy};
 
 /// One push target: a walked change's entry + id (push pre-flight → append).
@@ -32,15 +32,14 @@ pub(super) async fn push(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<types::PushRequest>,
 ) -> Result<Json<types::PushResult>, Error> {
-    blocking(move || {
-        let conn = state.open_db()?;
+    with_conn(state.pool(), move |conn| {
         let canonical = canonical_git_dir(&req.git_dir)?;
         let repo = Repository::open(&canonical)
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
 
         // The repo must be registered (`nit repo create`); its stored canonical
         // branch is the base — push neither takes nor configures one.
-        let repo_row = db::find_repo(&conn, &canonical)?.ok_or_else(|| {
+        let repo_row = db::find_repo(conn, &canonical)?.ok_or_else(|| {
             Error::not_found(format!(
                 "repo at {canonical} is not registered — run `nit repo create`"
             ))
@@ -65,10 +64,10 @@ pub(super) async fn push(
         // would add a revision to an abandoned change.
         let mut targets = Vec::with_capacity(walk.commits.len());
         for wc in &walk.commits {
-            let change_id = db::upsert_change(&conn, repo_row.id, &wc.change_key)?;
-            let row = db::get_change(&conn, change_id)?
+            let change_id = db::upsert_change(conn, repo_row.id, &wc.change_key)?;
+            let row = db::get_change(conn, change_id)?
                 .ok_or_else(|| Error::internal("change vanished after upsert"))?;
-            let entry = state.ensure_change(&conn, &row)?;
+            let entry = state.ensure_change(conn, &row)?;
             let proj = entry.read();
             let moves = proj
                 .latest_revision()
@@ -114,9 +113,8 @@ pub(super) async fn push(
                 resets_status,
             })
             .map_err(anyhow::Error::from)?;
-            let mut c = state.open_db()?;
             append_to_change(
-                &mut c,
+                conn,
                 &t.entry,
                 t.change_id,
                 vec![(LogKind::Revision, payload)],
@@ -157,9 +155,8 @@ pub(super) async fn push(
                     partial: req_partial,
                 })
                 .map_err(anyhow::Error::from)?;
-                let mut c = state.open_db()?;
                 append_to_change(
-                    &mut c,
+                    conn,
                     &tip.entry,
                     tip.change_id,
                     vec![(LogKind::Partial, payload)],
