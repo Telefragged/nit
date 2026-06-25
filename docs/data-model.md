@@ -118,12 +118,18 @@ Three kinds of id, all opaque and stable across replays:
   written into the `review` payload. Replay trusts the stored id and resumes
   the counter at `max(seen) + 1`; a draft's id is drawn from the same counter,
   so it never collides.
-- **Revision numbers and thread ids** are **not stored** — they are minted
-  **in the fold** by creation order, a pure function of the log. Revision
-  numbers are 0-based, assigned to each `revision` entry as it folds; a thread
-  is numbered when a comment folds with no `thread_id`. Every replay assigns
-  the same id to the same revision/thread, so a concurrent shared-change push
-  cannot mint a duplicate.
+- **Revision numbers** are **not stored** — they are minted **in the fold** by
+  creation order (0-based, assigned to each `revision` entry as it folds), a
+  pure function of the log, so every replay assigns the same number.
+- **Thread ids** are minted in the fold, in one place. The fold takes an entry
+  by value and fills a new-thread comment's `thread_id` from the change's
+  `next_thread_id` before applying it, returning the entry with the id written
+  into its payload — so the append (holding the projection write lock, so the
+  counter can't race) stores and broadcasts that one value, and no reader
+  re-derives it. `next_thread_id` is the single field minting touches: a new id
+  bumps it once; a comment that already names a thread (a reply, or a replayed
+  entry whose id is set) only keeps it ahead — never a double count. A comment
+  naming a not-yet-seen thread opens it.
 
 ### Payloads
 

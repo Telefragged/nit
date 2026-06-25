@@ -115,7 +115,7 @@ fn append_lifecycle(
     action: LifecycleAction,
     revision: Option<u64>,
 ) {
-    let new = review::NewEntry::Lifecycle(review::LifecyclePayload {
+    let new = review::EntryPayload::Lifecycle(review::LifecyclePayload {
         action,
         revision,
         message: None,

@@ -333,7 +333,7 @@ pub fn append_to_change(
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
-    news: Vec<review::NewEntry>,
+    news: Vec<review::EntryPayload>,
 ) -> anyhow::Result<Vec<review::Entry>> {
     append_to_change_with(conn, entry, change_id, news, |_| Ok(()))
 }
@@ -362,7 +362,7 @@ pub fn append_to_change_with(
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
-    news: Vec<review::NewEntry>,
+    news: Vec<review::EntryPayload>,
     pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
 ) -> anyhow::Result<Vec<review::Entry>> {
     if news.is_empty() {
@@ -381,29 +381,31 @@ pub fn append_to_change_with(
     // gives).
     let start = db::log_head(conn, change_id)?;
     let mut next = proj.clone();
+    // The fold mints new-thread ids; the write lock makes that allocation
+    // race-free against a concurrent shared-change push.
     let staged: Vec<review::Entry> = news
         .into_iter()
         .enumerate()
-        .map(|(k, new)| {
-            Ok(review::Entry {
-                seq: 0,
-                idx: start + u64::try_from(k).expect("batch fits u64"),
-                kind: new.kind(),
-                payload: new.to_payload()?,
-                created_at: now.clone(),
-            })
+        .map(|(k, payload)| {
+            review::fold(
+                &mut next,
+                review::Entry {
+                    seq: 0,
+                    idx: start + u64::try_from(k).expect("batch fits u64"),
+                    payload,
+                    created_at: now.clone(),
+                },
+            )
         })
-        .collect::<anyhow::Result<_>>()?;
-    for e in &staged {
-        review::fold(&mut next, e)?;
-    }
+        .collect();
 
     // Commit, minting each entry's global seq; `pre_commit` shares the tx.
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     pre_commit(&tx)?;
     let mut applied = Vec::with_capacity(staged.len());
     for e in staged {
-        let seq = db::append_log(&tx, change_id, e.idx, e.kind.as_str(), &e.payload, &now)?;
+        let payload = e.payload.to_value()?;
+        let seq = db::append_log(&tx, change_id, e.idx, e.kind().as_str(), &payload, &now)?;
         applied.push(review::Entry { seq, ..e });
     }
     // Re-stamp the denormalized status from the validated projection, in the

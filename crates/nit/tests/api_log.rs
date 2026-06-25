@@ -78,6 +78,18 @@ fn chain_log_aggregates_members_in_seq_order() {
         "A's two entries precede B's, interleaved by write order"
     );
 
+    // The comment opened a new thread, so the append minted its id (0) and
+    // stamped it into the stored payload — readers need no replay to name it.
+    let comment = entries(&log)
+        .iter()
+        .find(|e| e["kind"] == "comment")
+        .expect("the comment entry");
+    assert_eq!(
+        comment["payload"]["thread_id"],
+        serde_json::json!(0),
+        "the comment names its minted thread in the payload"
+    );
+
     // Querying the same chain by its base member's id walks the same tip and
     // yields the identical aggregate (the chain is tip-rooted either way).
     let (st, from_a) = http_get(&server.url(&format!("/api/chains/{a_id}/log")));

@@ -8,9 +8,15 @@
 //! Fold-assigned ids: review ids arrive already allocated inside the entry
 //! payloads (the server mints them from a process-global counter at append
 //! time). The change id is the `changes` rowid, carried on the projection.
-//! Revision numbers (0-based) and thread ids are minted **in the fold** by
-//! creation order — pure functions of the log, never stored (docs/data-model.md
-//! "Identity"), so a concurrent shared-change push cannot mint a duplicate.
+//! Revision numbers (0-based) are minted **in the fold** by creation order — a
+//! pure function of the log, never stored. Thread ids are minted in the fold
+//! too: [`fold`] takes an entry by value and, via
+//! [`ChangeProj::mint_thread_id`], fills a new-thread comment's `thread_id` from
+//! `next_thread_id` and returns the entry with the id written into its payload,
+//! so the caller stores and broadcasts that one value. `next_thread_id` is the
+//! single source of truth — the only field minting touches — so a concurrent
+//! shared-change push can't duplicate an id, and replay (ids already set) just
+//! advances it (docs/data-model.md "Identity").
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
@@ -135,7 +141,7 @@ pub struct LifecyclePayload {
 /// the payload to its stored JSON itself, so callers never touch
 /// `serde_json::Value` — that is the storage boundary's concern, not theirs.
 #[derive(Debug, Clone)]
-pub enum NewEntry {
+pub enum EntryPayload {
     Revision(RevisionPayload),
     Review(ReviewPayload),
     Comment(CommentPayload),
@@ -143,16 +149,16 @@ pub enum NewEntry {
     Lifecycle(LifecyclePayload),
 }
 
-impl NewEntry {
+impl EntryPayload {
     /// The kind tag this entry stores under.
     #[must_use]
     pub fn kind(&self) -> LogKind {
         match self {
-            NewEntry::Revision(_) => LogKind::Revision,
-            NewEntry::Review(_) => LogKind::Review,
-            NewEntry::Comment(_) => LogKind::Comment,
-            NewEntry::Partial(_) => LogKind::Partial,
-            NewEntry::Lifecycle(_) => LogKind::Lifecycle,
+            EntryPayload::Revision(_) => LogKind::Revision,
+            EntryPayload::Review(_) => LogKind::Review,
+            EntryPayload::Comment(_) => LogKind::Comment,
+            EntryPayload::Partial(_) => LogKind::Partial,
+            EntryPayload::Lifecycle(_) => LogKind::Lifecycle,
         }
     }
 
@@ -160,27 +166,46 @@ impl NewEntry {
     ///
     /// # Errors
     /// When the payload fails to serialize.
-    pub fn to_payload(&self) -> Result<serde_json::Value> {
+    pub fn to_value(&self) -> Result<serde_json::Value> {
         match self {
-            NewEntry::Revision(p) => serde_json::to_value(p),
-            NewEntry::Review(p) => serde_json::to_value(p),
-            NewEntry::Comment(p) => serde_json::to_value(p),
-            NewEntry::Partial(p) => serde_json::to_value(p),
-            NewEntry::Lifecycle(p) => serde_json::to_value(p),
+            EntryPayload::Revision(p) => serde_json::to_value(p),
+            EntryPayload::Review(p) => serde_json::to_value(p),
+            EntryPayload::Comment(p) => serde_json::to_value(p),
+            EntryPayload::Partial(p) => serde_json::to_value(p),
+            EntryPayload::Lifecycle(p) => serde_json::to_value(p),
         }
         .map_err(Into::into)
+    }
+
+    /// Parse a stored entry's `kind` + JSON `payload` back into the typed
+    /// payload — the deserialize half of the storage boundary (mirrors
+    /// [`to_value`](Self::to_value)).
+    ///
+    /// # Errors
+    /// When the JSON does not match the payload shape for `kind`.
+    fn from_json(kind: LogKind, json: &str) -> Result<EntryPayload> {
+        fn parse<T: for<'de> Deserialize<'de>>(json: &str) -> serde_json::Result<T> {
+            serde_json::from_str(json)
+        }
+        Ok(match kind {
+            LogKind::Revision => EntryPayload::Revision(parse(json)?),
+            LogKind::Review => EntryPayload::Review(parse(json)?),
+            LogKind::Comment => EntryPayload::Comment(parse(json)?),
+            LogKind::Partial => EntryPayload::Partial(parse(json)?),
+            LogKind::Lifecycle => EntryPayload::Lifecycle(parse(json)?),
+        })
     }
 }
 
 // ---------------------------------------------------------------------------
-// A parsed log entry
+// A folded log entry
 
+/// One log entry as the fold sees it: coordinates plus the **typed** payload.
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub seq: u64,
     pub idx: u64,
-    pub kind: LogKind,
-    pub payload: serde_json::Value,
+    pub payload: EntryPayload,
     pub created_at: String,
 }
 
@@ -188,27 +213,23 @@ impl Entry {
     /// # Errors
     /// When the stored `kind` is unknown or the payload is not valid JSON.
     pub fn from_row(row: &db::LogRow) -> Result<Entry> {
+        let kind: LogKind = row
+            .kind
+            .parse()
+            .map_err(|e| anyhow!("log entry {}: {e}", row.idx))?;
         Ok(Entry {
             seq: row.seq,
             idx: row.idx,
-            kind: row
-                .kind
-                .parse()
-                .map_err(|e| anyhow!("log entry {}: {e}", row.idx))?,
-            payload: serde_json::from_str(&row.payload)
+            payload: EntryPayload::from_json(kind, &row.payload)
                 .map_err(|e| anyhow!("log entry {}: bad payload: {e}", row.idx))?,
             created_at: row.created_at.clone(),
         })
     }
 
-    fn parse<T: for<'de> Deserialize<'de>>(&self) -> Result<T> {
-        serde_json::from_value(self.payload.clone()).map_err(|e| {
-            anyhow!(
-                "log entry {}: {} payload: {e}",
-                self.idx,
-                self.kind.as_str()
-            )
-        })
+    /// This entry's kind, from its payload variant.
+    #[must_use]
+    pub fn kind(&self) -> LogKind {
+        self.payload.kind()
     }
 }
 
@@ -425,34 +446,60 @@ impl ChangeProj {
         }
         ChangeStatus::Pending
     }
+
+    /// Resolve a comment's thread id and keep `next_thread_id` — the single
+    /// source of truth — past it (docs/data-model.md "Identity"). A new-thread
+    /// comment (no id, real body) is minted the next id; any id then bumps the
+    /// counter. The fold calls this before applying each comment, so a live
+    /// append mints (and the stored payload then carries the id) while replay,
+    /// seeing the id already set, only advances the counter — no double count.
+    fn mint_thread_id(&mut self, comment: &mut CommentInput) {
+        if comment.thread_id.is_none() && !comment.body.trim().is_empty() {
+            comment.thread_id = Some(self.next_thread_id);
+        }
+        if let Some(id) = comment.thread_id {
+            self.next_thread_id = self.next_thread_id.max(id + 1);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Fold
 
-/// Apply one entry to a change's projection (docs/data-model.md "The fold").
-///
-/// # Errors
-/// When a payload fails to parse.
-pub fn fold(change: &mut ChangeProj, entry: &Entry) -> Result<()> {
-    match entry.kind {
-        LogKind::Revision => fold_revision(change, &entry.parse()?, &entry.created_at),
-        LogKind::Review => fold_review(change, &entry.parse()?, &entry.created_at),
-        LogKind::Comment => {
-            let p: CommentPayload = entry.parse()?;
-            apply_comment(change, &p.comment, Author::Agent, None, &entry.created_at);
+/// Apply one entry to a change's projection (docs/data-model.md "The fold"),
+/// minting any new-thread ids into the entry's typed payload and returning the
+/// id-bearing entry.
+pub fn fold(change: &mut ChangeProj, mut entry: Entry) -> Entry {
+    let now = entry.created_at.clone();
+    match &mut entry.payload {
+        EntryPayload::Revision(p) => fold_revision(change, p, &now),
+        EntryPayload::Review(p) => {
+            change.reviews.push(ReviewProj {
+                id: p.review_id,
+                revision: p.revision,
+                verdict: p.verdict,
+                message: p.message.clone(),
+                created_at: now.clone(),
+            });
+            for c in &mut p.comments {
+                change.mint_thread_id(c);
+                apply_comment(change, c, Author::Reviewer, Some(p.review_id), &now);
+            }
         }
-        LogKind::Partial => {
-            let p: PartialPayload = entry.parse()?;
+        EntryPayload::Comment(p) => {
+            change.mint_thread_id(&mut p.comment);
+            apply_comment(change, &p.comment, Author::Agent, None, &now);
+        }
+        EntryPayload::Partial(p) => {
             if let Some(rev) = change.revisions.last_mut() {
                 rev.partial = p.partial;
             }
         }
-        LogKind::Lifecycle => fold_lifecycle(change, &entry.parse()?),
+        EntryPayload::Lifecycle(p) => fold_lifecycle(change, p),
     }
     change.head = entry.idx + 1;
-    change.last_entry_at = Some(entry.created_at.clone());
-    Ok(())
+    change.last_entry_at = Some(now);
+    entry
 }
 
 fn fold_revision(change: &mut ChangeProj, p: &RevisionPayload, now: &str) {
@@ -469,19 +516,6 @@ fn fold_revision(change: &mut ChangeProj, p: &RevisionPayload, now: &str) {
     });
 }
 
-fn fold_review(change: &mut ChangeProj, p: &ReviewPayload, now: &str) {
-    change.reviews.push(ReviewProj {
-        id: p.review_id,
-        revision: p.revision,
-        verdict: p.verdict,
-        message: p.message.clone(),
-        created_at: now.to_string(),
-    });
-    for c in &p.comments {
-        apply_comment(change, c, Author::Reviewer, Some(p.review_id), now);
-    }
-}
-
 fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
     change.lifecycle = match p.action {
         LifecycleAction::Merged => Lifecycle::Merged {
@@ -492,10 +526,13 @@ fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
     };
 }
 
-/// Apply one comment to a change's threads (shared by `review` and `comment`).
-/// With no `thread_id`, mint the next thread id and open a thread at the
-/// comment's anchor; with one, append to that thread. An empty body adds no
-/// comment, only its resolution (docs/data-model.md "The fold").
+/// Apply one comment — its `thread_id` already resolved by
+/// [`ChangeProj::mint_thread_id`] — to a change's threads (shared by `review`
+/// and `comment`; docs/data-model.md "The fold"):
+///   - **the thread already exists** — append to it (a reply); an empty body
+///     carries only its resolution.
+///   - **a set id not seen yet** — open the thread it names.
+///   - **unset** — an empty new thread the mint left alone; a no-op.
 fn apply_comment(
     change: &mut ChangeProj,
     c: &CommentInput,
@@ -503,50 +540,52 @@ fn apply_comment(
     review_id: Option<u64>,
     now: &str,
 ) {
-    match c.thread_id {
-        None => {
-            // A new thread needs a body; never mint an id for an empty one.
-            if c.body.trim().is_empty() {
-                return;
-            }
-            let id = change.next_thread_id;
-            let revision = c
-                .revision
-                .unwrap_or_else(|| change.latest_revision().map_or(0, |r| r.number));
-            change.threads.push(ThreadProj {
-                id,
-                revision,
-                anchor: Anchor::from_input(c),
-                resolved: c.resolved.unwrap_or(false),
-                comments: vec![ThreadComment {
-                    author,
-                    body: c.body.clone(),
-                    review_id,
-                    created_at: now.to_string(),
-                }],
+    let Some(tid) = c.thread_id else { return };
+    if let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) {
+        if !c.body.trim().is_empty() {
+            thread.comments.push(ThreadComment {
+                author,
+                body: c.body.clone(),
+                review_id,
                 created_at: now.to_string(),
-                updated_at: now.to_string(),
             });
-            change.next_thread_id += 1;
         }
-        Some(tid) => {
-            let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) else {
-                return;
-            };
-            if !c.body.trim().is_empty() {
-                thread.comments.push(ThreadComment {
-                    author,
-                    body: c.body.clone(),
-                    review_id,
-                    created_at: now.to_string(),
-                });
-            }
-            if let Some(state) = c.resolved {
-                thread.resolved = state;
-            }
-            thread.updated_at = now.to_string();
+        if let Some(state) = c.resolved {
+            thread.resolved = state;
         }
+        thread.updated_at = now.to_string();
+    } else if !c.body.trim().is_empty() {
+        open_thread(change, c, tid, author, review_id, now);
     }
+}
+
+/// Open a new thread carrying `id` at the comment's anchor. `next_thread_id` is
+/// kept ahead by [`ChangeProj::mint_thread_id`], the sole owner of the counter.
+fn open_thread(
+    change: &mut ChangeProj,
+    c: &CommentInput,
+    id: u64,
+    author: Author,
+    review_id: Option<u64>,
+    now: &str,
+) {
+    let revision = c
+        .revision
+        .unwrap_or_else(|| change.latest_revision().map_or(0, |r| r.number));
+    change.threads.push(ThreadProj {
+        id,
+        revision,
+        anchor: Anchor::from_input(c),
+        resolved: c.resolved.unwrap_or(false),
+        comments: vec![ThreadComment {
+            author,
+            body: c.body.clone(),
+            review_id,
+            created_at: now.to_string(),
+        }],
+        created_at: now.to_string(),
+        updated_at: now.to_string(),
+    });
 }
 
 /// Rebuild a change's projection from its row and its log rows (ascending idx).
@@ -556,8 +595,7 @@ fn apply_comment(
 pub fn replay(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangeProj> {
     let mut change = ChangeProj::empty(row);
     for log_row in rows {
-        let entry = Entry::from_row(log_row)?;
-        fold(&mut change, &entry)?;
+        fold(&mut change, Entry::from_row(log_row)?);
     }
     Ok(change)
 }
@@ -570,9 +608,8 @@ pub fn replay(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangeProj> {
 pub fn max_assigned_id(rows: &[db::LogRow]) -> Result<u64> {
     let mut max = 0;
     for row in rows {
-        let entry = Entry::from_row(row)?;
-        if entry.kind == LogKind::Review {
-            max = max.max(entry.parse::<ReviewPayload>()?.review_id);
+        if let EntryPayload::Review(p) = Entry::from_row(row)?.payload {
+            max = max.max(p.review_id);
         }
     }
     Ok(max)

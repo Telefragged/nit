@@ -67,12 +67,12 @@ fn publish_member(
         .as_verdict()
         .or_else(|| drained.then_some(Verdict::Comment));
 
-    let mut news: Vec<review::NewEntry> = Vec::new();
+    let mut news: Vec<review::EntryPayload> = Vec::new();
     if decision.as_lifecycle() == Some(LifecycleAction::Reopened) {
         news.push(lifecycle_entry(LifecycleAction::Reopened, None));
     }
     if let Some(verdict) = verdict {
-        news.push(review::NewEntry::Review(review::ReviewPayload {
+        news.push(review::EntryPayload::Review(review::ReviewPayload {
             review_id: state.alloc_id(),
             revision,
             verdict,
@@ -102,8 +102,8 @@ fn publish_member(
 }
 
 /// A `lifecycle` entry (revision is set only by the merge timer).
-fn lifecycle_entry(action: LifecycleAction, message: Option<String>) -> review::NewEntry {
-    review::NewEntry::Lifecycle(review::LifecyclePayload {
+fn lifecycle_entry(action: LifecycleAction, message: Option<String>) -> review::EntryPayload {
+    review::EntryPayload::Lifecycle(review::LifecyclePayload {
         action,
         revision: None,
         message,

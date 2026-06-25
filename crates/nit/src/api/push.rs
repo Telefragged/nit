@@ -103,7 +103,7 @@ pub(super) async fn push(
             let partial = req
                 .partial
                 .unwrap_or_else(|| prior.as_ref().is_some_and(|r| r.partial));
-            let new = review::NewEntry::Revision(RevisionPayload {
+            let new = review::EntryPayload::Revision(RevisionPayload {
                 commit_sha: wc.commit_sha.clone(),
                 parent_sha: wc.parent_sha.clone(),
                 base_sha: walk.fork_sha.clone(),
@@ -143,7 +143,7 @@ pub(super) async fn push(
         if let (Some(req_partial), Some(tip)) = (req.partial, targets.last()) {
             let current = tip.entry.read().latest_revision().map(|r| r.partial);
             if current != Some(req_partial) {
-                let new = review::NewEntry::Partial(review::PartialPayload {
+                let new = review::EntryPayload::Partial(review::PartialPayload {
                     partial: req_partial,
                 });
                 append_to_change(conn, &tip.entry, tip.change_id, vec![new]).map_err(map_busy)?;

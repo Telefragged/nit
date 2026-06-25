@@ -1,5 +1,5 @@
 use super::*;
-use crate::enums::ChangeStatus;
+use crate::enums::{ChangeStatus, LogKind};
 
 fn change_row() -> db::ChangeRow {
     db::ChangeRow {
@@ -11,12 +11,12 @@ fn change_row() -> db::ChangeRow {
     }
 }
 
-fn entry(idx: u64, kind: &str, payload: serde_json::Value) -> Entry {
+fn entry(idx: u64, kind: &str, payload: &serde_json::Value) -> Entry {
+    let kind: LogKind = kind.parse().expect("test log kind");
     Entry {
         seq: idx,
         idx,
-        kind: kind.parse().expect("test log kind"),
-        payload,
+        payload: EntryPayload::from_json(kind, &payload.to_string()).expect("test payload"),
         created_at: format!("t{idx}"),
     }
 }
@@ -41,12 +41,8 @@ fn review(revision: u64, verdict: &str) -> serde_json::Value {
 fn folded(entries: &[(&str, serde_json::Value)]) -> ChangeProj {
     let mut c = ChangeProj::empty(&change_row());
     for (i, (kind, payload)) in entries.iter().enumerate() {
-        let e = entry(
-            u64::try_from(i).expect("index fits u64"),
-            kind,
-            payload.clone(),
-        );
-        fold(&mut c, &e).expect("fold");
+        let e = entry(u64::try_from(i).expect("index fits u64"), kind, payload);
+        fold(&mut c, e);
     }
     c
 }
@@ -159,9 +155,9 @@ fn abandon_then_reopen() {
     let e = entry(
         c.head,
         "lifecycle",
-        serde_json::json!({"action": "reopened"}),
+        &serde_json::json!({"action": "reopened"}),
     );
-    fold(&mut c, &e).expect("fold");
+    fold(&mut c, e);
     assert!(!c.is_terminal());
     assert_eq!(c.status_at(0), ChangeStatus::ChangesRequested);
 }
@@ -170,8 +166,8 @@ fn abandon_then_reopen() {
 fn partial_flag_restamps_the_latest_revision() {
     let mut c = folded(&[("revision", revision("A", "base", "base", true))]);
     assert!(!c.is_partial());
-    let e = entry(c.head, "partial", serde_json::json!({"partial": true}));
-    fold(&mut c, &e).expect("fold");
+    let e = entry(c.head, "partial", &serde_json::json!({"partial": true}));
+    fold(&mut c, e);
     assert!(c.is_partial());
 }
 
@@ -213,6 +209,73 @@ fn agent_comment_opens_a_thread() {
     assert_eq!(c.threads.len(), 1);
     assert_eq!(c.threads[0].comments[0].author, crate::enums::Author::Agent);
     assert_eq!(c.unresolved_at(0), 1);
+}
+
+fn cinput(thread_id: Option<u64>, body: &str) -> CommentInput {
+    CommentInput {
+        thread_id,
+        revision: None,
+        file: None,
+        line: None,
+        side: None,
+        range: None,
+        line_text: None,
+        body: body.to_string(),
+        resolved: None,
+    }
+}
+
+#[test]
+fn mint_thread_id_assigns_then_keeps_the_counter_ahead() {
+    let mut c = ChangeProj::empty(&change_row());
+    // A new-thread comment is minted the next id, advancing the counter once.
+    let mut open = cinput(None, "opens");
+    c.mint_thread_id(&mut open);
+    assert_eq!(open.thread_id, Some(0));
+    assert_eq!(c.next_thread_id, 1);
+    // A reply already names its thread: not re-minted, counter unmoved.
+    let mut reply = cinput(Some(0), "reply");
+    c.mint_thread_id(&mut reply);
+    assert_eq!(reply.thread_id, Some(0));
+    assert_eq!(c.next_thread_id, 1);
+    // An empty new-thread comment is left unset.
+    let mut empty = cinput(None, "");
+    c.mint_thread_id(&mut empty);
+    assert_eq!(empty.thread_id, None);
+    assert_eq!(c.next_thread_id, 1);
+    // A stamped id past the counter (a replayed open) pulls it forward.
+    let mut stamped = cinput(Some(5), "stamped");
+    c.mint_thread_id(&mut stamped);
+    assert_eq!(c.next_thread_id, 6);
+}
+
+#[test]
+fn fold_opens_a_thread_for_a_stamped_unseen_id() {
+    let mut c = ChangeProj::empty(&change_row());
+    fold(
+        &mut c,
+        entry(0, "revision", &revision("A", "base", "base", true)),
+    );
+    // A comment carrying a stamped id for a thread not seen yet opens it, and
+    // the mint counter advances past the stamped id.
+    let open = entry(
+        1,
+        "comment",
+        &serde_json::json!({"thread_id": 3, "revision": 0, "file": "a.rs", "line": 1, "side": "new", "body": "why?"}),
+    );
+    fold(&mut c, open);
+    assert_eq!(c.threads.len(), 1);
+    assert_eq!(c.threads[0].id, 3);
+    assert_eq!(c.next_thread_id, 4);
+    // A later comment on the same id replies rather than re-opening.
+    let reply = entry(
+        2,
+        "comment",
+        &serde_json::json!({"thread_id": 3, "body": "ok"}),
+    );
+    fold(&mut c, reply);
+    assert_eq!(c.threads.len(), 1);
+    assert_eq!(c.threads[0].comments.len(), 2);
 }
 
 #[test]

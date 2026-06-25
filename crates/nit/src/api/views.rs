@@ -408,15 +408,22 @@ pub fn review_json(review: &review::ReviewProj) -> types::Review {
 // ---------------------------------------------------------------------------
 // Log entries
 
-/// A parsed log entry → its wire shape.
+/// A folded log entry → its wire shape, serializing the typed payload to JSON
+/// at this boundary.
+///
+/// # Panics
+/// If the payload fails to serialize — impossible for these plain structs.
 #[must_use]
 pub fn log_entry_view(change_id: u64, entry: &Entry) -> types::LogEntry {
     types::LogEntry {
         change_id,
         idx: entry.idx,
         seq: entry.seq,
-        kind: entry.kind,
+        kind: entry.kind(),
         created_at: entry.created_at.clone(),
-        payload: entry.payload.clone(),
+        payload: entry
+            .payload
+            .to_value()
+            .expect("log entry payload serializes"),
     }
 }

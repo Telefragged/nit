@@ -25,9 +25,9 @@ pub(super) async fn create_comment(
         if req.body.trim().is_empty() && !resolution_only {
             return Err(Error::bad_request("an agent comment needs a body"));
         }
-        let (comment, first_new_thread) = {
+        let comment = {
             let proj = entry.read();
-            let comment = if let Some(tid) = req.thread_id {
+            if let Some(tid) = req.thread_id {
                 if proj.thread(tid).is_none() {
                     return Err(Error::bad_request("thread not found on this change"));
                 }
@@ -75,13 +75,16 @@ pub(super) async fn create_comment(
                     body: req.body.clone(),
                     resolved: req.resolved,
                 }
-            };
-            (comment, proj.next_thread_id)
+            }
         };
-        let target_thread = comment.thread_id;
-        let new = review::NewEntry::Comment(review::CommentPayload { comment });
-        append_to_change(conn, &entry, id, vec![new]).map_err(map_busy)?;
-        let thread_id = target_thread.unwrap_or(first_new_thread);
+        let new = review::EntryPayload::Comment(review::CommentPayload { comment });
+        // A new thread's id is minted during the append, so read it back here.
+        let applied = append_to_change(conn, &entry, id, vec![new]).map_err(map_busy)?;
+        let thread_id = match applied.first().map(|e| &e.payload) {
+            Some(review::EntryPayload::Comment(p)) => p.comment.thread_id,
+            _ => None,
+        }
+        .ok_or_else(|| Error::internal("comment append minted no thread"))?;
         let proj = entry.read();
         let thread = proj
             .thread(thread_id)
@@ -102,7 +105,7 @@ fn set_lifecycle(
     message: Option<String>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
     if guard(&entry.read().lifecycle) {
-        let new = review::NewEntry::Lifecycle(review::LifecyclePayload {
+        let new = review::EntryPayload::Lifecycle(review::LifecyclePayload {
             action,
             revision: None,
             message,
