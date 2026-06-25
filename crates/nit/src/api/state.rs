@@ -249,6 +249,29 @@ impl AppState {
         Ok(map.entry(row.id).or_insert(entry).clone())
     }
 
+    /// The coordination entry for a change — **optimistically** from the cache,
+    /// else replayed from its DB log **transiently** (not re-cached). An evicted
+    /// terminal change is reachable this way without pulling it back into the
+    /// working set; the replayed entry has its own (follower-less) event feed,
+    /// which is fine because a terminal change takes no further appends. The
+    /// allocator was already seeded past this change's ids at startup, so no
+    /// reseed is needed. Touches the DB only on a miss — run inside `blocking`.
+    ///
+    /// # Errors
+    /// When the DB read or replay fails.
+    pub fn load_change(&self, change_id: u64) -> anyhow::Result<Option<Arc<ChangeEntry>>> {
+        if let Some(existing) = self.change_entry(change_id) {
+            return Ok(Some(existing));
+        }
+        let conn = self.open_db()?;
+        let Some(row) = db::get_change(&conn, change_id)? else {
+            return Ok(None);
+        };
+        let rows = db::log_entries(&conn, row.id, 0, None)?;
+        let proj = review::replay(&row, &rows)?;
+        Ok(Some(Arc::new(ChangeEntry::new(proj))))
+    }
+
     /// Snapshot every loaded change of one repo (each cloned out from under its
     /// lock), and build a [`RepoView`] for chain derivation.
     ///

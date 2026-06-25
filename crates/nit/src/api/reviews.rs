@@ -130,8 +130,8 @@ pub(super) async fn stage_decision(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::StagedDecision>,
 ) -> Result<Json<types::StagedDecision>, Error> {
-    change_or_404(&state, id)?;
     blocking(move || {
+        change_or_404(&state, id)?;
         let conn = state.open_db()?;
         db::upsert_draft_review(&conn, id, req.decision, &req.message)?;
         Ok(Json(req))
@@ -145,8 +145,8 @@ pub(super) async fn clear_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
 ) -> Result<StatusCode, Error> {
-    change_or_404(&state, id)?;
     blocking(move || {
+        change_or_404(&state, id)?;
         let conn = state.open_db()?;
         db::delete_draft_review(&conn, id)?;
         Ok(StatusCode::NO_CONTENT)
@@ -166,8 +166,8 @@ pub(super) async fn submit_chain(
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::BatchSubmitResult>, Error> {
-    let entry = change_or_404(&state, change_id)?;
     blocking(move || {
+        let entry = change_or_404(&state, change_id)?;
         let mut conn = state.open_db()?;
         let repo_id = entry.read().repo_id;
         let view = state.repo_view(repo_id);

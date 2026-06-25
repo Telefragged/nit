@@ -147,9 +147,13 @@ pub async fn serve_on(
 // ---------------------------------------------------------------------------
 // Routing helpers
 
+/// Resolve a change to its coordination entry (404 if unknown), loading it from
+/// the DB log on a cache miss (an evicted terminal change). The lookup may
+/// replay one change off disk, so every caller resolves it **inside**
+/// `blocking`.
 fn change_or_404(state: &Arc<AppState>, change_id: u64) -> Result<Arc<ChangeEntry>, Error> {
     state
-        .change_entry(change_id)
+        .load_change(change_id)?
         .ok_or_else(|| Error::not_found(format!("change {change_id} not found")))
 }
 

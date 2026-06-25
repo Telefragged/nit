@@ -18,8 +18,8 @@ pub(super) async fn create_draft(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::NewDraft>,
 ) -> Result<Json<types::Draft>, Error> {
-    let entry = change_or_404(&state, id)?;
     blocking(move || {
+        let entry = change_or_404(&state, id)?;
         let conn = state.open_db()?;
         let proj = entry.read();
         let rev = proj

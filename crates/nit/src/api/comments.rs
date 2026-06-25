@@ -18,8 +18,8 @@ pub(super) async fn create_comment(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::NewComment>,
 ) -> Result<Json<types::Thread>, Error> {
-    let entry = change_or_404(&state, id)?;
     blocking(move || {
+        let entry = change_or_404(&state, id)?;
         let mut conn = state.open_db()?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
         if req.body.trim().is_empty() && !resolution_only {
@@ -125,8 +125,8 @@ pub(super) async fn abandon_change(
     AppPath(id): AppPath<u64>,
     AppJson(req): AppJson<types::AbandonRequest>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    let entry = change_or_404(&state, id)?;
     blocking(move || {
+        let entry = change_or_404(&state, id)?;
         set_lifecycle(
             &state,
             &entry,
@@ -145,8 +145,8 @@ pub(super) async fn reopen_change(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    let entry = change_or_404(&state, id)?;
     blocking(move || {
+        let entry = change_or_404(&state, id)?;
         set_lifecycle(
             &state,
             &entry,

@@ -85,8 +85,8 @@ pub(super) async fn get_chain(
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::Chain>, Error> {
-    let entry = change_or_404(&state, change_id)?;
     blocking(move || {
+        let entry = change_or_404(&state, change_id)?;
         let repo_id = entry.read().repo_id;
         let base_branch = state
             .repo_state(repo_id)
@@ -111,8 +111,8 @@ pub(super) async fn chain_log(
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::ChainLog>, Error> {
-    let entry = change_or_404(&state, change_id)?;
     blocking(move || {
+        let entry = change_or_404(&state, change_id)?;
         let conn = state.open_db()?;
         let repo_id = entry.read().repo_id;
         let view = state.repo_view(repo_id);

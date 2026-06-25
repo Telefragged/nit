@@ -17,9 +17,9 @@ pub(super) async fn get_change_detail(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
-    let entry = change_or_404(&state, id)?;
     blocking(move || {
         let conn = state.open_db()?;
+        let entry = change_or_404(&state, id)?;
         change_detail_json(&conn, &state, &entry, id)
     })
     .await
@@ -41,8 +41,8 @@ pub(super) async fn revision_diff(
     AppPath((id, n)): AppPath<(u64, u64)>,
     AppQuery(q): AppQuery<DiffQuery>,
 ) -> Result<Json<types::Diff>, Error> {
-    let entry = change_or_404(&state, id)?;
     blocking(move || {
+        let entry = change_or_404(&state, id)?;
         let (git_dir, new_sha, new_msg, parent_sha, against): (
             String,
             String,
