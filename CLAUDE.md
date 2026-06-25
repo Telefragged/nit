@@ -64,3 +64,5 @@ identity across rewrites. Product spec: `nit.md`.
   - `frontend.md` — pages, design language, mock mode
   - `agent-workflow.md` — how coding agents drive nit (push/wait loop)
   - `dev.md` — dev loops, screenshot harness, testing, commit discipline
+  - `design-review-guide.md` — design anti-patterns to catch when reviewing
+    code, with bad-vs-good examples — read before a design review
