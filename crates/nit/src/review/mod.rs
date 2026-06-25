@@ -130,6 +130,48 @@ pub struct LifecyclePayload {
     pub message: Option<String>,
 }
 
+/// A log entry to append, as its typed domain payload. The append primitive
+/// (`crate::api::append_to_change`) derives the [`LogKind`] tag and serializes
+/// the payload to its stored JSON itself, so callers never touch
+/// `serde_json::Value` — that is the storage boundary's concern, not theirs.
+#[derive(Debug, Clone)]
+pub enum NewEntry {
+    Revision(RevisionPayload),
+    Review(ReviewPayload),
+    Comment(CommentPayload),
+    Partial(PartialPayload),
+    Lifecycle(LifecyclePayload),
+}
+
+impl NewEntry {
+    /// The kind tag this entry stores under.
+    #[must_use]
+    pub fn kind(&self) -> LogKind {
+        match self {
+            NewEntry::Revision(_) => LogKind::Revision,
+            NewEntry::Review(_) => LogKind::Review,
+            NewEntry::Comment(_) => LogKind::Comment,
+            NewEntry::Partial(_) => LogKind::Partial,
+            NewEntry::Lifecycle(_) => LogKind::Lifecycle,
+        }
+    }
+
+    /// Serialize the payload to its stored JSON shape.
+    ///
+    /// # Errors
+    /// When the payload fails to serialize.
+    pub fn to_payload(&self) -> Result<serde_json::Value> {
+        match self {
+            NewEntry::Revision(p) => serde_json::to_value(p),
+            NewEntry::Review(p) => serde_json::to_value(p),
+            NewEntry::Comment(p) => serde_json::to_value(p),
+            NewEntry::Partial(p) => serde_json::to_value(p),
+            NewEntry::Lifecycle(p) => serde_json::to_value(p),
+        }
+        .map_err(Into::into)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // A parsed log entry
 

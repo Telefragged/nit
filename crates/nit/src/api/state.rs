@@ -19,12 +19,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use deadpool_sqlite::Pool;
 use rusqlite::{Connection, TransactionBehavior};
-use serde_json::Value;
 use tokio::sync::watch;
 
 use crate::chain::RepoView;
 use crate::db;
-use crate::enums::LogKind;
 use crate::review::{self, ChangeProj};
 
 use super::types::{self, StreamMsg};
@@ -335,7 +333,7 @@ pub fn append_to_change(
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
-    news: Vec<(LogKind, Value)>,
+    news: Vec<review::NewEntry>,
 ) -> anyhow::Result<Vec<review::Entry>> {
     append_to_change_with(conn, entry, change_id, news, |_| Ok(()))
 }
@@ -364,7 +362,7 @@ pub fn append_to_change_with(
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
-    news: Vec<(LogKind, Value)>,
+    news: Vec<review::NewEntry>,
     pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
 ) -> anyhow::Result<Vec<review::Entry>> {
     if news.is_empty() {
@@ -386,14 +384,16 @@ pub fn append_to_change_with(
     let staged: Vec<review::Entry> = news
         .into_iter()
         .enumerate()
-        .map(|(k, (kind, payload))| review::Entry {
-            seq: 0,
-            idx: start + u64::try_from(k).expect("batch fits u64"),
-            kind,
-            payload,
-            created_at: now.clone(),
+        .map(|(k, new)| {
+            Ok(review::Entry {
+                seq: 0,
+                idx: start + u64::try_from(k).expect("batch fits u64"),
+                kind: new.kind(),
+                payload: new.to_payload()?,
+                created_at: now.clone(),
+            })
         })
-        .collect();
+        .collect::<anyhow::Result<_>>()?;
     for e in &staged {
         review::fold(&mut next, e)?;
     }

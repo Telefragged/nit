@@ -10,7 +10,7 @@ use rusqlite::Connection;
 
 use crate::chain::RepoView;
 use crate::db;
-use crate::enums::{LifecycleAction, LogKind};
+use crate::enums::LifecycleAction;
 use crate::gitscan;
 use crate::review::{self, ChangeProj};
 
@@ -115,18 +115,12 @@ fn append_lifecycle(
     action: LifecycleAction,
     revision: Option<u64>,
 ) {
-    let payload = match serde_json::to_value(review::LifecyclePayload {
+    let new = review::NewEntry::Lifecycle(review::LifecyclePayload {
         action,
         revision,
         message: None,
-    }) {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::warn!("lifecycle payload: {e}");
-            return;
-        }
-    };
-    if let Err(e) = append_to_change(conn, entry, change_id, vec![(LogKind::Lifecycle, payload)]) {
+    });
+    if let Err(e) = append_to_change(conn, entry, change_id, vec![new]) {
         tracing::warn!(change_id, "lifecycle append failed: {e:#}");
     }
 }

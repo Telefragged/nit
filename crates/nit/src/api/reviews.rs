@@ -8,7 +8,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 
 use crate::db;
-use crate::enums::{Decision, LifecycleAction, LogKind, Verdict};
+use crate::enums::{Decision, LifecycleAction, Verdict};
 use crate::review::{self, CommentInput, Lifecycle};
 
 use super::types;
@@ -67,15 +67,12 @@ fn publish_member(
         .as_verdict()
         .or_else(|| drained.then_some(Verdict::Comment));
 
-    let mut news: Vec<(LogKind, serde_json::Value)> = Vec::new();
+    let mut news: Vec<review::NewEntry> = Vec::new();
     if decision.as_lifecycle() == Some(LifecycleAction::Reopened) {
-        news.push((
-            LogKind::Lifecycle,
-            lifecycle_payload(LifecycleAction::Reopened, None)?,
-        ));
+        news.push(lifecycle_entry(LifecycleAction::Reopened, None));
     }
     if let Some(verdict) = verdict {
-        let payload = serde_json::to_value(review::ReviewPayload {
+        news.push(review::NewEntry::Review(review::ReviewPayload {
             review_id: state.alloc_id(),
             revision,
             verdict,
@@ -87,16 +84,11 @@ fn publish_member(
                 String::new()
             },
             comments,
-        })
-        .map_err(anyhow::Error::from)?;
-        news.push((LogKind::Review, payload));
+        }));
     }
     if decision.as_lifecycle() == Some(LifecycleAction::Abandoned) {
         let reason = (!message.trim().is_empty()).then(|| message.to_string());
-        news.push((
-            LogKind::Lifecycle,
-            lifecycle_payload(LifecycleAction::Abandoned, reason)?,
-        ));
+        news.push(lifecycle_entry(LifecycleAction::Abandoned, reason));
     }
 
     append_to_change_with(conn, entry, change_id, news, |tx| {
@@ -109,17 +101,13 @@ fn publish_member(
     Ok(())
 }
 
-/// A `lifecycle` payload value (revision is set only by the merge timer).
-fn lifecycle_payload(
-    action: LifecycleAction,
-    message: Option<String>,
-) -> Result<serde_json::Value, Error> {
-    serde_json::to_value(review::LifecyclePayload {
+/// A `lifecycle` entry (revision is set only by the merge timer).
+fn lifecycle_entry(action: LifecycleAction, message: Option<String>) -> review::NewEntry {
+    review::NewEntry::Lifecycle(review::LifecyclePayload {
         action,
         revision: None,
         message,
     })
-    .map_err(|e| anyhow::Error::from(e).into())
 }
 
 /// `PUT /api/changes/{id}/decision` — stage (or overwrite) the change's draft

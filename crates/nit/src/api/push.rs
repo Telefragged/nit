@@ -8,7 +8,6 @@ use axum::extract::State;
 use git2::Repository;
 
 use crate::db;
-use crate::enums::LogKind;
 use crate::gitscan;
 use crate::review::{self, Lifecycle, RevisionPayload};
 
@@ -104,22 +103,15 @@ pub(super) async fn push(
             let partial = req
                 .partial
                 .unwrap_or_else(|| prior.as_ref().is_some_and(|r| r.partial));
-            let payload = serde_json::to_value(RevisionPayload {
+            let new = review::NewEntry::Revision(RevisionPayload {
                 commit_sha: wc.commit_sha.clone(),
                 parent_sha: wc.parent_sha.clone(),
                 base_sha: walk.fork_sha.clone(),
                 message: wc.message.clone(),
                 partial,
                 resets_status,
-            })
-            .map_err(anyhow::Error::from)?;
-            append_to_change(
-                conn,
-                &t.entry,
-                t.change_id,
-                vec![(LogKind::Revision, payload)],
-            )
-            .map_err(map_busy)?;
+            });
+            append_to_change(conn, &t.entry, t.change_id, vec![new]).map_err(map_busy)?;
             gitscan::maintain_keep_refs(&repo, &t.entry.read());
 
             // A newly established parent↔child edge tells followers to
@@ -151,17 +143,10 @@ pub(super) async fn push(
         if let (Some(req_partial), Some(tip)) = (req.partial, targets.last()) {
             let current = tip.entry.read().latest_revision().map(|r| r.partial);
             if current != Some(req_partial) {
-                let payload = serde_json::to_value(review::PartialPayload {
+                let new = review::NewEntry::Partial(review::PartialPayload {
                     partial: req_partial,
-                })
-                .map_err(anyhow::Error::from)?;
-                append_to_change(
-                    conn,
-                    &tip.entry,
-                    tip.change_id,
-                    vec![(LogKind::Partial, payload)],
-                )
-                .map_err(map_busy)?;
+                });
+                append_to_change(conn, &tip.entry, tip.change_id, vec![new]).map_err(map_busy)?;
             }
         }
 

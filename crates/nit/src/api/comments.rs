@@ -6,7 +6,7 @@ use axum::Json;
 use axum::extract::State;
 use rusqlite::Connection;
 
-use crate::enums::{LifecycleAction, LogKind};
+use crate::enums::LifecycleAction;
 use crate::review::{self, CommentInput, Lifecycle};
 
 use super::types;
@@ -79,9 +79,8 @@ pub(super) async fn create_comment(
             (comment, proj.next_thread_id)
         };
         let target_thread = comment.thread_id;
-        let payload = serde_json::to_value(review::CommentPayload { comment })
-            .map_err(anyhow::Error::from)?;
-        append_to_change(conn, &entry, id, vec![(LogKind::Comment, payload)]).map_err(map_busy)?;
+        let new = review::NewEntry::Comment(review::CommentPayload { comment });
+        append_to_change(conn, &entry, id, vec![new]).map_err(map_busy)?;
         let thread_id = target_thread.unwrap_or(first_new_thread);
         let proj = entry.read();
         let thread = proj
@@ -103,13 +102,12 @@ fn set_lifecycle(
     message: Option<String>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
     if guard(&entry.read().lifecycle) {
-        let payload = serde_json::to_value(review::LifecyclePayload {
+        let new = review::NewEntry::Lifecycle(review::LifecyclePayload {
             action,
             revision: None,
             message,
-        })
-        .map_err(anyhow::Error::from)?;
-        append_to_change(conn, entry, id, vec![(LogKind::Lifecycle, payload)]).map_err(map_busy)?;
+        });
+        append_to_change(conn, entry, id, vec![new]).map_err(map_busy)?;
     }
     change_detail_json(conn, entry)
 }
