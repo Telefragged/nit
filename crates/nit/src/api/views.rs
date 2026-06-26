@@ -267,7 +267,6 @@ pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
 #[must_use]
 fn thread_comment_view(c: &ThreadComment) -> types::ThreadComment {
     types::ThreadComment {
-        author: c.author,
         body: c.body.clone(),
         review_id: c.review_id,
         created_at: c.created_at.clone(),

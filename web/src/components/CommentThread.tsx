@@ -10,11 +10,12 @@ import CommentEditor from "./CommentEditor";
 /** A published comment, read-only: it has no id/state/resolved and is never
  * editable (only the reviewer's own drafts are). */
 function PublishedComment({ comment }: { comment: ThreadComment }) {
+  const author = comment.review_id !== null ? "reviewer" : "agent";
   return (
     <div className="comment">
       <div className="comment-head">
-        <span className={`author author-${comment.author}`}>
-          {comment.author.toUpperCase()}
+        <span className={`author author-${author}`}>
+          {author.toUpperCase()}
         </span>
         <span className="comment-time">{timeAgo(comment.created_at)}</span>
       </div>

@@ -58,15 +58,6 @@ impl std::str::FromStr for Side {
     }
 }
 
-/// Who wrote a comment (docs/api.md "Comment placement"): a `reviewer`
-/// verdict comment, or an `agent` note.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Author {
-    Reviewer,
-    Agent,
-}
-
 /// The kind of one log entry (docs/data-model.md "The log"). The fold
 /// dispatches on it; the db `log.kind` TEXT column stores its [`as_str`].
 /// Each entry belongs to one **change**: a `revision` records a new

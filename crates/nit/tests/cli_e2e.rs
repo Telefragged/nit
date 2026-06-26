@@ -150,7 +150,7 @@ fn comment_opens_replies_resolves() {
     assert!(ok, "{stderr}");
 
     // Open a new thread on the change, resolved by the cwd's Change-Id. Returns
-    // a Thread (author=agent), born unresolved.
+    // a Thread (review_id null → agent), born unresolved.
     let (ok, thread, stderr) = nit(
         &server,
         &g,
@@ -168,7 +168,7 @@ fn comment_opens_replies_resolves() {
     );
     assert!(ok, "{stderr}");
     assert_eq!(thread["resolved"], false);
-    assert_eq!(thread["comments"][0]["author"], "agent");
+    assert!(thread["comments"][0]["review_id"].is_null());
     assert_eq!(thread["comments"][0]["body"], "is this right?");
     let thread_id = thread["id"].as_u64().unwrap();
     let change_num = thread["change_id"].as_u64().unwrap();

@@ -202,7 +202,8 @@ fn agent_comment_opens_a_thread() {
         ),
     ]);
     assert_eq!(c.threads.len(), 1);
-    assert_eq!(c.threads[0].comments[0].author, crate::enums::Author::Agent);
+    // An agent note carries no review_id — that is what marks it agent-authored.
+    assert_eq!(c.threads[0].comments[0].review_id, None);
 }
 
 fn cinput(thread_id: Option<u64>, body: &str) -> CommentInput {

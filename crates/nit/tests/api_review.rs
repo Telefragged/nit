@@ -135,7 +135,7 @@ fn reply_draft_appends_to_thread() {
     assert_eq!(comments.len(), 2);
     assert_eq!(comments[0]["body"], "root question");
     assert_eq!(comments[1]["body"], "a follow-up");
-    assert!(comments.iter().all(|c| c["author"] == "reviewer"));
+    assert!(comments.iter().all(|c| !c["review_id"].is_null()));
 }
 
 // ---------------------------------------------------------------------------
@@ -445,7 +445,7 @@ fn pure_rebase_carries_status_forward() {
 // ---------------------------------------------------------------------------
 // Agent comments (never change review status)
 
-/// The agent comment endpoint opens a thread / replies (author=agent) and never
+/// The agent comment endpoint opens a thread / replies (`review_id` null) and never
 /// moves the change's review status.
 #[test]
 fn agent_comment_opens_thread_without_review_status() {
@@ -456,14 +456,14 @@ fn agent_comment_opens_thread_without_review_status() {
     let id = push_one(&server, &g, "feat", "Ix");
     let comments_url = server.url(&format!("/api/changes/{id}/comments"));
 
-    // A new agent thread (published immediately, author=agent).
+    // A new agent thread (published immediately; review_id null → agent).
     let (st, thread) = http_post(
         &comments_url,
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "chose x1 deliberately"}),
     );
     assert_eq!(st, 200, "{thread}");
     let thread_id = thread["id"].as_u64().unwrap();
-    assert_eq!(thread["comments"][0]["author"], "agent");
+    assert!(thread["comments"][0]["review_id"].is_null());
     assert_eq!(thread["comments"][0]["body"], "chose x1 deliberately");
     assert_eq!(
         thread["comments"][0]["review_id"],
@@ -494,7 +494,7 @@ fn agent_comment_opens_thread_without_review_status() {
     assert_eq!(st, 200, "{replied}");
     let comments = replied["comments"].as_array().unwrap();
     assert_eq!(comments.len(), 2);
-    assert!(comments.iter().all(|c| c["author"] == "agent"));
+    assert!(comments.iter().all(|c| c["review_id"].is_null()));
 
     // An empty-body agent comment with no resolution is a 400.
     let (st, _) = http_post(&comments_url, &json!({"revision": 0, "body": ""}));
@@ -534,7 +534,7 @@ fn reviewer_replies_to_agent_thread() {
     assert_eq!(t["resolved"], true);
     let comments = t["comments"].as_array().unwrap();
     assert_eq!(comments.len(), 2);
-    assert_eq!(comments[0]["author"], "agent");
-    assert_eq!(comments[1]["author"], "reviewer");
+    assert!(comments[0]["review_id"].is_null());
+    assert!(!comments[1]["review_id"].is_null());
     assert_eq!(comments[1]["body"], "ack, thanks");
 }

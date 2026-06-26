@@ -71,7 +71,6 @@ function drainComments(
         thread.updated_at = now;
         if (hasBody) {
           thread.comments.push({
-            author: "reviewer",
             body: d.body,
             review_id: review.id,
             created_at: now,
@@ -92,7 +91,6 @@ function drainComments(
         resolved: d.resolved,
         comments: [
           {
-            author: "reviewer",
             body: d.body,
             review_id: review.id,
             created_at: now,

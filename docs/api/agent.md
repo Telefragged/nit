@@ -9,7 +9,8 @@ over the websocket ("Events").
 
 - `POST /api/changes/{id}/comments` —
   `req: {"thread_id": null, "revision": 2, "file": "Cargo.toml", "line": 14, "side": "new", "range": CommentRange, "body": "…", "resolved": false}`
-  → Thread (author=agent, published immediately). The agent's single
+  → Thread (the comment's `review_id` is null → agent, published
+  immediately). The agent's single
   comment-posting path — the change is the request **target**, like the draft
   and review endpoints (so attribution never depends on the server guessing
   "where the agent is"). With no `thread_id` it opens a **new thread** on the

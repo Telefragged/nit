@@ -148,9 +148,8 @@ Thread = {"id": 7, "change_id": 10, "revision": 2,
           "resolved": false,            // the thread's rolled-up state
           "comments": [ThreadComment],  // chronological
           "created_at": "…", "updated_at": "…"}
-ThreadComment = {"author": "reviewer",  // reviewer | agent
-                 "body": "…",
-                 "review_id": 5,        // the review that published it; null for an agent comment
+ThreadComment = {"body": "…",
+                 "review_id": 5,        // the review that published it; null for an agent comment — the client derives reviewer/agent from this
                  "created_at": "…"}
 Draft = {"id": 31, "change_id": 10,     // a reviewer's unpublished comment
          "thread_id": 7,                // set: replies to that thread; null: opens a new one
@@ -166,7 +165,7 @@ A thread's `id` is fold-assigned by fold order (not stored); its
 `change_id` and a comment's `review_id` are fold ids from the log; a
 draft's `id` is its row id in the `drafts` table. A thread is born from its
 first comment — reviewer- **or** agent-initiated — so a thread whose
-`comments[0].author` is `agent` is a note the agent left on its own change,
+`comments[0].review_id` is `null` is a note the agent left on its own change,
 and the reviewer engages with it exactly like any other (reply, resolve).
 
 ### Range comments

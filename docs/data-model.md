@@ -188,26 +188,27 @@ Three kinds of id, all opaque and stable across replays:
 Per change, the fold holds its **revisions** (each with its shas, message,
 partial flag and `resets_status`), its **threads** (each a located, resolvable
 conversation: an anchor — revision/file/line/side/range/line_text — a rolled-up
-`resolved` flag, and ordered comments with author + body), its **reviews**, and
+`resolved` flag, and ordered comments — each a body + `review_id`), its **reviews**, and
 its **lifecycle** (active / merged{revision} / abandoned). Replaying the log in
 order yields this. Each kind's effect:
 
 - **`revision`** — mint the next revision number (0-based) and push a revision
   with the payload's shas/message/partial/`resets_status`.
 - **`review`** — record the review (id, verdict, message, reviewed revision),
-  then apply each comment to the change's threads (below) as `reviewer`, tagged
-  with `review_id`.
-- **`comment`** — apply the one comment as `agent`, no `review_id`. Adds no
-  review and leaves status untouched — an agent note is not a verdict.
+  then apply each comment to the change's threads (below), tagged with the
+  review's `review_id`.
+- **`comment`** — apply the one comment with no `review_id` — which is what
+  marks it agent-authored. Adds no review and leaves status untouched — an
+  agent note is not a verdict.
 - **`partial`** — set the latest revision's partial flag.
 - **`lifecycle`** — set the change's lifecycle: `merged{revision}`,
   `abandoned`, or `reopened` (back to active).
 
 **Applying a comment** (shared by `review` and `comment`): with no `thread_id`,
 mint the next id and open a thread at the comment's anchor — first comment =
-author + body, `resolved` from the comment's decision (a new thread needs a
+body + `review_id`, `resolved` from the comment's decision (a new thread needs a
 non-empty body; an empty one is dropped, never minting an id). With a
-`thread_id`, append author + body to that thread (empty body adds no comment,
+`thread_id`, append the body + `review_id` to that thread (empty body adds no comment,
 only the resolution) and apply the `resolved` decision (true→resolved,
 false→reopened, null→unchanged). The anchor and birth come from the first
 comment; later comments may only move the flag, so a thread ends at the **last**

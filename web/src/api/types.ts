@@ -217,7 +217,6 @@ export interface Line {
 // ---------------------------------------------------------------------------
 // Comments
 
-type CommentAuthor = "reviewer" | "agent";
 export type CommentSide = "old" | "new";
 
 /**
@@ -255,9 +254,9 @@ export interface Thread {
 
 /** One message in a {@link Thread}. */
 export interface ThreadComment {
-  author: CommentAuthor;
   body: string;
-  /** The review that published it; null for an agent comment. */
+  /** The review that published it; null for an agent comment. The UI derives
+   * reviewer-vs-agent from this — there is no separate `author`. */
   review_id: number | null;
   created_at: string;
 }

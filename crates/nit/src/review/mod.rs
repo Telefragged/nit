@@ -22,7 +22,7 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{self, CommentRange};
-use crate::enums::{Author, ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
+use crate::enums::{ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -300,10 +300,11 @@ pub struct ThreadProj {
     pub updated_at: String,
 }
 
-/// One message in a thread.
+/// One message in a thread. `review_id` is the review that published it, or
+/// `None` for an agent's own note — which is what distinguishes reviewer from
+/// agent (the only consumer derives the label from it).
 #[derive(Debug, Clone)]
 pub struct ThreadComment {
-    pub author: Author,
     pub body: String,
     pub review_id: Option<u64>,
     pub created_at: String,
@@ -465,12 +466,12 @@ pub fn fold(change: &mut ChangeProj, mut entry: Entry) -> Entry {
             });
             for c in &mut p.comments {
                 change.mint_thread_id(c);
-                apply_comment(change, c, Author::Reviewer, Some(p.review_id), &now);
+                apply_comment(change, c, Some(p.review_id), &now);
             }
         }
         EntryPayload::Comment(p) => {
             change.mint_thread_id(&mut p.comment);
-            apply_comment(change, &p.comment, Author::Agent, None, &now);
+            apply_comment(change, &p.comment, None, &now);
         }
         EntryPayload::Partial(p) => {
             if let Some(rev) = change.revisions.last_mut() {
@@ -513,18 +514,11 @@ fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
 ///     carries only its resolution.
 ///   - **a set id not seen yet** — open the thread it names.
 ///   - **unset** — an empty new thread the mint left alone; a no-op.
-fn apply_comment(
-    change: &mut ChangeProj,
-    c: &CommentInput,
-    author: Author,
-    review_id: Option<u64>,
-    now: &str,
-) {
+fn apply_comment(change: &mut ChangeProj, c: &CommentInput, review_id: Option<u64>, now: &str) {
     let Some(tid) = c.thread_id else { return };
     if let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) {
         if !c.body.trim().is_empty() {
             thread.comments.push(ThreadComment {
-                author,
                 body: c.body.clone(),
                 review_id,
                 created_at: now.to_string(),
@@ -535,7 +529,7 @@ fn apply_comment(
         }
         thread.updated_at = now.to_string();
     } else if !c.body.trim().is_empty() {
-        open_thread(change, c, tid, author, review_id, now);
+        open_thread(change, c, tid, review_id, now);
     }
 }
 
@@ -545,7 +539,6 @@ fn open_thread(
     change: &mut ChangeProj,
     c: &CommentInput,
     id: u64,
-    author: Author,
     review_id: Option<u64>,
     now: &str,
 ) {
@@ -558,7 +551,6 @@ fn open_thread(
         anchor: Anchor::from_input(c),
         resolved: c.resolved.unwrap_or(false),
         comments: vec![ThreadComment {
-            author,
             body: c.body.clone(),
             review_id,
             created_at: now.to_string(),

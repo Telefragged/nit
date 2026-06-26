@@ -1284,7 +1284,6 @@ export const threads: ThreadRecord[] = [
     resolved: true,
     comments: [
       {
-        author: "reviewer",
         body: "Consider a partial index on revoked=0 if the table grows; not blocking.",
         review_id: 4,
         created_at: ago(22 * 60),
@@ -1305,7 +1304,6 @@ export const threads: ThreadRecord[] = [
     resolved: true,
     comments: [
       {
-        author: "reviewer",
         body:
           "Locking the RNG mutex inside rotate() serializes every refresh — " +
           "worth a thread-local RNG?",
@@ -1313,7 +1311,6 @@ export const threads: ThreadRecord[] = [
         created_at: ago(21 * 60),
       },
       {
-        author: "agent",
         body:
           "ChaCha12 keystream behind the lock costs ~11ns per token; a " +
           "thread-local would add per-thread reseeding. Keeping the mutex.",
@@ -1336,7 +1333,6 @@ export const threads: ThreadRecord[] = [
     resolved: false,
     comments: [
       {
-        author: "reviewer",
         body:
           "Why clone the pool for a second connection? lookup() and " +
           "mark_rotated() on different connections lose the transaction.",
@@ -1344,7 +1340,6 @@ export const threads: ThreadRecord[] = [
         created_at: ago(21 * 60),
       },
       {
-        author: "agent",
         body:
           "The pool connection is held across an await in the caller; cloning " +
           "avoids a deadlock. Can wrap both calls in one connection if you " +
@@ -1371,7 +1366,6 @@ export const threads: ThreadRecord[] = [
     resolved: false,
     comments: [
       {
-        author: "reviewer",
         body:
           "Generate-then-mark isn't atomic: a crash between these two " +
           "statements hands out a token the store never recorded.",
@@ -1395,7 +1389,6 @@ export const threads: ThreadRecord[] = [
     resolved: true,
     comments: [
       {
-        author: "reviewer",
         body:
           "This unwrap is a production panic on any unknown token — return a " +
           "typed error and map it to 401 at the edge.",
@@ -1403,7 +1396,6 @@ export const threads: ThreadRecord[] = [
         created_at: ago(21 * 60),
       },
       {
-        author: "agent",
         body:
           "Done in r2: lookup() errors are typed (RotateError) and reuse " +
           "now revokes the family.",
@@ -1429,7 +1421,6 @@ export const threads: ThreadRecord[] = [
     resolved: true,
     comments: [
       {
-        author: "reviewer",
         body:
           "The body never says what happens on token *reuse* — state the " +
           "family-revocation behavior here; it's the headline of this change.",
@@ -1437,7 +1428,6 @@ export const threads: ThreadRecord[] = [
         created_at: ago(21 * 60),
       },
       {
-        author: "agent",
         body:
           "Reworded: the message now calls out family revocation " +
           "(RFC 6819 §5.2.2.3).",
@@ -1460,7 +1450,6 @@ export const threads: ThreadRecord[] = [
     resolved: false,
     comments: [
       {
-        author: "reviewer",
         body: "Hard-coded 4MiB will thrash small deployments — read it from Config.",
         review_id: 6,
         created_at: ago(3 * 60),
@@ -1480,7 +1469,6 @@ export const threads: ThreadRecord[] = [
     resolved: false,
     comments: [
       {
-        author: "reviewer",
         body: "compactor.rs still calls jitter(); this won't build.",
         review_id: 6,
         created_at: ago(3 * 60),
@@ -1502,7 +1490,6 @@ export const threads: ThreadRecord[] = [
     resolved: false,
     comments: [
       {
-        author: "reviewer",
         body:
           "Recent-share window: is it EWMA or a fixed ring? Spell it out — it " +
           "decides how fast a task recovers priority.",

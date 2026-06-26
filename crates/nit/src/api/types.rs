@@ -11,8 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 pub use crate::enums::{
-    Author, ChainState, ChangeStatus, Decision, FileStatus, GraphSection, LineKind, LogKind, Side,
-    Verdict,
+    ChainState, ChangeStatus, Decision, FileStatus, GraphSection, LineKind, LogKind, Side, Verdict,
 };
 
 // ---------------------------------------------------------------------------
@@ -324,9 +323,9 @@ pub struct Thread {
 /// One message in a [`Thread`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadComment {
-    pub author: Author,
     pub body: String,
-    /// The review that published it; null for an agent comment.
+    /// The review that published it; null for an agent comment. The client
+    /// derives reviewer-vs-agent from this — there is no separate `author`.
     pub review_id: Option<u64>,
     pub created_at: String,
 }
