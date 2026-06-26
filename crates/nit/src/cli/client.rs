@@ -8,6 +8,17 @@ use serde_json::{Value, json};
 
 pub(crate) const DEFAULT_SERVER: &str = "http://127.0.0.1:8877";
 
+/// The `--server` override, flattened into every command so the flag's name,
+/// help, and default live in one place. `global` lets it sit before or after a
+/// subcommand (it carries `nit repo`'s parent flag down to `create`/`move`);
+/// on a leaf command it is a harmless no-op.
+#[derive(clap::Args)]
+pub struct ServerOpt {
+    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`).
+    #[arg(long, global = true)]
+    pub server: Option<String>,
+}
+
 pub(crate) fn server_url(flag: Option<String>) -> String {
     flag.or_else(|| std::env::var("NIT_SERVER").ok())
         .unwrap_or_else(|| DEFAULT_SERVER.to_string())

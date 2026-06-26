@@ -5,7 +5,7 @@ use anyhow::{Context, Result, anyhow};
 use crate::api::types::{CommentRange, NewComment};
 use crate::enums::Side;
 
-use super::client::{Client, print_json, server_url};
+use super::client::{Client, ServerOpt, print_json, server_url};
 use super::format::ChangeTarget;
 
 #[derive(clap::Args)]
@@ -41,9 +41,8 @@ pub struct CommentArgs {
     /// Reopen the thread (mark it unresolved)
     #[arg(long, conflicts_with = "resolve")]
     pub unresolve: bool,
-    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
-    #[arg(long)]
-    pub server: Option<String>,
+    #[command(flatten)]
+    pub server: ServerOpt,
 }
 
 /// Comment on a change: open a new thread or reply to one.
@@ -51,7 +50,7 @@ pub struct CommentArgs {
 /// # Errors
 /// When the server can't be reached or the arguments name no change.
 pub fn comment(args: CommentArgs) -> Result<()> {
-    let client = Client::new(server_url(args.server));
+    let client = Client::new(server_url(args.server.server));
     let change_id = args.target.resolve(&client)?;
     let resolved = if args.resolve {
         Some(true)

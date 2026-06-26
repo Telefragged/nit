@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Result, anyhow};
 use serde_json::json;
 
-use super::client::{Client, print_json, server_url};
+use super::client::{Client, ServerOpt, print_json, server_url};
 use super::git::{discover_repo, repo_git_dir};
 
 /// `nit repo` — inspect and manage the repository registry.
@@ -13,9 +13,8 @@ use super::git::{discover_repo, repo_git_dir};
 pub struct RepoArgs {
     #[command(subcommand)]
     pub cmd: RepoCmd,
-    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`).
-    #[arg(long, global = true)]
-    pub server: Option<String>,
+    #[command(flatten)]
+    pub server: ServerOpt,
 }
 
 #[derive(clap::Subcommand)]
@@ -51,12 +50,12 @@ pub struct RepoMoveArgs {
 /// an unresolvable path (`move`).
 pub fn repo(args: RepoArgs) -> Result<()> {
     match args.cmd {
-        RepoCmd::Create(a) => repo_create(&a, args.server),
+        RepoCmd::Create(a) => repo_create(&a, args.server.server),
         RepoCmd::List => {
-            let client = Client::new(server_url(args.server));
+            let client = Client::new(server_url(args.server.server));
             print_json(&client.get("/api/repos")?)
         }
-        RepoCmd::Move(a) => repo_move(&a, args.server),
+        RepoCmd::Move(a) => repo_move(&a, args.server.server),
     }
 }
 

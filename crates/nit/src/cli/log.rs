@@ -4,7 +4,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Value, json};
 
-use super::client::{Client, Retry, next_text, print_json, server_url};
+use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
 use super::format::print_oneline_entries;
 use super::resolve::resolve_chain;
 
@@ -31,9 +31,8 @@ pub struct LogArgs {
     /// lifecycle.
     #[arg(long, requires = "follow")]
     pub reviewer_only: bool,
-    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
-    #[arg(long)]
-    pub server: Option<String>,
+    #[command(flatten)]
+    pub server: ServerOpt,
 }
 
 /// Print entries of the aggregated chain log by position/range.
@@ -41,7 +40,7 @@ pub struct LogArgs {
 /// # Errors
 /// When a range is malformed or the server can't be reached.
 pub fn log(args: LogArgs) -> Result<()> {
-    let client = Client::new(server_url(args.server));
+    let client = Client::new(server_url(args.server.server));
     if args.follow {
         let [spec] = args.ranges.as_slice() else {
             bail!("--follow takes a single starting seq cursor (e.g. `0` or `..`)");

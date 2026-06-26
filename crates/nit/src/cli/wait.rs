@@ -4,7 +4,7 @@
 use anyhow::Result;
 use serde_json::{Value, json};
 
-use super::client::{Client, Retry, next_text, print_json, server_url};
+use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
 use super::format::print_oneline_entries;
 use super::log::{heads, max_seq};
 use super::resolve::resolve_tip_change;
@@ -17,9 +17,8 @@ pub struct WaitArgs {
     /// Print a one-line digest per entry instead of full payloads
     #[arg(long)]
     pub oneline: bool,
-    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
-    #[arg(long)]
-    pub server: Option<String>,
+    #[command(flatten)]
+    pub server: ServerOpt,
 }
 
 /// Block until the chain's aggregated log holds something worth acting on past
@@ -35,7 +34,7 @@ pub struct WaitArgs {
 /// # Errors
 /// When the server returns a malformed response or a fatal client error.
 pub fn wait(args: WaitArgs) -> Result<()> {
-    let client = Client::new(server_url(args.server));
+    let client = Client::new(server_url(args.server.server));
     let retry = Retry::UntilUp;
     let mut cursor = args.cursor;
     // HEAD is fixed for this command's lifetime, so the tip change id (the

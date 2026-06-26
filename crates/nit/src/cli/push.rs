@@ -4,7 +4,7 @@
 use anyhow::Result;
 use serde_json::json;
 
-use super::client::{Client, print_json, server_url};
+use super::client::{Client, ServerOpt, print_json, server_url};
 use super::git::{discover_repo, resolve_tip};
 
 #[derive(clap::Args)]
@@ -16,18 +16,16 @@ pub struct PushArgs {
     /// `nit ready`
     #[arg(long)]
     pub partial: bool,
-    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
-    #[arg(long)]
-    pub server: Option<String>,
+    #[command(flatten)]
+    pub server: ServerOpt,
 }
 
 #[derive(clap::Args)]
 pub struct ReadyArgs {
     /// The commit to mark ready (see `nit push`); defaults to the cwd's HEAD.
     pub commit: Option<String>,
-    /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`)
-    #[arg(long)]
-    pub server: Option<String>,
+    #[command(flatten)]
+    pub server: ServerOpt,
 }
 
 /// Push the cwd's checked-out commit (or an explicit rev) for review;
@@ -39,7 +37,7 @@ pub struct ReadyArgs {
 pub fn push(args: PushArgs) -> Result<()> {
     do_push(
         args.commit.as_deref(),
-        args.server,
+        args.server.server,
         args.partial.then_some(true),
     )
 }
@@ -49,7 +47,7 @@ pub fn push(args: PushArgs) -> Result<()> {
 /// # Errors
 /// Same as [`push`].
 pub fn ready(args: ReadyArgs) -> Result<()> {
-    do_push(args.commit.as_deref(), args.server, Some(false))
+    do_push(args.commit.as_deref(), args.server.server, Some(false))
 }
 
 /// Shared push/ready core: resolve the cwd's repo + the commit to push, then
