@@ -461,7 +461,6 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
     id: c.id,
     repo_id: c.repo_id,
     change_key: c.change_key,
-    subject: c.subject,
     revisions: c.revisions,
     threads: threads.filter((x) => x.change_id === c.id).map(renderThread),
     drafts: drafts.filter((x) => x.change_id === c.id).map(renderDraft),

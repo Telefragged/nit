@@ -68,12 +68,6 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(revs[0]["number"], 0);
     assert_eq!(revs[0]["commit_sha"], c1.to_string());
     assert_eq!(revs[0]["parent_sha"], g.root.to_string());
-    assert!(
-        detail["subject"]
-            .as_str()
-            .unwrap()
-            .starts_with("server: add health")
-    );
 }
 
 #[test]

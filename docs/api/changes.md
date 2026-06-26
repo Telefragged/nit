@@ -7,7 +7,6 @@
   ```json
   {
     "id": 10, "repo_id": 1, "change_key": "I3f2…",
-    "subject": "…",
     "revisions": [Revision],         // ascending
     "threads": [Thread],             // published threads, all revisions
     "drafts": [Draft],               // reviewer's unpublished comments

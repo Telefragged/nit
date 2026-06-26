@@ -633,7 +633,7 @@ export default function ReviewPage() {
     localStorage.setItem(LAYOUT_KEY, l);
   };
 
-  const subjectLine = selectedRev.message.split("\n")[0] ?? change.subject;
+  const subjectLine = selectedRev.message.split("\n")[0] ?? "";
 
   return (
     <ReviewContext.Provider value={ctxValue}>

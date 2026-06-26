@@ -53,7 +53,6 @@ function detail(
     id: changeId,
     repo_id: 1,
     change_key: `I${changeId}`,
-    subject: "",
     revisions: Array.from({ length: latest + 1 }, (_, n) => ({
       number: n,
       commit_sha: `sha${changeId}r${n}`,

@@ -315,10 +315,6 @@ pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<typ
         .map(|d| draft_view(d, change.id))
         .collect();
     let reviews = change.reviews.iter().map(review_json).collect();
-    let subject = change
-        .latest_revision()
-        .map(|r| subject_of(&r.message))
-        .unwrap_or_default();
     let draft_decision = db::get_draft_review(conn, change.id)?.map(|r| types::StagedDecision {
         decision: r.decision,
         message: r.message,
@@ -327,7 +323,6 @@ pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<typ
         id: change.id,
         repo_id: change.repo_id,
         change_key: change.change_key.clone(),
-        subject,
         revisions,
         threads,
         drafts,

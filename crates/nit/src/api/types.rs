@@ -198,7 +198,6 @@ pub struct ChangeDetail {
     pub id: u64,
     pub repo_id: u64,
     pub change_key: String,
-    pub subject: String,
     /// Ascending.
     pub revisions: Vec<Revision>,
     /// Published threads, all revisions; anchors verbatim (the client places
