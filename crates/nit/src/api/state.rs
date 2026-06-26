@@ -42,12 +42,11 @@ pub struct AppState {
     shutdown: watch::Sender<bool>,
 }
 
-/// Cached repo registry row: identity, the one canonical branch, and the git
-/// dir (mutable on `nit repo move`). The merge timer's baseline is not cached
-/// here — it lives only in `repos.base_head` (docs/data-model.md "Lifecycle
-/// timer").
+/// Cached repo registry row: the one canonical branch and the git dir
+/// (mutable on `nit repo move`), keyed by id in the repo map. The merge
+/// timer's baseline is not cached here — it lives only in `repos.base_head`
+/// (docs/data-model.md "Lifecycle timer").
 pub struct RepoState {
-    pub id: u64,
     pub base_branch: String,
     pub git_dir: StdRwLock<String>,
 }
@@ -55,7 +54,6 @@ pub struct RepoState {
 impl RepoState {
     fn new(row: &db::RepoRow) -> RepoState {
         RepoState {
-            id: row.id,
             base_branch: row.base_branch.clone(),
             git_dir: StdRwLock::new(row.git_dir.clone()),
         }
