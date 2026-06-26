@@ -5,6 +5,7 @@ import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import c from "highlight.js/lib/languages/c";
 import cpp from "highlight.js/lib/languages/cpp";
+import csharp from "highlight.js/lib/languages/csharp";
 import css from "highlight.js/lib/languages/css";
 import go from "highlight.js/lib/languages/go";
 import ini from "highlight.js/lib/languages/ini";
@@ -21,6 +22,7 @@ import yaml from "highlight.js/lib/languages/yaml";
 hljs.registerLanguage("bash", bash);
 hljs.registerLanguage("c", c);
 hljs.registerLanguage("cpp", cpp);
+hljs.registerLanguage("csharp", csharp);
 hljs.registerLanguage("css", css);
 hljs.registerLanguage("go", go);
 hljs.registerLanguage("ini", ini);
@@ -42,6 +44,8 @@ const EXT_LANG: Record<string, string> = {
   cc: "cpp",
   cpp: "cpp",
   hpp: "cpp",
+  cs: "csharp",
+  csx: "csharp",
   css: "css",
   go: "go",
   toml: "ini",
