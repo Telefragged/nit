@@ -7,6 +7,8 @@ use axum::extract::State;
 use git2::{Oid, Repository};
 use serde::Deserialize;
 
+use crate::review;
+
 use super::diff;
 use super::rebase;
 use super::types;
@@ -29,12 +31,6 @@ pub(super) struct DiffQuery {
     against: Option<u64>,
 }
 
-struct AgainstRev {
-    commit_sha: String,
-    message: String,
-    parent_sha: String,
-}
-
 pub(super) async fn revision_diff(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(u64, u64)>,
@@ -42,50 +38,35 @@ pub(super) async fn revision_diff(
 ) -> Result<Json<types::Diff>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
-        let (git_dir, new_sha, new_msg, parent_sha, against): (
-            String,
-            String,
-            String,
-            String,
-            Option<AgainstRev>,
-        ) = {
+        // Clone the revision(s) out from under the read lock so the git work
+        // below holds nothing live (a diff is not a hot path).
+        let (git_dir, rev, against): (String, review::RevisionProj, Option<review::RevisionProj>) = {
             let proj = entry.read();
             let rev = proj
                 .revision(n)
+                .cloned()
                 .ok_or_else(|| Error::not_found(format!("revision {n} not found")))?;
-            let against = match q.against {
-                None => None,
-                Some(m) => {
-                    let a = proj
-                        .revision(m)
-                        .ok_or_else(|| Error::not_found(format!("revision {m} not found")))?;
-                    Some(AgainstRev {
-                        commit_sha: a.commit_sha.clone(),
-                        message: a.message.clone(),
-                        parent_sha: a.parent_sha.clone(),
-                    })
-                }
-            };
-            let repo_id = proj.repo_id;
+            let against = q
+                .against
+                .map(|m| {
+                    proj.revision(m)
+                        .cloned()
+                        .ok_or_else(|| Error::not_found(format!("revision {m} not found")))
+                })
+                .transpose()?;
             let git_dir = state
-                .repo_state(repo_id)
+                .repo_state(proj.repo_id)
                 .ok_or_else(|| Error::internal("repo not loaded"))?
                 .git_dir();
-            (
-                git_dir,
-                rev.commit_sha.clone(),
-                rev.message.clone(),
-                rev.parent_sha.clone(),
-                against,
-            )
+            (git_dir, rev, against)
         };
         let repo = Repository::open(&git_dir)
             .map_err(|e| Error::internal(format!("cannot open the repository: {e}")))?;
-        let new_tree = commit_tree(&repo, &new_sha)?;
+        let new_tree = commit_tree(&repo, &rev.commit_sha)?;
         let (old_tree, against_message, against_rev) = match against {
             None => {
                 let parent = repo
-                    .find_commit(parse_oid(&parent_sha)?)
+                    .find_commit(parse_oid(&rev.parent_sha)?)
                     .map_err(|e| Error::internal(format!("parent commit missing: {e}")))?;
                 let tree = parent
                     .tree()
@@ -101,12 +82,12 @@ pub(super) async fn revision_diff(
         let mut wire = diff::diff_trees(&repo, &old_tree, &new_tree)?;
         wire.files.insert(
             0,
-            diff::commit_msg_file(against_message.as_deref(), &new_msg)?,
+            diff::commit_msg_file(against_message.as_deref(), &rev.message)?,
         );
         if let Some((m_sha, parent_m)) = against_rev
-            && parent_m != parent_sha
+            && parent_m != rev.parent_sha
             && let Err(e) =
-                rebase::tag_drift(&repo, &mut wire, &m_sha, &parent_m, &new_sha, &parent_sha)
+                rebase::tag_drift(&repo, &mut wire, &m_sha, &parent_m, &rev.commit_sha, &rev.parent_sha)
         {
             tracing::warn!("rebase-aware interdiff tagging failed; serving plain interdiff: {e:#}");
         }
