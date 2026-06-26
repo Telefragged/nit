@@ -62,8 +62,6 @@ export interface Chain {
   /** The repo this chain belongs to (registry id). */
   repo_id: number;
   state: ChainState;
-  /** The tip's latest revision is partial. */
-  partial: boolean;
   /** Oldest-first, base → tip. */
   path: PathEntry[];
 }
@@ -132,7 +130,6 @@ export interface Revision {
   commit_sha: string;
   parent_sha: string;
   base_sha: string;
-  partial: boolean;
   /** Full commit message. */
   message: string;
   created_at: string;

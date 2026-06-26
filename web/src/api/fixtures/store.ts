@@ -37,8 +37,6 @@ export interface TipRecord {
   repo_id: number;
   /** The patchset of the tip change this tip pins (its head revision). */
   revision: number;
-  /** Sticky; set by push --partial, cleared by ready — on the tip's latest. */
-  partial: boolean;
   /** Terminal tips (every member merged/abandoned) — off the dashboard's
    * default `active` view. */
   active: boolean;

@@ -117,7 +117,7 @@
   background: var(--gray-dim);
 }
 
-/* Side-by-side badges (e.g. state + PARTIAL on a dashboard row). */
+/* Status dots shown beside a dashboard row's state. */
 .dot {
   display: inline-block;
   width: 9px;

@@ -244,7 +244,7 @@ function derivePath(tip: TipRecord): PathEntry[] {
 /** A chain's derived state from its path members (docs/api.md state table).
  * Abandonment is derivation-inert: abandoned members are dropped before the
  * rollup, and there is no abandoned chain state. */
-function chainState(tip: TipRecord, path: PathEntry[]): ChainState {
+function chainState(path: PathEntry[]): ChainState {
   const live = path.filter((e) => e.status !== "abandoned");
   if (live.length === 0) return "agents_turn"; // empty or all-abandoned tip
   if (live.every((e) => e.status === "merged")) return "merged";
@@ -256,9 +256,8 @@ function chainState(tip: TipRecord, path: PathEntry[]): ChainState {
     return "agents_turn";
   }
   if (live.some((e) => e.status === "pending")) return "waiting_for_review";
-  // The rest are approved (≥1) and/or merged, no pending — approved, unless the
-  // tip is still partial (the agent is pushing), which is agents_turn.
-  return tip.partial ? "agents_turn" : "approved";
+  // The rest are approved (≥1) and/or merged, no pending — approved.
+  return "approved";
 }
 
 function chainView(tip: TipRecord): Chain {
@@ -266,8 +265,7 @@ function chainView(tip: TipRecord): Chain {
   return {
     tip_change_id: tip.tip_change_id,
     repo_id: tip.repo_id,
-    state: chainState(tip, path),
-    partial: tip.partial,
+    state: chainState(path),
     path,
   };
 }
@@ -292,7 +290,6 @@ function resolveTip(
     tip_change_id: changeId,
     repo_id: c.repo_id,
     revision: rev,
-    partial: false,
     active: !c.terminal,
   };
 }

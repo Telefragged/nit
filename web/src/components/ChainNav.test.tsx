@@ -58,7 +58,6 @@ function detail(
       commit_sha: `sha${changeId}r${n}`,
       parent_sha: "",
       base_sha: "",
-      partial: false,
       message: "",
       created_at: "",
     })),
@@ -86,7 +85,6 @@ const chain: Chain = {
   tip_change_id: 12,
   repo_id: 1,
   state: "waiting_for_review",
-  partial: false,
   path: [
     member(10, 0, "first change", "approved"),
     member(11, 1, "second change", "changes_requested"),

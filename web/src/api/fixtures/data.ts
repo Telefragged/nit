@@ -22,8 +22,7 @@
 //            rename and a binary file.
 //     tip change 40  merged — only visible via ?status=all.
 //   repo 2 (quarry)
-//     tip change 20  agents_turn — a changes_requested change, mid-push
-//            (partial).
+//     tip change 20  agents_turn — a changes_requested change.
 //     tip change 30  approved — single approved change.
 //   repo 3 (orbit)  the B-in-two-chains example (docs/api.md): one change
 //            (B = 51) reached by two tips at two patchsets — tip C (53) walks
@@ -92,7 +91,6 @@ const change10: ChangeRecord = {
       commit_sha: c10r1,
       parent_sha: parent10,
       base_sha: parent10,
-      partial: false,
       message: msg10r1,
       created_at: ago(26 * 60),
     },
@@ -201,7 +199,6 @@ const change11: ChangeRecord = {
       commit_sha: c11r1,
       parent_sha: c10r1,
       base_sha: parent10,
-      partial: false,
       message: msg11r1,
       created_at: ago(25 * 60),
     },
@@ -212,7 +209,6 @@ const change11: ChangeRecord = {
       commit_sha: c11r2,
       parent_sha: c10r1,
       base_sha: parent10,
-      partial: false,
       message: msg11r2,
       created_at: ago(95),
     },
@@ -692,7 +688,6 @@ const change12: ChangeRecord = {
       commit_sha: c12r1,
       parent_sha: c11r2,
       base_sha: parent10,
-      partial: false,
       message: msg12r1,
       created_at: ago(90),
     },
@@ -772,7 +767,6 @@ const change40: ChangeRecord = {
       commit_sha: c40r1,
       parent_sha: sha(400),
       base_sha: sha(400),
-      partial: false,
       message: msg40r1,
       created_at: ago(4 * 24 * 60),
     },
@@ -824,7 +818,7 @@ const change40: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// repo 2 — quarry: fix/wal-checkpoint (tip change 20, agents_turn, partial)
+// repo 2 — quarry: fix/wal-checkpoint (tip change 20, agents_turn)
 
 const c20r1 = sha(201);
 const parent20 = sha(200);
@@ -846,7 +840,6 @@ const change20: ChangeRecord = {
       commit_sha: c20r1,
       parent_sha: parent20,
       base_sha: parent20,
-      partial: true,
       message: msg20r1,
       created_at: ago(8 * 60),
     },
@@ -962,7 +955,6 @@ const change30: ChangeRecord = {
       commit_sha: c30r1,
       parent_sha: sha(300),
       base_sha: sha(300),
-      partial: false,
       message: msg30r1,
       created_at: ago(50 * 60),
     },
@@ -1063,7 +1055,6 @@ const changeA: ChangeRecord = {
       commit_sha: cA,
       parent_sha: mOrbit,
       base_sha: mOrbit,
-      partial: false,
       message: msgA,
       created_at: ago(7 * 60),
     },
@@ -1097,7 +1088,6 @@ const changeD: ChangeRecord = {
       commit_sha: cD,
       parent_sha: mOrbit,
       base_sha: mOrbit,
-      partial: false,
       message: msgD,
       created_at: ago(2 * 60),
     },
@@ -1122,7 +1112,6 @@ const changeB: ChangeRecord = {
       commit_sha: cB0,
       parent_sha: cA,
       base_sha: mOrbit,
-      partial: false,
       message: msgB,
       created_at: ago(6 * 60),
     },
@@ -1131,7 +1120,6 @@ const changeB: ChangeRecord = {
       commit_sha: cB1,
       parent_sha: cD,
       base_sha: mOrbit,
-      partial: false,
       message: msgB,
       created_at: ago(90),
     },
@@ -1162,7 +1150,6 @@ const changeC: ChangeRecord = {
       commit_sha: cC,
       parent_sha: cB0,
       base_sha: mOrbit,
-      partial: false,
       message: msgC,
       created_at: ago(5 * 60),
     },
@@ -1188,7 +1175,6 @@ const changeE: ChangeRecord = {
       commit_sha: cE,
       parent_sha: cB1,
       base_sha: mOrbit,
-      partial: false,
       message: msgE,
       created_at: ago(80),
     },
@@ -1223,14 +1209,12 @@ export const tips: TipRecord[] = [
     tip_change_id: 12,
     repo_id: 1,
     revision: 0,
-    partial: false,
     active: true,
   },
   {
     tip_change_id: 40,
     repo_id: 1,
     revision: 0,
-    partial: false,
     active: false, // merged — only with ?status=all
   },
   // repo 2
@@ -1238,15 +1222,12 @@ export const tips: TipRecord[] = [
     tip_change_id: 20,
     repo_id: 2,
     revision: 0,
-    // The agent is mid-push (nit push --partial); exercises the PARTIAL badge.
-    partial: true,
     active: true,
   },
   {
     tip_change_id: 30,
     repo_id: 2,
     revision: 0,
-    partial: false,
     active: true,
   },
   // repo 3 — two tips through the shared change B (51)
@@ -1254,14 +1235,12 @@ export const tips: TipRecord[] = [
     tip_change_id: 53,
     repo_id: 3,
     revision: 0,
-    partial: false,
     active: true,
   },
   {
     tip_change_id: 55,
     repo_id: 3,
     revision: 0,
-    partial: false,
     active: true,
   },
 ];
