@@ -31,7 +31,7 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&res, "I001");
+    let change_id = member_id(&server, &res, "I001");
     assert_eq!(status_at(&server, change_id, 0).as_deref(), Some("pending"));
 
     // Explicit abandon with a reason.

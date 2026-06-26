@@ -51,7 +51,7 @@ fn change_landed_on_main_becomes_merged() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&res, "I001");
+    let change_id = member_id(&server, &res, "I001");
     assert_eq!(res["tip_change"]["revision"], 0);
     assert_eq!(res["tip_change"]["status"], "pending");
 
@@ -87,8 +87,8 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
     let tip = res["tip_change"]["change_id"].as_u64().unwrap();
-    let ancestor = member_id(&res, "I001");
-    assert_eq!(tip, member_id(&res, "I002"));
+    let ancestor = member_id(&server, &res, "I001");
+    assert_eq!(tip, member_id(&server, &res, "I002"));
 
     // Land only the ancestor (I001) on main — the tip (I002) stays unlanded.
     let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
@@ -144,7 +144,7 @@ fn branchless_change_stays_live_without_auto_abandon() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&res, "I001");
+    let change_id = member_id(&server, &res, "I001");
 
     // Delete the only branch and wait out several sweeps: the change stays
     // pending (live), never auto-abandoned.
@@ -166,7 +166,7 @@ fn reopen_clears_abandoned_to_retained_status() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&res, "I001");
+    let change_id = member_id(&server, &res, "I001");
 
     // Approve, then abandon: the verdict is retained, masked by the overlay.
     review(&server, change_id, "approve", "lgtm");
@@ -195,7 +195,7 @@ fn push_to_abandoned_change_409s_until_reopened() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&res, "I001");
+    let change_id = member_id(&server, &res, "I001");
 
     // Abandon it, then move the branch to a *new* revision.
     abandon(&server, change_id);
@@ -233,7 +233,7 @@ fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&res, "I001");
+    let change_id = member_id(&server, &res, "I001");
 
     // Abandon the change; the branch still points at the unchanged sha.
     abandon(&server, change_id);

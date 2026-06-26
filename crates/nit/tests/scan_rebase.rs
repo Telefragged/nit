@@ -52,7 +52,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{pr}");
-    let tip_id = member_id(&pr, "Ib");
+    let tip_id = member_id(&server, &pr, "Ib");
     assert_eq!(pr["tip_change"]["revision"], 0, "first revision is rev 0");
 
     // Approve the tip change Ib at rev 0.
@@ -77,7 +77,11 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
         pr["tip_change"]["status"], "approved",
         "the approval carries forward across a pure rebase"
     );
-    assert_eq!(member_id(&pr, "Ib"), tip_id, "same change identity");
+    assert_eq!(
+        member_id(&server, &pr, "Ib"),
+        tip_id,
+        "same change identity"
+    );
 
     // The change detail: a new revision recorded, status still approved at the
     // pinned (latest) revision, and the review row stays on rev 0.
@@ -121,7 +125,7 @@ fn re_push_of_an_unchanged_tip_is_idempotent() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{pr}");
-    let change_id = member_id(&pr, "Ic");
+    let change_id = member_id(&server, &pr, "Ic");
     approve(&server, change_id);
 
     // Push the same tip again — nothing moved.
@@ -150,7 +154,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{pr}");
-    let change_id = member_id(&pr, "Ix");
+    let change_id = member_id(&server, &pr, "Ix");
 
     review(&server, change_id, "request_changes", "rename");
     assert_eq!(path_status(&server, change_id, "Ix"), "changes_requested");

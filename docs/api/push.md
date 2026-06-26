@@ -38,11 +38,11 @@
 ```json
 PushResult = {
   "tip_change": {"change_id": 10, "change_key": "I3f2…",
-                 "revision": 2, "status": "pending"},
-  "chain": Chain    // tip-rooted: the derived path, each member at the
-                    // revision this push gave it (see "Chains")
+                 "revision": 2, "status": "pending"}
 }
 ```
 
-There is no chain id — a chain is addressed by its **tip change id** plus an
-optional `?revision` selecting the patchset (and hence the chain context).
+The result names only the pushed tip change; read the derived chain back with
+`GET /api/chains/{tip_change.change_id}` (see "Chains"). There is no chain id —
+a chain is addressed by its **tip change id** plus an optional `?revision`
+selecting the patchset (and hence the chain context).

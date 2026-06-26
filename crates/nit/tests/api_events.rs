@@ -19,7 +19,7 @@ fn subscribe_replays_backlog_then_streams_live() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&res, "I001");
+    let change_id = member_id(&server, &res, "I001");
 
     let mut socket = ws_subscribe(&server, &[(change_id, 0)], READ);
     let backlog = ws_read(&mut socket).expect("backlog revision entry");
@@ -49,7 +49,7 @@ fn subscribe_at_head_skips_backlog() {
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main", None);
-    let change_id = member_id(&res, "I001");
+    let change_id = member_id(&server, &res, "I001");
 
     // The revision is at idx 0, so head is idx 1: no backlog replays.
     let mut socket = ws_subscribe(&server, &[(change_id, 1)], Duration::from_millis(400));
@@ -74,7 +74,7 @@ fn stacked_tip_wakes_parent_follower() {
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main", None);
-    let one = member_id(&res, "I001");
+    let one = member_id(&server, &res, "I001");
 
     // Follow change one from idx 0; reading its backlog revision arms the feed
     // (the sync point) before we stack the tip.
@@ -88,7 +88,7 @@ fn stacked_tip_wakes_parent_follower() {
     g.branch("feat", c2);
     let (st, res2) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res2}");
-    let two = member_id(&res2, "I002");
+    let two = member_id(&server, &res2, "I002");
 
     // change one's follower is woken by the advisory naming the new child —
     // change one itself appended nothing (its content is unchanged).
@@ -106,8 +106,8 @@ fn unsubscribed_changes_are_silent() {
     g.branch("feat", c2);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main", None);
-    let one = member_id(&res, "I001");
-    let two = member_id(&res, "I002");
+    let one = member_id(&server, &res, "I001");
+    let two = member_id(&server, &res, "I002");
 
     // Subscribe only to change one, at its head.
     let mut socket = ws_subscribe(&server, &[(one, 1)], Duration::from_millis(400));

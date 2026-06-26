@@ -464,7 +464,7 @@ fn vs_parent_diff_is_never_drift_processed() {
     assert_eq!(st, 200, "push r0: {p0}");
     let (st, p1) = push(&server, &g, "feat2", "main", None);
     assert_eq!(st, 200, "push r1: {p1}");
-    let change_id = member_id(&p1, "Ifeat");
+    let change_id = member_id(&server, &p1, "Ifeat");
 
     // r1's vs-parent diff is the plain `parent1 → r1` tree diff: feat.rs added,
     // nothing else, no drift — its parent is the source of truth, not r0's.
@@ -523,7 +523,7 @@ fn http_interdiff_contains_a_pure_rebase() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, p0) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "push the stack: {p0}");
-    let change_id = member_id(&p0, "Ifeat");
+    let change_id = member_id(&server, &p0, "Ifeat");
 
     // Amend C1 (its body moves) and rebase C2 onto it with the *same* delta and
     // message — a pure rebase of C2. Re-push: C1 gets revision 1 (a real edit),

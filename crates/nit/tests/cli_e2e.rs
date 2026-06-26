@@ -14,9 +14,9 @@ use std::process::Command;
 
 use common::{GitRepo, TestServer, msg, nit, nit_register, review};
 
-/// `nit push` prints a `PushResult` (`tip_change` + the derived chain) and
-/// registers the chain; `nit status`/`nit log` then read it back, resolved from
-/// the cwd HEAD.
+/// `nit push` prints a `PushResult` (`tip_change`) and registers the chain;
+/// `nit status`/`nit log` then read the derived chain back, resolved from the
+/// cwd HEAD.
 #[test]
 fn push_prints_result_then_status_and_log_read_it_back() {
     let g = GitRepo::new();
@@ -25,25 +25,22 @@ fn push_prints_result_then_status_and_log_read_it_back() {
     g.repo.set_head("refs/heads/feat").unwrap(); // the agent's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // push <branch> from the cwd (base `main`). The result carries the tip
-    // change at rev 0 (0-based) and the tip-rooted chain.
+    // push <branch> from the cwd (base `main`). The result carries just the
+    // tip change at rev 0 (0-based).
     let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
     assert!(ok, "{stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
     assert_eq!(push["tip_change"]["revision"], 0, "{push}");
     assert_eq!(push["tip_change"]["status"], "pending");
-    let chain = &push["chain"];
-    assert_eq!(chain["state"], "waiting_for_review");
-    assert_eq!(chain["partial"], false);
-    assert_eq!(chain["path"].as_array().unwrap().len(), 1);
-    assert_eq!(chain["path"][0]["position"], 0);
-    assert_eq!(chain["path"][0]["change_key"], "Ia");
-    assert_eq!(chain["path"][0]["revision"], 0);
 
-    // status (no --oneline) reads `GET /api/chains/{tip}` for the cwd HEAD.
+    // status (no --oneline) reads the derived chain back from
+    // `GET /api/chains/{tip}` for the cwd HEAD.
     let (ok, status, stderr) = nit(&server, &g, &["status"]);
     assert!(ok, "{stderr}");
     assert_eq!(status["state"], "waiting_for_review");
+    assert_eq!(status["partial"], false);
+    assert_eq!(status["path"].as_array().unwrap().len(), 1);
+    assert_eq!(status["path"][0]["position"], 0);
     assert_eq!(status["path"][0]["change_key"], "Ia");
     assert_eq!(status["path"][0]["revision"], 0);
 
@@ -115,9 +112,13 @@ fn partial_push_then_ready_clears_it() {
 
     let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &["--partial"]);
     assert!(ok, "{stderr}");
-    assert_eq!(push["chain"]["partial"], true);
-    assert_eq!(push["chain"]["state"], "waiting_for_review");
     let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
+
+    // The push marked the tip partial; the derived chain reads back partial.
+    let (ok, status, stderr) = nit(&server, &g, &["status"]);
+    assert!(ok, "{stderr}");
+    assert_eq!(status["partial"], true);
+    assert_eq!(status["state"], "waiting_for_review");
 
     // Reviewer approves the only change (stage a decision + submit the chain,
     // as the browser would). The verdict lands on rev 0.
@@ -131,10 +132,12 @@ fn partial_push_then_ready_clears_it() {
     assert_eq!(status["path"][0]["status"], "approved");
 
     // ready clears the sticky flag; the approved chain becomes mergeable.
-    let (ok, ready, stderr) = nit_register(&server, &g, "ready", "feat", &[]);
+    let (ok, _ready, stderr) = nit_register(&server, &g, "ready", "feat", &[]);
     assert!(ok, "{stderr}");
-    assert_eq!(ready["chain"]["partial"], false);
-    assert_eq!(ready["chain"]["state"], "approved");
+    let (ok, status, stderr) = nit(&server, &g, &["status"]);
+    assert!(ok, "{stderr}");
+    assert_eq!(status["partial"], false);
+    assert_eq!(status["state"], "approved");
 }
 
 /// `nit comment --change-id` opens a thread; `--thread … --resolve` replies and

@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_key: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main", None);
     assert_eq!(st, 200, "{res}");
-    member_id(&res, change_key)
+    member_id(server, &res, change_key)
 }
 
 fn drafts_url(server: &TestServer, change_id: u64) -> String {

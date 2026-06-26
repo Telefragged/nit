@@ -94,10 +94,9 @@ pub struct PushRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushResult {
     /// The pushed tip change, at the revision this push gave it. Always
-    /// present — a push that walks to nothing is rejected (409).
+    /// present — a push that walks to nothing is rejected (409). Read the
+    /// derived chain back with `GET /api/chains/{tip_change.change_id}`.
     pub tip_change: TipChange,
-    /// The derived path, tip-rooted (each member at this push's revision).
-    pub chain: Chain,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

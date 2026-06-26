@@ -32,7 +32,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     // Push A alone first (seq: A.revision).
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let a_id = member_id(&res, "Ia");
+    let a_id = member_id(&server, &res, "Ia");
 
     // An agent comment on A (seq: A.comment) — written before B exists, so it
     // must sort before B's revision in the merged timeline.
@@ -47,7 +47,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     g.branch("feat", b);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200, "{res}");
-    let b_id = member_id(&res, "Ib");
+    let b_id = member_id(&server, &res, "Ib");
     assert_ne!(a_id, b_id);
 
     // The aggregated chain log: every member's entries merged, sorted by seq.

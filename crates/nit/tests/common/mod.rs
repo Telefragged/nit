@@ -357,15 +357,25 @@ pub fn first_repo_id(server: &TestServer) -> u64 {
     repos["repos"][0]["id"].as_u64().expect("a repo")
 }
 
-/// Find a path member's `change_id` by its Change-Id in a `Chain`/`PushResult`
-/// path (`value["path"]` or `value["chain"]["path"]`).
-pub fn member_id(value: &Value, change_key: &str) -> u64 {
-    let path = value
-        .get("path")
-        .or_else(|| value.get("chain").and_then(|c| c.get("path")))
-        .and_then(|p| p.as_array())
-        .expect("a path");
-    path.iter()
+/// Find a path member's `change_id` by its Change-Id. Accepts a `Chain`
+/// (`value["path"]`) directly; for a `PushResult` (which names only the tip)
+/// it fetches the derived chain through `tip_change.change_id`.
+pub fn member_id(server: &TestServer, value: &Value, change_key: &str) -> u64 {
+    let fetched;
+    let path = if let Some(path) = value.get("path") {
+        path
+    } else {
+        let tip = value["tip_change"]["change_id"]
+            .as_u64()
+            .expect("a Chain `path` or a PushResult `tip_change`");
+        let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip}")));
+        assert_eq!(st, 200, "{chain}");
+        fetched = chain;
+        &fetched["path"]
+    };
+    path.as_array()
+        .expect("a path")
+        .iter()
         .find(|m| m["change_key"].as_str() == Some(change_key))
         .and_then(|m| m["change_id"].as_u64())
         .unwrap_or_else(|| panic!("no member {change_key} in path"))

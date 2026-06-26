@@ -406,7 +406,7 @@ fn abandoned_chain_drops_out_of_active_chains() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200);
-    let change_id = member_id(&res, "Iab1");
+    let change_id = member_id(&server, &res, "Iab1");
     let id = first_repo(&server);
     assert_eq!(active_chains(&server, id), 1);
 

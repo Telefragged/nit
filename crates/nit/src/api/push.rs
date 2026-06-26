@@ -1,5 +1,5 @@
 //! The push endpoint: resolve the base, walk commits, upsert + append
-//! revisions, and build the result chain.
+//! revisions, and name the pushed tip change.
 
 use std::sync::Arc;
 
@@ -13,7 +13,6 @@ use crate::review::{self, Lifecycle, RevisionPayload};
 
 use super::types;
 use super::types::StreamMsg;
-use super::views;
 use super::{AppJson, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{canonical_git_dir, map_busy};
 
@@ -150,9 +149,8 @@ pub(super) async fn push(
             }
         }
 
-        // Build the result from the derived chain rooted at the tip. The
+        // Name the pushed tip change at the revision this push gave it. The
         // empty-walk guard above guarantees at least one target.
-        let view = state.repo_view(repo_row.id);
         let tip = targets
             .last()
             .expect("the empty-walk guard guarantees at least one target");
@@ -168,12 +166,7 @@ pub(super) async fn push(
                 }),
             }
         };
-        let tip_sha = walk
-            .commits
-            .last()
-            .map_or(walk.fork_sha.clone(), |c| c.commit_sha.clone());
-        let chain = views::build_chain(&view, repo_row.id, &tip_sha);
-        Ok(Json(types::PushResult { tip_change, chain }))
+        Ok(Json(types::PushResult { tip_change }))
     })
     .await
 }

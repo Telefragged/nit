@@ -229,8 +229,8 @@ observes that itself.)
   explicit `<commit>` (any rev). The repo is the cwd's git-common-dir and must
   already be registered (`nit repo create`); the canonical branch is the repo's
   stored one. Server defaults to `$NIT_SERVER` or
-  `http://127.0.0.1:8877`. Prints the `PushResult` (the tip change + the derived
-  chain). Idempotent — a re-push where nothing moved records
+  `http://127.0.0.1:8877`. Prints the `PushResult` (the pushed tip change).
+  Idempotent — a re-push where nothing moved records
   nothing and succeeds (200); an unregistered repo is a 404, a structural fault
   a 400, a revision to an abandoned change or an already-merged tip a 409.
   `--partial` is sticky (a plain push never clears it). No cursor returned.

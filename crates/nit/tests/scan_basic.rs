@@ -42,8 +42,9 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(tip["revision"], 0);
     assert_eq!(tip["status"], "pending");
 
-    // The push result's chain is the derived path, base→tip, 0-based positions.
-    let path = res["chain"]["path"].as_array().unwrap();
+    // The derived chain is the path base→tip, 0-based positions.
+    let chain = only_chain(&server);
+    let path = chain["path"].as_array().unwrap();
     assert_eq!(path.len(), 2);
     assert_eq!(path[0]["change_key"], "I001");
     assert_eq!(path[0]["position"], 0);
@@ -60,7 +61,7 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(path[1]["commit_sha"], c2.to_string());
 
     // Each change shows exactly its revision 0.
-    let id1 = member_id(&res, "I001");
+    let id1 = member_id(&server, &res, "I001");
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
     assert_eq!(st, 200, "{detail}");
     let revs = detail["revisions"].as_array().unwrap();
@@ -106,7 +107,7 @@ fn no_op_repush_is_idempotent() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200);
-    let id = member_id(&only_chain(&server), "I001");
+    let id = member_id(&server, &only_chain(&server), "I001");
 
     // Nothing moved: a re-push is a 200 that records no new revision.
     let (st, res) = push(&server, &g, "feat", "main", None);
@@ -143,7 +144,7 @@ fn extending_the_branch_adds_a_change() {
     assert_eq!(path[1]["position"], 1);
 
     // The untouched first change keeps revision 0 (one revision only).
-    let id1 = member_id(&res, "I001");
+    let id1 = member_id(&server, &res, "I001");
     let (_, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
     assert_eq!(detail["revisions"].as_array().unwrap().len(), 1);
 }
@@ -156,7 +157,7 @@ fn amend_opens_revision_one_on_the_change() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main", None);
     assert_eq!(st, 200);
-    let id = member_id(&res, "I001");
+    let id = member_id(&server, &res, "I001");
 
     // Amend: same Change-Id, new content → revision 1 on the same change.
     let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "different\n")]);
