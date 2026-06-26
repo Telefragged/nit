@@ -78,13 +78,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
             let open = open_changes_by_key(&view);
             for (change_id, revision) in gitscan::detect_landings(&repo, since, &head, &open) {
                 if let Some(entry) = state.change_entry(change_id) {
-                    append_lifecycle(
-                        conn,
-                        &entry,
-                        change_id,
-                        LifecycleAction::Merged,
-                        Some(revision),
-                    );
+                    record_landing(conn, &entry, change_id, revision);
                 }
             }
         }
@@ -108,16 +102,12 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
         .collect()
 }
 
-fn append_lifecycle(
-    conn: &mut Connection,
-    entry: &ChangeEntry,
-    change_id: u64,
-    action: LifecycleAction,
-    revision: Option<u64>,
-) {
+/// Record a detected landing: the merge sweep's only lifecycle write, a
+/// `merged` entry on the change at the landed `revision`.
+fn record_landing(conn: &mut Connection, entry: &ChangeEntry, change_id: u64, revision: u64) {
     let new = review::EntryPayload::Lifecycle(review::LifecyclePayload {
-        action,
-        revision,
+        action: LifecycleAction::Merged,
+        revision: Some(revision),
         message: None,
     });
     if let Err(e) = append_to_change(conn, entry, change_id, vec![new]) {
