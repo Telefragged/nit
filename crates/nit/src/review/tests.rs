@@ -152,11 +152,7 @@ fn abandon_then_reopen() {
     assert_eq!(c.status_at(0), ChangeStatus::Abandoned);
     assert!(c.is_terminal());
     // Reopen restores the retained verdict status.
-    let e = entry(
-        c.head,
-        "lifecycle",
-        &serde_json::json!({"action": "reopened"}),
-    );
+    let e = entry(3, "lifecycle", &serde_json::json!({"action": "reopened"}));
     fold(&mut c, e);
     assert!(!c.is_terminal());
     assert_eq!(c.status_at(0), ChangeStatus::ChangesRequested);
@@ -166,7 +162,7 @@ fn abandon_then_reopen() {
 fn partial_flag_restamps_the_latest_revision() {
     let mut c = folded(&[("revision", revision("A", "base", "base", true))]);
     assert!(!c.is_partial());
-    let e = entry(c.head, "partial", &serde_json::json!({"partial": true}));
+    let e = entry(1, "partial", &serde_json::json!({"partial": true}));
     fold(&mut c, e);
     assert!(c.is_partial());
 }

@@ -331,7 +331,6 @@ pub struct ChangeProj {
     pub lifecycle: Lifecycle,
     /// The next thread id to mint — bumped each time a thread is opened.
     pub next_thread_id: u64,
-    pub head: u64,
     pub last_entry_at: Option<String>,
 }
 
@@ -348,7 +347,6 @@ impl ChangeProj {
             reviews: Vec::new(),
             lifecycle: Lifecycle::Active,
             next_thread_id: 0,
-            head: 0,
             last_entry_at: None,
         }
     }
@@ -488,7 +486,6 @@ pub fn fold(change: &mut ChangeProj, mut entry: Entry) -> Entry {
         }
         EntryPayload::Lifecycle(p) => fold_lifecycle(change, p),
     }
-    change.head = entry.idx + 1;
     change.last_entry_at = Some(now);
     entry
 }
