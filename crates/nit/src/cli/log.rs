@@ -4,7 +4,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Value, json};
 
-use super::client::{Client, Retry, print_json, server_url};
+use super::client::{Client, Retry, next_text, print_json, server_url};
 use super::format::print_oneline_entries;
 use super::resolve::resolve_chain;
 
@@ -93,24 +93,16 @@ fn follow(
             }
         }
         let mut socket = client.ws_connect(&heads(&entries), retry)?;
-        loop {
-            match socket.read() {
-                Ok(tungstenite::Message::Text(text)) => {
-                    let Ok(entry) = serde_json::from_str::<Value>(text.as_str()) else {
-                        continue;
-                    };
-                    if entry.get("new_parent").is_some() {
-                        break; // re-derive the chain (picks up the new parent)
-                    }
-                    cursor = cursor.max(entry["seq"].as_u64().unwrap_or(cursor));
-                    relay(&entry, oneline, reviewer_only)?;
-                }
-                Ok(tungstenite::Message::Ping(p)) => {
-                    let _ = socket.send(tungstenite::Message::Pong(p));
-                }
-                Ok(tungstenite::Message::Close(_)) | Err(_) => break, // reconnect
-                Ok(_) => {}
+        // None (close/error) falls through to the outer loop, which reconnects.
+        while let Some(text) = next_text(&mut socket) {
+            let Ok(entry) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
+            if entry.get("new_parent").is_some() {
+                break; // re-derive the chain (picks up the new parent)
             }
+            cursor = cursor.max(entry["seq"].as_u64().unwrap_or(cursor));
+            relay(&entry, oneline, reviewer_only)?;
         }
     }
 }

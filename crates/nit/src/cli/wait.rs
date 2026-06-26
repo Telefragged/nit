@@ -4,7 +4,7 @@
 use anyhow::Result;
 use serde_json::{Value, json};
 
-use super::client::{Client, Retry, print_json, server_url};
+use super::client::{Client, Retry, next_text, print_json, server_url};
 use super::format::print_oneline_entries;
 use super::log::{heads, max_seq};
 use super::resolve::resolve_tip_change;
@@ -69,16 +69,10 @@ fn wait_for_entry(client: &Client, entries: &[Value], retry: Retry) -> Result<()
     let subs = heads(entries);
     loop {
         let mut socket = client.ws_connect(&subs, retry)?;
-        loop {
-            match socket.read() {
-                Ok(tungstenite::Message::Text(_)) => return Ok(()), // an entry landed
-                Ok(tungstenite::Message::Ping(p)) => {
-                    let _ = socket.send(tungstenite::Message::Pong(p));
-                }
-                Ok(tungstenite::Message::Close(_)) | Err(_) => break, // reconnect
-                Ok(_) => {}
-            }
+        if next_text(&mut socket).is_some() {
+            return Ok(()); // an entry landed
         }
+        // close/error: reconnect.
     }
 }
 

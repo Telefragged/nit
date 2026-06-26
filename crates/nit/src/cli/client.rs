@@ -171,21 +171,22 @@ impl Client {
 
     fn post_raw(&self, path: &str, body: &Value) -> Result<Value, CallError> {
         let url = format!("{}{path}", self.base);
-        let response = self
-            .agent
-            .post(&url)
-            .send_json(body)
-            .map_err(|e| classify(e, path))?;
-        Self::read(response, path)
+        Self::send_raw(self.agent.post(&url), path, body)
     }
 
     fn patch_raw(&self, path: &str, body: &Value) -> Result<Value, CallError> {
         let url = format!("{}{path}", self.base);
-        let response = self
-            .agent
-            .patch(&url)
-            .send_json(body)
-            .map_err(|e| classify(e, path))?;
+        Self::send_raw(self.agent.patch(&url), path, body)
+    }
+
+    /// Send a JSON body on a built request (the verb-agnostic half of
+    /// [`post_raw`]/[`patch_raw`]).
+    fn send_raw(
+        req: ureq::RequestBuilder<ureq::typestate::WithBody>,
+        path: &str,
+        body: &Value,
+    ) -> Result<Value, CallError> {
+        let response = req.send_json(body).map_err(|e| classify(e, path))?;
         Self::read(response, path)
     }
 
@@ -206,6 +207,22 @@ impl Client {
             )));
         }
         Ok(value)
+    }
+}
+
+/// Pump the change-stream socket to its next text frame, answering pings
+/// transparently. Returns the frame text, or `None` on a close/error so the
+/// caller reconnects.
+pub(crate) fn next_text(socket: &mut WsConn) -> Option<String> {
+    loop {
+        match socket.read() {
+            Ok(tungstenite::Message::Text(text)) => return Some(text.to_string()),
+            Ok(tungstenite::Message::Ping(p)) => {
+                let _ = socket.send(tungstenite::Message::Pong(p));
+            }
+            Ok(tungstenite::Message::Close(_)) | Err(_) => return None,
+            Ok(_) => {}
+        }
     }
 }
 
