@@ -28,6 +28,7 @@ import {
 } from "../api/client";
 import type {
   ChangeDetail,
+  ChangeStatus,
   Decision,
   Review,
   Revision,
@@ -73,10 +74,11 @@ import { ReviewContext, sameTarget } from "./reviewContext";
 const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
 
-const VERDICT_BADGE: Record<Verdict, { cls: string; label: string }> = {
-  approve: { cls: "badge-green", label: "APPROVED" },
-  request_changes: { cls: "badge-red", label: "CHANGES REQUESTED" },
-  comment: { cls: "badge-blue", label: "COMMENTED" },
+// A verdict's displayed status — badges.tsx owns the label and color.
+const VERDICT_STATUS: Record<Verdict, ChangeStatus> = {
+  approve: "approved",
+  request_changes: "changes_requested",
+  comment: "commented",
 };
 
 /** Why `c` did nothing — several misses are policy, not user error, so
@@ -168,7 +170,6 @@ function DiffRangeSelect({
 
 /** One published review line; long cover messages get a more/less toggle. */
 function ReviewItem({ review }: { review: Review }) {
-  const badge = VERDICT_BADGE[review.verdict];
   const [expanded, setExpanded] = useState(false);
   const [truncated, setTruncated] = useState(false);
   const msgRef = useRef<HTMLSpanElement>(null);
@@ -178,7 +179,7 @@ function ReviewItem({ review }: { review: Review }) {
   }, [review.message]);
   return (
     <div className="review-item">
-      <span className={`badge ${badge.cls}`}>{badge.label}</span>
+      <StatusChip status={VERDICT_STATUS[review.verdict]} />
       <span className="mono dim">r{review.revision}</span>
       <span
         ref={msgRef}
