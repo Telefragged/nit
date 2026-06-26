@@ -1,10 +1,10 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { getChange, getRepo, getRepoGraph } from "../api/client";
-import type { ChangeDetail } from "../api/types";
+import { getRepo, getRepoGraph } from "../api/client";
 import ChangeGraph from "../components/ChangeGraph";
 import { repoPath } from "../lib/repo";
+import { useChangeDetails } from "../lib/useChangeDetails";
 import { ErrorPanel } from "./NotFound";
 
 /** A repo's review dashboard: one spine-centered change graph over the
@@ -38,17 +38,7 @@ export default function Dashboard() {
       ),
     [graphQuery.data],
   );
-  const changeQueries = useQueries({
-    queries: activityIds.map((changeId) => ({
-      queryKey: ["change", changeId],
-      queryFn: () => getChange(changeId),
-    })),
-  });
-  const activity = new Map<number, ChangeDetail>();
-  activityIds.forEach((changeId, i) => {
-    const detail = changeQueries[i]?.data;
-    if (detail) activity.set(changeId, detail);
-  });
+  const activity = useChangeDetails(activityIds);
 
   const repo = repoQuery.data;
 

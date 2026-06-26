@@ -1,7 +1,6 @@
 import {
   skipToken,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -66,6 +65,7 @@ import { activeIndexAt } from "../lib/scrollspy";
 import type { SelectionMiss } from "../lib/selection";
 import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
+import { useChangeDetails } from "../lib/useChangeDetails";
 import { ErrorPanel } from "./NotFound";
 import type { DraftTarget, ReviewCtx } from "./reviewContext";
 import { ReviewContext, sameTarget } from "./reviewContext";
@@ -278,21 +278,13 @@ export default function ReviewPage() {
 
   // Each chain member's per-change state is read from its own change detail
   // (GET /api/changes/{id}), fetched concurrently, rather than denormalized
-  // onto the chain path. Keyed ["change", id] so it shares the cache with the
-  // change query above (the current member is a warm hit). ChainNav reads each
-  // member's unresolved/latest-revision from these; the review bar reads each
-  // member's staged decision for its chain-wide "Submit (k)" count + nav.
-  const memberQueries = useQueries({
-    queries: (chainQ.data?.path ?? []).map((m) => ({
-      queryKey: ["change", m.change_id],
-      queryFn: () => getChange(m.change_id),
-    })),
-  });
-  const memberDetails = new Map<number, ChangeDetail>();
-  (chainQ.data?.path ?? []).forEach((m, i) => {
-    const detail = memberQueries[i]?.data;
-    if (detail) memberDetails.set(m.change_id, detail);
-  });
+  // onto the chain path. Shares the ["change", id] cache with the change query
+  // above (the current member is a warm hit). ChainNav reads each member's
+  // unresolved/latest-revision from these; the review bar reads each member's
+  // staged decision for its chain-wide "Submit (k)" count + nav.
+  const memberDetails = useChangeDetails(
+    (chainQ.data?.path ?? []).map((m) => m.change_id),
+  );
   const memberDecisions = new Map<number, Decision | null>();
   memberDetails.forEach((detail, id) => {
     memberDecisions.set(id, detail.draft_decision?.decision ?? null);
