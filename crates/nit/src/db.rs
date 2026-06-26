@@ -198,21 +198,19 @@ fn col_u64_opt(v: Option<i64>) -> rusqlite::Result<Option<u64>> {
     v.map(col_u64).transpose()
 }
 
-/// Parse a stored `side` TEXT column into a [`Side`] (the read half of the
-/// db↔domain boundary, like [`col_u64`]). A value that is neither `old` nor
-/// `new` means external corruption, surfaced as a conversion error.
-fn col_side(s: &str) -> rusqlite::Result<Side> {
-    s.parse().map_err(|e: String| {
-        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
-    })
-}
-
-/// Parse a stored `decision` TEXT column into a [`Decision`] (the read half of
-/// the db↔domain boundary, like [`col_side`]). An unknown value means external
+/// Parse a stored TEXT column into a closed-vocab enum (the read half of the
+/// db↔domain boundary, like [`col_u64`]). An unknown value means external
 /// corruption, surfaced as a conversion error.
-fn col_decision(s: &str) -> rusqlite::Result<Decision> {
-    s.parse().map_err(|e: String| {
-        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
+fn col_enum<T: std::str::FromStr>(s: &str) -> rusqlite::Result<T>
+where
+    T::Err: std::fmt::Display,
+{
+    s.parse().map_err(|e: T::Err| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Text,
+            e.to_string().into(),
+        )
     })
 }
 
@@ -570,7 +568,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
         thread_id: col_u64_opt(row.get("thread_id")?)?,
         file: row.get("file")?,
         line: col_u64_opt(row.get("line")?)?,
-        side: col_side(&row.get::<_, String>("side")?)?,
+        side: col_enum(&row.get::<_, String>("side")?)?,
         range,
         line_text: row.get("line_text")?,
         body: row.get("body")?,
@@ -730,7 +728,7 @@ pub struct DraftReviewRow {
 fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
     Ok(DraftReviewRow {
         change_id: col_u64(row.get("change_id")?)?,
-        decision: col_decision(&row.get::<_, String>("decision")?)?,
+        decision: col_enum(&row.get::<_, String>("decision")?)?,
         message: row.get("message")?,
     })
 }
