@@ -108,7 +108,7 @@ const MIGRATIONS: &[&str] = &[
     CREATE TABLE log (
       seq        INTEGER PRIMARY KEY AUTOINCREMENT,  -- globally monotone: cross-change order
       change_id  INTEGER NOT NULL REFERENCES changes(id),
-      idx        INTEGER NOT NULL,         -- 0-based, contiguous per change
+      idx        INTEGER NOT NULL,         -- 0-based per change (MAX(idx)+1 to append)
       kind       TEXT NOT NULL,
       payload    TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL,
@@ -156,6 +156,15 @@ const MIGRATIONS: &[&str] = &[
     // a git ref, not necessarily a local branch (docs/data-model.md "Tables").
     // A rename only; the stored value and its resolution are unchanged.
     "ALTER TABLE repos RENAME COLUMN base_branch TO base_ref;",
+    // v5: retire the `partial` log kind. The flag never affected a change's
+    // stored status (it only gated the read-derived `approved` chain state), so
+    // its entries are inert — drop them so replay no longer meets an unknown
+    // kind. Revision payloads keep a now-dead `partial` field, ignored by
+    // omission: `RevisionPayload` is not `deny_unknown_fields`, so serde drops
+    // the unrecognized key on deserialize. Deleting interior entries leaves idx
+    // gaps, harmless: the next idx is `MAX(idx) + 1` and the fold orders by
+    // idx, never assuming contiguity.
+    "DELETE FROM log WHERE kind = 'partial';",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -880,8 +889,8 @@ mod tests {
             &conn,
             c,
             0,
-            "partial",
-            &serde_json::json!({"partial": true}),
+            "revision",
+            &serde_json::json!({"commit_sha": "a"}),
             "t0",
         )
         .expect("append");
@@ -898,7 +907,7 @@ mod tests {
         assert_eq!(log_head(&conn, c).expect("head"), 2);
         let entries = log_entries(&conn, c, 0, None).expect("entries");
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].kind, "partial");
+        assert_eq!(entries[0].kind, "revision");
         assert_eq!(entries[1].idx, 1);
         let tail = log_entries(&conn, c, 1, None).expect("tail");
         assert_eq!(tail.len(), 1);

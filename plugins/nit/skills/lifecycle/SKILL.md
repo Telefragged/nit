@@ -22,16 +22,13 @@ is done, push it — an unpushed commit is invisible to the reviewer.
 
 ```sh
 # after EVERY completed commit:
-nit push --partial      # registers the commit; the first push starts review
-# after the LAST commit of the unit:
-nit ready               # clears the partial flag
+nit push      # registers the commit; the first push starts review
 ```
 
-`--partial` marks work in flight (review can start, merging can't); it is
-sticky until `nit ready`. Run both from inside the worktree — they resolve the
-repo and tip from the checked-out commit. Report the first push so the reviewer
-knows review has started. Keep the commits small and don't ration them; the
-reviewer is never blocked by more commits.
+Run it from inside the worktree — it resolves the repo and tip from the
+checked-out commit. Report the first push so the reviewer knows review has
+started. Keep the commits small and don't ration them; the reviewer is never
+blocked by more commits.
 
 ## Watch for feedback with a monitor
 
@@ -75,8 +72,6 @@ keep streaming.
     the reviewer sees an interdiff. Then reply on the thread and resolve it (the
     `comment` skill).
   - a question → answer it on its thread (the `comment` skill).
-  - (On a partial chain with everything approved, `agents_turn` just means the
-    reviewer is caught up — keep building or `nit ready`.)
 - **`waiting_for_review`** — the ball is with the reviewer; keep the monitor
   running.
 - **`approved`** — every change is approved. Land it per this project's approve
@@ -84,4 +79,4 @@ keep streaming.
 - **`merged` / `abandoned`** — the chain is closed. Stop the monitor.
 
 Never submit a review verdict yourself — that is the human's side. Your surface
-is push / ready / status / log / comment.
+is push / status / log / comment.

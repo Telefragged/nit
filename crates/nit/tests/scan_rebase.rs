@@ -50,7 +50,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     g.branch("feat", c2);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, pr) = push(&server, &g, "feat", "main", None);
+    let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     let tip_id = member_id(&server, &pr, "Ib");
     assert_eq!(pr["tip_change"]["revision"], 0, "first revision is rev 0");
@@ -67,7 +67,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let c2r = g.commit(&[c1r], &msg("two", "Ib"), &[("b.txt", b_txt)]);
     g.branch("feat", c2r);
 
-    let (st, pr) = push(&server, &g, "feat", "main", None);
+    let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(
         pr["tip_change"]["revision"], 1,
@@ -101,7 +101,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     // resets the change to pending — a new revision the reviewer hasn't seen.
     let c2w = g.commit(&[c1r], &msg("two: explained", "Ib"), &[("b.txt", b_txt)]);
     g.branch("feat", c2w);
-    let (st, pr) = push(&server, &g, "feat", "main", None);
+    let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(pr["tip_change"]["revision"], 2, "the reword appends rev 2");
     assert_eq!(
@@ -123,13 +123,13 @@ fn re_push_of_an_unchanged_tip_is_idempotent() {
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, pr) = push(&server, &g, "feat", "main", None);
+    let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     let change_id = member_id(&server, &pr, "Ic");
     approve(&server, change_id);
 
     // Push the same tip again — nothing moved.
-    let (st, pr) = push(&server, &g, "feat", "main", None);
+    let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(pr["tip_change"]["revision"], 0, "no new revision");
     assert_eq!(pr["tip_change"]["status"], "approved");
@@ -152,7 +152,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, pr) = push(&server, &g, "feat", "main", None);
+    let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     let change_id = member_id(&server, &pr, "Ix");
 
@@ -164,7 +164,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     g.branch("main", m1);
     let c1r = g.commit(&[m1], &msg("feat: x", "Ix"), &[("x.txt", txt)]);
     g.branch("feat", c1r);
-    let (st, pr) = push(&server, &g, "feat", "main", None);
+    let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(pr["tip_change"]["revision"], 1);
     assert_eq!(
@@ -175,7 +175,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     // Reword resets to pending.
     let c1w = g.commit(&[m1], &msg("feat: x, reworded", "Ix"), &[("x.txt", txt)]);
     g.branch("feat", c1w);
-    let (st, pr) = push(&server, &g, "feat", "main", None);
+    let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(pr["tip_change"]["revision"], 2);
     assert_eq!(pr["tip_change"]["status"], "pending");

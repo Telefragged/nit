@@ -73,13 +73,9 @@ at the revision the tip pins. **Abandonment is derivation-inert**: an
 abandoned state exists) — it shows as `abandoned` on its own path entry, and
 the agent decides what to do with it.
 
-| state                | when                                                                                                     | actionable |
-| -------------------- | -------------------------------------------------------------------------------------------------------- | ---------- |
-| `merged`             | every non-abandoned member merged at its pinned revision (off the main page)                             | true       |
-| `agents_turn`        | else any member changes_requested/commented; or empty/all-abandoned tip; or all approved while `partial` | true       |
-| `waiting_for_review` | else any member pending                                                                                  | false      |
-| `approved`           | else all approved (≥1) and not `partial`                                                                 | true       |
-
-`actionable` ≡ `state != waiting_for_review`. A chain drops off the main page
-iff **every** member is terminal — any one live member keeps a partially-landed
-stack visible.
+| state                | when                                                                         | actionable |
+| -------------------- | ---------------------------------------------------------------------------- | ---------- |
+| `merged`             | every non-abandoned member merged at its pinned revision (off the main page) | true       |
+| `agents_turn`        | else any member changes_requested/commented; or empty/all-abandoned tip      | true       |
+| `waiting_for_review` | else any member pending                                                      | false      |
+| `approved`           | else all approved (≥1)                                                       | true       |

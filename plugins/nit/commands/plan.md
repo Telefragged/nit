@@ -24,7 +24,7 @@ code yet — at this stage the only thing you produce is the plan document.
 
 Write the plan to Markdown, preferably under `plan/` (e.g.
 `plan/<short-name>.md`): the approach, the steps, the files you'll touch, the
-trade-offs. A plan is a complete unit, so `nit push` then `nit ready`.
+trade-offs. A plan is a complete unit, so `nit push` it.
 
 ## 3. Raise every question inline
 

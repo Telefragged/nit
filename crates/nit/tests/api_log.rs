@@ -30,7 +30,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
     // Push A alone first (seq: A.revision).
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     let a_id = member_id(&server, &res, "Ia");
 
@@ -45,7 +45,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     // Extend the chain with B and re-push the tip (seq: B.revision).
     let b = g.commit(&[a], &msg("core: B", "Ib"), &[("b.txt", "b\n")]);
     g.branch("feat", b);
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     let b_id = member_id(&server, &res, "Ib");
     assert_ne!(a_id, b_id);

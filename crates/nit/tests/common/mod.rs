@@ -243,22 +243,13 @@ pub fn nit(server: &TestServer, repo: &GitRepo, args: &[&str]) -> (bool, Value, 
     (out.status.success(), value, stderr)
 }
 
-/// `nit push <branch>` / `nit ready <branch>` from inside the repo: the branch
-/// is the positional commit (resolved locally). `cmd` is `"push"` or `"ready"`;
-/// `extra` carries flags like `--partial`. Registers the repo first
-/// (`nit repo create --base main`) so the push has somewhere to land;
-/// a repeat create just errors, which is ignored.
-pub fn nit_register(
-    server: &TestServer,
-    repo: &GitRepo,
-    cmd: &str,
-    branch: &str,
-    extra: &[&str],
-) -> (bool, Value, String) {
+/// `nit push <branch>` from inside the repo: the branch is the positional
+/// commit (resolved locally). Registers the repo first (`nit repo create
+/// --base main`) so the push has somewhere to land; a repeat create just
+/// errors, which is ignored.
+pub fn nit_register(server: &TestServer, repo: &GitRepo, branch: &str) -> (bool, Value, String) {
     let _ = nit(server, repo, &["repo", "create", "--base", "main"]);
-    let mut args = vec![cmd, branch];
-    args.extend_from_slice(extra);
-    nit(server, repo, &args)
+    nit(server, repo, &["push", branch])
 }
 
 fn agent() -> ureq::Agent {
@@ -310,25 +301,15 @@ pub fn create_repo(server: &TestServer, repo: &GitRepo, base: &str) -> (u16, Val
 }
 
 /// `POST /api/push` over HTTP, registering the repo first (`create_repo` with
-/// `base`, pinning the canonical base ref). `tip` is a branch name or sha;
-/// `partial` optionally sets/clears the sticky flag. A failing registration
-/// other than "already registered" (409) is returned as-is. Returns
-/// `(status, PushResult)`.
-pub fn push(
-    server: &TestServer,
-    repo: &GitRepo,
-    tip: &str,
-    base: &str,
-    partial: Option<bool>,
-) -> (u16, Value) {
+/// `base`, pinning the canonical base ref). `tip` is a branch name or sha. A
+/// failing registration other than "already registered" (409) is returned
+/// as-is. Returns `(status, PushResult)`.
+pub fn push(server: &TestServer, repo: &GitRepo, tip: &str, base: &str) -> (u16, Value) {
     let (st, body) = create_repo(server, repo, base);
     if st != 200 && st != 409 {
         return (st, body);
     }
-    let mut body = json!({"git_dir": repo.git_dir(), "tip": tip});
-    if let Some(p) = partial {
-        body["partial"] = json!(p);
-    }
+    let body = json!({"git_dir": repo.git_dir(), "tip": tip});
     http_post(&server.url("/api/push"), &body)
 }
 

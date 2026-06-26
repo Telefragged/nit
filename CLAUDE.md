@@ -35,7 +35,7 @@ identity across rewrites. Product spec: `nit.md`.
    directly" from the user (or a docs/dev.md exemption); it is never a call
    you make yourself, and never a label you apply after the fact to work
    already started on `main`. When in doubt, worktree.
-7. **`nit push --partial` after every completed commit** — pushing
+7. **`nit push` after every completed commit** — pushing
    finishes a commit, like treefmt and the Change-Id; no later pass
    (cleanup, self-review, verification) delays it. Push now, amend later —
    amends become new revisions by design. An unpushed commit is invisible

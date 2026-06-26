@@ -68,14 +68,6 @@ fn entry_summary(entry: &Value) -> String {
             Some(thread) => format!("agent commented on thread {thread} (change {change})"),
             None => format!("agent opened a thread on change {change}"),
         },
-        "partial" => format!(
-            "change {change} marked {}",
-            if p["partial"].as_bool().unwrap_or(false) {
-                "partial"
-            } else {
-                "ready"
-            }
-        ),
         "lifecycle" => format!("change {change} {}", p["action"].as_str().unwrap_or("?")),
         other => format!("{other} entry"),
     }

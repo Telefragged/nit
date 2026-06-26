@@ -17,7 +17,7 @@ fn subscribe_replays_backlog_then_streams_live() {
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
 
@@ -48,7 +48,7 @@ fn subscribe_at_head_skips_backlog() {
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (_, res) = push(&server, &g, "feat", "main", None);
+    let (_, res) = push(&server, &g, "feat", "main");
     let change_id = member_id(&server, &res, "I001");
 
     // The revision is at idx 0, so head is idx 1: no backlog replays.
@@ -73,7 +73,7 @@ fn stacked_tip_wakes_parent_follower() {
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (_, res) = push(&server, &g, "feat", "main", None);
+    let (_, res) = push(&server, &g, "feat", "main");
     let one = member_id(&server, &res, "I001");
 
     // Follow change one from idx 0; reading its backlog revision arms the feed
@@ -86,7 +86,7 @@ fn stacked_tip_wakes_parent_follower() {
     // Stack a brand-new tip (change two) on change one and re-push.
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
-    let (st, res2) = push(&server, &g, "feat", "main", None);
+    let (st, res2) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res2}");
     let two = member_id(&server, &res2, "I002");
 
@@ -105,7 +105,7 @@ fn unsubscribed_changes_are_silent() {
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (_, res) = push(&server, &g, "feat", "main", None);
+    let (_, res) = push(&server, &g, "feat", "main");
     let one = member_id(&server, &res, "I001");
     let two = member_id(&server, &res, "I002");
 

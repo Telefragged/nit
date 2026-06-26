@@ -24,7 +24,7 @@ Ask the user (AskUserQuestion) how they want `nit` available:
 - **Install to PATH** — run `nix profile add github:Telefragged/nit`. After
   this, `nit` is a normal command anywhere. Best when nit is used often.
 - **Run on demand** — no install; invoke `nix run github:Telefragged/nit -- <args>`
-  each time (e.g. `nix run github:Telefragged/nit -- push --partial`). Best
+  each time (e.g. `nix run github:Telefragged/nit -- push`). Best
   for a one-off or to avoid touching the user's profile.
 
 Carry the choice through the rest of setup: everywhere below that says `nit`,
@@ -147,7 +147,7 @@ base branch and their approve action verbatim):
 
 This project uses [nit](https://github.com/Telefragged/nit) for code review.
 Drive every change through review rather than landing it directly: push each
-completed commit with `nit push --partial`, answer reviewer feedback by
+completed commit with `nit push`, answer reviewer feedback by
 amending in place and pushing again, and keep questions and decisions in nit
 as comments. Say "drive it through nit" to take a change through the loop; the
 `/nit:goal`, `/nit:fork`, and `/nit:plan` commands are opinionated shortcuts.

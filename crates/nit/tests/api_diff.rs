@@ -76,7 +76,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, pushed) = push(&server, &g, "feat", "main", None);
+    let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
     let id = tip_change_id(&pushed);
     assert_eq!(pushed["tip_change"]["revision"], 0, "first revision is 0");
@@ -205,7 +205,7 @@ fn interdiff_against_earlier_revision() {
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, pushed) = push(&server, &g, "feat", "main", None);
+    let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
     let id = tip_change_id(&pushed);
     assert_eq!(pushed["tip_change"]["revision"], 0);
@@ -217,7 +217,7 @@ fn interdiff_against_earlier_revision() {
         &[("body.txt", &lines("b", 1..=8).replace("b4\n", "b4 v2\n"))],
     );
     g.branch("feat", c2);
-    let (st, pushed) = push(&server, &g, "feat", "main", None);
+    let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
     assert_eq!(
         pushed["tip_change"]["revision"], 1,
@@ -280,7 +280,7 @@ fn missing_revision_is_404() {
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, pushed) = push(&server, &g, "feat", "main", None);
+    let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
     let id = tip_change_id(&pushed);
 

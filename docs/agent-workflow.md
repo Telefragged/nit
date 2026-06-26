@@ -44,18 +44,17 @@ is reviewable as `/COMMIT_MSG`).
 
 ## The loop
 
-**Pushing is part of completing a commit, not a later phase.** Commit, push
-`--partial`, build the next. A planned later pass (cleanup, self-review,
-verification) never holds a push — post-push amends become new revisions by
-design. The only thing that delays a push is the commit not being done.
+**Pushing is part of completing a commit, not a later phase.** Commit, push,
+build the next. A planned later pass (cleanup, self-review, verification) never
+holds a push — post-push amends become new revisions by design. The only thing
+that delays a push is the commit not being done.
 
 ```sh
 nit repo create --base <branch>   # once per repo: register it, pinning the canonical
 #   branch; a push into an unregistered repo is a 404
 # after EVERY completed commit (green, formatter-clean, one concern, Change-Id'd):
-nit push --partial         # push the checked-out commit; base comes from the repo
+nit push                   # push the checked-out commit; base comes from the repo
 #   first push creates the change(s) and the chain — review starts here, on commit one
-nit ready                  # last commit done: clears partial
 
 # then read the chain and act on feedback:
 nit status                 # the derived chain digest (state + one line per change)
@@ -66,23 +65,9 @@ nit push                   # amended commits = new revisions
 #   re-read until state=approved, then run the project's approve action
 ```
 
-`nit push`/`nit ready` are the only writers of revisions and the partial flag.
-The reviewer's verdicts and abandon/reopen, the merge timer, and your own
-comments all land in the log independently — so after a push you **re-read** to
-see them.
-
-### Partial vs ready
-
-`--partial` tracks **work in flight, not review state**. A chain is partial
-while a work unit is open (more commits coming, or an in-flight rebase) and
-`ready` the moment it completes. Being under review does not make a chain
-partial. Both states are reviewable; partial only blocks the `approved` state
-(merging), never review. `--partial` is sticky — a plain `nit push` leaves the
-flag untouched; `nit ready` is the only thing that clears it.
-
-The partial flag lives on the **tip** change's latest revision (the work
-frontier). A shared interior change carrying a stale partial from a sibling
-push does not hold an unrelated chain partial.
+`nit push` is the only writer of revisions. The reviewer's verdicts and
+abandon/reopen, the merge timer, and your own comments all land in the log
+independently — so after a push you **re-read** to see them.
 
 ### Rebasing onto a moved base
 
@@ -95,7 +80,7 @@ ancestor has landed shows live with a "newer revision landed elsewhere" note
 until you rebase past it.
 
 The push duty is **per branch, owned by whoever builds it**. In multi-agent
-setups every worker drives its own `nit push --partial` from its own worktree
+setups every worker drives its own `nit push` from its own worktree
 the moment its first commit is green; the orchestrator must not centralize,
 batch, or phase-gate pushing. An unpushed branch is invisible to the reviewer.
 
@@ -132,17 +117,13 @@ subscribe their watch set over one websocket (docs/api.md "Events").
 it:
 
 - `agents_turn` — act now. Some member is `changes_requested`/`commented`, or
-  the tip is empty, or every member is approved while the chain is still
-  `partial`. For each `changes_requested`/`commented` change, address its
+  the tip is empty. For each `changes_requested`/`commented` change, address its
   review message and its threads (fix by amending the target commit, or
   reply/`--resolve`), then push. `commented` = questions without blocking;
-  reply, don't just ignore it. On a `partial` chain with everything approved,
-  `agents_turn` just means the reviewer is caught up — keep pushing, or
-  `nit ready` when done.
+  reply, don't just ignore it.
 - `waiting_for_review` — nothing actionable (any member still `pending`); the
   ball is with the reviewer. Re-read later.
-- `approved` — every member approved and not `partial`; run the project's
-  approve action.
+- `approved` — every member approved; run the project's approve action.
 - `merged` — every member landed; the chain is off the dashboard. Stop.
 
 There is **no abandoned chain state** — abandonment is per-change. A member
@@ -165,7 +146,7 @@ the commit message (1-based lines) — answer by rewording the commit (keep the
 path member is scoped to the pinned revision.
 
 Never submit a verdict yourself (`POST /api/changes/*/reviews` is the human's
-side). The agent surface is push / ready / status / log / comment / reopen.
+side). The agent surface is push / status / log / comment / reopen.
 
 ## Annotate the choices you make
 
@@ -224,7 +205,7 @@ observes that itself.)
   must resolve to a commit — any git ref, e.g. `origin/main` (400 otherwise);
   nit never guesses it. 409 if the repo is already registered. Prints the
   `Repo`. A `nit push` into an unregistered repo is a 404.
-- `nit push [<commit>] [--partial] [--server <url>]` — push the
+- `nit push [<commit>] [--server <url>]` — push the
   cwd's checked-out commit (HEAD — a detached HEAD or tag included), or an
   explicit `<commit>` (any rev). The repo is the cwd's git-common-dir and must
   already be registered (`nit repo create`); the canonical branch is the repo's
@@ -233,9 +214,7 @@ observes that itself.)
   Idempotent — a re-push where nothing moved records
   nothing and succeeds (200); an unregistered repo is a 404, a structural fault
   a 400, a revision to an abandoned change or an already-merged tip a 409.
-  `--partial` is sticky (a plain push never clears it). No cursor returned.
-- `nit ready [<commit>] [--server <url>]` — clears the partial
-  flag and refreshes. Idempotent.
+  No cursor returned.
 - `nit status [--chain <tip-change-id>] [--oneline] [--server <url>]` — the
   derived `Chain` for the cwd's tip (or `--chain`), no blocking. `--oneline`
   prints a `state=` header plus one line per member

@@ -5,7 +5,7 @@ nit is a single-machine, local-first review server. Three parts:
 1. **`nit` binary** (`crates/nit`, Rust) — one executable:
    - `nit serve` — axum HTTP server: JSON API under `/api`, serves the
      built web UI (`--web-dist` / `$NIT_WEB_DIST`) for everything else.
-   - `nit push` / `status` / `log` / `comment` / `ready` / `reopen` — thin
+   - `nit push` / `status` / `log` / `comment` / `reopen` — thin
      CLI clients of that API, run by agents from inside a git repo.
 2. **Web UI** (`web/`) — React/TS SPA (Vite). Talks only to `/api`.
 3. **State** — an append-only **log per change** in SQLite, folded into an
@@ -68,14 +68,14 @@ rule is a client concern (docs/data-model.md). The web polls the same folds.
   127.0.0.1.
 - **Change-centric**: the **change** (a `Change-Id`, scoped to a repo) is the
   primary entity. It owns an append-only log whose fold is its entire
-  reviewable state — revisions, threads, reviews, partial flag, lifecycle. A
+  reviewable state — revisions, threads, reviews, lifecycle. A
   **chain** is never stored, in SQLite or in memory; it is derived at read
   time by walking a tip commit back to the repo's canonical branch through
   each revision's recorded `parent_sha` (gerrit relation chains). The same
   `Change-Id` reached by two pushes on different parents is one change with
   two patchsets, surfaced as two chains.
 - **State is the fold of an append-only log**: every reviewable fact (a
-  revision, verdict, comment, partial flip, lifecycle transition) is one
+  revision, verdict, comment, lifecycle transition) is one
   immutable entry; the current state is the fold, held in memory per change
   and rebuilt by replay on startup. SQLite stores only the four tables
   ([data-model.md](data-model.md)); revision data lives in `revision`-kind

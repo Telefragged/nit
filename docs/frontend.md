@@ -28,9 +28,8 @@ events is the planned replacement for live refresh.
 - `/repos/:id` **Dashboard** — the repo's chains as collapsible drawers, one
   per derived **tip**. The drawer header is the summary: best-effort name
   (resolved server-side at query time), state badge (`WAITING FOR REVIEW`
-  amber / `AGENT'S TURN` blue / `APPROVED` green / `MERGED` gray, plus a gray
-  `PARTIAL` while the agent is still pushing), a status-dot preview of the
-  path in order, and the updated time. Expanding a drawer reveals the chain's
+  amber / `AGENT'S TURN` blue / `APPROVED` green / `MERGED` gray), a status-dot
+  preview of the path in order, and the updated time. Expanding a drawer reveals the chain's
   changes in place — one row per member: position (0-based), subject, short
   sha, status chip, the pinned revision (`r{n}`), and activity counts
   (comments / drafts / unresolved). A member pinned to an older patchset than
@@ -121,8 +120,8 @@ Expert-dense, dark-first (single dark theme for v1). Background
 `#0d1117`-ish, mono for code/shas, sans for chrome. Color discipline lives in
 `components/badges.tsx`: amber = needs reviewer, blue = agent working,
 green = approved/ready, red = changes requested/deletions, gray =
-informational. The gray-not-amber rule is deliberate — `PARTIAL`, `NEWER
-ELSEWHERE` and the terminal states are inert markers, so
+informational. The gray-not-amber rule is deliberate — `NEWER ELSEWHERE`
+and the terminal states are inert markers, so
 amber stays reserved for "needs reviewer". Compact, no marketing fluff.
 Keyboard shortcuts (`[`/`]` file nav, `n`/`p` change nav, `c` comment, `a`
 reply modal) are optional in v1.
@@ -142,7 +141,7 @@ stored chain list. Coverage worth knowing: repo 1 (acme-runtime) has a
 3-change `waiting_for_review` chain with a 2-revision change (interdiff,
 resolved/unresolved threads, a `/COMMIT_MSG` thread answered by a reword,
 drafts, a rebase-drift file) plus a merged tip behind `status=all`; repo 2
-(quarry) a `request_changes` partial chain and an `approved` chain; repo 3
+(quarry) a `request_changes` chain and an `approved` chain; repo 3
 (orbit) the **B-in-two-chains** scenario — one change `B` reached by two tips
 at two patchsets (tip C walks `B` at rev0, tip E at rev1), so the
 newer-elsewhere badge (`latest_revision` > `revision`) renders. Revisions are

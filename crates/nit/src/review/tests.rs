@@ -26,7 +26,7 @@ fn revision(sha: &str, parent: &str, base: &str, resets: bool) -> serde_json::Va
     serde_json::json!({
         "commit_sha": sha, "parent_sha": parent, "base_sha": base,
         "message": format!("subject {sha}\n\nChange-Id: Iabc\n"),
-        "partial": false, "resets_status": resets,
+        "resets_status": resets,
     })
 }
 
@@ -156,15 +156,6 @@ fn abandon_then_reopen() {
     fold(&mut c, e);
     assert!(!c.is_terminal());
     assert_eq!(c.status_at(0), ChangeStatus::ChangesRequested);
-}
-
-#[test]
-fn partial_flag_restamps_the_latest_revision() {
-    let mut c = folded(&[("revision", revision("A", "base", "base", true))]);
-    assert!(!c.is_partial());
-    let e = entry(1, "partial", &serde_json::json!({"partial": true}));
-    fold(&mut c, e);
-    assert!(c.is_partial());
 }
 
 #[test]

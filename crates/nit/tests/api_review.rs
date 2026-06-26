@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 /// Push `tip` (base `main`) and return its `change_id` (for single-commit
 /// chains the tip change is the repo's first change).
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_key: &str) -> u64 {
-    let (st, res) = push(server, g, tip, "main", None);
+    let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
     member_id(server, &res, change_key)
 }

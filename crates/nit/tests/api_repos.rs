@@ -61,12 +61,12 @@ fn repos_list_shape_base_ref_and_scoped_chains() {
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
 
     // The `push` helper registers each repo first (base `main`), then pushes.
-    let (st, _) = push(&server, &a, "feat", "main", None);
+    let (st, _) = push(&server, &a, "feat", "main");
     assert_eq!(st, 200);
     // Two independent tips off main → two live chains in repo b.
-    let (st, _) = push(&server, &b, "feat", "main", None);
+    let (st, _) = push(&server, &b, "feat", "main");
     assert_eq!(st, 200);
-    let (st, _) = push(&server, &b, "topic", "main", None);
+    let (st, _) = push(&server, &b, "topic", "main");
     assert_eq!(st, 200);
 
     let (st, list) = http_get(&server.url("/api/repos"));
@@ -120,7 +120,7 @@ fn base_can_be_any_branch() {
     g.delete_branch("main");
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, res) = push(&server, &g, "feat", "trunk", None);
+    let (st, res) = push(&server, &g, "feat", "trunk");
     assert_eq!(st, 200, "{res}");
     assert_eq!(repo_base(&server, first_repo(&server)), "trunk");
 }
@@ -262,7 +262,7 @@ fn relocate_repo_endpoint() {
     let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
     a.branch("feat", a1);
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &a, "feat", "main", None);
+    let (st, _) = push(&server, &a, "feat", "main");
     assert_eq!(st, 200);
     let repo_id = first_repo(&server);
 
@@ -285,7 +285,7 @@ fn relocate_repo_endpoint() {
     let b = GitRepo::new();
     let b1 = b.commit(&[b.root], &msg("b: one", "Ib1"), &[("b.rs", "b\n")]);
     b.branch("feat", b1);
-    let (st, _) = push(&server, &b, "feat", "main", None);
+    let (st, _) = push(&server, &b, "feat", "main");
     assert_eq!(st, 200);
     let (st, conflict) = http_patch(
         &server.url(&format!("/api/repos/{repo_id}")),
@@ -323,7 +323,7 @@ fn get_repo_by_id_endpoint() {
     let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
     a.branch("feat", a1);
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &a, "feat", "main", None);
+    let (st, _) = push(&server, &a, "feat", "main");
     assert_eq!(st, 200);
     let repo_id = first_repo(&server);
 
@@ -346,7 +346,7 @@ fn nit_repo_move_cli() {
     let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
     a.branch("feat", a1);
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &a, "feat", "main", None);
+    let (st, _) = push(&server, &a, "feat", "main");
     assert_eq!(st, 200);
     let old_git_dir = a.git_dir();
 
@@ -383,7 +383,7 @@ fn merged_chain_drops_out_of_active_chains() {
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &g, "feat", "main", None);
+    let (st, _) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
     let id = first_repo(&server);
     assert_eq!(active_chains(&server, id), 1, "one live tip after the push");
@@ -404,7 +404,7 @@ fn abandoned_chain_drops_out_of_active_chains() {
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
     let change_id = member_id(&server, &res, "Iab1");
     let id = first_repo(&server);

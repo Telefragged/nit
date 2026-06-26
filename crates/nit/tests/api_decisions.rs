@@ -11,7 +11,7 @@ use common::*;
 use serde_json::{Value, json};
 
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_key: &str) -> u64 {
-    let (st, res) = push(server, g, tip, "main", None);
+    let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
     member_id(server, &res, change_key)
 }
@@ -295,7 +295,7 @@ fn batch_submit_publishes_every_member() {
     let b = g.commit(&[a], &msg("core: b", "Ib"), &[("b.txt", "b\n")]);
     g.branch("feat", b);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     let id_a = member_id(&server, &res, "Ia");
     let id_b = member_id(&server, &res, "Ib");

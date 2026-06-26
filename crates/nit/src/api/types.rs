@@ -85,10 +85,6 @@ pub struct PushRequest {
     pub git_dir: String,
     /// Any ref or rev, resolved to a commit at push time.
     pub tip: String,
-    /// Sticky: true marks the tip's revision partial (`nit push --partial`),
-    /// false clears it (`nit ready`), absent leaves it unchanged.
-    #[serde(default)]
-    pub partial: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,8 +120,6 @@ pub struct Chain {
     /// The repo this chain belongs to (registry id).
     pub repo_id: u64,
     pub state: ChainState,
-    /// The tip's latest revision is partial.
-    pub partial: bool,
     /// Oldest-first, base → tip.
     pub path: Vec<PathEntry>,
 }
@@ -226,7 +220,6 @@ pub struct Revision {
     pub commit_sha: String,
     pub parent_sha: String,
     pub base_sha: String,
-    pub partial: bool,
     /// Full commit message.
     pub message: String,
     pub created_at: String,

@@ -48,7 +48,7 @@ fn open_fork_behind_head_orders_above_anchor_and_keeps_its_base() {
     g.branch("topic", topic);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, res) = push(&server, &g, "topic", "main", None);
+    let (st, res) = push(&server, &g, "topic", "main");
     assert_eq!(st, 200, "{res}");
     let repo_id = first_repo_id(&server);
     let graph = get_graph(&server, repo_id);
@@ -93,7 +93,7 @@ fn truncated_with_history(below: u64) -> bool {
     let topic = g.commit(&[head], &msg("topic: at HEAD", "Itopic"), &[("t", "t\n")]);
     g.branch("topic", topic);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, res) = push(&server, &g, "topic", "main", None);
+    let (st, res) = push(&server, &g, "topic", "main");
     assert_eq!(st, 200, "{res}");
     let repo_id = first_repo_id(&server);
     get_graph(&server, repo_id)["history_truncated"]

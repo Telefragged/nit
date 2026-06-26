@@ -61,7 +61,6 @@ pub struct RevisionPayload {
     pub parent_sha: String,
     pub base_sha: String,
     pub message: String,
-    pub partial: bool,
     /// `false` only for a pure rebase (patch-id-equal, message unchanged): the
     /// new revision then inherits the prior revision's review status rather
     /// than resetting to `pending`.
@@ -111,11 +110,6 @@ pub struct CommentInput {
     pub resolved: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PartialPayload {
-    pub partial: bool,
-}
-
 /// A `lifecycle` entry: the merge timer (`merged`) and the `nit abandon` /
 /// `nit reopen` actions. `revision` is set only for `merged` (which patchset
 /// landed); `message` is an optional reason on `abandoned`.
@@ -138,7 +132,6 @@ pub enum EntryPayload {
     Review(ReviewPayload),
     /// One agent comment (the `comment` kind), opening a thread or replying.
     Comment(CommentInput),
-    Partial(PartialPayload),
     Lifecycle(LifecyclePayload),
 }
 
@@ -164,7 +157,6 @@ impl EntryPayload {
             EntryPayload::Revision(_) => LogKind::Revision,
             EntryPayload::Review(_) => LogKind::Review,
             EntryPayload::Comment(_) => LogKind::Comment,
-            EntryPayload::Partial(_) => LogKind::Partial,
             EntryPayload::Lifecycle(_) => LogKind::Lifecycle,
         }
     }
@@ -178,7 +170,6 @@ impl EntryPayload {
             EntryPayload::Revision(p) => serde_json::to_value(p),
             EntryPayload::Review(p) => serde_json::to_value(p),
             EntryPayload::Comment(p) => serde_json::to_value(p),
-            EntryPayload::Partial(p) => serde_json::to_value(p),
             EntryPayload::Lifecycle(p) => serde_json::to_value(p),
         }
         .map_err(Into::into)
@@ -198,7 +189,6 @@ impl EntryPayload {
             LogKind::Revision => EntryPayload::Revision(parse(json)?),
             LogKind::Review => EntryPayload::Review(parse(json)?),
             LogKind::Comment => EntryPayload::Comment(parse(json)?),
-            LogKind::Partial => EntryPayload::Partial(parse(json)?),
             LogKind::Lifecycle => EntryPayload::Lifecycle(parse(json)?),
         })
     }
@@ -251,8 +241,6 @@ pub struct RevisionProj {
     pub parent_sha: String,
     pub base_sha: String,
     pub message: String,
-    /// This push's partial flag; `nit ready` re-stamps the latest revision's.
-    pub partial: bool,
     /// `false` for a pure rebase — the revision inherits the prior status.
     pub resets_status: bool,
     pub created_at: String,
@@ -385,13 +373,6 @@ impl ChangeProj {
         matches!(self.lifecycle, Lifecycle::Merged { .. })
     }
 
-    /// Whether the latest revision is partial (`nit push --partial` set, not
-    /// yet cleared by `nit ready`). A chain is partial iff its tip change is.
-    #[must_use]
-    pub fn is_partial(&self) -> bool {
-        self.latest_revision().is_some_and(|r| r.partial)
-    }
-
     /// The change's current status: [`status_at`](Self::status_at) its latest
     /// revision (pending when it has none). The denormalized `changes.status`
     /// column caches this so a query can filter changes without folding their
@@ -480,11 +461,6 @@ pub fn fold(change: &mut ChangeProj, mut entry: Entry) -> Entry {
             change.mint_thread_id(c);
             apply_comment(change, c, None, &now);
         }
-        EntryPayload::Partial(p) => {
-            if let Some(rev) = change.revisions.last_mut() {
-                rev.partial = p.partial;
-            }
-        }
         EntryPayload::Lifecycle(p) => fold_lifecycle(change, p),
     }
     entry
@@ -498,7 +474,6 @@ fn fold_revision(change: &mut ChangeProj, p: &RevisionPayload, now: &str) {
         parent_sha: p.parent_sha.clone(),
         base_sha: p.base_sha.clone(),
         message: p.message.clone(),
-        partial: p.partial,
         resets_status: p.resets_status,
         created_at: now.to_string(),
     });

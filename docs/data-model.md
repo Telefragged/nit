@@ -2,7 +2,7 @@
 
 The unit of state is the **change** (a `Change-Id`, scoped to a repo). A
 change owns an **append-only log** whose **fold** is its entire reviewable
-state — revisions, comment threads, reviews, partial flag, lifecycle.
+state — revisions, comment threads, reviews, lifecycle.
 Nothing is mutated or deleted; a correction is a new entry. The server holds
 each change's fold in memory, rebuilt by replaying its log on startup.
 
@@ -52,9 +52,9 @@ changes (id, repo_id, change_key, status, created_at, UNIQUE(repo_id, change_key
 log     (seq, change_id, idx, kind, payload, created_at,
          PRIMARY KEY (seq AUTOINCREMENT), UNIQUE(change_id, idx))
         -- the append-only log, keyed on the change. Every entry carries TWO
-        -- coordinates: a per-change `idx` (0-based, contiguous) and a global
+        -- coordinates: a per-change `idx` (0-based) and a global
         -- `seq` (the rowid, monotone across the whole repo). payload is
-        -- kind-specific JSON (below). head(change) = entry count = idx of the
+        -- kind-specific JSON (below). head(change) = MAX(idx)+1 = idx of the
         -- next entry to append.
 
 draft_comments (id, change_id, revision, thread_id, file, line, side,
@@ -95,15 +95,14 @@ its append lock, `seq` the autoincrement rowid.
 
 ## The log
 
-An entry is `(seq, change_id, idx, kind, payload, created_at)`. Five kinds:
+An entry is `(seq, change_id, idx, kind, payload, created_at)`. Four kinds:
 
-| kind        | appended by                                              |
-| ----------- | -------------------------------------------------------- |
-| `revision`  | a push observes a new commit-sha for this change         |
-| `review`    | a reviewer verdict, draining the change's drafts         |
-| `comment`   | an agent comment (`nit comment`)                         |
-| `lifecycle` | the merge timer; `nit abandon` / `nit reopen`            |
-| `partial`   | `nit ready` (or a push) re-stamps the tip's partial flag |
+| kind        | appended by                                      |
+| ----------- | ------------------------------------------------ |
+| `revision`  | a push observes a new commit-sha for this change |
+| `review`    | a reviewer verdict, draining the change's drafts |
+| `comment`   | an agent comment (`nit comment`)                 |
+| `lifecycle` | the merge timer; `nit abandon` / `nit reopen`    |
 
 `push` is the only writer of `revision`; the background timer is the only
 writer of `merged` `lifecycle` entries; `abandoned`/`reopened` are written on
@@ -142,7 +141,6 @@ Three kinds of id, all opaque and stable across replays:
   "parent_sha": "…",          // the previous walked commit, or the fork for the first
   "base_sha": "…",            // the walk's fork point on the canonical branch
   "message": "full commit message\n…",
-  "partial": true,            // this push's partial flag
   "resets_status": true       // false only for a pure rebase (patch-id-equal AND
                               // message unchanged): the new revision then inherits
                               // the prior revision's status instead of pending
@@ -179,29 +177,25 @@ Three kinds of id, all opaque and stable across replays:
 {"action": "merged", "revision": 2}    // merged | abandoned | reopened;
                                        // `revision` set only for merged (which patchset landed);
                                        // `message` optional reason on abandoned
-
-// partial — re-stamp the tip change's latest-revision partial flag
-{"partial": true}
 ```
 
 ## The fold (log → state)
 
 Per change, the fold holds its **revisions** (each with its shas, message,
-partial flag and `resets_status`), its **threads** (each a located, resolvable
+and `resets_status`), its **threads** (each a located, resolvable
 conversation: an anchor — revision/file/line/side/range/line_text — a rolled-up
 `resolved` flag, and ordered comments — each a body + `review_id`), its **reviews**, and
 its **lifecycle** (active / merged{revision} / abandoned). Replaying the log in
 order yields this. Each kind's effect:
 
 - **`revision`** — mint the next revision number (0-based) and push a revision
-  with the payload's shas/message/partial/`resets_status`.
+  with the payload's shas/message/`resets_status`.
 - **`review`** — record the review (id, verdict, message, reviewed revision),
   then apply each comment to the change's threads (below), tagged with the
   review's `review_id`.
 - **`comment`** — apply the one comment with no `review_id` — which is what
   marks it agent-authored. Adds no review and leaves status untouched — an
   agent note is not a verdict.
-- **`partial`** — set the latest revision's partial flag.
 - **`lifecycle`** — set the change's lifecycle: `merged{revision}`,
   `abandoned`, or `reopened` (back to active).
 
@@ -322,8 +316,7 @@ chain.
 ### Derived chain state
 
 `derive_state` folds the members' displayed status (each at its pinned
-revision) plus the tip's partial flag into the actionable state the agent
-branches on:
+revision) into the actionable state the agent branches on:
 
 **Abandonment is derivation-inert**: an `abandoned` member is dropped from the
 fold before the rollup (there is no chain-level abandoned state) — it shows as
@@ -333,18 +326,13 @@ fold before the rollup (there is no chain-level abandoned state) — it shows as
 every non-abandoned member merged (at its pinned revision) → merged   (off the main page)
 else any member changes_requested|commented      → agents_turn
 else any member pending                          → waiting_for_review
-else all approved (≥1) and tip partial           → agents_turn   (still pushing)
 else all approved (≥1)                           → approved
 else (no live members)                           → agents_turn   (empty/all-abandoned tip)
 ```
 
-A chain is **partial** iff its **tip** change's latest revision is partial —
-the tip is the work frontier, so the most recent push's intent governs whether
-the chain may merge; a shared interior change carrying a stale partial from a
-sibling push does not hold an unrelated chain partial. A chain drops off the
-main page iff **every** member is terminal — any one live member keeps a
-partially-landed stack visible. The full actionable/feedback contract lives in
-[api.md](api.md).
+A chain drops off the main page iff **every** member is terminal — any one live
+member keeps a partially-landed stack visible. The full actionable/feedback
+contract lives in [api.md](api.md).
 
 ## Push
 
@@ -379,16 +367,13 @@ A push that walks to nothing (`tip` ancestor-or-equal of `base`) is a **409**:
 the tip is already merged into the base (or is the base itself), so there is
 nothing to review — a stray push of a landed commit is a visible error, not a
 silent no-op. **Idempotency**: re-applying the same `(change_id, idx)` is a
-no-op at the storage layer, so a crash-retry is safe. `partial` is sticky:
-present, it re-stamps the tip's latest revision (a push where nothing moved but
-`partial` flips is exactly `nit ready`); absent, the tip inherits its prior
-revision's flag.
+no-op at the storage layer, so a crash-retry is safe.
 
 A push touching N changes commits them in **N per-change transactions**,
 oldest-first — **not atomic across changes**. A crash or concurrent reader
 mid-push can see some changes recorded and others not; this is made safe by
 construction, because `path_from_tip` truncates on an unresolved `parent_sha`
-(a torn push renders a partial chain, never an error).
+(a torn push renders a truncated chain, never an error).
 
 ## Lifecycle timer
 
@@ -505,7 +490,7 @@ the cursor it passes back, so they never wake it). The return hands back the
 whole gap since the cursor plus the derived chain-state (`feedback`).
 
 `nit log --follow --reviewer-only` mutes the agent's own entries
-(`revision`/`comment`/`partial`) and the automatic `merged` lifecycle (the
+(`revision`/`comment`) and the automatic `merged` lifecycle (the
 timer's, not the reviewer's) client-side, relaying only reviewer activity —
 verdicts plus the `abandoned`/`reopened` decisions.
 **Deferred:** muting a sibling-chain note on a revision the follower's path

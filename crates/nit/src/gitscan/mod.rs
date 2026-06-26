@@ -349,7 +349,6 @@ mod tests {
             parent_sha: base.to_string(),
             base_sha: base.to_string(),
             message: keyed("subject", key),
-            partial: false,
             resets_status: true,
             created_at: "t0".to_string(),
         });

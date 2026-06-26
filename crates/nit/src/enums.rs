@@ -71,7 +71,6 @@ pub enum LogKind {
     Review,
     Comment,
     Lifecycle,
-    Partial,
 }
 
 impl LogKind {
@@ -84,7 +83,6 @@ impl LogKind {
             LogKind::Review => "review",
             LogKind::Comment => "comment",
             LogKind::Lifecycle => "lifecycle",
-            LogKind::Partial => "partial",
         }
     }
 }
@@ -98,7 +96,6 @@ impl std::str::FromStr for LogKind {
             "review" => Ok(LogKind::Review),
             "comment" => Ok(LogKind::Comment),
             "lifecycle" => Ok(LogKind::Lifecycle),
-            "partial" => Ok(LogKind::Partial),
             other => Err(format!("unknown log entry kind {other:?}")),
         }
     }

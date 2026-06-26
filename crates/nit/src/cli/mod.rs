@@ -1,4 +1,4 @@
-//! `nit push` / `ready` / `status` / `log` / `comment` / `reopen` — thin CLI
+//! `nit push` / `status` / `log` / `comment` / `reopen` — thin CLI
 //! clients of the HTTP API, run by coding agents from inside a git repo
 //! (docs/agent-workflow.md). They print API JSON to stdout and decide purely on
 //! the documented shapes; all review logic lives server-side.
@@ -26,7 +26,7 @@ mod wait;
 pub use comment::{CommentArgs, comment};
 pub use lifecycle::{AbandonArgs, ReopenArgs, abandon, reopen};
 pub use log::{LogArgs, log};
-pub use push::{PushArgs, ReadyArgs, push, ready};
+pub use push::{PushArgs, push};
 pub use repo::{RepoArgs, repo};
 pub use status::{StatusArgs, status};
 pub use wait::{WaitArgs, wait};

@@ -24,7 +24,7 @@ struct Target {
 
 #[expect(
     clippy::too_many_lines,
-    reason = "one push flow: resolve, walk, pre-flight, per-commit upsert+append, partial, result"
+    reason = "one push flow: resolve, walk, pre-flight, per-commit upsert+append, result"
 )]
 pub(super) async fn push(
     State(state): State<Arc<AppState>>,
@@ -99,15 +99,11 @@ pub(super) async fn push(
                 ),
                 None => true,
             };
-            let partial = req
-                .partial
-                .unwrap_or_else(|| prior.as_ref().is_some_and(|r| r.partial));
             let new = review::EntryPayload::Revision(RevisionPayload {
                 commit_sha: wc.commit_sha.clone(),
                 parent_sha: wc.parent_sha.clone(),
                 base_sha: walk.fork_sha.clone(),
                 message: wc.message.clone(),
-                partial,
                 resets_status,
             });
             append_to_change(conn, &t.entry, t.change_id, vec![new]).map_err(map_busy)?;
@@ -133,19 +129,6 @@ pub(super) async fn push(
                         },
                     });
                 }
-            }
-        }
-
-        // The tip's partial flag (sticky). Re-stamp it when `req.partial`
-        // differs from the tip's latest revision — this is what `nit ready`
-        // (no revision moved) flips.
-        if let (Some(req_partial), Some(tip)) = (req.partial, targets.last()) {
-            let current = tip.entry.read().latest_revision().map(|r| r.partial);
-            if current != Some(req_partial) {
-                let new = review::EntryPayload::Partial(review::PartialPayload {
-                    partial: req_partial,
-                });
-                append_to_change(conn, &tip.entry, tip.change_id, vec![new]).map_err(map_busy)?;
             }
         }
 

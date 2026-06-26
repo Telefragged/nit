@@ -191,18 +191,8 @@ impl RepoView {
     }
 }
 
-/// Whether a path is partial: its **tip** change's latest revision is partial
-/// (the tip is the work frontier — the most recent push's intent governs).
-#[must_use]
-pub fn is_partial(view: &RepoView, path: &[PathMember]) -> bool {
-    path.last()
-        .and_then(|m| view.change(m.change_id))
-        .is_some_and(ChangeProj::is_partial)
-}
-
 /// Derived chain state over a path's members, each at its pinned revision
-/// (docs/api.md state table). A pure function of the members' displayed status
-/// plus the tip's partial flag.
+/// (docs/api.md state table). A pure function of the members' displayed status.
 #[must_use]
 pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     if path.is_empty() {
@@ -231,8 +221,6 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
         ChainState::AgentsTurn
     } else if statuses.contains(&ChangeStatus::Pending) {
         ChainState::WaitingForReview
-    } else if is_partial(view, path) {
-        ChainState::AgentsTurn // all approved but still pushing
     } else {
         ChainState::Approved
     }
@@ -323,7 +311,6 @@ mod tests {
             parent_sha: parent.to_string(),
             base_sha: base.to_string(),
             message: format!("subject {sha}"),
-            partial: false,
             resets_status: true,
             created_at: "t0".to_string(),
         }

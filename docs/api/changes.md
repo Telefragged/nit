@@ -15,7 +15,7 @@
   }
   Revision = {"number": 2, "commit_sha": "…",
               "parent_sha": "…", "base_sha": "…",
-              "partial": false, "message": "full commit message\n…",
+              "message": "full commit message\n…",
               "created_at": "…"}
   Review   = {"id": 5, "revision": 2, "verdict": "request_changes",
               "message": "cover message", "created_at": "…"}

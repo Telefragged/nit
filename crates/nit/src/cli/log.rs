@@ -27,7 +27,7 @@ pub struct LogArgs {
     #[arg(long)]
     pub follow: bool,
     /// With `--follow`, relay only the reviewer's activity: drop the agent's
-    /// own entries (`revision`/`comment`/`partial`) and the automatic `merged`
+    /// own entries (`revision`/`comment`) and the automatic `merged`
     /// lifecycle.
     #[arg(long, requires = "follow")]
     pub reviewer_only: bool,
@@ -68,7 +68,7 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// Follow the aggregated chain log as a parked monitor: replay `(cursor, head]`,
 /// then relay each new entry as it lands, until stopped. Rides out restarts
 /// (reconnect re-reads the gap from the log). `reviewer_only` drops the agent's
-/// own entries (`revision`/`comment`/`partial`).
+/// own entries (`revision`/`comment`).
 ///
 /// # Errors
 /// When a connect fails fatally or stdout can't be written.
@@ -155,13 +155,13 @@ fn follow_cursor(spec: &str) -> Result<u64> {
 }
 
 /// A log entry `--reviewer-only` suppresses: the agent's own echoes
-/// (`revision`/`comment`/`partial`) and the automatic `merged` lifecycle
-/// (written by the merge timer, not the reviewer). Reviewer verdicts and the
-/// reviewer-driven `abandoned`/`reopened` lifecycle always reach the monitor.
-/// Unrecognized kinds fail open.
+/// (`revision`/`comment`) and the automatic `merged` lifecycle (written by the
+/// merge timer, not the reviewer). Reviewer verdicts and the reviewer-driven
+/// `abandoned`/`reopened` lifecycle always reach the monitor. Unrecognized
+/// kinds fail open.
 fn muted_by_reviewer_only(entry: &Value) -> bool {
     match entry["kind"].as_str() {
-        Some("revision" | "comment" | "partial") => true,
+        Some("revision" | "comment") => true,
         Some("lifecycle") => entry["payload"]["action"].as_str() == Some("merged"),
         _ => false,
     }
@@ -248,7 +248,6 @@ mod tests {
         // The agent's own writes.
         assert!(kind("revision"));
         assert!(kind("comment"));
-        assert!(kind("partial"));
         // The automatic merge is the timer's, not reviewer activity.
         assert!(life("merged"));
         // Reviewer activity and reviewer-driven lifecycle reach the monitor.

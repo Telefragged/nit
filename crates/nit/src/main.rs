@@ -23,8 +23,6 @@ enum Cmd {
     Serve(server::ServeArgs),
     /// Push the cwd's checked-out commit (or [COMMIT]) for review (idempotent)
     Push(cli::PushArgs),
-    /// Mark the chain complete: clear the partial flag and refresh (idempotent)
-    Ready(cli::ReadyArgs),
     /// Block until log entries land beyond the seq cursor; prints {cursor, entries, feedback}
     Wait(cli::WaitArgs),
     /// Print the chain's status (--oneline for a digest)
@@ -52,7 +50,6 @@ fn main() -> Result<()> {
     match Args::parse().cmd {
         Cmd::Serve(args) => server::run(args),
         Cmd::Push(args) => cli::push(args),
-        Cmd::Ready(args) => cli::ready(args),
         Cmd::Wait(args) => cli::wait(args),
         Cmd::Status(args) => cli::status(args),
         Cmd::Log(args) => cli::log(args),

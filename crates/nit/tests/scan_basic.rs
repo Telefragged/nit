@@ -33,7 +33,7 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     g.branch("feat", c2);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
 
     // The tip change is I002 at revision 0, pending.
@@ -79,7 +79,7 @@ fn chains_lists_one_ordered_tip() {
     let c3 = g.commit(&[c2], &msg("three", "I003"), &[("c.rs", "c\n")]);
     g.branch("feat", c3);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &g, "feat", "main", None);
+    let (st, _) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
 
     let chain = only_chain(&server);
@@ -105,12 +105,12 @@ fn no_op_repush_is_idempotent() {
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &g, "feat", "main", None);
+    let (st, _) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
     let id = member_id(&server, &only_chain(&server), "I001");
 
     // Nothing moved: a re-push is a 200 that records no new revision.
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     assert_eq!(res["tip_change"]["revision"], 0);
     let (_, detail) = http_get(&server.url(&format!("/api/changes/{id}")));
@@ -127,13 +127,13 @@ fn extending_the_branch_adds_a_change() {
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &g, "feat", "main", None);
+    let (st, _) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
 
     // A new commit on top is a new change; the chain extends, prior change untouched.
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
     g.branch("feat", c2);
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     assert_eq!(res["tip_change"]["change_key"], "I002");
     assert_eq!(res["tip_change"]["revision"], 0);
@@ -155,14 +155,14 @@ fn amend_opens_revision_one_on_the_change() {
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
     let id = member_id(&server, &res, "I001");
 
     // Amend: same Change-Id, new content → revision 1 on the same change.
     let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "different\n")]);
     g.branch("feat", c1b);
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     assert_eq!(
         res["tip_change"]["change_id"], id,
@@ -186,7 +186,7 @@ fn merge_commit_rejects_the_push() {
     g.branch("feat", merge);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, e) = push(&server, &g, "feat", "main", None);
+    let (st, e) = push(&server, &g, "feat", "main");
     assert_eq!(st, 400, "{e}");
     assert!(
         e["error"].as_str().unwrap().contains("merge commits"),
@@ -209,7 +209,7 @@ fn already_merged_commit_rejects_the_push() {
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, e) = push(&server, &g, "feat", "main", None);
+    let (st, e) = push(&server, &g, "feat", "main");
     assert_eq!(st, 409, "{e}");
     assert!(
         e["error"].as_str().unwrap().contains("already merged"),
@@ -227,7 +227,7 @@ fn missing_change_id_rejects_the_push() {
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, e) = push(&server, &g, "feat", "main", None);
+    let (st, e) = push(&server, &g, "feat", "main");
     assert_eq!(st, 400, "{e}");
     assert!(
         e["error"]
@@ -246,7 +246,7 @@ fn duplicate_change_id_rejects_the_push() {
     g.branch("feat", c2);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, e) = push(&server, &g, "feat", "main", None);
+    let (st, e) = push(&server, &g, "feat", "main");
     assert_eq!(st, 400, "{e}");
     assert!(
         e["error"]
@@ -270,7 +270,7 @@ fn fixup_subject_rejects_the_push() {
     g.branch("feat", fx);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (st, e) = push(&server, &g, "feat", "main", None);
+    let (st, e) = push(&server, &g, "feat", "main");
     assert_eq!(st, 400, "{e}");
     assert!(
         e["error"].as_str().unwrap().contains("fixup!/squash!"),

@@ -460,9 +460,9 @@ fn vs_parent_diff_is_never_drift_processed() {
     g.branch("feat2", r1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, p0) = push(&server, &g, "feat", "main", None);
+    let (st, p0) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "push r0: {p0}");
-    let (st, p1) = push(&server, &g, "feat2", "main", None);
+    let (st, p1) = push(&server, &g, "feat2", "main");
     assert_eq!(st, 200, "push r1: {p1}");
     let change_id = member_id(&server, &p1, "Ifeat");
 
@@ -521,7 +521,7 @@ fn http_interdiff_contains_a_pure_rebase() {
     g.branch("feat", c2_r0);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, p0) = push(&server, &g, "feat", "main", None);
+    let (st, p0) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "push the stack: {p0}");
     let change_id = member_id(&server, &p0, "Ifeat");
 
@@ -541,7 +541,7 @@ fn http_interdiff_contains_a_pure_rebase() {
         &[],
     );
     g.branch("feat", c2_r1);
-    let (st, p1) = push(&server, &g, "feat", "main", None);
+    let (st, p1) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "re-push: {p1}");
 
     // C2 is now at revision 1, a pure rebase of revision 0.

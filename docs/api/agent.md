@@ -46,7 +46,7 @@ LogEntry = {
   "change_id": 10,          // which change's log this entry belongs to
   "idx": 5,                 // 0-based position in THAT change's log
   "seq": 412,               // global, monotone across the repo (cross-change order)
-  "kind": "review",         // revision | review | comment | lifecycle | partial
+  "kind": "review",         // revision | review | comment | lifecycle
   "created_at": "…",
   "payload": { … }          // kind-specific; shapes in data-model.md "Payloads"
 }

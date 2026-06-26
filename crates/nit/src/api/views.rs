@@ -30,7 +30,6 @@ pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &str) -> types::Chain
         tip_change_id,
         repo_id,
         state: chain::derive_state(view, &path),
-        partial: chain::is_partial(view, &path),
         path: path_entries(view, &path),
     }
 }
@@ -338,7 +337,6 @@ pub fn revision_json(rev: &review::RevisionProj) -> types::Revision {
         commit_sha: rev.commit_sha.clone(),
         parent_sha: rev.parent_sha.clone(),
         base_sha: rev.base_sha.clone(),
-        partial: rev.partial,
         message: rev.message.clone(),
         created_at: rev.created_at.clone(),
     }

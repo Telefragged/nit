@@ -1,5 +1,5 @@
 //! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside a
-//! fixture repo against a real server. The agent drives push / ready / status /
+//! fixture repo against a real server. The agent drives push / status /
 //! log / comment / reopen one-shot (the live followers `nit wait` /
 //! `nit log --follow` return in a later stage) — docs/agent-workflow.md.
 //!
@@ -12,7 +12,7 @@ mod common;
 
 use std::process::Command;
 
-use common::{GitRepo, TestServer, msg, nit, nit_register, review};
+use common::{GitRepo, TestServer, msg, nit, nit_register};
 
 /// `nit push` prints a `PushResult` (`tip_change`) and registers the chain;
 /// `nit status`/`nit log` then read the derived chain back, resolved from the
@@ -27,7 +27,7 @@ fn push_prints_result_then_status_and_log_read_it_back() {
 
     // push <branch> from the cwd (base `main`). The result carries just the
     // tip change at rev 0 (0-based).
-    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
     assert_eq!(push["tip_change"]["revision"], 0, "{push}");
@@ -38,7 +38,6 @@ fn push_prints_result_then_status_and_log_read_it_back() {
     let (ok, status, stderr) = nit(&server, &g, &["status"]);
     assert!(ok, "{stderr}");
     assert_eq!(status["state"], "waiting_for_review");
-    assert_eq!(status["partial"], false);
     assert_eq!(status["path"].as_array().unwrap().len(), 1);
     assert_eq!(status["path"][0]["position"], 0);
     assert_eq!(status["path"][0]["change_key"], "Ia");
@@ -75,13 +74,13 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    let (ok, _push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
 
     // amend (same Change-Id Ia, new content -> new sha) = rev 1.
     let c1b = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nB\n")]);
     g.branch("feat", c1b);
-    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     assert_eq!(push["tip_change"]["revision"], 1, "amend is rev 1: {push}");
 
@@ -93,51 +92,11 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
     assert!(entries.iter().all(|e| e["kind"] == "revision"));
 
     // Re-push with nothing moved: idempotent, still rev 1, no new entry.
-    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     assert_eq!(push["tip_change"]["revision"], 1);
     let (_ok, log, _) = nit(&server, &g, &["log"]);
     assert_eq!(log["entries"].as_array().unwrap().len(), 2, "{log}");
-}
-
-/// `nit push --partial` marks the tip partial; `nit ready` clears it. While
-/// partial, an all-approved chain is `agents_turn`, never `approved`.
-#[test]
-fn partial_push_then_ready_clears_it() {
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
-    g.branch("feat", c1);
-    g.repo.set_head("refs/heads/feat").unwrap();
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-
-    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &["--partial"]);
-    assert!(ok, "{stderr}");
-    let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
-
-    // The push marked the tip partial; the derived chain reads back partial.
-    let (ok, status, stderr) = nit(&server, &g, &["status"]);
-    assert!(ok, "{stderr}");
-    assert_eq!(status["partial"], true);
-    assert_eq!(status["state"], "waiting_for_review");
-
-    // Reviewer approves the only change (stage a decision + submit the chain,
-    // as the browser would). The verdict lands on rev 0.
-    review(&server, change_id, "approve", "lgtm");
-
-    // Approved but still partial: agents_turn, never approved.
-    let (ok, status, stderr) = nit(&server, &g, &["status"]);
-    assert!(ok, "{stderr}");
-    assert_eq!(status["state"], "agents_turn");
-    assert_eq!(status["partial"], true);
-    assert_eq!(status["path"][0]["status"], "approved");
-
-    // ready clears the sticky flag; the approved chain becomes mergeable.
-    let (ok, _ready, stderr) = nit_register(&server, &g, "ready", "feat", &[]);
-    assert!(ok, "{stderr}");
-    let (ok, status, stderr) = nit(&server, &g, &["status"]);
-    assert!(ok, "{stderr}");
-    assert_eq!(status["partial"], false);
-    assert_eq!(status["state"], "approved");
 }
 
 /// `nit comment --change-id` opens a thread; `--thread … --resolve` replies and
@@ -149,7 +108,7 @@ fn comment_opens_replies_resolves() {
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (ok, _push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    let (ok, _push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
 
     // Open a new thread on the change, resolved by the cwd's Change-Id. Returns
@@ -225,7 +184,7 @@ fn reopen_an_abandoned_change() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
 
@@ -245,7 +204,7 @@ fn reopen_an_abandoned_change() {
     assert_eq!(detail["change_key"], "Ia");
 
     // After reopen the change is pushable again (no 409 gate).
-    let (ok, push, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "reopened change accepts a push: {stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
 }
@@ -261,7 +220,7 @@ fn push_without_change_id_fails_with_a_helpful_message() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _json, stderr) = nit_register(&server, &g, "push", "feat", &[]);
+    let (ok, _json, stderr) = nit_register(&server, &g, "feat");
     assert!(!ok, "a missing Change-Id must fail the push");
     assert!(
         stderr.contains("Change-Id trailer"),

@@ -29,7 +29,7 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, res) = push(&server, &g, "feat", "main", None);
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
     assert_eq!(status_at(&server, change_id, 0).as_deref(), Some("pending"));

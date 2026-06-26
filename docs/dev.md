@@ -179,7 +179,7 @@ on PATH, else `nix run '…?ref=main#nit'`), not your branch's binary.
 
 ### The approve action
 
-nit derives `approved` (every live change approved, chain not `partial`)
+nit derives `approved` (every live change approved)
 but doesn't prescribe landing — each project defines that. Here it's a
 fast-forward-only merge to `main` (no merge commits — golden rule 2). The
 agent that built the chain **drives it all the way to `merged`**: reaching
