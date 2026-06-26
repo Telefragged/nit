@@ -54,10 +54,7 @@ pub(super) async fn revision_diff(
                         .ok_or_else(|| Error::not_found(format!("revision {m} not found")))
                 })
                 .transpose()?;
-            let git_dir = state
-                .repo_state(proj.repo_id)
-                .ok_or_else(|| Error::internal("repo not loaded"))?
-                .git_dir();
+            let git_dir = state.git_dir(proj.repo_id)?;
             (git_dir, rev, against)
         };
         let repo = Repository::open(&git_dir)

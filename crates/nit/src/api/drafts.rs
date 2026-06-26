@@ -40,10 +40,7 @@ pub(super) async fn create_draft(
             }
             None => None,
         };
-        let git_dir = state
-            .repo_state(proj.repo_id)
-            .ok_or_else(|| Error::internal("repo not loaded"))?
-            .git_dir();
+        let git_dir = state.git_dir(proj.repo_id)?;
         let line_text = snapshot_line_text(&git_dir, rev, req.file.as_deref(), req.line, side);
         drop(proj);
         let draft_id = state.alloc_id();

@@ -206,6 +206,17 @@ impl AppState {
             .cloned()
     }
 
+    /// The git-common-dir of a loaded repo (the read-side git work needs it).
+    ///
+    /// # Errors
+    /// When the repo is not in the registry cache.
+    pub fn git_dir(&self, repo_id: u64) -> Result<String, Error> {
+        Ok(self
+            .repo_state(repo_id)
+            .ok_or_else(|| Error::internal("repo not loaded"))?
+            .git_dir())
+    }
+
     /// Loaded repo ids, ascending.
     ///
     /// # Panics

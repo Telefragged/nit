@@ -58,10 +58,7 @@ pub(super) async fn create_comment(
                 let rev = proj
                     .revision(revision)
                     .ok_or_else(|| Error::bad_request(format!("revision {revision} not found")))?;
-                let git_dir = state
-                    .repo_state(proj.repo_id)
-                    .ok_or_else(|| Error::internal("repo not loaded"))?
-                    .git_dir();
+                let git_dir = state.git_dir(proj.repo_id)?;
                 let line_text =
                     snapshot_line_text(&git_dir, rev, req.file.as_deref(), req.line, side);
                 CommentInput {
