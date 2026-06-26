@@ -191,16 +191,6 @@ impl Decision {
     }
 }
 
-impl From<Verdict> for Decision {
-    fn from(verdict: Verdict) -> Decision {
-        match verdict {
-            Verdict::Approve => Decision::Approve,
-            Verdict::RequestChanges => Decision::RequestChanges,
-            Verdict::Comment => Decision::Comment,
-        }
-    }
-}
-
 impl std::str::FromStr for Decision {
     type Err = String;
 
