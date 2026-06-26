@@ -77,11 +77,11 @@ pub(super) async fn create_comment(
                 }
             }
         };
-        let new = review::EntryPayload::Comment(review::CommentPayload { comment });
+        let new = review::EntryPayload::Comment(comment);
         // A new thread's id is minted during the append, so read it back here.
         let applied = append_to_change(conn, &entry, id, vec![new]).map_err(map_busy)?;
         let thread_id = match applied.first().map(|e| &e.payload) {
-            Some(review::EntryPayload::Comment(p)) => p.comment.thread_id,
+            Some(review::EntryPayload::Comment(c)) => c.thread_id,
             _ => None,
         }
         .ok_or_else(|| Error::internal("comment append minted no thread"))?;

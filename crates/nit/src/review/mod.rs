@@ -79,14 +79,6 @@ pub struct ReviewPayload {
     pub comments: Vec<CommentInput>,
 }
 
-/// The `comment` kind: one comment an agent posts, opening a thread or
-/// continuing one.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommentPayload {
-    #[serde(flatten)]
-    pub comment: CommentInput,
-}
-
 /// A comment inside a `review` or `comment` payload: with `thread_id` unset it
 /// **opens a new thread** anchored by the fields below; with it set it
 /// **replies** to that thread (the anchor is ignored — the thread owns it).
@@ -144,7 +136,8 @@ pub struct LifecyclePayload {
 pub enum EntryPayload {
     Revision(RevisionPayload),
     Review(ReviewPayload),
-    Comment(CommentPayload),
+    /// One agent comment (the `comment` kind), opening a thread or replying.
+    Comment(CommentInput),
     Partial(PartialPayload),
     Lifecycle(LifecyclePayload),
 }
@@ -483,9 +476,9 @@ pub fn fold(change: &mut ChangeProj, mut entry: Entry) -> Entry {
                 apply_comment(change, c, Some(p.review_id), &now);
             }
         }
-        EntryPayload::Comment(p) => {
-            change.mint_thread_id(&mut p.comment);
-            apply_comment(change, &p.comment, None, &now);
+        EntryPayload::Comment(c) => {
+            change.mint_thread_id(c);
+            apply_comment(change, c, None, &now);
         }
         EntryPayload::Partial(p) => {
             if let Some(rev) = change.revisions.last_mut() {
