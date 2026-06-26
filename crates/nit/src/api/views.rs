@@ -30,7 +30,6 @@ pub fn build_chain_summary(view: &RepoView, repo_id: u64, tip_sha: &str) -> type
         repo_id,
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
-        updated_at: path_updated_at(view, &path),
         path: path_entries(view, &path),
     }
 }
@@ -53,15 +52,6 @@ pub fn build_chain(
         partial: chain::is_partial(view, &path),
         path: path_entries(view, &path),
     }
-}
-
-/// The newest member `updated_at` across a path.
-fn path_updated_at(view: &RepoView, path: &[PathMember]) -> String {
-    path.iter()
-        .filter_map(|m| view.change(m.change_id))
-        .map(|c| c.updated_at().to_string())
-        .max()
-        .unwrap_or_default()
 }
 
 /// One `PathEntry` per member, read at the revision the path pins.

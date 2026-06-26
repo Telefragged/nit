@@ -45,7 +45,6 @@ ChainSummary = {
   "repo_id": 1,                  // the repo this chain belongs to
   "state": "waiting_for_review", // derived — see state table
   "partial": false,              // the tip's latest revision is partial
-  "updated_at": "…",             // newest member entry's time
   "path": [PathEntry]            // oldest-first, base → tip
 }
 Chain = {

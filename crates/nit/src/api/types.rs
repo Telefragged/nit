@@ -119,8 +119,6 @@ pub struct ChainSummary {
     pub state: ChainState,
     /// The tip's latest revision is partial.
     pub partial: bool,
-    /// Newest member-entry time across the path.
-    pub updated_at: String,
     /// Oldest-first, base → tip.
     pub path: Vec<PathEntry>,
 }

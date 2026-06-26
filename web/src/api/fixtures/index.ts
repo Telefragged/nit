@@ -264,25 +264,6 @@ function chainState(tip: TipRecord, path: PathEntry[]): ChainState {
   return tip.partial ? "agents_turn" : "approved";
 }
 
-const newestEntryTime = (path: PathEntry[]): string => {
-  // The newest member-entry time across the path; fall back to the latest
-  // revision's created_at via the change set.
-  let newest = "";
-  for (const e of path) {
-    const c = changes.find((x) => x.id === e.change_id);
-    const rev = c?.revisions.find((r) => r.number === e.revision);
-    for (const t of [
-      rev?.created_at,
-      ...threads
-        .filter((th) => th.change_id === e.change_id)
-        .map((th) => th.updated_at),
-    ]) {
-      if (t && t > newest) newest = t;
-    }
-  }
-  return newest;
-};
-
 function chainSummary(tip: TipRecord): ChainSummary {
   const path = derivePath(tip);
   return {
@@ -290,7 +271,6 @@ function chainSummary(tip: TipRecord): ChainSummary {
     repo_id: tip.repo_id,
     state: chainState(tip, path),
     partial: tip.partial,
-    updated_at: newestEntryTime(path),
     path,
   };
 }
