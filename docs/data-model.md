@@ -27,9 +27,9 @@ a client decision ("Wake rule" below). The web polls the same folds.
 ## Tables
 
 ```sql
-repos   (id, git_dir, base_branch, base_head, UNIQUE(git_dir))
+repos   (id, git_dir, base_ref, base_head, UNIQUE(git_dir))
         -- the registry. git_dir is the canonical git-common-dir — the repo's
-        -- identity *and* display name; `nit repo move` repoints it. base_branch
+        -- identity *and* display name; `nit repo move` repoints it. base_ref
         -- is the repo's one canonical branch, set at `nit repo create`; mergedness
         -- always tracks it (there is no land-anywhere). base_head is the merge
         -- timer's baseline — the canonical-branch HEAD it last reconciled against
@@ -353,7 +353,7 @@ upsert keyed by its `Change-Id`.
 
 1. Look up the repo by its `git_dir`; an unregistered repo is a `404`
    (`nit repo create` first). The canonical `base` is the repo's stored
-   `base_branch` (set at create — push neither takes nor configures a base);
+   `base_ref` (set at create — push neither takes nor configures a base);
    `base` and `tip` failing to resolve is a `400`.
 2. `fork = merge-base(base, tip)`; walk `fork..tip` oldest-first
    (`gitscan::walk_push`). The walk is **all-or-nothing** — a `400` rejects the

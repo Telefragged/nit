@@ -44,7 +44,7 @@ pub(super) async fn push(
             ))
         })?;
         state.ensure_repo(&repo_row);
-        let base = repo_row.base_branch.clone();
+        let base = repo_row.base_ref.clone();
 
         let walk = gitscan::walk_push(&canonical, &base, &req.tip).map_err(Error::bad_request)?;
         // A tip that is ancestor-or-equal of the base walks to nothing: the work

@@ -2,7 +2,7 @@
 
 A repo is the registry grouping for changes; its identity is the
 **git-common-dir** (the `.git` dir, shared across worktrees), which is also
-its display name. A repo has exactly **one canonical branch** (`base_branch`)
+its display name. A repo has exactly **one canonical branch** (`base_ref`)
 — mergedness is always tracked against it, there is no land-anywhere. The web
 main page lists repos, each linking to that repo's chains. A repo is
 registered explicitly with `nit repo create` (`POST /api/repos`); a
@@ -34,7 +34,7 @@ registered explicitly with `nit repo create` (`POST /api/repos`); a
 Repo = {
   "id": 1,
   "git_dir": "/abs/path/.git",   // canonical git-common-dir — identity + name
-  "base_branch": "main",         // the one canonical branch; mergedness tracks it
+  "base_ref": "main",         // the one canonical branch; mergedness tracks it
   "active_chains": 2             // live tip count (derived from the tip set)
 }
 ```

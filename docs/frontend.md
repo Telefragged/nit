@@ -23,7 +23,7 @@ events is the planned replacement for live refresh.
 ## Pages
 
 - `/` **Repos** — table of registered repos: git-common-dir path (its
-  identity _and_ name), its `base_branch`, and a live **active-chain count**
+  identity _and_ name), its `base_ref`, and a live **active-chain count**
   (the repo's tip-commit count, derived). Click through to a repo's chains.
 - `/repos/:id` **Dashboard** — the repo's chains as collapsible drawers, one
   per derived **tip**. The drawer header is the summary: best-effort name

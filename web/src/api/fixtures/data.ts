@@ -60,9 +60,9 @@ import type {
 // Repos
 
 export const repos: RepoRecord[] = [
-  { id: 1, git_dir: "/home/vetle/src/acme-runtime/.git", base_branch: "main" },
-  { id: 2, git_dir: "/home/vetle/src/quarry/.git", base_branch: "main" },
-  { id: 3, git_dir: "/home/vetle/src/orbit/.git", base_branch: "main" },
+  { id: 1, git_dir: "/home/vetle/src/acme-runtime/.git", base_ref: "main" },
+  { id: 2, git_dir: "/home/vetle/src/quarry/.git", base_ref: "main" },
+  { id: 3, git_dir: "/home/vetle/src/orbit/.git", base_ref: "main" },
 ];
 
 // ---------------------------------------------------------------------------

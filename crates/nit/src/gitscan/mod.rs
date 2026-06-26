@@ -154,8 +154,8 @@ pub fn pure_rebase(
 /// The canonical branch's current HEAD sha, or `None` when it can't be
 /// resolved (the merge timer's per-sweep baseline check).
 #[must_use]
-pub fn resolve_head(repo: &Repository, base_branch: &str) -> Option<String> {
-    Some(resolve_commit(repo, base_branch).ok()?.to_string())
+pub fn resolve_head(repo: &Repository, base_ref: &str) -> Option<String> {
+    Some(resolve_commit(repo, base_ref).ok()?.to_string())
 }
 
 /// Landings observed on the canonical branch in the window `since..head` (the
@@ -251,10 +251,10 @@ pub struct HistoryCommit {
 /// When the canonical branch can't be resolved or the walk fails.
 pub fn canonical_history(
     repo: &Repository,
-    base_branch: &str,
+    base_ref: &str,
     window: u64,
 ) -> Result<(Vec<HistoryCommit>, bool), String> {
-    let head = resolve_commit(repo, base_branch)?;
+    let head = resolve_commit(repo, base_ref)?;
     let mut walk = repo.revwalk().map_err(|e| e.to_string())?;
     walk.push(head).map_err(|e| e.to_string())?;
     walk.set_sorting(Sort::TOPOLOGICAL)

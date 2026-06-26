@@ -77,11 +77,11 @@ pub fn build_graph(
     repo: &Repository,
     view: &RepoView,
     repo_id: u64,
-    base_branch: &str,
+    base_ref: &str,
     merged_window: u64,
 ) -> Result<types::RepoGraph> {
     let (history, history_truncated) =
-        gitscan::canonical_history(repo, base_branch, merged_window).map_err(anyhow::Error::msg)?;
+        gitscan::canonical_history(repo, base_ref, merged_window).map_err(anyhow::Error::msg)?;
     let anchor = history.first().map_or_else(String::new, |h| h.sha.clone());
 
     let mut nodes: Vec<types::GraphNode> = Vec::new();

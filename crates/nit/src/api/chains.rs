@@ -74,7 +74,7 @@ pub(super) async fn repo_graph(
             &repo,
             &view,
             repo_id,
-            &repo_state.base_branch,
+            &repo_state.base_ref,
             MERGED_WINDOW,
         )?))
     })

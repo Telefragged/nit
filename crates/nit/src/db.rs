@@ -152,6 +152,10 @@ const MIGRATIONS: &[&str] = &[
     // when it has drifted); NULL only for a change that has never appended (a
     // torn push), until its next append or restart.
     "ALTER TABLE changes ADD COLUMN status TEXT;",
+    // v4: rename the canonical-base column to `base_ref` — the stored value is
+    // a git ref, not necessarily a local branch (docs/data-model.md "Tables").
+    // A rename only; the stored value and its resolution are unchanged.
+    "ALTER TABLE repos RENAME COLUMN base_branch TO base_ref;",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -233,7 +237,7 @@ pub struct RepoRow {
     /// Canonical git-common-dir — the repo's identity and its display name.
     pub git_dir: String,
     /// The repo's one canonical branch; mergedness always tracks it.
-    pub base_branch: String,
+    pub base_ref: String,
     /// The canonical-branch HEAD the merge timer last reconciled against
     /// (docs/data-model.md "Lifecycle timer"); `None` until first observed.
     pub base_head: Option<String>,
@@ -243,7 +247,7 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
     Ok(RepoRow {
         id: col_u64(row.get("id")?)?,
         git_dir: row.get("git_dir")?,
-        base_branch: row.get("base_branch")?,
+        base_ref: row.get("base_ref")?,
         base_head: row.get("base_head")?,
     })
 }
@@ -254,15 +258,15 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
 ///
 /// # Errors
 /// On a database failure, including the `UNIQUE(git_dir)` clash.
-pub fn create_repo(conn: &Connection, git_dir: &str, base_branch: &str) -> Result<RepoRow> {
+pub fn create_repo(conn: &Connection, git_dir: &str, base_ref: &str) -> Result<RepoRow> {
     conn.execute(
-        "INSERT INTO repos (git_dir, base_branch) VALUES (?1, ?2)",
-        params![git_dir, base_branch],
+        "INSERT INTO repos (git_dir, base_ref) VALUES (?1, ?2)",
+        params![git_dir, base_ref],
     )?;
     Ok(RepoRow {
         id: col_u64(conn.last_insert_rowid())?,
         git_dir: git_dir.to_string(),
-        base_branch: base_branch.to_string(),
+        base_ref: base_ref.to_string(),
         base_head: None,
     })
 }
@@ -800,11 +804,11 @@ mod tests {
     fn create_repo_registers_and_find_locates() {
         let conn = mem();
         let a = create_repo(&conn, "/r/.git", "main").expect("create");
-        assert_eq!(a.base_branch, "main");
+        assert_eq!(a.base_ref, "main");
         // The same git dir is found by `find_repo` (and the row carries its base).
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
         assert_eq!(found.id, a.id);
-        assert_eq!(found.base_branch, "main");
+        assert_eq!(found.base_ref, "main");
         // A different git dir is a distinct repo.
         let b = create_repo(&conn, "/other/.git", "main").expect("create");
         assert_ne!(a.id, b.id);

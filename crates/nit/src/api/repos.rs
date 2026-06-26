@@ -18,7 +18,7 @@ fn repo_json(state: &AppState, row: db::RepoRow) -> types::Repo {
     types::Repo {
         id: row.id,
         git_dir: row.git_dir,
-        base_branch: row.base_branch,
+        base_ref: row.base_ref,
         active_chains: active,
     }
 }
@@ -121,7 +121,7 @@ pub(super) async fn relocate_repo(
         let row = db::RepoRow {
             id: repo_id,
             git_dir: canonical,
-            base_branch: existing.base_branch,
+            base_ref: existing.base_ref,
             base_head: existing.base_head,
         };
         state.ensure_repo(&row);

@@ -40,7 +40,7 @@ pub struct Repo {
     /// Canonical git-common-dir — the repo's identity and display name.
     pub git_dir: String,
     /// The one canonical branch; mergedness tracks it.
-    pub base_branch: String,
+    pub base_ref: String,
     /// Live tip count (derived from the tip set, never stored).
     pub active_chains: u64,
 }
@@ -78,7 +78,7 @@ pub struct AbandonRequest {
 
 /// `POST /api/push` request (this is `nit push`). The repo must already be
 /// registered (`nit repo create`); the canonical branch is its stored
-/// `base_branch`, so push takes no base.
+/// `base_ref`, so push takes no base.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushRequest {
     pub git_dir: String,

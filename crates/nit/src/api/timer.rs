@@ -60,7 +60,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         let Ok(repo) = Repository::open(repo_state.git_dir()) else {
             continue;
         };
-        let Some(head) = gitscan::resolve_head(&repo, &repo_state.base_branch) else {
+        let Some(head) = gitscan::resolve_head(&repo, &repo_state.base_ref) else {
             continue;
         };
         let recorded = db::get_repo(conn, repo_id)

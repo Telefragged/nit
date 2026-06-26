@@ -48,7 +48,7 @@ export interface TipRecord {
 export interface RepoRecord {
   id: number;
   git_dir: string;
-  base_branch: string;
+  base_ref: string;
 }
 
 /** A published thread (its anchor, rolled-up resolution and conversation) —

@@ -1,6 +1,6 @@
 //! The repo registry over HTTP (docs/api.md "Repos"). A repo is registered
 //! explicitly with `nit repo create` (`POST /api/repos`), pinning its one
-//! canonical `base_branch`; its identity is the git-common-dir, and a push
+//! canonical `base_ref`; its identity is the git-common-dir, and a push
 //! into an unregistered repo is a 404. `GET /api/repos` lists each repo with
 //! its live-tip `active_chains` count, which excludes a fully merged/abandoned
 //! chain (decided only by the background timer). `GET /api/chains?repo={id}`
@@ -44,7 +44,7 @@ fn active_chains(server: &TestServer, id: u64) -> u64 {
 }
 
 #[test]
-fn repos_list_shape_base_branch_and_scoped_chains() {
+fn repos_list_shape_base_ref_and_scoped_chains() {
     // Two distinct repos (distinct git dirs); the second carries two chains —
     // `feat` and `topic` both fork straight off `main`, so each is its own
     // live tip (a leaf in the parent DAG), not one stacked on the other.
@@ -86,9 +86,9 @@ fn repos_list_shape_base_branch_and_scoped_chains() {
     let id_b = repo_b["id"].as_u64().unwrap();
     assert_ne!(id_a, id_b, "distinct git dirs are distinct repos");
 
-    // Repo shape: id, git_dir, base_branch (set at create), active_chains.
-    assert_eq!(repo_a["base_branch"], "main");
-    assert_eq!(repo_b["base_branch"], "main");
+    // Repo shape: id, git_dir, base_ref (set at create), active_chains.
+    assert_eq!(repo_a["base_ref"], "main");
+    assert_eq!(repo_b["base_ref"], "main");
     assert_eq!(active_chains(&server, id_a), 1);
     assert_eq!(active_chains(&server, id_b), 2, "two independent tips");
 
@@ -139,7 +139,7 @@ fn create_repo_registers_and_pins_base() {
     let (st, repo) = create_repo(&server, &g, "main");
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
-    assert_eq!(repo["base_branch"], "main");
+    assert_eq!(repo["base_ref"], "main");
     assert_eq!(repo["active_chains"].as_u64(), Some(0));
     let id = first_repo(&server);
 
@@ -232,7 +232,7 @@ fn nit_repo_create_cli() {
     );
     let repo: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
-    assert_eq!(repo["base_branch"], "main");
+    assert_eq!(repo["base_ref"], "main");
 
     // The repo now shows up in `nit repo list` (≡ GET /api/repos).
     let (_, list) = http_get(&server.url("/api/repos"));
@@ -287,7 +287,7 @@ fn relocate_repo_endpoint() {
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["git_dir"].as_str().unwrap(), new_git_dir);
     assert_eq!(repo["id"].as_u64(), Some(repo_id));
-    assert_eq!(repo["base_branch"], "main", "base survives a relocation");
+    assert_eq!(repo["base_ref"], "main", "base survives a relocation");
 
     // GET /api/repos now reports the new path for the same id.
     let (_, list) = http_get(&server.url("/api/repos"));
@@ -315,7 +315,7 @@ fn get_repo_by_id_endpoint() {
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["id"].as_u64(), Some(repo_id));
     assert_eq!(repo["git_dir"].as_str().unwrap(), a.git_dir());
-    assert_eq!(repo["base_branch"], "main");
+    assert_eq!(repo["base_ref"], "main");
     assert_eq!(repo["active_chains"].as_u64(), Some(1));
 
     // Unknown id → 404.
@@ -412,7 +412,7 @@ fn first_repo(server: &TestServer) -> u64 {
     list["repos"][0]["id"].as_u64().expect("a repo")
 }
 
-/// A repo's recorded canonical `base_branch`.
+/// A repo's recorded canonical `base_ref`.
 fn repo_base(server: &TestServer, id: u64) -> String {
     let (_, list) = http_get(&server.url("/api/repos"));
     list["repos"]
@@ -421,8 +421,8 @@ fn repo_base(server: &TestServer, id: u64) -> String {
         .iter()
         .find(|r| r["id"].as_u64() == Some(id))
         .unwrap_or_else(|| panic!("repo {id} missing"))
-        .get("base_branch")
+        .get("base_ref")
         .and_then(|v| v.as_str())
-        .unwrap_or_else(|| panic!("no base_branch on repo {id}"))
+        .unwrap_or_else(|| panic!("no base_ref on repo {id}"))
         .to_string()
 }

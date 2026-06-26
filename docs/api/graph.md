@@ -15,7 +15,7 @@ git walk of the canonical branch for the merged history.
   not a refetch of the whole graph.
 
 The graph has three regions around the **canonical HEAD** anchor — resolved
-live from `base_branch`, never assumed equal to any one chain's recorded
+live from `base_ref`, never assumed equal to any one chain's recorded
 `base_sha` (each push computed its own merge-base):
 
 - **open** — every active change ascending above HEAD, derived exactly like

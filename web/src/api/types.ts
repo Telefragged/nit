@@ -10,7 +10,7 @@ export interface Repo {
   /** Canonical git-common-dir — the repo's identity and display name. */
   git_dir: string;
   /** The one canonical branch; mergedness tracks it. */
-  base_branch: string;
+  base_ref: string;
   /** Live tip count (derived from the tip set, never stored). */
   active_chains: number;
 }

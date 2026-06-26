@@ -47,14 +47,14 @@ pub struct AppState {
 /// timer's baseline is not cached here — it lives only in `repos.base_head`
 /// (docs/data-model.md "Lifecycle timer").
 pub struct RepoState {
-    pub base_branch: String,
+    pub base_ref: String,
     pub git_dir: StdRwLock<String>,
 }
 
 impl RepoState {
     fn new(row: &db::RepoRow) -> RepoState {
         RepoState {
-            base_branch: row.base_branch.clone(),
+            base_ref: row.base_ref.clone(),
             git_dir: StdRwLock::new(row.git_dir.clone()),
         }
     }

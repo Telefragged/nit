@@ -12,7 +12,7 @@
 --git-common-dir`), canonicalized server-side; the `nit` CLI infers it from
   the cwd. The repo must already be registered (`nit repo create`) — a push
   into an unknown git dir is a **404**; the canonical branch comes from the
-  stored `base_branch` (push does not take or configure a base). `tip` is any
+  stored `base_ref` (push does not take or configure a base). `tip` is any
   ref or rev, resolved to a commit at push time (the CLI sends the resolved
   commit sha of its checked-out HEAD by default); git is the source of truth
   for branch position, nit stores no branch sha.

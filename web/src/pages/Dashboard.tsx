@@ -62,7 +62,7 @@ export default function Dashboard() {
         {repo ? (
           <>
             {" "}
-            over <span className="mono">{repo.base_branch}</span>
+            over <span className="mono">{repo.base_ref}</span>
           </>
         ) : null}
         .

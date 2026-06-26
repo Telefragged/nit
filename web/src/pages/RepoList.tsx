@@ -14,7 +14,7 @@ function RepoRow({ repo }: { repo: Repo }) {
         <Link className="branch" to={`/repos/${repo.id}`}>
           {repoPath(repo.git_dir)}
         </Link>
-        <div className="repo">base {repo.base_branch}</div>
+        <div className="repo">base {repo.base_ref}</div>
       </td>
       <td className="count-cell">
         {repo.active_chains} active{" "}

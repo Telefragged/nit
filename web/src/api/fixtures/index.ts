@@ -303,7 +303,7 @@ function repoList(): Repo[] {
   return repos.map((r) => ({
     id: r.id,
     git_dir: r.git_dir,
-    base_branch: r.base_branch,
+    base_ref: r.base_ref,
     active_chains: tips.filter((t) => t.repo_id === r.id && t.active).length,
   }));
 }
