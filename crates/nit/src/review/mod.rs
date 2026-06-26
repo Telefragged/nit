@@ -373,15 +373,6 @@ impl ChangeProj {
         self.threads.iter().find(|t| t.id == id)
     }
 
-    /// Unresolved threads anchored at `revision` (the count the reviewer owes).
-    #[must_use]
-    pub fn unresolved_at(&self, revision: u64) -> usize {
-        self.threads
-            .iter()
-            .filter(|t| t.revision == revision && !t.resolved)
-            .count()
-    }
-
     #[must_use]
     pub fn is_terminal(&self) -> bool {
         !matches!(self.lifecycle, Lifecycle::Active)

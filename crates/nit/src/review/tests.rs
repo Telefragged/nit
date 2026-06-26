@@ -194,7 +194,6 @@ fn threads_open_reply_and_resolve() {
     assert_eq!(c.threads.len(), 1);
     assert_eq!(c.threads[0].comments.len(), 2);
     assert!(c.threads[0].resolved);
-    assert_eq!(c.unresolved_at(0), 0);
 }
 
 #[test]
@@ -208,7 +207,6 @@ fn agent_comment_opens_a_thread() {
     ]);
     assert_eq!(c.threads.len(), 1);
     assert_eq!(c.threads[0].comments[0].author, crate::enums::Author::Agent);
-    assert_eq!(c.unresolved_at(0), 1);
 }
 
 fn cinput(thread_id: Option<u64>, body: &str) -> CommentInput {
