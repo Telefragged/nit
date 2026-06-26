@@ -110,7 +110,16 @@ pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
             }
             match spa {
                 Some(spa) => match tower::ServiceExt::oneshot(spa, req).await {
-                    Ok(resp) => resp.into_response(),
+                    // Cap browser caching at a minute so a redeployed UI is
+                    // picked up promptly — index.html is unhashed and points at
+                    // the rest.
+                    Ok(mut resp) => {
+                        resp.headers_mut().insert(
+                            axum::http::header::CACHE_CONTROL,
+                            axum::http::HeaderValue::from_static("max-age=60"),
+                        );
+                        resp.into_response()
+                    }
                     Err(infallible) => match infallible {},
                 },
                 None => StatusCode::NOT_FOUND.into_response(),
