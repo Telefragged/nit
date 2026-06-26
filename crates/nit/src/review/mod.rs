@@ -150,6 +150,20 @@ pub enum EntryPayload {
 }
 
 impl EntryPayload {
+    /// A `lifecycle` entry from its parts (the merge timer, abandon/reopen).
+    #[must_use]
+    pub fn lifecycle(
+        action: LifecycleAction,
+        revision: Option<u64>,
+        message: Option<String>,
+    ) -> EntryPayload {
+        EntryPayload::Lifecycle(LifecyclePayload {
+            action,
+            revision,
+            message,
+        })
+    }
+
     /// The kind tag this entry stores under.
     #[must_use]
     pub fn kind(&self) -> LogKind {

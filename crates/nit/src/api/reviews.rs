@@ -69,7 +69,11 @@ fn publish_member(
 
     let mut news: Vec<review::EntryPayload> = Vec::new();
     if decision.as_lifecycle() == Some(LifecycleAction::Reopened) {
-        news.push(lifecycle_entry(LifecycleAction::Reopened, None));
+        news.push(review::EntryPayload::lifecycle(
+            LifecycleAction::Reopened,
+            None,
+            None,
+        ));
     }
     if let Some(verdict) = verdict {
         news.push(review::EntryPayload::Review(review::ReviewPayload {
@@ -88,7 +92,11 @@ fn publish_member(
     }
     if decision.as_lifecycle() == Some(LifecycleAction::Abandoned) {
         let reason = (!message.trim().is_empty()).then(|| message.to_string());
-        news.push(lifecycle_entry(LifecycleAction::Abandoned, reason));
+        news.push(review::EntryPayload::lifecycle(
+            LifecycleAction::Abandoned,
+            None,
+            reason,
+        ));
     }
 
     append_to_change_with(conn, entry, change_id, news, |tx| {
@@ -102,14 +110,6 @@ fn publish_member(
 }
 
 /// A `lifecycle` entry (revision is set only by the merge timer).
-fn lifecycle_entry(action: LifecycleAction, message: Option<String>) -> review::EntryPayload {
-    review::EntryPayload::Lifecycle(review::LifecyclePayload {
-        action,
-        revision: None,
-        message,
-    })
-}
-
 /// `PUT /api/changes/{id}/decision` — stage (or overwrite) the change's draft
 /// decision. Validated only as an enum; legality against the lifecycle is a
 /// submit-time concern (a draft is reviewer scratch).

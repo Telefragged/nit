@@ -105,11 +105,7 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
 /// Record a detected landing: the merge sweep's only lifecycle write, a
 /// `merged` entry on the change at the landed `revision`.
 fn record_landing(conn: &mut Connection, entry: &ChangeEntry, change_id: u64, revision: u64) {
-    let new = review::EntryPayload::Lifecycle(review::LifecyclePayload {
-        action: LifecycleAction::Merged,
-        revision: Some(revision),
-        message: None,
-    });
+    let new = review::EntryPayload::lifecycle(LifecycleAction::Merged, Some(revision), None);
     if let Err(e) = append_to_change(conn, entry, change_id, vec![new]) {
         tracing::warn!(change_id, "lifecycle append failed: {e:#}");
     }

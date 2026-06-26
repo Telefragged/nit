@@ -105,11 +105,7 @@ fn set_lifecycle(
     message: Option<String>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
     if guard(&entry.read().lifecycle) {
-        let new = review::EntryPayload::Lifecycle(review::LifecyclePayload {
-            action,
-            revision: None,
-            message,
-        });
+        let new = review::EntryPayload::lifecycle(action, None, message);
         append_to_change(conn, entry, id, vec![new]).map_err(map_busy)?;
     }
     change_detail_json(conn, entry)
