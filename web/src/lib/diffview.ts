@@ -55,19 +55,20 @@ export interface RowPair {
   right: Line | null;
 }
 
-/**
- * Pair a hunk's lines into side-by-side rows: context lines mirror, del runs
- * align index-wise with the add run that follows (git emits del before add
- * within a replacement block).
- */
-export function pairLines(lines: Line[]): RowPair[] {
-  const rows: RowPair[] = [];
+/** A hunk segment: a lone context line, or a replacement run (the del lines
+ * followed by the add lines — git emits del before add within a block). */
+type DiffBlock = { context: Line } | { dels: Line[]; adds: Line[] };
+
+/** Walk a hunk's lines as blocks, the shared structure behind side-by-side
+ * pairing and intraline marking. Each context line yields alone; a run of
+ * dels then adds yields as one replacement block. */
+function* diffBlocks(lines: Line[]): Generator<DiffBlock> {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
     if (line === undefined) break;
     if (line.kind === "context") {
-      rows.push({ left: line, right: line });
+      yield { context: line };
       i++;
       continue;
     }
@@ -85,6 +86,23 @@ export function pairLines(lines: Line[]): RowPair[] {
       adds.push(l);
       i++;
     }
+    yield { dels, adds };
+  }
+}
+
+/**
+ * Pair a hunk's lines into side-by-side rows: context lines mirror, del runs
+ * align index-wise with the add run that follows (git emits del before add
+ * within a replacement block).
+ */
+export function pairLines(lines: Line[]): RowPair[] {
+  const rows: RowPair[] = [];
+  for (const block of diffBlocks(lines)) {
+    if ("context" in block) {
+      rows.push({ left: block.context, right: block.context });
+      continue;
+    }
+    const { dels, adds } = block;
     const n = Math.max(dels.length, adds.length);
     for (let k = 0; k < n; k++) {
       rows.push({ left: dels[k] ?? null, right: adds[k] ?? null });
@@ -104,28 +122,9 @@ export type IntralineRange = [number, number];
  */
 export function intralineMarks(lines: Line[]): Map<Line, IntralineRange> {
   const marks = new Map<Line, IntralineRange>();
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line === undefined) break;
-    if (line.kind === "context") {
-      i++;
-      continue;
-    }
-    const dels: Line[] = [];
-    const adds: Line[] = [];
-    while (i < lines.length) {
-      const l = lines[i];
-      if (l?.kind !== "del") break;
-      dels.push(l);
-      i++;
-    }
-    while (i < lines.length) {
-      const l = lines[i];
-      if (l?.kind !== "add") break;
-      adds.push(l);
-      i++;
-    }
+  for (const block of diffBlocks(lines)) {
+    if ("context" in block) continue;
+    const { dels, adds } = block;
     const n = Math.min(dels.length, adds.length);
     for (let k = 0; k < n; k++) {
       const del = dels[k];
