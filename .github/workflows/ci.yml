@@ -30,12 +30,37 @@ jobs:
           fi
           echo "shas=$shas" >> "$GITHUB_OUTPUT"
 
-  # Build and run the full check suite on each commit, in parallel — one runner
-  # per commit. fail-fast is off so every commit is reported, not just the
-  # first to break.
-  check:
+  # Warm the shared dependency closure once and save it under the primary key,
+  # so the per-commit matrix below restores it instead of every leg rebuilding
+  # the same deps and racing to save the same (immutable) key. It builds the
+  # pushed tip purely to populate the store — the tip's own outputs are not
+  # reused across commits, but the dependency closure underneath them is.
+  # Best-effort: it owns the only save, does not gate the matrix (a failure
+  # just makes the legs fall back to the prefix restore), and is excluded from
+  # the required status check.
+  warm:
     needs: commits
     if: ${{ needs.commits.outputs.shas != '[]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size: 6G
+      - run: nix build
+
+  # Build and run the full check suite on each commit, in parallel — one runner
+  # per commit. fail-fast is off so every commit is reported, not just the
+  # first to break. The store is restore-only here (the warm job above owns the
+  # save); legs run even if warm failed, falling back to the prefix restore.
+  check:
+    needs: [commits, warm]
+    if: ${{ !cancelled() && needs.commits.result == 'success' && needs.commits.outputs.shas != '[]' }}
     strategy:
       fail-fast: false
       matrix:
@@ -46,11 +71,10 @@ jobs:
         with:
           ref: ${{ matrix.sha }}
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: nix-community/cache-nix-action@v7
+      - uses: nix-community/cache-nix-action/restore@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
-          gc-max-store-size: 6G
       - run: nix build
       - run: nix flake check
 
