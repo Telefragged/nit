@@ -220,10 +220,10 @@ observes that itself.)
 ## Command reference
 
 - `nit repo create --base <ref> [--server <url>]` — register the cwd's repo
-  (once per repo), pinning its canonical branch: `--base` is required and must
-  name an existing branch (400 otherwise); nit never guesses it. 409 if the
-  repo is already registered. Prints the `Repo`. A `nit push` into an
-  unregistered repo is a 404.
+  (once per repo), pinning its canonical base ref: `--base` is required and
+  must resolve to a commit — any git ref, e.g. `origin/main` (400 otherwise);
+  nit never guesses it. 409 if the repo is already registered. Prints the
+  `Repo`. A `nit push` into an unregistered repo is a 404.
 - `nit push [<commit>] [--partial] [--server <url>]` — push the
   cwd's checked-out commit (HEAD — a detached HEAD or tag included), or an
   explicit `<commit>` (any rev). The repo is the cwd's git-common-dir and must

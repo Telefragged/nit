@@ -30,10 +30,11 @@ a client decision ("Wake rule" below). The web polls the same folds.
 repos   (id, git_dir, base_ref, base_head, UNIQUE(git_dir))
         -- the registry. git_dir is the canonical git-common-dir — the repo's
         -- identity *and* display name; `nit repo move` repoints it. base_ref
-        -- is the repo's one canonical branch, set at `nit repo create`; mergedness
-        -- always tracks it (there is no land-anywhere). base_head is the merge
-        -- timer's baseline — the canonical-branch HEAD it last reconciled against
-        -- ("Lifecycle timer"), the one stored value that is observation state,
+        -- is the repo's one canonical base ref — any git ref (a local branch,
+        -- `origin/main`, a tag), set at `nit repo create`; mergedness always
+        -- tracks it (there is no land-anywhere). base_head is the merge timer's
+        -- baseline — the base ref's HEAD it last reconciled against ("Lifecycle
+        -- timer"), the one stored value that is observation state,
         -- not git-derivable. Stores nothing else derivable from git (no commits,
         -- timestamps — those live in .git).
 

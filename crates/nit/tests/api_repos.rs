@@ -126,6 +126,23 @@ fn base_can_be_any_branch() {
 }
 
 #[test]
+fn base_can_be_a_remote_tracking_ref() {
+    // The base is any git ref that resolves to a commit, not only a local
+    // branch — e.g. `origin/main`, which `find_branch` would reject. Tracking a
+    // remote ref is the point: some repos review against `origin/main`.
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    g.repo
+        .reference("refs/remotes/origin/main", c1, true, "test")
+        .unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, repo) = create_repo(&server, &g, "origin/main");
+    assert_eq!(st, 200, "{repo}");
+    assert_eq!(repo["base_ref"], "origin/main");
+}
+
+#[test]
 fn create_repo_registers_and_pins_base() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
@@ -192,7 +209,7 @@ fn push_into_unregistered_repo_is_404() {
 
 #[test]
 fn create_repo_rejects_unknown_base() {
-    // Naming a branch the repo doesn't have is a 400 — nit never guesses a base.
+    // A base that resolves to nothing is a 400 — nit never guesses a base.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);

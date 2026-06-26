@@ -29,7 +29,7 @@ pub enum RepoCmd {
 
 #[derive(clap::Args)]
 pub struct RepoCreateArgs {
-    /// The repo's canonical base branch (must name an existing branch).
+    /// The repo's canonical base ref — any git ref, e.g. `origin/main`.
     #[arg(long)]
     pub base: String,
 }

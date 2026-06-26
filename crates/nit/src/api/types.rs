@@ -39,7 +39,7 @@ pub struct Repo {
     pub id: u64,
     /// Canonical git-common-dir — the repo's identity and display name.
     pub git_dir: String,
-    /// The one canonical branch; mergedness tracks it.
+    /// The one canonical base ref; mergedness tracks it.
     pub base_ref: String,
     /// Live tip count (derived from the tip set, never stored).
     pub active_chains: u64,
@@ -51,7 +51,8 @@ pub struct RepoList {
 }
 
 /// `POST /api/repos` request — register a repo (`nit repo create`). `base`
-/// configures the one canonical branch; it must name an existing branch.
+/// configures the one canonical base ref; it must resolve to a commit — any
+/// git ref, e.g. `origin/main`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateRepo {
     pub git_dir: String,

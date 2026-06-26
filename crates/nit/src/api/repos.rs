@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
-use git2::{BranchType, Repository};
+use git2::Repository;
 
 use crate::db;
 
@@ -23,9 +23,10 @@ fn repo_json(state: &AppState, row: db::RepoRow) -> types::Repo {
     }
 }
 
-/// Register a repo (`nit repo create`), configuring its one canonical branch.
-/// `base` must name an existing branch (400 otherwise); nit never guesses it.
-/// 409 if the git dir is already registered.
+/// Register a repo (`nit repo create`), configuring its one canonical base
+/// ref. `base` must resolve to a commit — any git ref, e.g. `origin/main`
+/// (400 otherwise); nit never guesses it. 409 if the git dir is already
+/// registered.
 pub(super) async fn create_repo(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<types::CreateRepo>,
@@ -44,22 +45,25 @@ pub(super) async fn create_repo(
                 existing.id
             )));
         }
-        if repo.find_branch(&req.base, BranchType::Local).is_err() {
-            return Err(Error::bad_request(format!(
-                "no '{}' branch found — name an existing branch as the base",
-                req.base
-            )));
-        }
-        let row = db::create_repo(conn, &canonical, &req.base)?;
-        // Seed the merge timer's baseline at the branch's current HEAD, so the
-        // first landing after registration shows up in a delta scan rather than
-        // being swallowed as pre-tracking history (docs/data-model.md).
-        if let Ok(commit) = repo
+        // Resolve the base to a commit up front — any git ref (a local branch,
+        // `origin/main`, a tag, a sha), not only a local branch. This both
+        // validates it (400 otherwise) and seeds the merge timer's baseline
+        // below; nit never guesses the base.
+        let base_commit = repo
             .revparse_single(&req.base)
             .and_then(|o| o.peel_to_commit())
-        {
-            db::update_repo_base_head(conn, row.id, &commit.id().to_string())?;
-        }
+            .map_err(|e| {
+                Error::bad_request(format!(
+                    "cannot resolve '{}' to a commit — name an existing git ref as the base: {}",
+                    req.base,
+                    e.message()
+                ))
+            })?;
+        let row = db::create_repo(conn, &canonical, &req.base)?;
+        // Seed the merge timer's baseline at the base ref's current HEAD, so the
+        // first landing after registration shows up in a delta scan rather than
+        // being swallowed as pre-tracking history (docs/data-model.md).
+        db::update_repo_base_head(conn, row.id, &base_commit.id().to_string())?;
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, row)))
     })

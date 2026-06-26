@@ -303,14 +303,14 @@ pub fn http_delete(url: &str) -> (u16, Value) {
 // Change-centric helpers (push + chain navigation)
 
 /// `POST /api/repos` over HTTP (≡ `nit repo create`). `base` pins the canonical
-/// branch (it must name an existing branch). Returns `(status, Repo)`.
+/// base ref (any git ref that resolves to a commit). Returns `(status, Repo)`.
 pub fn create_repo(server: &TestServer, repo: &GitRepo, base: &str) -> (u16, Value) {
     let body = json!({"git_dir": repo.git_dir(), "base": base});
     http_post(&server.url("/api/repos"), &body)
 }
 
 /// `POST /api/push` over HTTP, registering the repo first (`create_repo` with
-/// `base`, pinning the canonical branch). `tip` is a branch name or sha;
+/// `base`, pinning the canonical base ref). `tip` is a branch name or sha;
 /// `partial` optionally sets/clears the sticky flag. A failing registration
 /// other than "already registered" (409) is returned as-is. Returns
 /// `(status, PushResult)`.
