@@ -18,16 +18,6 @@ pub struct PathMember {
     pub commit_sha: String,
 }
 
-/// A tip whose path walks through some change, plus the revision it pins there
-/// and the path the walk produced (so callers needn't re-walk) — drives
-/// `ChangeDetail.chains`.
-#[derive(Debug, Clone)]
-pub struct ChainHit {
-    pub tip_change_id: u64,
-    pub revision: u64,
-    pub path: Vec<PathMember>,
-}
-
 /// One node of the graph's open region: an active change pinned at the
 /// revision its tip walked, plus the commit it parents onto (docs/api.md
 /// "Graph").
@@ -109,7 +99,7 @@ impl RepoView {
     /// The **active frontier**: leaves of non-terminal changes (the dashboard's
     /// `status=active`). A merged change has landed and an abandoned change is
     /// dead, so neither is an active tip — but an abandoned change is still an
-    /// enumerable member ([`chains_through`](Self::chains_through)).
+    /// enumerable member ([`enumerable_tips`](Self::enumerable_tips)).
     #[must_use]
     pub fn tips(&self) -> Vec<String> {
         self.leaves_where(|c| !c.is_terminal())
@@ -117,8 +107,8 @@ impl RepoView {
 
     /// Leaves for **chain enumeration**: drops only merged changes, so an
     /// abandoned leaf still resolves to its own chain (abandonment is
-    /// membership-inert). The dashboard hides these via [`tips`](Self::tips); a
-    /// change resource enumerates them.
+    /// membership-inert). The dashboard hides these via [`tips`](Self::tips);
+    /// resolving the chain a change sits on enumerates them.
     #[must_use]
     pub fn enumerable_tips(&self) -> Vec<String> {
         self.leaves_where(|c| !c.is_merged())
@@ -198,30 +188,6 @@ impl RepoView {
             }
         }
         out
-    }
-
-    /// The tips whose path walks through `change_id`, each with the revision
-    /// that path pins on it.
-    #[must_use]
-    pub fn chains_through(&self, change_id: u64) -> Vec<ChainHit> {
-        let mut hits = Vec::new();
-        for tip in self.enumerable_tips() {
-            let path = self.path_from_tip(&tip);
-            let Some(revision) = path
-                .iter()
-                .find(|m| m.change_id == change_id)
-                .map(|m| m.revision)
-            else {
-                continue;
-            };
-            let tip_change_id = path.last().map_or(change_id, |m| m.change_id);
-            hits.push(ChainHit {
-                tip_change_id,
-                revision,
-                path,
-            });
-        }
-        hits
     }
 }
 
@@ -405,13 +371,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(13, 0), (11, 1), (14, 0)]
         );
-
-        // B (change 11) is reached by both tips, at two patchsets.
-        let hits = view.chains_through(11);
-        let mut pairs: Vec<(u64, u64)> =
-            hits.iter().map(|h| (h.tip_change_id, h.revision)).collect();
-        pairs.sort_unstable();
-        assert_eq!(pairs, vec![(12, 0), (14, 1)]);
+        // B (change 11) is thus reached by both tips, at two patchsets.
     }
 
     #[test]

@@ -145,9 +145,9 @@ drafts, a rebase-drift file) plus a merged tip behind `status=all`; repo 2
 (quarry) a `request_changes` partial chain and an `approved` chain; repo 3
 (orbit) the **B-in-two-chains** scenario — one change `B` reached by two tips
 at two patchsets (tip C walks `B` at rev0, tip E at rev1), so the
-newer-elsewhere badge (`latest_revision` > `revision`) and
-`ChangeDetail.chains` / `ChainRef` all render. Revisions are 0-based, so the
-fixtures exercise rev0/rev1 display directly. Keep fixtures contract-true.
+newer-elsewhere badge (`latest_revision` > `revision`) renders. Revisions are
+0-based, so the fixtures exercise rev0/rev1 display directly. Keep fixtures
+contract-true.
 
 ## Checking your work
 

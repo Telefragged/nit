@@ -301,8 +301,6 @@ revisions; it holds no locks and touches no git.
   unresolved parent (below the merge-base, or a torn push) truncates the path,
   never errors; a cycle guard rides out bad data. Each member is pinned to the
   patchset the tip walked through.
-- **`chains_through(change_id)`** returns every tip whose path walks that change,
-  with the revision that path pins on it — drives `ChangeDetail.chains`.
 
 ### The B-in-two-chains example
 

@@ -201,13 +201,6 @@ pub struct GraphNode {
     pub revision: Option<u64>,
 }
 
-/// A tip walking through a change, plus the patchset it pins there.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainRef {
-    pub tip_change_id: u64,
-    pub revision: u64,
-}
-
 // ---------------------------------------------------------------------------
 // Changes
 
@@ -228,14 +221,6 @@ pub struct ChangeDetail {
     pub reviews: Vec<Review>,
     /// The reviewer's staged decision for this change, or `None`.
     pub draft_decision: Option<StagedDecision>,
-}
-
-/// `GET /api/changes/{id}/chains` response: every tip walking through this
-/// change, each with the patchset it pins there. Derived separately from the
-/// change detail so a change read never builds a repo view.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainsThrough {
-    pub chains: Vec<ChainRef>,
 }
 
 /// A reviewer's staged decision plus its cover note/reason (docs/api.md

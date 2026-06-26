@@ -269,8 +269,8 @@ export default function ReviewPage() {
   const selected = selectedRev?.number ?? 1;
 
   // The chain context is the derived chain through this change rooted at the
-  // viewed revision — the path whose ChainRef pins `selected`. Fetched with
-  // the revision so switching patchsets re-roots onto that revision's chain.
+  // viewed revision — the path that pins `selected`. Fetched with the
+  // revision so switching patchsets re-roots onto that revision's chain.
   const chainQ = useQuery({
     queryKey: ["chain", changeId, selected],
     queryFn: change ? () => getChain(changeId, selected) : skipToken,

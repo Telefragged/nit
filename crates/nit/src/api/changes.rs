@@ -10,7 +10,6 @@ use serde::Deserialize;
 use super::diff;
 use super::rebase;
 use super::types;
-use super::views;
 use super::{AppPath, AppQuery, AppState, Error, with_conn};
 use super::{change_detail_json, change_or_404};
 
@@ -21,23 +20,6 @@ pub(super) async fn get_change_detail(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         change_detail_json(conn, &entry)
-    })
-    .await
-}
-
-/// `GET /api/changes/{id}/chains` — every tip walking through this change, each
-/// pinned to the patchset it walks (docs/api.md "Changes"). Derived from a repo
-/// view, kept separate from the change detail so a change read builds no view.
-pub(super) async fn change_chains(
-    State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
-) -> Result<Json<types::ChainsThrough>, Error> {
-    with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
-        let repo_id = entry.read().repo_id;
-        let view = state.repo_view(repo_id);
-        let chains = views::chains_through_view(&view, id);
-        Ok(Json(types::ChainsThrough { chains }))
     })
     .await
 }
