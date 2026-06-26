@@ -20,34 +20,15 @@ use super::{Error, types};
 // ---------------------------------------------------------------------------
 // Chains (derived)
 
-/// Build a chain summary from a tip commit-sha (the dashboard entry).
+/// Build the derived `Chain` for one tip commit-sha — the dashboard list
+/// entry, the chain page, and the push result all share this one shape.
 #[must_use]
-pub fn build_chain_summary(view: &RepoView, repo_id: u64, tip_sha: &str) -> types::ChainSummary {
-    let path = view.path_from_tip(tip_sha);
-    let tip_change_id = path.last().map_or(0, |m| m.change_id);
-    types::ChainSummary {
-        tip_change_id,
-        repo_id,
-        state: chain::derive_state(view, &path),
-        partial: chain::is_partial(view, &path),
-        path: path_entries(view, &path),
-    }
-}
-
-/// Build the full `Chain` for one tip commit-sha (the chain page / push result).
-#[must_use]
-pub fn build_chain(
-    view: &RepoView,
-    repo_id: u64,
-    base_branch: &str,
-    tip_sha: &str,
-) -> types::Chain {
+pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &str) -> types::Chain {
     let path = view.path_from_tip(tip_sha);
     let tip_change_id = path.last().map_or(0, |m| m.change_id);
     types::Chain {
         tip_change_id,
         repo_id,
-        base_branch: base_branch.to_string(),
         state: chain::derive_state(view, &path),
         partial: chain::is_partial(view, &path),
         path: path_entries(view, &path),
@@ -194,7 +175,6 @@ pub fn build_graph(
 
     Ok(types::RepoGraph {
         repo_id,
-        base_branch: base_branch.to_string(),
         anchor,
         history_truncated,
         nodes,

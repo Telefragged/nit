@@ -55,8 +55,9 @@ export interface PathEntry {
   commit_sha: string;
 }
 
-/** A dashboard entry: one per known tip commit. */
-export interface ChainSummary {
+/** A derived chain: the path through a tip change plus its rolled-up state.
+ * The dashboard list element and the single-chain shape are identical. */
+export interface Chain {
   tip_change_id: number;
   /** The repo this chain belongs to (registry id). */
   repo_id: number;
@@ -64,17 +65,6 @@ export interface ChainSummary {
   /** The tip's latest revision is partial. */
   partial: boolean;
   /** Oldest-first, base → tip. */
-  path: PathEntry[];
-}
-
-/** The full chain for one tip (the chain page / a change's chain context). */
-export interface Chain {
-  tip_change_id: number;
-  /** The repo this chain belongs to (registry id). */
-  repo_id: number;
-  base_branch: string;
-  state: ChainState;
-  partial: boolean;
   path: PathEntry[];
 }
 
@@ -90,7 +80,6 @@ export type GraphSection = "open" | "head" | "history";
  * ascending, the HEAD anchor, then the merged-history window descending. */
 export interface RepoGraph {
   repo_id: number;
-  base_branch: string;
   /** The HEAD node's commit_sha — the anchor every region pivots on. */
   anchor: string;
   /** The canonical branch has merged commits below the displayed window — the

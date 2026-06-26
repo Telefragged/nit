@@ -48,7 +48,6 @@ in the node set; `parents.len() > 1` is a merge.
 ```json
 RepoGraph = {
   "repo_id": 1,
-  "base_branch": "main",
   "anchor": "9f12c0a…",        // the head node's commit_sha
   "history_truncated": false,  // more merged commits exist below the window
   "nodes": [GraphNode]         // row order: open (top) → head → history (bottom)

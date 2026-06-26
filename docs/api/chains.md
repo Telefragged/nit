@@ -6,7 +6,7 @@ chain is stored: these endpoints compute it from the in-memory tip-commit set
 and the commit-sha → `(change, revision)` index (docs/data-model.md "Chain
 derivation").
 
-- `GET /api/chains?repo={id}` → `{"chains": [ChainSummary]}` — one entry per
+- `GET /api/chains?repo={id}` → `{"chains": [Chain]}` — one entry per
   known **tip commit** (the dashboard). `status` defaults to `active` (live
   tips — neither merged nor abandoned, so an abandoned tip is hidden here);
   `all` also includes merged and abandoned tips.
@@ -40,20 +40,12 @@ derivation").
   ```
 
 ```json
-ChainSummary = {
+Chain = {
   "tip_change_id": 12,
   "repo_id": 1,                  // the repo this chain belongs to
   "state": "waiting_for_review", // derived — see state table
   "partial": false,              // the tip's latest revision is partial
   "path": [PathEntry]            // oldest-first, base → tip
-}
-Chain = {
-  "tip_change_id": 12,
-  "repo_id": 1,
-  "base_branch": "main",
-  "state": "waiting_for_review",
-  "partial": false,
-  "path": [PathEntry]
 }
 PathEntry = {
   "change_id": 10, "position": 0,    // position is a property of THIS path

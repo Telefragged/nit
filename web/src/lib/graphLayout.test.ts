@@ -48,7 +48,6 @@ const edge = (g: GraphLayout, from: string, to: string) =>
 function mockGraph(): RepoGraph {
   return {
     repo_id: 1,
-    base_branch: "main",
     anchor: "H",
     history_truncated: false,
     nodes: [
@@ -137,7 +136,6 @@ describe("layoutGraph behind-HEAD base (in window)", () => {
   it("attaches to its real base with a behind edge on a side lane", () => {
     const g = layoutGraph({
       repo_id: 1,
-      base_branch: "main",
       anchor: "H",
       history_truncated: false,
       nodes: [
@@ -163,7 +161,6 @@ describe("layoutGraph behind-HEAD base (below window)", () => {
   it("dangles a behind edge into the collapsed marker", () => {
     const g = layoutGraph({
       repo_id: 1,
-      base_branch: "main",
       anchor: "H",
       history_truncated: true,
       nodes: [

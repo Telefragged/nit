@@ -172,7 +172,7 @@ pub(super) async fn push(
             .commits
             .last()
             .map_or(walk.fork_sha.clone(), |c| c.commit_sha.clone());
-        let chain = views::build_chain(&view, repo_row.id, &repo_row.base_branch, &tip_sha);
+        let chain = views::build_chain(&view, repo_row.id, &tip_sha);
         Ok(Json(types::PushResult { tip_change, chain }))
     })
     .await

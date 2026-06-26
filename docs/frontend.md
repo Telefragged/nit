@@ -35,7 +35,7 @@ events is the planned replacement for live refresh.
   sha, status chip, the pinned revision (`r{n}`), and activity counts
   (comments / drafts / unresolved). A member pinned to an older patchset than
   its latest carries a `NEWER ELSEWHERE` badge. The list is `GET
-/api/chains?status=active`, whose `ChainSummary.path` already carries every
+/api/chains?status=active`, whose `Chain.path` already carries every
   member entry — the drawer renders from it with no further fetch.
   Merged/abandoned tips drop off (visible only with `status=all`); a
   partially-landed stack stays — any one live member keeps it on the page,

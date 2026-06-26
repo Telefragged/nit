@@ -12,7 +12,6 @@ import { ApiError } from "../client";
 import type {
   Chain,
   ChainState,
-  ChainSummary,
   ChangeDetail,
   ChangeStatus,
   CommentSide,
@@ -264,24 +263,11 @@ function chainState(tip: TipRecord, path: PathEntry[]): ChainState {
   return tip.partial ? "agents_turn" : "approved";
 }
 
-function chainSummary(tip: TipRecord): ChainSummary {
-  const path = derivePath(tip);
-  return {
-    tip_change_id: tip.tip_change_id,
-    repo_id: tip.repo_id,
-    state: chainState(tip, path),
-    partial: tip.partial,
-    path,
-  };
-}
-
 function chainView(tip: TipRecord): Chain {
   const path = derivePath(tip);
-  const repo = repos.find((r) => r.id === tip.repo_id);
   return {
     tip_change_id: tip.tip_change_id,
     repo_id: tip.repo_id,
-    base_branch: repo?.base_branch ?? "main",
     state: chainState(tip, path),
     partial: tip.partial,
     path,
@@ -366,7 +352,7 @@ function graphRowOrder(nodes: GraphNode[]): GraphNode[] {
 const MERGED_WINDOW = 5;
 
 function buildGraph(repoId: number, window: number): RepoGraph {
-  const repo = repos.find((r) => r.id === repoId) ?? notFound(`repo ${repoId}`);
+  if (!repos.some((r) => r.id === repoId)) notFound(`repo ${repoId}`);
   const scenario = graphScenarios[repoId] ?? { history: graphHistory };
   const fullHistory = scenario.history;
   const history = fullHistory.slice(0, window + 1);
@@ -457,7 +443,6 @@ function buildGraph(repoId: number, window: number): RepoGraph {
 
   return {
     repo_id: repoId,
-    base_branch: repo.base_branch,
     anchor: anchorSha,
     history_truncated: historyTruncated,
     nodes: [...openNodes, ...rest],
@@ -553,7 +538,7 @@ export async function mockRequest(
         (status === "all" || t.active) &&
         (repo === null || t.repo_id === Number(repo)),
     );
-    return { chains: listed.map(chainSummary) };
+    return { chains: listed.map(chainView) };
   }
 
   // The aggregated chain log is not in this cut (events return later); serve

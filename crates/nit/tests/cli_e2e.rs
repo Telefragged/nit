@@ -33,7 +33,6 @@ fn push_prints_result_then_status_and_log_read_it_back() {
     assert_eq!(push["tip_change"]["revision"], 0, "{push}");
     assert_eq!(push["tip_change"]["status"], "pending");
     let chain = &push["chain"];
-    assert_eq!(chain["base_branch"], "main");
     assert_eq!(chain["state"], "waiting_for_review");
     assert_eq!(chain["partial"], false);
     assert_eq!(chain["path"].as_array().unwrap().len(), 1);
@@ -326,7 +325,6 @@ fn bare_push_resolves_head() {
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "bare push resolves HEAD: {stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
-    assert_eq!(push["chain"]["base_branch"], "main");
 }
 
 /// A detached HEAD has no branch name, yet bare `nit push` resolves the

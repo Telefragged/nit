@@ -122,7 +122,6 @@ fn base_can_be_any_branch() {
 
     let (st, res) = push(&server, &g, "feat", "trunk", None);
     assert_eq!(st, 200, "{res}");
-    assert_eq!(res["chain"]["base_branch"], "trunk");
     assert_eq!(repo_base(&server, first_repo(&server)), "trunk");
 }
 

@@ -49,7 +49,7 @@ pub(super) async fn list_chains(
                 view.tips()
             };
             for tip in tips {
-                chains.push(views::build_chain_summary(&view, repo_id, &tip));
+                chains.push(views::build_chain(&view, repo_id, &tip));
             }
         }
         Json(types::ChainList { chains })
@@ -90,19 +90,9 @@ pub(super) async fn get_chain(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, change_id)?;
         let repo_id = entry.read().repo_id;
-        let base_branch = state
-            .repo_state(repo_id)
-            .ok_or_else(|| Error::internal(format!("repo {repo_id} not loaded")))?
-            .base_branch
-            .clone();
         let view = state.repo_view(repo_id);
         let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
-        Ok(Json(views::build_chain(
-            &view,
-            repo_id,
-            &base_branch,
-            &tip_sha,
-        )))
+        Ok(Json(views::build_chain(&view, repo_id, &tip_sha)))
     })
     .await
 }

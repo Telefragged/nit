@@ -112,7 +112,15 @@ pub struct TipChange {
 // Chains (derived; addressed by tip change id + ?revision)
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainSummary {
+pub struct ChainList {
+    pub chains: Vec<Chain>,
+}
+
+/// A derived chain: the path through a tip change, plus its rolled-up state.
+/// The list element (`GET /api/chains`) and the single-chain shape
+/// (`GET /api/chains/{id}`) are identical.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Chain {
     pub tip_change_id: u64,
     /// The repo this chain belongs to (registry id).
     pub repo_id: u64,
@@ -120,22 +128,6 @@ pub struct ChainSummary {
     /// The tip's latest revision is partial.
     pub partial: bool,
     /// Oldest-first, base → tip.
-    pub path: Vec<PathEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainList {
-    pub chains: Vec<ChainSummary>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Chain {
-    pub tip_change_id: u64,
-    /// The repo this chain belongs to (registry id).
-    pub repo_id: u64,
-    pub base_branch: String,
-    pub state: ChainState,
-    pub partial: bool,
     pub path: Vec<PathEntry>,
 }
 
@@ -166,7 +158,6 @@ pub struct PathEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepoGraph {
     pub repo_id: u64,
-    pub base_branch: String,
     /// The HEAD node's `commit_sha` — the anchor every region pivots on.
     pub anchor: String,
     /// The canonical branch has merged commits below the displayed window — the
