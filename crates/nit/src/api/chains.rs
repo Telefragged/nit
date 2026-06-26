@@ -13,7 +13,7 @@ use crate::review;
 use super::types;
 use super::views;
 use super::{AppPath, AppQuery, AppState, Error, with_conn};
-use super::{ChainQuery, MERGED_WINDOW, change_or_404};
+use super::{ChainQuery, MERGED_WINDOW, chain_context};
 
 /// `?status=` filter: active-only (default) or all (includes terminal chains).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -88,10 +88,7 @@ pub(super) async fn get_chain(
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::Chain>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, change_id)?;
-        let repo_id = entry.read().repo_id;
-        let view = state.repo_view(repo_id);
-        let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
+        let (view, repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
         Ok(Json(views::build_chain(&view, repo_id, &tip_sha)))
     })
     .await
@@ -104,10 +101,7 @@ pub(super) async fn chain_log(
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::ChainLog>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, change_id)?;
-        let repo_id = entry.read().repo_id;
-        let view = state.repo_view(repo_id);
-        let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
+        let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
         let path = view.path_from_tip(&tip_sha);
         let mut entries = Vec::new();
         for member in &path {

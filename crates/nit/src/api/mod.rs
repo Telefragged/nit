@@ -39,6 +39,7 @@ use axum::routing::{get, patch, post, put};
 use git2::Repository;
 use serde::Deserialize;
 
+use crate::chain::RepoView;
 use crate::enums::Side;
 use crate::review;
 
@@ -160,6 +161,21 @@ fn change_or_404(
     state
         .load_change(conn, change_id)?
         .ok_or_else(|| Error::not_found(format!("change {change_id} not found")))
+}
+
+/// The chain context a chain endpoint operates on: the repo's [`RepoView`], its
+/// id, and the tip sha the path through `change_id` walks at `revision`. Shared
+/// by `get_chain`, `chain_log`, and `submit_chain`.
+fn chain_context(
+    state: &Arc<AppState>,
+    conn: &rusqlite::Connection,
+    change_id: u64,
+    revision: Option<u64>,
+) -> Result<(RepoView, u64, String), Error> {
+    let repo_id = change_or_404(state, conn, change_id)?.read().repo_id;
+    let view = state.repo_view(repo_id);
+    let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, revision)?;
+    Ok((view, repo_id, tip_sha))
 }
 
 /// Canonicalize a git-dir path to a UTF-8 string, or a 400.

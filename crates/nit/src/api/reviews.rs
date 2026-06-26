@@ -12,11 +12,10 @@ use crate::enums::{Decision, LifecycleAction, Verdict};
 use crate::review::{self, CommentInput, Lifecycle};
 
 use super::types;
-use super::views;
 use super::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change_with, with_conn,
 };
-use super::{ChainQuery, change_or_404, map_busy};
+use super::{ChainQuery, chain_context, change_or_404, map_busy};
 
 /// One change's reviewer comment drafts as `CommentInput`s, ready to drain into
 /// a `review` entry (a reply keeps its thread, a new thread carries its anchor).
@@ -153,10 +152,7 @@ pub(super) async fn submit_chain(
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<types::BatchSubmitResult>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, change_id)?;
-        let repo_id = entry.read().repo_id;
-        let view = state.repo_view(repo_id);
-        let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, q.revision)?;
+        let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
 
         let mut submitted = 0u64;
         let mut errors = Vec::new();
