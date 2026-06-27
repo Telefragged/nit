@@ -133,6 +133,10 @@ Three kinds of id, all opaque and stable across replays:
 
 ### Payloads
 
+The four payloads form a closed union discriminated by the entry's `kind`:
+the wire carries `kind` and `payload` as an adjacently-tagged pair, and an
+unknown `kind` is rejected when the entry is parsed, never folded.
+
 ```jsonc
 // revision — one new commit-sha observed for this change. The revision
 // `number` is NOT carried; the fold mints it (0-based, by append order).

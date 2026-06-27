@@ -13,7 +13,7 @@ chain, no resubscribe bookkeeping.
   // client → server
   {"subscribe": {"10": 4, "11": 0}}   // change_id → from-idx: replay [from, head) then stream live
   // server → client
-  {"change_id": 10, "idx": 5, "seq": 412, "kind": "review", "created_at": "…", "payload": {…}}
+  {"change_id": 10, "idx": 5, "seq": 412, "created_at": "…", "kind": "review", "payload": {…}}
   {"new_parent": {"of": 10, "parent": 9}}    // out-of-log: change 10's parent edge is now change 9
   ```
 
@@ -41,7 +41,7 @@ chain, no resubscribe bookkeeping.
   costs nothing (a follower re-derives from local HEAD each pass anyway).
 
 ```jsonc
-TaggedLogEntry = {"change_id": 10, "idx": 5, "seq": 412, "kind": "…", "created_at": "…", "payload": {…}}
+TaggedLogEntry = {"change_id": 10, "idx": 5, "seq": 412, "created_at": "…", "kind": "…", "payload": {…}}
 ClientMsg      = {"subscribe": {"<id>": <from-idx>, …}}
 NewParent      = {"new_parent": {"of": 10, "parent": 9}}
 ```
