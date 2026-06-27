@@ -227,7 +227,7 @@
           # the sandbox lacks.
           test = cargoNix.workspaceMembers."nit".build.override {
             runTests = true;
-            testInputs = [ pkgs.git ];
+            testInputs = [ pkgs.gitMinimal ];
             testPreRun = ''
               export HOME=$TMPDIR
               export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
