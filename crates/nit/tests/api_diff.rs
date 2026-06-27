@@ -9,7 +9,6 @@ mod common;
 use common::{GitRepo, TestServer, http_get, msg, push};
 use serde_json::{Value, json};
 
-/// `prefix1\nprefix2\n…\nprefixN\n` — numbered lines, newline-terminated.
 fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
     use std::fmt::Write;
     n.fold(String::new(), |mut s, i| {
@@ -58,8 +57,8 @@ fn diff_vs_parent_leads_with_commit_msg() {
     );
     g.branch("main", base);
 
-    // The change touches two far-apart lines (two hunks), adds a file, and
-    // rewrites the binary blob.
+    // Far-apart edits (k2 and k11) force two separate hunks — context windows
+    // don't overlap.
     let keep_v2 = keep_v1
         .replace("k2\n", "k2 changed\n")
         .replace("k11\n", "k11 changed\n");
@@ -106,10 +105,8 @@ fn diff_vs_parent_leads_with_commit_msg() {
         })
     );
 
-    // /COMMIT_MSG + the three real files.
     assert_eq!(diff["files"].as_array().unwrap().len(), 4);
 
-    // A multi-hunk modification with exact line numbers and texts.
     assert_eq!(
         by_path(&diff, "keep.txt"),
         json!({
@@ -167,7 +164,6 @@ fn diff_vs_parent_leads_with_commit_msg() {
         })
     );
 
-    // A binary modification: flagged, no hunks, counts zero.
     assert_eq!(
         by_path(&diff, "data.bin"),
         json!({
@@ -196,7 +192,6 @@ fn interdiff_against_earlier_revision() {
     );
     g.branch("main", base);
 
-    // Revision 0: the original commit.
     let c1 = g.commit(
         &[base],
         &msg("feat: thing", "Iinter01"),
@@ -210,7 +205,6 @@ fn interdiff_against_earlier_revision() {
     let id = tip_change_id(&pushed);
     assert_eq!(pushed["tip_change"]["revision"], 0);
 
-    // Revision 1: amend — reword the subject and re-edit the same line.
     let c2 = g.commit(
         &[base],
         &msg("feat: thing, reworded", "Iinter01"),
@@ -248,7 +242,6 @@ fn interdiff_against_earlier_revision() {
         .expect("an added subject line");
     assert_eq!(cm_add["text"], "feat: thing, reworded");
 
-    // tree(r0) → tree(r1): only body.txt's line 4 moved (b4 v1 → b4 v2).
     let body = by_path(&diff, "body.txt");
     assert_eq!(body["status"], "modified");
     assert_eq!(
@@ -284,18 +277,15 @@ fn missing_revision_is_404() {
     assert_eq!(st, 200, "{pushed}");
     let id = tip_change_id(&pushed);
 
-    // Revision 0 exists; revision 1 does not.
     let (st, _) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff")));
     assert_eq!(st, 200);
     let (st, e) = http_get(&server.url(&format!("/api/changes/{id}/revisions/1/diff")));
     assert_eq!(st, 404, "{e}");
     assert!(e["error"].as_str().unwrap().contains("revision 1"));
 
-    // A missing `against` revision is equally a 404.
     let (st, e) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff?against=9")));
     assert_eq!(st, 404, "{e}");
 
-    // An unknown change is a 404 too.
     let missing = id + 999;
     let (st, _) = http_get(&server.url(&format!("/api/changes/{missing}/revisions/0/diff")));
     assert_eq!(st, 404);
