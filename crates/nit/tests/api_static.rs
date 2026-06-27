@@ -1,6 +1,6 @@
 //! Static UI serving (docs/api.md "Static UI"): the built SPA outside
 //! /api, index.html fallback for client-side routes, API-only without a
-//! web dist. Client routes are change-id addressed now (`/chains/{change_id}`,
+//! web dist. Client routes are change-id addressed (`/chains/{change_id}`,
 //! `/changes/{id}`).
 
 mod common;
@@ -17,7 +17,6 @@ fn serves_spa_with_index_fallback() {
 
     let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(dist));
 
-    // Real files serve as-is.
     let (st, body) = http_get(&server.url("/index.html"));
     assert_eq!(st, 200);
     assert_eq!(body.as_str().unwrap(), "<html>nit-spa</html>");
@@ -25,7 +24,6 @@ fn serves_spa_with_index_fallback() {
     assert_eq!(st, 200);
     assert_eq!(body.as_str().unwrap(), "console.log('nit')");
 
-    // Client-side routes fall back to index.html — now change-id addressed.
     for route in ["/", "/chains/12", "/changes/10"] {
         let (st, body) = http_get(&server.url(route));
         assert_eq!(st, 200, "{route}");
@@ -68,19 +66,18 @@ fn api_errors_are_json_everywhere() {
     std::fs::write(dist.join("index.html"), "<html>nit-spa</html>").unwrap();
     let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(dist));
 
-    // Unknown /api paths: JSON 404, not the SPA.
+    // Unknown /api paths error as JSON, not the SPA fallback.
     for path in ["/api", "/api/", "/api/nonexistent", "/api/chain/12"] {
         let (st, body) = http_get(&server.url(path));
         assert_eq!(st, 404, "{path}: {body}");
         assert!(body["error"].is_string(), "{path}: {body}");
     }
 
-    // Non-numeric path param: JSON 400.
     let (st, body) = http_get(&server.url("/api/chains/abc"));
     assert_eq!(st, 400, "{body}");
     assert!(body["error"].is_string(), "{body}");
 
-    // Malformed JSON body: JSON 400, not text/plain.
+    // A malformed JSON body errors as JSON, not text/plain.
     let resp = ureq::Agent::new_with_defaults()
         .post(&server.url("/api/push"))
         .header("content-type", "application/json")
@@ -95,7 +92,6 @@ fn api_errors_are_json_everywhere() {
     assert_eq!(st, 400, "{body}");
     assert!(body["error"].is_string(), "{body}");
 
-    // Wrong method: JSON 405.
     let resp = ureq::Agent::new_with_defaults()
         .delete(&server.url("/api/health"))
         .config()
