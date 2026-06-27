@@ -46,7 +46,6 @@ pub(crate) fn resolve_change(client: &Client, change_key: &str) -> Result<u64> {
         .ok_or_else(|| anyhow!("no change with Change-Id {change_key:?} on this chain"))
 }
 
-/// The registry id of the repo at `git_dir`.
 fn repo_id_for(client: &Client, git_dir: &str, retry: Retry) -> Result<u64> {
     let list: RepoList = client.get_retry("/api/repos", retry)?;
     list.repos

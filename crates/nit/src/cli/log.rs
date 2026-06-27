@@ -111,7 +111,6 @@ fn follow(
     }
 }
 
-/// Relay one streamed entry, honoring `--reviewer-only`.
 fn relay(entry: &LogEntry, oneline: bool, reviewer_only: bool) -> Result<()> {
     if reviewer_only && muted_by_reviewer_only(entry) {
         return Ok(());
@@ -282,7 +281,6 @@ mod tests {
             })
         };
         let life = |a| LogPayload::lifecycle(a, None, None);
-        // The agent's own writes.
         assert!(muted(revision()));
         assert!(muted(comment()));
         // The automatic merge is the timer's, not reviewer activity.

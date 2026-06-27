@@ -72,7 +72,6 @@ pub fn wait(args: WaitArgs) -> Result<()> {
             print_wait(&resp, args.oneline)?;
             return Ok(());
         }
-        // Nothing new: park on the websocket until the head advances.
         wait_for_entry(&client, &log.entries, retry)?;
     }
 }
@@ -85,7 +84,7 @@ fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result
     loop {
         let mut socket = client.ws_connect(&subs, retry)?;
         if next_text(&mut socket).is_some() {
-            return Ok(()); // an entry landed
+            return Ok(());
         }
         // close/error: reconnect.
     }

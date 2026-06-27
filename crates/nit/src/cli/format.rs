@@ -157,8 +157,6 @@ mod tests {
     fn chain_oneline_digests_each_member() {
         use nit_types::chains::PathEntry;
         use nit_types::enums::{ChainState, ChangeStatus};
-        // The path carries only structure; the unresolved counts are composed
-        // separately (from the change snapshots) and keyed by change_id.
         let member = |change_id, position, key: &str, status, revision, subject: &str| PathEntry {
             change_id,
             position,

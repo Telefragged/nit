@@ -1,5 +1,3 @@
-//! `nit repo` — inspect and manage the repository registry.
-
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};

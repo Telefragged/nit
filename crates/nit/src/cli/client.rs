@@ -100,12 +100,10 @@ pub(crate) enum Retry {
     UntilUp,
 }
 
-/// Backoff between reconnect attempts: 1, 2, 4, 8, then 10s, capped.
 fn retry_delay(attempt: u32) -> std::time::Duration {
     std::time::Duration::from_secs(1 << attempt.min(4)).min(std::time::Duration::from_secs(10))
 }
 
-/// A connected websocket to the nit server.
 pub(crate) type WsConn =
     tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 
@@ -155,13 +153,11 @@ impl Client {
         }
     }
 
-    /// GET, retrying with backoff while the server is unreachable.
     pub(crate) fn get_retry<T: DeserializeOwned>(&self, path: &str, retry: Retry) -> Result<T> {
         self.retry_loop(retry, || self.get_raw(path))
     }
 
-    /// Connect the change stream and `subscribe` `subs` (`change_id` →
-    /// from-idx), retrying the connect while the server is unreachable.
+    /// `subs` maps `change_id` → from-idx.
     pub(crate) fn ws_connect(
         &self,
         subs: &std::collections::HashMap<u64, u64>,
