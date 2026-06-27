@@ -104,7 +104,6 @@ fn buffer_edits(old: &[u8], new: &[u8]) -> Result<Vec<Edit>> {
         .collect()
 }
 
-/// The net line delta an edit introduces (added minus deleted lines).
 fn net_delta(e: &Edit) -> i64 {
     i64::try_from(e.b.len()).unwrap_or(i64::MAX) - i64::try_from(e.a.len()).unwrap_or(i64::MAX)
 }
@@ -137,10 +136,10 @@ fn project_clipped(pos: Span, mappings: &[Edit]) -> Vec<Span> {
     };
     for m in mappings {
         if m.a.start >= pos.end {
-            break; // this mapping and every later one is past `pos`
+            break;
         }
         if m.a.end <= cursor {
-            shift += net_delta(m); // entirely before the cursor
+            shift += net_delta(m);
             continue;
         }
         emit(cursor, m.a.start, shift); // the untouched gap before this edit
@@ -246,13 +245,11 @@ fn tag_file(
         }
     }
     if !any_drift {
-        return Ok(false); // No drift → byte-identical, leave untouched.
+        return Ok(false);
     }
 
-    // Region selection follows the agent's real delta: keep a hunk only if
-    // it carries a real changed line; an isolated all-drift hunk is dropped.
+    // Region selection follows the agent's real delta.
     file.hunks.retain(|h| h.lines.iter().any(is_real_change));
-    // Recount over the survivors, excluding drift (one pass for both totals).
     let (mut additions, mut deletions) = (0u64, 0u64);
     for line in file.hunks.iter().flat_map(|h| &h.lines) {
         match line.kind {
@@ -304,7 +301,7 @@ pub fn tag_drift(
 
     let drifted = changed_paths(repo, &parent_m, &parent_n)?;
     if drifted.is_empty() {
-        return Ok(()); // Base unchanged between the parents — no drift.
+        return Ok(());
     }
 
     let mut drop_files = Vec::new();

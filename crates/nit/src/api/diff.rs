@@ -52,7 +52,6 @@ pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<Diff> {
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default()
         };
-        // New path; old path when deleted.
         let file_path = if delta.status() == Delta::Deleted {
             path(delta.old_file())
         } else {
@@ -248,7 +247,7 @@ mod tests {
             Repo { _dir: dir, repo }
         }
 
-        /// Build a tree from (path, content) pairs (bytes allow binary).
+        /// Bytes allow binary content.
         fn tree(&self, files: &[(&str, &[u8])]) -> git2::Oid {
             let mut builder = self
                 .repo
@@ -280,10 +279,9 @@ mod tests {
     fn modified_file_hunks_and_line_numbers() {
         let r = Repo::new();
         let old = lines(1..=20);
-        let new = old.replace("line 3\n", "line three\n").replace(
-            "line 17\n",
-            "line 17\nline 17.5\n", // insertion lower down
-        );
+        let new = old
+            .replace("line 3\n", "line three\n")
+            .replace("line 17\n", "line 17\nline 17.5\n");
         let t_old = r.tree(&[("a.txt", old.as_bytes())]);
         let t_new = r.tree(&[("a.txt", new.as_bytes())]);
         let diff = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff should build");
