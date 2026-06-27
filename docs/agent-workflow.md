@@ -200,6 +200,11 @@ observes that itself.)
 
 ## Command reference
 
+- `nit --version` — print the client and server builds (`client <ver>` /
+  `server <ver>`, each `<semver>[+<sha>[.dirty]]`); exits non-zero if the server
+  (`$NIT_SERVER` or the default) is unreachable, printing `server unreachable`.
+  The canonical check that nit is installed and the server is up — use it in
+  place of any ad-hoc `/api/health` probe.
 - `nit repo create --base <ref> [--server <url>]` — register the cwd's repo
   (once per repo), pinning its canonical base ref: `--base` is required and
   must resolve to a commit — any git ref, e.g. `origin/main` (400 otherwise);

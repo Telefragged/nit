@@ -21,6 +21,7 @@ mod push;
 mod repo;
 mod resolve;
 mod status;
+mod version;
 mod wait;
 
 pub use comment::{CommentArgs, comment};
@@ -29,4 +30,5 @@ pub use log::{LogArgs, log};
 pub use push::{PushArgs, push};
 pub use repo::{RepoArgs, repo};
 pub use status::{StatusArgs, status};
+pub use version::version;
 pub use wait::{WaitArgs, wait};

@@ -17,6 +17,7 @@ nix develop          # devShell with the full toolchain
 
 ```sh
 nit serve            # review UI + API on http://127.0.0.1:8877
+nit --version        # client + server build; non-zero exit if the server is down
 ```
 
 Agent loop (any tool that can run shell commands):

@@ -24,6 +24,20 @@ pub(crate) fn server_url(flag: Option<String>) -> String {
         .unwrap_or_else(|| DEFAULT_SERVER.to_string())
 }
 
+/// Probe the server's reported build with a hard 1-second budget — the
+/// reachability half of `nit --version`. Any timeout, transport, or parse
+/// failure reads as unreachable (`None`); a healthy server returns its
+/// `/api/health` `version`.
+pub(crate) fn server_version(base: &str) -> Option<String> {
+    let agent = ureq::config::Config::builder()
+        .timeout_global(Some(std::time::Duration::from_secs(1)))
+        .build()
+        .new_agent();
+    let mut resp = agent.get(format!("{base}/api/health")).call().ok()?;
+    let body: Value = resp.body_mut().read_json().ok()?;
+    body["version"].as_str().map(str::to_owned)
+}
+
 #[derive(Debug)]
 pub(crate) enum CallError {
     Unreachable(anyhow::Error),

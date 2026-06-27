@@ -9,12 +9,16 @@ use nit::cli;
 #[derive(Parser)]
 #[command(
     name = "nit",
-    version = nit::VERSION,
-    about = "Commit-level code review for AI coding agents"
+    about = "Commit-level code review for AI coding agents",
+    arg_required_else_help = true
 )]
 struct Args {
+    /// Print the client and server build versions; exit non-zero if the server
+    /// is unreachable. The canonical "is nit up / installed" check.
+    #[arg(short = 'V', long)]
+    version: bool,
     #[command(subcommand)]
-    cmd: Cmd,
+    cmd: Option<Cmd>,
 }
 
 #[derive(Subcommand)]
@@ -47,7 +51,17 @@ fn main() -> Result<()> {
         )
         .init();
 
-    match Args::parse().cmd {
+    let args = Args::parse();
+    if args.version {
+        cli::version();
+        return Ok(());
+    }
+    let Some(cmd) = args.cmd else {
+        // `arg_required_else_help` shows help for a bare `nit`; with `--version`
+        // handled above, nothing else reaches here.
+        return Ok(());
+    };
+    match cmd {
         Cmd::Serve(args) => server::run(args),
         Cmd::Push(args) => cli::push(args),
         Cmd::Wait(args) => cli::wait(args),
