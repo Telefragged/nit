@@ -4,18 +4,15 @@
 //! explicit `abandon`/`reopen` actions and the 409-then-200 push gate around an
 //! abandoned change.
 //!
-//! `merged` is written only by the background sweep, so the merged tests call
-//! `fast_timer()` *before* `TestServer::start` and poll with `wait_for`.
-//! Abandonment is an explicit action, not a sweep — those tests drive
-//! `POST .../abandon` directly.
+//! `merged` is written only by the background sweep, so the merged tests drive
+//! one sweep synchronously through `sweep()` and assert. Abandonment is an
+//! explicit action, not a sweep — those tests drive `POST .../abandon`
+//! directly.
 
 mod common;
 
-use std::time::Duration;
-
 use common::{
-    GitRepo, TestServer, fast_timer, first_repo_id, http_get, http_post, member_id, msg, push,
-    review, wait_for,
+    GitRepo, TestServer, first_repo_id, http_get, http_post, member_id, msg, push, review, sweep,
 };
 use serde_json::json;
 
@@ -34,15 +31,8 @@ fn status_at(server: &TestServer, change_id: u64, revision: u64) -> Option<Strin
         .and_then(|m| m["status"].as_str().map(str::to_string))
 }
 
-fn wait_status(server: &TestServer, change_id: u64, revision: u64, want: &str) {
-    wait_for(Duration::from_secs(5), || {
-        (status_at(server, change_id, revision).as_deref() == Some(want)).then_some(())
-    });
-}
-
 #[test]
 fn change_landed_on_main_becomes_merged() {
-    fast_timer();
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -59,7 +49,8 @@ fn change_landed_on_main_becomes_merged() {
     let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("main", landed);
 
-    wait_status(&server, change_id, 0, "merged");
+    sweep(&server);
+    assert_eq!(status_at(&server, change_id, 0).as_deref(), Some("merged"));
 
     // A fully-merged chain drops off the active dashboard but stays reachable
     // by id (and under ?status=all).
@@ -75,7 +66,6 @@ fn change_landed_on_main_becomes_merged() {
 
 #[test]
 fn prefix_merge_marks_ancestor_while_tip_stays_live() {
-    fast_timer();
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
@@ -92,7 +82,8 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("main", landed);
 
-    wait_status(&server, ancestor, 0, "merged");
+    sweep(&server);
+    assert_eq!(status_at(&server, ancestor, 0).as_deref(), Some("merged"));
     assert_eq!(status_at(&server, tip, 0).as_deref(), Some("pending"));
 
     // One live member keeps the partially-landed stack on the active list, but
@@ -132,7 +123,6 @@ fn abandon(server: &TestServer, change_id: u64) {
 fn branchless_change_stays_live_without_auto_abandon() {
     // The core inversion: a change off every branch is NOT abandoned. Only the
     // explicit action abandons.
-    fast_timer(); // give the (merge-only) sweep ample chances to misfire
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -142,8 +132,14 @@ fn branchless_change_stays_live_without_auto_abandon() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
 
+    // Delete the only branch, then move main with an unrelated commit (distinct
+    // patch-id, so no false landing) so the sweep does real work over the open
+    // set containing this change — and demonstrably leaves it pending, never
+    // auto-abandoned.
     g.delete_branch("feat");
-    std::thread::sleep(Duration::from_millis(600));
+    let other = g.commit(&[g.root], &msg("unrelated", "I999"), &[("z.txt", "z\n")]);
+    g.branch("main", other);
+    sweep(&server);
     assert_eq!(
         status_at(&server, change_id, 0).as_deref(),
         Some("pending"),

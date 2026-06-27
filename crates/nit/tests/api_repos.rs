@@ -10,11 +10,8 @@
 
 mod common;
 
-use std::time::Duration;
-
 use common::{
-    GitRepo, TestServer, create_repo, fast_timer, http_get, http_patch, http_post, member_id, msg,
-    push, wait_for,
+    GitRepo, TestServer, create_repo, http_get, http_patch, http_post, member_id, msg, push, sweep,
 };
 use serde_json::json;
 
@@ -359,7 +356,6 @@ fn nit_repo_move_cli() {
 
 #[test]
 fn merged_chain_drops_out_of_active_chains() {
-    fast_timer();
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Im1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
@@ -370,12 +366,11 @@ fn merged_chain_drops_out_of_active_chains() {
     let id = first_repo(&server);
     assert_eq!(active_chains(&server, id), 1, "one live tip after the push");
 
-    // The background timer detects the patch-id on `main` and marks the change
-    // merged, so the chain leaves the live-tip set.
+    // The sweep detects the patch-id on `main` and marks the change merged, so
+    // the chain leaves the live-tip set.
     g.branch("main", c1);
-    wait_for(Duration::from_secs(5), || {
-        (active_chains(&server, id) == 0).then_some(())
-    });
+    sweep(&server);
+    assert_eq!(active_chains(&server, id), 0);
 }
 
 #[test]

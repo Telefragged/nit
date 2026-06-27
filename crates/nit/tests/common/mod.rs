@@ -160,10 +160,13 @@ fn commit_full_in(
         .unwrap()
 }
 
-/// A real `nit::api` server (the binary's stack) bound on port 0.
+/// A real `nit::api` server (the binary's stack) bound on port 0. The harness
+/// owns the `AppState` the server runs on so a test can drive a lifecycle
+/// sweep in-process (`sweep`); no background timer runs.
 pub struct TestServer {
     pub base: String,
     pub addr: std::net::SocketAddr,
+    state: Option<std::sync::Arc<nit::api::AppState>>,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
     served: Option<tokio::task::JoinHandle<()>>,
     rt: Option<tokio::runtime::Runtime>,
@@ -187,17 +190,22 @@ impl TestServer {
         let listener = rt.block_on(tokio::net::TcpListener::bind(addr)).unwrap();
         let addr = listener.local_addr().unwrap();
         let base = format!("http://{addr}");
+        let state = rt.block_on(nit::api::AppState::load(db_path)).unwrap();
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-        let served = rt.spawn(async move {
-            nit::api::serve_on(listener, db_path, web_dist, async {
-                let _ = rx.await;
+        let served = {
+            let state = state.clone();
+            rt.spawn(async move {
+                nit::api::serve_on_state(listener, state, web_dist, async {
+                    let _ = rx.await;
+                })
+                .await
+                .unwrap();
             })
-            .await
-            .unwrap();
-        });
+        };
         TestServer {
             base,
             addr,
+            state: Some(state),
             shutdown: Some(tx),
             served: Some(served),
             rt: Some(rt),
@@ -218,6 +226,12 @@ impl Drop for TestServer {
             if let Some(served) = self.served.take() {
                 let _ = rt
                     .block_on(async { tokio::time::timeout(Duration::from_secs(5), served).await });
+            }
+            // Drop the pooled AppState inside the runtime: deadpool closes
+            // sqlite connections via spawn_blocking, which needs a live runtime.
+            {
+                let _enter = rt.enter();
+                drop(self.state.take());
             }
             rt.shutdown_timeout(Duration::from_secs(5));
         }
@@ -356,6 +370,18 @@ pub fn member_id(server: &TestServer, value: &Value, change_key: &str) -> u64 {
 
 pub fn msg(subject: &str, change_id: &str) -> String {
     format!("{subject}\n\nChange-Id: {change_id}\n")
+}
+
+/// Drive one lifecycle sweep synchronously, in-process, against the server's
+/// own `AppState` — deterministic merge detection with no timer and no HTTP
+/// round-trip. Returns once the sweep has committed.
+pub fn sweep(server: &TestServer) {
+    let state = server.state.as_ref().expect("state");
+    server
+        .rt
+        .as_ref()
+        .expect("runtime")
+        .block_on(nit::api::sweep_once(state));
 }
 
 /// For the asynchronous lifecycle timer.
