@@ -150,9 +150,8 @@ with every new page or state. The npm `@playwright/test` version must match
   newlines (a `-m` per paragraph, lines pre-wrapped), not a single sentence.
 - Keep messages **timeless** — no process narration ("rebased onto X", branch
   ordering); that goes in the `nit` reply or terminal, not git history.
-- Code comments are stricter: a comment says what the code **is**, never
-  how it got there (no "now / no longer / replaced"). git blame holds the
-  history.
+- Code comments follow golden rule 10 — the non-obvious _why_, never how it
+  got there ("now / no longer / replaced"); git blame holds the history.
 - Every commit treefmt-clean (re-format after a rebase — "Formatting").
 - Never mix refactors with behavior changes.
 - **Every change starts in its own worktree** on a `track/*` branch — the

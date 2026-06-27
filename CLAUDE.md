@@ -52,6 +52,13 @@ identity across rewrites. Product spec: `nit.md`.
    are green: `nix flake check` runs `clippy` (`-D warnings`) and the full
    test suite as crate2nix checks. A green `nix build` is necessary but not
    sufficient — it skips tests (docs/dev.md "Verification").
+10. **Comments earn their place — the non-obvious _why_, or nothing.** A
+    comment states what the code cannot: an invariant, a constraint, a
+    subtle ordering. Never restate the code, narrate how it got there
+    ("now / no longer / replaced" — git blame holds that), or brag. Be
+    dense — the fewest words that carry a rationale the reader can't see.
+    Binds review and simplification passes too
+    (docs/design-review-guide.md rule 7).
 
 ## Layout
 
