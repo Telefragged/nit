@@ -9,8 +9,7 @@ use common::{GitRepo, TestServer, member_id, msg, push, review, ws_read, ws_subs
 
 const READ: Duration = Duration::from_secs(3);
 
-/// A `subscribe` from idx 0 replays the change's backlog, then live appends
-/// stream in with monotone seq.
+/// At idx 0 replays full backlog; `seq` is monotone across the replay/live boundary.
 #[test]
 fn subscribe_replays_backlog_then_streams_live() {
     let g = GitRepo::new();
@@ -27,9 +26,8 @@ fn subscribe_replays_backlog_then_streams_live() {
     assert_eq!(backlog["idx"], 0);
     assert_eq!(backlog["kind"], "revision");
 
-    // A live review entry streams in past the backlog. review() stages a
-    // decision (a side-table write, no log entry/frame) then submits, which
-    // appends the `review` at idx 1 and broadcasts it.
+    // review() stages via a side-table write (no log entry), then submits —
+    // that's why the `review` lands at idx 1.
     review(&server, change_id, "request_changes", "fix");
     let live = ws_read(&mut socket).expect("live review entry");
     assert_eq!(live["kind"], "review");
@@ -40,8 +38,7 @@ fn subscribe_replays_backlog_then_streams_live() {
     );
 }
 
-/// A `subscribe` from the change's head replays nothing (the watermark/empty
-/// backlog), then a live append arrives — the doorbell `nit wait` relies on.
+/// The connection stays live past an empty backlog drain — the doorbell `nit wait` relies on.
 #[test]
 fn subscribe_at_head_skips_backlog() {
     let g = GitRepo::new();
@@ -55,7 +52,7 @@ fn subscribe_at_head_skips_backlog() {
     let mut socket = ws_subscribe(&server, &[(change_id, 1)], Duration::from_millis(400));
     assert!(ws_read(&mut socket).is_none(), "no backlog at head");
 
-    // Resubscribe is not needed; the live append on this socket arrives.
+    // Resubscribe is not needed — the live append arrives on this same socket.
     review(&server, change_id, "approve", "lgtm");
     let live = ws_read(&mut socket).expect("live entry after head subscribe");
     assert_eq!(live["kind"], "review");
@@ -83,7 +80,6 @@ fn stacked_tip_wakes_parent_follower() {
     assert_eq!(backlog["change_id"], one);
     assert_eq!(backlog["kind"], "revision");
 
-    // Stack a brand-new tip (change two) on change one and re-push.
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
     let (st, res2) = push(&server, &g, "feat", "main");
@@ -109,9 +105,7 @@ fn unsubscribed_changes_are_silent() {
     let one = member_id(&server, &res, "I001");
     let two = member_id(&server, &res, "I002");
 
-    // Subscribe only to change one, at its head.
     let mut socket = ws_subscribe(&server, &[(one, 1)], Duration::from_millis(400));
-    // Activity on change two must not reach this socket.
     review(&server, two, "approve", "ok");
     assert!(
         ws_read(&mut socket).is_none(),
