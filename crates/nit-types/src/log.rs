@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::comments::CommentRange;
-use crate::enums::{LifecycleAction, Side, Verdict};
+use crate::enums::{LifecycleAction, LogKind, Side, Verdict};
 
 /// A `revision` entry: one new commit-sha observed for this change. The
 /// revision `number` is **not** carried — the fold mints it (0-based, by
@@ -74,4 +74,66 @@ pub struct LifecyclePayload {
     pub revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+}
+
+/// A log entry's payload as a closed union tagged by `kind`. The server's fold
+/// holds it typed; flattened into [`LogEntry`] the adjacent tag produces the
+/// wire's `{…, "kind": …, "payload": …}`. Storage serializes the inner struct
+/// alone (the `kind` lives in its own column), via the boundary in
+/// `crate::review`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "payload", rename_all = "snake_case")]
+pub enum LogPayload {
+    Revision(RevisionPayload),
+    Review(ReviewPayload),
+    /// One agent comment (the `comment` kind), opening a thread or replying.
+    Comment(CommentInput),
+    Lifecycle(LifecyclePayload),
+}
+
+impl LogPayload {
+    /// The kind tag this entry stores under.
+    #[must_use]
+    pub fn kind(&self) -> LogKind {
+        match self {
+            LogPayload::Revision(_) => LogKind::Revision,
+            LogPayload::Review(_) => LogKind::Review,
+            LogPayload::Comment(_) => LogKind::Comment,
+            LogPayload::Lifecycle(_) => LogKind::Lifecycle,
+        }
+    }
+
+    /// A `lifecycle` entry from its parts (the merge timer, abandon/reopen).
+    #[must_use]
+    pub fn lifecycle(
+        action: LifecycleAction,
+        revision: Option<u64>,
+        message: Option<String>,
+    ) -> LogPayload {
+        LogPayload::Lifecycle(LifecyclePayload {
+            action,
+            revision,
+            message,
+        })
+    }
+}
+
+/// One log entry (docs/api.md `LogEntry`). Belongs to one change; `seq` totally
+/// orders the whole repo, `idx` orders one change. The flattened [`LogPayload`]
+/// contributes the `kind` discriminant and the `payload` body.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    pub change_id: u64,
+    pub idx: u64,
+    pub seq: u64,
+    pub created_at: String,
+    #[serde(flatten)]
+    pub payload: LogPayload,
+}
+
+/// `GET /api/chains/{change_id}/log` response — the aggregated chain log,
+/// merged across members and sorted by global `seq`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainLog {
+    pub entries: Vec<LogEntry>,
 }

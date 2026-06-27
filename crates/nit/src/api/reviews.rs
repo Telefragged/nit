@@ -66,16 +66,16 @@ fn publish_member(
         .as_verdict()
         .or_else(|| drained.then_some(Verdict::Comment));
 
-    let mut news: Vec<review::EntryPayload> = Vec::new();
+    let mut news: Vec<review::LogPayload> = Vec::new();
     if decision.as_lifecycle() == Some(LifecycleAction::Reopened) {
-        news.push(review::EntryPayload::lifecycle(
+        news.push(review::LogPayload::lifecycle(
             LifecycleAction::Reopened,
             None,
             None,
         ));
     }
     if let Some(verdict) = verdict {
-        news.push(review::EntryPayload::Review(review::ReviewPayload {
+        news.push(review::LogPayload::Review(review::ReviewPayload {
             review_id: state.alloc_id(),
             revision,
             verdict,
@@ -91,7 +91,7 @@ fn publish_member(
     }
     if decision.as_lifecycle() == Some(LifecycleAction::Abandoned) {
         let reason = (!message.trim().is_empty()).then(|| message.to_string());
-        news.push(review::EntryPayload::lifecycle(
+        news.push(review::LogPayload::lifecycle(
             LifecycleAction::Abandoned,
             None,
             reason,

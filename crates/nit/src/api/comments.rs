@@ -74,11 +74,11 @@ pub(super) async fn create_comment(
                 }
             }
         };
-        let new = review::EntryPayload::Comment(comment);
+        let new = review::LogPayload::Comment(comment);
         // A new thread's id is minted during the append, so read it back here.
         let applied = append_to_change(conn, &entry, id, vec![new]).map_err(map_busy)?;
         let thread_id = match applied.first().map(|e| &e.payload) {
-            Some(review::EntryPayload::Comment(c)) => c.thread_id,
+            Some(review::LogPayload::Comment(c)) => c.thread_id,
             _ => None,
         }
         .ok_or_else(|| Error::internal("comment append minted no thread"))?;
@@ -102,7 +102,7 @@ fn set_lifecycle(
     message: Option<String>,
 ) -> Result<Json<types::ChangeDetail>, Error> {
     if guard(&entry.read().lifecycle) {
-        let new = review::EntryPayload::lifecycle(action, None, message);
+        let new = review::LogPayload::lifecycle(action, None, message);
         append_to_change(conn, entry, id, vec![new]).map_err(map_busy)?;
     }
     change_detail_json(conn, entry)

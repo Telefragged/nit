@@ -99,7 +99,7 @@ pub(super) async fn push(
                 ),
                 None => true,
             };
-            let new = review::EntryPayload::Revision(RevisionPayload {
+            let new = review::LogPayload::Revision(RevisionPayload {
                 commit_sha: wc.commit_sha.clone(),
                 parent_sha: wc.parent_sha.clone(),
                 base_sha: walk.fork_sha.clone(),

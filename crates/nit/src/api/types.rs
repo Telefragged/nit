@@ -24,27 +24,8 @@ pub use nit_types::push::{PushRequest, PushResult, TipChange};
 pub use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
 
 // ---------------------------------------------------------------------------
-// Agent endpoints
-
-/// One log entry (docs/api.md `LogEntry`). Belongs to one change; `seq` totally
-/// orders the whole repo, `idx` orders one change.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogEntry {
-    pub change_id: u64,
-    pub idx: u64,
-    pub seq: u64,
-    pub kind: LogKind,
-    pub created_at: String,
-    /// Kind-specific; shapes in data-model.md "Payloads".
-    pub payload: serde_json::Value,
-}
-
-/// `GET /api/chains/{change_id}/log` response — the aggregated chain log,
-/// merged across members and sorted by global `seq`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainLog {
-    pub entries: Vec<LogEntry>,
-}
+// Agent endpoints (the log)
+pub use nit_types::log::{ChainLog, LogEntry, LogPayload};
 
 // ---------------------------------------------------------------------------
 // Events (WS /api/stream) — docs/api.md "Events"

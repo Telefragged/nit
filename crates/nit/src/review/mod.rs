@@ -20,7 +20,6 @@
 
 use anyhow::{Result, anyhow};
 use nit_types::comments::CommentRange;
-use serde::Deserialize;
 
 use crate::db;
 use crate::enums::{ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
@@ -39,78 +38,39 @@ pub enum Lifecycle {
 
 // ---------------------------------------------------------------------------
 // Log payloads (the JSON in each `log.payload`; docs/data-model.md "Payloads")
-pub use nit_types::log::{CommentInput, LifecyclePayload, ReviewPayload, RevisionPayload};
+pub use nit_types::log::{
+    CommentInput, LifecyclePayload, LogPayload, ReviewPayload, RevisionPayload,
+};
 
-/// A log entry to append, as its typed domain payload. The append primitive
-/// (`crate::api::append_to_change`) derives the [`LogKind`] tag and serializes
-/// the payload to its stored JSON itself, so callers never touch
-/// `serde_json::Value` — that is the storage boundary's concern, not theirs.
-#[derive(Debug, Clone)]
-pub enum EntryPayload {
-    Revision(RevisionPayload),
-    Review(ReviewPayload),
-    /// One agent comment (the `comment` kind), opening a thread or replying.
-    Comment(CommentInput),
-    Lifecycle(LifecyclePayload),
+/// Serialize a log payload to the JSON stored in its `log.payload` column: the
+/// inner struct alone, since the entry's `kind` is stored in its own column.
+/// The write half of the storage boundary ([`payload_from_json`] is the read
+/// half) — no `serde_json::Value` crosses it.
+///
+/// # Errors
+/// When the payload fails to serialize — impossible for these plain structs.
+pub(crate) fn payload_to_json(payload: &LogPayload) -> Result<String> {
+    match payload {
+        LogPayload::Revision(p) => serde_json::to_string(p),
+        LogPayload::Review(p) => serde_json::to_string(p),
+        LogPayload::Comment(p) => serde_json::to_string(p),
+        LogPayload::Lifecycle(p) => serde_json::to_string(p),
+    }
+    .map_err(Into::into)
 }
 
-impl EntryPayload {
-    /// A `lifecycle` entry from its parts (the merge timer, abandon/reopen).
-    #[must_use]
-    pub fn lifecycle(
-        action: LifecycleAction,
-        revision: Option<u64>,
-        message: Option<String>,
-    ) -> EntryPayload {
-        EntryPayload::Lifecycle(LifecyclePayload {
-            action,
-            revision,
-            message,
-        })
-    }
-
-    /// The kind tag this entry stores under.
-    #[must_use]
-    pub fn kind(&self) -> LogKind {
-        match self {
-            EntryPayload::Revision(_) => LogKind::Revision,
-            EntryPayload::Review(_) => LogKind::Review,
-            EntryPayload::Comment(_) => LogKind::Comment,
-            EntryPayload::Lifecycle(_) => LogKind::Lifecycle,
-        }
-    }
-
-    /// Serialize the payload to its stored JSON shape.
-    ///
-    /// # Errors
-    /// When the payload fails to serialize.
-    pub fn to_value(&self) -> Result<serde_json::Value> {
-        match self {
-            EntryPayload::Revision(p) => serde_json::to_value(p),
-            EntryPayload::Review(p) => serde_json::to_value(p),
-            EntryPayload::Comment(p) => serde_json::to_value(p),
-            EntryPayload::Lifecycle(p) => serde_json::to_value(p),
-        }
-        .map_err(Into::into)
-    }
-
-    /// Parse a stored entry's `kind` + JSON `payload` back into the typed
-    /// payload — the deserialize half of the storage boundary (mirrors
-    /// [`to_value`](Self::to_value)).
-    ///
-    /// # Errors
-    /// When the JSON does not match the payload shape for `kind`.
-    fn from_json(kind: LogKind, json: &str) -> Result<EntryPayload> {
-        fn parse<T: for<'de> Deserialize<'de>>(json: &str) -> serde_json::Result<T> {
-            serde_json::from_str(json)
-        }
-        Ok(match kind {
-            LogKind::Revision => EntryPayload::Revision(parse(json)?),
-            LogKind::Review => EntryPayload::Review(parse(json)?),
-            LogKind::Comment => EntryPayload::Comment(parse(json)?),
-            LogKind::Lifecycle => EntryPayload::Lifecycle(parse(json)?),
-        })
-    }
+/// Parse a stored entry's `kind` + inner JSON back into the typed payload — the
+/// read half of the storage boundary (mirrors [`payload_to_json`]).
+///
+/// # Errors
+/// When the JSON does not match the payload shape for `kind`.
+pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload> {
+    Ok(match kind {
+        LogKind::Revision => LogPayload::Revision(serde_json::from_str(json)?),
+        LogKind::Review => LogPayload::Review(serde_json::from_str(json)?),
+        LogKind::Comment => LogPayload::Comment(serde_json::from_str(json)?),
+        LogKind::Lifecycle => LogPayload::Lifecycle(serde_json::from_str(json)?),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +81,7 @@ impl EntryPayload {
 pub struct Entry {
     pub seq: u64,
     pub idx: u64,
-    pub payload: EntryPayload,
+    pub payload: LogPayload,
     pub created_at: String,
 }
 
@@ -136,7 +96,7 @@ impl Entry {
         Ok(Entry {
             seq: row.seq,
             idx: row.idx,
-            payload: EntryPayload::from_json(kind, &row.payload)
+            payload: payload_from_json(kind, &row.payload)
                 .map_err(|e| anyhow!("log entry {}: bad payload: {e}", row.idx))?,
             created_at: row.created_at.clone(),
         })
@@ -362,8 +322,8 @@ impl ChangeProj {
 pub fn fold(change: &mut ChangeProj, mut entry: Entry) -> Entry {
     let now = entry.created_at.clone();
     match &mut entry.payload {
-        EntryPayload::Revision(p) => fold_revision(change, p, &now),
-        EntryPayload::Review(p) => {
+        LogPayload::Revision(p) => fold_revision(change, p, &now),
+        LogPayload::Review(p) => {
             change.reviews.push(ReviewProj {
                 id: p.review_id,
                 revision: p.revision,
@@ -376,11 +336,11 @@ pub fn fold(change: &mut ChangeProj, mut entry: Entry) -> Entry {
                 apply_comment(change, c, Some(p.review_id), &now);
             }
         }
-        EntryPayload::Comment(c) => {
+        LogPayload::Comment(c) => {
             change.mint_thread_id(c);
             apply_comment(change, c, None, &now);
         }
-        EntryPayload::Lifecycle(p) => fold_lifecycle(change, p),
+        LogPayload::Lifecycle(p) => fold_lifecycle(change, p),
     }
     entry
 }
@@ -481,7 +441,7 @@ pub fn replay(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangeProj> {
 pub fn max_assigned_id(rows: &[db::LogRow]) -> Result<u64> {
     let mut max = 0;
     for row in rows {
-        if let EntryPayload::Review(p) = Entry::from_row(row)?.payload {
+        if let LogPayload::Review(p) = Entry::from_row(row)?.payload {
             max = max.max(p.review_id);
         }
     }

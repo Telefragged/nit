@@ -18,7 +18,6 @@ use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use nit_types::comments::CommentRange;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::Value;
 
 use crate::enums::{ChangeStatus, Decision, Side};
 
@@ -456,7 +455,7 @@ pub fn append_log(
     change_id: u64,
     idx: u64,
     kind: &str,
-    payload: &Value,
+    payload: &str,
     created_at: &str,
 ) -> Result<u64> {
     conn.execute(
@@ -466,7 +465,7 @@ pub fn append_log(
             i64::try_from(change_id)?,
             i64::try_from(idx)?,
             kind,
-            payload.to_string(),
+            payload,
             created_at
         ],
     )?;
@@ -868,24 +867,9 @@ mod tests {
         let conn = mem();
         let c = change(&conn);
         assert_eq!(log_head(&conn, c).expect("head"), 0);
-        let s0 = append_log(
-            &conn,
-            c,
-            0,
-            "revision",
-            &serde_json::json!({"commit_sha": "a"}),
-            "t0",
-        )
-        .expect("append");
-        let s1 = append_log(
-            &conn,
-            c,
-            1,
-            "comment",
-            &serde_json::json!({"body": "note"}),
-            "t1",
-        )
-        .expect("append");
+        let s0 =
+            append_log(&conn, c, 0, "revision", r#"{"commit_sha":"a"}"#, "t0").expect("append");
+        let s1 = append_log(&conn, c, 1, "comment", r#"{"body":"note"}"#, "t1").expect("append");
         assert!(s1 > s0, "seq is monotone");
         assert_eq!(log_head(&conn, c).expect("head"), 2);
         let entries = log_entries(&conn, c, 0, None).expect("entries");
@@ -903,9 +887,9 @@ mod tests {
         let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
         let a = upsert_change(&conn, repo.id, "Ia").expect("a");
         let b = upsert_change(&conn, repo.id, "Ib").expect("b");
-        let sa = append_log(&conn, a, 0, "comment", &serde_json::json!({}), "t0").expect("a0");
-        let sb = append_log(&conn, b, 0, "comment", &serde_json::json!({}), "t1").expect("b0");
-        let sa1 = append_log(&conn, a, 1, "comment", &serde_json::json!({}), "t2").expect("a1");
+        let sa = append_log(&conn, a, 0, "comment", "{}", "t0").expect("a0");
+        let sb = append_log(&conn, b, 0, "comment", "{}", "t1").expect("b0");
+        let sa1 = append_log(&conn, a, 1, "comment", "{}", "t2").expect("a1");
         // Both changes' idx restart at 0, but seq totally orders the interleave.
         assert!(sa < sb && sb < sa1);
     }

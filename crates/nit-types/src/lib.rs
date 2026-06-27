@@ -21,3 +21,6 @@ pub mod health;
 pub mod log;
 pub mod push;
 pub mod repos;
+
+#[cfg(test)]
+mod tests;

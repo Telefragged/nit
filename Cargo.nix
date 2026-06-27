@@ -3380,6 +3380,12 @@ rec {
             features = [ "derive" ];
           }
         ];
+        devDependencies = [
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+          }
+        ];
         features = {
           "clap" = [ "dep:clap" ];
         };

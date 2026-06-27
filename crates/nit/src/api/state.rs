@@ -342,7 +342,7 @@ pub fn append_to_change(
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
-    news: Vec<review::EntryPayload>,
+    news: Vec<review::LogPayload>,
 ) -> anyhow::Result<Vec<review::Entry>> {
     append_to_change_with(conn, entry, change_id, news, |_| Ok(()))
 }
@@ -371,7 +371,7 @@ pub fn append_to_change_with(
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
-    news: Vec<review::EntryPayload>,
+    news: Vec<review::LogPayload>,
     pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
 ) -> anyhow::Result<Vec<review::Entry>> {
     if news.is_empty() {
@@ -413,7 +413,7 @@ pub fn append_to_change_with(
     pre_commit(&tx)?;
     let mut applied = Vec::with_capacity(staged.len());
     for e in staged {
-        let payload = e.payload.to_value()?;
+        let payload = review::payload_to_json(&e.payload)?;
         let seq = db::append_log(&tx, change_id, e.idx, e.kind().as_str(), &payload, &now)?;
         applied.push(review::Entry { seq, ..e });
     }
