@@ -27,19 +27,6 @@ use crate::enums::{ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
 // ---------------------------------------------------------------------------
 // Enums
 
-impl From<Verdict> for ChangeStatus {
-    /// The review status a verdict produces, before the lifecycle overlay
-    /// (`merged`/`abandoned`) that [`ChangeProj::status_at`] layers on top
-    /// (docs/data-model.md "The fold").
-    fn from(verdict: Verdict) -> ChangeStatus {
-        match verdict {
-            Verdict::Approve => ChangeStatus::Approved,
-            Verdict::RequestChanges => ChangeStatus::ChangesRequested,
-            Verdict::Comment => ChangeStatus::Commented,
-        }
-    }
-}
-
 /// A change's terminal lifecycle, folded from its `lifecycle` entries
 /// (docs/data-model.md "Lifecycle"). `Merged` records which patchset landed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

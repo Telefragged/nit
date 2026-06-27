@@ -1,7 +1,6 @@
 //! The shared closed vocabularies of nit: the small sets of named values —
-//! sides, authors, verdicts, statuses, kinds — that appear in both the
-//! domain (`crate::review` fold) and the wire (`crate::api::types`), and on
-//! the CLI.
+//! sides, verdicts, statuses, kinds — used across the server's domain fold,
+//! the wire DTOs that live beside them in this crate, and the CLI alike.
 //!
 //! **Discipline: a closed set of values is an `enum`, never a `String`.**
 //! Every value that can only be one of a fixed list lives here as a serde
@@ -24,7 +23,8 @@ use serde::{Deserialize, Serialize};
 /// Which tree of a revision a line comment is anchored to (docs/api.md
 /// "Comment placement"): `new` is the revision's commit tree, `old` its
 /// parent tree. Defaults to `new` where a request omits it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[serde(rename_all = "snake_case")]
 pub enum Side {
     Old,
@@ -238,6 +238,19 @@ impl std::str::FromStr for ChangeStatus {
             "merged" => Ok(ChangeStatus::Merged),
             "abandoned" => Ok(ChangeStatus::Abandoned),
             other => Err(format!("unknown change status {other:?}")),
+        }
+    }
+}
+
+impl From<Verdict> for ChangeStatus {
+    /// The review status a verdict produces, before the lifecycle overlay
+    /// (`merged`/`abandoned`) the server's fold layers on top
+    /// (docs/data-model.md "The fold").
+    fn from(verdict: Verdict) -> ChangeStatus {
+        match verdict {
+            Verdict::Approve => ChangeStatus::Approved,
+            Verdict::RequestChanges => ChangeStatus::ChangesRequested,
+            Verdict::Comment => ChangeStatus::Commented,
         }
     }
 }

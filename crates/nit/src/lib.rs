@@ -28,6 +28,9 @@ pub mod api;
 pub mod chain;
 pub mod cli;
 pub mod db;
-pub mod enums;
 pub mod gitscan;
 pub mod review;
+
+/// The shared closed vocabularies (sides, verdicts, statuses, kinds), defined
+/// once in `nit-types` and re-exported so `crate::enums::*` stays stable.
+pub use nit_types::enums;
