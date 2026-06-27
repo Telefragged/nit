@@ -36,34 +36,41 @@
       # Pin rustc from rust-toolchain.toml so nix and rustup builds match.
       rustToolchainFor = pkgs: pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-      # Clippy's source: Rust only, so web/ or docs/ edits don't rebuild it.
-      rustSrc = nixpkgs.lib.fileset.toSource {
-        root = ./.;
-        fileset = nixpkgs.lib.fileset.unions [
-          ./Cargo.toml
-          ./Cargo.lock
-          ./crates
-        ];
-      };
-
       # Cargo.nix is generated — don't hand-edit (regen: docs/dev.md). Build
       # with our pinned rustc, not nixpkgs'; the virtual workspace has no
       # rootCrate, so callers select a member via `workspaceMembers."<name>"`.
+      # Our own crates (local `src`, not a crates.io `sha256`) compile with
+      # clippy-driver under Cargo.toml's `[workspace.lints]`; deps stay plain.
       cargoNixFor =
         pkgs:
         let
           rustToolchain = rustToolchainFor pkgs;
+          lints = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.lints;
         in
         pkgs.callPackage ./Cargo.nix {
           buildRustCrateForPkgs =
             p:
-            p.buildRustCrate.override {
-              rustc = rustToolchain;
-              cargo = rustToolchain;
-              # buildRustCrate defaults to codegen-units=1 (serial codegen),
-              # ~3x slower per crate than cargo's release default. Match cargo.
-              defaultCodegenUnits = 16;
-            };
+            let
+              base = p.buildRustCrate.override {
+                rustc = rustToolchain;
+                cargo = rustToolchain;
+                clippy = rustToolchain;
+                # buildRustCrate defaults to codegen-units=1 (serial codegen),
+                # ~3x slower per crate than cargo's release default. Match cargo.
+                defaultCodegenUnits = 16;
+              };
+            in
+            crate:
+            let
+              drv = base crate;
+            in
+            if crate ? sha256 then
+              drv
+            else
+              drv.override (_: {
+                useClippy = true;
+                inherit lints;
+              });
         };
 
       # Source tree and version shared by the web build (nit-web) and its
@@ -181,7 +188,6 @@
         pkgs:
         let
           cargoNix = cargoNixFor pkgs;
-          rustToolchain = rustToolchainFor pkgs;
           webNpmDeps = webNpmDepsFor pkgs;
         in
         {
@@ -194,28 +200,10 @@
             buildPhase = "HOME=$TMPDIR treefmt --ci --tree-root .";
             installPhase = "touch $out";
           };
-          # crate2nix has no clippy mode, so lint standalone: importCargoLock
-          # vendors the deps, clippy runs offline against them.
-          clippy = pkgs.stdenv.mkDerivation {
-            name = "nit-clippy";
-            src = rustSrc;
-            cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-            nativeBuildInputs = [
-              rustToolchain
-              pkgs.rustPlatform.cargoSetupHook
-              pkgs.pkg-config
-            ];
-            buildInputs = [
-              pkgs.libgit2
-              pkgs.sqlite
-              pkgs.zlib
-            ];
-            buildPhase = "cargo clippy --offline --all-targets -- -D warnings";
-            installPhase = "touch $out";
-          };
-          # Tests run here, not in `nix build`. The differential test shells out
-          # to `git rebase`, so it needs git and a committer identity the sandbox
-          # lacks.
+          # Also clippy-checks the test targets (lib/bins are linted in every
+          # build). Tests run here, not in `nix build`; the differential test
+          # shells out to `git rebase`, so it needs git and a committer identity
+          # the sandbox lacks.
           test = cargoNix.workspaceMembers."nit".build.override {
             runTests = true;
             testInputs = [ pkgs.git ];

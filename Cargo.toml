@@ -20,3 +20,7 @@ allow_attributes_without_reason = "deny"
 
 # Fires on deliberately parallel names (change1/change2, draft_b/draft_c).
 similar_names = "allow"
+
+[workspace.lints.rust]
+# Warnings are errors everywhere — local `cargo` and the nix lint gate alike.
+warnings = "deny"

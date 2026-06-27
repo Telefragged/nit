@@ -9,7 +9,7 @@ via `.envrc`). Never use system cargo/node.
 # backend
 nix develop -c cargo run -- serve              # api on :8877
 nix develop -c cargo check                     # fast compile gate
-nix develop -c cargo clippy --all-targets -- -D warnings
+nix develop -c cargo clippy --all-targets      # -D warnings via Cargo.toml lints
 nix develop -c cargo test
 nix develop -c cargo fmt
 
@@ -38,9 +38,11 @@ Checks verify a change, not a green build — `nix build` skips tests
 
 - `nix develop -c cargo check` — fast inner-loop gate.
 - `nix flake check` — the pre-commit gate: builds the product and runs the
-  Rust validators (`clippy` with `-D warnings`, `test`, `test-nit-types`)
-  and the web validators (`web-lint`, `web-test`). Run one alone with
-  `nix build .#checks.<system>.clippy` or `.#checks.<system>.web-test`.
+  Rust validators (`test`, `test-nit-types`) and the web validators
+  (`web-lint`, `web-test`). Every crate of ours compiles with `clippy-driver`
+  under `-D warnings`, so a lint fails any build; the `test*` checks add the
+  test targets. Run one alone with `nix build .#checks.<system>.test` or
+  `.#checks.<system>.web-test`.
 
 The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
 change, regenerate it with `nix develop -c crate2nix generate` and commit it

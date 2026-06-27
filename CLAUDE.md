@@ -49,9 +49,10 @@ identity across rewrites. Product spec: `nit.md`.
    actually simpler or it breaks behavior, never because it changes a lot.
 9. **Checks are verification — `cargo check` is the floor.** A commit is
    done when `nix develop -c cargo check` passes and the flake validators
-   are green: `nix flake check` runs `clippy` (`-D warnings`) and the full
-   test suite as crate2nix checks. A green `nix build` is necessary but not
-   sufficient — it skips tests (docs/dev.md "Verification").
+   are green: `nix flake check` builds and runs the full test suite as
+   crate2nix checks, every crate of ours compiled under `clippy`
+   (`-D warnings`). A green `nix build` is necessary but not sufficient — it
+   skips tests (docs/dev.md "Verification").
 10. **Comments earn their place — the non-obvious _why_, or nothing.** A
     comment states what the code cannot: an invariant, a constraint, a
     subtle ordering. Never restate the code, narrate how it got there
