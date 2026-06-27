@@ -28,7 +28,6 @@ fn git_dir_of(root: &std::path::Path) -> String {
         .to_string()
 }
 
-/// The `active_chains` of repo `id` in a `GET /api/repos` body.
 fn active_chains(server: &TestServer, id: u64) -> u64 {
     let (st, list) = http_get(&server.url("/api/repos"));
     assert_eq!(st, 200, "{list}");
@@ -86,7 +85,6 @@ fn repos_list_shape_base_ref_and_scoped_chains() {
     let id_b = repo_b["id"].as_u64().unwrap();
     assert_ne!(id_a, id_b, "distinct git dirs are distinct repos");
 
-    // Repo shape: id, git_dir, base_ref (set at create), active_chains.
     assert_eq!(repo_a["base_ref"], "main");
     assert_eq!(repo_b["base_ref"], "main");
     assert_eq!(active_chains(&server, id_a), 1);
@@ -102,7 +100,6 @@ fn repos_list_shape_base_ref_and_scoped_chains() {
     assert_eq!(st, 200);
     assert_eq!(scoped_a["chains"].as_array().unwrap().len(), 1);
 
-    // An unknown repo filter scopes to nothing (not an error).
     let (st, none) = http_get(&server.url("/api/chains?repo=9999"));
     assert_eq!(st, 200);
     assert!(none["chains"].as_array().unwrap().is_empty());
@@ -110,8 +107,7 @@ fn repos_list_shape_base_ref_and_scoped_chains() {
 
 #[test]
 fn base_can_be_any_branch() {
-    // The base is whatever `--base` names — nit never assumes `main`/`master`.
-    // A repo without either registers fine against an arbitrary `trunk`.
+    // nit never assumes `main`/`master` — the base must be named explicitly.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("base: one", "Ib1"), &[("a.rs", "a\n")]);
     g.branch("trunk", c1);
@@ -147,12 +143,10 @@ fn create_repo_registers_and_pins_base() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
-    // A second canonical-branch candidate, to prove a re-create can't switch it.
     g.branch("trunk", g.root);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // An explicit base registers the repo and pins its canonical branch; no
-    // push has happened, so it carries no live tips.
+    // no push yet — active_chains starts at 0.
     let (st, repo) = create_repo(&server, &g, "main");
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
@@ -181,7 +175,6 @@ fn push_into_unregistered_repo_is_404() {
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // No `nit repo create` first: the push is rejected and nothing is recorded.
     let unregistered = |tip: &str| {
         http_post(
             &server.url("/api/push"),
@@ -200,7 +193,6 @@ fn push_into_unregistered_repo_is_404() {
         "a rejected push registers nothing: {list}"
     );
 
-    // After create, the same push lands.
     let (st, _) = create_repo(&server, &g, "main");
     assert_eq!(st, 200);
     let (st, res) = unregistered("feat");
@@ -251,7 +243,7 @@ fn nit_repo_create_cli() {
     assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
     assert_eq!(repo["base_ref"], "main");
 
-    // The repo now shows up in `nit repo list` (≡ GET /api/repos).
+    // nit repo list ≡ GET /api/repos.
     let (_, list) = http_get(&server.url("/api/repos"));
     assert_eq!(list["repos"][0]["git_dir"].as_str().unwrap(), g.git_dir());
 }
@@ -266,22 +258,18 @@ fn relocate_repo_endpoint() {
     assert_eq!(st, 200);
     let repo_id = first_repo(&server);
 
-    // Unknown repo → 404.
     let (st, _) = http_patch(
         &server.url("/api/repos/999"),
         &json!({"git_dir": a.git_dir()}),
     );
     assert_eq!(st, 404);
 
-    // An unresolvable new path → 400.
     let (st, _) = http_patch(
         &server.url(&format!("/api/repos/{repo_id}")),
         &json!({"git_dir": "/does/not/exist/.git"}),
     );
     assert_eq!(st, 400);
 
-    // A path belonging to a *different* repo → 409. Register a second repo,
-    // then try to point repo A at its git dir.
     let b = GitRepo::new();
     let b1 = b.commit(&[b.root], &msg("b: one", "Ib1"), &[("b.rs", "b\n")]);
     b.branch("feat", b1);
@@ -293,7 +281,6 @@ fn relocate_repo_endpoint() {
     );
     assert_eq!(st, 409, "{conflict}");
 
-    // Move repo A on disk, then repoint it at the new git dir.
     let new_root = a.dir.path().join("moved");
     std::fs::rename(a.dir.path().join("repo"), &new_root).unwrap();
     let new_git_dir = git_dir_of(&new_root);
@@ -306,7 +293,6 @@ fn relocate_repo_endpoint() {
     assert_eq!(repo["id"].as_u64(), Some(repo_id));
     assert_eq!(repo["base_ref"], "main", "base survives a relocation");
 
-    // GET /api/repos now reports the new path for the same id.
     let (_, list) = http_get(&server.url("/api/repos"));
     let row = list["repos"]
         .as_array()
@@ -327,7 +313,6 @@ fn get_repo_by_id_endpoint() {
     assert_eq!(st, 200);
     let repo_id = first_repo(&server);
 
-    // The by-id repo carries the same shape the list reports for that row.
     let (st, repo) = http_get(&server.url(&format!("/api/repos/{repo_id}")));
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["id"].as_u64(), Some(repo_id));
@@ -335,7 +320,6 @@ fn get_repo_by_id_endpoint() {
     assert_eq!(repo["base_ref"], "main");
     assert_eq!(repo["active_chains"].as_u64(), Some(1));
 
-    // Unknown id → 404.
     let (st, _) = http_get(&server.url("/api/repos/9999"));
     assert_eq!(st, 404);
 }
@@ -350,8 +334,7 @@ fn nit_repo_move_cli() {
     assert_eq!(st, 200);
     let old_git_dir = a.git_dir();
 
-    // Move the repo, then `nit repo move <old git dir> <new root>`. The cwd is
-    // the still-present tempdir — the command keys off its args, not the cwd.
+    // The cwd is the still-present tempdir — the command keys off its args, not the cwd.
     let new_root = a.dir.path().join("moved");
     std::fs::rename(a.dir.path().join("repo"), &new_root).unwrap();
     let new_git_dir = git_dir_of(&new_root);
@@ -370,7 +353,6 @@ fn nit_repo_move_cli() {
     let updated: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(updated["git_dir"].as_str().unwrap(), new_git_dir);
 
-    // `nit repo list` (≡ GET /api/repos) now shows the new path.
     let (_, list) = http_get(&server.url("/api/repos"));
     assert_eq!(list["repos"][0]["git_dir"].as_str().unwrap(), new_git_dir);
 }
@@ -388,9 +370,8 @@ fn merged_chain_drops_out_of_active_chains() {
     let id = first_repo(&server);
     assert_eq!(active_chains(&server, id), 1, "one live tip after the push");
 
-    // Land the change on the canonical branch (a fast-forward of main onto the
-    // tip). The background timer detects the patch-id on `main` and marks the
-    // change merged, so the chain leaves the live-tip set.
+    // The background timer detects the patch-id on `main` and marks the change
+    // merged, so the chain leaves the live-tip set.
     g.branch("main", c1);
     wait_for(Duration::from_secs(5), || {
         (active_chains(&server, id) == 0).then_some(())
@@ -410,8 +391,8 @@ fn abandoned_chain_drops_out_of_active_chains() {
     let id = first_repo(&server);
     assert_eq!(active_chains(&server, id), 1);
 
-    // Abandon the change: it drops out of the active-tip set (the dashboard
-    // hides abandoned tips), even though it stays enumerable as its own chain.
+    // Abandoned tips are excluded from active_chains (the dashboard hides them)
+    // but stay enumerable as their own chain.
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/abandon")),
         &json!({}),
@@ -420,16 +401,12 @@ fn abandoned_chain_drops_out_of_active_chains() {
     assert_eq!(active_chains(&server, id), 0);
 }
 
-// ---------------------------------------------------------------------------
-// Small repo-registry helpers (one repo per server in these tests).
-
 /// The only registered repo's id.
 fn first_repo(server: &TestServer) -> u64 {
     let (_, list) = http_get(&server.url("/api/repos"));
     list["repos"][0]["id"].as_u64().expect("a repo")
 }
 
-/// A repo's recorded canonical `base_ref`.
 fn repo_base(server: &TestServer, id: u64) -> String {
     let (_, list) = http_get(&server.url("/api/repos"));
     list["repos"]
