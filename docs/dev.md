@@ -43,7 +43,8 @@ Checks verify a change, not a green build — `nix build` skips tests
 ## Formatting
 
 `nix develop -c treefmt` formats the tree (`nix fmt` is the same; config in
-`treefmt.toml`); `treefmt --fail-on-change` checks.
+`treefmt.toml`); the `treefmt` flake check verifies it, so `nix flake check`
+fails on any unformatted file.
 
 Format **per commit**, so each commit is clean on its own. A rebase breaks
 this — replayed commits and conflict resolutions land unformatted in
@@ -186,8 +187,8 @@ agent that built the chain **drives it all the way to `merged`**: reaching
 `approved` is the cue to land, never to hand off.
 
 ```sh
-# if main moved: rebase onto it, re-formatting each replayed commit
-git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' main
+# if main moved: rebase onto it, verifying each replayed commit
+git rebase -x 'nix flake check' main
 nit push                                       # re-record the rebased revisions (see below)
 git -C <primary> merge --ff-only <branch>      # never `git checkout main` inside a worktree
 git worktree remove <worktree> && git branch -d <branch>
