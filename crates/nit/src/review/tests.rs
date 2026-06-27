@@ -58,7 +58,6 @@ fn anchored(file: &str, line: u64, body: &str) -> CommentInput {
     }
 }
 
-/// Fold a sequence of payloads onto a fresh change, idx-ordered.
 fn folded(payloads: Vec<LogPayload>) -> ChangeProj {
     let mut c = ChangeProj::empty(&change_row());
     for (i, payload) in payloads.into_iter().enumerate() {
@@ -183,7 +182,6 @@ fn abandon_then_reopen() {
 fn threads_open_reply_and_resolve() {
     let c = folded(vec![
         revision("A", "base", "base", true),
-        // A review opening a thread (reviewer), then a resolving reply.
         LogPayload::Review(ReviewPayload {
             review_id: 200,
             revision: 0,
@@ -236,17 +234,14 @@ fn cinput(thread_id: Option<u64>, body: &str) -> CommentInput {
 #[test]
 fn mint_thread_id_assigns_then_keeps_the_counter_ahead() {
     let mut c = ChangeProj::empty(&change_row());
-    // A new-thread comment is minted the next id, advancing the counter once.
     let mut open = cinput(None, "opens");
     c.mint_thread_id(&mut open);
     assert_eq!(open.thread_id, Some(0));
     assert_eq!(c.next_thread_id, 1);
-    // A reply already names its thread: not re-minted, counter unmoved.
     let mut reply = cinput(Some(0), "reply");
     c.mint_thread_id(&mut reply);
     assert_eq!(reply.thread_id, Some(0));
     assert_eq!(c.next_thread_id, 1);
-    // An empty new-thread comment is left unset.
     let mut empty = cinput(None, "");
     c.mint_thread_id(&mut empty);
     assert_eq!(empty.thread_id, None);
@@ -261,8 +256,6 @@ fn mint_thread_id_assigns_then_keeps_the_counter_ahead() {
 fn fold_opens_a_thread_for_a_stamped_unseen_id() {
     let mut c = ChangeProj::empty(&change_row());
     fold(&mut c, entry(0, revision("A", "base", "base", true)));
-    // A comment carrying a stamped id for a thread not seen yet opens it, and
-    // the mint counter advances past the stamped id.
     let open = entry(
         1,
         LogPayload::Comment(CommentInput {
@@ -274,7 +267,6 @@ fn fold_opens_a_thread_for_a_stamped_unseen_id() {
     assert_eq!(c.threads.len(), 1);
     assert_eq!(c.threads[0].id, 3);
     assert_eq!(c.next_thread_id, 4);
-    // A later comment on the same id replies rather than re-opening.
     let reply = entry(2, LogPayload::Comment(cinput(Some(3), "ok")));
     fold(&mut c, reply);
     assert_eq!(c.threads.len(), 1);

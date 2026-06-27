@@ -25,9 +25,6 @@ use nit_types::enums::{ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
 
 use crate::db;
 
-// ---------------------------------------------------------------------------
-// Enums
-
 /// A change's terminal lifecycle, folded from its `lifecycle` entries
 /// (docs/data-model.md "Lifecycle"). `Merged` records which patchset landed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,9 +69,6 @@ pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload>
     })
 }
 
-// ---------------------------------------------------------------------------
-// A folded log entry
-
 /// One log entry as the fold sees it: coordinates plus the **typed** payload.
 #[derive(Debug, Clone)]
 pub struct Entry {
@@ -101,7 +95,6 @@ impl Entry {
         })
     }
 
-    /// This entry's kind, from its payload variant.
     #[must_use]
     pub fn kind(&self) -> LogKind {
         self.payload.kind()
@@ -297,11 +290,10 @@ impl ChangeProj {
     }
 
     /// Resolve a comment's thread id and keep `next_thread_id` — the single
-    /// source of truth — past it (docs/data-model.md "Identity"). A new-thread
-    /// comment (no id, real body) is minted the next id; any id then bumps the
-    /// counter. The fold calls this before applying each comment, so a live
-    /// append mints (and the stored payload then carries the id) while replay,
-    /// seeing the id already set, only advances the counter — no double count.
+    /// source of truth — past it (docs/data-model.md "Identity"). Called before
+    /// each fold: a live append mints (the stored payload then carries the id)
+    /// while replay, seeing the id already set, only advances the counter —
+    /// no double count.
     fn mint_thread_id(&mut self, comment: &mut CommentInput) {
         if comment.thread_id.is_none() && !comment.body.trim().is_empty() {
             comment.thread_id = Some(self.next_thread_id);
@@ -311,9 +303,6 @@ impl ChangeProj {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Fold
 
 /// Apply one entry to a change's projection (docs/data-model.md "The fold"),
 /// minting any new-thread ids into the entry's typed payload and returning the
@@ -369,11 +358,8 @@ fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
 
 /// Apply one comment — its `thread_id` already resolved by
 /// [`ChangeProj::mint_thread_id`] — to a change's threads (shared by `review`
-/// and `comment`; docs/data-model.md "The fold"):
-///   - **the thread already exists** — append to it (a reply); an empty body
-///     carries only its resolution.
-///   - **a set id not seen yet** — open the thread it names.
-///   - **unset** — an empty new thread the mint left alone; a no-op.
+/// and `comment`; docs/data-model.md "The fold"). An unset id is a no-op:
+/// the mint left it alone because the body was empty.
 fn apply_comment(change: &mut ChangeProj, c: &CommentInput, review_id: Option<u64>, now: &str) {
     let Some(tid) = c.thread_id else { return };
     if let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) {
