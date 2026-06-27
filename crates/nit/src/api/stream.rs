@@ -112,7 +112,8 @@ async fn apply_client_msg(
                 let Some(entry) = state.change_entry(change_id) else {
                     continue;
                 };
-                // Arm the live feed BEFORE reading the backlog.
+                // Subscribe before reading the backlog, so events that land
+                // mid-read are caught here and deduped by the watermark.
                 feeds.insert(change_id, Feed(entry.subscribe()));
                 let backlog = read_backlog(state, change_id, from).await;
                 let mut next = from;
@@ -160,14 +161,15 @@ mod tests {
 
     use super::*;
 
-    /// A `Feed` surfaces broadcast overflow as `Err` rather than silently
-    /// skipping the gap — the signal `handle_socket` turns into a socket close.
+    /// `Feed` yields `Err(Overflowed)` when the broadcast buffer is full, not a
+    /// silent skip.
     #[tokio::test]
     async fn feed_surfaces_overflow() {
         let (mut tx, rx) = async_broadcast::broadcast::<StreamMsg>(2);
         tx.set_overflow(true);
         let mut feed = Feed(rx);
-        // Capacity 2, three sends: the oldest is dropped, overflowing the reader.
+        // Overflow mode drops the oldest slot; the reader sees
+        // RecvError::Overflowed, not the sender.
         for of in 0..3 {
             let _ = tx.try_broadcast(StreamMsg::NewParent {
                 new_parent: NewParent { of, parent: 0 },

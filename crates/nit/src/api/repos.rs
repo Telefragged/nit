@@ -47,9 +47,8 @@ pub(super) async fn create_repo(
             )));
         }
         // Resolve the base to a commit up front — any git ref (a local branch,
-        // `origin/main`, a tag, a sha), not only a local branch. This both
-        // validates it (400 otherwise) and seeds the merge timer's baseline
-        // below; nit never guesses the base.
+        // `origin/main`, a tag, a sha), not only a local branch; seeds the merge
+        // timer's baseline below. nit never guesses the base.
         let base_commit = repo
             .revparse_single(&req.base)
             .and_then(|o| o.peel_to_commit())
@@ -85,7 +84,7 @@ pub(super) async fn list_repos(
     .await
 }
 
-/// One repo by id, with its live-tip count (404 if unknown).
+/// One repo by id; live-tip count derived, never stored (404 if unknown).
 pub(super) async fn get_repo(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,

@@ -63,8 +63,6 @@ fn publish_member(
 ) -> Result<(), Error> {
     let comments = drafts_to_comments(conn, change_id)?;
     let drained = !comments.is_empty();
-    // A real verdict publishes as itself; a lifecycle-only decision still
-    // publishes a `comment` review when there are comment drafts to carry.
     let verdict = decision
         .as_verdict()
         .or_else(|| drained.then_some(Verdict::Comment));
@@ -157,7 +155,7 @@ pub(super) async fn submit_chain(
         let mut errors = Vec::new();
         for member in view.path_from_tip(&tip_sha) {
             let Some(staged) = db::get_draft_review(conn, member.change_id)? else {
-                continue; // no decision on this member — leave its comment drafts
+                continue; // leave its comment drafts
             };
             let Some(member_entry) = state.change_entry(member.change_id) else {
                 continue;
@@ -192,8 +190,7 @@ pub(super) async fn submit_chain(
 }
 
 /// Why a staged decision cannot publish against the member's current lifecycle,
-/// or `None` when it is legal (an active change takes any verdict or `abandon`;
-/// an abandoned change takes only `reopen`).
+/// or `None` when it is legal.
 fn decision_block(lifecycle: Lifecycle, decision: Decision) -> Option<&'static str> {
     match (lifecycle, decision.as_lifecycle()) {
         (Lifecycle::Merged { .. }, _) => Some("change is merged — nothing to submit"),

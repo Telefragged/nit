@@ -1,6 +1,3 @@
-//! The push endpoint: resolve the base, walk commits, upsert + append
-//! revisions, and name the pushed tip change.
-
 use std::sync::Arc;
 
 use axum::Json;
@@ -18,7 +15,7 @@ use crate::review::Lifecycle;
 use super::{AppJson, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{canonical_git_dir, map_busy};
 
-/// One push target: a walked change's entry + id (push pre-flight → append).
+/// Bridges push pre-flight into the append phase.
 struct Target {
     entry: Arc<ChangeEntry>,
     change_id: u64,
@@ -37,8 +34,7 @@ pub(super) async fn push(
         let repo = Repository::open(&canonical)
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
 
-        // The repo must be registered (`nit repo create`); its stored canonical
-        // branch is the base — push neither takes nor configures one.
+        // Push takes no base parameter -- the repo's stored canonical branch is used.
         let repo_row = db::find_repo(conn, &canonical)?.ok_or_else(|| {
             Error::not_found(format!(
                 "repo at {canonical} is not registered — run `nit repo create`"
@@ -60,8 +56,7 @@ pub(super) async fn push(
             )));
         }
 
-        // Pre-flight: ensure every change exists, and reject (409) a push that
-        // would add a revision to an abandoned change.
+        // Pre-flight: reject abandoned-change pushes before writing any revisions.
         let mut targets = Vec::with_capacity(walk.commits.len());
         for wc in &walk.commits {
             let change_id = db::upsert_change(conn, repo_row.id, &wc.change_key)?;
@@ -82,14 +77,14 @@ pub(super) async fn push(
             targets.push(Target { entry, change_id });
         }
 
-        // Per commit, oldest-first: append a revision iff the content moved.
+        // Oldest-first: targets[i - 1] is always the parent when publishing edges.
         for (i, (wc, t)) in walk.commits.iter().zip(&targets).enumerate() {
             let prior = t.entry.read().latest_revision().cloned();
             if prior
                 .as_ref()
                 .is_some_and(|r| r.commit_sha == wc.commit_sha)
             {
-                continue; // unchanged
+                continue;
             }
             let resets_status = match &prior {
                 Some(old) => !gitscan::pure_rebase(
@@ -134,8 +129,6 @@ pub(super) async fn push(
             }
         }
 
-        // Name the pushed tip change at the revision this push gave it. The
-        // empty-walk guard above guarantees at least one target.
         let tip = targets
             .last()
             .expect("the empty-walk guard guarantees at least one target");

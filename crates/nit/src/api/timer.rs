@@ -70,11 +70,10 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
             .flatten()
             .and_then(|r| r.base_head);
         if recorded.as_deref() == Some(head.as_str()) {
-            continue; // the canonical branch has not moved — nothing to scan
+            continue; // canonical branch unmoved — nothing to scan
         }
-        // With a recorded baseline, scan the new commits for landings; the first
-        // observation has none, so it only adopts one (landings that predate
-        // tracking are not this timer's concern).
+        // First observation has no baseline -- no landings are detected;
+        // landings that predate tracking are not this timer's concern.
         if let Some(since) = &recorded {
             let view = state.repo_view(repo_id);
             let open = open_changes_by_key(&view);
@@ -93,8 +92,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
     }
 }
 
-/// The repo's non-terminal changes keyed by `Change-Id` — the sweep's working
-/// set, looked up once per new commit.
+/// The sweep's working set -- looked up once per new commit.
 fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
     view.change_ids()
         .into_iter()
@@ -104,8 +102,7 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
         .collect()
 }
 
-/// Record a detected landing: the merge sweep's only lifecycle write, a
-/// `merged` entry on the change at the landed `revision`.
+/// The merge sweep's only lifecycle write.
 fn record_landing(conn: &mut Connection, entry: &ChangeEntry, change_id: u64, revision: u64) {
     let new = LogPayload::lifecycle(LifecycleAction::Merged, Some(revision), None);
     if let Err(e) = append_to_change(conn, entry, change_id, vec![new]) {
