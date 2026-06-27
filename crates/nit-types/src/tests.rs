@@ -91,3 +91,36 @@ fn side_round_trips_without_clap() {
         Side::Old
     );
 }
+
+#[test]
+fn stream_msg_untagged_falls_through() {
+    use crate::events::{NewParent, StreamMsg};
+    // An entry frame (carrying the entry's own fields) parses as Entry.
+    let entry_json = serde_json::to_string(&revision_entry()).expect("serialize");
+    match serde_json::from_str::<StreamMsg>(&entry_json).expect("entry frame") {
+        StreamMsg::Entry(e) => assert_eq!(e.change_id, 7),
+        StreamMsg::NewParent { .. } => panic!("expected an entry"),
+    }
+    // A new_parent frame lacks the entry fields, so it falls through to it.
+    let np = StreamMsg::NewParent {
+        new_parent: NewParent { of: 10, parent: 9 },
+    };
+    let np_json = serde_json::to_string(&np).expect("serialize");
+    assert_eq!(np_json, r#"{"new_parent":{"of":10,"parent":9}}"#);
+    match serde_json::from_str::<StreamMsg>(&np_json).expect("new_parent frame") {
+        StreamMsg::NewParent { new_parent } => {
+            assert_eq!(new_parent.of, 10);
+            assert_eq!(new_parent.parent, 9);
+        }
+        StreamMsg::Entry(_) => panic!("expected a new_parent"),
+    }
+}
+
+#[test]
+fn client_msg_subscribe_is_externally_tagged() {
+    use crate::events::ClientMsg;
+    use std::collections::HashMap;
+    let map = HashMap::from([("10".to_string(), 5u64)]);
+    let json = serde_json::to_string(&ClientMsg::Subscribe(map)).expect("serialize");
+    assert_eq!(json, r#"{"subscribe":{"10":5}}"#);
+}
