@@ -23,9 +23,6 @@ use crate::review::{self, Anchor, ChangeProj, Entry, ThreadComment, ThreadProj};
 
 use super::Error;
 
-// ---------------------------------------------------------------------------
-// Chains (derived)
-
 /// Build the derived `Chain` for one tip commit-sha — the dashboard list
 /// entry, the chain page, and the push result all share this one shape.
 #[must_use]
@@ -92,7 +89,6 @@ pub fn build_graph(
     let mut nodes: Vec<GraphNode> = Vec::new();
     let mut shas: HashSet<String> = HashSet::new();
 
-    // History region: the HEAD anchor (depth 0) + merged commits below it.
     for (depth, h) in history.iter().enumerate() {
         let change = h.change_key.as_deref().and_then(|k| view.change_by_key(k));
         nodes.push(GraphNode {
@@ -229,9 +225,6 @@ pub fn resolve_revision_tip(
     Ok((revision, tip_sha))
 }
 
-// ---------------------------------------------------------------------------
-// Threads + drafts
-
 /// A published thread → its wire shape, projecting its [`Anchor`] back to the
 /// flat `file`/`line`/`side`/`range`/`line_text` fields.
 #[must_use]
@@ -278,7 +271,6 @@ fn thread_comment_view(c: &ThreadComment) -> nit_types::comments::ThreadComment 
     }
 }
 
-/// A draft row → its wire shape.
 #[must_use]
 pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
     Draft {
@@ -298,11 +290,6 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Change detail
-
-/// Change detail JSON for **one** change: every revision, every published
-/// thread, the reviewer's open drafts, every review, and the staged decision.
 /// A pure read of the single fold — the chains a change sits on come from the
 /// chain endpoints (`GET /api/chains/{id}`), so a change read builds no view.
 ///
@@ -358,9 +345,6 @@ pub fn review_json(review: &review::ReviewProj) -> Review {
         created_at: review.created_at.clone(),
     }
 }
-
-// ---------------------------------------------------------------------------
-// Log entries
 
 /// A folded log entry → its wire shape: the typed payload flows straight
 /// through (the wire `LogEntry` shares the same `LogPayload`).

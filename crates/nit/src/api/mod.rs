@@ -51,7 +51,7 @@ pub use state::{
     append_to_change_with, with_conn,
 };
 
-/// The `/api` router. Static UI serving is layered on top in [`app`].
+/// Static UI serving is layered on top in [`app`].
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health))
@@ -90,8 +90,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-/// Full application: `/api` plus the built web UI with an `index.html` SPA
-/// fallback. Unknown `/api/*` paths stay JSON 404s.
+/// Unknown `/api/*` paths stay JSON 404s.
 pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
     let api = router(state).method_not_allowed_fallback(|| async {
         Error {
@@ -113,9 +112,8 @@ pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
             }
             match spa {
                 Some(spa) => match tower::ServiceExt::oneshot(spa, req).await {
-                    // Cap browser caching at a minute so a redeployed UI is
-                    // picked up promptly — index.html is unhashed and points at
-                    // the rest.
+                    // index.html is unhashed and points at the rest, so a
+                    // short cap means a redeployed UI is picked up promptly.
                     Ok(mut resp) => {
                         resp.headers_mut().insert(
                             axum::http::header::CACHE_CONTROL,
@@ -131,8 +129,7 @@ pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
     })
 }
 
-/// Serve `app` on an already-bound listener until `shutdown` resolves, running
-/// the background lifecycle timer alongside.
+/// Runs the background lifecycle timer alongside the server.
 ///
 /// # Errors
 /// When the database can't be loaded or accepting connections fails.
@@ -158,13 +155,8 @@ pub async fn serve_on(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Routing helpers
-
-/// Resolve a change to its coordination entry (404 if unknown), loading it from
-/// the DB log on a cache miss (an evicted terminal change). The lookup may
-/// replay one change off disk, so every caller resolves it on its pooled
-/// connection inside [`with_conn`].
+/// Loads from the DB log on a cache miss (an evicted terminal change); may
+/// replay one change off disk, so every caller must resolve inside [`with_conn`].
 fn change_or_404(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
@@ -190,7 +182,6 @@ fn chain_context(
     Ok((view, repo_id, tip_sha))
 }
 
-/// Canonicalize a git-dir path to a UTF-8 string, or a 400.
 fn canonical_git_dir(raw: &str) -> Result<String, Error> {
     Ok(std::fs::canonicalize(raw)
         .map_err(|e| Error::bad_request(format!("cannot resolve git dir {raw}: {e}")))?
@@ -206,9 +197,6 @@ fn map_busy(err: anyhow::Error) -> Error {
         err.into()
     }
 }
-
-// ---------------------------------------------------------------------------
-// Health
 
 async fn health() -> Json<Health> {
     Json(Health {
