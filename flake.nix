@@ -66,14 +66,23 @@
             };
         };
 
-      # Shared by the web build (nit-web) and its lint check (web-lint):
-      # one source tree and one npm dependency closure (npmDepsHash), two
-      # scripts. System-independent, so it lives outside forAllSystems.
+      # Source tree and version shared by the web build (nit-web) and its
+      # lint/test checks. System-independent, so it lives outside
+      # forAllSystems.
       webArgs = {
         version = "0.1.0";
         src = ./web;
-        npmDepsHash = "sha256-7NKAoi4RpVq50ZjjeMTk/3//FA4qNNiQRt4zTKG4vrI=";
       };
+
+      # The web npm closure, shared via `npmDeps` so the nit-web build and
+      # the web-lint / web-test checks don't each refetch it.
+      webNpmDepsFor =
+        pkgs:
+        pkgs.fetchNpmDeps {
+          inherit (webArgs) src;
+          name = "nit-web-npm-deps";
+          hash = "sha256-7NKAoi4RpVq50ZjjeMTk/3//FA4qNNiQRt4zTKG4vrI=";
+        };
 
       # Build metadata for `nit --version`: `+<sha>[.dirty]` from the flake's
       # git state, which the build sandbox can't reach itself (no `.git`).
@@ -136,11 +145,13 @@
         pkgs:
         let
           cargoNix = cargoNixFor pkgs;
+          webNpmDeps = webNpmDepsFor pkgs;
         in
         rec {
           nit-web = pkgs.buildNpmPackage {
             pname = "nit-web";
-            inherit (webArgs) version src npmDepsHash;
+            inherit (webArgs) version src;
+            npmDeps = webNpmDeps;
             installPhase = "cp -r dist $out";
           };
 
@@ -171,6 +182,7 @@
         let
           cargoNix = cargoNixFor pkgs;
           rustToolchain = rustToolchainFor pkgs;
+          webNpmDeps = webNpmDepsFor pkgs;
         in
         {
           build = self.packages.${pkgs.system}.nit;
@@ -229,13 +241,15 @@
           # The lint report is the derivation's output.
           web-lint = pkgs.buildNpmPackage {
             pname = "nit-web-lint";
-            inherit (webArgs) version src npmDepsHash;
+            inherit (webArgs) version src;
+            npmDeps = webNpmDeps;
             dontNpmBuild = true;
             installPhase = "npm run lint > $out";
           };
           web-test = pkgs.buildNpmPackage {
             pname = "nit-web-test";
-            inherit (webArgs) version src npmDepsHash;
+            inherit (webArgs) version src;
+            npmDeps = webNpmDeps;
             dontNpmBuild = true;
             installPhase = "npm run test > $out";
           };
