@@ -54,7 +54,6 @@ function renderReview(url = "/changes/11?against=base") {
   );
 }
 
-/** A queried node that must exist for the test to make sense. */
 function must<T>(value: T | null | undefined, what: string): T {
   if (value == null) throw new Error(`expected ${what}`);
   return value;
@@ -65,7 +64,7 @@ const section = (i: number): HTMLElement =>
 const isExpanded = (el: HTMLElement): boolean =>
   el.querySelector(".file-header")?.getAttribute("aria-expanded") === "true";
 
-/** Wait for the diff to load: the rail item for store.rs is rendered. */
+/** Awaits diff load: resolves once the named rail item appears in the DOM. */
 const railItem = (path: string) => screen.findByTitle(path);
 
 describe("collapsed-by-default file sections", () => {
@@ -94,7 +93,7 @@ describe("collapsed-by-default file sections", () => {
     expect(isExpanded(section(1))).toBe(true);
     fireEvent.click(header);
     expect(isExpanded(section(1))).toBe(false);
-    // No section scroll, and no rail nudge — the active file never moved.
+    // The active file never moved.
     expect(scrollCalls).toEqual([]);
     expect(railScrolls).toBe(0);
   });
@@ -103,8 +102,7 @@ describe("collapsed-by-default file sections", () => {
     renderReview();
     await railItem("src/auth/store.rs");
 
-    // Mixed state: commit message (above the target) expanded, the two
-    // files in between and the target collapsed — the layout-shift case.
+    // layout-shift case: expanded content sits above the collapsed target.
     expect(isExpanded(section(0))).toBe(true);
     expect(isExpanded(section(1))).toBe(false);
     expect(isExpanded(section(2))).toBe(false);
@@ -159,10 +157,9 @@ describe("collapse with an open dirty comment editor", () => {
     vi.restoreAllMocks();
   });
 
-  /** Expand rotate.rs (file-1), open the inline draft editor on its first
-   * commentable line and type into it, leaving the draft dirty. The editor
-   * opens the only way there is now: a caret in a line's code text, then
-   * the c shortcut (clicking a line no longer comments — see lib/selection). */
+  /** Open the inline draft editor on section(1)'s first commentable line and
+   * leave it dirty: place a caret in .code-text, then press 'c'
+   * (see lib/selection — clicking a line does not open an editor). */
   async function openDirtyEditor() {
     renderReview();
     await railItem("src/auth/store.rs");
@@ -261,9 +258,8 @@ describe("comment counts in the diff-range dropdowns", () => {
   });
 
   it("honors r0 as an explicit diff base instead of snapping to Base", async () => {
-    // Regression: revisions are 0-based, but a leftover 1-based guard
-    // (M >= 1) rejected r0 and reset the picker to "base". r0 is a real
-    // interdiff base — selecting it must stick.
+    // r0 is a valid interdiff base — selecting it must stick; an M >= 1 guard
+    // would wrongly reject it.
     renderReview("/changes/11?against=0");
     await railItem("src/auth/store.rs");
     const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");

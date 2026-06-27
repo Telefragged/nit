@@ -74,7 +74,7 @@ import { ReviewContext, sameTarget } from "./reviewContext";
 const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
 
-// A verdict's displayed status — badges.tsx owns the label and color.
+// badges.tsx owns the label and color.
 const VERDICT_STATUS: Record<Verdict, ChangeStatus> = {
   approve: "approved",
   request_changes: "changes_requested",
@@ -386,7 +386,6 @@ export default function ReviewPage() {
   const chainPath = chainQ.data?.path;
   const fileCount = files.length;
 
-  // Change-level draft (no file/line anchor).
   const createChangeComment = useMutation({
     mutationFn: (body: string) =>
       createDraft(changeId, { revision: selected, body }),
@@ -416,8 +415,6 @@ export default function ReviewPage() {
         );
         revealFile(next);
       } else if (e.key === "n" || e.key === "p") {
-        // Prev/next path member in chain order, derived from the selected
-        // revision's chain context.
         if (!chainPath) return;
         const idx = chainPath.findIndex((c) => c.change_id === changeId);
         if (idx < 0) return;
@@ -501,7 +498,7 @@ export default function ReviewPage() {
     if (fileCount === 0) return;
     let raf = 0;
     const onScroll = () => {
-      if (raf) return; // coalesce to one measurement per frame
+      if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
         const sections = Array.from({ length: fileCount }, (_, i) =>
@@ -549,7 +546,6 @@ export default function ReviewPage() {
     return map;
   }, [threads, files, selected, against]);
 
-  // --- early returns ---------------------------------------------------
   if (changeQ.isError) {
     return (
       <main className="page">
@@ -569,8 +565,8 @@ export default function ReviewPage() {
 
   const chain = chainQ.data;
   const repo = repoQ.data;
-  // This change's entry in the selected revision's chain — its position and
-  // displayed status now live on the path member, not on ChangeDetail.
+  // Position and displayed status for this change are on the path entry, not
+  // on ChangeDetail.
   const here = chain?.path.find((c) => c.change_id === change.id);
   const allFilesExpanded = allExpanded(expanded, files);
 
@@ -625,7 +621,7 @@ export default function ReviewPage() {
       againstRaw !== "base" &&
       deriveDiffBase(againstRaw, n) === undefined
     )
-      patch.against = null; // numeric base not valid for the viewed rev
+      patch.against = null;
     switchRange(patch);
   };
 

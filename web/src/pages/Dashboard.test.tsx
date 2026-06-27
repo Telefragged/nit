@@ -41,7 +41,6 @@ describe("repo dashboard change graph", () => {
     renderDashboard();
     await screen.findByText("auth: document rotation and ship flow diagram");
 
-    // The Activity column header is preserved from the per-chain table.
     expect(screen.getByText("Activity")).toBeTruthy();
     // Change 12's seeded staged decision shows in its activity cell — it
     // arrives from the per-change fetch, so await it rather than reading sync.
