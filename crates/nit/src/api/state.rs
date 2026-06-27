@@ -44,10 +44,9 @@ pub struct AppState {
     shutdown: watch::Sender<bool>,
 }
 
-/// Cached repo registry row: the one canonical branch and the git dir
-/// (mutable on `nit repo move`), keyed by id in the repo map. The merge
-/// timer's baseline is not cached here — it lives only in `repos.base_head`
-/// (docs/data-model.md "Lifecycle timer").
+/// Cached repo registry entry; `git_dir` is in an `RwLock` because `nit repo move`
+/// repoints it in-place. The merge timer's baseline is not cached here — it lives
+/// only in `repos.base_head` (docs/data-model.md "Lifecycle timer").
 pub struct RepoState {
     pub base_ref: String,
     pub git_dir: StdRwLock<String>,
@@ -71,13 +70,10 @@ impl RepoState {
     }
 }
 
-/// Per-change coordination: the folded state behind one `RwLock` (appenders
-/// take it for `write`, which both serializes them and guards the fold;
-/// readers take it for `read`; held only inside `spawn_blocking`, never across
-/// `.await`) plus the live-event broadcast for websocket followers.
+/// Per-change coordination: write-locking `proj` both serializes appenders and
+/// guards the fold; held only inside `spawn_blocking`, never across `.await`.
 pub struct ChangeEntry {
     pub proj: StdRwLock<ChangeProj>,
-    /// Live feed: each appended entry is published here for current followers.
     events: Sender<StreamMsg>,
     /// A parked receiver so the channel never closes for lack of followers.
     events_keepalive: InactiveReceiver<StreamMsg>,
@@ -97,8 +93,6 @@ impl ChangeEntry {
         }
     }
 
-    /// Read-lock the projection.
-    ///
     /// # Panics
     /// When the projection lock is poisoned.
     pub fn read(&self) -> std::sync::RwLockReadGuard<'_, ChangeProj> {
@@ -119,9 +113,8 @@ impl ChangeEntry {
 }
 
 impl AppState {
-    /// Build the connection pool, migrate the schema once, replay every
-    /// change's log into memory, cache the repo registry, and seed the id
-    /// allocator above every fold id in use.
+    /// Initialize from `db_path`, seeding the id allocator above every
+    /// fold-assigned id in use to prevent reuse after restart.
     ///
     /// # Errors
     /// When the pool can't be built, the schema migration fails, or a log fails
@@ -173,7 +166,7 @@ impl AppState {
         self.next_id.fetch_add(1, Ordering::SeqCst)
     }
 
-    /// Mark the server as shutting down, waking every parked task.
+    /// Signal shutdown, waking every task subscribed via [`Self::shutdown_watch`].
     pub fn begin_shutdown(&self) {
         self.shutdown.send_replace(true);
     }
@@ -254,8 +247,10 @@ impl AppState {
         state
     }
 
-    /// Ensure a [`ChangeEntry`] exists for a change row (an empty projection if
-    /// new), and return it. Replays the change's log if it is already on disk.
+    /// Ensure a [`ChangeEntry`] for `row` is loaded into the cache — replaying
+    /// its log when absent and **seeding the global id allocator** from the
+    /// replayed entries — then return it. A brand-new change with no log
+    /// entries starts with an empty projection.
     ///
     /// # Errors
     /// When replay fails.
@@ -410,7 +405,6 @@ pub fn append_to_change_with(
         })
         .collect();
 
-    // Commit, minting each entry's global seq; `pre_commit` shares the tx.
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     pre_commit(&tx)?;
     let mut applied = Vec::with_capacity(staged.len());
@@ -458,8 +452,7 @@ where
         .map_err(|e| Error::internal(format!("database task: {e}")))?
 }
 
-// ---------------------------------------------------------------------------
-// Error type: non-2xx with {"error": "human readable message"}
+// Non-2xx responses carry {"error": "human readable message"} in the body.
 
 #[derive(Debug)]
 pub struct Error {
