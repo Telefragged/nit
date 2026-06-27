@@ -187,21 +187,22 @@ agent that built the chain **drives it all the way to `merged`**: reaching
 `approved` is the cue to land, never to hand off.
 
 ```sh
-# if main moved: rebase onto it, verifying each replayed commit
-git rebase -x 'nix flake check' main
-nit push                                       # re-record the rebased revisions (see below)
-git -C <primary> merge --ff-only <branch>      # never `git checkout main` inside a worktree
+nix develop -c scripts/land.sh                 # rebase if main moved, flake-check
+                                               # every commit, then ff-merge to main
 git worktree remove <worktree> && git branch -d <branch>
 ```
 
-The lifecycle timer marks the chain `merged` once the commits are on `main`,
-matching each change's latest revision patch-id against the canonical branch
-— so the `nit push` after the rebase matters: it re-records each revision at
-its rebased sha. A pure rebase keeps its patch-id (and its approval), so the
-push just adds a no-op revision; a rebase that **resolved conflicts** changed
-those patch-ids, and without the push the timer never matches them, so they
-never flip to `merged`. Don't push _after_ the ff-merge — the tip is on
-`main` then, an empty walk, a 409.
+`scripts/land.sh` (the `land` skill) covers the no-conflict case end to end,
+printing one line per step and stopping with a hint when it can't proceed —
+a rebase conflict, a commit that fails `nix flake check`, or `main` moving
+mid-check (re-run to retry). The lifecycle timer marks the chain `merged` once
+the commits are on `main`, matching each change's latest revision patch-id
+against the canonical branch. A pure rebase keeps its patch-id (and its
+approval), so the script needs no `nit push`. The exception is when it stops
+on a conflict: resolving it **changes** those patch-ids, so run `nit push`
+after finishing that rebase (never _after_ the ff-merge — the tip is on `main`
+then, an empty walk, a 409) or the timer never matches them and they never
+flip to `merged`.
 
 Landing is the agent's responsibility **all the way to `merged`; you stop
 only when it is fundamentally impossible** — an unresolvable rebase, or you
