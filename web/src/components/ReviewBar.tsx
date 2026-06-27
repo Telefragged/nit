@@ -15,9 +15,6 @@ const DECISION_LABEL: Record<Decision, string> = {
   reopen: "Reopen",
 };
 
-/** The decisions the modal offers for the change's current lifecycle: an
- * abandoned change can only be reopened; a live one takes the three verdicts or
- * an abandon. Abandonment is a decision here, not a separate button. */
 function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
   return abandoned
     ? [{ decision: "reopen", cls: "btn-approve" }]
@@ -50,12 +47,10 @@ export default function ReviewBar({
   /** The selected revision's chain context, for submit + next-change nav. */
   chain: Chain | undefined;
   /** Each chain member's staged decision (or null), keyed by change id —
-   * fetched per member by ReviewPage from GET /api/changes/{id}. The source
-   * for the chain-wide submit count and the next-undecided sweep. */
+   * the source for the chain-wide submit count and the next-undecided sweep. */
   memberDecisions: Map<number, Decision | null>;
   selectedRevision: number;
-  /** Threads that would stay open once the staged drafts publish — computed
-   * by ReviewPage from the same assembled threads it already holds. */
+  /** Threads that would stay open once the staged drafts publish. */
   unresolved: number;
   replyOpen: boolean;
   onReplyOpenChange: (open: boolean) => void;
@@ -74,7 +69,7 @@ export default function ReviewBar({
   // This change's path member carries its displayed status (per (change, rev)).
   const here = chain?.path.find((c) => c.change_id === change.id);
   const abandoned = here?.status === "abandoned";
-  // Members of this chain that carry a staged decision — what Submit publishes.
+  // Chain members with a staged decision — what Submit publishes.
   const stagedInChain =
     chain?.path.filter(
       (c) => (memberDecisions.get(c.change_id) ?? null) !== null,
@@ -87,9 +82,8 @@ export default function ReviewBar({
     void queryClient.invalidateQueries({ queryKey: ["chain"] });
   };
 
-  // Stage a decision (does not publish): saves it server-side, closes the
-  // modal, then advances to the next member still missing a decision so the
-  // reviewer can sweep the chain before submitting.
+  // Stage a decision (does not publish) — auto-advances to the next undecided
+  // member so the reviewer can sweep the chain before submitting.
   const stage = useMutation({
     mutationFn: (decision: Decision) =>
       stageDecision(change.id, { decision, message: message.trim() }),

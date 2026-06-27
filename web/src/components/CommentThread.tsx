@@ -48,7 +48,6 @@ function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
   // A reply draft carries a resolve decision; offer the checkbox when editing
   // it. A new-thread draft has none (docs/api.md "Thread resolution").
   const editResolved = draft.thread_id !== null ? draft.resolved : undefined;
-  // An empty-body draft stages a resolution only — render the intent.
   const resolutionOnly = draft.body.trim().length === 0;
 
   return (
@@ -131,7 +130,6 @@ export default function CommentThread({
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["change", changeId] });
 
-  // The thread's resolution as it will be after pending drafts publish.
   const resolved = pendingResolved(thread);
   const pending = resolved !== thread.resolved;
 
@@ -211,9 +209,9 @@ export default function CommentThread({
               <button
                 className="linkish"
                 onClick={() => {
-                  // Resolve is one click: stage an empty resolution-only draft
-                  // straight away. Reopen still opens the editor so the
-                  // reviewer can say why before it publishes.
+                  // Resolve needs no justification — fires immediately;
+                  // Reopen opens the editor so the reviewer must explain
+                  // before it publishes.
                   if (resolved) {
                     setEditor({ isReply: false, resolved: false });
                   } else {

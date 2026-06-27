@@ -71,7 +71,6 @@ describe("rebase drift rendering", () => {
     const { container } = renderFile("unified");
     // The two drift lines (del + add), and only those, carry .drift.
     expect(container.querySelectorAll(".code.drift").length).toBe(2);
-    // The real edit (del + add) is rendered without the drift class.
     const realChanges = container.querySelectorAll(
       ".code.del:not(.drift), .code.add:not(.drift)",
     );

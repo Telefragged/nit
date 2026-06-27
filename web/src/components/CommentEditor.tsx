@@ -51,8 +51,6 @@ export default function CommentEditor({
   const resolveChanges =
     showResolve && resolved !== (resolvedFrom ?? initialResolved);
   const hasBody = body.trim().length > 0;
-  // A bare resolve/reopen (the checkbox alone changing the thread's state) is
-  // savable even with no message.
   const canSave = (hasBody || resolveChanges) && !saving;
   // Only typed text counts as discardable work — flipping the checkbox is
   // cheap to redo, so cancelling it never prompts.

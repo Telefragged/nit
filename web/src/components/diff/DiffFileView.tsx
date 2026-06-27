@@ -146,7 +146,6 @@ export default function DiffFileView({
     return map;
   }, [file]);
 
-  // Anchors actually present in this diff, per side.
   const present = useMemo(() => {
     const set = new Set<string>();
     for (const hunk of file.hunks) {

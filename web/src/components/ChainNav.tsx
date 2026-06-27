@@ -25,7 +25,7 @@ export default function ChainNav({
   currentId: number;
   /** Each member's change detail (GET /api/changes/{id}), fetched per member
    * by ReviewPage — the source for the unresolved count and newer-elsewhere
-   * badge, which are no longer carried on the chain path. */
+   * badge, which the chain path does not carry. */
   memberDetails: Map<number, ChangeDetail>;
 }) {
   const [open, setOpen] = useState(true);

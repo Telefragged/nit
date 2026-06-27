@@ -95,8 +95,8 @@ function GraphRow({
   const { node } = ln;
   const isOpen = node.section === "open";
   const isHistory = node.section === "history";
-  // The whole row navigates to the change (like the old table); the subject
-  // stays a link so cmd/middle-click still opens a tab (useRowNav ignores it).
+  // The whole row navigates to the change; the subject stays a link so
+  // cmd/middle-click still opens a tab (useRowNav ignores it).
   const to = node.change_id !== null ? `/changes/${node.change_id}` : null;
   const rowNav = useRowNav(to ?? "");
   const subject = to ? (
@@ -155,8 +155,8 @@ export default function ChangeGraph({
   activity,
 }: {
   graph: RepoGraph;
-  /** Per-change detail, keyed by change id, fetched concurrently by the
-   * dashboard — the source for each node's activity badges. */
+  /** Per-change detail, keyed by change id — the source for each node's
+   * activity badges. */
   activity: Map<number, ChangeDetail>;
 }) {
   const layout = useMemo(() => layoutGraph(graph), [graph]);

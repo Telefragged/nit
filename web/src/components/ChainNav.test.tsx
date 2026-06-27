@@ -40,10 +40,9 @@ function member(
   };
 }
 
-/** A member's change snapshot: `latest`+1 revisions and `unresolved` open
- * threads on r0 — the state ChainNav now reads off the snapshot, not the
- * path. The path entries above carry none of it, so these assertions pass
- * only because ChainNav reads from here. */
+/** Change snapshot: ChainNav reads revision count and unresolved-thread
+ * count from here, not the path entry — path entries above carry neither,
+ * so these assertions hold only because ChainNav sources from the snapshot. */
 function detail(
   changeId: number,
   latest: number,
@@ -124,20 +123,19 @@ describe("ChainNav", () => {
 
   it("lists every member, links the siblings, and marks the current one", () => {
     renderNav(11);
-    // The header tracks the current member's 1-based position over the count.
     expect(screen.getByRole("button").textContent).toContain("2/3");
 
     expect(document.querySelectorAll(".chain-nav-row")).toHaveLength(3);
 
-    // Siblings link through to their change; the current one is not a link.
     const links = screen.getAllByRole("link");
     expect(links.map((a) => a.getAttribute("href"))).toEqual([
       "/changes/10",
       "/changes/12",
     ]);
 
-    // Current member: a non-link row, flagged for assistive tech, highlighted,
-    // and the only one carrying its open-thread count.
+    // Current member: a div not a link (current page is never self-linked),
+    // aria-current="page" for assistive tech, and the only row carrying an
+    // open-thread count.
     const current = must(
       document.querySelector<HTMLElement>(".chain-nav-row.current"),
       ".chain-nav-row.current",

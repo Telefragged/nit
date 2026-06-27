@@ -3,10 +3,6 @@ import type { ChangeStatus } from "../api/types";
 // Color discipline (docs/frontend.md): amber = needs reviewer, blue = agent
 // working, green = approved/ready, red = changes requested, gray = inert.
 
-/**
- * A path member whose change has a newer patchset on another chain (the path
- * pins an older revision). Informational — gray.
- */
 export function NewerElsewhereBadge({
   revision,
   latest,
