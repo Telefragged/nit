@@ -19,7 +19,6 @@ use nit::api::rebase::tag_drift;
 use nit_types::diff::{Diff, DiffFile};
 use nit_types::enums::{FileStatus, LineKind};
 
-/// File content from lines, newline-terminated.
 fn body(lines: &[&str]) -> Vec<u8> {
     let mut s = lines.join("\n");
     s.push('\n');
@@ -56,7 +55,6 @@ fn file<'a>(diff: &'a Diff, path: &str) -> Option<&'a DiffFile> {
     diff.files.iter().find(|f| f.path == path)
 }
 
-/// Lines of `file` tagged as drift, by their visible line number and side.
 fn drift_lines(f: &DiffFile) -> Vec<(char, u64)> {
     let mut out = Vec::new();
     for hunk in &f.hunks {
@@ -74,7 +72,7 @@ fn drift_lines(f: &DiffFile) -> Vec<(char, u64)> {
 }
 
 // ---------------------------------------------------------------------------
-// Reproduce the problem, then show it contained (properties 3 & 5).
+// Properties 3 & 5 — motivating case: pure rebase collapses to nothing.
 
 /// The motivating case: an earlier change C1 is amended, which rewrites the
 /// later change C2 onto a new parent. C2's own delta is unchanged (a pure
@@ -197,7 +195,6 @@ fn drift_kept_when_the_diff_folds_it_against_a_duplicate_line() {
     assert_eq!(drift_lines(f), vec![('-', 4), ('-', 5), ('+', 4), ('+', 5)]);
 }
 
-// ---------------------------------------------------------------------------
 // The agent removing a pre-existing (base) line in a later revision is the
 // agent's real work — the base did not remove it — so it must show as a real
 // deletion, never tagged drift and hidden.
@@ -233,7 +230,6 @@ fn agent_removing_a_base_line_in_a_later_revision_is_real() {
     assert_eq!(f.deletions, 1);
 }
 
-// ---------------------------------------------------------------------------
 // Line-level limitation, asserted as a safe invariant: on runs of identical
 // lines the two diffs can anchor a duplicate differently, so some base
 // movement may show as a real change (counts a little high). That is the safe
@@ -275,9 +271,9 @@ fn isolated_drift_hunk_is_dropped_real_hunk_kept() {
         ])
     };
     let parent_m = snapshot(&g, &[("f.rs", &twelve("l1", "l12"))]);
-    let m = snapshot(&g, &[("f.rs", &twelve("l1m", "l12"))]); // C2 edits line 1
-    let parent_n = snapshot(&g, &[("f.rs", &twelve("l1", "l12x"))]); // drift on line 12
-    let n = snapshot(&g, &[("f.rs", &twelve("l1n", "l12x"))]); // C2 re-edits line 1
+    let m = snapshot(&g, &[("f.rs", &twelve("l1m", "l12"))]);
+    let parent_n = snapshot(&g, &[("f.rs", &twelve("l1", "l12x"))]);
+    let n = snapshot(&g, &[("f.rs", &twelve("l1n", "l12x"))]);
 
     let (plain, tagged) = interdiff(&g, m, parent_m, n, parent_n);
     // Plain: two hunks far apart — the real edit at top, the drift at bottom.
@@ -302,9 +298,8 @@ fn isolated_drift_hunk_is_dropped_real_hunk_kept() {
 #[test]
 fn drift_is_found_after_the_agents_edits_shift_it() {
     let g = GitRepo::new();
-    // C2 inserts "X" at the top (shifting everything below by one) and edits
-    // C; the base drifts E. In the interdiff E sits at line 6, but in the
-    // parents the drift is at line 5.
+    // After X is inserted, E sits at line 6 in the interdiff but at line 5
+    // in the parents.
     let parent_m = snapshot(&g, &[("f.rs", &body(&["A", "B", "C", "D", "E"]))]);
     let m = snapshot(&g, &[("f.rs", &body(&["X", "A", "B", "Cm", "D", "E"]))]);
     let parent_n = snapshot(&g, &[("f.rs", &body(&["A", "B", "C", "D", "Ex"]))]);
@@ -326,7 +321,7 @@ fn drift_is_found_after_the_agents_edits_shift_it() {
 fn overlapping_edit_is_real_not_drift() {
     let g = GitRepo::new();
     let parent_m = snapshot(&g, &[("f.rs", &body(&["A", "B", "C", "D", "E"]))]);
-    let m = snapshot(&g, &[("f.rs", &body(&["A", "B", "Cm", "D", "E"]))]); // C2 edits C
+    let m = snapshot(&g, &[("f.rs", &body(&["A", "B", "Cm", "D", "E"]))]);
     let parent_n = snapshot(&g, &[("f.rs", &body(&["A", "B", "Cx", "D", "E"]))]); // base also edits C
     let n = snapshot(&g, &[("f.rs", &body(&["A", "B", "Cn", "D", "E"]))]); // C2 edits the moved C
 
@@ -416,7 +411,6 @@ fn renamed_file_is_left_as_a_plain_diff() {
         drift_lines(renamed).is_empty(),
         "renamed file is not drift-processed"
     );
-    // The ordinary drift file (base.rs) is still contained.
     assert!(file(&tagged, "base.rs").is_none(), "base.rs drift dropped");
 }
 
@@ -504,8 +498,6 @@ fn http_interdiff_contains_a_pure_rebase() {
     let base_v1 = body(&["fn shared() {}", "// CHANGED", "fn tail() {}"]);
     let feat = body(&["pub const F: u8 = 1;"]);
 
-    // A two-change stack on main: C1 (Ibase) edits shared.rs, C2 (Ifeat) adds
-    // feat.rs on top. Push the whole stack — both at revision 0.
     let c1_r0 = g.commit_full(
         &[g.root],
         &msg("infra: shared", "Ibase"),
@@ -544,7 +536,7 @@ fn http_interdiff_contains_a_pure_rebase() {
     let (st, p1) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "re-push: {p1}");
 
-    // C2 is now at revision 1, a pure rebase of revision 0.
+    // C2 revision 1 is a pure rebase — its own delta is unchanged, only the parent moved.
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
     assert_eq!(st, 200, "change detail: {detail}");
     let revs = detail["revisions"].as_array().expect("revisions");
