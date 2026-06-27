@@ -1,11 +1,15 @@
 [workspace]
-members = ["crates/nit"]
+members = ["crates/nit", "crates/nit-types"]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+nit-types = { path = "crates/nit-types" }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

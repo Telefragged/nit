@@ -48,7 +48,7 @@
 
       # Cargo.nix is generated — don't hand-edit (regen: docs/dev.md). Build
       # with our pinned rustc, not nixpkgs'; the virtual workspace has no
-      # rootCrate, so callers build the lone member.
+      # rootCrate, so callers select a member via `workspaceMembers."<name>"`.
       cargoNixFor =
         pkgs:
         let
@@ -212,6 +212,14 @@
               export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
               export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
             '';
+          };
+          # nit-types is shared with a future web build, so it must stay
+          # wasm-friendly: build and round-trip-test it with NO optional
+          # features, the clap-off config the server's `features = ["clap"]`
+          # would otherwise mask.
+          test-nit-types = cargoNix.workspaceMembers."nit-types".build.override {
+            runTests = true;
+            features = [ ];
           };
           # The frontend lint (eslint + stylelint + knip) as a validator, the
           # web counterpart to clippy — it mirrors the devShell `npm run lint`.

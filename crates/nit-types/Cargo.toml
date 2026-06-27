@@ -1,0 +1,18 @@
+[package]
+name = "nit-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Wire types shared by the nit server and CLI"
+
+[lints]
+workspace = true
+
+[features]
+# Off by default so the crate stays wasm-friendly (serde only); the `nit`
+# crate turns it on for the CLI's `clap::ValueEnum` derive on `Side`.
+clap = ["dep:clap"]
+
+[dependencies]
+serde = { workspace = true }
+clap = { version = "4", features = ["derive"], optional = true }

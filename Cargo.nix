@@ -38,19 +38,7 @@ rec {
   # "public" attributes that we attempt to keep stable with new versions of crate2nix.
   #
 
-  rootCrate = rec {
-    packageId = "nit";
 
-    # Use this attribute to refer to the derivation building your root crate package.
-    # You can override the features with rootCrate.build.override { features = [ "default" "feature1" ... ]; }.
-    build = internal.buildRustCrateWithFeatures {
-      inherit packageId;
-    };
-
-    # Debug support which might change between releases.
-    # File a bug if you depend on any for non-debug work!
-    debug = internal.debugCrate { inherit packageId; };
-  };
   # Refer your crate build derivation by name here.
   # You can override the features with
   # workspaceMembers."${crateName}".build.override { features = [ "default" "feature1" ... ]; }.
@@ -59,6 +47,16 @@ rec {
       packageId = "nit";
       build = internal.buildRustCrateWithFeatures {
         packageId = "nit";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
+    "nit-types" = rec {
+      packageId = "nit-types";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "nit-types";
       };
 
       # Debug support which might change between releases.
@@ -3298,6 +3296,11 @@ rec {
             packageId = "jiff";
           }
           {
+            name = "nit-types";
+            packageId = "nit-types";
+            features = [ "clap" ];
+          }
+          {
             name = "rusqlite";
             packageId = "rusqlite";
           }
@@ -3357,6 +3360,30 @@ rec {
           }
         ];
 
+      };
+      "nit-types" = rec {
+        crateName = "nit-types";
+        version = "0.1.0";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/nit-types; };
+        libName = "nit_types";
+        dependencies = [
+          {
+            name = "clap";
+            packageId = "clap";
+            optional = true;
+            features = [ "derive" ];
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+        ];
+        features = {
+          "clap" = [ "dep:clap" ];
+        };
+        resolvedDefaultFeatures = [ "clap" ];
       };
       "nu-ansi-term" = rec {
         crateName = "nu-ansi-term";
