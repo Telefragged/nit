@@ -33,38 +33,7 @@ pub struct ApiError {
 
 // ---------------------------------------------------------------------------
 // Repos
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Repo {
-    pub id: u64,
-    /// Canonical git-common-dir — the repo's identity and display name.
-    pub git_dir: String,
-    /// The one canonical base ref; mergedness tracks it.
-    pub base_ref: String,
-    /// Live tip count (derived from the tip set, never stored).
-    pub active_chains: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RepoList {
-    pub repos: Vec<Repo>,
-}
-
-/// `POST /api/repos` request — register a repo (`nit repo create`). `base`
-/// configures the one canonical base ref; it must resolve to a commit — any
-/// git ref, e.g. `origin/main`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateRepo {
-    pub git_dir: String,
-    pub base: String,
-}
-
-/// `PATCH /api/repos/{id}` request — repoint a moved repo at its new
-/// git-common-dir (`nit repo move`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RelocateRepo {
-    pub git_dir: String,
-}
+pub use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
 
 /// `POST /api/changes/{id}/abandon` request (this is `nit abandon`). The body
 /// is optional — an absent or empty `message` abandons without a reason.
@@ -76,112 +45,15 @@ pub struct AbandonRequest {
 
 // ---------------------------------------------------------------------------
 // Push
-
-/// `POST /api/push` request (this is `nit push`). The repo must already be
-/// registered (`nit repo create`); the canonical branch is its stored
-/// `base_ref`, so push takes no base.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PushRequest {
-    pub git_dir: String,
-    /// Any ref or rev, resolved to a commit at push time.
-    pub tip: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PushResult {
-    /// The pushed tip change, at the revision this push gave it. Always
-    /// present — a push that walks to nothing is rejected (409). Read the
-    /// derived chain back with `GET /api/chains/{tip_change.change_id}`.
-    pub tip_change: TipChange,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TipChange {
-    pub change_id: u64,
-    pub change_key: String,
-    pub revision: u64,
-    pub status: ChangeStatus,
-}
+pub use nit_types::push::{PushRequest, PushResult, TipChange};
 
 // ---------------------------------------------------------------------------
 // Chains (derived; addressed by tip change id + ?revision)
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainList {
-    pub chains: Vec<Chain>,
-}
-
-/// A derived chain: the path through a tip change, plus its rolled-up state.
-/// The list element (`GET /api/chains`) and the single-chain shape
-/// (`GET /api/chains/{id}`) are identical.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Chain {
-    pub tip_change_id: u64,
-    /// The repo this chain belongs to (registry id).
-    pub repo_id: u64,
-    pub state: ChainState,
-    /// Oldest-first, base → tip.
-    pub path: Vec<PathEntry>,
-}
-
-/// One member of a derived path: structure only, read at the revision the path
-/// pins. Per-change review state (counts, staged decision, the newest patchset)
-/// is not here — a client reads it from `GET /api/changes/{id}` per member.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PathEntry {
-    pub change_id: u64,
-    /// Position in THIS path (0-based).
-    pub position: u64,
-    pub change_key: String,
-    /// The patchset this path walks.
-    pub revision: u64,
-    /// Per `(change, this revision)`.
-    pub status: ChangeStatus,
-    pub subject: String,
-    pub commit_sha: String,
-}
+pub use nit_types::chains::{Chain, ChainList, PathEntry};
 
 // ---------------------------------------------------------------------------
 // Graph (the spine-centered DAG; docs/api.md "Graph")
-
-/// One repo's change graph: a single commit-sha-keyed DAG over the canonical
-/// branch, the source for the web dashboard. Nothing about it is stored — it
-/// is assembled at read time from the same folds + sha index as a chain, plus
-/// a git walk of the canonical branch for the merged history.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RepoGraph {
-    pub repo_id: u64,
-    /// The HEAD node's `commit_sha` — the anchor every region pivots on.
-    pub anchor: String,
-    /// The canonical branch has merged commits below the displayed window — the
-    /// client shows an "earlier history hidden" marker and dangles deep forks
-    /// to it.
-    pub history_truncated: bool,
-    /// Row order, top → bottom: open (top) → head → history (bottom). A
-    /// topological order in which every node precedes its parents.
-    pub nodes: Vec<GraphNode>,
-}
-
-/// One node of the change graph, keyed by its `commit_sha`. Edges are its
-/// `parents` (an edge is drawn to each that is in the node set; `len > 1` is
-/// a merge).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphNode {
-    /// The node's stable id — a full 40-hex commit-sha; the client truncates.
-    pub commit_sha: String,
-    pub section: GraphSection,
-    pub subject: String,
-    /// `ChangeStatus` at the pinned revision; head/history read as merged —
-    /// the client styles by `section`.
-    pub status: ChangeStatus,
-    /// Parent commit-shas; an edge is drawn to each that is in the node set.
-    pub parents: Vec<String>,
-    /// The backing change, or `None` for a bare git commit (merge / pre-nit).
-    pub change_id: Option<u64>,
-    pub change_key: Option<String>,
-    /// The pinned patchset (open nodes); `None` off the open region.
-    pub revision: Option<u64>,
-}
+pub use nit_types::graph::{GraphNode, RepoGraph};
 
 // ---------------------------------------------------------------------------
 // Changes
@@ -237,53 +109,7 @@ pub struct Review {
 
 // ---------------------------------------------------------------------------
 // Diffs
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Diff {
-    pub files: Vec<DiffFile>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiffFile {
-    /// New path (old path when deleted).
-    pub path: String,
-    /// Only set for renames.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub old_path: Option<String>,
-    pub status: FileStatus,
-    pub binary: bool,
-    pub additions: u64,
-    pub deletions: u64,
-    /// Empty when binary.
-    pub hunks: Vec<Hunk>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Hunk {
-    pub old_start: u64,
-    pub old_lines: u64,
-    pub new_start: u64,
-    pub new_lines: u64,
-    pub header: String,
-    pub lines: Vec<Line>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Line {
-    pub kind: LineKind,
-    /// Old line number; absent for add.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub old: Option<u64>,
-    /// New line number; absent for del.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub new: Option<u64>,
-    /// Changed by a rebase, not the agent (docs/api.md "Rebase-aware
-    /// interdiffs"). Omitted on the wire when false.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub drift: bool,
-    /// Without trailing newline.
-    pub text: String,
-}
+pub use nit_types::diff::{Diff, DiffFile, Hunk, Line};
 
 // ---------------------------------------------------------------------------
 // Comments

@@ -9,5 +9,10 @@
 //! web build can share these types without pulling in the server, and every
 //! payload is a typed shape rather than dynamic JSON.
 
+pub mod chains;
 pub mod comments;
+pub mod diff;
 pub mod enums;
+pub mod graph;
+pub mod push;
+pub mod repos;
