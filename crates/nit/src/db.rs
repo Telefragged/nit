@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
+use nit_types::comments::CommentRange;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
@@ -178,24 +179,6 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
         .with_context(|| format!("applying migration {}", i + 1))?;
     }
     Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Range anchor (shared row + wire shape; docs/api.md "Range comments")
-
-/// Selected-text anchor of a line comment: 1-based lines on the comment's
-/// side, 0-based chars, `end_char` exclusive, `end_line` = the comment's
-/// `line`. `api::types` re-exports it — the JSON shape is these four
-/// fields. These are domain coordinates (always non-negative), so the
-/// shape is `u64`; the `SQLite` columns are signed, converted in
-/// [`map_draft`]/[`insert_draft`] like every other id (this is the
-/// DTO↔domain boundary).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct CommentRange {
-    pub start_line: u64,
-    pub start_char: u64,
-    pub end_line: u64,
-    pub end_char: u64,
 }
 
 /// Read a column written from a `u64` back as `u64`. Ids, indices and line

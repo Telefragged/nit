@@ -19,9 +19,10 @@
 //! advances it (docs/data-model.md "Identity").
 
 use anyhow::{Result, anyhow};
+use nit_types::comments::CommentRange;
 use serde::{Deserialize, Serialize};
 
-use crate::db::{self, CommentRange};
+use crate::db;
 use crate::enums::{ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
 
 // ---------------------------------------------------------------------------

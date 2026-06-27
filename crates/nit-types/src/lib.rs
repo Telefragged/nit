@@ -9,4 +9,5 @@
 //! web build can share these types without pulling in the server, and every
 //! payload is a typed shape rather than dynamic JSON.
 
+pub mod comments;
 pub mod enums;

@@ -288,9 +288,8 @@ pub struct Line {
 // ---------------------------------------------------------------------------
 // Comments
 
-/// Selected-text anchor of a line comment (api.md "Range comments") —
-/// the db row type is the wire shape verbatim, re-exported not mirrored.
-pub use crate::db::CommentRange;
+/// Selected-text anchor of a line comment (api.md "Range comments").
+pub use nit_types::comments::CommentRange;
 
 /// A published comment thread (docs/api.md "Comment placement").
 #[derive(Debug, Clone, Serialize, Deserialize)]
