@@ -8,10 +8,9 @@ use anyhow::Result;
 
 #[derive(clap::Args)]
 pub struct ServeArgs {
-    /// Address to listen on
     #[arg(long, default_value = "127.0.0.1:8877")]
     pub listen: SocketAddr,
-    /// Database path (default: `$XDG_DATA_HOME/nit/nit.sqlite3`)
+    /// Default: `$XDG_DATA_HOME/nit/nit.sqlite3` when unset.
     #[arg(long)]
     pub db: Option<PathBuf>,
     /// Built web UI directory served outside /api

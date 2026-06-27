@@ -63,7 +63,6 @@ impl RepoView {
         self.changes.get(&id)
     }
 
-    /// Every change id in the view.
     #[must_use]
     pub fn change_ids(&self) -> Vec<u64> {
         self.changes.keys().copied().collect()
@@ -139,7 +138,7 @@ impl RepoView {
                 break;
             };
             if rev.parent_sha == rev.base_sha || self.is_merged(&rev.parent_sha) {
-                break; // reached the canonical branch (recorded fork, or a landed parent)
+                break;
             }
             sha.clone_from(&rev.parent_sha);
         }
@@ -197,7 +196,7 @@ impl RepoView {
 #[must_use]
 pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     if path.is_empty() {
-        return ChainState::AgentsTurn; // empty tip
+        return ChainState::AgentsTurn; // tip not in the index — no chain members, agent's turn by default
     }
     // Abandonment is derivation-inert: an abandoned member is excluded from the
     // rollup entirely (no chain-level abandoned state). It shows as `abandoned`
@@ -211,7 +210,7 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
         .filter(|s| *s != ChangeStatus::Abandoned)
         .collect();
     if statuses.is_empty() {
-        return ChainState::AgentsTurn; // empty or all-abandoned tip
+        return ChainState::AgentsTurn;
     }
     if statuses.iter().all(|s| *s == ChangeStatus::Merged) {
         ChainState::Merged
@@ -239,7 +238,6 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
 /// tie-break keeps it deterministic.
 #[must_use]
 pub fn graph_row_order(nodes: &[(String, Vec<String>)]) -> Vec<String> {
-    // rank(i) = 0 if no children, else 1 + max(child rank); memoized, cycle-safe.
     fn rank(
         i: usize,
         children: &[Vec<usize>],
@@ -268,7 +266,6 @@ pub fn graph_row_order(nodes: &[(String, Vec<String>)]) -> Vec<String> {
         .enumerate()
         .map(|(i, (sha, _))| (sha.as_str(), i))
         .collect();
-    // Invert parents → children, over in-set ids only.
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
     for (i, (_, parents)) in nodes.iter().enumerate() {
         for p in parents {
@@ -329,7 +326,6 @@ mod tests {
     #[test]
     fn b_in_two_chains() {
         let ca = change(10, "Ia", vec![rev(0, "A", "m", "m")]);
-        // B: rev0 parent A (push1), rev1 parent D (push2).
         let cb = change(
             11,
             "Ib",
@@ -360,7 +356,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(13, 0), (11, 1), (14, 0)]
         );
-        // B (change 11) is thus reached by both tips, at two patchsets.
     }
 
     #[test]
@@ -421,7 +416,6 @@ mod tests {
             .collect();
         shas.sort();
         assert_eq!(shas, vec!["A", "B", "Bp", "C", "D", "E"]);
-        // Change 11 (B) appears as two distinct nodes, at rev0 and rev1.
         let b_nodes: Vec<u64> = view
             .open_nodes()
             .iter()
@@ -452,8 +446,7 @@ mod tests {
             graph_row_order(&pairs),
             vec!["A1", "A2", "A3", "A4", "H", "G1", "G2", "G3", "G4", "G5"]
         );
-        // Every node precedes each of its parents (None < Some keeps the
-        // comparison honest if a sha is ever missing).
+        // None < Some keeps the comparison honest if a sha is ever missing.
         let order = graph_row_order(&pairs);
         let pos = |s: &str| order.iter().position(|x| x == s);
         for (child, parents) in &pairs {
