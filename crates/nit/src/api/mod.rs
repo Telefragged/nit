@@ -50,6 +50,7 @@ pub use state::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change,
     append_to_change_with, with_conn,
 };
+pub use timer::sweep_once;
 
 /// Static UI serving is layered on top in [`app`].
 pub fn router(state: Arc<AppState>) -> Router {
@@ -143,6 +144,26 @@ pub async fn serve_on(
     let state = AppState::load(db_path).await?;
     tracing::info!("listening on http://{addr}");
     let timer = tokio::spawn(timer::run_lifecycle_timer(state.clone()));
+    let res = serve_on_state(listener, state, web_dist, shutdown).await;
+    timer.abort();
+    res
+}
+
+/// Serve `app` from a caller-owned [`AppState`] until `shutdown` resolves.
+/// Unlike [`serve_on`] it spawns **no lifecycle timer**: the only sweeps are
+/// the ones the owner triggers through [`sweep_once`], so a test driving the
+/// state in-process never has a stray sweep land between its setup and a later
+/// assertion. Owning the state is also what lets that in-process driver act on
+/// the very projections the server reads, instead of going over the wire.
+///
+/// # Errors
+/// When accepting connections fails.
+pub async fn serve_on_state(
+    listener: tokio::net::TcpListener,
+    state: Arc<AppState>,
+    web_dist: Option<PathBuf>,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> anyhow::Result<()> {
     let st = state.clone();
     let shutdown = async move {
         shutdown.await;
@@ -151,7 +172,6 @@ pub async fn serve_on(
     axum::serve(listener, app(state, web_dist))
         .with_graceful_shutdown(shutdown)
         .await?;
-    timer.abort();
     Ok(())
 }
 

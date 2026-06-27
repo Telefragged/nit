@@ -40,13 +40,20 @@ pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
             () = tokio::time::sleep(interval) => {}
             _ = shutdown.wait_for(|&s| s) => break,
         }
-        let st = state.clone();
-        let _ = with_conn(state.pool(), move |conn| {
-            sweep_lifecycle(&st, conn);
-            Ok(())
-        })
-        .await;
+        sweep_once(&state).await;
     }
+}
+
+/// Run one lifecycle sweep to completion. The background timer calls this on
+/// its interval; tests call it directly to drive merge detection without
+/// waiting on — or coupling to — the timer.
+pub async fn sweep_once(state: &Arc<AppState>) {
+    let st = state.clone();
+    let _ = with_conn(state.pool(), move |conn| {
+        sweep_lifecycle(&st, conn);
+        Ok(())
+    })
+    .await;
 }
 
 /// One sweep: for each repo whose canonical branch has moved since the last
