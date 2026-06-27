@@ -108,7 +108,7 @@ describe("layoutGraph node semantics", () => {
     // A3 is shared by two chains (its two children A1, A2).
     expect(find(g, "A3").childCount).toBe(2);
 
-    // Open + head at full opacity; history fades with depth (floor 0.3).
+    // Opacity floor 0.3 — not yet reached; G5 at depth 5 gives 0.35.
     expect(find(g, "A1").opacity).toBe(1);
     expect(find(g, "H").opacity).toBe(1);
     expect(find(g, "G1").depth).toBe(1);
@@ -123,7 +123,7 @@ describe("layoutGraph edges", () => {
     const g = layoutGraph(mockGraph());
     expect(edge(g, "A4", "H").kind).toBe("open"); // open chain joins HEAD
     expect(edge(g, "A4", "H").lane).toBe(0); // on the spine
-    expect(edge(g, "A2", "A3").kind).toBe("open"); // cross-lane fork, still open
+    expect(edge(g, "A2", "A3").kind).toBe("open"); // cross-lane fork
     expect(edge(g, "A2", "A3").lane).toBe(1); // A2's side lane carries the color
     expect(edge(g, "H", "G1").kind).toBe("history"); // into merged history
     expect(edge(g, "G2", "G4").kind).toBe("history");

@@ -22,9 +22,7 @@ export const LAYOUT_B = {
   railPadL: 42,
   /** Horizontal gap between lane centers. */
   laneGap: 42,
-  /** Padding right of the last lane. */
   railPadR: 26,
-  /** Node radius. */
   nodeR: 5,
   /** Extra radius for a merge node. */
   mergeBump: 1.5,
@@ -32,7 +30,6 @@ export const LAYOUT_B = {
   elbow: 9,
   /** Per-row opacity falloff for merged history. */
   fadeStep: 0.13,
-  /** Opacity floor for faded merged history. */
   fadeFloor: 0.3,
 };
 
@@ -48,7 +45,7 @@ export interface LaidNode {
   isMerge: boolean;
   /** Rows below the HEAD anchor (0 off the history region) — drives the fade. */
   depth: number;
-  /** Number of children in the graph (a tip — the breadcrumb anchor — has 0). */
+  /** A tip — the breadcrumb anchor — has 0. */
   childCount: number;
   opacity: number;
 }
@@ -89,7 +86,7 @@ interface Branch {
   bot: number;
 }
 
-/** Lay a repo graph out for rendering. Pure: never mutates `graph`. */
+/** Pure: never mutates `graph`. */
 export function layoutGraph(graph: RepoGraph): GraphLayout {
   const nodes = graph.nodes;
   const n = nodes.length;
@@ -97,7 +94,7 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
   const rowOf = new Map<string, number>();
   nodes.forEach((nd, i) => rowOf.set(nd.commit_sha, i));
 
-  // In-set parents (drawable edges) per node, and the inverse children.
+  // In-set (drawable) parents; childRows is the inverse.
   const parentRows: number[][] = nodes.map((nd) =>
     nd.parents
       .map((p) => rowOf.get(p))
@@ -179,7 +176,7 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
     branches.push({ rows, top, bot });
   }
 
-  // 3. Interval-graph coloring into lanes ≥ 1 (longest span first, then by top).
+  // 3. Interval-graph coloring (longest span first, then by top).
   const ordered = [...branches].sort((a, b) => {
     const la = a.bot - a.top;
     const lb = b.bot - b.top;
@@ -198,7 +195,6 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
     for (const r of br.rows) lane[r] = placed + 1;
   }
 
-  // 4. Coordinates, nodes, edges.
   const laneAt = (i: number): number => lane[i] ?? 0;
   const cx = (l: number): number => LAYOUT_B.railPadL + l * LAYOUT_B.laneGap;
   const cy = (r: number): number => r * LAYOUT_B.rowH + LAYOUT_B.rowH / 2;
@@ -206,7 +202,6 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
     Math.max(LAYOUT_B.fadeFloor, 1 - depth * LAYOUT_B.fadeStep);
   const maxLane = lane.reduce((m, l) => Math.max(m, l), 0);
 
-  // An edge from child (top) to parent (bottom): straight in-lane, else an elbow.
   const edgePath = (x0: number, y0: number, x1: number, y1: number): string => {
     if (x0 === x1) return `M ${x0} ${y0} L ${x1} ${y1}`;
     const b = LAYOUT_B.elbow;
@@ -279,8 +274,7 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
         opacity,
       });
     }
-    // A deep-behind fork: the base is older than the window, so there is no
-    // in-set parent — dangle a behind edge down into the collapsed marker.
+    // A deep-behind fork: base older than the window, so no in-set parent.
     if (
       ln.node.section === "open" &&
       inSet.length === 0 &&
@@ -297,7 +291,6 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
     }
   });
 
-  // The spine descends into the collapsed marker from the deepest lane-0 node.
   if (collapsed && spineBottom) {
     edges.push({
       key: "spine>collapsed",
