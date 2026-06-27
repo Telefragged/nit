@@ -10,9 +10,13 @@
 //! payload is a typed shape rather than dynamic JSON.
 
 pub mod chains;
+pub mod changes;
 pub mod comments;
+pub mod decisions;
 pub mod diff;
 pub mod enums;
+pub mod error;
 pub mod graph;
+pub mod health;
 pub mod push;
 pub mod repos;
