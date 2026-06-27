@@ -153,7 +153,6 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE changes ADD COLUMN status TEXT;",
     // v4: rename the canonical-base column to `base_ref` — the stored value is
     // a git ref, not necessarily a local branch (docs/data-model.md "Tables").
-    // A rename only; the stored value and its resolution are unchanged.
     "ALTER TABLE repos RENAME COLUMN base_branch TO base_ref;",
     // v5: retire the `partial` log kind. The flag never affected a change's
     // stored status (it only gated the read-derived `approved` chain state), so
@@ -494,8 +493,7 @@ pub fn log_entries(
 ) -> Result<Vec<LogRow>> {
     let change_id = i64::try_from(change_id)?;
     let from = i64::try_from(from)?;
-    // `to = None` means "through head": omit the upper bound entirely rather
-    // than fake one with a sentinel.
+    // Omit the upper bound entirely rather than fake one with a sentinel.
     let rows = match to {
         Some(to) => conn
             .prepare(
@@ -694,7 +692,7 @@ pub fn drafts_for_change(conn: &Connection, change_id: u64) -> Result<Vec<DraftR
     Ok(rows)
 }
 
-/// Delete every draft of one change (called when its drafts publish).
+/// Called when a change's drafts publish.
 ///
 /// # Errors
 /// On a database failure.
@@ -784,7 +782,6 @@ mod tests {
         conn
     }
 
-    /// A repo + one change on it (the common setup).
     fn change(conn: &Connection) -> u64 {
         let repo = create_repo(conn, "/r/.git", "main").expect("repo");
         upsert_change(conn, repo.id, "I1").expect("change")
@@ -795,11 +792,9 @@ mod tests {
         let conn = mem();
         let a = create_repo(&conn, "/r/.git", "main").expect("create");
         assert_eq!(a.base_ref, "main");
-        // The same git dir is found by `find_repo` (and the row carries its base).
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
         assert_eq!(found.id, a.id);
         assert_eq!(found.base_ref, "main");
-        // A different git dir is a distinct repo.
         let b = create_repo(&conn, "/other/.git", "main").expect("create");
         assert_ne!(a.id, b.id);
     }
@@ -821,7 +816,6 @@ mod tests {
         let a = upsert_change(&conn, repo.id, "Iabc").expect("create");
         let again = upsert_change(&conn, repo.id, "Iabc").expect("re-upsert");
         assert_eq!(a, again);
-        // A different key is a distinct change.
         let b = upsert_change(&conn, repo.id, "Idef").expect("create");
         assert_ne!(a, b);
         assert_eq!(
@@ -851,8 +845,6 @@ mod tests {
         );
         update_change_status(&conn, c, ChangeStatus::Approved).expect("stamp");
         assert_eq!(status(&conn).as_deref(), Some("approved"));
-        // Re-stamping overwrites with the new status' wire spelling, and the
-        // typed row parses it back through `col_change_status`.
         update_change_status(&conn, c, ChangeStatus::ChangesRequested).expect("restamp");
         assert_eq!(status(&conn).as_deref(), Some("changes_requested"));
         assert_eq!(
@@ -935,7 +927,7 @@ mod tests {
         assert_eq!(staged.decision, Decision::RequestChanges);
         assert_eq!(staged.message, "fix this");
 
-        // A second stage overwrites (one row per change).
+        // One row per change: a second stage replaces the first.
         upsert_draft_review(&conn, c, Decision::Approve, "lgtm").expect("restage");
         let staged = get_draft_review(&conn, c).expect("get").expect("some");
         assert_eq!(staged.decision, Decision::Approve);
@@ -943,7 +935,6 @@ mod tests {
 
         delete_draft_review(&conn, c).expect("clear");
         assert!(get_draft_review(&conn, c).expect("get").is_none());
-        // Deleting again is a no-op.
         delete_draft_review(&conn, c).expect("clear again");
     }
 }
