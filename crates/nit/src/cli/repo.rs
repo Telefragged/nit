@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
-use serde_json::json;
+
+use crate::api::types::{CreateRepo, RelocateRepo, Repo, RepoList};
 
 use super::client::{Client, ServerOpt, print_json, server_url};
 use super::git::{discover_repo, repo_git_dir};
@@ -53,7 +54,8 @@ pub fn repo(args: RepoArgs) -> Result<()> {
         RepoCmd::Create(a) => repo_create(&a, args.server.server),
         RepoCmd::List => {
             let client = Client::new(server_url(args.server.server));
-            print_json(&client.get("/api/repos")?)
+            let list: RepoList = client.get("/api/repos")?;
+            print_json(&list)
         }
         RepoCmd::Move(a) => repo_move(&a, args.server.server),
     }
@@ -62,28 +64,32 @@ pub fn repo(args: RepoArgs) -> Result<()> {
 fn repo_create(args: &RepoCreateArgs, server: Option<String>) -> Result<()> {
     let (git_dir, _repo) = discover_repo()?;
     let client = Client::new(server_url(server));
-    let body = json!({"git_dir": git_dir, "base": args.base});
-    print_json(&client.post("/api/repos", &body)?)
+    let body = CreateRepo {
+        git_dir,
+        base: args.base.clone(),
+    };
+    let repo: Repo = client.post("/api/repos", &body)?;
+    print_json(&repo)
 }
 
 fn repo_move(args: &RepoMoveArgs, server: Option<String>) -> Result<()> {
     let client = Client::new(server_url(server));
     let to = repo_git_dir(&args.to)?;
     let from = args.from.trim_end_matches('/');
-    let list = client.get("/api/repos")?;
-    let repos = list["repos"]
-        .as_array()
-        .ok_or_else(|| anyhow!("malformed repo list: {list}"))?;
-    let id = repos
+    let list: RepoList = client.get("/api/repos")?;
+    let id = list
+        .repos
         .iter()
         .find(|r| {
-            let gd = r["git_dir"].as_str().unwrap_or("");
-            gd == from || gd.strip_suffix("/.git").is_some_and(|root| root == from)
+            r.git_dir == from
+                || r.git_dir
+                    .strip_suffix("/.git")
+                    .is_some_and(|root| root == from)
         })
-        .and_then(|r| r["id"].as_u64())
+        .map(|r| r.id)
         .ok_or_else(|| {
             anyhow!("no repo registered at '{from}' — run 'nit repo list' to see the exact paths")
         })?;
-    let updated = client.patch(&format!("/api/repos/{id}"), &json!({"git_dir": to}))?;
+    let updated: Repo = client.patch(&format!("/api/repos/{id}"), &RelocateRepo { git_dir: to })?;
     print_json(&updated)
 }

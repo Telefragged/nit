@@ -1,7 +1,8 @@
 //! `nit reopen` / `nit abandon` — change-lifecycle transitions.
 
 use anyhow::Result;
-use serde_json::json;
+
+use crate::api::types::{AbandonRequest, ChangeDetail};
 
 use super::client::{Client, ServerOpt, print_json, server_url};
 use super::format::ChangeTarget;
@@ -32,7 +33,8 @@ pub struct AbandonArgs {
 pub fn reopen(args: ReopenArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
     let change_id = args.target.resolve(&client)?;
-    let detail = client.post(&format!("/api/changes/{change_id}/reopen"), &json!({}))?;
+    // reopen carries no request body; the server reads only the path id.
+    let detail: ChangeDetail = client.post(&format!("/api/changes/{change_id}/reopen"), &())?;
     print_json(&detail)
 }
 
@@ -44,10 +46,9 @@ pub fn reopen(args: ReopenArgs) -> Result<()> {
 pub fn abandon(args: AbandonArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
     let change_id = args.target.resolve(&client)?;
-    let body = match args.message {
-        Some(message) => json!({ "message": message }),
-        None => json!({}),
+    let body = AbandonRequest {
+        message: args.message,
     };
-    let detail = client.post(&format!("/api/changes/{change_id}/abandon"), &body)?;
+    let detail: ChangeDetail = client.post(&format!("/api/changes/{change_id}/abandon"), &body)?;
     print_json(&detail)
 }

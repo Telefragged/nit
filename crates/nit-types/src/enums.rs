@@ -269,6 +269,20 @@ pub enum ChainState {
     Approved,
 }
 
+impl ChainState {
+    /// The wire spelling (mirrors the serde renaming), for Value-free display
+    /// in the CLI.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ChainState::Merged => "merged",
+            ChainState::AgentsTurn => "agents_turn",
+            ChainState::WaitingForReview => "waiting_for_review",
+            ChainState::Approved => "approved",
+        }
+    }
+}
+
 /// Which region of the change graph a node sits in (docs/api.md "Graph"):
 /// `open` ascends above the canonical HEAD, `head` is the HEAD anchor, and
 /// `history` descends below it (merged commits, fading with depth). The client

@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use serde_json::Value;
+
+use crate::api::types::{Chain, ChangeDetail};
 
 use super::client::{Client, Retry, ServerOpt, print_json, server_url};
 use super::format::chain_oneline;
@@ -28,7 +29,7 @@ pub struct StatusArgs {
 pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
     let change_id = resolve_chain(&client, args.chain, Retry::No)?;
-    let chain = client.get(&format!("/api/chains/{change_id}"))?;
+    let chain: Chain = client.get(&format!("/api/chains/{change_id}"))?;
     if args.oneline {
         let unresolved = member_unresolved(&client, &chain)?;
         print!("{}", chain_oneline(&chain, &unresolved));
@@ -45,24 +46,16 @@ pub fn status(args: StatusArgs) -> Result<()> {
 ///
 /// # Errors
 /// When a member's change snapshot can't be fetched.
-fn member_unresolved(client: &Client, chain: &Value) -> Result<HashMap<u64, u64>> {
+fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<u64, u64>> {
     let mut counts = HashMap::new();
-    let path = chain["path"].as_array().map_or(&[][..], Vec::as_slice);
-    for member in path {
-        let Some(change_id) = member["change_id"].as_u64() else {
-            continue;
-        };
-        let revision = member["revision"].as_u64();
-        let detail = client.get(&format!("/api/changes/{change_id}"))?;
-        let open = detail["threads"].as_array().map_or(0, |threads| {
-            threads
-                .iter()
-                .filter(|t| {
-                    t["revision"].as_u64() == revision && t["resolved"].as_bool() != Some(true)
-                })
-                .count()
-        });
-        counts.insert(change_id, u64::try_from(open).unwrap_or(u64::MAX));
+    for member in &chain.path {
+        let detail: ChangeDetail = client.get(&format!("/api/changes/{}", member.change_id))?;
+        let open = detail
+            .threads
+            .iter()
+            .filter(|t| t.revision == member.revision && !t.resolved)
+            .count();
+        counts.insert(member.change_id, u64::try_from(open).unwrap_or(u64::MAX));
     }
     Ok(counts)
 }

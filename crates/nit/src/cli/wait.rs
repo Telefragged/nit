@@ -41,7 +41,7 @@ pub fn wait(args: WaitArgs) -> Result<()> {
     // chain's stable identity) resolves once, not every loop pass.
     let tip = resolve_tip_change(&client, retry)?;
     loop {
-        let log = client.get_retry(&format!("/api/chains/{tip}/log"), retry)?;
+        let log: Value = client.get_retry(&format!("/api/chains/{tip}/log"), retry)?;
         let entries: Vec<Value> = log["entries"].as_array().cloned().unwrap_or_default();
         let fresh: Vec<Value> = entries
             .iter()
@@ -51,7 +51,7 @@ pub fn wait(args: WaitArgs) -> Result<()> {
         cursor = max_seq(&entries).max(cursor);
 
         if !fresh.is_empty() {
-            let feedback = client.get_retry(&format!("/api/chains/{tip}"), retry)?;
+            let feedback: Value = client.get_retry(&format!("/api/chains/{tip}"), retry)?;
             let resp = json!({"cursor": cursor, "entries": fresh, "feedback": feedback});
             print_wait(&resp, args.oneline)?;
             return Ok(());

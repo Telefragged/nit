@@ -1,10 +1,14 @@
 //! HTTP/websocket transport for the CLI: the [`Client`] over the nit server's
 //! JSON API, the unreachable-vs-fatal [`CallError`] split, the [`Retry`] policy
 //! that rides out server restarts, and the shared `print_json`/`server_url`
-//! helpers.
+//! helpers. Every request and response is a typed `nit-types` shape — no
+//! `serde_json::Value` crosses this boundary.
 
 use anyhow::{Result, anyhow};
-use serde_json::{Value, json};
+use nit_types::error::ApiError;
+use nit_types::events::ClientMsg;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 pub(crate) const DEFAULT_SERVER: &str = "http://127.0.0.1:8877";
 
@@ -34,8 +38,8 @@ pub(crate) fn server_version(base: &str) -> Option<String> {
         .build()
         .new_agent();
     let mut resp = agent.get(format!("{base}/api/health")).call().ok()?;
-    let body: Value = resp.body_mut().read_json().ok()?;
-    body["version"].as_str().map(str::to_owned)
+    let health: nit_types::health::Health = resp.body_mut().read_json().ok()?;
+    Some(health.version)
 }
 
 #[derive(Debug)]
@@ -121,7 +125,7 @@ impl Client {
         }
     }
 
-    pub(crate) fn get(&self, path: &str) -> Result<Value> {
+    pub(crate) fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         self.get_raw(path).map_err(|e| e.into_error(&self.base))
     }
 
@@ -152,7 +156,7 @@ impl Client {
     }
 
     /// GET, retrying with backoff while the server is unreachable.
-    pub(crate) fn get_retry(&self, path: &str, retry: Retry) -> Result<Value> {
+    pub(crate) fn get_retry<T: DeserializeOwned>(&self, path: &str, retry: Retry) -> Result<T> {
         self.retry_loop(retry, || self.get_raw(path))
     }
 
@@ -166,7 +170,7 @@ impl Client {
         let url = format!("{}/api/stream", self.base.replacen("http", "ws", 1));
         let map: std::collections::HashMap<String, u64> =
             subs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let sub = json!({ "subscribe": map }).to_string();
+        let sub = serde_json::to_string(&ClientMsg::Subscribe(map))?;
         self.retry_loop(retry, || Self::try_ws(&url, &sub))
     }
 
@@ -178,60 +182,80 @@ impl Client {
         Ok(socket)
     }
 
-    pub(crate) fn post(&self, path: &str, body: &Value) -> Result<Value> {
+    pub(crate) fn post<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T> {
         self.post_raw(path, body)
             .map_err(|e| e.into_error(&self.base))
     }
 
-    pub(crate) fn patch(&self, path: &str, body: &Value) -> Result<Value> {
+    pub(crate) fn patch<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T> {
         self.patch_raw(path, body)
             .map_err(|e| e.into_error(&self.base))
     }
 
-    fn get_raw(&self, path: &str) -> Result<Value, CallError> {
+    fn get_raw<T: DeserializeOwned>(&self, path: &str) -> Result<T, CallError> {
         let url = format!("{}{path}", self.base);
         let response = self.agent.get(&url).call().map_err(|e| classify(e, path))?;
         Self::read(response, path)
     }
 
-    fn post_raw(&self, path: &str, body: &Value) -> Result<Value, CallError> {
+    fn post_raw<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T, CallError> {
         let url = format!("{}{path}", self.base);
         Self::send_raw(self.agent.post(&url), path, body)
     }
 
-    fn patch_raw(&self, path: &str, body: &Value) -> Result<Value, CallError> {
+    fn patch_raw<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T, CallError> {
         let url = format!("{}{path}", self.base);
         Self::send_raw(self.agent.patch(&url), path, body)
     }
 
     /// Send a JSON body on a built request (the verb-agnostic half of
     /// [`post_raw`]/[`patch_raw`]).
-    fn send_raw(
+    fn send_raw<B: Serialize, T: DeserializeOwned>(
         req: ureq::RequestBuilder<ureq::typestate::WithBody>,
         path: &str,
-        body: &Value,
-    ) -> Result<Value, CallError> {
+        body: &B,
+    ) -> Result<T, CallError> {
         let response = req.send_json(body).map_err(|e| classify(e, path))?;
         Self::read(response, path)
     }
 
-    fn read(
+    /// Deserialize a success body into `T`; on a non-2xx, decode the
+    /// `{"error": …}` envelope into a fatal error.
+    fn read<T: DeserializeOwned>(
         mut response: ureq::http::Response<ureq::Body>,
         path: &str,
-    ) -> Result<Value, CallError> {
+    ) -> Result<T, CallError> {
         let status = response.status();
-        let value: Value = response
-            .body_mut()
-            .read_json()
-            .map_err(|e| classify(e, path))?;
         if !status.is_success() {
-            let message = value["error"].as_str().unwrap_or("unknown error");
+            let message = response
+                .body_mut()
+                .read_json::<ApiError>()
+                .map_or_else(|_| "unknown error".to_string(), |e| e.error);
             return Err(CallError::Fatal(anyhow!(
                 "{path}: {} — {message}",
                 status.as_u16()
             )));
         }
-        Ok(value)
+        response
+            .body_mut()
+            .read_json::<T>()
+            .map_err(|e| classify(e, path))
     }
 }
 
@@ -251,7 +275,7 @@ pub(crate) fn next_text(socket: &mut WsConn) -> Option<String> {
     }
 }
 
-pub(crate) fn print_json(value: &Value) -> Result<()> {
+pub(crate) fn print_json<T: Serialize>(value: &T) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }

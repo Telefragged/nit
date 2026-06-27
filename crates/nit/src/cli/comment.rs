@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, anyhow};
 
-use crate::api::types::{CommentRange, NewComment};
+use crate::api::types::{CommentRange, NewComment, Thread};
 use crate::enums::Side;
 
 use super::client::{Client, ServerOpt, print_json, server_url};
@@ -73,10 +73,7 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         body: args.message.unwrap_or_default(),
         resolved,
     };
-    let thread = client.post(
-        &format!("/api/changes/{change_id}/comments"),
-        &serde_json::to_value(&req)?,
-    )?;
+    let thread: Thread = client.post(&format!("/api/changes/{change_id}/comments"), &req)?;
     print_json(&thread)
 }
 

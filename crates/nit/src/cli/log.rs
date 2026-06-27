@@ -50,7 +50,7 @@ pub fn log(args: LogArgs) -> Result<()> {
         return follow(&client, change_id, cursor, args.oneline, args.reviewer_only);
     }
     let change_id = resolve_chain(&client, args.chain, Retry::No)?;
-    let log = client.get(&format!("/api/chains/{change_id}/log"))?;
+    let log: Value = client.get(&format!("/api/chains/{change_id}/log"))?;
     let all = log["entries"].as_array().cloned().unwrap_or_default();
     let mut entries: Vec<Value> = Vec::new();
     for spec in &args.ranges {
@@ -83,7 +83,7 @@ fn follow(
     loop {
         // Re-derive the chain each connect: a new tip enters the watch set, a
         // departed change goes quiet (self-healing, never needs new_parent).
-        let log = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
+        let log: Value = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
         let entries: Vec<Value> = log["entries"].as_array().cloned().unwrap_or_default();
         for e in &entries {
             if e["seq"].as_u64().unwrap_or(0) > cursor {

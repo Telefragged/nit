@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use anyhow::{Result, bail};
 use serde_json::Value;
 
+use crate::api::types::Chain;
 use crate::gitscan::short_sha;
 
 use super::client::Client;
@@ -77,23 +78,21 @@ fn entry_summary(entry: &Value) -> String {
 /// `unresolved` maps a member's `change_id` to its open-thread count, composed
 /// by the caller from the change snapshots (the path itself carries only
 /// structure).
-pub(crate) fn chain_oneline(chain: &Value, unresolved: &HashMap<u64, u64>) -> String {
+pub(crate) fn chain_oneline(chain: &Chain, unresolved: &HashMap<u64, u64>) -> String {
     use std::fmt::Write;
     let mut out = String::new();
     let inf = "write to String is infallible";
-    writeln!(out, "state={}", chain["state"].as_str().unwrap_or("?")).expect(inf);
-    let path = chain["path"].as_array().map_or(&[][..], Vec::as_slice);
-    for m in path {
-        let change_id = m["change_id"].as_u64().unwrap_or(0);
+    writeln!(out, "state={}", chain.state.as_str()).expect(inf);
+    for m in &chain.path {
         writeln!(
             out,
             "{}\t{}\t{}\tr{}\t{}u\t{}",
-            m["position"].as_u64().unwrap_or(0),
-            short_key(m["change_key"].as_str().unwrap_or("")),
-            m["status"].as_str().unwrap_or("?"),
-            m["revision"].as_u64().unwrap_or(0),
-            unresolved.get(&change_id).copied().unwrap_or(0),
-            m["subject"].as_str().unwrap_or(""),
+            m.position,
+            short_key(&m.change_key),
+            m.status.as_str(),
+            m.revision,
+            unresolved.get(&m.change_id).copied().unwrap_or(0),
+            m.subject,
         )
         .expect(inf);
     }
@@ -127,18 +126,42 @@ mod tests {
 
     #[test]
     fn chain_oneline_digests_each_member() {
+        use crate::api::types::PathEntry;
+        use crate::enums::{ChainState, ChangeStatus};
         // The path carries only structure; the unresolved counts are composed
         // separately (from the change snapshots) and keyed by change_id.
-        let chain = json!({
-            "state": "agents_turn",
-            "path": [
-                {"change_id": 1, "position": 0, "change_key": "I0123456789abc",
-                 "status": "changes_requested", "revision": 2,
-                 "subject": "server: add health endpoint"},
-                {"change_id": 2, "position": 1, "change_key": "Iabcdef0123456",
-                 "status": "approved", "revision": 1, "subject": "web: render the diff"},
-            ]
-        });
+        let member = |change_id, position, key: &str, status, revision, subject: &str| PathEntry {
+            change_id,
+            position,
+            change_key: key.to_string(),
+            status,
+            revision,
+            subject: subject.to_string(),
+            commit_sha: String::new(),
+        };
+        let chain = Chain {
+            tip_change_id: 2,
+            repo_id: 1,
+            state: ChainState::AgentsTurn,
+            path: vec![
+                member(
+                    1,
+                    0,
+                    "I0123456789abc",
+                    ChangeStatus::ChangesRequested,
+                    2,
+                    "server: add health endpoint",
+                ),
+                member(
+                    2,
+                    1,
+                    "Iabcdef0123456",
+                    ChangeStatus::Approved,
+                    1,
+                    "web: render the diff",
+                ),
+            ],
+        };
         let unresolved = HashMap::from([(1, 3), (2, 0)]);
         assert_eq!(
             chain_oneline(&chain, &unresolved),

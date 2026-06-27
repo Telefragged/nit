@@ -2,7 +2,8 @@
 //! review via `POST /api/push`.
 
 use anyhow::Result;
-use serde_json::json;
+
+use crate::api::types::{PushRequest, PushResult};
 
 use super::client::{Client, ServerOpt, print_json, server_url};
 use super::git::{discover_repo, resolve_tip};
@@ -27,7 +28,7 @@ pub fn push(args: PushArgs) -> Result<()> {
     let (git_dir, repo) = discover_repo()?;
     let tip = resolve_tip(&repo, args.commit.as_deref())?;
     let client = Client::new(server_url(args.server.server));
-    let body = json!({"git_dir": git_dir, "tip": tip});
-    let result = client.post("/api/push", &body)?;
+    let body = PushRequest { git_dir, tip };
+    let result: PushResult = client.post("/api/push", &body)?;
     print_json(&result)
 }
