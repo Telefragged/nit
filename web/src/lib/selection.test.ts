@@ -79,11 +79,11 @@ beforeEach(() => {
 });
 
 const ROWS: RowSpec[] = [
-  { old: 10, new: 12, text: "alpha beta gamma" }, // 0 context
-  { new: 13, text: "added line one" }, // 1 add
-  { new: 14, text: "added line two" }, // 2 add
-  { old: 11, text: "deleted line" }, // 3 del
-  { old: 12, new: 15, text: "tail line" }, // 4 context
+  { old: 10, new: 12, text: "alpha beta gamma" },
+  { new: 13, text: "added line one" },
+  { new: 14, text: "added line two" },
+  { old: 11, text: "deleted line" },
+  { old: 12, new: 15, text: "tail line" },
 ];
 
 describe("selectionTarget, unified layout", () => {
@@ -112,7 +112,7 @@ describe("selectionTarget, unified layout", () => {
   it("maps a del-to-context selection to the old side", () => {
     const s = mountUnified([ROWS]);
     const r = rangeOf(textNode(s, 3), 0, textNode(s, 4), 4);
-    // The old side is commentable everywhere now — the caller maps it to a
+    // The old side is always commentable — the caller maps it to a
     // stored (revision, side) for the range it was drawn in (lib/comments).
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
@@ -261,7 +261,6 @@ describe("selectionTarget, split layout", () => {
     );
   }
 
-  /** Code text node of column `side`, visual row `i`. */
   function colText(section: HTMLElement, side: string, i: number): Text {
     const cells = section.querySelectorAll(`.code[data-side="${side}"]`);
     const cell = cells[i];

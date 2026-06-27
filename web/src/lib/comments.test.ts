@@ -289,12 +289,9 @@ describe("revisionActivity", () => {
       [
         thread({ id: 1, revision: 2, resolved: false }),
         thread({ id: 2, revision: 2, resolved: true }),
-        thread({ id: 3, revision: 1, resolved: false }), // a different revision
+        thread({ id: 3, revision: 1, resolved: false }),
       ],
-      [
-        draft({ id: 11, revision: 2 }),
-        draft({ id: 12, revision: 1 }), // a different revision
-      ],
+      [draft({ id: 11, revision: 2 }), draft({ id: 12, revision: 1 })],
       2,
     );
     // unresolved excludes the resolved thread; the rev-1 thread/draft are out.

@@ -185,7 +185,7 @@ export function selectionTarget(
   if (cells.length === 1) {
     startChar = Math.min(startChar, endChar);
     if (startChar === endChar) {
-      return { file: path, side, line }; // collapsed: plain line comment
+      return { file: path, side, line };
     }
   }
   return {

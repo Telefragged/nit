@@ -88,8 +88,8 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Highlight one diff line to an HTML string. Line-at-a-time loses multi-line
- * constructs (block comments resume as code) — accepted for v1.
+ * Returns an HTML string. Line-at-a-time loses multi-line constructs
+ * (block comments resume as code) — accepted for v1.
  */
 export function highlightLine(text: string, language: string | null): string {
   if (!language) return escapeHtml(text);

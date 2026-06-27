@@ -12,14 +12,12 @@ import type {
   ThreadComment,
 } from "../api/types";
 
-/** A line comment's anchor: the revision and side it is pinned to. */
 export interface CommentAnchor {
   revision: number;
   side: CommentSide;
   line: number | null;
 }
 
-/** Where a column of the diff cell renders a comment thread. */
 export interface Placement {
   side: CommentSide;
   line: number;
@@ -33,7 +31,6 @@ export interface Placement {
  * sole draft and is open until published.
  */
 export interface UiThread {
-  /** Published thread id; `null` for a draft-only new thread. */
   id: number | null;
   revision: number;
   file: string | null;
@@ -41,7 +38,6 @@ export interface UiThread {
   side: CommentSide;
   range: CommentRange | null;
   line_text: string | null;
-  /** The published resolution (false for a draft-only thread). */
   resolved: boolean;
   /** Published comments (chronological). */
   comments: ThreadComment[];

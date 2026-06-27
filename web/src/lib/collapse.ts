@@ -12,8 +12,8 @@ export function defaultExpanded(): ReadonlySet<string> {
   return new Set([COMMIT_MSG_PATH]);
 }
 
-/** Expand one file. Returns the input set unchanged (same reference) when
- * already expanded, so callers can setState without a redundant render. */
+/** Returns the input set unchanged (same reference) when already expanded,
+ * so callers can setState without a redundant render. */
 export function expand(
   cur: ReadonlySet<string>,
   path: string,
@@ -24,7 +24,6 @@ export function expand(
   return next;
 }
 
-/** Flip one file's collapsed/expanded state. */
 export function toggle(
   cur: ReadonlySet<string>,
   path: string,

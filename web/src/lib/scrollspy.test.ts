@@ -7,8 +7,7 @@ describe("activeIndexAt", () => {
   });
 
   it("returns null while the page is above the first section", () => {
-    // Every top below the threshold line — nothing has reached it yet,
-    // matching the no-highlight state on load.
+    // Matches the no-highlight state on load.
     expect(activeIndexAt([200, 900, 1600], 116)).toBe(null);
   });
 
@@ -17,8 +16,6 @@ describe("activeIndexAt", () => {
   });
 
   it("picks the last section at or above the threshold", () => {
-    // Sections 0–2 have scrolled past the line; like a sticky header,
-    // the latest one to cross it is current.
     expect(activeIndexAt([-800, -300, 50, 700], 116)).toBe(2);
   });
 
