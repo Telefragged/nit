@@ -233,6 +233,12 @@
             dontNpmBuild = true;
             installPhase = "npm run lint > $out";
           };
+          web-test = pkgs.buildNpmPackage {
+            pname = "nit-web-test";
+            inherit (webArgs) version src npmDepsHash;
+            dontNpmBuild = true;
+            installPhase = "npm run test > $out";
+          };
         }
       );
 

@@ -38,8 +38,9 @@ Checks verify a change, not a green build — `nix build` skips tests
 
 - `nix develop -c cargo check` — fast inner-loop gate.
 - `nix flake check` — the pre-commit gate: builds the product and runs the
-  `clippy` (`-D warnings`) and `test` validators. Run one alone with
-  `nix build .#checks.<system>.clippy` or `.#checks.<system>.test`.
+  Rust validators (`clippy` with `-D warnings`, `test`, `test-nit-types`)
+  and the web validators (`web-lint`, `web-test`). Run one alone with
+  `nix build .#checks.<system>.clippy` or `.#checks.<system>.web-test`.
 
 The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
 change, regenerate it with `nix develop -c crate2nix generate` and commit it
@@ -134,7 +135,8 @@ with every new page or state. The npm `@playwright/test` version must match
   integration tests (`tempfile` + git2). `cargo test` runs as the `test`
   flake check.
 - Frontend: tsc-clean always; test break-prone logic (diff rendering,
-  comment anchoring) with vitest (`npm test`).
+  comment anchoring) with vitest (`npm test`), which runs as the `web-test`
+  flake check.
 - End-to-end: `scripts/e2e.sh` drives the full loop against a fixture repo.
 - A fresh `.worktrees/*` checkout has no `web/node_modules`; run
   `cd web && nix develop -c npm ci` before any web check.
