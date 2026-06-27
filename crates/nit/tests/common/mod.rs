@@ -25,17 +25,6 @@ pub fn sig() -> Signature<'static> {
     Signature::new("Test", "test@example.com", &Time::new(t, 0)).unwrap()
 }
 
-/// Configure a fast merge sweep for the whole test process. Call once before
-/// starting a server in a merge-detection test. Process-global, so a test file
-/// relying on it must use the same value throughout.
-pub fn fast_timer() {
-    // SAFETY: set before any server thread reads it; identical values across a
-    // file's tests, so concurrent writers do not tear.
-    unsafe {
-        std::env::set_var("NIT_TIMER_INTERVAL_MS", "150");
-    }
-}
-
 /// A standalone fixture repo: `main` with one root commit.
 pub struct GitRepo {
     pub dir: tempfile::TempDir,
@@ -382,21 +371,6 @@ pub fn sweep(server: &TestServer) {
         .as_ref()
         .expect("runtime")
         .block_on(nit::api::sweep_once(state));
-}
-
-/// For the asynchronous lifecycle timer.
-pub fn wait_for<T>(timeout: Duration, mut predicate: impl FnMut() -> Option<T>) -> T {
-    let deadline = Instant::now() + timeout;
-    loop {
-        if let Some(v) = predicate() {
-            return v;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "condition not met within {timeout:?}"
-        );
-        std::thread::sleep(Duration::from_millis(50));
-    }
 }
 
 pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
