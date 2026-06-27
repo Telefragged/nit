@@ -101,7 +101,6 @@ impl GitRepo {
     }
 }
 
-/// A repo's canonical git-common-dir as a string.
 fn git_dir_string(repo: &Repository) -> String {
     std::fs::canonicalize(repo.commondir())
         .unwrap()
@@ -160,9 +159,6 @@ fn commit_full_in(
     repo.commit(None, &s, &s, message, &tree, &parent_refs)
         .unwrap()
 }
-
-// ---------------------------------------------------------------------------
-// Server harness
 
 /// A real `nit::api` server (the binary's stack) bound on port 0.
 pub struct TestServer {
@@ -290,9 +286,6 @@ pub fn http_delete(url: &str) -> (u16, Value) {
     read(agent().delete(url).call().unwrap())
 }
 
-// ---------------------------------------------------------------------------
-// Change-centric helpers (push + chain navigation)
-
 /// `POST /api/repos` over HTTP (≡ `nit repo create`). `base` pins the canonical
 /// base ref (any git ref that resolves to a commit). Returns `(status, Repo)`.
 pub fn create_repo(server: &TestServer, repo: &GitRepo, base: &str) -> (u16, Value) {
@@ -332,7 +325,6 @@ pub fn review(server: &TestServer, change_id: u64, verdict: &str, message: &str)
     out
 }
 
-/// The first registered repo's id.
 pub fn first_repo_id(server: &TestServer) -> u64 {
     let (_, repos) = http_get(&server.url("/api/repos"));
     repos["repos"][0]["id"].as_u64().expect("a repo")
@@ -362,13 +354,11 @@ pub fn member_id(server: &TestServer, value: &Value, change_key: &str) -> u64 {
         .unwrap_or_else(|| panic!("no member {change_key} in path"))
 }
 
-/// `subject` + `Change-Id` trailer message.
 pub fn msg(subject: &str, change_id: &str) -> String {
     format!("{subject}\n\nChange-Id: {change_id}\n")
 }
 
-/// Poll `predicate` until it returns `Some`, or panic after `timeout` — for
-/// the asynchronous lifecycle timer.
+/// For the asynchronous lifecycle timer.
 pub fn wait_for<T>(timeout: Duration, mut predicate: impl FnMut() -> Option<T>) -> T {
     let deadline = Instant::now() + timeout;
     loop {
@@ -383,13 +373,9 @@ pub fn wait_for<T>(timeout: Duration, mut predicate: impl FnMut() -> Option<T>) 
     }
 }
 
-// ---------------------------------------------------------------------------
-// Websocket change stream (WS /api/stream)
-
 pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 
-/// Connect `WS /api/stream` and `subscribe` the given changes (`change_id` →
-/// from-idx), with a read timeout so `ws_read` never blocks the test forever.
+/// `change_id` → `from-idx` pairs; read timeout so `ws_read` never blocks the suite.
 pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Duration) -> WsSock {
     let url = format!("ws://{}/api/stream", server.addr);
     let (mut socket, _) = tungstenite::connect(&url).expect("ws connect");
