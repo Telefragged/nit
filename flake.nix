@@ -29,7 +29,28 @@
           f (
             import nixpkgs {
               inherit system;
-              overlays = [ rust-overlay.overlays.default ];
+              overlays = [
+                rust-overlay.overlays.default
+                # Build the npm-deps prefetcher with our pinned toolchain, not a
+                # second stock rustc. auditable off: cargo-auditable is its last
+                # edge back.
+                (final: prev: {
+                  prefetch-npm-deps = prev.prefetch-npm-deps.override {
+                    rustPlatform =
+                      let
+                        tc = final.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+                        base = final.makeRustPlatform {
+                          cargo = tc;
+                          rustc = tc;
+                        };
+                      in
+                      base
+                      // {
+                        buildRustPackage = args: base.buildRustPackage (args // { auditable = false; });
+                      };
+                  };
+                })
+              ];
             }
           )
         );
