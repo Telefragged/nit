@@ -62,9 +62,6 @@ fn draft_comment(server: &TestServer, change_id: u64, file: &str, line: u64, bod
     assert_eq!(st, 200);
 }
 
-// ---------------------------------------------------------------------------
-// Stage / clear
-
 /// A staged decision surfaces on both the change detail (with its message) and
 /// the chain path member (change-wide); clearing it removes it.
 #[test]
@@ -89,15 +86,14 @@ fn stage_surfaces_then_clears() {
         "request_changes"
     );
 
-    // Clear it.
     let (st, _) = http_delete(&server.url(&format!("/api/changes/{id}/decision")));
     assert_eq!(st, 204);
     assert_eq!(detail(&server, id)["draft_decision"], Value::Null);
-    // A second clear is still 204 (a no-op).
+    // Idempotent: a second clear is a no-op.
     let (st, _) = http_delete(&server.url(&format!("/api/changes/{id}/decision")));
     assert_eq!(st, 204);
 
-    // Staging is not a publish: no review, status still pending.
+    // Staging is not a publish.
     assert!(
         detail(&server, id)["reviews"]
             .as_array()
@@ -106,9 +102,6 @@ fn stage_surfaces_then_clears() {
     );
     assert_eq!(status_at(&server, id), "pending");
 }
-
-// ---------------------------------------------------------------------------
-// Batch submit
 
 /// Batch submit publishes a staged verdict, draining the change's comment
 /// drafts into the review and clearing the staged decision.
@@ -222,7 +215,8 @@ fn batch_submit_reopen_decision() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let id = push_one(&server, &g, "feat", "Ia");
 
-    // Abandon it (the immediate endpoint), then stage + submit a reopen.
+    // Abandon via the immediate endpoint — keeps setup off the
+    // batch-submit path under test.
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{id}/abandon")),
         &json!({}),
@@ -252,7 +246,7 @@ fn batch_submit_skips_illegal_decision_keeps_row() {
         &json!({}),
     );
     assert_eq!(st, 200);
-    stage(&server, id, "approve", "lgtm"); // a verdict on an abandoned change
+    stage(&server, id, "approve", "lgtm");
 
     let out = submit_chain(&server, id);
     assert_eq!(out["submitted"], 0);
@@ -276,7 +270,6 @@ fn batch_submit_is_idempotent() {
 
     stage(&server, id, "approve", "lgtm");
     assert_eq!(submit_chain(&server, id)["submitted"], 1);
-    // Re-submit: the row is gone, so nothing republishes.
     assert_eq!(submit_chain(&server, id)["submitted"], 0);
     assert_eq!(
         detail(&server, id)["reviews"].as_array().unwrap().len(),
@@ -303,7 +296,7 @@ fn batch_submit_publishes_every_member() {
     stage(&server, id_a, "approve", "a lgtm");
     stage(&server, id_b, "request_changes", "b needs work");
 
-    let out = submit_chain(&server, id_b); // tip is B; the path is A → B
+    let out = submit_chain(&server, id_b);
     assert_eq!(out["submitted"], 2);
     assert!(out["errors"].as_array().unwrap().is_empty());
     assert_eq!(status_at(&server, id_a), "approved");
@@ -336,15 +329,11 @@ fn batch_submit_publishes_at_pinned_revision() {
         review["revision"], 1,
         "published at the pinned (latest) revision"
     );
-    // r1 shows approved; r0 carries no review of its own.
     let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}?revision=1")));
     assert_eq!(chain["path"][0]["status"], "approved");
     let (_, r0) = http_get(&server.url(&format!("/api/chains/{id}?revision=0")));
     assert_eq!(r0["path"][0]["status"], "pending");
 }
-
-// ---------------------------------------------------------------------------
-// Validation
 
 /// An unknown decision value is a 400 (enum deserialize); an unknown change is
 /// a 404.

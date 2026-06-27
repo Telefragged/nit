@@ -34,7 +34,6 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     let change_id = member_id(&server, &res, "I001");
     assert_eq!(status_at(&server, change_id, 0).as_deref(), Some("pending"));
 
-    // Explicit abandon with a reason.
     let (st, detail) = http_post(
         &server.url(&format!("/api/changes/{change_id}/abandon")),
         &json!({"message": "superseded by another approach"}),
@@ -45,7 +44,6 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
         Some("abandoned")
     );
 
-    // The reason is recorded on the lifecycle entry.
     let (_, log) = http_get(&server.url(&format!("/api/chains/{change_id}/log")));
     let abandoned = log["entries"]
         .as_array()
@@ -58,7 +56,7 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
         "the reason is stored: {abandoned}"
     );
 
-    // Idempotent: abandoning again (bodyless) is a no-op, still abandoned.
+    // Idempotent: re-abandoning an already-abandoned change is a no-op.
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/abandon")),
         &json!({}),
