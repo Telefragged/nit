@@ -50,7 +50,9 @@ jobs:
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
-          gc-max-store-size: 6G
+          # Above the ~6.7G build+check closure, so the pre-save GC keeps the
+          # cache whole instead of trimming it every run.
+          gc-max-store-size: 8G
           # Every leg restores, but only the tip writes back: the legs share
           # one key, so parallel saves race to store the same entry, and the
           # tip is the store future runs branch from.
