@@ -5,9 +5,8 @@
 use std::collections::HashMap;
 
 use anyhow::{Result, bail};
-use serde_json::Value;
 
-use crate::api::types::Chain;
+use crate::api::types::{Chain, LogEntry, LogPayload};
 use crate::gitscan::short_sha;
 
 use super::client::Client;
@@ -39,38 +38,36 @@ impl ChangeTarget {
     }
 }
 
-pub(crate) fn print_oneline_entries(entries: &[Value]) {
+pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
     for e in entries {
-        let idx = e["idx"]
-            .as_u64()
-            .map_or_else(|| "?".to_string(), |i| i.to_string());
-        let kind = e["kind"].as_str().unwrap_or("?");
-        println!("{idx}\t{kind}\t{}", entry_summary(e));
+        println!(
+            "{}\t{}\t{}",
+            e.idx,
+            e.payload.kind().as_str(),
+            entry_summary(e)
+        );
     }
 }
 
 /// One-line digest of a log entry (a CLI display concern; the server ships only
 /// the raw entry).
-fn entry_summary(entry: &Value) -> String {
-    let p = &entry["payload"];
-    let change = entry["change_id"].as_u64().unwrap_or(0);
-    match entry["kind"].as_str().unwrap_or("?") {
-        "revision" => format!(
-            "change {change} new revision {}",
-            short_sha(p["commit_sha"].as_str().unwrap_or(""))
-        ),
-        "review" => format!(
+fn entry_summary(entry: &LogEntry) -> String {
+    let change = entry.change_id;
+    match &entry.payload {
+        LogPayload::Revision(p) => {
+            format!("change {change} new revision {}", short_sha(&p.commit_sha))
+        }
+        LogPayload::Review(p) => format!(
             "reviewer {} on change {change} r{} ({} comment(s))",
-            p["verdict"].as_str().unwrap_or("?"),
-            p["revision"].as_u64().unwrap_or(0),
-            p["comments"].as_array().map_or(0, Vec::len)
+            p.verdict.as_str(),
+            p.revision,
+            p.comments.len()
         ),
-        "comment" => match p["thread_id"].as_u64() {
+        LogPayload::Comment(c) => match c.thread_id {
             Some(thread) => format!("agent commented on thread {thread} (change {change})"),
             None => format!("agent opened a thread on change {change}"),
         },
-        "lifecycle" => format!("change {change} {}", p["action"].as_str().unwrap_or("?")),
-        other => format!("{other} entry"),
+        LogPayload::Lifecycle(p) => format!("change {change} {}", p.action.as_str()),
     }
 }
 
@@ -106,21 +103,51 @@ fn short_key(key: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn entry_summary_digests_each_kind() {
-        let rev = json!({"change_id": 7, "kind": "revision", "payload": {"commit_sha": "abcdef0123456789"}});
+        use crate::api::types::{CommentInput, ReviewPayload, RevisionPayload};
+        use crate::enums::{LifecycleAction, Verdict};
+        let entry = |payload| LogEntry {
+            change_id: 7,
+            idx: 0,
+            seq: 0,
+            created_at: String::new(),
+            payload,
+        };
+        let comment = || CommentInput {
+            thread_id: None,
+            revision: None,
+            file: None,
+            line: None,
+            side: None,
+            range: None,
+            line_text: None,
+            body: String::new(),
+            resolved: None,
+        };
+        let rev = entry(LogPayload::Revision(RevisionPayload {
+            commit_sha: "abcdef0123456789".to_string(),
+            parent_sha: String::new(),
+            base_sha: String::new(),
+            message: String::new(),
+            resets_status: true,
+        }));
         assert_eq!(entry_summary(&rev), "change 7 new revision abcdef012345");
-        let review = json!({"change_id": 7, "kind": "review",
-            "payload": {"verdict": "request_changes", "revision": 2, "comments": [{}, {}]}});
+        let review = entry(LogPayload::Review(ReviewPayload {
+            review_id: 0,
+            revision: 2,
+            verdict: Verdict::RequestChanges,
+            message: String::new(),
+            comments: vec![comment(), comment()],
+        }));
         assert_eq!(
             entry_summary(&review),
             "reviewer request_changes on change 7 r2 (2 comment(s))"
         );
-        let opened = json!({"change_id": 7, "kind": "comment", "payload": {"thread_id": null}});
+        let opened = entry(LogPayload::Comment(comment()));
         assert_eq!(entry_summary(&opened), "agent opened a thread on change 7");
-        let life = json!({"change_id": 7, "kind": "lifecycle", "payload": {"action": "merged"}});
+        let life = entry(LogPayload::lifecycle(LifecycleAction::Merged, None, None));
         assert_eq!(entry_summary(&life), "change 7 merged");
     }
 

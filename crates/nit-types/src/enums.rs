@@ -112,6 +112,18 @@ pub enum LifecycleAction {
     Reopened,
 }
 
+impl LifecycleAction {
+    /// The wire spelling (mirrors the serde renaming), for Value-free display.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LifecycleAction::Merged => "merged",
+            LifecycleAction::Abandoned => "abandoned",
+            LifecycleAction::Reopened => "reopened",
+        }
+    }
+}
+
 /// A reviewer's verdict on one change (docs/api.md "Reviews"). Folds to the
 /// matching [`ChangeStatus`] (`From<Verdict>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,6 +132,18 @@ pub enum Verdict {
     Approve,
     RequestChanges,
     Comment,
+}
+
+impl Verdict {
+    /// The wire spelling (mirrors the serde renaming), for Value-free display.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Verdict::Approve => "approve",
+            Verdict::RequestChanges => "request_changes",
+            Verdict::Comment => "comment",
+        }
+    }
 }
 
 /// A reviewer's **staged** decision on a change (docs/api.md "Reviewer

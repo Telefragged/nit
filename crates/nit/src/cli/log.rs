@@ -2,7 +2,9 @@
 //! `--follow` it as a parked monitor over the websocket change stream.
 
 use anyhow::{Context, Result, anyhow, bail};
-use serde_json::{Value, json};
+
+use crate::api::types::{ChainLog, LogEntry, LogPayload, StreamMsg};
+use crate::enums::LifecycleAction;
 
 use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
 use super::format::print_oneline_entries;
@@ -50,9 +52,9 @@ pub fn log(args: LogArgs) -> Result<()> {
         return follow(&client, change_id, cursor, args.oneline, args.reviewer_only);
     }
     let change_id = resolve_chain(&client, args.chain, Retry::No)?;
-    let log: Value = client.get(&format!("/api/chains/{change_id}/log"))?;
-    let all = log["entries"].as_array().cloned().unwrap_or_default();
-    let mut entries: Vec<Value> = Vec::new();
+    let log: ChainLog = client.get(&format!("/api/chains/{change_id}/log"))?;
+    let all = log.entries;
+    let mut entries: Vec<LogEntry> = Vec::new();
     for spec in &args.ranges {
         let (from, to) = LogRange::parse(spec)?.bounds(all.len());
         entries.extend(all.get(from..to).unwrap_or(&[]).iter().cloned());
@@ -60,7 +62,7 @@ pub fn log(args: LogArgs) -> Result<()> {
     if args.oneline {
         print_oneline_entries(&entries);
     } else {
-        print_json(&json!({"entries": entries}))?;
+        print_json(&ChainLog { entries })?;
     }
     Ok(())
 }
@@ -83,31 +85,33 @@ fn follow(
     loop {
         // Re-derive the chain each connect: a new tip enters the watch set, a
         // departed change goes quiet (self-healing, never needs new_parent).
-        let log: Value = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
-        let entries: Vec<Value> = log["entries"].as_array().cloned().unwrap_or_default();
-        for e in &entries {
-            if e["seq"].as_u64().unwrap_or(0) > cursor {
-                cursor = cursor.max(e["seq"].as_u64().unwrap_or(cursor));
+        let log: ChainLog = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
+        for e in &log.entries {
+            if e.seq > cursor {
+                cursor = cursor.max(e.seq);
                 relay(e, oneline, reviewer_only)?;
             }
         }
-        let mut socket = client.ws_connect(&heads(&entries), retry)?;
+        let mut socket = client.ws_connect(&heads(&log.entries), retry)?;
         // None (close/error) falls through to the outer loop, which reconnects.
         while let Some(text) = next_text(&mut socket) {
-            let Ok(entry) = serde_json::from_str::<Value>(&text) else {
+            let Ok(msg) = serde_json::from_str::<StreamMsg>(&text) else {
                 continue;
             };
-            if entry.get("new_parent").is_some() {
-                break; // re-derive the chain (picks up the new parent)
+            match msg {
+                // A new parent re-roots the chain; re-derive it to pick it up.
+                StreamMsg::NewParent { .. } => break,
+                StreamMsg::Entry(entry) => {
+                    cursor = cursor.max(entry.seq);
+                    relay(&entry, oneline, reviewer_only)?;
+                }
             }
-            cursor = cursor.max(entry["seq"].as_u64().unwrap_or(cursor));
-            relay(&entry, oneline, reviewer_only)?;
         }
     }
 }
 
 /// Relay one streamed entry, honoring `--reviewer-only`.
-fn relay(entry: &Value, oneline: bool, reviewer_only: bool) -> Result<()> {
+fn relay(entry: &LogEntry, oneline: bool, reviewer_only: bool) -> Result<()> {
     if reviewer_only && muted_by_reviewer_only(entry) {
         return Ok(());
     }
@@ -121,25 +125,19 @@ fn relay(entry: &Value, oneline: bool, reviewer_only: bool) -> Result<()> {
 
 /// Each change's head idx (max idx + 1) from the aggregated log — the
 /// from-idx to subscribe at so the backlog replay is empty (doorbell mode).
-pub(super) fn heads(entries: &[Value]) -> std::collections::HashMap<u64, u64> {
+pub(super) fn heads(entries: &[LogEntry]) -> std::collections::HashMap<u64, u64> {
     let mut heads: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
     for e in entries {
-        if let (Some(cid), Some(idx)) = (e["change_id"].as_u64(), e["idx"].as_u64()) {
-            heads
-                .entry(cid)
-                .and_modify(|h| *h = (*h).max(idx + 1))
-                .or_insert(idx + 1);
-        }
+        heads
+            .entry(e.change_id)
+            .and_modify(|h| *h = (*h).max(e.idx + 1))
+            .or_insert(e.idx + 1);
     }
     heads
 }
 
-pub(super) fn max_seq(entries: &[Value]) -> u64 {
-    entries
-        .iter()
-        .filter_map(|e| e["seq"].as_u64())
-        .max()
-        .unwrap_or(0)
+pub(super) fn max_seq(entries: &[LogEntry]) -> u64 {
+    entries.iter().map(|e| e.seq).max().unwrap_or(0)
 }
 
 /// Parse the single `--follow` positional into a starting `seq` cursor: a bare
@@ -157,13 +155,12 @@ fn follow_cursor(spec: &str) -> Result<u64> {
 /// A log entry `--reviewer-only` suppresses: the agent's own echoes
 /// (`revision`/`comment`) and the automatic `merged` lifecycle (written by the
 /// merge timer, not the reviewer). Reviewer verdicts and the reviewer-driven
-/// `abandoned`/`reopened` lifecycle always reach the monitor. Unrecognized
-/// kinds fail open.
-fn muted_by_reviewer_only(entry: &Value) -> bool {
-    match entry["kind"].as_str() {
-        Some("revision" | "comment") => true,
-        Some("lifecycle") => entry["payload"]["action"].as_str() == Some("merged"),
-        _ => false,
+/// `abandoned`/`reopened` lifecycle always reach the monitor.
+fn muted_by_reviewer_only(entry: &LogEntry) -> bool {
+    match &entry.payload {
+        LogPayload::Revision(_) | LogPayload::Comment(_) => true,
+        LogPayload::Lifecycle(p) => p.action == LifecycleAction::Merged,
+        LogPayload::Review(_) => false,
     }
 }
 
@@ -241,21 +238,58 @@ mod tests {
 
     #[test]
     fn reviewer_only_mutes_agent_echoes_and_auto_merge() {
-        let kind = |k: &str| muted_by_reviewer_only(&json!({"kind": k, "payload": {}}));
-        let life = |a: &str| {
-            muted_by_reviewer_only(&json!({"kind": "lifecycle", "payload": {"action": a}}))
+        use crate::api::types::{CommentInput, ReviewPayload, RevisionPayload};
+        use crate::enums::Verdict;
+        let muted = |payload| {
+            muted_by_reviewer_only(&LogEntry {
+                change_id: 1,
+                idx: 0,
+                seq: 0,
+                created_at: String::new(),
+                payload,
+            })
         };
+        let revision = || {
+            LogPayload::Revision(RevisionPayload {
+                commit_sha: String::new(),
+                parent_sha: String::new(),
+                base_sha: String::new(),
+                message: String::new(),
+                resets_status: true,
+            })
+        };
+        let comment = || {
+            LogPayload::Comment(CommentInput {
+                thread_id: None,
+                revision: None,
+                file: None,
+                line: None,
+                side: None,
+                range: None,
+                line_text: None,
+                body: String::new(),
+                resolved: None,
+            })
+        };
+        let review = || {
+            LogPayload::Review(ReviewPayload {
+                review_id: 0,
+                revision: 0,
+                verdict: Verdict::Comment,
+                message: String::new(),
+                comments: vec![],
+            })
+        };
+        let life = |a| LogPayload::lifecycle(a, None, None);
         // The agent's own writes.
-        assert!(kind("revision"));
-        assert!(kind("comment"));
+        assert!(muted(revision()));
+        assert!(muted(comment()));
         // The automatic merge is the timer's, not reviewer activity.
-        assert!(life("merged"));
+        assert!(muted(life(LifecycleAction::Merged)));
         // Reviewer activity and reviewer-driven lifecycle reach the monitor.
-        assert!(!kind("review"));
-        assert!(!life("abandoned"));
-        assert!(!life("reopened"));
-        // Unrecognized kinds fail open — relayed, never hidden.
-        assert!(!kind("some_future_kind"));
+        assert!(!muted(review()));
+        assert!(!muted(life(LifecycleAction::Abandoned)));
+        assert!(!muted(life(LifecycleAction::Reopened)));
     }
 
     #[test]

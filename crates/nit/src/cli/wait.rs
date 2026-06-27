@@ -2,7 +2,9 @@
 //! acting on past the `seq` cursor, parking the websocket as a doorbell.
 
 use anyhow::Result;
-use serde_json::{Value, json};
+use serde::Serialize;
+
+use crate::api::types::{Chain, ChainLog, LogEntry};
 
 use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
 use super::format::print_oneline_entries;
@@ -19,6 +21,15 @@ pub struct WaitArgs {
     pub oneline: bool,
     #[command(flatten)]
     pub server: ServerOpt,
+}
+
+/// The `nit wait` result: the entries drained past the cursor plus the chain
+/// snapshot the agent acts on.
+#[derive(Serialize)]
+struct WaitResult {
+    cursor: u64,
+    entries: Vec<LogEntry>,
+    feedback: Chain,
 }
 
 /// Block until the chain's aggregated log holds something worth acting on past
@@ -41,30 +52,34 @@ pub fn wait(args: WaitArgs) -> Result<()> {
     // chain's stable identity) resolves once, not every loop pass.
     let tip = resolve_tip_change(&client, retry)?;
     loop {
-        let log: Value = client.get_retry(&format!("/api/chains/{tip}/log"), retry)?;
-        let entries: Vec<Value> = log["entries"].as_array().cloned().unwrap_or_default();
-        let fresh: Vec<Value> = entries
+        let log: ChainLog = client.get_retry(&format!("/api/chains/{tip}/log"), retry)?;
+        let fresh: Vec<LogEntry> = log
+            .entries
             .iter()
-            .filter(|e| e["seq"].as_u64().unwrap_or(0) > cursor)
+            .filter(|e| e.seq > cursor)
             .cloned()
             .collect();
-        cursor = max_seq(&entries).max(cursor);
+        cursor = max_seq(&log.entries).max(cursor);
 
         if !fresh.is_empty() {
-            let feedback: Value = client.get_retry(&format!("/api/chains/{tip}"), retry)?;
-            let resp = json!({"cursor": cursor, "entries": fresh, "feedback": feedback});
+            let feedback: Chain = client.get_retry(&format!("/api/chains/{tip}"), retry)?;
+            let resp = WaitResult {
+                cursor,
+                entries: fresh,
+                feedback,
+            };
             print_wait(&resp, args.oneline)?;
             return Ok(());
         }
         // Nothing new: park on the websocket until the head advances.
-        wait_for_entry(&client, &entries, retry)?;
+        wait_for_entry(&client, &log.entries, retry)?;
     }
 }
 
 /// Park the websocket as a doorbell: subscribe the chain's changes at their
 /// current heads (no backlog replay) and block until the first live frame, then
 /// return so the caller re-drains the log. Rides out restarts.
-fn wait_for_entry(client: &Client, entries: &[Value], retry: Retry) -> Result<()> {
+fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result<()> {
     let subs = heads(entries);
     loop {
         let mut socket = client.ws_connect(&subs, retry)?;
@@ -75,15 +90,15 @@ fn wait_for_entry(client: &Client, entries: &[Value], retry: Retry) -> Result<()
     }
 }
 
-fn print_wait(resp: &Value, oneline: bool) -> Result<()> {
+fn print_wait(resp: &WaitResult, oneline: bool) -> Result<()> {
     if !oneline {
         return print_json(resp);
     }
-    let cursor = resp["cursor"].as_u64().unwrap_or(0);
-    let state = resp["feedback"]["state"].as_str().unwrap_or("?");
-    println!("cursor={cursor} state={state}");
-    if let Some(arr) = resp["entries"].as_array() {
-        print_oneline_entries(arr);
-    }
+    println!(
+        "cursor={} state={}",
+        resp.cursor,
+        resp.feedback.state.as_str()
+    );
+    print_oneline_entries(&resp.entries);
     Ok(())
 }

@@ -23,7 +23,9 @@ pub use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
 
 // ---------------------------------------------------------------------------
 // Agent endpoints (the log)
-pub use nit_types::log::{ChainLog, LogEntry, LogPayload};
+pub use nit_types::log::{
+    ChainLog, CommentInput, LifecyclePayload, LogEntry, LogPayload, ReviewPayload, RevisionPayload,
+};
 
 // ---------------------------------------------------------------------------
 // Events (WS /api/stream) — docs/api.md "Events"
