@@ -29,7 +29,7 @@ fn chain_log_aggregates_members_in_seq_order() {
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // Push A alone first (seq: A.revision).
+    // This push contributes the A.revision entry.
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     let a_id = member_id(&server, &res, "Ia");
@@ -42,7 +42,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     );
     assert_eq!(st, 200);
 
-    // Extend the chain with B and re-push the tip (seq: B.revision).
+    // This push contributes the B.revision entry.
     let b = g.commit(&[a], &msg("core: B", "Ib"), &[("b.txt", "b\n")]);
     g.branch("feat", b);
     let (st, res) = push(&server, &g, "feat", "main");
@@ -50,12 +50,9 @@ fn chain_log_aggregates_members_in_seq_order() {
     let b_id = member_id(&server, &res, "Ib");
     assert_ne!(a_id, b_id);
 
-    // The aggregated chain log: every member's entries merged, sorted by seq.
     let (st, log) = http_get(&server.url(&format!("/api/chains/{b_id}/log")));
     assert_eq!(st, 200, "{log}");
 
-    // Three entries total: A.revision, A.comment, B.revision — strictly
-    // ascending seq, and exactly that chronological order.
     let seq = seqs(&log);
     assert_eq!(seq.len(), 3, "{log}");
     assert!(

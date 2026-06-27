@@ -12,14 +12,12 @@ use common::{GitRepo, TestServer, first_repo_id, http_get, msg, push};
 use nit::api::MERGED_WINDOW;
 use serde_json::Value;
 
-/// GET the repo's graph, asserting 200.
 fn get_graph(server: &TestServer, repo_id: u64) -> Value {
     let (st, g) = http_get(&server.url(&format!("/api/repos/{repo_id}/graph")));
     assert_eq!(st, 200, "{g}");
     g
 }
 
-/// Row index of the node with `sha`, or panic.
 fn row_of(graph: &Value, sha: &str) -> usize {
     graph["nodes"]
         .as_array()
@@ -43,7 +41,7 @@ fn open_fork_behind_head_orders_above_anchor_and_keeps_its_base() {
     let c1 = g.commit(&[g.root], &msg("main: one", "Im1"), &[("m1", "1\n")]);
     let c2 = g.commit(&[c1], &msg("main: two", "Im2"), &[("m2", "2\n")]);
     let c3 = g.commit(&[c2], &msg("main: three", "Im3"), &[("m3", "3\n")]);
-    g.branch("main", c3); // HEAD advances to c3, leaving the topic behind
+    g.branch("main", c3);
     let topic = g.commit(&[c1], &msg("topic: behind HEAD", "Itopic"), &[("t", "t\n")]);
     g.branch("topic", topic);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -54,7 +52,6 @@ fn open_fork_behind_head_orders_above_anchor_and_keeps_its_base() {
     let graph = get_graph(&server, repo_id);
     let (topic, c1, c3) = (topic.to_string(), c1.to_string(), c3.to_string());
 
-    // The HEAD anchor is main's tip c3; the topic is its own open section.
     assert_eq!(graph["anchor"], c3.as_str());
     assert_eq!(node(&graph, &c3)["section"], "head");
     assert_eq!(node(&graph, &topic)["section"], "open");
@@ -66,8 +63,6 @@ fn open_fork_behind_head_orders_above_anchor_and_keeps_its_base() {
         "open fork must order above the HEAD anchor: {graph}"
     );
 
-    // No re-rooting: topic keeps c1 (its real fork, a visible history node) as
-    // its parent, not the anchor c3.
     let parents = node(&graph, &topic)["parents"].as_array().unwrap();
     assert_eq!(parents.len(), 1, "{graph}");
     assert_eq!(parents[0], c1.as_str(), "topic keeps its real fork base");
