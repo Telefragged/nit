@@ -10,8 +10,7 @@ mod common;
 
 use common::*;
 use serde_json::{Value, json};
-/// Push `tip` (base `main`) and return its `change_id` (for single-commit
-/// chains the tip change is the repo's first change).
+/// For single-commit chains the tip change is the repo's first change.
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_key: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
@@ -28,7 +27,6 @@ fn detail(server: &TestServer, change_id: u64) -> Value {
     d
 }
 
-/// The published thread by fold id, from a fresh change detail.
 fn thread_of(server: &TestServer, change_id: u64, thread_id: u64) -> Value {
     detail(server, change_id)["threads"]
         .as_array()
@@ -38,9 +36,6 @@ fn thread_of(server: &TestServer, change_id: u64, thread_id: u64) -> Value {
         .cloned()
         .unwrap_or_else(|| panic!("thread {thread_id} not on change {change_id}"))
 }
-
-// ---------------------------------------------------------------------------
-// Drafts → review → published threads
 
 /// A draft opens a new thread; submitting a review drains it into one review,
 /// publishes the thread, and sets the (change, revision) status to the verdict.
@@ -57,7 +52,7 @@ fn review_drains_drafts_and_sets_status() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let id = push_one(&server, &g, "feat", "Ia");
 
-    // Two new-thread drafts on rev 0; private until published.
+    // Drafts are reviewer-private until published.
     let (st, d1) = http_post(
         &drafts_url(&server, id),
         &json!({"revision": 0, "file": "a.txt", "line": 2, "body": "why a2?"}),
@@ -76,8 +71,7 @@ fn review_drains_drafts_and_sets_status() {
     assert!(pre["threads"].as_array().unwrap().is_empty(), "unpublished");
     assert!(pre["reviews"].as_array().unwrap().is_empty());
 
-    // Stage the verdict and submit the chain (the only publish path): the
-    // drafts drain into one review on this change.
+    // Review submit is the only publish path; drafts drain into one review entry.
     let out = review(&server, id, "request_changes", "a few nits");
     assert_eq!(out["submitted"], 1, "{out}");
 
@@ -91,8 +85,7 @@ fn review_drains_drafts_and_sets_status() {
     assert_eq!(post["reviews"][0]["revision"], 0);
     assert_eq!(post["reviews"][0]["verdict"], "request_changes");
     assert_eq!(post["reviews"][0]["message"], "a few nits");
-    // The verdict is the displayed status at (change, rev 0): visible on the
-    // path (the thread count is read from the change snapshot, above).
+    // The review verdict is reflected as member status on the chain path view.
     let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
     let member = chain["path"]
         .as_array()
@@ -103,8 +96,7 @@ fn review_drains_drafts_and_sets_status() {
     assert_eq!(member["status"], "changes_requested");
 }
 
-/// A reply draft (`thread_id`) appends to a published thread, keeping the
-/// thread's own anchor; submitting a second review publishes the reply.
+/// Reply drafts inherit the thread's anchor; a second review publishes the reply.
 #[test]
 fn reply_draft_appends_to_thread() {
     let g = GitRepo::new();
@@ -113,7 +105,6 @@ fn reply_draft_appends_to_thread() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let id = push_one(&server, &g, "feat", "Ix");
 
-    // Open + publish a thread.
     let (_, _) = http_post(
         &drafts_url(&server, id),
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "root question"}),
@@ -121,7 +112,7 @@ fn reply_draft_appends_to_thread() {
     review(&server, id, "comment", "");
     let thread_id = detail(&server, id)["threads"][0]["id"].as_u64().unwrap();
 
-    // A reply draft references the thread; anchor fields are owned by the thread.
+    // Anchor fields (file, line) belong to the thread; replies omit them.
     let (st, reply) = http_post(
         &drafts_url(&server, id),
         &json!({"revision": 0, "thread_id": thread_id, "body": "a follow-up"}),
@@ -129,7 +120,6 @@ fn reply_draft_appends_to_thread() {
     assert_eq!(st, 200, "{reply}");
     assert_eq!(reply["thread_id"], thread_id);
     review(&server, id, "comment", "");
-    // The published reply lands in the same thread.
     let t = thread_of(&server, id, thread_id);
     let comments = t["comments"].as_array().unwrap();
     assert_eq!(comments.len(), 2);
@@ -137,9 +127,6 @@ fn reply_draft_appends_to_thread() {
     assert_eq!(comments[1]["body"], "a follow-up");
     assert!(comments.iter().all(|c| !c["review_id"].is_null()));
 }
-
-// ---------------------------------------------------------------------------
-// Range drafts + /COMMIT_MSG side rules
 
 /// A well-formed range round-trips verbatim; the "Range comments" 400s and the
 /// `/COMMIT_MSG` old-side 400 are all rejected.
@@ -156,7 +143,6 @@ fn draft_anchor_validation() {
     let id = push_one(&server, &g, "feat", "Ix");
     let url = drafts_url(&server, id);
 
-    // A well-formed range stores exactly as written.
     let (st, ranged) = http_post(
         &url,
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "sel",
@@ -201,7 +187,6 @@ fn draft_anchor_validation() {
         assert_eq!(st, 400, "{what}: {st} {e}");
     }
 
-    // Other anchor faults: unknown revision, a line without a file.
     let (st, _) = http_post(&url, &json!({"revision": 9, "body": "x"}));
     assert_eq!(st, 400, "unknown revision");
     let (st, _) = http_post(&url, &json!({"revision": 0, "line": 3, "body": "x"}));
@@ -210,7 +195,6 @@ fn draft_anchor_validation() {
     let (st, _) = http_post(&url, &json!({"revision": 0, "body": ""}));
     assert_eq!(st, 400, "empty body, no resolution");
 
-    // /COMMIT_MSG: old-side anchors are rejected; new-side line 1 is the subject.
     let (st, e) = http_post(
         &url,
         &json!({"revision": 0, "file": "/COMMIT_MSG", "line": 1, "side": "old", "body": "x"}),
@@ -225,7 +209,6 @@ fn draft_anchor_validation() {
     assert_eq!(m["line_text"], "core: x");
 }
 
-/// An old-side draft snapshots the parent tree; a new-side draft the commit's.
 #[test]
 fn old_side_draft_snapshots_parent_tree() {
     let g = GitRepo::new();
@@ -257,10 +240,6 @@ fn old_side_draft_snapshots_parent_tree() {
     assert_eq!(new["line_text"], "NEW2", "new side reads the commit tree");
 }
 
-// ---------------------------------------------------------------------------
-// Draft editing
-
-/// PATCH rewrites a draft's body/resolution; DELETE removes it (404 after).
 #[test]
 fn patch_and_delete_draft() {
     let g = GitRepo::new();
@@ -283,7 +262,6 @@ fn patch_and_delete_draft() {
     assert_eq!(st, 200, "{edited}");
     assert_eq!(edited["body"], "second");
     assert_eq!(edited["resolved"], true);
-    // The change reflects the edited draft.
     let d = detail(&server, id);
     assert_eq!(d["drafts"][0]["body"], "second");
 
@@ -292,7 +270,6 @@ fn patch_and_delete_draft() {
     let d = detail(&server, id);
     assert!(d["drafts"].as_array().unwrap().is_empty(), "draft deleted");
 
-    // A second delete (and a patch) on the gone row is a 404.
     let (st, _) = http_delete(&server.url(&format!("/api/drafts/{draft_id}")));
     assert_eq!(st, 404);
     let (st, _) = http_patch(
@@ -301,9 +278,6 @@ fn patch_and_delete_draft() {
     );
     assert_eq!(st, 404);
 }
-
-// ---------------------------------------------------------------------------
-// Thread resolution (drafted, applied in draft order on publish)
 
 /// Resolution is staged on a draft and applied on publish; an empty-body
 /// resolution-only draft moves the thread without adding a comment.
@@ -316,7 +290,6 @@ fn drafted_thread_resolution() {
     let id = push_one(&server, &g, "feat", "Ix");
     let url = drafts_url(&server, id);
 
-    // Publish a thread.
     let (_, _) = http_post(
         &url,
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "why?"}),
@@ -326,7 +299,6 @@ fn drafted_thread_resolution() {
 
     let is_resolved = |server: &TestServer| -> bool {
         let t = thread_of(server, id, thread_id);
-        // No empty-body resolution draft ever materializes as a comment.
         assert!(
             t["comments"]
                 .as_array()
@@ -339,7 +311,6 @@ fn drafted_thread_resolution() {
     };
     assert!(!is_resolved(&server), "new thread starts unresolved");
 
-    // Resolve: an empty-body reply draft staging resolved=true, then publish.
     let (st, res_draft) = http_post(
         &url,
         &json!({"revision": 0, "thread_id": thread_id, "body": "", "resolved": true}),
@@ -349,7 +320,6 @@ fn drafted_thread_resolution() {
     review(&server, id, "comment", "");
     assert!(is_resolved(&server), "drafted resolve applied on publish");
 
-    // Reopen: stage resolved=false, then publish.
     let (st, _) = http_post(
         &url,
         &json!({"revision": 0, "thread_id": thread_id, "body": "", "resolved": false}),
@@ -377,7 +347,6 @@ fn resolution_applied_in_draft_order() {
     review(&server, id, "comment", "");
     let thread_id = detail(&server, id)["threads"][0]["id"].as_u64().unwrap();
 
-    // Two resolution drafts on the same thread, last says reopen (false).
     let (st, _) = http_post(
         &url,
         &json!({"revision": 0, "thread_id": thread_id, "body": "", "resolved": true}),
@@ -396,9 +365,6 @@ fn resolution_applied_in_draft_order() {
     assert_eq!(t["comments"].as_array().unwrap().len(), 2);
 }
 
-// ---------------------------------------------------------------------------
-// Per-(change, revision) status: a pure rebase carries the verdict forward
-
 /// A pure rebase (same patch-id + message, new parent) appends a revision but
 /// carries the verdict forward; reviewing the new revision still works because
 /// a live tip pins it.
@@ -413,7 +379,6 @@ fn pure_rebase_carries_status_forward() {
 
     review(&server, id, "approve", "lgtm");
 
-    // Move main, re-parent the same patch onto it: same content, new sha.
     let m1 = g.commit(&[g.root], "mainline: unrelated\n", &[("b.txt", "b\n")]);
     g.branch("main", m1);
     let c1 = g.commit(&[m1], &msg("core: a", "Ia"), &[("a.txt", a_txt)]);
@@ -471,7 +436,6 @@ fn agent_comment_opens_thread_without_review_status() {
         "agent comment has no review"
     );
 
-    // Status is unchanged by an agent comment (still pending, no review).
     let d = detail(&server, id);
     assert!(
         d["reviews"].as_array().unwrap().is_empty(),
@@ -499,7 +463,6 @@ fn agent_comment_opens_thread_without_review_status() {
     // An empty-body agent comment with no resolution is a 400.
     let (st, _) = http_post(&comments_url, &json!({"revision": 0, "body": ""}));
     assert_eq!(st, 400, "empty agent comment rejected");
-    // Replying to a non-existent thread is a 400.
     let (st, _) = http_post(&comments_url, &json!({"thread_id": 9999, "body": "hi"}));
     assert_eq!(st, 400, "reply to unknown thread rejected");
 }
@@ -514,7 +477,6 @@ fn reviewer_replies_to_agent_thread() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let id = push_one(&server, &g, "feat", "Ix");
 
-    // The agent opens a thread on its own change.
     let (st, thread) = http_post(
         &server.url(&format!("/api/changes/{id}/comments")),
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "note: intentional"}),
@@ -522,7 +484,6 @@ fn reviewer_replies_to_agent_thread() {
     assert_eq!(st, 200, "{thread}");
     let thread_id = thread["id"].as_u64().unwrap();
 
-    // The reviewer replies + resolves via a draft, then publishes.
     let (st, _) = http_post(
         &drafts_url(&server, id),
         &json!({"revision": 0, "thread_id": thread_id, "body": "ack, thanks", "resolved": true}),
