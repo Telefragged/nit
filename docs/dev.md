@@ -33,12 +33,17 @@ prints it); a stale hash breaks `nix build` and every
 ## Verification
 
 Checks verify a change, not a green build — `nix build` skips tests
-(`doCheck = false`). Before every commit (golden rule 9):
+(crate2nix builds the crate with `runTests` off). Before every commit
+(golden rule 9):
 
 - `nix develop -c cargo check` — fast inner-loop gate.
 - `nix flake check` — the pre-commit gate: builds the product and runs the
-  `clippy` (`-D warnings`) and `test` crane validators. Run one alone with
+  `clippy` (`-D warnings`) and `test` validators. Run one alone with
   `nix build .#checks.<system>.clippy` or `.#checks.<system>.test`.
+
+The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
+change, regenerate it with `nix develop -c crate2nix generate` and commit it
+in the same change — a stale `Cargo.nix` fails the build fast.
 
 ## Formatting
 

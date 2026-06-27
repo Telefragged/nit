@@ -7,7 +7,6 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    crane.url = "github:ipetkov/crane";
   };
 
   outputs =
@@ -15,7 +14,6 @@
       self,
       nixpkgs,
       rust-overlay,
-      crane,
     }:
     let
       systems = [
@@ -35,58 +33,39 @@
             }
           )
         );
-      # The pinned toolchain (rust-toolchain.toml) drives both the devShell
-      # and the build, so contributors and CI compile with the same rustc.
+      # Pin rustc from rust-toolchain.toml so nix and rustup builds match.
       rustToolchainFor = pkgs: pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-      # crane wired to that toolchain: the shared source filter, the
-      # deps-only artifact cache, and the args every build and check reuse.
-      craneScopeFor =
+
+      # Clippy's source: Rust only, so web/ or docs/ edits don't rebuild it.
+      rustSrc = nixpkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = nixpkgs.lib.fileset.unions [
+          ./Cargo.toml
+          ./Cargo.lock
+          ./crates
+        ];
+      };
+
+      # Cargo.nix is generated — don't hand-edit (regen: docs/dev.md). Build
+      # with our pinned rustc, not nixpkgs'; the virtual workspace has no
+      # rootCrate, so callers build the lone member.
+      cargoNixFor =
         pkgs:
         let
           rustToolchain = rustToolchainFor pkgs;
-          # crane builds its internal `crane-utils` helper with nixpkgs'
-          # default Rust, pulling a second full toolchain (plus LLVM) into the
-          # build closure beside our pinned one. Point it at the pinned
-          # toolchain and skip the SBOM (auditable) build it does not need.
-          craneUtilsRustPlatform =
-            let
-              base = pkgs.makeRustPlatform {
-                cargo = rustToolchain;
-                rustc = rustToolchain;
-              };
-            in
-            base
-            // {
-              buildRustPackage = args: base.buildRustPackage (args // { auditable = false; });
-            };
-          craneLib = ((crane.mkLib pkgs).overrideToolchain rustToolchain).overrideScope (
-            _final: prev: {
-              craneUtils = prev.craneUtils.override { rustPlatform = craneUtilsRustPlatform; };
-            }
-          );
-          commonArgs = {
-            # The workspace root Cargo.toml has no [package], so crane cannot
-            # infer a name from it; set it here for every crane derivation
-            # (deps, build, clippy, test) instead of the placeholder.
-            pname = "nit";
-            version = "0.1.0";
-            src = pkgs.lib.fileset.toSource {
-              root = ./.;
-              fileset = craneLib.fileset.commonCargoSources ./.;
-            };
-            strictDeps = true;
-            nativeBuildInputs = [ pkgs.pkg-config ];
-            buildInputs = [
-              pkgs.libgit2
-              pkgs.sqlite
-              pkgs.zlib
-            ];
-          };
-          cargoArtifacts = craneLib.buildDepsOnly commonArgs;
         in
-        {
-          inherit craneLib commonArgs cargoArtifacts;
+        pkgs.callPackage ./Cargo.nix {
+          buildRustCrateForPkgs =
+            p:
+            p.buildRustCrate.override {
+              rustc = rustToolchain;
+              cargo = rustToolchain;
+              # buildRustCrate defaults to codegen-units=1 (serial codegen),
+              # ~3x slower per crate than cargo's release default. Match cargo.
+              defaultCodegenUnits = 16;
+            };
         };
+
       # Shared by the web build (nit-web) and its lint check (web-lint):
       # one source tree and one npm dependency closure (npmDepsHash), two
       # scripts. System-independent, so it lives outside forAllSystems.
@@ -112,6 +91,9 @@
               libgit2
               sqlite
               zlib
+
+              # Regenerates Cargo.nix
+              crate2nix
 
               # Web frontend
               nodejs_22
@@ -141,7 +123,7 @@
       packages = forAllSystems (
         pkgs:
         let
-          inherit (craneScopeFor pkgs) craneLib commonArgs cargoArtifacts;
+          cargoNix = cargoNixFor pkgs;
         in
         rec {
           nit-web = pkgs.buildNpmPackage {
@@ -150,15 +132,8 @@
             installPhase = "cp -r dist $out";
           };
 
-          nit-unwrapped = craneLib.buildPackage (
-            commonArgs
-            // {
-              inherit cargoArtifacts;
-              # Tests run as a discrete `nix flake check` validator (the `test`
-              # check below), not as part of building the product.
-              doCheck = false;
-            }
-          );
+          # Build only; tests live in the `test` check (the build/verify split).
+          nit-unwrapped = cargoNix.workspaceMembers."nit".build;
 
           # The real product: nit with the built web UI baked in via env.
           nit =
@@ -179,7 +154,8 @@
       checks = forAllSystems (
         pkgs:
         let
-          inherit (craneScopeFor pkgs) craneLib commonArgs cargoArtifacts;
+          cargoNix = cargoNixFor pkgs;
+          rustToolchain = rustToolchainFor pkgs;
         in
         {
           build = self.packages.${pkgs.system}.nit;
@@ -191,31 +167,37 @@
             buildPhase = "HOME=$TMPDIR treefmt --ci --tree-root .";
             installPhase = "touch $out";
           };
-          # Clippy as a crane validator, mirroring the devShell lint command
-          # (cargo clippy --all-targets -- -D warnings). The workspace sets
-          # clippy::pedantic = warn; -D warnings turns any lint into a failure.
-          clippy = craneLib.cargoClippy (
-            commonArgs
-            // {
-              inherit cargoArtifacts;
-              cargoClippyExtraArgs = "--all-targets -- -D warnings";
-            }
-          );
-          # The test suite as a discrete validator. It builds real repos and
-          # runs `git rebase` in the differential test, so it needs git and a
-          # committer identity the build sandbox otherwise lacks.
-          test = craneLib.cargoTest (
-            commonArgs
-            // {
-              inherit cargoArtifacts;
-              nativeCheckInputs = [ pkgs.git ];
-              preCheck = ''
-                export HOME=$TMPDIR
-                export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
-                export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
-              '';
-            }
-          );
+          # crate2nix has no clippy mode, so lint standalone: importCargoLock
+          # vendors the deps, clippy runs offline against them.
+          clippy = pkgs.stdenv.mkDerivation {
+            name = "nit-clippy";
+            src = rustSrc;
+            cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
+            nativeBuildInputs = [
+              rustToolchain
+              pkgs.rustPlatform.cargoSetupHook
+              pkgs.pkg-config
+            ];
+            buildInputs = [
+              pkgs.libgit2
+              pkgs.sqlite
+              pkgs.zlib
+            ];
+            buildPhase = "cargo clippy --offline --all-targets -- -D warnings";
+            installPhase = "touch $out";
+          };
+          # Tests run here, not in `nix build`. The differential test shells out
+          # to `git rebase`, so it needs git and a committer identity the sandbox
+          # lacks.
+          test = cargoNix.workspaceMembers."nit".build.override {
+            runTests = true;
+            testInputs = [ pkgs.git ];
+            testPreRun = ''
+              export HOME=$TMPDIR
+              export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
+              export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
+            '';
+          };
           # The frontend lint (eslint + stylelint + knip) as a validator, the
           # web counterpart to clippy — it mirrors the devShell `npm run lint`.
           # Shares nit-web's source and npm dependency closure (webArgs) but
