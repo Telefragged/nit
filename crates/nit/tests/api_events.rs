@@ -105,10 +105,22 @@ fn unsubscribed_changes_are_silent() {
     let one = member_id(&server, &res, "I001");
     let two = member_id(&server, &res, "I002");
 
-    let mut socket = ws_subscribe(&server, &[(one, 1)], Duration::from_millis(400));
-    review(&server, two, "approve", "ok");
-    assert!(
-        ws_read(&mut socket).is_none(),
-        "change two is not subscribed"
+    // Subscribe only to change one; reading its backlog revision arms the feed
+    // (the sync point) before any review broadcasts.
+    let mut socket = ws_subscribe(&server, &[(one, 0)], READ);
+    assert_eq!(
+        ws_read(&mut socket).expect("backlog for one")["kind"],
+        "revision"
     );
+
+    // Review change two (unsubscribed) then change one (subscribed). The next
+    // frame must be change one's review: two's review is broadcast first, so a
+    // leak would arrive ahead of one's. A deterministic silence fence, with no
+    // read-timeout wait.
+    review(&server, two, "approve", "ok");
+    review(&server, one, "approve", "ok");
+    let frame = ws_read(&mut socket).expect("review for one");
+    assert_eq!(frame["change_id"], one);
+    assert_eq!(frame["kind"], "review");
+    assert_eq!(frame["idx"], 1);
 }
