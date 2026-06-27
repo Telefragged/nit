@@ -183,6 +183,14 @@
         in
         {
           build = self.packages.${pkgs.system}.nit;
+          # Check that all files are formatted (same treefmt as `nix fmt`).
+          treefmt = pkgs.stdenvNoCC.mkDerivation {
+            name = "treefmt-check";
+            src = self;
+            nativeBuildInputs = [ self.formatter.${pkgs.system} ];
+            buildPhase = "HOME=$TMPDIR treefmt --ci --tree-root .";
+            installPhase = "touch $out";
+          };
           # Clippy as a crane validator, mirroring the devShell lint command
           # (cargo clippy --all-targets -- -D warnings). The workspace sets
           # clippy::pedantic = warn; -D warnings turns any lint into a failure.
