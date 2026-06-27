@@ -58,15 +58,9 @@ async function request<T = void>(
   return (await res.json()) as T;
 }
 
-// ---------------------------------------------------------------------------
-// Repos
-
 export const listRepos = () => request<RepoList>("GET", "/repos");
 
 export const getRepo = (id: number) => request<Repo>("GET", `/repos/${id}`);
-
-// ---------------------------------------------------------------------------
-// Chains
 
 /** The derived chain through a change's tip. `revision` selects which patchset
  * of the change to root on (and hence the chain context). */
@@ -83,9 +77,6 @@ export const getChain = (changeId: number, revision?: number) =>
 export const getRepoGraph = (repoId: number) =>
   request<RepoGraph>("GET", `/repos/${repoId}/graph`);
 
-// ---------------------------------------------------------------------------
-// Changes
-
 export const getChange = (id: number) =>
   request<ChangeDetail>("GET", `/changes/${id}`);
 
@@ -97,9 +88,6 @@ export const getDiff = (changeId: number, revision: number, against?: number) =>
       : `/changes/${changeId}/revisions/${revision}/diff?against=${against}`,
   );
 
-// ---------------------------------------------------------------------------
-// Drafts
-
 export const createDraft = (changeId: number, draft: CreateDraftRequest) =>
   request<Draft>("POST", `/changes/${changeId}/drafts`, draft);
 
@@ -108,7 +96,6 @@ export const updateDraft = (id: number, req: UpdateDraftRequest) =>
 
 export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 
-// ---------------------------------------------------------------------------
 // Reviewer decisions (staged like comment drafts, published per chain)
 
 /** Stage (or overwrite) a change's draft decision — a verdict or an
@@ -116,7 +103,6 @@ export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 export const stageDecision = (changeId: number, req: StagedDecision) =>
   request<StagedDecision>("PUT", `/changes/${changeId}/decision`, req);
 
-/** Discard a change's staged decision. */
 export const clearDecision = (changeId: number) =>
   request("DELETE", `/changes/${changeId}/decision`);
 

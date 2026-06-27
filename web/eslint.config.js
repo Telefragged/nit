@@ -32,7 +32,6 @@ export default tseslint.config(
   // `#[expect]` model from the Rust side.
   { linterOptions: { reportUnusedDisableDirectives: "error" } },
 
-  // ── TypeScript / React sources — type-aware, strictest presets ──
   {
     files: ["**/*.{ts,tsx,mjs}"],
     extends: [

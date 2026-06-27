@@ -2,9 +2,6 @@
 // Never invent shapes in components; change the doc first, then this file
 // and crates/nit/src/api/types.rs together.
 
-// ---------------------------------------------------------------------------
-// Repos
-
 export interface Repo {
   id: number;
   /** Canonical git-common-dir — the repo's identity and display name. */
@@ -19,7 +16,6 @@ export interface RepoList {
   repos: Repo[];
 }
 
-// ---------------------------------------------------------------------------
 // Chains (derived; addressed by tip change id + ?revision)
 
 /** Derived chain state — see the normative state table in docs/api.md.
@@ -66,7 +62,6 @@ export interface Chain {
   path: PathEntry[];
 }
 
-// ---------------------------------------------------------------------------
 // Graph (the spine-centered DAG; docs/api.md "Graph")
 
 /** Which region of the change graph a node sits in: `open` ascends above the
@@ -106,9 +101,6 @@ export interface GraphNode {
   /** The pinned patchset (open nodes); null off the open region. */
   revision: number | null;
 }
-
-// ---------------------------------------------------------------------------
-// Changes
 
 export interface ChangeDetail {
   id: number;
@@ -157,9 +149,6 @@ export interface Review {
   message: string;
   created_at: string;
 }
-
-// ---------------------------------------------------------------------------
-// Diffs
 
 /**
  * Reserved synthetic diff path: the revision's commit message as a
@@ -210,9 +199,6 @@ export interface Line {
   text: string;
 }
 
-// ---------------------------------------------------------------------------
-// Comments
-
 export type CommentSide = "old" | "new";
 
 /**
@@ -248,7 +234,6 @@ export interface Thread {
   updated_at: string;
 }
 
-/** One message in a {@link Thread}. */
 export interface ThreadComment {
   body: string;
   /** The review that published it; null for an agent comment. The UI derives
