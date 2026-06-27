@@ -1,6 +1,6 @@
-//! HTTP API: every endpoint of `docs/api.md` (the contract), axum 0.8.
+//! HTTP API: every endpoint of `docs/api.md` (the contract), axum 0.8. The
+//! wire shapes are the shared [`nit_types`] crate (golden rule 4).
 //!
-//! - [`types`] — the wire-shape mirror of docs/api.md (golden rule 4).
 //! - [`diff`] — diff JSON rendering and line-text snapshots.
 //! - [`views`] — the per-change folds + chain derivation → wire shapes.
 //! - [`state`] — the in-memory fold, the append primitive, errors.
@@ -15,7 +15,6 @@
 pub mod diff;
 pub mod rebase;
 pub mod state;
-pub mod types;
 pub mod views;
 
 mod chains;
@@ -39,8 +38,12 @@ use axum::routing::{get, patch, post, put};
 use git2::Repository;
 use serde::Deserialize;
 
+use nit_types::changes::ChangeDetail;
+use nit_types::comments::CommentRange;
+use nit_types::enums::Side;
+use nit_types::health::Health;
+
 use crate::chain::RepoView;
-use crate::enums::Side;
 use crate::review;
 
 pub use state::{
@@ -207,8 +210,8 @@ fn map_busy(err: anyhow::Error) -> Error {
 // ---------------------------------------------------------------------------
 // Health
 
-async fn health() -> Json<types::Health> {
-    Json(types::Health {
+async fn health() -> Json<Health> {
+    Json(Health {
         status: "ok".to_string(),
         version: crate::VERSION.to_string(),
     })
@@ -229,16 +232,13 @@ struct ChainQuery {
 fn change_detail_json(
     conn: &rusqlite::Connection,
     entry: &ChangeEntry,
-) -> Result<Json<types::ChangeDetail>, Error> {
+) -> Result<Json<ChangeDetail>, Error> {
     let change = entry.read();
     Ok(Json(views::build_change_detail(conn, &change)?))
 }
 
 /// The "Range comments" rules of docs/api.md.
-fn validate_range(
-    range: types::CommentRange,
-    line: Option<u64>,
-) -> Result<types::CommentRange, Error> {
+fn validate_range(range: CommentRange, line: Option<u64>) -> Result<CommentRange, Error> {
     if line.is_none() {
         return Err(Error::bad_request("a range requires a line anchor"));
     }
@@ -261,8 +261,8 @@ fn validate_anchor(
     side: Option<Side>,
     file: Option<&str>,
     line: Option<u64>,
-    range: Option<types::CommentRange>,
-) -> Result<(Side, Option<types::CommentRange>), Error> {
+    range: Option<CommentRange>,
+) -> Result<(Side, Option<CommentRange>), Error> {
     let side = side.unwrap_or_default();
     if line.is_some() && file.is_none() {
         return Err(Error::bad_request("a line anchor requires a file"));

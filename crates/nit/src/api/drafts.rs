@@ -6,9 +6,10 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 
+use nit_types::comments::{Draft, EditDraft, NewDraft};
+
 use crate::db;
 
-use super::types;
 use super::views;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
 use super::{change_or_404, snapshot_line_text, validate_anchor};
@@ -16,8 +17,8 @@ use super::{change_or_404, snapshot_line_text, validate_anchor};
 pub(super) async fn create_draft(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-    AppJson(req): AppJson<types::NewDraft>,
-) -> Result<Json<types::Draft>, Error> {
+    AppJson(req): AppJson<NewDraft>,
+) -> Result<Json<Draft>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let proj = entry.read();
@@ -69,8 +70,8 @@ pub(super) async fn create_draft(
 pub(super) async fn edit_draft(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-    AppJson(req): AppJson<types::EditDraft>,
-) -> Result<Json<types::Draft>, Error> {
+    AppJson(req): AppJson<EditDraft>,
+) -> Result<Json<Draft>, Error> {
     with_conn(state.pool(), move |conn| {
         db::update_draft(conn, id, &req.body, req.resolved, &db::now_rfc3339())?;
         let updated = db::get_draft(conn, id)?

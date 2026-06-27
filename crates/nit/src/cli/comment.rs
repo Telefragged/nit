@@ -2,8 +2,8 @@
 
 use anyhow::{Context, Result, anyhow};
 
-use crate::api::types::{CommentRange, NewComment, Thread};
-use crate::enums::Side;
+use nit_types::comments::{CommentRange, NewComment, Thread};
+use nit_types::enums::Side;
 
 use super::client::{Client, ServerOpt, print_json, server_url};
 use super::format::ChangeTarget;

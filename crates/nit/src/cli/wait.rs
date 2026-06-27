@@ -4,7 +4,8 @@
 use anyhow::Result;
 use serde::Serialize;
 
-use crate::api::types::{Chain, ChainLog, LogEntry};
+use nit_types::chains::Chain;
+use nit_types::log::{ChainLog, LogEntry};
 
 use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
 use super::format::print_oneline_entries;

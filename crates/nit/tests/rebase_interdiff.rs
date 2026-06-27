@@ -16,8 +16,8 @@ use common::*;
 use git2::Oid;
 use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, diff_trees};
 use nit::api::rebase::tag_drift;
-use nit::api::types::{Diff, DiffFile};
-use nit::enums::{FileStatus, LineKind};
+use nit_types::diff::{Diff, DiffFile};
+use nit_types::enums::{FileStatus, LineKind};
 
 /// File content from lines, newline-terminated.
 fn body(lines: &[&str]) -> Vec<u8> {

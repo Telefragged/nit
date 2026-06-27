@@ -4,7 +4,8 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::api::types::{Chain, ChangeDetail};
+use nit_types::chains::Chain;
+use nit_types::changes::ChangeDetail;
 
 use super::client::{Client, Retry, ServerOpt, print_json, server_url};
 use super::format::chain_oneline;

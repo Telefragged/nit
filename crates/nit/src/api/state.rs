@@ -21,11 +21,13 @@ use deadpool_sqlite::Pool;
 use rusqlite::{Connection, TransactionBehavior};
 use tokio::sync::watch;
 
+use nit_types::error::ApiError;
+use nit_types::events::StreamMsg;
+use nit_types::log::LogPayload;
+
 use crate::chain::RepoView;
 use crate::db;
 use crate::review::{self, ChangeProj};
-
-use super::types::{self, StreamMsg};
 
 /// Per-change live-event buffer. A follower lagging more than this many entries
 /// behind is dropped from the stream and reconnects + re-reads the gap from the
@@ -342,7 +344,7 @@ pub fn append_to_change(
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
-    news: Vec<review::LogPayload>,
+    news: Vec<LogPayload>,
 ) -> anyhow::Result<Vec<review::Entry>> {
     append_to_change_with(conn, entry, change_id, news, |_| Ok(()))
 }
@@ -371,7 +373,7 @@ pub fn append_to_change_with(
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
-    news: Vec<review::LogPayload>,
+    news: Vec<LogPayload>,
     pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
 ) -> anyhow::Result<Vec<review::Entry>> {
     if news.is_empty() {
@@ -603,7 +605,7 @@ impl IntoResponse for Error {
         }
         (
             self.status,
-            Json(types::ApiError {
+            Json(ApiError {
                 error: self.message,
             }),
         )

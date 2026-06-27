@@ -7,10 +7,13 @@ use axum::extract::State;
 use git2::Repository;
 use serde::Deserialize;
 
+use nit_types::chains::{Chain, ChainList};
+use nit_types::graph::RepoGraph;
+use nit_types::log::ChainLog;
+
 use crate::db;
 use crate::review;
 
-use super::types;
 use super::views;
 use super::{AppPath, AppQuery, AppState, Error, with_conn};
 use super::{ChainQuery, MERGED_WINDOW, chain_context};
@@ -34,7 +37,7 @@ pub(super) struct ListChainsQuery {
 pub(super) async fn list_chains(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<ListChainsQuery>,
-) -> Result<Json<types::ChainList>, Error> {
+) -> Result<Json<ChainList>, Error> {
     tokio::task::spawn_blocking(move || {
         let include_terminal = matches!(q.status, ChainFilter::All);
         let mut chains = Vec::new();
@@ -52,7 +55,7 @@ pub(super) async fn list_chains(
                 chains.push(views::build_chain(&view, repo_id, &tip));
             }
         }
-        Json(types::ChainList { chains })
+        Json(ChainList { chains })
     })
     .await
     .map_err(|e| Error::internal(format!("chain list task panicked: {e}")))
@@ -62,7 +65,7 @@ pub(super) async fn list_chains(
 pub(super) async fn repo_graph(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
-) -> Result<Json<types::RepoGraph>, Error> {
+) -> Result<Json<RepoGraph>, Error> {
     tokio::task::spawn_blocking(move || {
         let repo_state = state
             .repo_state(repo_id)
@@ -86,7 +89,7 @@ pub(super) async fn get_chain(
     State(state): State<Arc<AppState>>,
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
-) -> Result<Json<types::Chain>, Error> {
+) -> Result<Json<Chain>, Error> {
     with_conn(state.pool(), move |conn| {
         let (view, repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
         Ok(Json(views::build_chain(&view, repo_id, &tip_sha)))
@@ -99,7 +102,7 @@ pub(super) async fn chain_log(
     State(state): State<Arc<AppState>>,
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
-) -> Result<Json<types::ChainLog>, Error> {
+) -> Result<Json<ChainLog>, Error> {
     with_conn(state.pool(), move |conn| {
         let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
         let path = view.path_from_tip(&tip_sha);
@@ -113,7 +116,7 @@ pub(super) async fn chain_log(
             }
         }
         entries.sort_by_key(|e| e.seq);
-        Ok(Json(types::ChainLog { entries }))
+        Ok(Json(ChainLog { entries }))
     })
     .await
 }

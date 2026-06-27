@@ -7,11 +7,14 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 
-use crate::db;
-use crate::enums::{Decision, LifecycleAction, Verdict};
-use crate::review::{self, CommentInput, Lifecycle};
+use nit_types::changes::StagedDecision;
+use nit_types::decisions::{BatchSubmitResult, SubmitError};
+use nit_types::enums::{Decision, LifecycleAction, Verdict};
+use nit_types::log::{CommentInput, LogPayload, ReviewPayload};
 
-use super::types;
+use crate::db;
+use crate::review::Lifecycle;
+
 use super::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change_with, with_conn,
 };
@@ -66,16 +69,12 @@ fn publish_member(
         .as_verdict()
         .or_else(|| drained.then_some(Verdict::Comment));
 
-    let mut news: Vec<review::LogPayload> = Vec::new();
+    let mut news: Vec<LogPayload> = Vec::new();
     if decision.as_lifecycle() == Some(LifecycleAction::Reopened) {
-        news.push(review::LogPayload::lifecycle(
-            LifecycleAction::Reopened,
-            None,
-            None,
-        ));
+        news.push(LogPayload::lifecycle(LifecycleAction::Reopened, None, None));
     }
     if let Some(verdict) = verdict {
-        news.push(review::LogPayload::Review(review::ReviewPayload {
+        news.push(LogPayload::Review(ReviewPayload {
             review_id: state.alloc_id(),
             revision,
             verdict,
@@ -91,7 +90,7 @@ fn publish_member(
     }
     if decision.as_lifecycle() == Some(LifecycleAction::Abandoned) {
         let reason = (!message.trim().is_empty()).then(|| message.to_string());
-        news.push(review::LogPayload::lifecycle(
+        news.push(LogPayload::lifecycle(
             LifecycleAction::Abandoned,
             None,
             reason,
@@ -115,8 +114,8 @@ fn publish_member(
 pub(super) async fn stage_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-    AppJson(req): AppJson<types::StagedDecision>,
-) -> Result<Json<types::StagedDecision>, Error> {
+    AppJson(req): AppJson<StagedDecision>,
+) -> Result<Json<StagedDecision>, Error> {
     with_conn(state.pool(), move |conn| {
         change_or_404(&state, conn, id)?;
         db::upsert_draft_review(conn, id, req.decision, &req.message)?;
@@ -150,7 +149,7 @@ pub(super) async fn submit_chain(
     State(state): State<Arc<AppState>>,
     AppPath(change_id): AppPath<u64>,
     AppQuery(q): AppQuery<ChainQuery>,
-) -> Result<Json<types::BatchSubmitResult>, Error> {
+) -> Result<Json<BatchSubmitResult>, Error> {
     with_conn(state.pool(), move |conn| {
         let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
 
@@ -165,7 +164,7 @@ pub(super) async fn submit_chain(
             };
             let lifecycle = member_entry.read().lifecycle;
             if let Some(reason) = decision_block(lifecycle, staged.decision) {
-                errors.push(types::SubmitError {
+                errors.push(SubmitError {
                     change_id: member.change_id,
                     message: reason.to_string(),
                 });
@@ -181,13 +180,13 @@ pub(super) async fn submit_chain(
                 member.revision,
             ) {
                 Ok(()) => submitted += 1,
-                Err(e) => errors.push(types::SubmitError {
+                Err(e) => errors.push(SubmitError {
                     change_id: member.change_id,
                     message: e.message,
                 }),
             }
         }
-        Ok(Json(types::BatchSubmitResult { submitted, errors }))
+        Ok(Json(BatchSubmitResult { submitted, errors }))
     })
     .await
 }

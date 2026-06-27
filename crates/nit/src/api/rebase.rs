@@ -35,9 +35,10 @@ use std::path::Path;
 use anyhow::Result;
 use git2::{DiffOptions, Patch, Repository, Tree};
 
+use nit_types::diff::{Diff, DiffFile, Line};
+use nit_types::enums::{FileStatus, LineKind};
+
 use super::diff::{self, COMMIT_MSG_PATH};
-use super::types;
-use crate::enums::{FileStatus, LineKind};
 
 /// A 0-based, half-open line range.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -206,7 +207,7 @@ fn changed_paths(repo: &Repository, old: &Tree, new: &Tree) -> Result<HashSet<St
 /// file untouched (byte-identical) when it carries no drift.
 fn tag_file(
     repo: &Repository,
-    file: &mut types::DiffFile,
+    file: &mut DiffFile,
     parent_m: &Tree,
     tree_m: &Tree,
     parent_n: &Tree,
@@ -265,7 +266,7 @@ fn tag_file(
     Ok(file.hunks.is_empty())
 }
 
-fn is_real_change(line: &types::Line) -> bool {
+fn is_real_change(line: &Line) -> bool {
     matches!(line.kind, LineKind::Add | LineKind::Del) && !line.drift
 }
 
@@ -286,7 +287,7 @@ fn is_real_change(line: &types::Line) -> bool {
 /// When git cannot diff the two parents (before any file is touched).
 pub fn tag_drift(
     repo: &Repository,
-    diff: &mut types::Diff,
+    diff: &mut Diff,
     m_sha: &str,
     parent_m_sha: &str,
     n_sha: &str,

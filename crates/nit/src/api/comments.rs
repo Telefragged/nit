@@ -6,10 +6,13 @@ use axum::Json;
 use axum::extract::State;
 use rusqlite::Connection;
 
-use crate::enums::LifecycleAction;
-use crate::review::{self, CommentInput, Lifecycle};
+use nit_types::changes::{AbandonRequest, ChangeDetail};
+use nit_types::comments::{NewComment, Thread};
+use nit_types::enums::LifecycleAction;
+use nit_types::log::{CommentInput, LogPayload};
 
-use super::types;
+use crate::review::Lifecycle;
+
 use super::views;
 use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{change_detail_json, change_or_404, map_busy, snapshot_line_text, validate_anchor};
@@ -17,8 +20,8 @@ use super::{change_detail_json, change_or_404, map_busy, snapshot_line_text, val
 pub(super) async fn create_comment(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-    AppJson(req): AppJson<types::NewComment>,
-) -> Result<Json<types::Thread>, Error> {
+    AppJson(req): AppJson<NewComment>,
+) -> Result<Json<Thread>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
@@ -74,11 +77,11 @@ pub(super) async fn create_comment(
                 }
             }
         };
-        let new = review::LogPayload::Comment(comment);
+        let new = LogPayload::Comment(comment);
         // A new thread's id is minted during the append, so read it back here.
         let applied = append_to_change(conn, &entry, id, vec![new]).map_err(map_busy)?;
         let thread_id = match applied.first().map(|e| &e.payload) {
-            Some(review::LogPayload::Comment(c)) => c.thread_id,
+            Some(LogPayload::Comment(c)) => c.thread_id,
             _ => None,
         }
         .ok_or_else(|| Error::internal("comment append minted no thread"))?;
@@ -100,9 +103,9 @@ fn set_lifecycle(
     guard: fn(&Lifecycle) -> bool,
     action: LifecycleAction,
     message: Option<String>,
-) -> Result<Json<types::ChangeDetail>, Error> {
+) -> Result<Json<ChangeDetail>, Error> {
     if guard(&entry.read().lifecycle) {
-        let new = review::LogPayload::lifecycle(action, None, message);
+        let new = LogPayload::lifecycle(action, None, message);
         append_to_change(conn, entry, id, vec![new]).map_err(map_busy)?;
     }
     change_detail_json(conn, entry)
@@ -114,8 +117,8 @@ fn set_lifecycle(
 pub(super) async fn abandon_change(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-    AppJson(req): AppJson<types::AbandonRequest>,
-) -> Result<Json<types::ChangeDetail>, Error> {
+    AppJson(req): AppJson<AbandonRequest>,
+) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         set_lifecycle(
@@ -135,7 +138,7 @@ pub(super) async fn abandon_change(
 pub(super) async fn reopen_change(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-) -> Result<Json<types::ChangeDetail>, Error> {
+) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         set_lifecycle(

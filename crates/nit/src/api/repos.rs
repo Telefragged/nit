@@ -6,16 +6,17 @@ use axum::Json;
 use axum::extract::State;
 use git2::Repository;
 
+use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
+
 use crate::db;
 
 use super::canonical_git_dir;
-use super::types;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
 
 /// A repo row plus its derived live-tip count, as the wire `Repo`.
-fn repo_json(state: &AppState, row: db::RepoRow) -> types::Repo {
+fn repo_json(state: &AppState, row: db::RepoRow) -> Repo {
     let active = u64::try_from(state.repo_view(row.id).tips().len()).unwrap_or(u64::MAX);
-    types::Repo {
+    Repo {
         id: row.id,
         git_dir: row.git_dir,
         base_ref: row.base_ref,
@@ -29,8 +30,8 @@ fn repo_json(state: &AppState, row: db::RepoRow) -> types::Repo {
 /// registered.
 pub(super) async fn create_repo(
     State(state): State<Arc<AppState>>,
-    AppJson(req): AppJson<types::CreateRepo>,
-) -> Result<Json<types::Repo>, Error> {
+    AppJson(req): AppJson<CreateRepo>,
+) -> Result<Json<Repo>, Error> {
     with_conn(state.pool(), move |conn| {
         let canonical = canonical_git_dir(&req.git_dir)?;
         let repo = Repository::open(&canonical).map_err(|e| {
@@ -73,13 +74,13 @@ pub(super) async fn create_repo(
 /// List every registered repo with its live-tip count (derived, never stored).
 pub(super) async fn list_repos(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<types::RepoList>, Error> {
+) -> Result<Json<RepoList>, Error> {
     with_conn(state.pool(), move |conn| {
         let repos = db::all_repos(conn)?
             .into_iter()
             .map(|r| repo_json(&state, r))
             .collect();
-        Ok(Json(types::RepoList { repos }))
+        Ok(Json(RepoList { repos }))
     })
     .await
 }
@@ -88,7 +89,7 @@ pub(super) async fn list_repos(
 pub(super) async fn get_repo(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
-) -> Result<Json<types::Repo>, Error> {
+) -> Result<Json<Repo>, Error> {
     with_conn(state.pool(), move |conn| {
         let row = db::get_repo(conn, repo_id)?
             .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;
@@ -101,8 +102,8 @@ pub(super) async fn get_repo(
 pub(super) async fn relocate_repo(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
-    AppJson(req): AppJson<types::RelocateRepo>,
-) -> Result<Json<types::Repo>, Error> {
+    AppJson(req): AppJson<RelocateRepo>,
+) -> Result<Json<Repo>, Error> {
     with_conn(state.pool(), move |conn| {
         let existing = db::get_repo(conn, repo_id)?
             .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;

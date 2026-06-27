@@ -21,8 +21,9 @@
 use anyhow::{Result, anyhow};
 use nit_types::comments::CommentRange;
 
+use nit_types::enums::{ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
+
 use crate::db;
-use crate::enums::{ChangeStatus, LifecycleAction, LogKind, Side, Verdict};
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -38,9 +39,7 @@ pub enum Lifecycle {
 
 // ---------------------------------------------------------------------------
 // Log payloads (the JSON in each `log.payload`; docs/data-model.md "Payloads")
-pub use nit_types::log::{
-    CommentInput, LifecyclePayload, LogPayload, ReviewPayload, RevisionPayload,
-};
+use nit_types::log::{CommentInput, LifecyclePayload, LogPayload, RevisionPayload};
 
 /// Serialize a log payload to the JSON stored in its `log.payload` column: the
 /// inner struct alone, since the entry's `kind` is stored in its own column.

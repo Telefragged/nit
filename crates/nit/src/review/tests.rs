@@ -1,5 +1,7 @@
+use nit_types::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
+use nit_types::log::ReviewPayload;
+
 use super::*;
-use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
 
 fn change_row() -> db::ChangeRow {
     db::ChangeRow {

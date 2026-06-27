@@ -3,7 +3,8 @@
 
 use anyhow::{Result, anyhow};
 
-use crate::api::types::{Chain, ChainList, RepoList};
+use nit_types::chains::{Chain, ChainList};
+use nit_types::repos::RepoList;
 
 use super::client::{Client, Retry};
 use super::git::{discover_repo, head_sha};

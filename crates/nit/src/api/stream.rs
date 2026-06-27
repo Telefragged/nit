@@ -11,11 +11,12 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use tokio_stream::{StreamExt, StreamMap};
 
+use nit_types::events::{ClientMsg, StreamMsg};
+use nit_types::log::LogEntry;
+
 use crate::db;
 use crate::review;
 
-use super::types;
-use super::types::StreamMsg;
 use super::views;
 use super::{AppState, with_conn};
 
@@ -60,7 +61,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 let Some(Ok(msg)) = incoming else { break };
                 match msg {
                     Message::Text(text) => {
-                        let Ok(client) = serde_json::from_str::<types::ClientMsg>(&text) else {
+                        let Ok(client) = serde_json::from_str::<ClientMsg>(&text) else {
                             continue;
                         };
                         if apply_client_msg(&mut socket, &state, &mut feeds, &mut watermark, client)
@@ -100,10 +101,10 @@ async fn apply_client_msg(
     state: &Arc<AppState>,
     feeds: &mut StreamMap<u64, Feed>,
     watermark: &mut HashMap<u64, u64>,
-    client: types::ClientMsg,
+    client: ClientMsg,
 ) -> Result<(), ()> {
     match client {
-        types::ClientMsg::Subscribe(map) => {
+        ClientMsg::Subscribe(map) => {
             for (id_str, from) in map {
                 let Ok(change_id) = id_str.parse::<u64>() else {
                     continue;
@@ -136,7 +137,7 @@ async fn send_json(socket: &mut WebSocket, msg: &StreamMsg) -> Result<(), ()> {
 
 /// A change's log slice `[from, head)` as tagged entries, for the backlog
 /// replay. Errors collapse to empty (the follower re-reads on reconnect).
-async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<types::LogEntry> {
+async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<LogEntry> {
     with_conn(state.pool(), move |conn| {
         let rows = db::log_entries(conn, change_id, from, None)?;
         rows.iter()
@@ -155,6 +156,8 @@ async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<t
 
 #[cfg(test)]
 mod tests {
+    use nit_types::events::NewParent;
+
     use super::*;
 
     /// A `Feed` surfaces broadcast overflow as `Err` rather than silently
@@ -167,7 +170,7 @@ mod tests {
         // Capacity 2, three sends: the oldest is dropped, overflowing the reader.
         for of in 0..3 {
             let _ = tx.try_broadcast(StreamMsg::NewParent {
-                new_parent: types::NewParent { of, parent: 0 },
+                new_parent: NewParent { of, parent: 0 },
             });
         }
         assert!(matches!(

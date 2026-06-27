@@ -9,8 +9,8 @@ use std::path::Path;
 use anyhow::{Result, anyhow};
 use git2::{Delta, DiffOptions, Patch, Repository, Tree};
 
-use super::types;
-use crate::enums::{FileStatus, LineKind};
+use nit_types::diff::{Diff, DiffFile, Hunk, Line};
+use nit_types::enums::{FileStatus, LineKind};
 
 /// The reserved synthetic diff path carrying the revision's commit
 /// message (docs/api.md "The commit message as a file"). Git tree paths
@@ -31,7 +31,7 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
 ///
 /// # Errors
 /// When git can't build or read the diff's patches.
-pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<types::Diff> {
+pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<Diff> {
     let mut opts = DiffOptions::new();
     opts.context_lines(3);
     let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), Some(&mut opts))?;
@@ -60,7 +60,7 @@ pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<types::Di
         };
         let old_path = (status == FileStatus::Renamed).then(|| path(delta.old_file()));
 
-        let mut file = types::DiffFile {
+        let mut file = DiffFile {
             path: file_path,
             old_path,
             status,
@@ -85,7 +85,7 @@ pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<types::Di
         }
         files.push(file);
     }
-    Ok(types::Diff { files })
+    Ok(Diff { files })
 }
 
 fn delta_status(delta: Delta) -> Option<FileStatus> {
@@ -98,7 +98,7 @@ fn delta_status(delta: Delta) -> Option<FileStatus> {
     }
 }
 
-fn patch_hunks(patch: &mut Patch) -> Result<Vec<types::Hunk>> {
+fn patch_hunks(patch: &mut Patch) -> Result<Vec<Hunk>> {
     let mut hunks = Vec::new();
     for h in 0..patch.num_hunks() {
         let (hunk, _) = patch.hunk(h)?;
@@ -112,7 +112,7 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<types::Hunk>> {
                 _ => continue, // eofnl markers etc.
             };
             let text = String::from_utf8_lossy(line.content());
-            lines.push(types::Line {
+            lines.push(Line {
                 kind,
                 old: line.old_lineno().map(u64::from),
                 new: line.new_lineno().map(u64::from),
@@ -120,7 +120,7 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<types::Hunk>> {
                 text: text.strip_suffix('\n').unwrap_or(&text).to_string(),
             });
         }
-        hunks.push(types::Hunk {
+        hunks.push(Hunk {
             old_start: u64::from(hunk.old_start()),
             old_lines: u64::from(hunk.old_lines()),
             new_start: u64::from(hunk.new_start()),
@@ -140,7 +140,7 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<types::Hunk>> {
 ///
 /// # Errors
 /// When git can't build or read the buffer diff.
-pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> {
+pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<DiffFile> {
     let mut opts = DiffOptions::new();
     opts.context_lines(3);
     let mut patch = Patch::from_buffers(
@@ -154,12 +154,12 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
     let mut hunks = patch_hunks(&mut patch)?;
     if hunks.is_empty() && !new.is_empty() {
         // Identical interdiff: synthesize the all-context hunk.
-        let lines: Vec<types::Line> = new
+        let lines: Vec<Line> = new
             .lines()
             .enumerate()
             .map(|(i, text)| {
                 let n = u64::try_from(i)? + 1;
-                Ok(types::Line {
+                Ok(Line {
                     kind: LineKind::Context,
                     old: Some(n),
                     new: Some(n),
@@ -169,7 +169,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
             })
             .collect::<Result<_>>()?;
         let count = u64::try_from(lines.len())?;
-        hunks.push(types::Hunk {
+        hunks.push(Hunk {
             old_start: 1,
             old_lines: count,
             new_start: 1,
@@ -178,7 +178,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<types::DiffFile> 
             lines,
         });
     }
-    Ok(types::DiffFile {
+    Ok(DiffFile {
         path: COMMIT_MSG_PATH.to_string(),
         old_path: None,
         status: if old.is_some() {

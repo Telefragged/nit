@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 
-use crate::api::types::{PushRequest, PushResult};
+use nit_types::push::{PushRequest, PushResult};
 
 use super::client::{Client, ServerOpt, print_json, server_url};
 use super::git::{discover_repo, resolve_tip};

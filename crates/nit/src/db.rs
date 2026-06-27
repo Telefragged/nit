@@ -17,9 +17,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use nit_types::comments::CommentRange;
+use nit_types::enums::{ChangeStatus, Decision, Side};
 use rusqlite::{Connection, OptionalExtension, params};
-
-use crate::enums::{ChangeStatus, Decision, Side};
 
 /// RFC3339 timestamp for "now" (UTC), the format stored in every
 /// `created_at`/`updated_at` column.

@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 
-use crate::api::types::{AbandonRequest, ChangeDetail};
+use nit_types::changes::{AbandonRequest, ChangeDetail};
 
 use super::client::{Client, ServerOpt, print_json, server_url};
 use super::format::ChangeTarget;

@@ -7,18 +7,20 @@ use axum::extract::State;
 use git2::{Oid, Repository};
 use serde::Deserialize;
 
+use nit_types::changes::ChangeDetail;
+use nit_types::diff::Diff;
+
 use crate::review;
 
 use super::diff;
 use super::rebase;
-use super::types;
 use super::{AppPath, AppQuery, AppState, Error, with_conn};
 use super::{change_detail_json, change_or_404};
 
 pub(super) async fn get_change_detail(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-) -> Result<Json<types::ChangeDetail>, Error> {
+) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         change_detail_json(conn, &entry)
@@ -35,7 +37,7 @@ pub(super) async fn revision_diff(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(u64, u64)>,
     AppQuery(q): AppQuery<DiffQuery>,
-) -> Result<Json<types::Diff>, Error> {
+) -> Result<Json<Diff>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         // Clone the revision(s) out from under the read lock so the git work

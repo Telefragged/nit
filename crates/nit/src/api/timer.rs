@@ -8,11 +8,13 @@ use std::time::Duration;
 use git2::Repository;
 use rusqlite::Connection;
 
+use nit_types::enums::LifecycleAction;
+use nit_types::log::LogPayload;
+
 use crate::chain::RepoView;
 use crate::db;
-use crate::enums::LifecycleAction;
 use crate::gitscan;
-use crate::review::{self, ChangeProj};
+use crate::review::ChangeProj;
 
 use super::{AppState, ChangeEntry, append_to_change, with_conn};
 
@@ -105,7 +107,7 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
 /// Record a detected landing: the merge sweep's only lifecycle write, a
 /// `merged` entry on the change at the landed `revision`.
 fn record_landing(conn: &mut Connection, entry: &ChangeEntry, change_id: u64, revision: u64) {
-    let new = review::LogPayload::lifecycle(LifecycleAction::Merged, Some(revision), None);
+    let new = LogPayload::lifecycle(LifecycleAction::Merged, Some(revision), None);
     if let Err(e) = append_to_change(conn, entry, change_id, vec![new]) {
         tracing::warn!(change_id, "lifecycle append failed: {e:#}");
     }

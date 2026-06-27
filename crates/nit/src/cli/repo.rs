@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 
-use crate::api::types::{CreateRepo, RelocateRepo, Repo, RepoList};
+use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
 
 use super::client::{Client, ServerOpt, print_json, server_url};
 use super::git::{discover_repo, repo_git_dir};

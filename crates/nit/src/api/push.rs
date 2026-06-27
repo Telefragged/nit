@@ -7,12 +7,14 @@ use axum::Json;
 use axum::extract::State;
 use git2::Repository;
 
+use nit_types::events::{NewParent, StreamMsg};
+use nit_types::log::{LogPayload, RevisionPayload};
+use nit_types::push::{PushRequest, PushResult, TipChange};
+
 use crate::db;
 use crate::gitscan;
-use crate::review::{self, Lifecycle, RevisionPayload};
+use crate::review::Lifecycle;
 
-use super::types;
-use super::types::StreamMsg;
 use super::{AppJson, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{canonical_git_dir, map_busy};
 
@@ -28,8 +30,8 @@ struct Target {
 )]
 pub(super) async fn push(
     State(state): State<Arc<AppState>>,
-    AppJson(req): AppJson<types::PushRequest>,
-) -> Result<Json<types::PushResult>, Error> {
+    AppJson(req): AppJson<PushRequest>,
+) -> Result<Json<PushResult>, Error> {
     with_conn(state.pool(), move |conn| {
         let canonical = canonical_git_dir(&req.git_dir)?;
         let repo = Repository::open(&canonical)
@@ -99,7 +101,7 @@ pub(super) async fn push(
                 ),
                 None => true,
             };
-            let new = review::LogPayload::Revision(RevisionPayload {
+            let new = LogPayload::Revision(RevisionPayload {
                 commit_sha: wc.commit_sha.clone(),
                 parent_sha: wc.parent_sha.clone(),
                 base_sha: walk.fork_sha.clone(),
@@ -123,7 +125,7 @@ pub(super) async fn push(
                 };
                 if let Some(feed) = feed {
                     feed.publish(StreamMsg::NewParent {
-                        new_parent: types::NewParent {
+                        new_parent: NewParent {
                             of: t.change_id,
                             parent: parent.change_id,
                         },
@@ -140,16 +142,16 @@ pub(super) async fn push(
         let tip_change = {
             let proj = tip.entry.read();
             let rev = proj.latest_revision();
-            types::TipChange {
+            TipChange {
                 change_id: tip.change_id,
                 change_key: proj.change_key.clone(),
                 revision: rev.map_or(0, |r| r.number),
-                status: rev.map_or(crate::enums::ChangeStatus::Pending, |r| {
+                status: rev.map_or(nit_types::enums::ChangeStatus::Pending, |r| {
                     proj.status_at(r.number)
                 }),
             }
         };
-        Ok(Json(types::PushResult { tip_change }))
+        Ok(Json(PushResult { tip_change }))
     })
     .await
 }

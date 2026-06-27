@@ -6,7 +6,9 @@ use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 
-use crate::api::types::{Chain, LogEntry, LogPayload};
+use nit_types::chains::Chain;
+use nit_types::log::{LogEntry, LogPayload};
+
 use crate::gitscan::short_sha;
 
 use super::client::Client;
@@ -106,8 +108,8 @@ mod tests {
 
     #[test]
     fn entry_summary_digests_each_kind() {
-        use crate::api::types::{CommentInput, ReviewPayload, RevisionPayload};
-        use crate::enums::{LifecycleAction, Verdict};
+        use nit_types::enums::{LifecycleAction, Verdict};
+        use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let entry = |payload| LogEntry {
             change_id: 7,
             idx: 0,
@@ -153,8 +155,8 @@ mod tests {
 
     #[test]
     fn chain_oneline_digests_each_member() {
-        use crate::api::types::PathEntry;
-        use crate::enums::{ChainState, ChangeStatus};
+        use nit_types::chains::PathEntry;
+        use nit_types::enums::{ChainState, ChangeStatus};
         // The path carries only structure; the unresolved counts are composed
         // separately (from the change snapshots) and keyed by change_id.
         let member = |change_id, position, key: &str, status, revision, subject: &str| PathEntry {

@@ -3,8 +3,9 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 
-use crate::api::types::{ChainLog, LogEntry, LogPayload, StreamMsg};
-use crate::enums::LifecycleAction;
+use nit_types::enums::LifecycleAction;
+use nit_types::events::StreamMsg;
+use nit_types::log::{ChainLog, LogEntry, LogPayload};
 
 use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
 use super::format::print_oneline_entries;
@@ -238,8 +239,8 @@ mod tests {
 
     #[test]
     fn reviewer_only_mutes_agent_echoes_and_auto_merge() {
-        use crate::api::types::{CommentInput, ReviewPayload, RevisionPayload};
-        use crate::enums::Verdict;
+        use nit_types::enums::Verdict;
+        use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let muted = |payload| {
             muted_by_reviewer_only(&LogEntry {
                 change_id: 1,

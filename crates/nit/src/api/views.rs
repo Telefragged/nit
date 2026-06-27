@@ -9,13 +9,19 @@ use anyhow::Result;
 use git2::Repository;
 use rusqlite::Connection;
 
+use nit_types::chains::{Chain, PathEntry};
+use nit_types::changes::{ChangeDetail, Review, Revision, StagedDecision};
+use nit_types::comments::{Draft, Thread};
+use nit_types::enums::{ChangeStatus, GraphSection, Side};
+use nit_types::graph::{GraphNode, RepoGraph};
+use nit_types::log::LogEntry;
+
 use crate::chain::{self, PathMember, RepoView};
 use crate::db;
-use crate::enums::{ChangeStatus, Side};
 use crate::gitscan::{self, identity::subject_of};
 use crate::review::{self, Anchor, ChangeProj, Entry, ThreadComment, ThreadProj};
 
-use super::{Error, types};
+use super::Error;
 
 // ---------------------------------------------------------------------------
 // Chains (derived)
@@ -23,10 +29,10 @@ use super::{Error, types};
 /// Build the derived `Chain` for one tip commit-sha — the dashboard list
 /// entry, the chain page, and the push result all share this one shape.
 #[must_use]
-pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &str) -> types::Chain {
+pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &str) -> Chain {
     let path = view.path_from_tip(tip_sha);
     let tip_change_id = path.last().map_or(0, |m| m.change_id);
-    types::Chain {
+    Chain {
         tip_change_id,
         repo_id,
         state: chain::derive_state(view, &path),
@@ -35,7 +41,7 @@ pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &str) -> types::Chain
 }
 
 /// One `PathEntry` per member, read at the revision the path pins.
-fn path_entries(view: &RepoView, path: &[PathMember]) -> Vec<types::PathEntry> {
+fn path_entries(view: &RepoView, path: &[PathMember]) -> Vec<PathEntry> {
     path.iter()
         .enumerate()
         .filter_map(|(position, m)| {
@@ -45,13 +51,13 @@ fn path_entries(view: &RepoView, path: &[PathMember]) -> Vec<types::PathEntry> {
         .collect()
 }
 
-fn path_entry(change: &ChangeProj, member: &PathMember, position: u64) -> types::PathEntry {
+fn path_entry(change: &ChangeProj, member: &PathMember, position: u64) -> PathEntry {
     let revision = member.revision;
     let subject = change
         .revision(revision)
         .map(|r| subject_of(&r.message))
         .unwrap_or_default();
-    types::PathEntry {
+    PathEntry {
         change_id: change.id,
         position,
         change_key: change.change_key.clone(),
@@ -78,23 +84,23 @@ pub fn build_graph(
     repo_id: u64,
     base_ref: &str,
     merged_window: u64,
-) -> Result<types::RepoGraph> {
+) -> Result<RepoGraph> {
     let (history, history_truncated) =
         gitscan::canonical_history(repo, base_ref, merged_window).map_err(anyhow::Error::msg)?;
     let anchor = history.first().map_or_else(String::new, |h| h.sha.clone());
 
-    let mut nodes: Vec<types::GraphNode> = Vec::new();
+    let mut nodes: Vec<GraphNode> = Vec::new();
     let mut shas: HashSet<String> = HashSet::new();
 
     // History region: the HEAD anchor (depth 0) + merged commits below it.
     for (depth, h) in history.iter().enumerate() {
         let change = h.change_key.as_deref().and_then(|k| view.change_by_key(k));
-        nodes.push(types::GraphNode {
+        nodes.push(GraphNode {
             commit_sha: h.sha.clone(),
             section: if depth == 0 {
-                types::GraphSection::Head
+                GraphSection::Head
             } else {
-                types::GraphSection::History
+                GraphSection::History
             },
             subject: h.subject.clone(),
             status: ChangeStatus::Merged,
@@ -121,9 +127,9 @@ pub fn build_graph(
             .revision(node.revision)
             .map(|r| subject_of(&r.message))
             .unwrap_or_default();
-        nodes.push(types::GraphNode {
+        nodes.push(GraphNode {
             commit_sha: node.commit_sha,
-            section: types::GraphSection::Open,
+            section: GraphSection::Open,
             subject,
             status: change.status_at(node.revision),
             parents: vec![node.parent_sha],
@@ -144,12 +150,12 @@ pub fn build_graph(
     // the top, which is wrong whenever the whole chain forks behind HEAD.
     let open_shas: HashSet<&str> = nodes
         .iter()
-        .filter(|n| n.section == types::GraphSection::Open)
+        .filter(|n| n.section == GraphSection::Open)
         .map(|n| n.commit_sha.as_str())
         .collect();
     let open_pairs: Vec<(String, Vec<String>)> = nodes
         .iter()
-        .filter(|n| n.section == types::GraphSection::Open)
+        .filter(|n| n.section == GraphSection::Open)
         .map(|n| {
             let parents = n
                 .parents
@@ -167,12 +173,12 @@ pub fn build_graph(
         .collect();
     let (mut open_nodes, rest): (Vec<_>, Vec<_>) = nodes
         .into_iter()
-        .partition(|n| n.section == types::GraphSection::Open);
+        .partition(|n| n.section == GraphSection::Open);
     open_nodes.sort_by_key(|n| open_pos.get(&n.commit_sha).copied().unwrap_or(usize::MAX));
     open_nodes.extend(rest); // the HEAD anchor + history, in canonical-walk order
     let nodes = open_nodes;
 
-    Ok(types::RepoGraph {
+    Ok(RepoGraph {
         repo_id,
         anchor,
         history_truncated,
@@ -229,7 +235,7 @@ pub fn resolve_revision_tip(
 /// A published thread → its wire shape, projecting its [`Anchor`] back to the
 /// flat `file`/`line`/`side`/`range`/`line_text` fields.
 #[must_use]
-pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
+pub fn thread_view(t: &ThreadProj, change_id: u64) -> Thread {
     let (file, line, side, range, line_text) = match &t.anchor {
         Anchor::Change => (None, None, Side::New, None, None),
         Anchor::File { file } => (Some(file.clone()), None, Side::New, None, None),
@@ -247,7 +253,7 @@ pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
             line_text.clone(),
         ),
     };
-    types::Thread {
+    Thread {
         id: t.id,
         change_id,
         revision: t.revision,
@@ -264,8 +270,8 @@ pub fn thread_view(t: &ThreadProj, change_id: u64) -> types::Thread {
 }
 
 #[must_use]
-fn thread_comment_view(c: &ThreadComment) -> types::ThreadComment {
-    types::ThreadComment {
+fn thread_comment_view(c: &ThreadComment) -> nit_types::comments::ThreadComment {
+    nit_types::comments::ThreadComment {
         body: c.body.clone(),
         review_id: c.review_id,
         created_at: c.created_at.clone(),
@@ -274,8 +280,8 @@ fn thread_comment_view(c: &ThreadComment) -> types::ThreadComment {
 
 /// A draft row → its wire shape.
 #[must_use]
-pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Draft {
-    types::Draft {
+pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
+    Draft {
         id: d.id,
         change_id,
         thread_id: d.thread_id,
@@ -302,23 +308,23 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> types::Draft {
 ///
 /// # Errors
 /// When reading drafts fails.
-pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<types::ChangeDetail> {
-    let revisions: Vec<types::Revision> = change.revisions.iter().map(revision_json).collect();
-    let threads: Vec<types::Thread> = change
+pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<ChangeDetail> {
+    let revisions: Vec<Revision> = change.revisions.iter().map(revision_json).collect();
+    let threads: Vec<Thread> = change
         .threads
         .iter()
         .map(|t| thread_view(t, change.id))
         .collect();
-    let drafts: Vec<types::Draft> = db::drafts_for_change(conn, change.id)?
+    let drafts: Vec<Draft> = db::drafts_for_change(conn, change.id)?
         .iter()
         .map(|d| draft_view(d, change.id))
         .collect();
     let reviews = change.reviews.iter().map(review_json).collect();
-    let draft_decision = db::get_draft_review(conn, change.id)?.map(|r| types::StagedDecision {
+    let draft_decision = db::get_draft_review(conn, change.id)?.map(|r| StagedDecision {
         decision: r.decision,
         message: r.message,
     });
-    Ok(types::ChangeDetail {
+    Ok(ChangeDetail {
         id: change.id,
         repo_id: change.repo_id,
         change_key: change.change_key.clone(),
@@ -331,8 +337,8 @@ pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<typ
 }
 
 #[must_use]
-pub fn revision_json(rev: &review::RevisionProj) -> types::Revision {
-    types::Revision {
+pub fn revision_json(rev: &review::RevisionProj) -> Revision {
+    Revision {
         number: rev.number,
         commit_sha: rev.commit_sha.clone(),
         parent_sha: rev.parent_sha.clone(),
@@ -343,8 +349,8 @@ pub fn revision_json(rev: &review::RevisionProj) -> types::Revision {
 }
 
 #[must_use]
-pub fn review_json(review: &review::ReviewProj) -> types::Review {
-    types::Review {
+pub fn review_json(review: &review::ReviewProj) -> Review {
+    Review {
         id: review.id,
         revision: review.revision,
         verdict: review.verdict,
@@ -359,8 +365,8 @@ pub fn review_json(review: &review::ReviewProj) -> types::Review {
 /// A folded log entry → its wire shape: the typed payload flows straight
 /// through (the wire `LogEntry` shares the same `LogPayload`).
 #[must_use]
-pub fn log_entry_view(change_id: u64, entry: &Entry) -> types::LogEntry {
-    types::LogEntry {
+pub fn log_entry_view(change_id: u64, entry: &Entry) -> LogEntry {
+    LogEntry {
         change_id,
         idx: entry.idx,
         seq: entry.seq,
