@@ -36,13 +36,11 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
 
-    // The tip change is I002 at revision 0, pending.
     let tip = &res["tip_change"];
     assert_eq!(tip["change_key"], "I002");
     assert_eq!(tip["revision"], 0);
     assert_eq!(tip["status"], "pending");
 
-    // The derived chain is the path base→tip, 0-based positions.
     let chain = only_chain(&server);
     let path = chain["path"].as_array().unwrap();
     assert_eq!(path.len(), 2);
@@ -60,7 +58,6 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(path[1]["revision"], 0);
     assert_eq!(path[1]["commit_sha"], c2.to_string());
 
-    // Each change shows exactly its revision 0.
     let id1 = member_id(&server, &res, "I001");
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
     assert_eq!(st, 200, "{detail}");
@@ -85,7 +82,6 @@ fn chains_lists_one_ordered_tip() {
     let chain = only_chain(&server);
     assert_eq!(chain["state"], "waiting_for_review");
     let path = chain["path"].as_array().unwrap();
-    // base→tip, contiguous 0-based positions, in commit order.
     let keys: Vec<&str> = path
         .iter()
         .map(|m| m["change_key"].as_str().unwrap())
@@ -109,7 +105,6 @@ fn no_op_repush_is_idempotent() {
     assert_eq!(st, 200);
     let id = member_id(&server, &only_chain(&server), "I001");
 
-    // Nothing moved: a re-push is a 200 that records no new revision.
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     assert_eq!(res["tip_change"]["revision"], 0);
@@ -204,7 +199,6 @@ fn already_merged_commit_rejects_the_push() {
     // nothing (docs/data-model.md "Push").
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    // The commit has landed: the canonical branch and the tip both point at it.
     g.branch("main", c1);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
