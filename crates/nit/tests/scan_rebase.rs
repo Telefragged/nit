@@ -9,14 +9,12 @@ mod common;
 use common::{GitRepo, TestServer, http_get, member_id, msg, push, review};
 use serde_json::Value;
 
-/// `GET /api/changes/{id}`.
 fn change_detail(server: &TestServer, change_id: u64) -> Value {
     let (st, v) = http_get(&server.url(&format!("/api/changes/{change_id}")));
     assert_eq!(st, 200, "{v}");
     v
 }
 
-/// The status the derived chain path pins on `change_key` (rooted at the tip).
 fn path_status(server: &TestServer, tip_change_id: u64, change_key: &str) -> String {
     let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip_change_id}")));
     assert_eq!(st, 200, "{chain}");
@@ -44,7 +42,6 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let g = GitRepo::new();
     let a_txt = "a1\na2\na3\n";
     let b_txt = "b1\nb2\n";
-    // A 2-change chain on `feat`: Ia (base) then Ib (tip).
     let c1 = g.commit(&[g.root], &msg("one", "Ia"), &[("a.txt", a_txt)]);
     let c2 = g.commit(&[c1], &msg("two", "Ib"), &[("b.txt", b_txt)]);
     g.branch("feat", c2);
@@ -55,12 +52,10 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let tip_id = member_id(&server, &pr, "Ib");
     assert_eq!(pr["tip_change"]["revision"], 0, "first revision is rev 0");
 
-    // Approve the tip change Ib at rev 0.
     approve(&server, tip_id);
     assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
 
-    // main moves on; the agent rebases the whole chain onto it. Same diffs and
-    // messages, new shas + new parents → pure rebases.
+    // Same diffs and messages, new shas + new parents → pure rebases.
     let m1 = g.commit(&[g.root], "main: unrelated\n", &[("m.txt", "m\n")]);
     g.branch("main", m1);
     let c1r = g.commit(&[m1], &msg("one", "Ia"), &[("a.txt", a_txt)]);
@@ -83,8 +78,6 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
         "same change identity"
     );
 
-    // The change detail: a new revision recorded, status still approved at the
-    // pinned (latest) revision, and the review row stays on rev 0.
     let detail = change_detail(&server, tip_id);
     let revs = detail["revisions"].as_array().unwrap();
     assert_eq!(revs.len(), 2, "rev 0 and rev 1");
@@ -128,7 +121,6 @@ fn re_push_of_an_unchanged_tip_is_idempotent() {
     let change_id = member_id(&server, &pr, "Ic");
     approve(&server, change_id);
 
-    // Push the same tip again — nothing moved.
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(pr["tip_change"]["revision"], 0, "no new revision");
@@ -159,7 +151,6 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     review(&server, change_id, "request_changes", "rename");
     assert_eq!(path_status(&server, change_id, "Ix"), "changes_requested");
 
-    // Pure rebase onto a moved base.
     let m1 = g.commit(&[g.root], "main moves\n", &[("m.txt", "m\n")]);
     g.branch("main", m1);
     let c1r = g.commit(&[m1], &msg("feat: x", "Ix"), &[("x.txt", txt)]);
@@ -172,7 +163,6 @@ fn pure_rebase_carries_request_changes_reword_resets() {
         "request_changes carries forward across a pure rebase"
     );
 
-    // Reword resets to pending.
     let c1w = g.commit(&[m1], &msg("feat: x, reworded", "Ix"), &[("x.txt", txt)]);
     g.branch("feat", c1w);
     let (st, pr) = push(&server, &g, "feat", "main");
