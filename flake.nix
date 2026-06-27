@@ -74,6 +74,18 @@
         src = ./web;
         npmDepsHash = "sha256-7NKAoi4RpVq50ZjjeMTk/3//FA4qNNiQRt4zTKG4vrI=";
       };
+
+      # Build metadata for `nit --version`: `+<sha>[.dirty]` from the flake's
+      # git state, which the build sandbox can't reach itself (no `.git`).
+      # `rev` is set only on a clean tree, `dirtyRev` only on a dirty one;
+      # neither on a revless tarball, leaving a bare semver.
+      gitSuffix =
+        if self ? rev then
+          "+${builtins.substring 0 12 self.rev}"
+        else if self ? dirtyRev then
+          "+${builtins.substring 0 12 self.dirtyRev}.dirty"
+        else
+          "";
     in
     {
       devShells = forAllSystems (
@@ -133,7 +145,10 @@
           };
 
           # Build only; tests live in the `test` check (the build/verify split).
-          nit-unwrapped = cargoNix.workspaceMembers."nit".build;
+          # The git suffix rides in as an env var the crate's build.rs reads.
+          nit-unwrapped = cargoNix.workspaceMembers."nit".build.overrideAttrs (_: {
+            NIT_GIT_SUFFIX = gitSuffix;
+          });
 
           # The real product: nit with the built web UI baked in via env.
           nit =

@@ -9,7 +9,7 @@ use nit::cli;
 #[derive(Parser)]
 #[command(
     name = "nit",
-    version,
+    version = nit::VERSION,
     about = "Commit-level code review for AI coding agents"
 )]
 struct Args {

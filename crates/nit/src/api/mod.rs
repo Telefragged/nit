@@ -210,7 +210,7 @@ fn map_busy(err: anyhow::Error) -> Error {
 async fn health() -> Json<types::Health> {
     Json(types::Health {
         status: "ok".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
+        version: crate::VERSION.to_string(),
     })
 }
 

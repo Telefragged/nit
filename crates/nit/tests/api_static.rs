@@ -36,7 +36,7 @@ fn serves_spa_with_index_fallback() {
     let (st, health) = http_get(&server.url("/api/health"));
     assert_eq!(st, 200);
     assert_eq!(health["status"], "ok");
-    assert_eq!(health["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(health["version"], nit::VERSION);
     // An unknown change is a JSON 404, never the SPA.
     let (st, e) = http_get(&server.url("/api/chains/12"));
     assert_eq!(st, 404);
