@@ -25,8 +25,6 @@ fn push_prints_result_then_status_and_log_read_it_back() {
     g.repo.set_head("refs/heads/feat").unwrap(); // the agent's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // push <branch> from the cwd (base `main`). The result carries just the
-    // tip change at rev 0 (0-based).
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
@@ -43,7 +41,6 @@ fn push_prints_result_then_status_and_log_read_it_back() {
     assert_eq!(status["path"][0]["change_key"], "Ia");
     assert_eq!(status["path"][0]["revision"], 0);
 
-    // status --oneline: a compact state line plus one line per member.
     let out = Command::new(env!("CARGO_BIN_EXE_nit"))
         .args(["status", "--oneline"])
         .current_dir(g.workdir())
@@ -55,7 +52,6 @@ fn push_prints_result_then_status_and_log_read_it_back() {
     assert!(text.contains("state=waiting_for_review"), "{text}");
     assert!(text.contains("\tIa\t"), "one line per member: {text}");
 
-    // log: the aggregated chain log, one revision entry from the push.
     let (ok, log, stderr) = nit(&server, &g, &["log"]);
     assert!(ok, "{stderr}");
     let entries = log["entries"].as_array().unwrap();
@@ -77,21 +73,18 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
     let (ok, _push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
 
-    // amend (same Change-Id Ia, new content -> new sha) = rev 1.
     let c1b = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nB\n")]);
     g.branch("feat", c1b);
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     assert_eq!(push["tip_change"]["revision"], 1, "amend is rev 1: {push}");
 
-    // The aggregated log now has two revision entries.
     let (ok, log, stderr) = nit(&server, &g, &["log"]);
     assert!(ok, "{stderr}");
     let entries = log["entries"].as_array().unwrap();
     assert_eq!(entries.len(), 2, "{log}");
     assert!(entries.iter().all(|e| e["kind"] == "revision"));
 
-    // Re-push with nothing moved: idempotent, still rev 1, no new entry.
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     assert_eq!(push["tip_change"]["revision"], 1);
@@ -135,7 +128,6 @@ fn comment_opens_replies_resolves() {
     let thread_id = thread["id"].as_u64().unwrap();
     let change_num = thread["change_id"].as_u64().unwrap();
 
-    // Reply to the thread and resolve it in one shot (--thread … --resolve).
     let (ok, reply, stderr) = nit(
         &server,
         &g,
@@ -188,7 +180,7 @@ fn reopen_an_abandoned_change() {
     assert!(ok, "{stderr}");
     let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
 
-    // Abandon it explicitly via the CLI (a reviewer/agent judgment).
+    // CLI abandon — a reviewer/agent judgment, distinct from the background timer.
     let (ok, detail, stderr) = nit(
         &server,
         &g,
@@ -197,20 +189,19 @@ fn reopen_an_abandoned_change() {
     assert!(ok, "{stderr}");
     assert_eq!(detail["id"], change_id);
 
-    // reopen by id clears it back to non-terminal.
+    // Clears the change back to non-terminal status.
     let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change", &change_id.to_string()]);
     assert!(ok, "{stderr}");
     assert_eq!(detail["id"], change_id);
     assert_eq!(detail["change_key"], "Ia");
 
-    // After reopen the change is pushable again (no 409 gate).
+    // No 409 gate after reopen — the change accepts a new push.
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "reopened change accepts a push: {stderr}");
     assert_eq!(push["tip_change"]["change_key"], "Ia");
 }
 
-/// A push from a branch with a commit missing its `Change-Id` trailer fails
-/// non-zero with a helpful message (the all-or-nothing walk rejects it).
+/// Push fails when any commit lacks a `Change-Id` — the all-or-nothing walk rejects the branch.
 #[test]
 fn push_without_change_id_fails_with_a_helpful_message() {
     let g = GitRepo::new();
@@ -248,7 +239,7 @@ fn status_before_any_push_says_run_nit_push_first() {
     assert!(stderr.contains("run 'nit push' first"), "{stderr}");
 }
 
-/// An unreachable server is reported as such, not as a malformed request.
+/// Unreachable server is reported as a connection error, not as a malformed-request error.
 #[test]
 fn push_to_a_dead_server_reports_unreachable() {
     let g = GitRepo::new();
