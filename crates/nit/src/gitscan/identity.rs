@@ -4,9 +4,7 @@
 
 use std::collections::HashMap;
 
-/// The subject of a commit message: first paragraph, leading blank lines
-/// skipped, inner newlines collapsed to spaces (git's
-/// `find_commit_subject` + `format_subject`).
+/// Commit subject, matching git's `find_commit_subject` + `format_subject`.
 #[must_use]
 pub fn subject_of(message: &str) -> String {
     let body = message.trim_start_matches(['\n', '\r']);
@@ -14,9 +12,7 @@ pub fn subject_of(message: &str) -> String {
     para.replace('\n', " ").trim().to_string()
 }
 
-/// Extract the `Change-Id:` trailer value from a commit message using
-/// git's trailer parser. Keys match ASCII-case-insensitively; when a
-/// message (incorrectly) carries several, the last one wins.
+/// When a message (incorrectly) carries several `Change-Id:` trailers, the last one wins.
 #[must_use]
 pub fn change_id_trailer(message: &str) -> Option<String> {
     let trailers = git2::message_trailers_strs(message).ok()?;

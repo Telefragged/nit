@@ -18,7 +18,6 @@ use git2::{Commit, Oid, Repository, Sort};
 
 use crate::review::ChangeProj;
 
-/// Documented push error for chains containing merge commits.
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
 /// A commit sha truncated to 12 chars — the canonical short form for display.
@@ -46,7 +45,6 @@ pub struct PushWalk {
     pub commits: Vec<WalkedCommit>,
 }
 
-/// Resolve a refish to a commit oid, with a human message on failure.
 fn resolve_commit(repo: &Repository, refish: &str) -> Result<Oid, String> {
     repo.revparse_single(refish)
         .and_then(|o| o.peel_to_commit())
@@ -259,8 +257,6 @@ pub fn canonical_history(
     walk.push(head).map_err(|e| e.to_string())?;
     walk.set_sorting(Sort::TOPOLOGICAL)
         .map_err(|e| e.to_string())?;
-    // The anchor plus `window` merged commits below it; one more means the
-    // history is truncated.
     let take = usize::try_from(window)
         .unwrap_or(usize::MAX)
         .saturating_add(1);
@@ -329,12 +325,10 @@ mod tests {
             .expect("commit")
     }
 
-    /// `subject` + a `Change-Id` trailer.
     fn keyed(subject: &str, key: &str) -> String {
         format!("{subject}\n\nChange-Id: {key}\n")
     }
 
-    /// A one-revision change `id`/`key`, forked at `base`, tipped at `commit`.
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProj {
         let mut proj = ChangeProj::empty(&ChangeRow {
             id,
@@ -355,7 +349,6 @@ mod tests {
         proj
     }
 
-    /// A fresh repo with a root commit. Returns `(dir, repo, root)`.
     fn repo() -> (tempfile::TempDir, Repository, Oid) {
         let dir = tempfile::tempdir().expect("tempdir");
         let repo = Repository::init(dir.path()).expect("init repo");
@@ -458,7 +451,6 @@ mod tests {
         );
         let a = change_proj(1, "I001", a_feat, root);
         let b = change_proj(2, "I002", b_feat, a_feat);
-        // Both land on a fresh line off the root.
         let landed_a = commit(&repo, Some(root), &keyed("a", "I001"), &[("a.txt", "a\n")]);
         let landed_b = commit(
             &repo,
@@ -476,7 +468,6 @@ mod tests {
         assert_eq!(got, vec![(1, 0), (2, 0)]);
     }
 
-    /// A landing whose Change-Id matches no open change is ignored.
     #[test]
     fn commit_outside_the_open_set_is_ignored() {
         let (_dir, repo, root) = repo();
@@ -502,8 +493,7 @@ mod tests {
         assert_eq!(got, vec![]);
     }
 
-    /// A baseline that no longer resolves yields no landings (the caller
-    /// re-baselines and detects nothing that sweep).
+    /// The caller re-baselines when the baseline oid can no longer be resolved.
     #[test]
     fn unresolvable_baseline_detects_nothing() {
         let (_dir, repo, root) = repo();
