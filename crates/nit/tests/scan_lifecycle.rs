@@ -34,7 +34,6 @@ fn status_at(server: &TestServer, change_id: u64, revision: u64) -> Option<Strin
         .and_then(|m| m["status"].as_str().map(str::to_string))
 }
 
-/// Block until `change_id`'s status at `revision` equals `want`.
 fn wait_status(server: &TestServer, change_id: u64, revision: u64, want: &str) {
     wait_for(Duration::from_secs(5), || {
         (status_at(server, change_id, revision).as_deref() == Some(want)).then_some(())
@@ -78,7 +77,6 @@ fn change_landed_on_main_becomes_merged() {
 fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     fast_timer();
     let g = GitRepo::new();
-    // A two-change stack: I001 then I002 on top.
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
@@ -95,7 +93,6 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     g.branch("main", landed);
 
     wait_status(&server, ancestor, 0, "merged");
-    // The tip change is untouched; it never landed.
     assert_eq!(status_at(&server, tip, 0).as_deref(), Some("pending"));
 
     // One live member keeps the partially-landed stack on the active list, but
@@ -119,7 +116,6 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     );
 }
 
-/// Abandon a change via the action.
 fn abandon(server: &TestServer, change_id: u64) {
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/abandon")),
@@ -146,8 +142,6 @@ fn branchless_change_stays_live_without_auto_abandon() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
 
-    // Delete the only branch and wait out several sweeps: the change stays
-    // pending (live), never auto-abandoned.
     g.delete_branch("feat");
     std::thread::sleep(Duration::from_millis(600));
     assert_eq!(
@@ -172,7 +166,6 @@ fn reopen_clears_abandoned_to_retained_status() {
     review(&server, change_id, "approve", "lgtm");
     abandon(&server, change_id);
 
-    // Reopen restores the retained verdict (approved), not pending.
     let (st, detail) = http_post(
         &server.url(&format!("/api/changes/{change_id}/reopen")),
         &json!({}),
@@ -197,17 +190,14 @@ fn push_to_abandoned_change_409s_until_reopened() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
 
-    // Abandon it, then move the branch to a *new* revision.
     abandon(&server, change_id);
     let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
     g.branch("feat", c1b);
 
-    // Pushing a new revision onto an abandoned change is a 409.
     let (st, e) = push(&server, &g, "feat", "main");
     assert_eq!(st, 409, "{e}");
     assert!(e["error"].as_str().unwrap().contains("abandoned"), "{e}");
 
-    // After reopen the same push succeeds and folds to a fresh revision.
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_id}/reopen")),
         &json!({}),
@@ -235,7 +225,7 @@ fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
 
-    // Abandon the change; the branch still points at the unchanged sha.
+    // The branch still points at the same sha — abandon doesn't move it.
     abandon(&server, change_id);
 
     // Re-pushing the same sha walks to nothing that moves, so the 409 guard
