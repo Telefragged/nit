@@ -51,6 +51,10 @@ jobs:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
           gc-max-store-size: 6G
+          # Every leg restores, but only the tip writes back: the legs share
+          # one key, so parallel saves race to store the same entry, and the
+          # tip is the store future runs branch from.
+          save: ${{ matrix.sha == (github.event.pull_request.head.sha || github.sha) }}
       - run: nix build
       - run: nix flake check
 
