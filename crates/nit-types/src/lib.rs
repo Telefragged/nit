@@ -18,5 +18,6 @@ pub mod enums;
 pub mod error;
 pub mod graph;
 pub mod health;
+pub mod log;
 pub mod push;
 pub mod repos;
