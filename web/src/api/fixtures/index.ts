@@ -218,7 +218,7 @@ function walkPath(
     out.push(member);
     parent = member.revision.parent_sha;
   }
-  return out.reverse(); // base → tip
+  return out.reverse();
 }
 
 function pathEntry(
@@ -285,7 +285,6 @@ function resolveTip(
     const member = derivePath(tip).find((e) => e.change_id === changeId);
     if (member?.revision === rev) return tip;
   }
-  // No live tip pins this (change, revision): the change is its own tip.
   return {
     tip_change_id: changeId,
     repo_id: c.repo_id,
@@ -400,8 +399,6 @@ function buildGraph(repoId: number, window: number): RepoGraph {
     }
   }
 
-  // An open chain's root parents onto the anchor unless its real base is in
-  // the graph (e.g. a behind-HEAD fork onto a merged commit, below).
   for (const nd of nodes) {
     if (nd.section === "open" && !nd.parents.some((p) => present.has(p))) {
       nd.parents = [anchorSha];
@@ -552,8 +549,7 @@ export async function mockRequest(
     return chainView(tip);
   }
 
-  // Batch submit: publish every chain member's staged decision at the revision
-  // the path pins, each independently (docs/api.md "Chains").
+  // Batch submit (docs/api.md "Chains").
   if ((m = /^\/chains\/(\d+)\/submit$/.exec(p)) && method === "POST") {
     const id = Number(m[1]);
     const revision = q.has("revision") ? Number(q.get("revision")) : undefined;

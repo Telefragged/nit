@@ -55,9 +55,6 @@ import type {
   TipRecord,
 } from "./store";
 
-// ---------------------------------------------------------------------------
-// Repos
-
 export const repos: RepoRecord[] = [
   { id: 1, git_dir: "/home/vetle/src/acme-runtime/.git", base_ref: "main" },
   { id: 2, git_dir: "/home/vetle/src/quarry/.git", base_ref: "main" },
@@ -747,7 +744,6 @@ const change12: ChangeRecord = {
   },
 };
 
-// ---------------------------------------------------------------------------
 // repo 1 — build/rustls (tip change 40, merged; only with ?status=all)
 
 const c40r1 = sha(401);
@@ -817,7 +813,6 @@ const change40: ChangeRecord = {
   },
 };
 
-// ---------------------------------------------------------------------------
 // repo 2 — quarry: fix/wal-checkpoint (tip change 20, agents_turn)
 
 const c20r1 = sha(201);
@@ -934,7 +929,6 @@ const change20: ChangeRecord = {
   },
 };
 
-// ---------------------------------------------------------------------------
 // repo 2 — quarry: chore/dedupe-ci-cache (tip change 30, approved)
 
 const c30r1 = sha(301);
@@ -1204,7 +1198,6 @@ export const changes: ChangeRecord[] = [
 ];
 
 export const tips: TipRecord[] = [
-  // repo 1
   {
     tip_change_id: 12,
     repo_id: 1,
@@ -1217,7 +1210,6 @@ export const tips: TipRecord[] = [
     revision: 0,
     active: false, // merged — only with ?status=all
   },
-  // repo 2
   {
     tip_change_id: 20,
     repo_id: 2,
@@ -1300,7 +1292,6 @@ export const threads: ThreadRecord[] = [
     created_at: ago(21 * 60),
     updated_at: ago(110),
   },
-  // change 11 — unresolved thread on store.rs.
   {
     id: 73,
     change_id: 11,
@@ -1330,9 +1321,8 @@ export const threads: ThreadRecord[] = [
     created_at: ago(21 * 60),
     updated_at: ago(105),
   },
-  // change 11 — unresolved range thread: the selection spans the
-  // generate/mark pair (partial first line through mid last line) and
-  // survives the amend, shifting 22-23 → 30-31 with chars intact.
+  // spans the generate/mark pair (partial first line through mid last line);
+  // survives amend, shifting 22-23 → 30-31 with chars intact.
   {
     id: 79,
     change_id: 11,
@@ -1355,8 +1345,8 @@ export const threads: ThreadRecord[] = [
     created_at: ago(21 * 60),
     updated_at: ago(21 * 60),
   },
-  // change 11 — resolved thread on a line rewritten in r1; it stays pinned
-  // to r0 and shows on the left of the r0 → r1 interdiff.
+  // thread on a line rewritten in r1; stays pinned to r0 and shows on the
+  // left of the r0 → r1 interdiff.
   {
     id: 75,
     change_id: 11,
@@ -1385,8 +1375,8 @@ export const threads: ThreadRecord[] = [
     created_at: ago(21 * 60),
     updated_at: ago(100),
   },
-  // change 11 — resolved thread on the commit message: the r1 reword
-  // answers it; the anchored line survives unchanged (no shift needed).
+  // thread on the commit message: the r1 reword answers it; the anchored
+  // line survives unchanged (no shift needed).
   {
     id: 77,
     change_id: 11,
@@ -1394,7 +1384,6 @@ export const threads: ThreadRecord[] = [
     file: COMMIT_MSG_PATH,
     line: 5,
     side: "new",
-    // Single-line partial selection: "the legitimate client refreshes."
     range: { start_line: 5, start_char: 7, end_line: 5, end_char: 40 },
     line_text: "moment the legitimate client refreshes.",
     resolved: true,
@@ -1417,7 +1406,7 @@ export const threads: ThreadRecord[] = [
     created_at: ago(21 * 60),
     updated_at: ago(96),
   },
-  // change 20 — two unresolved threads from the request_changes review.
+  // Two unresolved threads from the request_changes review.
   {
     id: 80,
     change_id: 20,
@@ -1456,8 +1445,8 @@ export const threads: ThreadRecord[] = [
     created_at: ago(3 * 60),
     updated_at: ago(3 * 60),
   },
-  // change 51 (B) — a shared thread on rev0, the patchset C's chain walks.
-  // It belongs to the change, so both chains see it; it renders against rev0.
+  // Shared thread that patchset C's chain also walks: it belongs to the change
+  // (not a patchset), so both chains see it.
   {
     id: 82,
     change_id: 51,
@@ -1481,10 +1470,9 @@ export const threads: ThreadRecord[] = [
   },
 ];
 
-// change 11 — the reviewer's in-progress drafts on revision 1: two new
-// threads on the new side, plus one on the old (red) side — a remark on the
-// pre-change code, which the old column of the base → r1 diff is for
-// (docs/api.md "Comment placement"). All open new threads (thread_id null).
+// Reviewer's in-progress drafts on r1: two new-side threads plus one old-side
+// remark on the pre-change code (the old/red diff column;
+// docs/api.md "Comment placement"). All are opening threads.
 export const drafts: DraftRecord[] = [
   {
     id: 100,
@@ -1536,8 +1524,8 @@ export const drafts: DraftRecord[] = [
 ];
 
 // Reviewer decision drafts (docs/api.md "Reviewer decisions"): one staged
-// decision per change, mutable, published on chain batch submit — the mock of
-// the server's draft_reviews side table. Seed one so the dashboard drawer's
+// decision per change, published on chain batch submit — the mock of the
+// server's draft_reviews side table. Seed one so the dashboard drawer's
 // submit button + draft-state pill and the change-page staged chip render.
 export const draftReviews = new Map<
   number,

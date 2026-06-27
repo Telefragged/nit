@@ -1,11 +1,6 @@
-// The mutable store shapes behind the wire types — the records the data
-// fixtures populate and the server logic mutates in place.
-//
-// A change owns its revisions, reviews and diffs. It is no longer pinned to
-// a chain or a position — those are properties of a derived path. The
-// change's displayed status at a revision is derived from `reviews` (the
-// verdict of the latest review at that revision), unless `terminal` marks it
-// merged/abandoned change-wide.
+// Mutable store shapes for the mock fixture layer. A change owns its
+// revisions, reviews and diffs; chain membership and position are derived
+// (walked from parent_sha), not stored on the change.
 
 import type {
   ChangeStatus,
