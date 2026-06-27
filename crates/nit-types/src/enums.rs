@@ -33,8 +33,8 @@ pub enum Side {
 }
 
 impl Side {
-    /// The persisted/wire spelling — also the `drafts.side` column value
-    /// (the db↔domain boundary; mirrors the serde renaming).
+    /// The persisted/wire spelling — the `drafts.side` column value
+    /// (db↔domain boundary).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -74,8 +74,7 @@ pub enum LogKind {
 }
 
 impl LogKind {
-    /// The persisted/wire spelling (the db↔domain boundary; mirrors the
-    /// serde renaming).
+    /// The persisted/wire spelling (db↔domain boundary).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -166,8 +165,6 @@ pub enum Decision {
 }
 
 impl Decision {
-    /// The review verdict this decision publishes as, or `None` for the
-    /// lifecycle actions (`abandon`/`reopen`).
     #[must_use]
     pub fn as_verdict(self) -> Option<Verdict> {
         match self {
@@ -178,8 +175,6 @@ impl Decision {
         }
     }
 
-    /// The lifecycle transition this decision publishes as, or `None` for a
-    /// verdict.
     #[must_use]
     pub fn as_lifecycle(self) -> Option<LifecycleAction> {
         match self {
@@ -190,7 +185,7 @@ impl Decision {
     }
 
     /// The persisted/wire spelling — the `draft_reviews.decision` column value
-    /// (the db↔domain boundary; mirrors the serde renaming).
+    /// (db↔domain boundary).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -234,9 +229,8 @@ pub enum ChangeStatus {
 }
 
 impl ChangeStatus {
-    /// The persisted/wire spelling — the value of the denormalized
-    /// `changes.status` column (the db↔domain boundary; mirrors the serde
-    /// renaming).
+    /// The persisted/wire spelling — the denormalized `changes.status` column
+    /// value (db↔domain boundary).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
