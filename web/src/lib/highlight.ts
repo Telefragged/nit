@@ -13,6 +13,7 @@ import ini from "highlight.js/lib/languages/ini";
 import javascript from "highlight.js/lib/languages/javascript";
 import json from "highlight.js/lib/languages/json";
 import markdown from "highlight.js/lib/languages/markdown";
+import nix from "highlight.js/lib/languages/nix";
 import python from "highlight.js/lib/languages/python";
 import rust from "highlight.js/lib/languages/rust";
 import sql from "highlight.js/lib/languages/sql";
@@ -31,6 +32,7 @@ hljs.registerLanguage("ini", ini);
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("json", json);
 hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("nix", nix);
 hljs.registerLanguage("python", python);
 hljs.registerLanguage("rust", rust);
 hljs.registerLanguage("sql", sql);
@@ -60,6 +62,7 @@ const EXT_LANG: Record<string, string> = {
   mjs: "javascript",
   json: "json",
   md: "markdown",
+  nix: "nix",
   py: "python",
   rs: "rust",
   sql: "sql",
