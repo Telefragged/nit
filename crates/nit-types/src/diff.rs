@@ -10,6 +10,15 @@ pub struct Diff {
     pub files: Vec<DiffFile>,
 }
 
+/// A file's full-context diff lines, for expanding the unchanged runs the
+/// shown diff hides (docs/api.md "Expanding context"). Same `Line` shape as
+/// the diff, so revealed lines carry their drift exactly as the hunks do.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct FileLines {
+    pub lines: Vec<Line>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct DiffFile {

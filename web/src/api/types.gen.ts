@@ -274,6 +274,8 @@ export type DiffFile = {
   hunks: Array<Hunk>;
 };
 
+export type FileLines = { lines: Array<Line> };
+
 export type Hunk = {
   old_start: number;
   old_lines: number;

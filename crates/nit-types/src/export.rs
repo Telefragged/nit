@@ -51,6 +51,7 @@ fn write_wire_types() {
         crate::comments::EditDraft,
         crate::diff::Diff,
         crate::diff::DiffFile,
+        crate::diff::FileLines,
         crate::diff::Hunk,
         crate::diff::Line,
         crate::decisions::BatchSubmitResult,

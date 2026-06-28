@@ -32,8 +32,23 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
 /// # Errors
 /// When git can't build or read the diff's patches.
 pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<Diff> {
+    diff_trees_ctx(repo, old, new, 3)
+}
+
+/// The same diff with every unchanged line kept as context — the source the
+/// UI reveals from when expanding a hunk's surroundings (docs/api.md
+/// "Expanding context"). Identical classification and drift handling to the
+/// shown diff, so revealed lines match it exactly.
+///
+/// # Errors
+/// When git can't build or read the diff's patches.
+pub fn diff_trees_full(repo: &Repository, old: &Tree, new: &Tree) -> Result<Diff> {
+    diff_trees_ctx(repo, old, new, u32::MAX)
+}
+
+fn diff_trees_ctx(repo: &Repository, old: &Tree, new: &Tree, context: u32) -> Result<Diff> {
     let mut opts = DiffOptions::new();
-    opts.context_lines(3);
+    opts.context_lines(context);
     let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), Some(&mut opts))?;
     let mut find = git2::DiffFindOptions::new();
     find.renames(true);
@@ -214,17 +229,21 @@ pub fn nth_line(text: &str, line: u64) -> Option<String> {
     text.lines().nth(idx).map(str::to_string)
 }
 
+/// The full text of `file` in `tree`, `None` for a missing/binary path —
+/// the shared read behind [`line_text`] and [`line_range`].
+fn blob_text(repo: &Repository, tree: &Tree, file: &str) -> Option<String> {
+    let blob = repo
+        .find_blob(tree.get_path(Path::new(file)).ok()?.id())
+        .ok()?;
+    (!blob.is_binary()).then(|| String::from_utf8_lossy(blob.content()).into_owned())
+}
+
 /// Snapshot of line `line` (1-based) of `file` in `tree`, for
 /// `comments.line_text`. `None` when the path/line/encoding make that
 /// impossible.
 #[must_use]
 pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: u64) -> Option<String> {
-    let entry = tree.get_path(Path::new(file)).ok()?;
-    let blob = repo.find_blob(entry.id()).ok()?;
-    if blob.is_binary() {
-        return None;
-    }
-    nth_line(&String::from_utf8_lossy(blob.content()), line)
+    nth_line(&blob_text(repo, tree, file)?, line)
 }
 
 #[cfg(test)]
@@ -497,5 +516,37 @@ mod tests {
         assert_eq!(line_text(&r.repo, &tree, "a.txt", 0), None);
         assert_eq!(line_text(&r.repo, &tree, "missing.txt", 1), None);
         assert_eq!(line_text(&r.repo, &tree, "bin.dat", 1), None);
+    }
+
+    #[test]
+    fn diff_trees_full_keeps_every_unchanged_line() {
+        let r = Repo::new();
+        let old = lines(1..=20);
+        // Edits far apart: the shown diff splits into two hunks, full context
+        // keeps them in one run with every unchanged line present.
+        let new = old
+            .replace("line 3\n", "line three\n")
+            .replace("line 18\n", "line eighteen\n");
+        let t_old = r.tree(&[("a.txt", old.as_bytes())]);
+        let t_new = r.tree(&[("a.txt", new.as_bytes())]);
+
+        let shown = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff builds");
+        assert_eq!(shown.files[0].hunks.len(), 2); // a gap the UI would expand
+
+        let full = diff_trees_full(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff builds");
+        let f = &full.files[0];
+        assert_eq!(f.hunks.len(), 1); // one run, no gap
+        let lines = &f.hunks[0].lines;
+        // 20 originals minus 2 replaced plus 2 replacements = 22 wire lines.
+        assert_eq!(lines.len(), 22);
+        // The lines the shown diff hid (e.g. new line 10) are present here.
+        let ten = lines
+            .iter()
+            .find(|l| l.new == Some(10))
+            .expect("the gap's line 10 is kept");
+        assert_eq!(
+            (ten.kind, ten.text.as_str()),
+            (LineKind::Context, "line 10")
+        );
     }
 }

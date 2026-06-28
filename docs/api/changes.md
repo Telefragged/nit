@@ -51,6 +51,27 @@ Line = {"kind": "context",      // context | add | del
         "text": "fn main() {"}  // without trailing newline
 ```
 
+### Expanding context
+
+A hunk carries only three lines of context, so the unchanged runs between
+hunks (and above the first) are not in the diff. To reveal them on demand:
+
+- `GET /api/changes/{id}/revisions/{n}/lines?path={p}[&against={m}]`
+  → `{"lines": [Line]}` — file `p`'s diff over the **same** `old → new`
+  trees as `…/diff` (vs parent, or vs `m`'s tree with `against`), but with
+  every unchanged line kept as context.
+
+```json
+FileLines = {"lines": [Line]}   // the Line shape above, drift and all
+```
+
+The lines are the diff's own `Line`s — same `kind`, `old`/`new`, and
+`drift` — so a revealed line matches the shown hunks exactly, **including
+rebase drift** an all-drift gap would otherwise hide ("Rebase-aware
+interdiffs"). The client slices the run between two hunks (new line for
+`add`/`context`, old line for `del`) and reveals it from either end. An
+empty `lines` (binary, missing, or `/COMMIT_MSG`) is simply not expandable.
+
 ### The commit message as a file
 
 Every diff response lists the synthetic path `/COMMIT_MSG` as its
