@@ -4,3 +4,6 @@
 channel = "1.96.0"
 profile = "minimal"
 components = ["clippy", "rustfmt", "rust-src", "rust-analyzer"]
+# nit-wasm compiles the shared fold to WebAssembly for the web (flake.nix
+# `nitWasm`); rust-overlay and rustup both read this target list.
+targets = ["wasm32-unknown-unknown"]

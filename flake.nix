@@ -157,6 +157,39 @@
           installPhase = "mv types.gen.ts $out";
           dontFixup = true;
         };
+
+      # The shared change fold compiled to WebAssembly: nit-wasm built for
+      # wasm32, then run through wasm-bindgen (`--target bundler`) into the JS
+      # glue + `.wasm` the web imports. Offline and pinned like wireTypesTs; the
+      # `rust-toolchain.toml` wasm32 target and the wasm-bindgen-cli version
+      # (which must match nit-wasm's `wasm-bindgen` dep) come from this flake.
+      wasmPkg =
+        pkgs:
+        pkgs.stdenv.mkDerivation {
+          name = "nit-wasm-pkg";
+          src = nixpkgs.lib.fileset.toSource {
+            root = ./.;
+            fileset = nixpkgs.lib.fileset.unions [
+              ./Cargo.toml
+              ./Cargo.lock
+              ./rust-toolchain.toml
+              ./crates
+            ];
+          };
+          nativeBuildInputs = [
+            (rustToolchainFor pkgs)
+            pkgs.wasm-bindgen-cli
+            pkgs.rustPlatform.cargoSetupHook
+          ];
+          cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
+          buildPhase = ''
+            cargo build --offline --release --target wasm32-unknown-unknown -p nit-wasm
+            wasm-bindgen target/wasm32-unknown-unknown/release/nit_wasm.wasm \
+              --target bundler --out-dir pkg
+          '';
+          installPhase = "cp -r pkg $out";
+          dontFixup = true;
+        };
     in
     {
       devShells = forAllSystems (
@@ -177,6 +210,10 @@
 
               # Regenerates Cargo.nix
               crate2nix
+
+              # Compiles nit-wasm's glue (`nix run .#gen-wasm`); version pinned
+              # to nit-wasm's wasm-bindgen dep.
+              wasm-bindgen-cli
 
               # Web frontend
               nodejs_22
@@ -247,6 +284,9 @@
         in
         {
           build = self.packages.${pkgs.system}.nit;
+          # Compile the WebAssembly fold — surfaces a wasm32 build break or a
+          # wasm-bindgen version skew independently of the web build.
+          wasm-build = wasmPkg pkgs;
           # Check that all files are formatted (same treefmt as `nix fmt`).
           treefmt = pkgs.stdenvNoCC.mkDerivation {
             name = "treefmt-check";
@@ -352,6 +392,28 @@
               '';
             }
           }/bin/gen-types";
+        };
+
+        # `nix run .#gen-wasm` writes the WebAssembly fold into the tree. The
+        # artifacts are gitignored (binary, derived) and injected into the web
+        # build by nix; this is the local-dev equivalent for `npm run` loops.
+        gen-wasm = {
+          type = "app";
+          program = "${
+            pkgs.writeShellApplication {
+              name = "gen-wasm";
+              text = ''
+                if [ ! -e Cargo.toml ] || [ ! -d crates/nit-wasm ]; then
+                  echo "run from the repo root" >&2
+                  exit 1
+                fi
+                rm -rf web/src/wasm
+                install -d web/src/wasm
+                install -m644 ${wasmPkg pkgs}/* web/src/wasm/
+                echo "wrote web/src/wasm/"
+              '';
+            }
+          }/bin/gen-wasm";
         };
       });
 

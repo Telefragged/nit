@@ -63,6 +63,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "nit-wasm" = rec {
+      packageId = "nit-wasm";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "nit-wasm";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
   };
 
 
@@ -3402,6 +3412,33 @@ rec {
         };
         resolvedDefaultFeatures = [ "clap" "ts" ];
       };
+      "nit-wasm" = rec {
+        crateName = "nit-wasm";
+        version = "0.1.0";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/nit-wasm; };
+        libName = "nit_wasm";type = [ "cdylib" ];
+        dependencies = [
+          {
+            name = "nit-types";
+            packageId = "nit-types";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+          }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+          }
+        ];
+
+      };
       "nu-ansi-term" = rec {
         crateName = "nu-ansi-term";
         version = "0.50.3";
@@ -6322,6 +6359,7 @@ rec {
           "serde_json" = [ "dep:serde_json" ];
           "strict-macro" = [ "wasm-bindgen-macro/strict-macro" ];
         };
+        resolvedDefaultFeatures = [ "default" "std" ];
       };
       "wasm-bindgen-macro" = rec {
         crateName = "wasm-bindgen-macro";

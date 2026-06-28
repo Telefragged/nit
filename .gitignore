@@ -5,6 +5,9 @@
 node_modules/
 web/dist/
 
+# Generated WebAssembly fold (nix run .#gen-wasm; injected at build time)
+web/src/wasm/
+
 # Nix
 result
 result-*

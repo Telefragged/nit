@@ -1042,6 +1042,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nit-wasm"
+version = "0.1.0"
+dependencies = [
+ "nit-types",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
