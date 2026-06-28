@@ -25,7 +25,16 @@ import prettier from "eslint-config-prettier";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", "**/*.tsbuildinfo"] },
+  {
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "**/*.tsbuildinfo",
+      // Generated from crates/nit-types (nix run .#gen-types); ts-rs picks the
+      // `type`/`Array<T>` style, prettier owns the formatting.
+      "src/api/types.gen.ts",
+    ],
+  },
 
   // An inline `eslint-disable` is a debt with a reason, never free: a
   // stale one (the rule no longer fires) is itself an error — the

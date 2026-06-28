@@ -123,6 +123,40 @@
           "+${builtins.substring 0 12 self.dirtyRev}.dirty"
         else
           "";
+
+      # The web's wire types, generated from nit-types: a native `cargo test`
+      # (the `ts`-feature exporter) writes every web-facing type's ts-rs
+      # declaration into one module, prettier-formatted like any source file. A
+      # pinned, offline derivation so `gen-types` (writes it) and `types-drift`
+      # (diffs it) share one source of truth. `TS_RS_LARGE_INT=number` maps
+      # u64/i64 to the wire's `number`, not bigint.
+      wireTypesTs =
+        pkgs:
+        pkgs.stdenv.mkDerivation {
+          name = "nit-wire-types.gen.ts";
+          src = nixpkgs.lib.fileset.toSource {
+            root = ./.;
+            fileset = nixpkgs.lib.fileset.unions [
+              ./Cargo.toml
+              ./Cargo.lock
+              ./crates
+            ];
+          };
+          nativeBuildInputs = [
+            (rustToolchainFor pkgs)
+            pkgs.prettier
+            pkgs.rustPlatform.cargoSetupHook
+          ];
+          cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
+          buildPhase = ''
+            TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
+              cargo test --offline --features ts -p nit-types \
+              -- --exact export::write_wire_types
+            prettier --write types.gen.ts
+          '';
+          installPhase = "mv types.gen.ts $out";
+          dontFixup = true;
+        };
     in
     {
       devShells = forAllSystems (
@@ -234,10 +268,9 @@
               export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
             '';
           };
-          # nit-types is shared with a future web build, so it must stay
-          # wasm-friendly: build and round-trip-test it with NO optional
-          # features, the clap-off config the server's `features = ["clap"]`
-          # would otherwise mask.
+          # Build and round-trip-test nit-types with NO optional features —
+          # the serde-only baseline an optional feature (the server's
+          # `features = ["clap"]`, the web's `features = ["ts"]`) would mask.
           test-nit-types = cargoNix.workspaceMembers."nit-types".build.override {
             runTests = true;
             features = [ ];
@@ -262,8 +295,37 @@
             dontNpmBuild = true;
             installPhase = "npm run test > $out";
           };
+          # The committed web/src/api/types.gen.ts must match a fresh
+          # generation from nit-types — `nix run .#gen-types` to refresh it.
+          types-drift = pkgs.runCommand "types-drift-check" { } ''
+            if ! diff -u ${self}/web/src/api/types.gen.ts ${wireTypesTs pkgs}; then
+              echo "web/src/api/types.gen.ts is stale — run: nix run .#gen-types" >&2
+              exit 1
+            fi
+            touch $out
+          '';
         }
       );
+
+      # `nix run .#gen-types` regenerates the web's wire types into the tree.
+      apps = forAllSystems (pkgs: {
+        gen-types = {
+          type = "app";
+          program = "${
+            pkgs.writeShellApplication {
+              name = "gen-types";
+              text = ''
+                if [ ! -e Cargo.toml ] || [ ! -d crates/nit-types ]; then
+                  echo "run from the repo root" >&2
+                  exit 1
+                fi
+                install -m644 ${wireTypesTs pkgs} web/src/api/types.gen.ts
+                echo "wrote web/src/api/types.gen.ts"
+              '';
+            }
+          }/bin/gen-types";
+        };
+      });
 
       # `nix fmt` = the same whole-tree treefmt the devShell runs,
       # self-contained (formatters on PATH without entering the shell).
