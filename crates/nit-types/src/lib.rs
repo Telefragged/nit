@@ -25,3 +25,7 @@ pub mod repos;
 
 #[cfg(test)]
 mod tests;
+
+// The single-file TypeScript export of the web-facing wire types.
+#[cfg(all(test, feature = "ts"))]
+mod export;

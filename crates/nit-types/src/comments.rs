@@ -11,6 +11,7 @@ use crate::enums::Side;
 /// (always non-negative), so the shape is `u64`; the server's `SQLite`
 /// columns are signed, converted at the db boundary like every other id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentRange {
     pub start_line: u64,
     pub start_char: u64,
@@ -20,6 +21,7 @@ pub struct CommentRange {
 
 /// A published comment thread (docs/api.md "Comment placement").
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Thread {
     /// Fold-assigned by creation order (not stored).
     pub id: u64,
@@ -40,6 +42,7 @@ pub struct Thread {
 
 /// One message in a [`Thread`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ThreadComment {
     pub body: String,
     /// The review that published it; null for an agent comment. The client
@@ -48,8 +51,9 @@ pub struct ThreadComment {
     pub created_at: String,
 }
 
-/// A reviewer's unpublished comment (a `drafts`-table row).
+/// A reviewer's unpublished comment.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Draft {
     pub id: u64,
     pub change_id: u64,
@@ -70,28 +74,37 @@ pub struct Draft {
 
 /// `POST /api/changes/{id}/drafts` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct NewDraft {
     pub revision: u64,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub file: Option<String>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub line: Option<u64>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub side: Option<Side>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub range: Option<CommentRange>,
     pub body: String,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub thread_id: Option<u64>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub resolved: Option<bool>,
 }
 
 /// `PATCH /api/drafts/{id}` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct EditDraft {
     pub body: String,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub resolved: Option<bool>,
 }
 

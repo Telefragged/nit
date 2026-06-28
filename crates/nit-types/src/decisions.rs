@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 /// `POST /api/chains/{id}/submit` response — the outcome of publishing every
 /// chain member's staged decision (docs/api.md "Chains").
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct BatchSubmitResult {
     /// Members whose staged decision published.
     pub submitted: u64,
@@ -14,6 +15,7 @@ pub struct BatchSubmitResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct SubmitError {
     pub change_id: u64,
     pub message: String,

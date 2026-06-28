@@ -9,6 +9,7 @@ use crate::enums::{ChangeStatus, GraphSection};
 /// is assembled at read time from the same folds + sha index as a chain, plus
 /// a git walk of the canonical branch for the merged history.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RepoGraph {
     pub repo_id: u64,
     /// The HEAD node's `commit_sha` — the anchor every region pivots on.
@@ -26,6 +27,7 @@ pub struct RepoGraph {
 /// `parents` (an edge is drawn to each that is in the node set; `len > 1` is
 /// a merge).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct GraphNode {
     /// The node's stable id — a full 40-hex commit-sha; the client truncates.
     pub commit_sha: String,

@@ -1,5 +1,6 @@
 //! Serde round-trip tests, run by the `test-nit-types` flake check with no
-//! optional features — so the wasm-friendly (clap-off) config is exercised.
+//! optional features — exercising the serde-only baseline that an optional
+//! feature (clap, ts) would otherwise mask.
 
 use crate::enums::{LifecycleAction, Side};
 use crate::log::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};

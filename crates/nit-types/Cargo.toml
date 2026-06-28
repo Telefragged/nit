@@ -9,13 +9,18 @@ description = "Wire types shared by the nit server and CLI"
 workspace = true
 
 [features]
-# Off by default so the crate stays wasm-friendly (serde only); the `nit`
-# crate turns it on for the CLI's `clap::ValueEnum` derive on `Side`.
+# Off by default so the crate stays serde-only; the `nit` crate turns it on
+# for the CLI's `clap::ValueEnum` derive on `Side`.
 clap = ["dep:clap"]
+# Off by default (keeps the default build serde-only, per `test-nit-types`);
+# turned on to derive the ts-rs TypeScript bindings — the `gen-types` app and
+# `types-drift` check in flake.nix generate web/src/api/types.gen.ts from them.
+ts = ["dep:ts-rs", "ts-rs/no-serde-warnings"]
 
 [dependencies]
 serde = { workspace = true }
 clap = { version = "4", features = ["derive"], optional = true }
+ts-rs = { version = "12", optional = true }
 
 [dev-dependencies]
 serde_json = "1"

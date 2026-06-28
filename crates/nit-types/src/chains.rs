@@ -14,6 +14,7 @@ pub struct ChainList {
 /// The list element (`GET /api/chains`) and the single-chain shape
 /// (`GET /api/chains/{id}`) are identical.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Chain {
     pub tip_change_id: u64,
     /// The repo this chain belongs to (registry id).
@@ -27,6 +28,7 @@ pub struct Chain {
 /// pins. Per-change review state (counts, staged decision, the newest patchset)
 /// is not here — a client reads it from `GET /api/changes/{id}` per member.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct PathEntry {
     pub change_id: u64,
     /// Position in THIS path (0-based).

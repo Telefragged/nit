@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Repo {
     pub id: u64,
     /// Canonical git-common-dir — the repo's identity and display name.
@@ -14,6 +15,7 @@ pub struct Repo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RepoList {
     pub repos: Vec<Repo>,
 }

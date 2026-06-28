@@ -2862,9 +2862,9 @@ rec {
       };
       "js-sys" = rec {
         crateName = "js-sys";
-        version = "0.3.103";
+        version = "0.3.98";
         edition = "2021";
-        sha256 = "00lib0b6hqmw56r2hjp7xrv730qacslirbkdlhvmi39zvgy4pd2k";
+        sha256 = "024zjwpxp6fri4j79bh1686q1x4nw4a06fh1a28zv2rzc4973pv7";
         libName = "js_sys";
         authors = [
           "The wasm-bindgen Developers"
@@ -2873,6 +2873,11 @@ rec {
           {
             name = "cfg-if";
             packageId = "cfg-if";
+          }
+          {
+            name = "once_cell";
+            packageId = "once_cell";
+            usesDefaultFeatures = false;
           }
           {
             name = "wasm-bindgen";
@@ -3379,6 +3384,11 @@ rec {
             packageId = "serde";
             features = [ "derive" ];
           }
+          {
+            name = "ts-rs";
+            packageId = "ts-rs";
+            optional = true;
+          }
         ];
         devDependencies = [
           {
@@ -3388,8 +3398,9 @@ rec {
         ];
         features = {
           "clap" = [ "dep:clap" ];
+          "ts" = [ "dep:ts-rs" "ts-rs/no-serde-warnings" ];
         };
-        resolvedDefaultFeatures = [ "clap" ];
+        resolvedDefaultFeatures = [ "clap" "ts" ];
       };
       "nu-ansi-term" = rec {
         crateName = "nu-ansi-term";
@@ -4689,6 +4700,23 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "getrandom" ];
       };
+      "termcolor" = rec {
+        crateName = "termcolor";
+        version = "1.4.1";
+        edition = "2018";
+        sha256 = "0mappjh3fj3p2nmrg4y7qv94rchwi9mzmgmfflr8p2awdj7lyy86";
+        authors = [
+          "Andrew Gallant <jamslam@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "winapi-util";
+            packageId = "winapi-util";
+            target = { target, features }: (target."windows" or false);
+          }
+        ];
+
+      };
       "thiserror" = rec {
         crateName = "thiserror";
         version = "2.0.18";
@@ -5728,6 +5756,100 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "ansi" "default" "env-filter" "fmt" "matchers" "nu-ansi-term" "once_cell" "registry" "sharded-slab" "smallvec" "std" "thread_local" "tracing" "tracing-log" ];
       };
+      "ts-rs" = rec {
+        crateName = "ts-rs";
+        version = "12.0.1";
+        edition = "2021";
+        sha256 = "1n1if87wnpdg3p7gzibkn0l79cax29cgbaallm3isaarcq350q3m";
+        libName = "ts_rs";
+        authors = [
+          "Moritz Bischof <moritz.bischof1@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "thiserror";
+            packageId = "thiserror";
+          }
+          {
+            name = "ts-rs-macros";
+            packageId = "ts-rs-macros";
+          }
+        ];
+        features = {
+          "arrayvec" = [ "dep:arrayvec" ];
+          "arrayvec-impl" = [ "arrayvec" ];
+          "bigdecimal" = [ "dep:bigdecimal" ];
+          "bigdecimal-impl" = [ "bigdecimal" ];
+          "bson" = [ "dep:bson" ];
+          "bson-uuid-impl" = [ "bson" ];
+          "bytes" = [ "dep:bytes" ];
+          "bytes-impl" = [ "bytes" ];
+          "chrono" = [ "dep:chrono" ];
+          "chrono-impl" = [ "chrono" ];
+          "default" = [ "serde-compat" ];
+          "dprint-plugin-typescript" = [ "dep:dprint-plugin-typescript" ];
+          "format" = [ "dprint-plugin-typescript" ];
+          "heapless" = [ "dep:heapless" ];
+          "heapless-impl" = [ "heapless" ];
+          "indexmap" = [ "dep:indexmap" ];
+          "indexmap-impl" = [ "indexmap" ];
+          "jiff" = [ "dep:jiff" ];
+          "jiff-impl" = [ "jiff" ];
+          "no-serde-warnings" = [ "ts-rs-macros/no-serde-warnings" ];
+          "ordered-float" = [ "dep:ordered-float" ];
+          "ordered-float-impl" = [ "ordered-float" ];
+          "semver" = [ "dep:semver" ];
+          "semver-impl" = [ "semver" ];
+          "serde-compat" = [ "ts-rs-macros/serde-compat" ];
+          "serde-json-impl" = [ "serde_json" ];
+          "serde_json" = [ "dep:serde_json" ];
+          "smol_str" = [ "dep:smol_str" ];
+          "smol_str-impl" = [ "smol_str" ];
+          "tokio" = [ "dep:tokio" ];
+          "tokio-impl" = [ "tokio" ];
+          "url" = [ "dep:url" ];
+          "url-impl" = [ "url" ];
+          "uuid" = [ "dep:uuid" ];
+          "uuid-impl" = [ "uuid" ];
+        };
+        resolvedDefaultFeatures = [ "default" "no-serde-warnings" "serde-compat" ];
+      };
+      "ts-rs-macros" = rec {
+        crateName = "ts-rs-macros";
+        version = "12.0.1";
+        edition = "2021";
+        sha256 = "1ajjnsl39fz492mrqpjkkrrh8s5shl5ghjv7kvpqhydwa7m0xn9q";
+        procMacro = true;
+        libName = "ts_rs_macros";
+        authors = [
+          "Moritz Bischof <moritz.bischof1@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+          {
+            name = "syn";
+            packageId = "syn";
+            features = [ "full" "extra-traits" ];
+          }
+          {
+            name = "termcolor";
+            packageId = "termcolor";
+            optional = true;
+          }
+        ];
+        features = {
+          "serde-compat" = [ "termcolor" ];
+          "termcolor" = [ "dep:termcolor" ];
+        };
+        resolvedDefaultFeatures = [ "no-serde-warnings" "serde-compat" "termcolor" ];
+      };
       "tungstenite" = rec {
         crateName = "tungstenite";
         version = "0.29.0";
@@ -6153,9 +6275,9 @@ rec {
       };
       "wasm-bindgen" = rec {
         crateName = "wasm-bindgen";
-        version = "0.2.126";
+        version = "0.2.121";
         edition = "2021";
-        sha256 = "197rma4qg1kb8l4bl7857pgszzval8s1w740g9myyjh92467q1jb";
+        sha256 = "14375vc40l67lk9rxp59my4r6s64h2an3vjfh9j0hnqngk8f3b29";
         libName = "wasm_bindgen";
         authors = [
           "The wasm-bindgen Developers"
@@ -6203,9 +6325,9 @@ rec {
       };
       "wasm-bindgen-macro" = rec {
         crateName = "wasm-bindgen-macro";
-        version = "0.2.126";
+        version = "0.2.121";
         edition = "2021";
-        sha256 = "1cda6wl5zyiy7777cfgrix7fhpaqba55l5zpqj4zig7ng7jyaz0n";
+        sha256 = "0y45ghbkvs5rmxvdyhqrx8nzyy45rdx6619c01iaarykmzsfcs4f";
         procMacro = true;
         libName = "wasm_bindgen_macro";
         authors = [
@@ -6227,9 +6349,9 @@ rec {
       };
       "wasm-bindgen-macro-support" = rec {
         crateName = "wasm-bindgen-macro-support";
-        version = "0.2.126";
+        version = "0.2.121";
         edition = "2021";
-        sha256 = "03iq412frl2py55skwb3ya08xha0cf6q22zr5kqlwbr675w7r6gk";
+        sha256 = "1wjr69qa8rwmk4v7243dr100k393qi0avznk6p5sgck4bk1rwnnr";
         libName = "wasm_bindgen_macro_support";
         authors = [
           "The wasm-bindgen Developers"
@@ -6263,10 +6385,10 @@ rec {
       };
       "wasm-bindgen-shared" = rec {
         crateName = "wasm-bindgen-shared";
-        version = "0.2.126";
+        version = "0.2.121";
         edition = "2021";
         links = "wasm_bindgen";
-        sha256 = "097a3kbjls447s1lwr41l21x5crrh5vq3h6zsxccz7slrjq4q6yw";
+        sha256 = "0h9la4176j5bvgbr64cqkmirif8z59vrcax9i4qx1w79045i1q64";
         libName = "wasm_bindgen_shared";
         authors = [
           "The wasm-bindgen Developers"
@@ -6388,6 +6510,25 @@ rec {
           "std" = [ "indexmap?/std" ];
         };
         resolvedDefaultFeatures = [ "component-model" "features" "hash-collections" "simd" "std" "validate" ];
+      };
+      "winapi-util" = rec {
+        crateName = "winapi-util";
+        version = "0.1.11";
+        edition = "2021";
+        sha256 = "08hdl7mkll7pz8whg869h58c1r9y7in0w0pk8fm24qc77k0b39y2";
+        libName = "winapi_util";
+        authors = [
+          "Andrew Gallant <jamslam@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "windows-sys";
+            packageId = "windows-sys";
+            target = { target, features }: (target."windows" or false);
+            features = [ "Win32_Foundation" "Win32_Storage_FileSystem" "Win32_System_Console" "Win32_System_SystemInformation" ];
+          }
+        ];
+
       };
       "windows-link" = rec {
         crateName = "windows-link";
@@ -6657,7 +6798,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Wdk" "Wdk_Foundation" "Wdk_Storage" "Wdk_Storage_FileSystem" "Wdk_System" "Wdk_System_IO" "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_Diagnostics" "Win32_System_Diagnostics_Debug" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_SystemServices" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
+        resolvedDefaultFeatures = [ "Wdk" "Wdk_Foundation" "Wdk_Storage" "Wdk_Storage_FileSystem" "Wdk_System" "Wdk_System_IO" "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_Diagnostics" "Win32_System_Diagnostics_Debug" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_SystemInformation" "Win32_System_SystemServices" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
       };
       "wit-bindgen 0.51.0" = rec {
         crateName = "wit-bindgen";

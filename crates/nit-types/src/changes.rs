@@ -8,6 +8,7 @@ use crate::enums::{Decision, Verdict};
 
 /// `GET /api/changes/{id}` response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeDetail {
     pub id: u64,
     pub repo_id: u64,
@@ -28,6 +29,7 @@ pub struct ChangeDetail {
 /// "Reviewer decisions"). The body of [`ChangeDetail::draft_decision`] and the
 /// `PUT /api/changes/{id}/decision` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct StagedDecision {
     pub decision: Decision,
     #[serde(default)]
@@ -35,6 +37,7 @@ pub struct StagedDecision {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Revision {
     pub number: u64,
     pub commit_sha: String,
@@ -46,6 +49,7 @@ pub struct Revision {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Review {
     pub id: u64,
     pub revision: u64,

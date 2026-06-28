@@ -5,16 +5,19 @@ use serde::{Deserialize, Serialize};
 use crate::enums::{FileStatus, LineKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Diff {
     pub files: Vec<DiffFile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct DiffFile {
     /// New path (old path when deleted).
     pub path: String,
     /// Only set for renames.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub old_path: Option<String>,
     pub status: FileStatus,
     pub binary: bool,
@@ -25,6 +28,7 @@ pub struct DiffFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Hunk {
     pub old_start: u64,
     pub old_lines: u64,
@@ -35,13 +39,16 @@ pub struct Hunk {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Line {
     pub kind: LineKind,
     /// Old line number; absent for add.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub old: Option<u64>,
     /// New line number; absent for del.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub new: Option<u64>,
     /// Changed by a rebase, not the agent (docs/api.md "Rebase-aware
     /// interdiffs").

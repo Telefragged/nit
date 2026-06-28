@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 /// parent tree. Defaults to `new` where a request omits it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Side {
     Old,
@@ -126,6 +127,7 @@ impl LifecycleAction {
 /// A reviewer's verdict on one change (docs/api.md "Reviews"). Folds to the
 /// matching [`ChangeStatus`] (`From<Verdict>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
     Approve,
@@ -155,6 +157,7 @@ impl Verdict {
 /// [`as_verdict`]: Decision::as_verdict
 /// [`as_lifecycle`]: Decision::as_lifecycle
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Decision {
     Approve,
@@ -218,6 +221,7 @@ impl std::str::FromStr for Decision {
 /// lifecycle overlay (`merged` for the landed patchset, `abandoned`
 /// change-wide). Per `(change, revision)`, never a change-wide scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum ChangeStatus {
     Pending,
@@ -279,6 +283,7 @@ impl From<Verdict> for ChangeStatus {
 /// derivation-inert — there is no abandoned chain state (an abandoned member is
 /// excluded from the rollup; the agent reasons about its per-change status).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum ChainState {
     Merged,
@@ -307,6 +312,7 @@ impl ChainState {
 /// styles a node by its `section` first (head → ring, history → grey/fade),
 /// falling back to its `ChangeStatus` for open nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum GraphSection {
     Open,
@@ -317,6 +323,7 @@ pub enum GraphSection {
 /// `DiffFile.status` — how a file changed between the two diffed trees
 /// (docs/api.md "Diff").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum FileStatus {
     Added,
@@ -327,6 +334,7 @@ pub enum FileStatus {
 
 /// `Line.kind` — a diff line's role (docs/api.md "Diff").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum LineKind {
     Context,
