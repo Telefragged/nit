@@ -132,8 +132,9 @@ describe("layoutGraph edges", () => {
 
 // An open change pushed onto an older merged commit still in the window — main
 // advanced without a rebase, so the change forks off a visible history node.
+// Its base is on screen, so the edge is solid (only an off-window base dashes).
 describe("layoutGraph behind-HEAD base (in window)", () => {
-  it("attaches to its real base with a behind edge on a side lane", () => {
+  it("attaches to its visible base with a solid edge on a side lane", () => {
     const g = layoutGraph({
       repo_id: 1,
       anchor: "H",
@@ -148,8 +149,8 @@ describe("layoutGraph behind-HEAD base (in window)", () => {
       ],
     });
     expect(laneOf(g, "B")).toBe(1);
-    expect(edge(g, "B", "c2e8e4d").kind).toBe("behind");
-    expect(edge(g, "B", "c2e8e4d").lane).toBe(1); // the behind edge keeps B's color
+    expect(edge(g, "B", "c2e8e4d").kind).toBe("open"); // base is a visible node
+    expect(edge(g, "B", "c2e8e4d").lane).toBe(1); // the edge keeps B's color
     expect(edge(g, "J", "H").kind).toBe("open"); // normal fork at HEAD
     expect(g.collapsed).toBeNull();
   });

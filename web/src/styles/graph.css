@@ -138,7 +138,8 @@ a.graph-subject:hover {
   stroke: var(--graph-hist-edge);
 }
 
-/* A behind fork keeps its branch color but dashes to flag the older base. */
+/* A fork whose base is older than the window keeps its branch color but dashes
+   to flag that the base it dangles to is off screen. */
 .graph-edge.edge-behind {
   stroke-dasharray: 5 4;
 }

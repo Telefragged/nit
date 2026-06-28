@@ -8,8 +8,10 @@
 // branch is a row span packed into the first lane (1, 2, …) whose occupants
 // don't overlap it. The row coordinate is the array index — children sit above
 // their parents, so open changes ascend from the HEAD anchor and merged
-// history descends below it. An open change whose base sits behind HEAD (main
-// advanced without a rebase) attaches to that older base with a "behind" edge.
+// history descends below it. An open change attaches to its base with a solid
+// edge whenever that base is a visible node (HEAD or a merged commit still in
+// the window); only a base older than the window — no node to anchor to —
+// dangles a dashed "behind" edge into the collapsed-history marker.
 
 import type { GraphNode, RepoGraph } from "../api/types";
 
@@ -258,10 +260,11 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
       if (p === undefined) continue;
       let kind: EdgeKind;
       let opacity = 1;
-      if (ln.node.section === "open" && p.node.section === "history") {
-        kind = "behind"; // an open change forks off a commit behind HEAD
-      } else if (ln.node.section === "open") {
-        kind = "open"; // an open-chain edge (open → open, or up into HEAD)
+      if (ln.node.section === "open") {
+        // An open change anchored to a visible node — its real base is on
+        // screen, so the edge is solid (lane-colored), whether that base is
+        // HEAD, another open commit, or a merged commit still in the window.
+        kind = "open";
       } else {
         kind = "history"; // the merged spine below HEAD
         opacity = fade(Math.max(ln.depth, p.depth));
