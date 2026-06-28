@@ -295,6 +295,34 @@
             dontNpmBuild = true;
             installPhase = "npm run test > $out";
           };
+          # The same `capture.mjs` agents run locally, but against the nix
+          # `playwright-driver` browsers, so a driver/npm-pin skew fails the
+          # check. Its output is the PNGs, not a marker file.
+          web-screenshots = pkgs.buildNpmPackage {
+            pname = "nit-web-screenshots";
+            inherit (webArgs) version src;
+            npmDeps = webNpmDeps;
+            dontNpmBuild = true;
+            env = {
+              PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
+              PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+              # No user namespaces / writable /dev/shm in the build sandbox.
+              NIT_SCREENSHOT_NO_SANDBOX = "1";
+              # The system font stacks (tokens.css) resolve to nothing in the
+              # sandbox; map the generic sans/mono families to real fonts so
+              # the captures render text, not tofu.
+              FONTCONFIG_FILE = pkgs.makeFontsConf {
+                fontDirectories = [
+                  pkgs.liberation_ttf
+                  pkgs.dejavu_fonts
+                ];
+              };
+            };
+            installPhase = ''
+              export HOME=$TMPDIR
+              NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
+            '';
+          };
           # The committed web/src/api/types.gen.ts must match a fresh
           # generation from nit-types — `nix run .#gen-types` to refresh it.
           types-drift = pkgs.runCommand "types-drift-check" { } ''

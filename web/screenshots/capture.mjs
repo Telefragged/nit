@@ -9,7 +9,8 @@
 // (several agents, each in its own worktree) never race on a shared port;
 // set NIT_SCREENSHOT_PORT to pin it when a stable URL is wanted.
 //
-// Output: <repo root>/screenshots/*.png (gitignored).
+// Output: <repo root>/screenshots/*.png (gitignored), or
+// $NIT_SCREENSHOT_OUT_DIR when set.
 //
 // Browsers come from the nix devShell ($PLAYWRIGHT_BROWSERS_PATH); the
 // @playwright/test npm version is pinned to the driver version. Never run
@@ -23,7 +24,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const webDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const outDir = resolve(webDir, "../screenshots");
+const outDir = process.env.NIT_SCREENSHOT_OUT_DIR
+  ? resolve(process.env.NIT_SCREENSHOT_OUT_DIR)
+  : resolve(webDir, "../screenshots");
 
 /** A free TCP port, obtained by letting the OS assign one on bind(0). The
  * mock vite server defaults to this so parallel screenshot runs (several
@@ -555,7 +558,15 @@ async function main() {
       ? await liveCaptures(baseUrl)
       : captures;
 
-    const browser = await chromium.launch();
+    // Chromium's namespace sandbox can't nest inside the nix build sandbox
+    // (no user namespaces, no writable /dev/shm); the `web-screenshots`
+    // check sets NIT_SCREENSHOT_NO_SANDBOX to drop both. Never set it for
+    // host runs — it removes a real privilege boundary around page content.
+    const browser = await chromium.launch({
+      args: process.env.NIT_SCREENSHOT_NO_SANDBOX
+        ? ["--no-sandbox", "--disable-dev-shm-usage"]
+        : [],
+    });
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       colorScheme: "dark",

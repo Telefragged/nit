@@ -39,9 +39,11 @@ Checks verify a change, not a green build — `nix build` skips tests
 - `nix develop -c cargo check` — fast inner-loop gate.
 - `nix flake check` — the pre-commit gate: builds the product and runs the
   Rust validators (`test`, `test-nit-types`) and the web validators
-  (`web-lint`, `web-test`). Every crate of ours compiles with `clippy-driver`
-  under `-D warnings`, so a lint fails any build; the `test*` checks add the
-  test targets. Run one alone with `nix build .#checks.<system>.test` or
+  (`web-lint`, `web-test`, `web-screenshots`). Every crate of ours compiles
+  with `clippy-driver` under `-D warnings`, so a lint fails any build; the
+  `test*` checks add the test targets; `web-screenshots` runs the screenshot
+  harness against the nix browsers, so a driver/npm-pin skew fails here. Run
+  one alone with `nix build .#checks.<system>.test` or
   `.#checks.<system>.web-test`.
 
 The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
@@ -136,7 +138,10 @@ nix develop -c scripts/screenshots-live.sh
 
 Mock mode covers detailed states (drafts, 409s, interdiff); add a capture
 with every new page or state. The npm `@playwright/test` version must match
-`pkgs.playwright-driver` (the devShell sets `$PLAYWRIGHT_DRIVER_VERSION`).
+`pkgs.playwright-driver` (the devShell sets `$PLAYWRIGHT_DRIVER_VERSION`) —
+the `web-screenshots` flake check runs mock mode in the sandbox and its
+output _is_ the PNGs, so `nix build .#checks.<system>.web-screenshots` both
+catches a skew and gives you the gallery in `result/`.
 
 ## Testing expectations
 
