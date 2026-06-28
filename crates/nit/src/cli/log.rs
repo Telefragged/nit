@@ -4,7 +4,6 @@
 use anyhow::{Context, Result, anyhow, bail};
 
 use nit_types::enums::LifecycleAction;
-use nit_types::events::StreamMsg;
 use nit_types::log::{ChainLog, LogEntry, LogPayload};
 
 use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
@@ -84,8 +83,8 @@ fn follow(
 ) -> Result<()> {
     let retry = Retry::UntilUp;
     loop {
-        // Re-derive the chain each connect: a new tip enters the watch set, a
-        // departed change goes quiet (self-healing, never needs new_parent).
+        // Each connect refetches and replays past the cursor, so a reconnect
+        // (server restart, overflow) re-reads whatever landed during the gap.
         let log: ChainLog = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
         for e in &log.entries {
             if e.seq > cursor {
@@ -96,17 +95,11 @@ fn follow(
         let mut socket = client.ws_connect(&heads(&log.entries), retry)?;
         // None (close/error) falls through to the outer loop, which reconnects.
         while let Some(text) = next_text(&mut socket) {
-            let Ok(msg) = serde_json::from_str::<StreamMsg>(&text) else {
+            let Ok(entry) = serde_json::from_str::<LogEntry>(&text) else {
                 continue;
             };
-            match msg {
-                // A new parent re-roots the chain; re-derive it to pick it up.
-                StreamMsg::NewParent { .. } => break,
-                StreamMsg::Entry(entry) => {
-                    cursor = cursor.max(entry.seq);
-                    relay(&entry, oneline, reviewer_only)?;
-                }
-            }
+            cursor = cursor.max(entry.seq);
+            relay(&entry, oneline, reviewer_only)?;
         }
     }
 }

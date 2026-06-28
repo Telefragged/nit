@@ -22,8 +22,7 @@ use rusqlite::{Connection, TransactionBehavior};
 use tokio::sync::watch;
 
 use nit_types::error::ApiError;
-use nit_types::events::StreamMsg;
-use nit_types::log::LogPayload;
+use nit_types::log::{LogEntry, LogPayload};
 
 use crate::chain::RepoView;
 use crate::db;
@@ -74,9 +73,9 @@ impl RepoState {
 /// guards the fold; held only inside `spawn_blocking`, never across `.await`.
 pub struct ChangeEntry {
     pub proj: StdRwLock<ChangeProj>,
-    events: Sender<StreamMsg>,
+    events: Sender<LogEntry>,
     /// A parked receiver so the channel never closes for lack of followers.
-    events_keepalive: InactiveReceiver<StreamMsg>,
+    events_keepalive: InactiveReceiver<LogEntry>,
 }
 
 impl ChangeEntry {
@@ -101,13 +100,13 @@ impl ChangeEntry {
 
     /// Publish a message to live followers. Best-effort: with none, the channel
     /// is inactive and the message is dropped (it is durable in the log).
-    pub fn publish(&self, msg: StreamMsg) {
+    pub fn publish(&self, msg: LogEntry) {
         let _ = self.events.try_broadcast(msg);
     }
 
     /// An active subscription to this change's live feed. Arm it **before**
     /// reading the backlog so no append slips the arm/read gap.
-    pub fn subscribe(&self) -> Receiver<StreamMsg> {
+    pub fn subscribe(&self) -> Receiver<LogEntry> {
         self.events_keepalive.activate_cloned()
     }
 }
@@ -425,7 +424,7 @@ pub fn append_to_change_with(
     // Publish to live followers only after the durable commit + fold, so a
     // follower reconciling against its backlog never sees a half-applied entry.
     for e in &applied {
-        entry.publish(StreamMsg::Entry(super::views::log_entry_view(change_id, e)));
+        entry.publish(super::views::log_entry_view(change_id, e));
     }
     Ok(applied)
 }

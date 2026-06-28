@@ -11,7 +11,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use tokio_stream::{StreamExt, StreamMap};
 
-use nit_types::events::{ClientMsg, StreamMsg};
+use nit_types::events::ClientMsg;
 use nit_types::log::LogEntry;
 
 use crate::db;
@@ -36,10 +36,10 @@ pub(super) async fn stream(
 /// that fell more than `EVENTS_BUFFER` behind lose entries with no signal.
 /// Yielding the error lets `handle_socket` close the socket so the client
 /// reconnects and re-reads the gap from the log (docs/api.md "Events").
-struct Feed(Receiver<StreamMsg>);
+struct Feed(Receiver<LogEntry>);
 
 impl tokio_stream::Stream for Feed {
-    type Item = Result<StreamMsg, RecvError>;
+    type Item = Result<LogEntry, RecvError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.0).poll_recv(cx)
@@ -78,14 +78,12 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
             Some((change_id, item)) = feeds.next(), if !feeds.is_empty() => {
                 // Overflow (or a closed feed): this follower fell behind. Close
                 // the socket so it reconnects and re-reads the gap from the log.
-                let Ok(msg) = item else { break };
+                let Ok(entry) = item else { break };
                 // Drop a live entry the backlog replay already covered.
-                if let StreamMsg::Entry(ref e) = msg
-                    && e.idx < watermark.get(&change_id).copied().unwrap_or(0)
-                {
+                if entry.idx < watermark.get(&change_id).copied().unwrap_or(0) {
                     continue;
                 }
-                if send_json(&mut socket, &msg).await.is_err() {
+                if send_json(&mut socket, &entry).await.is_err() {
                     break;
                 }
             }
@@ -119,7 +117,7 @@ async fn apply_client_msg(
                 let mut next = from;
                 for e in &backlog {
                     next = e.idx + 1;
-                    send_json(socket, &StreamMsg::Entry(e.clone())).await?;
+                    send_json(socket, e).await?;
                 }
                 watermark.insert(change_id, next);
             }
@@ -128,7 +126,7 @@ async fn apply_client_msg(
     Ok(())
 }
 
-async fn send_json(socket: &mut WebSocket, msg: &StreamMsg) -> Result<(), ()> {
+async fn send_json(socket: &mut WebSocket, msg: &LogEntry) -> Result<(), ()> {
     let text = serde_json::to_string(msg).map_err(|_| ())?;
     socket
         .send(Message::Text(text.into()))
@@ -157,7 +155,8 @@ async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<L
 
 #[cfg(test)]
 mod tests {
-    use nit_types::events::NewParent;
+    use nit_types::enums::LifecycleAction;
+    use nit_types::log::LogPayload;
 
     use super::*;
 
@@ -165,14 +164,18 @@ mod tests {
     /// silent skip.
     #[tokio::test]
     async fn feed_surfaces_overflow() {
-        let (mut tx, rx) = async_broadcast::broadcast::<StreamMsg>(2);
+        let (mut tx, rx) = async_broadcast::broadcast::<LogEntry>(2);
         tx.set_overflow(true);
         let mut feed = Feed(rx);
         // Overflow mode drops the oldest slot; the reader sees
         // RecvError::Overflowed, not the sender.
-        for of in 0..3 {
-            let _ = tx.try_broadcast(StreamMsg::NewParent {
-                new_parent: NewParent { of, parent: 0 },
+        for idx in 0..3 {
+            let _ = tx.try_broadcast(LogEntry {
+                change_id: 0,
+                idx,
+                seq: idx,
+                created_at: String::new(),
+                payload: LogPayload::lifecycle(LifecycleAction::Reopened, None, None),
             });
         }
         assert!(matches!(
