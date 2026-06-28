@@ -11,9 +11,8 @@ use nit_types::comments::{NewComment, Thread};
 use nit_types::enums::LifecycleAction;
 use nit_types::log::{CommentInput, LogPayload};
 
-use crate::review::Lifecycle;
+use crate::review::{self, Lifecycle};
 
-use super::views;
 use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{change_detail_json, change_or_404, map_busy, snapshot_line_text, validate_anchor};
 
@@ -89,7 +88,7 @@ pub(super) async fn create_comment(
         let thread = proj
             .thread(thread_id)
             .ok_or_else(|| Error::internal("thread vanished after fold"))?;
-        Ok(Json(views::thread_view(thread, id)))
+        Ok(Json(review::thread_view(thread, id)))
     })
     .await
 }

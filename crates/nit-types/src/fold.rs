@@ -28,7 +28,8 @@
 //! the live tail at the boundary, and [`fold`] skips any entry below it, so the
 //! arm/snapshot overlap is idempotent, never doubled.
 
-use crate::comments::CommentRange;
+use crate::changes::{ChangeDetail, Review, Revision};
+use crate::comments::{CommentRange, Thread};
 use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
 use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
@@ -367,6 +368,101 @@ pub fn replay(id: u64, repo_id: u64, change_key: String, entries: Vec<LogEntry>)
         fold(&mut change, entry);
     }
     change
+}
+
+// ---------------------------------------------------------------------------
+// Projection → wire (docs/api.md "Changes"): the published view of a change,
+// shared by the server's change endpoint and the WebAssembly fold.
+
+#[must_use]
+pub fn revision_view(rev: &RevisionProj) -> Revision {
+    Revision {
+        number: rev.number,
+        commit_sha: rev.commit_sha.clone(),
+        parent_sha: rev.parent_sha.clone(),
+        base_sha: rev.base_sha.clone(),
+        message: rev.message.clone(),
+        created_at: rev.created_at.clone(),
+    }
+}
+
+#[must_use]
+pub fn review_view(review: &ReviewProj) -> Review {
+    Review {
+        id: review.id,
+        revision: review.revision,
+        verdict: review.verdict,
+        message: review.message.clone(),
+        created_at: review.created_at.clone(),
+    }
+}
+
+/// A published thread → its wire shape, projecting its [`Anchor`] back to the
+/// flat `file`/`line`/`side`/`range`/`line_text` fields.
+#[must_use]
+pub fn thread_view(t: &ThreadProj, change_id: u64) -> Thread {
+    let (file, line, side, range, line_text) = match &t.anchor {
+        Anchor::Change => (None, None, Side::New, None, None),
+        Anchor::File { file } => (Some(file.clone()), None, Side::New, None, None),
+        Anchor::Line {
+            file,
+            side,
+            line,
+            line_text,
+            range,
+        } => (
+            Some(file.clone()),
+            Some(*line),
+            *side,
+            *range,
+            line_text.clone(),
+        ),
+    };
+    Thread {
+        id: t.id,
+        change_id,
+        revision: t.revision,
+        file,
+        line,
+        side,
+        range,
+        line_text,
+        resolved: t.resolved,
+        comments: t.comments.iter().map(thread_comment_view).collect(),
+        created_at: t.created_at.clone(),
+        updated_at: t.updated_at.clone(),
+    }
+}
+
+fn thread_comment_view(c: &ThreadComment) -> crate::comments::ThreadComment {
+    crate::comments::ThreadComment {
+        body: c.body.clone(),
+        review_id: c.review_id,
+        created_at: c.created_at.clone(),
+    }
+}
+
+/// The published projection of a change as the wire [`ChangeDetail`]
+/// (docs/api.md "Changes"), minus the reviewer's drafts and staged decision:
+/// mutable scratch outside the log that the server overlays from the database.
+/// The WebAssembly fold returns this verbatim and the browser fills its own
+/// drafts in.
+#[must_use]
+pub fn change_detail(change: &ChangeProj) -> ChangeDetail {
+    ChangeDetail {
+        id: change.id,
+        repo_id: change.repo_id,
+        change_key: change.change_key.clone(),
+        revisions: change.revisions.iter().map(revision_view).collect(),
+        threads: change
+            .threads
+            .iter()
+            .map(|t| thread_view(t, change.id))
+            .collect(),
+        drafts: Vec::new(),
+        reviews: change.reviews.iter().map(review_view).collect(),
+        draft_decision: None,
+    }
 }
 
 #[cfg(test)]

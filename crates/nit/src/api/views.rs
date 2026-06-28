@@ -10,15 +10,15 @@ use git2::Repository;
 use rusqlite::Connection;
 
 use nit_types::chains::{Chain, PathEntry};
-use nit_types::changes::{ChangeDetail, Review, Revision, StagedDecision};
-use nit_types::comments::{Draft, Thread};
-use nit_types::enums::{ChangeStatus, GraphSection, Side};
+use nit_types::changes::{ChangeDetail, StagedDecision};
+use nit_types::comments::Draft;
+use nit_types::enums::{ChangeStatus, GraphSection};
 use nit_types::graph::{GraphNode, RepoGraph};
 
 use crate::chain::{self, PathMember, RepoView};
 use crate::db;
 use crate::gitscan::{self, identity::subject_of};
-use crate::review::{self, Anchor, ChangeProj, ThreadComment, ThreadProj};
+use crate::review::ChangeProj;
 
 use super::Error;
 
@@ -224,52 +224,6 @@ pub fn resolve_revision_tip(
     Ok((revision, tip_sha))
 }
 
-/// A published thread → its wire shape, projecting its [`Anchor`] back to the
-/// flat `file`/`line`/`side`/`range`/`line_text` fields.
-#[must_use]
-pub fn thread_view(t: &ThreadProj, change_id: u64) -> Thread {
-    let (file, line, side, range, line_text) = match &t.anchor {
-        Anchor::Change => (None, None, Side::New, None, None),
-        Anchor::File { file } => (Some(file.clone()), None, Side::New, None, None),
-        Anchor::Line {
-            file,
-            side,
-            line,
-            line_text,
-            range,
-        } => (
-            Some(file.clone()),
-            Some(*line),
-            *side,
-            *range,
-            line_text.clone(),
-        ),
-    };
-    Thread {
-        id: t.id,
-        change_id,
-        revision: t.revision,
-        file,
-        line,
-        side,
-        range,
-        line_text,
-        resolved: t.resolved,
-        comments: t.comments.iter().map(thread_comment_view).collect(),
-        created_at: t.created_at.clone(),
-        updated_at: t.updated_at.clone(),
-    }
-}
-
-#[must_use]
-fn thread_comment_view(c: &ThreadComment) -> nit_types::comments::ThreadComment {
-    nit_types::comments::ThreadComment {
-        body: c.body.clone(),
-        review_id: c.review_id,
-        created_at: c.created_at.clone(),
-    }
-}
-
 #[must_use]
 pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
     Draft {
@@ -295,52 +249,17 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
 /// # Errors
 /// When reading drafts fails.
 pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<ChangeDetail> {
-    let revisions: Vec<Revision> = change.revisions.iter().map(revision_json).collect();
-    let threads: Vec<Thread> = change
-        .threads
-        .iter()
-        .map(|t| thread_view(t, change.id))
-        .collect();
-    let drafts: Vec<Draft> = db::drafts_for_change(conn, change.id)?
+    // The published view (revisions/threads/reviews) is the shared fold; the
+    // reviewer's drafts and staged decision live outside the log, so overlay
+    // them from the database here.
+    let mut detail = nit_types::fold::change_detail(change);
+    detail.drafts = db::drafts_for_change(conn, change.id)?
         .iter()
         .map(|d| draft_view(d, change.id))
         .collect();
-    let reviews = change.reviews.iter().map(review_json).collect();
-    let draft_decision = db::get_draft_review(conn, change.id)?.map(|r| StagedDecision {
+    detail.draft_decision = db::get_draft_review(conn, change.id)?.map(|r| StagedDecision {
         decision: r.decision,
         message: r.message,
     });
-    Ok(ChangeDetail {
-        id: change.id,
-        repo_id: change.repo_id,
-        change_key: change.change_key.clone(),
-        revisions,
-        threads,
-        drafts,
-        reviews,
-        draft_decision,
-    })
-}
-
-#[must_use]
-pub fn revision_json(rev: &review::RevisionProj) -> Revision {
-    Revision {
-        number: rev.number,
-        commit_sha: rev.commit_sha.clone(),
-        parent_sha: rev.parent_sha.clone(),
-        base_sha: rev.base_sha.clone(),
-        message: rev.message.clone(),
-        created_at: rev.created_at.clone(),
-    }
-}
-
-#[must_use]
-pub fn review_json(review: &review::ReviewProj) -> Review {
-    Review {
-        id: review.id,
-        revision: review.revision,
-        verdict: review.verdict,
-        message: review.message.clone(),
-        created_at: review.created_at.clone(),
-    }
+    Ok(detail)
 }
