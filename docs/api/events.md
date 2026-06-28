@@ -14,7 +14,6 @@ chain, no resubscribe bookkeeping.
   {"subscribe": {"10": 4, "11": 0}}   // change_id → from-idx: replay [from, head) then stream live
   // server → client
   {"change_id": 10, "idx": 5, "seq": 412, "created_at": "…", "kind": "review", "payload": {…}}
-  {"new_parent": {"of": 10, "parent": 9}}    // out-of-log: change 10's parent edge is now change 9
   ```
 
   A `subscribe` arms the change's live feed **before** replaying its
@@ -27,23 +26,14 @@ chain, no resubscribe bookkeeping.
   follower drops the whole set by closing the socket. A follower that falls
   more than a feed's buffer behind **overflows**: the server closes the socket
   rather than skip the gap, and the client reconnects and re-reads the missed
-  entries from the log.
-
-  The **only** non-log message is `new_parent` (out-of-log, no `idx`/`seq`):
-  it fires whenever a parent↔child edge `{of → parent}` is newly established —
-  an existing change re-roots onto a new parent, **or** a brand-new child is
-  stacked on an existing parent (a chain extension) — and the client re-derives
-  its logical chain and subscribes the new member. It is published on the
-  edge's **pre-existing** endpoint, the only feed a follower can already hold:
-  the re-rooted change's own feed for a re-root, the parent's feed for a new
-  child (whose own feed has no subscribers yet). It is **advisory and
-  idempotent** — the next HEAD re-derivation supersedes it, so a dropped one
-  costs nothing (a follower re-derives from local HEAD each pass anyway).
+  entries from the log. The server emits **only** tagged log entries; a chain
+  member newly stacked while a follower is parked lands on its own feed, so a
+  follower learns of it by re-deriving from local HEAD and resubscribing, not
+  from any server push.
 
 ```jsonc
 TaggedLogEntry = {"change_id": 10, "idx": 5, "seq": 412, "created_at": "…", "kind": "…", "payload": {…}}
 ClientMsg      = {"subscribe": {"<id>": <from-idx>, …}}
-NewParent      = {"new_parent": {"of": 10, "parent": 9}}
 ```
 
 ### The cursor
