@@ -1,0 +1,43 @@
+// The shared change fold, compiled to WebAssembly (crates/nit-wasm). The change
+// page folds the websocket stream client-side with the same Rust code the
+// server runs: the server ships a ChangeProj snapshot, the browser resumes
+// folding the live tail onto it and projects the published ChangeDetail — never
+// reimplementing the projection.
+//
+// JSON crosses the wasm boundary as strings, sidestepping wasm-bindgen's
+// u64/BigInt args; the web's plain `number` ids round-trip through serde. A
+// ChangeProj is opaque to the web — only these wrappers (re)hydrate it.
+
+import { change_detail, fold_entry, replay_proj } from "../wasm/nit_wasm";
+import type { ChangeDetail, ChangeProj, LogEntry } from "./types";
+
+/** A change's identity (not carried in the log) plus its entries, ascending by
+ * `idx` — the input to {@link replayProj}. */
+export interface ReplayInput {
+  id: number;
+  repo_id: number;
+  change_key: string;
+  entries: LogEntry[];
+}
+
+/** Fold a change's whole log into its `ChangeProj` snapshot — what the mock
+ * ships to mirror the server, which folds natively. */
+export function replayProj(input: ReplayInput): ChangeProj {
+  return JSON.parse(replay_proj(JSON.stringify(input))) as ChangeProj;
+}
+
+/** Apply one live log entry to a `ChangeProj`, returning the advanced
+ * projection. Idempotent across the snapshot/live overlap (an entry below the
+ * snapshot's high-water mark is a no-op). */
+export function foldEntry(proj: ChangeProj, entry: LogEntry): ChangeProj {
+  return JSON.parse(
+    fold_entry(JSON.stringify(proj), JSON.stringify(entry)),
+  ) as ChangeProj;
+}
+
+/** Published projection only — drafts and the staged decision are not log
+ * state, so they come back empty; the caller overlays its own
+ * (`GET /changes/{id}/drafts`). */
+export function changeDetail(proj: ChangeProj): ChangeDetail {
+  return JSON.parse(change_detail(JSON.stringify(proj))) as ChangeDetail;
+}

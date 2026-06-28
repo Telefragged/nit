@@ -109,7 +109,7 @@
         pkgs.fetchNpmDeps {
           inherit (webArgs) src;
           name = "nit-web-npm-deps";
-          hash = "sha256-HSMf/lC8ZuNsfBiBzCTgi2RlXzs+UkvW9Fp/IlDqPiU=";
+          hash = "sha256-eymspPvGazdNAPAPIVwpAgdaygNWFUhEWCqWTp16jTY=";
         };
 
       # Build metadata for `nit --version`: `+<sha>[.dirty]` from the flake's
@@ -190,6 +190,15 @@
           installPhase = "cp -r pkg $out";
           dontFixup = true;
         };
+
+      # Drop the generated wasm glue into a web build's tree before it runs.
+      # web/src/wasm is gitignored (so absent from the npm-package source), so
+      # every web derivation injects it the way `nix run .#gen-wasm` does for
+      # local dev — the artifact is built by nix, never committed.
+      injectWasm = pkgs: ''
+        mkdir -p src/wasm
+        cp ${wasmPkg pkgs}/* src/wasm/
+      '';
     in
     {
       devShells = forAllSystems (
@@ -251,6 +260,7 @@
             pname = "nit-web";
             inherit (webArgs) version src;
             npmDeps = webNpmDeps;
+            preBuild = injectWasm pkgs;
             installPhase = "cp -r dist $out";
           };
 
@@ -321,19 +331,22 @@
           # runs the lint in place of the build, so a stylelint, eslint, or
           # knip regression fails `nix flake check` instead of slipping in.
           # The lint report is the derivation's output.
+          # web-lint/web-test set dontNpmBuild, which disables the build phase
+          # (and its preBuild hook), so inject the wasm at the head of the
+          # install phase that runs the lint/test instead.
           web-lint = pkgs.buildNpmPackage {
             pname = "nit-web-lint";
             inherit (webArgs) version src;
             npmDeps = webNpmDeps;
             dontNpmBuild = true;
-            installPhase = "npm run lint > $out";
+            installPhase = injectWasm pkgs + "npm run lint > $out";
           };
           web-test = pkgs.buildNpmPackage {
             pname = "nit-web-test";
             inherit (webArgs) version src;
             npmDeps = webNpmDeps;
             dontNpmBuild = true;
-            installPhase = "npm run test > $out";
+            installPhase = injectWasm pkgs + "npm run test > $out";
           };
           # The same `capture.mjs` agents run locally, but against the nix
           # `playwright-driver` browsers, so a driver/npm-pin skew fails the
