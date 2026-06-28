@@ -365,7 +365,7 @@ export default function DiffFileView({
       ctx.setEditorDirty(false);
       ctx.setEditingTarget(null);
       void queryClient.invalidateQueries({
-        queryKey: ["change", ctx.changeId],
+        queryKey: ["drafts", ctx.changeId],
       });
     },
   });

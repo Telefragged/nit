@@ -19,13 +19,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import {
-  createDraft,
-  getChain,
-  getChange,
-  getDiff,
-  getRepo,
-} from "../api/client";
+import { createDraft, getChain, getDiff, getRepo } from "../api/client";
 import type {
   ChangeDetail,
   ChangeStatus,
@@ -68,6 +62,8 @@ import type { SelectionMiss } from "../lib/selection";
 import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
 import { useChangeDetails } from "../lib/useChangeDetails";
+import { useChangeStream } from "../lib/useChangeStream";
+import { useDrafts } from "../lib/useDrafts";
 import { ErrorPanel } from "./NotFound";
 import type { DraftTarget, ReviewCtx } from "./reviewContext";
 import { ReviewContext, sameTarget } from "./reviewContext";
@@ -223,17 +219,26 @@ export default function ReviewPage() {
     ? Number(searchParams.get("revision"))
     : undefined;
 
-  const changeQ = useQuery({
-    queryKey: ["change", changeId],
-    queryFn: () => getChange(changeId),
-  });
-  const change = changeQ.data;
+  // The change page is event-driven: the published projection (revisions,
+  // threads, reviews) is folded from the change-event websocket into the
+  // ["change", id] cache by `useChangeStream` (below). This query only reads
+  // that cache (skipToken — never fetches). The chain structure, the diff, the
+  // repo, and the reviewer's drafts/staged decision are not in the log, so they
+  // stay REST; `change` composes the published projection with the drafts
+  // overlay (`useDrafts`).
+  const queryClient = useQueryClient();
 
-  // The repo behind this change — the crumb shows its path. Fetched by id
-  // once the change loads; skipToken holds the hook's place until then.
+  const publishedQ = useQuery<ChangeDetail>({
+    queryKey: ["change", changeId],
+    queryFn: skipToken,
+  });
+  const published = publishedQ.data;
+
+  // The repo behind this change — the crumb shows its path. Fetched by id once
+  // the projection arrives; skipToken holds the hook's place until then.
   const repoQ = useQuery({
-    queryKey: ["repo", change?.repo_id],
-    queryFn: change ? () => getRepo(change.repo_id) : skipToken,
+    queryKey: ["repo", published?.repo_id],
+    queryFn: published ? () => getRepo(published.repo_id) : skipToken,
   });
 
   const [layout, setLayout] = useState<Layout>(() =>
@@ -245,7 +250,6 @@ export default function ReviewPage() {
   const [activeFile, setActiveFile] = useState<number | null>(null);
   const [changeCommentOpen, setChangeCommentOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
-  const queryClient = useQueryClient();
 
   // Transient "why c did nothing" notice; a fresh object per press keeps
   // the timeout effect retriggering on repeated identical misses.
@@ -263,7 +267,7 @@ export default function ReviewPage() {
   }, [selectionMiss]);
 
   // --- derive revision/diff mode (before any early return: no hooks below)
-  const revisions = change?.revisions ?? [];
+  const revisions = published?.revisions ?? [];
   const latest = revisions[revisions.length - 1];
   const selectedRev =
     revisions.find((r) => r.number === (revisionParam ?? latest?.number)) ??
@@ -271,25 +275,58 @@ export default function ReviewPage() {
   const selected = selectedRev?.number ?? 1;
 
   // The chain context is the derived chain through this change rooted at the
-  // viewed revision — the path that pins `selected`. Fetched with the
-  // revision so switching patchsets re-roots onto that revision's chain.
+  // viewed revision — the path that pins `selected`. Fetched with the revision
+  // so switching patchsets re-roots onto that revision's chain.
   const chainQ = useQuery({
     queryKey: ["chain", changeId, selected],
-    queryFn: change ? () => getChain(changeId, selected) : skipToken,
+    queryFn: published ? () => getChain(changeId, selected) : skipToken,
   });
+  const memberIds = (chainQ.data?.path ?? []).map((m) => m.change_id);
 
-  // Each chain member's per-change state is read from its own change detail
-  // (GET /api/changes/{id}), fetched concurrently, rather than denormalized
-  // onto the chain path. Shares the ["change", id] cache with the change query
-  // above (the current member is a warm hit). ChainNav reads each member's
-  // unresolved/latest-revision from these; the review bar reads each member's
-  // staged decision for its chain-wide "Submit (k)" count + nav.
-  const memberDetails = useChangeDetails(
-    (chainQ.data?.path ?? []).map((m) => m.change_id),
+  // Subscribe to the change and every chain member: each snapshot + live fold is
+  // written into the ["change", id] cache the queries above read. The drafts
+  // overlay rides a separate ["drafts", id] read; `change` composes the two.
+  useChangeStream([changeId, ...memberIds]);
+  const draftsMap = useDrafts([changeId, ...memberIds]);
+  const overlay = draftsMap.get(changeId);
+  const change = useMemo(
+    () =>
+      published
+        ? {
+            ...published,
+            drafts: overlay?.drafts ?? [],
+            draft_decision: overlay?.draft_decision ?? null,
+          }
+        : undefined,
+    [published, overlay],
   );
+
+  // Pin the viewed revision into the URL on first load. A new revision arriving
+  // over the websocket then becomes selectable (it joins `revisions`) without
+  // the view jumping to it — `selected` follows the pinned ?revision, not the
+  // moving latest. The pin is to the revision already shown, so nothing moves.
+  const latestNumber = latest?.number;
+  useEffect(() => {
+    if (revisionParam === undefined && latestNumber !== undefined) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("revision", String(latestNumber));
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [revisionParam, latestNumber, setSearchParams]);
+
+  // Each chain member's published projection comes from the ["change", id]
+  // cache the stream keeps live (ChainNav reads each member's
+  // unresolved/latest-revision); its staged decision comes from the member's
+  // drafts overlay, for the review bar's chain-wide "Submit (k)" count + nav.
+  const memberDetails = useChangeDetails(memberIds, true);
   const memberDecisions = new Map<number, Decision | null>();
-  memberDetails.forEach((detail, id) => {
-    memberDecisions.set(id, detail.draft_decision?.decision ?? null);
+  draftsMap.forEach((d, id) => {
+    memberDecisions.set(id, d.draft_decision?.decision ?? null);
   });
 
   const againstRaw = searchParams.get("against");
@@ -298,7 +335,7 @@ export default function ReviewPage() {
   const diffQ = useQuery({
     queryKey: ["diff", changeId, selected, against ?? null],
     queryFn: () => getDiff(changeId, selected, against),
-    enabled: change !== undefined,
+    enabled: published !== undefined,
     retry: false,
   });
   const files = useMemo(() => diffQ.data?.files ?? [], [diffQ.data]);
@@ -392,7 +429,7 @@ export default function ReviewPage() {
       createDraft(changeId, { revision: selected, body }),
     onSuccess: () => {
       setChangeCommentOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["change", changeId] });
+      void queryClient.invalidateQueries({ queryKey: ["drafts", changeId] });
     },
   });
 
@@ -544,14 +581,16 @@ export default function ReviewPage() {
     return map;
   }, [threads, files, selected, against]);
 
-  if (changeQ.isError) {
+  // The change's published projection arrives over the websocket (no fetch to
+  // error on); a bad change id surfaces when its chain REST read fails.
+  if (chainQ.isError) {
     return (
       <main className="page">
-        <ErrorPanel error={changeQ.error} />
+        <ErrorPanel error={chainQ.error} />
       </main>
     );
   }
-  if (changeQ.isPending || !change || !latest || !selectedRev) {
+  if (!change || !latest || !selectedRev) {
     return (
       <main className="page">
         <div className="skeleton" style={{ width: 320, height: 18 }} />

@@ -30,7 +30,7 @@ function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["change", changeId] });
+    queryClient.invalidateQueries({ queryKey: ["drafts", changeId] });
 
   const update = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
@@ -128,7 +128,7 @@ export default function CommentThread({
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<ThreadEditor | null>(null);
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["change", changeId] });
+    queryClient.invalidateQueries({ queryKey: ["drafts", changeId] });
 
   const resolved = pendingResolved(thread);
   const pending = resolved !== thread.resolved;

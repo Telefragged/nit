@@ -1,15 +1,21 @@
-import { useQueries } from "@tanstack/react-query";
+import { skipToken, useQueries } from "@tanstack/react-query";
 
 import { getChange } from "../api/client";
 import type { ChangeDetail } from "../api/types";
 
-/** Cache key ["change", id] shares react-query's cache across the dashboard
- * and review page. Pending/errored ids are absent from the returned Map. */
-export function useChangeDetails(ids: number[]): Map<number, ChangeDetail> {
+/** Each change's published detail, keyed ["change", id]. By default fetches via
+ * getChange — the dashboard's activity feed, where nothing else populates the
+ * cache. With `cacheOnly`, reads the cache without fetching: the review page
+ * folds each member off the websocket (useChangeStream), so a getChange would
+ * re-fetch what the snapshot already delivers. Ids still loading are absent. */
+export function useChangeDetails(
+  ids: number[],
+  cacheOnly = false,
+): Map<number, ChangeDetail> {
   const queries = useQueries({
     queries: ids.map((id) => ({
       queryKey: ["change", id],
-      queryFn: () => getChange(id),
+      queryFn: cacheOnly ? skipToken : () => getChange(id),
     })),
   });
   const byId = new Map<number, ChangeDetail>();

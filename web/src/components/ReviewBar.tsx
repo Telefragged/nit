@@ -77,9 +77,10 @@ export default function ReviewBar({
     ).length ?? 0;
 
   const invalidate = () => {
-    // The chain-wide count reads every member's decision, so refresh all loaded
-    // change details, not only this one (each member is keyed ["change", id]).
-    void queryClient.invalidateQueries({ queryKey: ["change"] });
+    // The chain-wide count reads every member's staged decision, so refresh all
+    // loaded drafts overlays, not only this one (each is keyed ["drafts", id]).
+    // The published projection updates itself off the websocket.
+    void queryClient.invalidateQueries({ queryKey: ["drafts"] });
     void queryClient.invalidateQueries({ queryKey: ["chain"] });
   };
 

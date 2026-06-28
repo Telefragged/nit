@@ -6,6 +6,7 @@ import type {
   BatchSubmitResult,
   Chain,
   ChangeDetail,
+  ChangeDrafts,
   NewDraft,
   Diff,
   Draft,
@@ -80,6 +81,12 @@ export const getRepoGraph = (repoId: number) =>
 
 export const getChange = (id: number) =>
   request<ChangeDetail>("GET", `/changes/${id}`);
+
+/** The reviewer's private overlay alone (drafts + staged decision); the change
+ * page reads the published projection over the websocket instead (docs/api.md
+ * "Events"). */
+export const getChangeDrafts = (id: number) =>
+  request<ChangeDrafts>("GET", `/changes/${id}/drafts`);
 
 export const getDiff = (changeId: number, revision: number, against?: number) =>
   request<Diff>(
