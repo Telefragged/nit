@@ -109,10 +109,7 @@ pub(super) async fn chain_log(
         let mut entries = Vec::new();
         for member in &path {
             for row in db::log_entries(conn, member.change_id, 0, None)? {
-                entries.push(views::log_entry_view(
-                    member.change_id,
-                    &review::Entry::from_row(&row)?,
-                ));
+                entries.push(review::entry_from_row(member.change_id, &row)?);
             }
         }
         entries.sort_by_key(|e| e.seq);

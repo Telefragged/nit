@@ -290,18 +290,7 @@ mod tests {
     use super::*;
     use nit_types::enums::Verdict;
 
-    use crate::db::ChangeRow;
     use crate::review::{ChangeProj, Lifecycle, ReviewProj, RevisionProj};
-
-    fn row(id: u64, key: &str) -> ChangeRow {
-        ChangeRow {
-            id,
-            repo_id: 1,
-            change_key: key.to_string(),
-            status: None,
-            created_at: "t0".to_string(),
-        }
-    }
 
     fn rev(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProj {
         RevisionProj {
@@ -316,7 +305,7 @@ mod tests {
     }
 
     fn change(id: u64, key: &str, revs: Vec<RevisionProj>) -> ChangeProj {
-        let mut c = ChangeProj::empty(&row(id, key));
+        let mut c = ChangeProj::new(id, 1, key.to_string(), "t0".to_string());
         c.revisions = revs;
         c
     }

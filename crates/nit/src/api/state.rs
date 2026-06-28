@@ -131,8 +131,10 @@ impl AppState {
                 let mut changes = HashMap::new();
                 for row in db::all_changes(conn)? {
                     let rows = db::log_entries(conn, row.id, 0, None)?;
-                    max_id = max_id.max(review::max_assigned_id(&rows)?);
-                    let proj = review::replay(&row, &rows)?;
+                    let proj = review::replay_rows(&row, &rows)?;
+                    // Review ids are minted into the fold, so the projection
+                    // already carries the max — no second parse of the rows.
+                    max_id = max_id.max(proj.reviews.iter().map(|r| r.id).max().unwrap_or(0));
                     // Reconcile the cached status, writing only when it has
                     // drifted from the fold — an unchanged restart rewrites no
                     // rows.
@@ -265,9 +267,9 @@ impl AppState {
             return Ok(existing);
         }
         let rows = db::log_entries(conn, row.id, 0, None)?;
-        self.next_id
-            .fetch_max(review::max_assigned_id(&rows)? + 1, Ordering::SeqCst);
-        let proj = review::replay(row, &rows)?;
+        let proj = review::replay_rows(row, &rows)?;
+        let max_review = proj.reviews.iter().map(|r| r.id).max().unwrap_or(0);
+        self.next_id.fetch_max(max_review + 1, Ordering::SeqCst);
         let entry = Arc::new(ChangeEntry::new(proj));
         let mut map = self.changes.lock().expect("change map poisoned");
         Ok(map.entry(row.id).or_insert(entry).clone())
@@ -296,7 +298,7 @@ impl AppState {
             return Ok(None);
         };
         let rows = db::log_entries(conn, row.id, 0, None)?;
-        let proj = review::replay(&row, &rows)?;
+        let proj = review::replay_rows(&row, &rows)?;
         Ok(Some(Arc::new(ChangeEntry::new(proj))))
     }
 
@@ -339,7 +341,7 @@ pub fn append_to_change(
     entry: &ChangeEntry,
     change_id: u64,
     news: Vec<LogPayload>,
-) -> anyhow::Result<Vec<review::Entry>> {
+) -> anyhow::Result<Vec<LogEntry>> {
     append_to_change_with(conn, entry, change_id, news, |_| Ok(()))
 }
 
@@ -369,7 +371,7 @@ pub fn append_to_change_with(
     change_id: u64,
     news: Vec<LogPayload>,
     pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
-) -> anyhow::Result<Vec<review::Entry>> {
+) -> anyhow::Result<Vec<LogEntry>> {
     if news.is_empty() {
         return Ok(Vec::new());
     }
@@ -388,17 +390,18 @@ pub fn append_to_change_with(
     let mut next = proj.clone();
     // The fold mints new-thread ids; the write lock makes that allocation
     // race-free against a concurrent shared-change push.
-    let staged: Vec<review::Entry> = news
+    let staged: Vec<LogEntry> = news
         .into_iter()
         .enumerate()
         .map(|(k, payload)| {
             review::fold(
                 &mut next,
-                review::Entry {
+                LogEntry {
+                    change_id,
                     seq: 0,
                     idx: start + u64::try_from(k).expect("batch fits u64"),
-                    payload,
                     created_at: now.clone(),
+                    payload,
                 },
             )
         })
@@ -409,8 +412,15 @@ pub fn append_to_change_with(
     let mut applied = Vec::with_capacity(staged.len());
     for e in staged {
         let payload = review::payload_to_json(&e.payload)?;
-        let seq = db::append_log(&tx, change_id, e.idx, e.kind().as_str(), &payload, &now)?;
-        applied.push(review::Entry { seq, ..e });
+        let seq = db::append_log(
+            &tx,
+            change_id,
+            e.idx,
+            e.payload.kind().as_str(),
+            &payload,
+            &now,
+        )?;
+        applied.push(LogEntry { seq, ..e });
     }
     // Re-stamp the denormalized status from the validated projection, in the
     // same transaction as the appends (docs/data-model.md "Tables").
@@ -424,7 +434,7 @@ pub fn append_to_change_with(
     // Publish to live followers only after the durable commit + fold, so a
     // follower reconciling against its backlog never sees a half-applied entry.
     for e in &applied {
-        entry.publish(super::views::log_entry_view(change_id, e));
+        entry.publish(e.clone());
     }
     Ok(applied)
 }

@@ -14,12 +14,11 @@ use nit_types::changes::{ChangeDetail, Review, Revision, StagedDecision};
 use nit_types::comments::{Draft, Thread};
 use nit_types::enums::{ChangeStatus, GraphSection, Side};
 use nit_types::graph::{GraphNode, RepoGraph};
-use nit_types::log::LogEntry;
 
 use crate::chain::{self, PathMember, RepoView};
 use crate::db;
 use crate::gitscan::{self, identity::subject_of};
-use crate::review::{self, Anchor, ChangeProj, Entry, ThreadComment, ThreadProj};
+use crate::review::{self, Anchor, ChangeProj, ThreadComment, ThreadProj};
 
 use super::Error;
 
@@ -343,18 +342,5 @@ pub fn review_json(review: &review::ReviewProj) -> Review {
         verdict: review.verdict,
         message: review.message.clone(),
         created_at: review.created_at.clone(),
-    }
-}
-
-/// A folded log entry → its wire shape: the typed payload flows straight
-/// through (the wire `LogEntry` shares the same `LogPayload`).
-#[must_use]
-pub fn log_entry_view(change_id: u64, entry: &Entry) -> LogEntry {
-    LogEntry {
-        change_id,
-        idx: entry.idx,
-        seq: entry.seq,
-        created_at: entry.created_at.clone(),
-        payload: entry.payload.clone(),
     }
 }

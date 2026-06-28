@@ -295,7 +295,6 @@ mod tests {
     use git2::{Oid, Repository, Signature};
 
     use super::detect_landings;
-    use crate::db::ChangeRow;
     use crate::review::{ChangeProj, RevisionProj};
 
     /// Commit `files` onto `parent` (none → root) with `message`, returning the
@@ -330,13 +329,7 @@ mod tests {
     }
 
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProj {
-        let mut proj = ChangeProj::empty(&ChangeRow {
-            id,
-            repo_id: 1,
-            change_key: key.to_string(),
-            status: None,
-            created_at: "t0".to_string(),
-        });
+        let mut proj = ChangeProj::new(id, 1, key.to_string(), "t0".to_string());
         proj.revisions.push(RevisionProj {
             number: 0,
             commit_sha: commit.to_string(),

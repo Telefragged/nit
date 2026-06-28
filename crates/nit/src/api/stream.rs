@@ -17,7 +17,6 @@ use nit_types::log::LogEntry;
 use crate::db;
 use crate::review;
 
-use super::views;
 use super::{AppState, with_conn};
 
 /// `WS /api/stream?repo={id}` — the client-driven change stream
@@ -140,12 +139,7 @@ async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<L
     with_conn(state.pool(), move |conn| {
         let rows = db::log_entries(conn, change_id, from, None)?;
         rows.iter()
-            .map(|r| {
-                Ok(views::log_entry_view(
-                    change_id,
-                    &review::Entry::from_row(r)?,
-                ))
-            })
+            .map(|r| review::entry_from_row(change_id, r))
             .collect::<anyhow::Result<Vec<_>>>()
             .map_err(Into::into)
     })
