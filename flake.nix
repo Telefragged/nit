@@ -109,7 +109,7 @@
         pkgs.fetchNpmDeps {
           inherit (webArgs) src;
           name = "nit-web-npm-deps";
-          hash = "sha256-7NKAoi4RpVq50ZjjeMTk/3//FA4qNNiQRt4zTKG4vrI=";
+          hash = "sha256-HSMf/lC8ZuNsfBiBzCTgi2RlXzs+UkvW9Fp/IlDqPiU=";
         };
 
       # Build metadata for `nit --version`: `+<sha>[.dirty]` from the flake's
