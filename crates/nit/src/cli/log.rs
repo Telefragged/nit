@@ -4,6 +4,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 
 use nit_types::enums::LifecycleAction;
+use nit_types::events::StreamMsg;
 use nit_types::log::{ChainLog, LogEntry, LogPayload};
 
 use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
@@ -95,7 +96,9 @@ fn follow(
         let mut socket = client.ws_connect(&heads(&log.entries), retry)?;
         // None (close/error) falls through to the outer loop, which reconnects.
         while let Some(text) = next_text(&mut socket) {
-            let Ok(entry) = serde_json::from_str::<LogEntry>(&text) else {
+            // Cursor mode never asks for a snapshot, so only `entry` frames
+            // arrive; ignore anything else.
+            let Ok(StreamMsg::Entry(entry)) = serde_json::from_str::<StreamMsg>(&text) else {
                 continue;
             };
             cursor = cursor.max(entry.seq);

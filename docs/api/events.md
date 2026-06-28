@@ -7,33 +7,45 @@ chain, no resubscribe bookkeeping.
 
 - `WS /api/stream?repo={id}` — the client-driven change stream. The client
   builds its subscription over the open socket; the server emits **only**
-  entries for currently-subscribed changes.
+  frames for currently-subscribed changes. Server → client frames are a tagged
+  `StreamMsg`: a `snapshot` (a change's folded `ChangeProj`) or an `entry` (one
+  log entry). The client picks one of two subscribe modes per message:
 
   ```jsonc
-  // client → server
-  {"subscribe": {"10": 4, "11": 0}}   // change_id → from-idx: replay [from, head) then stream live
+  // client → server — cursor replay (the CLI follower)
+  {"subscribe": {"10": 4, "11": 0}}    // change_id → from-idx: replay [from, head) then stream live
+  // client → server — snapshot mode (the web change page)
+  {"subscribe_snapshot": ["10", "11"]} // per change: a ChangeProj snapshot, then the live tail
+
   // server → client
-  {"change_id": 10, "idx": 5, "seq": 412, "created_at": "…", "kind": "review", "payload": {…}}
+  {"entry": {"change_id": 10, "idx": 5, "seq": 412, "created_at": "…", "kind": "review", "payload": {…}}}
+  {"snapshot": {"id": 10, "repo_id": 1, "revisions": […], "threads": […], "reviews": […], "entries_folded": 5, …}}
   ```
 
-  A `subscribe` arms the change's live feed **before** replaying its
-  `[from, head)` backlog, then drops live entries with
-  `idx < last_backlog_idx + 1` — the arm/read overlap is a duplicate the
-  watermark suppresses, never a gap. The server joins the subscribed changes'
+  Either mode arms the change's live feed **before** reading its backlog — a
+  `[from, head)` entry replay (cursor) or a snapshot of the in-memory
+  projection — so an append that lands mid-read rides the feed and is deduped
+  by an idx watermark, never gapped. **Snapshot mode** ships the change's
+  already-folded `ChangeProj` — the fold the server has done once, not repeated
+  per follower — whose `entries_folded` is the high-water mark; the server drops
+  live entries below it, so a follower resumes folding the live tail at the
+  boundary with no overlap, and a reconnect re-snapshots rather than tracking a
+  cursor. **Cursor mode** replays raw `[from, head)` entries and drops live ones
+  with `idx < last_backlog_idx + 1`. The server joins the subscribed changes'
   per-change feeds in a keyed dynamic-membership map (`tokio-stream`'s
   `StreamMap`); there is no per-chain channel and no server-side chain —
   following a whole chain is the client subscribing to each member, and a
   follower drops the whole set by closing the socket. A follower that falls
   more than a feed's buffer behind **overflows**: the server closes the socket
-  rather than skip the gap, and the client reconnects and re-reads the missed
-  entries from the log. The server emits **only** tagged log entries; a chain
-  member newly stacked while a follower is parked lands on its own feed, so a
-  follower learns of it by re-deriving from local HEAD and resubscribing, not
-  from any server push.
+  rather than skip the gap, and the client reconnects and re-reads (or
+  re-snapshots) the missed state. A chain member newly stacked while a follower
+  is parked lands on its own feed, so a follower learns of it by re-deriving
+  from local HEAD and resubscribing, not from any server push.
 
 ```jsonc
+StreamMsg = {"entry": TaggedLogEntry} | {"snapshot": ChangeProj}
+ClientMsg = {"subscribe": {"<id>": <from-idx>, …}} | {"subscribe_snapshot": ["<id>", …]}
 TaggedLogEntry = {"change_id": 10, "idx": 5, "seq": 412, "created_at": "…", "kind": "…", "payload": {…}}
-ClientMsg      = {"subscribe": {"<id>": <from-idx>, …}}
 ```
 
 ### The cursor

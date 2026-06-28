@@ -11,7 +11,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use tokio_stream::{StreamExt, StreamMap};
 
-use nit_types::events::ClientMsg;
+use nit_types::events::{ClientMsg, StreamMsg};
 use nit_types::log::LogEntry;
 
 use crate::db;
@@ -47,9 +47,10 @@ impl tokio_stream::Stream for Feed {
 
 /// Drive one follower's socket: `subscribe` messages drive a keyed
 /// `StreamMap` of per-change feeds (dynamic membership); each arms the feed
-/// **before** replaying the change's `[from, head)` backlog and records an idx
-/// watermark so the arm/read overlap is deduped, never gapped. A feed that
-/// overflows closes the socket — the client reconnects and re-reads the log.
+/// **before** reading the change's backlog (a `[from, head)` replay, or a
+/// `ChangeProj` snapshot) and records an idx watermark so the arm/read overlap
+/// is deduped, never gapped. A feed that overflows closes the socket — the
+/// client reconnects and re-reads the log.
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let mut feeds: StreamMap<u64, Feed> = StreamMap::new();
     let mut watermark: HashMap<u64, u64> = HashMap::new();
@@ -78,11 +79,10 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 // Overflow (or a closed feed): this follower fell behind. Close
                 // the socket so it reconnects and re-reads the gap from the log.
                 let Ok(entry) = item else { break };
-                // Drop a live entry the backlog replay already covered.
                 if entry.idx < watermark.get(&change_id).copied().unwrap_or(0) {
                     continue;
                 }
-                if send_json(&mut socket, &entry).await.is_err() {
+                if send(&mut socket, &StreamMsg::Entry(entry)).await.is_err() {
                     break;
                 }
             }
@@ -114,18 +114,34 @@ async fn apply_client_msg(
                 feeds.insert(change_id, Feed(entry.subscribe()));
                 let backlog = read_backlog(state, change_id, from).await;
                 let mut next = from;
-                for e in &backlog {
+                for e in backlog {
                     next = e.idx + 1;
-                    send_json(socket, e).await?;
+                    send(socket, &StreamMsg::Entry(e)).await?;
                 }
                 watermark.insert(change_id, next);
+            }
+        }
+        ClientMsg::SubscribeSnapshot(ids) => {
+            for change_id in ids {
+                let Some(entry) = state.change_entry(change_id) else {
+                    continue;
+                };
+                // Arm the feed, then snapshot the projection: an append that
+                // lands between the two rides the feed and is deduped by the
+                // high-water mark, so the snapshot and its live tail neither
+                // gap nor double (docs/api.md "Events"). Clone out from under
+                // the read lock — no guard is held across the send.
+                feeds.insert(change_id, Feed(entry.subscribe()));
+                let proj = entry.read().clone();
+                watermark.insert(change_id, proj.entries_folded);
+                send(socket, &StreamMsg::Snapshot(proj)).await?;
             }
         }
     }
     Ok(())
 }
 
-async fn send_json(socket: &mut WebSocket, msg: &LogEntry) -> Result<(), ()> {
+async fn send(socket: &mut WebSocket, msg: &StreamMsg) -> Result<(), ()> {
     let text = serde_json::to_string(msg).map_err(|_| ())?;
     socket
         .send(Message::Text(text.into()))

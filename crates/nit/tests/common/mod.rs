@@ -375,14 +375,21 @@ pub fn sweep(server: &TestServer) {
 
 pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 
-/// `change_id` → `from-idx` pairs; read timeout so `ws_read` never blocks the suite.
-pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Duration) -> WsSock {
+/// Open the stream with a read timeout so reads never block the suite.
+fn ws_open(server: &TestServer, read_timeout: Duration) -> WsSock {
     let url = format!("ws://{}/api/stream", server.addr);
-    let (mut socket, _) = tungstenite::connect(&url).expect("ws connect");
+    let (socket, _) = tungstenite::connect(&url).expect("ws connect");
     if let tungstenite::stream::MaybeTlsStream::Plain(s) = socket.get_ref() {
         s.set_read_timeout(Some(read_timeout))
             .expect("read timeout");
     }
+    socket
+}
+
+/// Cursor mode (docs/api.md "Events"): `change_id` → `from-idx` pairs; the
+/// server replays each `[from, head)` backlog, then streams live.
+pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Duration) -> WsSock {
+    let mut socket = ws_open(server, read_timeout);
     let map: std::collections::HashMap<String, u64> =
         subs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
     let sub = json!({ "subscribe": map }).to_string();
@@ -392,7 +399,24 @@ pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Dura
     socket
 }
 
-/// The next Text frame parsed as JSON, or `None` on read timeout / close.
+/// Snapshot mode (docs/api.md "Events"): the server folds a `ChangeProj`
+/// snapshot per id, then attaches each change's live tail.
+pub fn ws_subscribe_snapshot(server: &TestServer, ids: &[u64], read_timeout: Duration) -> WsSock {
+    let mut socket = ws_open(server, read_timeout);
+    let sub = json!({ "subscribe_snapshot": ids }).to_string();
+    socket
+        .send(tungstenite::Message::Text(sub.into()))
+        .expect("subscribe_snapshot");
+    socket
+}
+
+/// The next frame's `entry` body — a `StreamMsg::Entry` — or `None` on timeout.
+pub fn ws_entry(socket: &mut WsSock) -> Option<Value> {
+    ws_read(socket).map(|f| f["entry"].clone())
+}
+
+/// The next Text frame (a `StreamMsg`) parsed as JSON, or `None` on read
+/// timeout / close.
 pub fn ws_read(socket: &mut WsSock) -> Option<Value> {
     loop {
         match socket.read() {

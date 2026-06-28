@@ -28,6 +28,8 @@
 //! the live tail at the boundary, and [`fold`] skips any entry below it, so the
 //! arm/snapshot overlap is idempotent, never doubled.
 
+use serde::{Deserialize, Serialize};
+
 use crate::changes::{ChangeDetail, Review, Revision};
 use crate::comments::{CommentRange, Thread};
 use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
@@ -35,7 +37,8 @@ use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionP
 
 /// A change's terminal lifecycle, folded from its `lifecycle` entries
 /// (docs/data-model.md "Lifecycle"). `Merged` records which patchset landed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Lifecycle {
     Active,
     Merged { revision: u64 },
@@ -45,7 +48,7 @@ pub enum Lifecycle {
 // ---------------------------------------------------------------------------
 // Projection (the folded state of ONE change)
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RevisionProj {
     /// 0-based, minted in the fold.
     pub number: u64,
@@ -61,7 +64,8 @@ pub struct RevisionProj {
 /// Where a thread is anchored within a revision (docs/api.md "Comment
 /// placement"), modeled so the invalid combinations the flat wire fields
 /// allow are unrepresentable.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Anchor {
     /// The change as a whole (no file).
     Change,
@@ -96,7 +100,7 @@ impl Anchor {
 
 /// A located, resolvable conversation. Its anchor and birth come from its
 /// first comment; the `id` is fold-assigned by creation order, never stored.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadProj {
     pub id: u64,
     pub revision: u64,
@@ -110,14 +114,14 @@ pub struct ThreadProj {
 /// One message in a thread. `review_id` is the review that published it, or
 /// `None` for an agent's own note — which is what distinguishes reviewer from
 /// agent (the only consumer derives the label from it).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadComment {
     pub body: String,
     pub review_id: Option<u64>,
     pub created_at: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewProj {
     pub id: u64,
     pub revision: u64,
@@ -126,8 +130,11 @@ pub struct ReviewProj {
     pub created_at: String,
 }
 
-/// The fold of one change's log.
-#[derive(Debug, Clone)]
+/// The fold of one change's log. Serializable so the server can ship it as the
+/// subscribe **snapshot** and the browser can resume folding the live tail from
+/// it (docs/api.md "Events"); the wire form is opaque to the web, which only
+/// passes it back through the shared WebAssembly fold.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeProj {
     pub id: u64,
     pub repo_id: u64,
