@@ -14,8 +14,8 @@ import type {
   ChainState,
   ChangeDetail,
   ChangeStatus,
-  CommentSide,
-  CreateDraftRequest,
+  Side,
+  NewDraft,
   Decision,
   Draft,
   GraphNode,
@@ -469,7 +469,7 @@ function snapshotLineText(
   revision: number,
   file: string | undefined,
   line: number | undefined,
-  side: CommentSide,
+  side: Side,
 ): string | null {
   if (!file || line === undefined) return null;
   const diff = c.diffs[diffKey(revision)];
@@ -595,8 +595,8 @@ export async function mockRequest(
 
   if ((m = /^\/changes\/(\d+)\/drafts$/.exec(p)) && method === "POST") {
     const c = getChange(Number(m[1]));
-    const req = body as CreateDraftRequest;
-    const side: CommentSide = req.side ?? "new";
+    const req = body as NewDraft;
+    const side: Side = req.side ?? "new";
     const now = new Date().toISOString();
     const record: DraftRecord = {
       id: nextDraftId++,

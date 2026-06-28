@@ -1,10 +1,10 @@
 import { createContext, useContext } from "react";
-import type { CommentRange, CommentSide } from "../api/types";
+import type { CommentRange, Side } from "../api/types";
 
 /** Anchor of the draft editor currently open in the diff. */
 export interface DraftTarget {
   file: string;
-  side: CommentSide;
+  side: Side;
   /** The range's end line when a range is set. */
   line: number;
   /** Selected-text anchor (docs/api.md "Range comments"). */

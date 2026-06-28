@@ -6,14 +6,14 @@ import type {
   BatchSubmitResult,
   Chain,
   ChangeDetail,
-  CreateDraftRequest,
+  NewDraft,
   Diff,
   Draft,
   Repo,
   RepoGraph,
   RepoList,
   StagedDecision,
-  UpdateDraftRequest,
+  EditDraft,
 } from "./types";
 
 export class ApiError extends Error {
@@ -88,10 +88,10 @@ export const getDiff = (changeId: number, revision: number, against?: number) =>
       : `/changes/${changeId}/revisions/${revision}/diff?against=${against}`,
   );
 
-export const createDraft = (changeId: number, draft: CreateDraftRequest) =>
+export const createDraft = (changeId: number, draft: NewDraft) =>
   request<Draft>("POST", `/changes/${changeId}/drafts`, draft);
 
-export const updateDraft = (id: number, req: UpdateDraftRequest) =>
+export const updateDraft = (id: number, req: EditDraft) =>
   request<Draft>("PATCH", `/drafts/${id}`, req);
 
 export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);

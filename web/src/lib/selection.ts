@@ -6,7 +6,7 @@
 // line's text — sign and gutters excluded — lives inside a `.code-text`
 // span within the cell.
 
-import type { CommentSide } from "../api/types";
+import type { Side } from "../api/types";
 import type { DraftTarget } from "../pages/reviewContext";
 
 /** `Range.intersectsNode`, hand-rolled so jsdom tests and the browser run
@@ -75,7 +75,7 @@ function sweptCells(range: Range): HTMLElement[] {
 /** The side both boundary cells can express, preferring "new" (the
  * post-change side). Null when the boundaries disagree — the selected
  * text is not contiguous on either side. */
-function sideOf(first: HTMLElement, last: HTMLElement): CommentSide | null {
+function sideOf(first: HTMLElement, last: HTMLElement): Side | null {
   if (first.dataset.new !== undefined && last.dataset.new !== undefined) {
     return "new";
   }
@@ -102,7 +102,7 @@ export interface SelectionMiss {
  * makes a one-side range sweep both columns' cells, but only the dragged
  * side should highlight.
  */
-export function selectionAnchorSide(anchor: Node | null): CommentSide | null {
+export function selectionAnchorSide(anchor: Node | null): Side | null {
   const el =
     anchor instanceof Element ? anchor : (anchor?.parentElement ?? null);
   const side = el?.closest("[data-side]")?.getAttribute("data-side");

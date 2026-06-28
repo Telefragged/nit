@@ -6,13 +6,7 @@ import {
   useMemo,
 } from "react";
 import { createDraft } from "../../api/client";
-import type {
-  CommentRange,
-  CommentSide,
-  DiffFile,
-  Hunk,
-  Line,
-} from "../../api/types";
+import type { CommentRange, Side, DiffFile, Hunk, Line } from "../../api/types";
 import {
   commentCountLabel,
   commentPlacement,
@@ -237,7 +231,7 @@ export default function DiffFileView({
   // "what am I commenting on" feedback once the DOM selection is dismissed.
   const rangePaints = useMemo(() => {
     const paints: {
-      side: CommentSide;
+      side: Side;
       range: CommentRange;
       active: boolean;
     }[] = [];
@@ -257,7 +251,7 @@ export default function DiffFileView({
    * the given sides (unified cells show both; split cells one). */
   function cellRangeMarks(
     line: Line,
-    sides: readonly CommentSide[],
+    sides: readonly Side[],
   ): RangeMark[] | undefined {
     const marks: RangeMark[] = [];
     for (const p of rangePaints) {

@@ -5,7 +5,7 @@
 import type {
   ChangeStatus,
   CommentRange,
-  CommentSide,
+  Side,
   Diff,
   Review,
   Revision,
@@ -52,7 +52,7 @@ export interface ThreadRecord {
   revision: number;
   file: string | null;
   line: number | null;
-  side: CommentSide;
+  side: Side;
   /** Selected-text anchor; most fixture threads are whole-line. */
   range?: CommentRange | null;
   line_text: string | null;
@@ -71,7 +71,7 @@ export interface DraftRecord {
   revision: number;
   file: string | null;
   line: number | null;
-  side: CommentSide;
+  side: Side;
   range?: CommentRange | null;
   line_text: string | null;
   body: string;

@@ -6,7 +6,7 @@
 
 import type {
   CommentRange,
-  CommentSide,
+  Side,
   Draft,
   Thread,
   ThreadComment,
@@ -14,12 +14,12 @@ import type {
 
 export interface CommentAnchor {
   revision: number;
-  side: CommentSide;
+  side: Side;
   line: number | null;
 }
 
 export interface Placement {
-  side: CommentSide;
+  side: Side;
   line: number;
 }
 
@@ -35,7 +35,7 @@ export interface UiThread {
   revision: number;
   file: string | null;
   line: number | null;
-  side: CommentSide;
+  side: Side;
   range: CommentRange | null;
   line_text: string | null;
   resolved: boolean;
@@ -118,10 +118,10 @@ export function commentPlacement(
  * revision's own content, so a draft there anchors to FROM's new side.
  */
 export function draftAnchor(
-  column: CommentSide,
+  column: Side,
   selected: number,
   against: number | undefined,
-): { revision: number; side: CommentSide } {
+): { revision: number; side: Side } {
   if (column === "new") return { revision: selected, side: "new" };
   if (against === undefined) return { revision: selected, side: "old" };
   return { revision: against, side: "new" };
