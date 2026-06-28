@@ -38,6 +38,7 @@ use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionP
 /// A change's terminal lifecycle, folded from its `lifecycle` entries
 /// (docs/data-model.md "Lifecycle"). `Merged` records which patchset landed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Lifecycle {
     Active,
@@ -49,6 +50,7 @@ pub enum Lifecycle {
 // Projection (the folded state of ONE change)
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RevisionProj {
     /// 0-based, minted in the fold.
     pub number: u64,
@@ -65,6 +67,7 @@ pub struct RevisionProj {
 /// placement"), modeled so the invalid combinations the flat wire fields
 /// allow are unrepresentable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Anchor {
     /// The change as a whole (no file).
@@ -101,6 +104,7 @@ impl Anchor {
 /// A located, resolvable conversation. Its anchor and birth come from its
 /// first comment; the `id` is fold-assigned by creation order, never stored.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ThreadProj {
     pub id: u64,
     pub revision: u64,
@@ -115,6 +119,9 @@ pub struct ThreadProj {
 /// `None` for an agent's own note — which is what distinguishes reviewer from
 /// agent (the only consumer derives the label from it).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// Shares the wire `ThreadComment` name but is a distinct type — only
+// ever round-tripped through the wasm fold.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(rename = "ThreadCommentProj"))]
 pub struct ThreadComment {
     pub body: String,
     pub review_id: Option<u64>,
@@ -122,6 +129,7 @@ pub struct ThreadComment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReviewProj {
     pub id: u64,
     pub revision: u64,
@@ -135,6 +143,7 @@ pub struct ReviewProj {
 /// it (docs/api.md "Events"); the wire form is opaque to the web, which only
 /// passes it back through the shared WebAssembly fold.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeProj {
     pub id: u64,
     pub repo_id: u64,
@@ -377,7 +386,6 @@ pub fn replay(id: u64, repo_id: u64, change_key: String, entries: Vec<LogEntry>)
     change
 }
 
-// ---------------------------------------------------------------------------
 // Projection → wire (docs/api.md "Changes"): the published view of a change,
 // shared by the server's change endpoint and the WebAssembly fold.
 
@@ -514,7 +522,6 @@ mod tests {
         })
     }
 
-    /// A new-thread comment anchored at `file:line` on the new side of revision 0.
     fn anchored(file: &str, line: u64, body: &str) -> CommentInput {
         CommentInput {
             thread_id: None,
@@ -614,7 +621,6 @@ mod tests {
         ]);
         assert_eq!(c.status_at(0), ChangeStatus::Approved);
         assert_eq!(c.current_status(), ChangeStatus::Pending);
-        // A verdict on the latest revision moves the current status.
         let c = folded(vec![
             revision("A", "base", "base", true),
             review(0, Verdict::Approve),
@@ -767,8 +773,7 @@ mod tests {
         fold(&mut c, entry(0, revision("A", "base", "base", true)));
         fold(&mut c, entry(1, review(0, Verdict::Approve)));
         assert_eq!(c.entries_folded, 2);
-        // Re-delivering the snapshot/live boundary (idx 1) is a no-op: no second
-        // review lands and the mark holds.
+        // Re-delivering the snapshot/live boundary (idx 1) is a no-op.
         fold(&mut c, entry(1, review(0, Verdict::RequestChanges)));
         assert_eq!(c.reviews.len(), 1);
         assert_eq!(c.entries_folded, 2);

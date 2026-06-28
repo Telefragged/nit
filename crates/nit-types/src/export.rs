@@ -33,6 +33,7 @@ fn write_wire_types() {
         crate::enums::GraphSection,
         crate::enums::FileStatus,
         crate::enums::LineKind,
+        crate::enums::LifecycleAction,
         crate::repos::Repo,
         crate::repos::RepoList,
         crate::chains::Chain,
@@ -40,6 +41,7 @@ fn write_wire_types() {
         crate::graph::RepoGraph,
         crate::graph::GraphNode,
         crate::changes::ChangeDetail,
+        crate::changes::ChangeDrafts,
         crate::changes::Revision,
         crate::changes::Review,
         crate::changes::StagedDecision,
@@ -56,6 +58,25 @@ fn write_wire_types() {
         crate::diff::Line,
         crate::decisions::BatchSubmitResult,
         crate::decisions::SubmitError,
+        // The websocket event stream (docs/api.md "Events"): the change page
+        // folds these client-side.
+        crate::log::RevisionPayload,
+        crate::log::ReviewPayload,
+        crate::log::CommentInput,
+        crate::log::LifecyclePayload,
+        crate::log::LogPayload,
+        crate::log::LogEntry,
+        crate::events::ClientMsg,
+        crate::events::StreamMsg,
+        // The folded projection the server snapshots over the stream; the web
+        // holds it opaque and only round-trips it through the wasm fold.
+        crate::fold::Lifecycle,
+        crate::fold::Anchor,
+        crate::fold::RevisionProj,
+        crate::fold::ThreadComment,
+        crate::fold::ThreadProj,
+        crate::fold::ReviewProj,
+        crate::fold::ChangeProj,
     );
     std::fs::write(path, out).expect("write types.gen.ts");
 }

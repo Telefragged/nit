@@ -105,6 +105,7 @@ impl std::str::FromStr for LogKind {
 /// "Payloads"). The merge/abandon timer writes `merged`/`abandoned`;
 /// `nit reopen` writes `reopened`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum LifecycleAction {
     Merged,

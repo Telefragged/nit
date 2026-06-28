@@ -10,6 +10,7 @@ use crate::enums::{LifecycleAction, LogKind, Side, Verdict};
 /// revision `number` is **not** carried — the fold mints it (0-based, by
 /// append order) so a concurrent shared-change push cannot duplicate it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RevisionPayload {
     pub commit_sha: String,
     pub parent_sha: String,
@@ -22,6 +23,7 @@ pub struct RevisionPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReviewPayload {
     pub review_id: u64,
     pub revision: u64,
@@ -36,6 +38,7 @@ pub struct ReviewPayload {
 /// **opens a new thread** anchored by the fields below; with it set it
 /// **replies** to that thread (the anchor is ignored — the thread owns it).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentInput {
     /// `None` opens a new thread; `Some` appends to that thread.
     #[serde(default)]
@@ -68,6 +71,7 @@ pub struct CommentInput {
 /// `nit reopen` actions. `revision` is set only for `merged` (which patchset
 /// landed); `message` is an optional reason on `abandoned`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LifecyclePayload {
     pub action: LifecycleAction,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -82,6 +86,7 @@ pub struct LifecyclePayload {
 /// alone (the `kind` lives in its own column), via the boundary in
 /// `crate::review`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", content = "payload", rename_all = "snake_case")]
 pub enum LogPayload {
     Revision(RevisionPayload),
@@ -122,6 +127,7 @@ impl LogPayload {
 /// orders the whole repo, `idx` orders one change. The flattened [`LogPayload`]
 /// contributes the `kind` discriminant and the `payload` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LogEntry {
     pub change_id: u64,
     pub idx: u64,

@@ -11,6 +11,7 @@ use crate::log::LogEntry;
 
 /// A client → server websocket message. Externally tagged, `snake_case`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum ClientMsg {
     /// Cursor replay (the CLI follower): `change_id` → from-idx; the server
@@ -28,6 +29,7 @@ pub enum ClientMsg {
 /// A server → client websocket message (docs/api.md "Events"). Externally
 /// tagged, `snake_case`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum StreamMsg {
     /// The change's folded projection at subscribe time — the snapshot a

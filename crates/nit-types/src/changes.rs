@@ -28,6 +28,7 @@ pub struct ChangeDetail {
 /// `GET /api/changes/{id}/drafts` response: the reviewer's private overlay —
 /// unpublished drafts and the staged decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeDrafts {
     pub drafts: Vec<Draft>,
     pub draft_decision: Option<StagedDecision>,
