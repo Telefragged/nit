@@ -5,9 +5,10 @@ React 19 + TypeScript, Vite, in `web/`. Libraries: `react-router-dom`,
 syntax highlighting). Keep the dependency list short; justify additions in
 the commit message.
 
-`web/src/api/types.ts` mirrors [api.md](api.md) exactly — never invent
-shapes in components. `web/src/api/client.ts` is the only place `fetch`
-happens.
+`web/src/api/types.ts` re-exports `types.gen.ts`, which is generated from
+`crates/nit-types` (`nix run .#gen-types`) and matches [api.md](api.md)
+exactly — never invent shapes in components, and never hand-edit the
+generated file. `web/src/api/client.ts` is the only place `fetch` happens.
 
 The unit of state is the **change** (a `Change-Id`, scoped to a repo); a
 **chain** is derived, never stored — a path walked from a tip back to the

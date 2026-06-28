@@ -21,8 +21,9 @@ identity across rewrites. Product spec: `nit.md`.
    the tip), especially after conflict resolution (docs/dev.md
    "Formatting").
 4. **Cross-component JSON shapes live in docs/api.md** — change the doc
-   first, then both sides (`crates/nit/src/api/types.rs`,
-   `web/src/api/types.ts`).
+   first, then `crates/nit-types`, then regenerate the web's TypeScript
+   (`nix run .#gen-types` writes `web/src/api/types.gen.ts`; never
+   hand-edit that file).
 5. **To see the UI, render it**:
    `cd web && nix develop -c npm run screenshots`, then Read
    `screenshots/*.png`.

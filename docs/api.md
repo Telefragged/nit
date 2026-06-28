@@ -1,9 +1,9 @@
 # HTTP API — the contract
 
 Everything under `/api`, JSON in/out. **This doc set is the single source of
-truth for shapes**: the frontend mirrors it in `web/src/api/types.ts`, the
-backend in `crates/nit/src/api/types.rs`. Change a shape in its `api/`
-section file first.
+truth for shapes**: the backend models them in `crates/nit-types`, from which
+the frontend's `web/src/api/types.gen.ts` is generated (`nix run
+.#gen-types`). Change a shape in its `api/` section file first.
 
 Errors: non-2xx with `{"error": "human readable message"}`.
 Times are RFC3339 strings. Shas are full 40-hex; clients truncate for

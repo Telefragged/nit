@@ -48,6 +48,12 @@ The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
 change, regenerate it with `nix develop -c crate2nix generate` and commit it
 in the same change — a stale `Cargo.nix` fails the build fast.
 
+The web's wire types (`web/src/api/types.gen.ts`) are generated the same
+way — from `crates/nit-types` via `nix run .#gen-types`, a native
+`cargo test` that runs the crate's `ts`-feature `ts-rs` exporter (no wasm).
+Regenerate and commit it whenever those types change; the `types-drift`
+check fails a stale file.
+
 ## Formatting
 
 `nix develop -c treefmt` formats the tree (`nix fmt` is the same; config in
@@ -95,8 +101,9 @@ rules, binding on review and simplification passes too (a violation is a
 finding to fix, and reviewer agents are told so):
 
 - **A closed set of values is an `enum`, never a `String`** (sides,
-  verdicts, statuses, kinds…). Home: `crates/nit/src/enums.rs`, mirrored by
-  the TS unions in `web/src/api/types.ts`. `#[serde(rename_all = …)]` keeps
+  verdicts, statuses, kinds…). Home: `crates/nit-types/src/enums.rs`, from
+  which the TS unions in `web/src/api/types.gen.ts` are generated.
+  `#[serde(rename_all = …)]` keeps
   the wire spelling, so it is not a wire change. Buys exhaustive `match`es
   and a 400 on an unknown value at deserialize time. A `String` is fine
   only at the storage boundary, converted to the enum immediately.
