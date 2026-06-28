@@ -4,7 +4,6 @@ use axum::Json;
 use axum::extract::State;
 use git2::Repository;
 
-use nit_types::events::{NewParent, StreamMsg};
 use nit_types::log::{LogPayload, RevisionPayload};
 use nit_types::push::{PushRequest, PushResult, TipChange};
 
@@ -21,10 +20,6 @@ struct Target {
     change_id: u64,
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one push flow: resolve, walk, pre-flight, per-commit upsert+append, result"
-)]
 pub(super) async fn push(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<PushRequest>,
@@ -77,8 +72,7 @@ pub(super) async fn push(
             targets.push(Target { entry, change_id });
         }
 
-        // Oldest-first: targets[i - 1] is always the parent when publishing edges.
-        for (i, (wc, t)) in walk.commits.iter().zip(&targets).enumerate() {
+        for (wc, t) in walk.commits.iter().zip(&targets) {
             let prior = t.entry.read().latest_revision().cloned();
             if prior
                 .as_ref()
@@ -105,28 +99,6 @@ pub(super) async fn push(
             });
             append_to_change(conn, &t.entry, t.change_id, vec![new]).map_err(map_busy)?;
             gitscan::maintain_keep_refs(&repo, &t.entry.read());
-
-            // A newly established parent↔child edge tells followers to
-            // re-derive (advisory — they re-derive HEAD regardless). Publish on
-            // the edge's *pre-existing* endpoint, the only feed a follower can
-            // already hold: a re-rooted existing change on its own feed; a
-            // brand-new child stacked on an existing parent, on the parent's.
-            if i > 0 {
-                let parent = &targets[i - 1];
-                let feed = match &prior {
-                    Some(old) if old.parent_sha != wc.parent_sha => Some(&t.entry),
-                    None => Some(&parent.entry),
-                    _ => None,
-                };
-                if let Some(feed) = feed {
-                    feed.publish(StreamMsg::NewParent {
-                        new_parent: NewParent {
-                            of: t.change_id,
-                            parent: parent.change_id,
-                        },
-                    });
-                }
-            }
         }
 
         let tip = targets

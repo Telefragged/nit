@@ -1,5 +1,5 @@
-//! `WS /api/stream`: backlog replay, the idx watermark, live streaming, and the
-//! `new_parent` advisory (docs/api.md "Events").
+//! `WS /api/stream`: backlog replay, the idx watermark, and live streaming
+//! (docs/api.md "Events").
 
 mod common;
 
@@ -57,40 +57,6 @@ fn subscribe_at_head_skips_backlog() {
     let live = ws_read(&mut socket).expect("live entry after head subscribe");
     assert_eq!(live["kind"], "review");
     assert_eq!(live["idx"], 1);
-}
-
-/// A brand-new tip stacked on a subscribed change wakes that change's
-/// follower with a `new_parent` advisory — the chain-extension counterpart to
-/// a re-root. Without it, `nit log --follow` on an earlier change never learns
-/// the new tip exists and misses reviews published to it. The advisory lands on
-/// the *parent's* feed; the new child's own feed has no subscribers yet.
-#[test]
-fn stacked_tip_wakes_parent_follower() {
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    g.branch("feat", c1);
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (_, res) = push(&server, &g, "feat", "main");
-    let one = member_id(&server, &res, "I001");
-
-    // Follow change one from idx 0; reading its backlog revision arms the feed
-    // (the sync point) before we stack the tip.
-    let mut socket = ws_subscribe(&server, &[(one, 0)], READ);
-    let backlog = ws_read(&mut socket).expect("backlog revision for change one");
-    assert_eq!(backlog["change_id"], one);
-    assert_eq!(backlog["kind"], "revision");
-
-    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    g.branch("feat", c2);
-    let (st, res2) = push(&server, &g, "feat", "main");
-    assert_eq!(st, 200, "{res2}");
-    let two = member_id(&server, &res2, "I002");
-
-    // change one's follower is woken by the advisory naming the new child —
-    // change one itself appended nothing (its content is unchanged).
-    let frame = ws_read(&mut socket).expect("new_parent advisory on the parent feed");
-    assert_eq!(frame["new_parent"]["of"], two);
-    assert_eq!(frame["new_parent"]["parent"], one);
 }
 
 /// Only entries for currently-subscribed changes reach a socket.
