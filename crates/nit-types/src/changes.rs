@@ -25,6 +25,14 @@ pub struct ChangeDetail {
     pub draft_decision: Option<StagedDecision>,
 }
 
+/// `GET /api/changes/{id}/drafts` response: the reviewer's private overlay —
+/// unpublished drafts and the staged decision.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeDrafts {
+    pub drafts: Vec<Draft>,
+    pub draft_decision: Option<StagedDecision>,
+}
+
 /// A reviewer's staged decision plus its cover note/reason (docs/api.md
 /// "Reviewer decisions"). The body of [`ChangeDetail::draft_decision`] and the
 /// `PUT /api/changes/{id}/decision` request.

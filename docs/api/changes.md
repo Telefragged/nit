@@ -26,6 +26,14 @@
   the change; a `PathEntry` from `GET /api/chains/{id}` carries them.
   `reviews` and `threads` are change-wide and carry their `revision`; a client
   viewing one patchset MUST filter by the viewing `?revision`.
+- `GET /api/changes/{id}/drafts` — the reviewer's private overlay alone: their
+  unpublished `drafts` and `draft_decision`. These are not in the log, so the
+  change page reads them here over REST and folds the published projection
+  (revisions/threads/reviews) from the websocket instead (docs/api.md
+  "Events"); `GET /api/changes/{id}` still returns both for a one-shot read.
+  ```json
+  { "drafts": [Draft], "draft_decision": StagedDecision }   // ChangeDrafts
+  ```
 - `GET /api/changes/{id}/revisions/{n}/diff` → Diff of revision n against
   its parent.
 - `GET /api/changes/{id}/revisions/{n}/diff?against={m}` → interdiff

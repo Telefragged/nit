@@ -79,7 +79,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/changes/{id}/revisions/{n}/lines",
             get(changes::revision_lines),
         )
-        .route("/api/changes/{id}/drafts", post(drafts::create_draft))
+        .route(
+            "/api/changes/{id}/drafts",
+            get(changes::get_change_drafts).post(drafts::create_draft),
+        )
         .route("/api/changes/{id}/comments", post(comments::create_comment))
         .route(
             "/api/changes/{id}/decision",

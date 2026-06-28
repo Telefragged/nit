@@ -103,6 +103,39 @@ fn stage_surfaces_then_clears() {
     assert_eq!(status_at(&server, id), "pending");
 }
 
+/// `GET /changes/{id}/drafts` returns the reviewer's private overlay alone —
+/// drafts + staged decision, no published projection — for the change page that
+/// folds revisions/threads/reviews over the websocket instead.
+#[test]
+fn drafts_endpoint_returns_the_overlay() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let id = push_one(&server, &g, "feat", "Ia");
+
+    let drafts = |server: &TestServer| {
+        let (st, d) = http_get(&server.url(&format!("/api/changes/{id}/drafts")));
+        assert_eq!(st, 200, "{d}");
+        d
+    };
+
+    let d = drafts(&server);
+    assert_eq!(d["drafts"].as_array().unwrap().len(), 0);
+    assert_eq!(d["draft_decision"], Value::Null);
+
+    draft_comment(&server, id, "a.txt", 1, "nit");
+    stage(&server, id, "approve", "lgtm");
+
+    let d = drafts(&server);
+    assert_eq!(d["drafts"].as_array().unwrap().len(), 1);
+    assert_eq!(d["draft_decision"]["decision"], "approve");
+    assert!(d.get("revisions").is_none() && d.get("reviews").is_none());
+
+    let (st, _) = http_get(&server.url("/api/changes/99999/drafts"));
+    assert_eq!(st, 404);
+}
+
 /// Batch submit publishes a staged verdict, draining the change's comment
 /// drafts into the review and clearing the staged decision.
 #[test]

@@ -10,7 +10,7 @@ use git2::Repository;
 use rusqlite::Connection;
 
 use nit_types::chains::{Chain, PathEntry};
-use nit_types::changes::{ChangeDetail, StagedDecision};
+use nit_types::changes::{ChangeDetail, ChangeDrafts, StagedDecision};
 use nit_types::comments::Draft;
 use nit_types::enums::{ChangeStatus, GraphSection};
 use nit_types::graph::{GraphNode, RepoGraph};
@@ -243,6 +243,27 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
     }
 }
 
+/// The reviewer's private overlay — unpublished drafts and the staged decision
+/// — read straight from the database. Not log state, so the change page reads
+/// it over REST (`GET /api/changes/{id}/drafts`) while folding the published
+/// projection over the websocket (docs/api.md "Events"); the change detail
+/// folds the same overlay in.
+///
+/// # Errors
+/// When reading drafts fails.
+pub fn change_overlay(conn: &Connection, change_id: u64) -> Result<ChangeDrafts> {
+    Ok(ChangeDrafts {
+        drafts: db::drafts_for_change(conn, change_id)?
+            .iter()
+            .map(|d| draft_view(d, change_id))
+            .collect(),
+        draft_decision: db::get_draft_review(conn, change_id)?.map(|r| StagedDecision {
+            decision: r.decision,
+            message: r.message,
+        }),
+    })
+}
+
 /// A pure read of the single fold — the chains a change sits on come from the
 /// chain endpoints (`GET /api/chains/{id}`), so a change read builds no view.
 ///
@@ -253,13 +274,8 @@ pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<Cha
     // reviewer's drafts and staged decision live outside the log, so overlay
     // them from the database here.
     let mut detail = nit_types::fold::change_detail(change);
-    detail.drafts = db::drafts_for_change(conn, change.id)?
-        .iter()
-        .map(|d| draft_view(d, change.id))
-        .collect();
-    detail.draft_decision = db::get_draft_review(conn, change.id)?.map(|r| StagedDecision {
-        decision: r.decision,
-        message: r.message,
-    });
+    let overlay = change_overlay(conn, change.id)?;
+    detail.drafts = overlay.drafts;
+    detail.draft_decision = overlay.draft_decision;
     Ok(detail)
 }

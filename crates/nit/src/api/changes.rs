@@ -7,13 +7,14 @@ use axum::extract::State;
 use git2::{Oid, Repository, Tree};
 use serde::Deserialize;
 
-use nit_types::changes::ChangeDetail;
+use nit_types::changes::{ChangeDetail, ChangeDrafts};
 use nit_types::diff::{Diff, FileLines};
 
 use crate::review;
 
 use super::diff;
 use super::rebase;
+use super::views;
 use super::{AppPath, AppQuery, AppState, ChangeEntry, Error, with_conn};
 use super::{change_detail_json, change_or_404};
 
@@ -24,6 +25,20 @@ pub(super) async fn get_change_detail(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         change_detail_json(conn, &entry)
+    })
+    .await
+}
+
+/// `GET /api/changes/{id}/drafts` — the reviewer's private overlay (drafts +
+/// staged decision). The change page reads this over REST and the folded
+/// projection over the websocket (docs/api.md "Events").
+pub(super) async fn get_change_drafts(
+    State(state): State<Arc<AppState>>,
+    AppPath(id): AppPath<u64>,
+) -> Result<Json<ChangeDrafts>, Error> {
+    with_conn(state.pool(), move |conn| {
+        change_or_404(&state, conn, id)?;
+        Ok(Json(views::change_overlay(conn, id)?))
     })
     .await
 }
