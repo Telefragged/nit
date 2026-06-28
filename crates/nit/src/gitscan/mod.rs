@@ -329,7 +329,7 @@ mod tests {
     }
 
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProj {
-        let mut proj = ChangeProj::new(id, 1, key.to_string(), "t0".to_string());
+        let mut proj = ChangeProj::new(id, 1, key.to_string());
         proj.revisions.push(RevisionProj {
             number: 0,
             commit_sha: commit.to_string(),

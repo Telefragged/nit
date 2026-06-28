@@ -17,6 +17,7 @@ pub mod diff;
 pub mod enums;
 pub mod error;
 pub mod events;
+pub mod fold;
 pub mod graph;
 pub mod health;
 pub mod log;

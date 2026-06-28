@@ -22,10 +22,15 @@
 //! shared-change push can't duplicate an id, and replay (ids already set) just
 //! advances it (docs/data-model.md "Identity"). The fold therefore requires
 //! entries in ascending `idx` order.
+//!
+//! [`ChangeProj::entries_folded`] is the count of entries consumed (the next
+//! `idx`): the server stamps it into a snapshot so a follower resumes folding
+//! the live tail at the boundary, and [`fold`] skips any entry below it, so the
+//! arm/snapshot overlap is idempotent, never doubled.
 
-use nit_types::comments::CommentRange;
-use nit_types::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
-use nit_types::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
+use crate::comments::CommentRange;
+use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
+use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
 /// A change's terminal lifecycle, folded from its `lifecycle` entries
 /// (docs/data-model.md "Lifecycle"). `Merged` records which patchset landed.
@@ -126,30 +131,33 @@ pub struct ChangeProj {
     pub id: u64,
     pub repo_id: u64,
     pub change_key: String,
-    pub created_at: String,
     pub revisions: Vec<RevisionProj>,
     pub threads: Vec<ThreadProj>,
     pub reviews: Vec<ReviewProj>,
     pub lifecycle: Lifecycle,
     /// The next thread id to mint — bumped each time a thread is opened.
     pub next_thread_id: u64,
+    /// Count of entries folded = the next unconsumed `idx` (a high-water mark).
+    /// Carried in the snapshot so the client resumes folding the live tail at
+    /// the right boundary and [`fold`] stays idempotent across the overlap.
+    pub entries_folded: u64,
 }
 
 impl ChangeProj {
-    /// An empty projection for the change `(id, repo_id, change_key)` created at
-    /// `created_at`. The fold builds the rest from the log.
+    /// An empty projection for the change `(id, repo_id, change_key)`. The fold
+    /// builds the rest from the log.
     #[must_use]
-    pub fn new(id: u64, repo_id: u64, change_key: String, created_at: String) -> ChangeProj {
+    pub fn new(id: u64, repo_id: u64, change_key: String) -> ChangeProj {
         ChangeProj {
             id,
             repo_id,
             change_key,
-            created_at,
             revisions: Vec::new(),
             threads: Vec::new(),
             reviews: Vec::new(),
             lifecycle: Lifecycle::Active,
             next_thread_id: 0,
+            entries_folded: 0,
         }
     }
 
@@ -245,6 +253,14 @@ impl ChangeProj {
 /// fold"), minting any new-thread ids into the entry's typed payload and
 /// returning the id-bearing entry (the server stores and broadcasts that one).
 pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
+    // Idempotent across the snapshot/live overlap: an entry already folded into
+    // this projection (its idx below the high-water mark) leaves it untouched,
+    // so a follower that re-receives the boundary entries the snapshot already
+    // covers never double-applies them (docs/api.md "Events").
+    if entry.idx < change.entries_folded {
+        return entry;
+    }
+    change.entries_folded = entry.idx + 1;
     let now = entry.created_at.clone();
     match &mut entry.payload {
         LogPayload::Revision(p) => fold_revision(change, p, &now),
@@ -345,29 +361,23 @@ fn open_thread(
 
 /// Rebuild a change's projection by folding its entries (ascending `idx`).
 #[must_use]
-pub fn replay(
-    id: u64,
-    repo_id: u64,
-    change_key: String,
-    created_at: String,
-    entries: &[LogEntry],
-) -> ChangeProj {
-    let mut change = ChangeProj::new(id, repo_id, change_key, created_at);
+pub fn replay(id: u64, repo_id: u64, change_key: String, entries: Vec<LogEntry>) -> ChangeProj {
+    let mut change = ChangeProj::new(id, repo_id, change_key);
     for entry in entries {
-        fold(&mut change, entry.clone());
+        fold(&mut change, entry);
     }
     change
 }
 
 #[cfg(test)]
 mod tests {
-    use nit_types::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
-    use nit_types::log::ReviewPayload;
+    use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
+    use crate::log::ReviewPayload;
 
     use super::*;
 
     fn empty() -> ChangeProj {
-        ChangeProj::new(1, 1, "Iabc".to_string(), "t0".to_string())
+        ChangeProj::new(1, 1, "Iabc".to_string())
     }
 
     fn entry(idx: u64, payload: LogPayload) -> LogEntry {
@@ -639,13 +649,30 @@ mod tests {
             1,
             1,
             "Iabc".to_string(),
-            "t0".to_string(),
-            &[
+            vec![
                 entry(0, revision("A", "base", "base", true)),
                 entry(1, review(0, Verdict::Approve)),
             ],
         );
         assert_eq!(c.revisions.len(), 1);
         assert_eq!(c.status_at(0), ChangeStatus::Approved);
+    }
+
+    #[test]
+    fn entries_folded_tracks_the_high_water_mark_and_dedups_the_overlap() {
+        let mut c = empty();
+        fold(&mut c, entry(0, revision("A", "base", "base", true)));
+        fold(&mut c, entry(1, review(0, Verdict::Approve)));
+        assert_eq!(c.entries_folded, 2);
+        // Re-delivering the snapshot/live boundary (idx 1) is a no-op: no second
+        // review lands and the mark holds.
+        fold(&mut c, entry(1, review(0, Verdict::RequestChanges)));
+        assert_eq!(c.reviews.len(), 1);
+        assert_eq!(c.entries_folded, 2);
+        assert_eq!(c.status_at(0), ChangeStatus::Approved);
+        // The next contiguous entry resumes folding.
+        fold(&mut c, entry(2, review(0, Verdict::RequestChanges)));
+        assert_eq!(c.reviews.len(), 2);
+        assert_eq!(c.entries_folded, 3);
     }
 }

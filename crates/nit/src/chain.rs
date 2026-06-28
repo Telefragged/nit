@@ -305,7 +305,7 @@ mod tests {
     }
 
     fn change(id: u64, key: &str, revs: Vec<RevisionProj>) -> ChangeProj {
-        let mut c = ChangeProj::new(id, 1, key.to_string(), "t0".to_string());
+        let mut c = ChangeProj::new(id, 1, key.to_string());
         c.revisions = revs;
         c
     }

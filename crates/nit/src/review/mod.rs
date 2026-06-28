@@ -1,13 +1,13 @@
 //! The per-change fold and its server-side adapters.
 //!
-//! The fold itself ([`mod@fold`], re-exported here so the rest of the crate
-//! keeps importing `crate::review::*`) is pure over `nit_types` — no database,
-//! no storage serialization, no event publishing — so the same code folds the
-//! websocket stream client-side once compiled to WebAssembly. This module adds
-//! the two things that must **not** follow it to the browser: the storage
-//! boundary ([`payload_to_json`]/[`payload_from_json`], the `log.payload`
-//! column split) and the row adapters that build wire [`LogEntry`]s from `db`
-//! rows ([`entry_from_row`]/[`replay_rows`]).
+//! The fold itself ([`nit_types::fold`], re-exported here so the rest of the
+//! crate keeps importing `crate::review::*`) is pure over `nit_types` — no
+//! database, no storage serialization, no event publishing — so the same code
+//! folds the websocket stream client-side once compiled to WebAssembly. This
+//! module adds the two things that must **not** follow it to the browser: the
+//! storage boundary ([`payload_to_json`]/[`payload_from_json`], the
+//! `log.payload` column split) and the row adapters that build wire
+//! [`LogEntry`]s from `db` rows ([`entry_from_row`]/[`replay_rows`]).
 
 use anyhow::{Result, anyhow};
 
@@ -16,8 +16,7 @@ use nit_types::log::{LogEntry, LogPayload};
 
 use crate::db;
 
-mod fold;
-pub use fold::*;
+pub use nit_types::fold::*;
 
 /// Serialize a log payload to the JSON stored in its `log.payload` column: the
 /// inner struct alone, since the entry's `kind` is stored in its own column.
@@ -80,13 +79,7 @@ pub fn replay_rows(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangePro
         .iter()
         .map(|r| entry_from_row(row.id, r))
         .collect::<Result<Vec<_>>>()?;
-    Ok(replay(
-        row.id,
-        row.repo_id,
-        row.change_key.clone(),
-        row.created_at.clone(),
-        &entries,
-    ))
+    Ok(replay(row.id, row.repo_id, row.change_key.clone(), entries))
 }
 
 #[cfg(test)]
