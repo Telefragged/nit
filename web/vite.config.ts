@@ -13,7 +13,7 @@ export default defineConfig({
   plugins: [react(), wasm()],
   server: {
     proxy: {
-      "/api": "http://127.0.0.1:8877",
+      "/api": { target: "http://127.0.0.1:8877", ws: true },
     },
   },
   // Vitest (`npm test`): jsdom so component tests have a DOM; VITE_MOCK so

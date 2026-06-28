@@ -14,6 +14,7 @@ import type {
   ChainState,
   ChangeDetail,
   ChangeStatus,
+  CommentInput,
   Side,
   NewDraft,
   Decision,
@@ -27,9 +28,10 @@ import type {
   Review,
   Revision,
   StagedDecision,
-  Thread,
   Verdict,
 } from "../types";
+import { changeDetail as foldDetail, replayProj } from "../fold";
+import { logFor, mockAppend } from "./stream";
 import { diffKey } from "./builders";
 import {
   changes,
@@ -38,75 +40,53 @@ import {
   graphHistory,
   graphScenarios,
   repos,
-  threads,
   tips,
 } from "./data";
-import type {
-  ChangeRecord,
-  DraftRecord,
-  ThreadRecord,
-  TipRecord,
-} from "./store";
+import type { ChangeRecord, DraftRecord, TipRecord } from "./store";
 
 let nextDraftId = 200;
 let nextThreadId = 300;
 let nextReviewId = 50;
 
-/** Drain a change's comment drafts into `review`, opening or updating their
- * threads; returns the threads it touched. Shared by the immediate POST
- * /reviews and the batch submit (docs/api.md "Thread resolution"). */
-function drainComments(
-  c: ChangeRecord,
-  review: Review,
-  now: string,
-): ThreadRecord[] {
-  const touched = new Map<number, ThreadRecord>();
+/** Drain a change's comment drafts into `CommentInput`s for the review's log
+ * entry; a new thread gets a record id stamped on so the websocket fold mints
+ * the same id (docs/api.md "Thread resolution"). The fold owns the thread, so
+ * nothing is mirrored here — the review_id is attached when the entry folds. */
+function drainComments(c: ChangeRecord): CommentInput[] {
+  const comments: CommentInput[] = [];
   const changeDrafts = drafts
     .filter((x) => x.change_id === c.id)
     .sort((a, b) => a.id - b.id);
   for (const d of changeDrafts) {
-    const hasBody = d.body.trim() !== "";
     if (d.thread_id !== null) {
-      const thread = threads.find((x) => x.id === d.thread_id);
-      if (thread) {
-        thread.resolved = d.resolved;
-        thread.updated_at = now;
-        if (hasBody) {
-          thread.comments.push({
-            body: d.body,
-            review_id: review.id,
-            created_at: now,
-          });
-        }
-        touched.set(thread.id, thread);
-      }
-    } else if (hasBody) {
-      const thread: ThreadRecord = {
-        id: nextThreadId++,
-        change_id: c.id,
+      // A reply: the folded thread owns the anchor, so only id/body/resolved.
+      comments.push({
+        thread_id: d.thread_id,
+        revision: null,
+        file: null,
+        line: null,
+        side: null,
+        range: null,
+        line_text: null,
+        body: d.body,
+        resolved: d.resolved,
+      });
+    } else if (d.body.trim() !== "") {
+      comments.push({
+        thread_id: nextThreadId++,
         revision: d.revision,
         file: d.file,
         line: d.line,
         side: d.side,
         range: d.range ?? null,
         line_text: d.line_text,
+        body: d.body,
         resolved: d.resolved,
-        comments: [
-          {
-            body: d.body,
-            review_id: review.id,
-            created_at: now,
-          },
-        ],
-        created_at: now,
-        updated_at: now,
-      };
-      threads.push(thread);
-      touched.set(thread.id, thread);
+      });
     }
     drafts.splice(drafts.indexOf(d), 1);
   }
-  return [...touched.values()];
+  return comments;
 }
 
 /** Why a staged decision can't publish against the change's lifecycle, or null
@@ -134,7 +114,10 @@ function publishMember(
   revision: number,
   now: string,
 ): void {
-  if (decision === "reopen") c.terminal = undefined;
+  if (decision === "reopen") {
+    c.terminal = undefined;
+    emitLifecycle(c.id, now, "reopened");
+  }
   const hasComments = drafts.some((d) => d.change_id === c.id);
   const verdict: Verdict | null =
     decision === "approve" ||
@@ -153,9 +136,35 @@ function publishMember(
       created_at: now,
     };
     c.reviews.push(review);
-    drainComments(c, review, now);
+    const comments = drainComments(c);
+    mockAppend(c.id, now, {
+      kind: "review",
+      payload: {
+        review_id: review.id,
+        revision,
+        verdict,
+        message: review.message,
+        comments,
+      },
+    });
   }
-  if (decision === "abandon") c.terminal ??= "abandoned";
+  if (decision === "abandon" && !c.terminal) {
+    c.terminal = "abandoned";
+    emitLifecycle(c.id, now, "abandoned");
+  }
+}
+
+/** Append a `lifecycle` entry to a change's mock log so live followers see the
+ * abandon/reopen the record mutation just made. */
+function emitLifecycle(
+  changeId: number,
+  now: string,
+  action: "abandoned" | "reopened",
+): void {
+  mockAppend(changeId, now, {
+    kind: "lifecycle",
+    payload: { action, revision: null, message: null },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -443,24 +452,34 @@ function buildGraph(repoId: number, window: number): RepoGraph {
   };
 }
 
-/** A thread/draft record → its wire shape; anchors are served verbatim (the
- * client places them by diff range, docs/api.md "Comment placement"). */
-function renderThread(t: ThreadRecord): Thread {
-  return { ...t, range: t.range ?? null };
-}
+/** Anchors are served verbatim; the client places them by diff range
+ * (docs/api.md "Comment placement"). */
 function renderDraft(d: DraftRecord): Draft {
   return { ...d, range: d.range ?? null };
 }
 
+// The published view (revisions/threads/reviews) folds the change's single
+// synth log — the same source the websocket snapshot folds — so a mutation that
+// appends to the log shows up identically over REST and the stream. The
+// reviewer's drafts and staged decision are not log state, so overlay them.
 function changeDetail(c: ChangeRecord): ChangeDetail {
   return {
-    id: c.id,
-    repo_id: c.repo_id,
-    change_key: c.change_key,
-    revisions: c.revisions,
-    threads: threads.filter((x) => x.change_id === c.id).map(renderThread),
+    ...foldDetail(
+      replayProj({
+        id: c.id,
+        repo_id: c.repo_id,
+        change_key: c.change_key,
+        entries: logFor(c.id),
+      }),
+    ),
+    ...changeDrafts(c),
+  };
+}
+
+/** The reviewer's overlay alone (`GET /changes/{id}/drafts`). */
+function changeDrafts(c: ChangeRecord) {
+  return {
     drafts: drafts.filter((x) => x.change_id === c.id).map(renderDraft),
-    reviews: c.reviews,
     draft_decision: draftReviews.get(c.id) ?? null,
   };
 }
@@ -608,6 +627,10 @@ export async function mockRequest(
     return changeDetail(getChange(Number(m[1])));
   }
 
+  if ((m = /^\/changes\/(\d+)\/drafts$/.exec(p)) && method === "GET") {
+    return changeDrafts(getChange(Number(m[1])));
+  }
+
   if (
     (m = /^\/changes\/(\d+)\/revisions\/(\d+)\/diff$/.exec(p)) &&
     method === "GET"
@@ -702,13 +725,19 @@ export async function mockRequest(
 
   if ((m = /^\/changes\/(\d+)\/abandon$/.exec(p)) && method === "POST") {
     const c = getChange(Number(m[1]));
-    c.terminal ??= "abandoned";
+    if (!c.terminal) {
+      c.terminal = "abandoned";
+      emitLifecycle(c.id, new Date().toISOString(), "abandoned");
+    }
     return changeDetail(c);
   }
 
   if ((m = /^\/changes\/(\d+)\/reopen$/.exec(p)) && method === "POST") {
     const c = getChange(Number(m[1]));
-    if (c.terminal === "abandoned") c.terminal = undefined;
+    if (c.terminal === "abandoned") {
+      c.terminal = undefined;
+      emitLifecycle(c.id, new Date().toISOString(), "reopened");
+    }
     return changeDetail(c);
   }
 

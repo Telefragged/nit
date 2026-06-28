@@ -371,7 +371,7 @@
                 ];
               };
             };
-            installPhase = ''
+            installPhase = injectWasm pkgs + ''
               export HOME=$TMPDIR
               NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
             '';
