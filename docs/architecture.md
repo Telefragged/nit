@@ -24,13 +24,21 @@ nit is a single-machine, local-first review server. Three parts:
   git and returns values the api layer folds.
 - **SQLite** (`db/`) — the four-table log; nothing in it is ever mutated or
   deleted. See [data-model.md](data-model.md) "Tables".
-- **The per-change fold** (`review/`) — `ChangeProj` is one change's folded
-  state; `fold` applies one log entry, `replay` rebuilds a change from its
-  rows. Revision numbers and thread ids are minted **in the fold**.
+- **The per-change fold** (`nit_types::fold`) — `ChangeProj` is one change's
+  folded state; `fold` applies one wire `LogEntry`, `replay` rebuilds a change.
+  Revision numbers and thread ids are minted **in the fold**. It is **pure over
+  `nit-types`** — no database, serialization, or publishing — so the same code
+  runs on the server and, compiled to WebAssembly (`crates/nit-wasm`), in the
+  browser. The `nit` crate's `review/` holds only the db/storage adapters
+  (`entry_from_row`, `replay_rows`, the `log.payload` column split).
 - **Chain derivation** (`chain/`) — `RepoView` resolves a commit-sha to
   `(change, revision)` and walks a tip back to the base. A pure function of
   owned change snapshots; holds no locks, touches no git.
 - **React SPA** (`web/`) — the reviewer's browser UI ([frontend.md](frontend.md)).
+  The change page is **event-driven**: it subscribes over `WS /api/stream` for a
+  `ChangeProj` snapshot and folds the live tail with `crates/nit-wasm` (the
+  shared fold), so the browser resumes the server's projection rather than
+  reimplementing it.
 - **The CLI** — `nit push` and the agent read/comment commands
   ([agent-workflow.md](agent-workflow.md)).
 

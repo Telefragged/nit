@@ -16,10 +16,24 @@ repo's canonical branch ([data-model.md](data-model.md), [api.md](api.md)
 "Chains"). The web reflects that: a change page reads `?revision` to pick a
 patchset, and `?revision` _is_ the choice of chain context. The web fetches
 with react-query — on mount, on window focus, and on mutation invalidation; a
-reviewer action invalidates the affected queries so its result shows at once. It
-does not (yet) consume the change websocket (`WS /api/stream`), which serves the
-agent-side followers (`nit wait`, `nit log --follow`); moving the UI onto those
-events is the planned replacement for live refresh.
+reviewer action invalidates the affected queries so its result shows at once.
+
+The **change page is event-driven**: it subscribes to the change and every
+chain member over the change websocket (`WS /api/stream`, the same feed
+`nit wait` / `nit log --follow` consume) in snapshot mode — the server folds a
+`ChangeProj` snapshot once and ships it, then attaches the live tail — and the
+browser resumes folding that tail with the **shared fold compiled to
+WebAssembly** (`crates/nit-wasm`, the very code the server runs;
+`lib/useChangeStream.ts`, `api/fold.ts`, `api/stream.ts`). The folded published
+projection (revisions, threads, reviews) is written into the `["change", id]`
+react-query cache the page reads, so the rest of the page is unchanged. The
+reviewer's drafts + staged decision are scratch outside the log, so they ride a
+separate REST read (`GET /changes/{id}/drafts`, keyed `["drafts", id]`) the
+page composes on; the chain structure, diffs, and repo are not in the log
+either, so those stay REST too. A revision pushed over the socket becomes
+selectable but does not hijack the view — the page pins `?revision` to the
+patchset in view, so a new patchset is available without a jump. Other pages
+still poll/refetch; moving them onto the stream is the next step.
 
 ## Pages
 

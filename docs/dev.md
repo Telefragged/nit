@@ -56,6 +56,14 @@ way — from `crates/nit-types` via `nix run .#gen-types`, a native
 Regenerate and commit it whenever those types change; the `types-drift`
 check fails a stale file.
 
+The shared change fold is compiled to WebAssembly (`crates/nit-wasm`) for the
+event-driven change page. `nix run .#gen-wasm` writes the glue + `.wasm` into
+`web/src/wasm/` — **gitignored** (binary, derived) and injected into every web
+nix build, so run it once after checkout before `npm run dev`/`check`/`test`.
+The `wasm-build` check compiles it under `nix flake check`. The
+`wasm-bindgen-cli` in the devShell and `crates/nit-wasm`'s `wasm-bindgen` dep
+are pinned to the same version — a skew breaks the glue at init, not at build.
+
 ## Formatting
 
 `nix develop -c treefmt` formats the tree (`nix fmt` is the same; config in
