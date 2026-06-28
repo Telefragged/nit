@@ -17,8 +17,10 @@ import type {
   Side,
   NewDraft,
   Decision,
+  DiffFile,
   Draft,
   GraphNode,
+  Line,
   PathEntry,
   Repo,
   RepoGraph,
@@ -483,6 +485,33 @@ function snapshotLineText(
   return null;
 }
 
+/** Reconstruct a file's full-context diff lines from its shown hunks,
+ * filling the gaps between (and above) them with synthesized context. The
+ * mock has no real file bodies, so this is what `/lines` returns. */
+function fullLines(file: DiffFile): Line[] {
+  const out: Line[] = [];
+  let oldN = 1;
+  let newN = 1;
+  for (const hunk of file.hunks) {
+    while (newN < hunk.new_start) {
+      out.push({
+        kind: "context",
+        old: oldN,
+        new: newN,
+        text: `    // unchanged line ${newN}`,
+      });
+      oldN++;
+      newN++;
+    }
+    for (const l of hunk.lines) {
+      out.push(l);
+      if (l.old !== undefined) oldN = l.old + 1;
+      if (l.new !== undefined) newN = l.new + 1;
+    }
+  }
+  return out;
+}
+
 const notFound = (what: string): never => {
   throw new ApiError(404, `${what} not found`);
 };
@@ -591,6 +620,25 @@ export async function mockRequest(
     const diff = c.diffs[diffKey(revision, against)];
     if (!diff) notFound(`diff for revision ${revision}`);
     return structuredClone(diff);
+  }
+
+  // Context expansion (docs/api.md "Expanding context"). The fixtures hold
+  // diffs, not whole files, so reconstruct the full-context lines from the
+  // shown hunks with synthesized context filling the gaps — enough for the
+  // expand controls to reveal rows. (Real drift in a gap is the backend's
+  // job; the mock just makes the interaction renderable.)
+  if (
+    (m = /^\/changes\/(\d+)\/revisions\/(\d+)\/lines$/.exec(p)) &&
+    method === "GET"
+  ) {
+    const c = getChange(Number(m[1]));
+    const revision = Number(m[2]);
+    const against = q.has("against") ? Number(q.get("against")) : undefined;
+    const path = q.get("path") ?? "";
+    const file = c.diffs[diffKey(revision, against)]?.files.find(
+      (f) => f.path === path,
+    );
+    return { lines: file ? fullLines(file) : [] };
   }
 
   if ((m = /^\/changes\/(\d+)\/drafts$/.exec(p)) && method === "POST") {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Line } from "../api/types";
 import {
+  gapLines,
   intralineDiff,
   pairLines,
   rangeSliceOnLine,
@@ -93,6 +94,40 @@ describe("skippedBefore", () => {
 
   it("is zero for adjacent hunks", () => {
     expect(skippedBefore(hunk(1, 3, 1, 3), hunk(4, 2, 4, 2))).toBe(0);
+  });
+});
+
+describe("gapLines", () => {
+  const hunk = (oldStart: number, newStart: number) => ({
+    old_start: oldStart,
+    old_lines: 1,
+    new_start: newStart,
+    new_lines: 1,
+    header: "",
+    lines: [],
+  });
+
+  // A file whose full diff has a drift del between two changed lines.
+  const full: Line[] = [
+    ctx(1, 1),
+    ctx(2, 2),
+    ctx(3, 3),
+    del(4, "dropped by the base"), // drift: old-only, in the gap
+    ctx(5, 4),
+    ctx(6, 5),
+  ];
+
+  it("returns the run between two hunks, del lines included", () => {
+    // prev ends at old 3 / new 3; next starts at old 6 / new 5.
+    const out = gapLines(full, hunk(3, 3), hunk(6, 5));
+    expect(out).toEqual([del(4, "dropped by the base"), ctx(5, 4)]);
+  });
+
+  it("returns the run above the first hunk", () => {
+    expect(gapLines(full, undefined, hunk(3, 3))).toEqual([
+      ctx(1, 1),
+      ctx(2, 2),
+    ]);
   });
 });
 

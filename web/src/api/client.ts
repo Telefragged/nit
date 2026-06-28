@@ -9,6 +9,7 @@ import type {
   NewDraft,
   Diff,
   Draft,
+  FileLines,
   Repo,
   RepoGraph,
   RepoList,
@@ -87,6 +88,24 @@ export const getDiff = (changeId: number, revision: number, against?: number) =>
       ? `/changes/${changeId}/revisions/${revision}/diff`
       : `/changes/${changeId}/revisions/${revision}/diff?against=${against}`,
   );
+
+/** File `path`'s full-context diff lines over the same trees as `getDiff`
+ * (`against` selects the interdiff base), for revealing the unchanged runs
+ * the shown hunks hide — drift and all (docs/api.md "Expanding context"). */
+export const getFileLines = (
+  changeId: number,
+  revision: number,
+  path: string,
+  against?: number,
+) => {
+  const q = `path=${encodeURIComponent(path)}`;
+  return request<FileLines>(
+    "GET",
+    `/changes/${changeId}/revisions/${revision}/lines?${
+      against === undefined ? q : `${q}&against=${against}`
+    }`,
+  );
+};
 
 export const createDraft = (changeId: number, draft: NewDraft) =>
   request<Draft>("POST", `/changes/${changeId}/drafts`, draft);

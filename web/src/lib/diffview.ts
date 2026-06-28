@@ -203,3 +203,24 @@ export function skippedBefore(prev: Hunk | undefined, hunk: Hunk): number {
   const newSkip = hunk.new_start - (prev.new_start + prev.new_lines);
   return Math.max(oldSkip, newSkip, 0);
 }
+
+/** The full-context lines that fall in the gap between `prev` and `hunk` —
+ * the hidden run a context-expand button reveals (docs/api.md "Expanding
+ * context"). `full` is the file's full-context diff; a line belongs to the
+ * gap by its new number (`add`/`context`) or old number (`del`), so an
+ * all-drift gap's del lines come along. Order is preserved. */
+export function gapLines(
+  full: readonly Line[],
+  prev: Hunk | undefined,
+  hunk: Hunk,
+): Line[] {
+  const oldLo = prev ? prev.old_start + prev.old_lines : 1;
+  const newLo = prev ? prev.new_start + prev.new_lines : 1;
+  const oldHi = hunk.old_start - 1;
+  const newHi = hunk.new_start - 1;
+  return full.filter((l) =>
+    l.new !== undefined
+      ? l.new >= newLo && l.new <= newHi
+      : l.old !== undefined && l.old >= oldLo && l.old <= oldHi,
+  );
+}

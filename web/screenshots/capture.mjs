@@ -108,6 +108,21 @@ const captures = [
     path: "/changes/11?against=base",
     actions: expandAllFiles,
   },
+  // Context expansion: each gap separator carries two centred +N buttons —
+  // the top one reveals downward from the hunk above, the bottom one upward
+  // from the hunk below (docs/api.md "Expanding context"). Clicks the top
+  // (downward) button to show the revealed lines and the dropped count.
+  {
+    name: "review-expand-context",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      const btn = page.locator(".hunk-expand.expand-down").first();
+      await btn.scrollIntoViewIfNeeded();
+      await btn.click();
+      await page.waitForTimeout(150);
+    },
+  },
   // Collapsed-by-default file sections: only the synthetic commit message
   // starts expanded, the code files are header-only rows.
   { name: "review-files-collapsed", path: "/changes/11?against=base" },

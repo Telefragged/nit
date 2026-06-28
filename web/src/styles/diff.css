@@ -186,6 +186,7 @@
 }
 
 .hunk-row {
+  position: relative; /* anchors the centred expand buttons */
   grid-column: 1 / -1;
   background: rgb(88 166 255 / 5%);
   color: var(--text-faint);
@@ -198,6 +199,44 @@
 
 .diff-grid > .hunk-row:first-child {
   border-top: none;
+}
+
+/* The two expand buttons float centred on the separator's edges — each
+   straddling a border so it sits half over the marker and half over the
+   adjacent diff: the top one reveals downward (from the hunk above), the
+   bottom one upward (from the hunk below). */
+.hunk-expand {
+  position: absolute;
+  left: 50%;
+  z-index: 1;
+  padding: 0 8px;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--blue);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.hunk-expand.expand-down {
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+
+.hunk-expand.expand-up {
+  bottom: 0;
+  transform: translate(-50%, 50%);
+}
+
+.hunk-expand:hover:not(:disabled) {
+  background: rgb(88 166 255 / 22%);
+  border-color: var(--blue);
+}
+
+.hunk-expand:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .hunk-skip {

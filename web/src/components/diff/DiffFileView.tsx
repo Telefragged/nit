@@ -3,10 +3,20 @@ import {
   Fragment,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  useEffect,
   useMemo,
+  useRef,
+  useState,
 } from "react";
-import { createDraft } from "../../api/client";
-import type { CommentRange, Side, DiffFile, Hunk, Line } from "../../api/types";
+import { createDraft, getFileLines } from "../../api/client";
+import {
+  COMMIT_MSG_PATH,
+  type CommentRange,
+  type DiffFile,
+  type Hunk,
+  type Line,
+  type Side,
+} from "../../api/types";
 import {
   commentCountLabel,
   commentPlacement,
@@ -17,6 +27,7 @@ import {
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
+  gapLines,
   intralineMarks,
   pairLines,
   rangeSliceOnLine,
@@ -88,13 +99,61 @@ const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
  * interdiffs"), so its gutter and code cell render contained. */
 const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
 
-function HunkSeparator({ prev, hunk }: { prev: Hunk | undefined; hunk: Hunk }) {
-  const skipped = skippedBefore(prev, hunk);
+/** Lines revealed per click of a context-expand button. */
+const EXPAND_STEP = 10;
+
+/** The `@@` row before a hunk, shown only while a gap of unchanged lines
+ * remains (a fully-revealed gap leaves the hunks contiguous, so it vanishes).
+ * When the file is expandable, two `+N` buttons float on the separator's
+ * edges — half over the marker, half over the diff (docs/api.md "Expanding
+ * context"): the top one pulls down from the hunk above, the bottom one up
+ * from the hunk below. The top button is absent at the top of the file. */
+function HunkSeparator({
+  prev,
+  hunk,
+  expandable,
+  busyUp,
+  busyDown,
+  onUp,
+  onDown,
+}: {
+  prev: Hunk | undefined;
+  hunk: Hunk;
+  expandable: boolean;
+  busyUp: boolean;
+  busyDown: boolean;
+  onUp: () => void;
+  onDown: (() => void) | null;
+}) {
+  const more = skippedBefore(prev, hunk);
+  if (more === 0) return null;
+  const step = Math.min(EXPAND_STEP, more);
+  const plural = step === 1 ? "" : "s";
   return (
     <div className="hunk-row">
-      <span className="hunk-skip">
-        {skipped > 0 ? `⋯ ${skipped} unchanged lines` : "⋯"}
-      </span>
+      {expandable && onDown ? (
+        <button
+          type="button"
+          className="hunk-expand expand-down"
+          onClick={onDown}
+          disabled={busyDown}
+          title={`Show ${step} more line${plural} below`}
+        >
+          +{step}
+        </button>
+      ) : null}
+      {expandable ? (
+        <button
+          type="button"
+          className="hunk-expand expand-up"
+          onClick={onUp}
+          disabled={busyUp}
+          title={`Show ${step} more line${plural} above`}
+        >
+          +{step}
+        </button>
+      ) : null}
+      <span className="hunk-skip">⋯ {more} unchanged lines</span>
       <span className="hunk-header">
         @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines}{" "}
         @@ {hunk.header}
@@ -128,28 +187,139 @@ export default function DiffFileView({
   const queryClient = useQueryClient();
   const lang = languageFor(file.path);
 
+  // Context expansion (docs/api.md "Expanding context"): the file's full
+  // diff is fetched once on the first expand, and the unchanged run hidden in
+  // each gap is sliced from it and folded back into the bordering hunks as
+  // real Lines — drift and all — so highlight/comment/placement and the drift
+  // tint flow through unchanged. The synthetic commit message and deletions
+  // have no diff to expand. Reveals are keyed by separator `i` (the gap before
+  // hunk i): `down` pulls from the gap's top into hunk i-1, `up` from its
+  // bottom into hunk i.
+  const expandable = file.path !== COMMIT_MSG_PATH && file.status !== "deleted";
+  const [full, setFull] = useState<readonly Line[] | null>(null);
+  const [down, setDown] = useState<ReadonlyMap<number, number>>(new Map());
+  const [up, setUp] = useState<ReadonlyMap<number, number>>(new Map());
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
+  // Reset when a different diff renders into the same file section (react-query
+  // keeps the `file` reference stable while content is unchanged, so a
+  // background refetch — e.g. after a comment — keeps what's revealed). Done
+  // during render, not in an effect, so stale reveals never paint.
+  const [shownFile, setShownFile] = useState(file);
+  if (shownFile !== file) {
+    setShownFile(file);
+    setFull(null);
+    setDown(new Map());
+    setUp(new Map());
+    setBusy(new Set());
+  }
+  // The latest committed `file`, so a fetch in flight when the diff switches
+  // can detect the switch and drop its result instead of splicing it in.
+  const fileRef = useRef(file);
+  useEffect(() => {
+    fileRef.current = file;
+  });
+  // The in-flight full-diff fetch, keyed by file so each end's button shares
+  // one request and a diff switch starts a fresh one.
+  const fetching = useRef<{
+    file: DiffFile;
+    lines: Promise<readonly Line[] | null>;
+  } | null>(null);
+
+  const hunks = useMemo(() => {
+    if (!full || (down.size === 0 && up.size === 0)) return file.hunks;
+    const oldN = (ls: Line[]) => ls.filter((l) => l.old !== undefined).length;
+    const newN = (ls: Line[]) => ls.filter((l) => l.new !== undefined).length;
+    return file.hunks.map((hunk, i) => {
+      const upN = up.get(i) ?? 0;
+      const before = gapLines(full, file.hunks[i - 1], hunk);
+      const pre = upN > 0 ? before.slice(before.length - upN) : [];
+      const next = file.hunks[i + 1];
+      const downN = next ? (down.get(i + 1) ?? 0) : 0;
+      const post =
+        downN > 0 && next ? gapLines(full, hunk, next).slice(0, downN) : [];
+      if (pre.length === 0 && post.length === 0) return hunk;
+      // A revealed line shifts each side's start/count only where it has a
+      // number, so a drift del moves the old side without the new.
+      return {
+        ...hunk,
+        old_start: hunk.old_start - oldN(pre),
+        new_start: hunk.new_start - newN(pre),
+        old_lines: hunk.old_lines + oldN(pre) + oldN(post),
+        new_lines: hunk.new_lines + newN(pre) + newN(post),
+        lines: [...pre, ...hunk.lines, ...post],
+      };
+    });
+  }, [file.hunks, full, down, up]);
+
+  /** The file's full-context diff, fetched once and shared across both ends
+   * and every gap; `null` if the diff switched out from under the fetch. */
+  function loadFull(): Promise<readonly Line[] | null> {
+    if (full) return Promise.resolve(full);
+    if (fetching.current?.file !== file) {
+      const lines = getFileLines(
+        ctx.changeId,
+        ctx.selected,
+        file.path,
+        ctx.against,
+      ).then((r) => {
+        if (fileRef.current !== file) return null;
+        setFull(r.lines);
+        return r.lines;
+      });
+      fetching.current = { file, lines };
+    }
+    return fetching.current.lines;
+  }
+
+  /** Reveal the next ≤`EXPAND_STEP` hidden lines at one end of the gap before
+   * hunk `sep` (docs/api.md "Expanding context"). `down` pulls from the gap's
+   * top, `up` from its bottom; both walk toward the middle. */
+  async function expand(end: "down" | "up", sep: number) {
+    const key = `${end}:${sep}`;
+    if (busy.has(key)) return;
+    setBusy((b) => new Set(b).add(key));
+    try {
+      const lines = await loadFull();
+      const hunk = file.hunks[sep];
+      if (!lines || fileRef.current !== file || !hunk) return;
+      const gap = gapLines(lines, file.hunks[sep - 1], hunk);
+      const remaining = gap.length - (down.get(sep) ?? 0) - (up.get(sep) ?? 0);
+      if (remaining <= 0) return;
+      const step = Math.min(EXPAND_STEP, remaining);
+      (end === "down" ? setDown : setUp)((m) =>
+        new Map(m).set(sep, (m.get(sep) ?? 0) + step),
+      );
+    } finally {
+      setBusy((b) => {
+        const next = new Set(b);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
   // Intraline emphasis for modified line pairs, per hunk (keyed by line
   // object identity, so unified and split rows share the same map).
   const marks = useMemo(() => {
     const map = new Map<Line, IntralineRange>();
-    for (const hunk of file.hunks) {
+    for (const hunk of hunks) {
       for (const [line, range] of intralineMarks(hunk.lines)) {
         map.set(line, range);
       }
     }
     return map;
-  }, [file]);
+  }, [hunks]);
 
   const present = useMemo(() => {
     const set = new Set<string>();
-    for (const hunk of file.hunks) {
+    for (const hunk of hunks) {
       for (const line of hunk.lines) {
         if (line.old !== undefined) set.add(`old:${line.old}`);
         if (line.new !== undefined) set.add(`new:${line.new}`);
       }
     }
     return set;
-  }, [file]);
+  }, [hunks]);
 
   // Bucket each thread by where its anchor lands in the current diff range
   // (docs/api.md "Comment placement"). A thread pinned to a revision that
@@ -484,9 +654,17 @@ export default function DiffFileView({
               }`}
               onMouseDown={layout === "split" ? lockSelectionSide : undefined}
             >
-              {file.hunks.map((hunk, hi) => (
+              {hunks.map((hunk, hi) => (
                 <Fragment key={hi}>
-                  <HunkSeparator prev={file.hunks[hi - 1]} hunk={hunk} />
+                  <HunkSeparator
+                    prev={hunks[hi - 1]}
+                    hunk={hunk}
+                    expandable={expandable}
+                    busyUp={busy.has(`up:${hi}`)}
+                    busyDown={busy.has(`down:${hi}`)}
+                    onUp={() => void expand("up", hi)}
+                    onDown={hi > 0 ? () => void expand("down", hi) : null}
+                  />
                   {layout === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
                 </Fragment>
               ))}
