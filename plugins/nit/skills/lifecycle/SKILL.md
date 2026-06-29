@@ -48,7 +48,13 @@ swallow the stream. The Monitor tool turns each relayed line into a
 notification you act on. `--reviewer-only` mutes your own echoes;
 `<tip_change_id>` is the numeric chain id from `nit push`/`nit status`; `0`
 streams from the start (resume after a restart by passing the last seq you
-saw). Re-point the monitor at the new tip as you stack more commits.
+saw).
+
+`--chain <id>` follows the chain _as seen from `<id>`_, so once `<id>` is no
+longer the tip — every time you stack a new commit on top — entries on the
+commits above it stop streaming reliably. Re-arm the monitor at the new tip
+change id whenever the tip moves, resuming from the last seq you consumed (not
+`0`) so you don't replay what you've already handled.
 
 Each relayed line is a doorbell: read the full picture with `nit status`, and
 use `nit log` for entry detail. Its positional argument is a range of log
@@ -67,16 +73,43 @@ keep streaming.
 
 - **`agents_turn`** — act now. For each change marked `changes_requested` /
   `commented`:
-  - code feedback → fix it by amending the commit in place (keep it one
-    commit), then `nit push` — the rewritten commit lands as a new revision and
-    the reviewer sees an interdiff. Then reply on the thread and resolve it (the
-    `comment` skill).
+  - code feedback → amend the fix into the commit it belongs to (see **Amend
+    in place** below), then `nit push` — the rewritten commit lands as a new
+    revision and the reviewer reads it as an interdiff. Then reply on the
+    thread and resolve it (the `comment` skill).
   - a question → answer it on its thread (the `comment` skill).
 - **`waiting_for_review`** — the ball is with the reviewer; keep the monitor
   running.
-- **`approved`** — every change is approved. Land it per this project's approve
-  action (your project config records it). Drive it to `merged`.
+- **`approved`** — the cue to land, not to hand off. Land it per this project's
+  approve action (your project config records it) and drive it through to
+  `merged` yourself — don't stop to ask.
 - **`merged` / `abandoned`** — the chain is closed. Stop the monitor.
 
 Never submit a review verdict yourself — that is the human's side. Your surface
 is push / status / log / comment.
+
+## Amend in place
+
+A review fix belongs _in the commit that drew it_ — amend that commit, never
+add a separate "address review" commit. The rewrite pushes as a new revision
+and the reviewer reads it against the last one.
+
+- **Tip commit** — edit, `git commit --amend`, push.
+- **Interior commit** (anything below the tip) — don't tear the stack apart
+  with reset or cherry-pick. Stage the fix and let git route it to the right
+  commit:
+
+  ```sh
+  git commit --fixup <sha>     # <sha> of the commit being fixed
+  GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>
+  ```
+
+  `<base>` is the branch the chain is stacked on. `-i` runs non-interactively
+  because `GIT_SEQUENCE_EDITOR=true` accepts the generated todo unedited.
+
+The **`Change-Id:` trailer must survive the rewrite** — it is what binds the
+new revision to the reviewed change. `--amend` and `--fixup` keep it; a reword
+that rebuilds the message from scratch (`-m`/`-F`) drops it, the commit hook
+mints a fresh one, and the next push _orphans_ the change and restarts its
+review. Carry the original `Change-Id:` (and any `Co-Authored-By:`) trailers
+across every reword.
