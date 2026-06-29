@@ -70,11 +70,24 @@ plan, answers your questions on the lines they sit on, and approves or requests
 changes — all in nit. Anchor as tightly as you can (range > line > change-level)
 per the `comment` skill.
 
-## 4. Refine, then implement
+## 4. Park a monitor and wait — this is the gate
 
-Drive the loop with the `lifecycle` skill. On feedback, refine by amending the
-plan commit and pushing again; reply on each thread and resolve it. When the
-chain reaches **`approved`** and your questions are resolved, the plan is signed
-off — **now implement it**, building it out commit by commit through nit
+Pushing the plan and raising your questions is the move that, in plan mode,
+`ExitPlanMode` makes when it presents to the user and blocks. nit doesn't block
+you, so the discipline is yours: the chain is now open with nothing left to do
+but hear back — exactly the state where a watcher must be running. **Don't end
+the turn here.** Park a monitor on the plan's chain per the `lifecycle` skill
+("Watch for feedback with a monitor") and wait for the reviewer; that parked
+monitor is what replaces plan mode's approve/reject prompt. Ending the turn
+with the plan pushed and nothing watching leaves the reviewer's answers landing
+on nobody.
+
+## 5. Refine, then implement
+
+Drive the loop with the `lifecycle` skill. When feedback arrives, refine by
+amending the plan commit and pushing again; reply on each thread and resolve
+it. When the chain reaches **`approved`** and your questions are resolved, the
+plan is signed off — **now implement it**, building it out commit by commit
+through nit
 (`/nit:goal` is the natural way to carry it the rest of the way). Until then,
 the only thing committed is the plan document.
