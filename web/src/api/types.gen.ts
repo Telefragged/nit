@@ -276,6 +276,12 @@ export type DiffFile = {
   additions: number;
   deletions: number;
   /**
+   * New-side line count: the EOF anchor that lets the client reveal the
+   * unchanged run below the last hunk, which no hunk bounds from beneath
+   * (docs/api.md "Expanding context"). 0 when deleted or binary.
+   */
+  new_total: number;
+  /**
    * Empty when binary.
    */
   hunks: Array<Hunk>;

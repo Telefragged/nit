@@ -3,7 +3,7 @@
 // state lives here — see ./data for the mutable store, ./index for the server.
 
 import { COMMIT_MSG_PATH } from "../types";
-import type { Diff, DiffFile, Line } from "../types";
+import type { Diff, DiffFile, Hunk, Line } from "../types";
 
 const NOW = Date.now();
 export const ago = (minutes: number) =>
@@ -39,6 +39,17 @@ export const del = (old: number, text: string): Line => ({
 /** Mark a line as rebase drift (docs/api.md "Rebase-aware interdiffs"). */
 export const drift = (line: Line): Line => ({ ...line, drift: true });
 
+/** New-side line the last hunk reaches, or a declared `new_total` — the
+ * mock's file length, the EOF the trailing expander stops at. */
+export function newSideEnd(file: {
+  hunks: Hunk[];
+  new_total?: number;
+}): number {
+  if (file.new_total !== undefined) return file.new_total;
+  const last = file.hunks.at(-1);
+  return last ? last.new_start + last.new_lines - 1 : 0;
+}
+
 /** The /COMMIT_MSG entry of a vs-parent diff: the whole message, all-add. */
 export function msgFile(message: string): DiffFile {
   const lines = message.replace(/\n$/, "").split("\n");
@@ -48,6 +59,7 @@ export function msgFile(message: string): DiffFile {
     binary: false,
     additions: lines.length,
     deletions: 0,
+    new_total: lines.length,
     hunks: [
       {
         old_start: 0,
@@ -74,6 +86,7 @@ export function trivialDiff(message: string, path: string, line: string): Diff {
         binary: false,
         additions: 1,
         deletions: 0,
+        new_total: 2,
         hunks: [
           {
             old_start: 1,

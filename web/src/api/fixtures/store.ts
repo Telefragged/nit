@@ -6,11 +6,19 @@ import type {
   ChangeStatus,
   CommentRange,
   Side,
-  Diff,
+  DiffFile,
   Review,
   Revision,
   ThreadComment,
 } from "../types";
+
+/** A file authored in ./data may omit `new_total`, which ./index fills from
+ * the last hunk when serving — a mock file has no body past its hunks, so it
+ * ends where its last hunk does unless it declares otherwise. */
+export type AuthoredFile = Omit<DiffFile, "new_total"> & { new_total?: number };
+interface AuthoredDiff {
+  files: AuthoredFile[];
+}
 
 export interface ChangeRecord {
   id: number;
@@ -22,7 +30,7 @@ export interface ChangeRecord {
   revisions: Revision[];
   reviews: Review[];
   /** Keyed by diffKey(revision, against). */
-  diffs: Record<string, Diff>;
+  diffs: Record<string, AuthoredDiff>;
 }
 
 /** A tip commit: the head of one derived chain. The set of these is the only

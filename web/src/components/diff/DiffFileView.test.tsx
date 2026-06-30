@@ -29,6 +29,7 @@ const mixed: DiffFile = {
   binary: false,
   additions: 1,
   deletions: 1,
+  new_total: 4,
   hunks: [
     {
       old_start: 1,

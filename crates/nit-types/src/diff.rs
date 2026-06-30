@@ -32,6 +32,10 @@ pub struct DiffFile {
     pub binary: bool,
     pub additions: u64,
     pub deletions: u64,
+    /// New-side line count: the EOF anchor that lets the client reveal the
+    /// unchanged run below the last hunk, which no hunk bounds from beneath
+    /// (docs/api.md "Expanding context"). 0 when deleted or binary.
+    pub new_total: u64,
     /// Empty when binary.
     pub hunks: Vec<Hunk>,
 }

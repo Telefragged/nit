@@ -81,6 +81,7 @@ fn diff_trees_ctx(repo: &Repository, old: &Tree, new: &Tree, context: u32) -> Re
             binary: false,
             additions: 0,
             deletions: 0,
+            new_total: 0,
             hunks: Vec::new(),
         };
         match Patch::from_diff(&diff, idx)? {
@@ -91,6 +92,12 @@ fn diff_trees_ctx(repo: &Repository, old: &Tree, new: &Tree, context: u32) -> Re
                     let (_, additions, deletions) = patch.line_stats()?;
                     file.additions = u64::try_from(additions)?;
                     file.deletions = u64::try_from(deletions)?;
+                    // new_total anchors the trailing-context expander. The
+                    // full-context path (/lines) keeps only one file's hunks
+                    // and drops new_total, so skip the blob read it'd waste.
+                    if context != u32::MAX {
+                        file.new_total = blob_line_count(repo, delta.new_file().id())?;
+                    }
                     file.hunks = patch_hunks(&mut patch)?;
                 }
             }
@@ -100,6 +107,18 @@ fn diff_trees_ctx(repo: &Repository, old: &Tree, new: &Tree, context: u32) -> Re
         files.push(file);
     }
     Ok(Diff { files })
+}
+
+/// New-side line count of `oid`'s blob — the EOF the client expands toward
+/// below the last hunk. The null oid (the new side of a deletion) is empty.
+fn blob_line_count(repo: &Repository, oid: git2::Oid) -> Result<u64> {
+    if oid.is_zero() {
+        return Ok(0);
+    }
+    let blob = repo.find_blob(oid)?;
+    Ok(u64::try_from(
+        String::from_utf8_lossy(blob.content()).lines().count(),
+    )?)
 }
 
 fn delta_status(delta: Delta) -> Option<FileStatus> {
@@ -203,6 +222,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<DiffFile> {
         binary: false,
         additions: u64::try_from(additions)?,
         deletions: u64::try_from(deletions)?,
+        new_total: u64::try_from(new.lines().count())?,
         hunks,
     })
 }

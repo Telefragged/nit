@@ -46,6 +46,9 @@ DiffFile = {
   "old_path": "src/old.rs",     // only set for renames
   "status": "modified",         // added | deleted | modified | renamed
   "binary": false, "additions": 10, "deletions": 3,
+  "new_total": 240,             // new-side line count, the EOF anchor that
+                                // lets the client expand context below the
+                                // last hunk (0 when deleted/binary)
   "hunks": [Hunk]               // empty when binary
 }
 Hunk = {"old_start": 1, "old_lines": 5, "new_start": 1, "new_lines": 7,
@@ -62,7 +65,10 @@ Line = {"kind": "context",      // context | add | del
 ### Expanding context
 
 A hunk carries only three lines of context, so the unchanged runs between
-hunks (and above the first) are not in the diff. To reveal them on demand:
+hunks (above the first, and below the last) are not in the diff. The bottom
+run has no hunk beneath it to anchor against, so `DiffFile.new_total` gives
+the file's line count — the client expands down toward it. To reveal a run
+on demand:
 
 - `GET /api/changes/{id}/revisions/{n}/lines?path={p}[&against={m}]`
   → `{"lines": [Line]}` — file `p`'s diff over the **same** `old → new`

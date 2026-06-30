@@ -18,7 +18,6 @@ import type {
   Side,
   NewDraft,
   Decision,
-  DiffFile,
   Draft,
   GraphNode,
   Line,
@@ -32,7 +31,7 @@ import type {
 } from "../types";
 import { changeDetail as foldDetail, replayProj } from "../fold";
 import { logFor, mockAppend } from "./stream";
-import { diffKey } from "./builders";
+import { diffKey, newSideEnd } from "./builders";
 import {
   changes,
   draftReviews,
@@ -42,7 +41,12 @@ import {
   repos,
   tips,
 } from "./data";
-import type { ChangeRecord, DraftRecord, TipRecord } from "./store";
+import type {
+  AuthoredFile,
+  ChangeRecord,
+  DraftRecord,
+  TipRecord,
+} from "./store";
 
 let nextDraftId = 200;
 let nextThreadId = 300;
@@ -507,7 +511,7 @@ function snapshotLineText(
 /** Reconstruct a file's full-context diff lines from its shown hunks,
  * filling the gaps between (and above) them with synthesized context. The
  * mock has no real file bodies, so this is what `/lines` returns. */
-function fullLines(file: DiffFile): Line[] {
+function fullLines(file: AuthoredFile): Line[] {
   const out: Line[] = [];
   let oldN = 1;
   let newN = 1;
@@ -641,8 +645,10 @@ export async function mockRequest(
     const rev = c.revisions.find((r) => r.number === revision);
     if (!rev) notFound(`revision ${revision}`);
     const diff = c.diffs[diffKey(revision, against)];
-    if (!diff) notFound(`diff for revision ${revision}`);
-    return structuredClone(diff);
+    if (!diff) return notFound(`diff for revision ${revision}`);
+    // Fill the EOF anchor the wire shape carries but ./data omits.
+    const files = diff.files.map((f) => ({ ...f, new_total: newSideEnd(f) }));
+    return structuredClone({ files });
   }
 
   // Context expansion (docs/api.md "Expanding context"). The fixtures hold
