@@ -93,12 +93,21 @@ monitor is what replaces plan mode's approve/reject prompt. Ending the turn
 with the plan pushed and nothing watching leaves the reviewer's answers landing
 on nobody.
 
-## 5. Refine, then implement
+## 5. Refine, then implement — approval is _not_ a cue to land
 
 Drive the loop with the `lifecycle` skill. When feedback arrives, refine by
-amending the plan commit and pushing again; reply on each thread and resolve
-it. When the chain reaches **`approved`** and your questions are resolved, the
-plan is signed off — **now implement it**, building it out commit by commit
-through nit
-(`/nit:goal` is the natural way to carry it the rest of the way). Until then,
-the only thing committed is the plan document.
+amending the plan commit and pushing again; reply on each thread and resolve it.
+
+When the chain reaches **`approved`** and your questions are resolved, the plan
+is signed off — and here "signed off" means **implement it**, not land it. This
+is the one place the usual "approved → land" reflex (the `lifecycle`/`land`
+default) is **wrong**: a plan is a design artifact, not a shippable change.
+**Never run the approve action / `land.sh` on a plan chain.** Landing the plan
+by itself drops a half-finished unit onto `main` and marks the plan change
+`merged` in nit — which has no unmerge, so you're left hand-resetting `main` to
+dig back out.
+
+Instead, build the implementation commit by commit through nit, stacked on the
+plan commit in the same worktree (`/nit:goal` is the natural way to carry it the
+rest of the way). You land only once the **implementation** is approved, per
+this project's approve action — never the plan on its own.
