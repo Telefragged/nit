@@ -54,19 +54,30 @@ weighed. A plan is a complete unit of work, so `nit push` it — that puts it in
 front of the reviewer, exactly where `ExitPlanMode` would have surfaced it to
 the user.
 
-## 3. Raise every question inline
+## 3. Raise every question where it arises
 
 Every place you'd have stopped to ask — an assumption, an open choice, a gap, a
-"confirm?" — becomes a comment anchored to the exact range of the plan it
-concerns, left unresolved:
+"confirm?" — becomes a comment anchored to the **spot in the plan that raises
+it**: the step that makes the assumption, the trade-off line you're unsure of,
+the sentence naming the approach you'd swap. Leave each one unresolved.
 
 ```sh
 nit comment --change <id> --file plan/<name>.md --line 12 --range 12:1-12:48 \
   -m "Assuming we keep the existing API shape here — confirm?"
 ```
 
+Don't gather the questions into an "Open questions" section at the end of the
+plan. A trailing list divorces each question from the thing it's about, so the
+reviewer weighs in without the surrounding context — and the section quietly
+becomes a dumping ground that lets the prose above it stay vague. Anchoring on
+the line that raises the question is what lands the reviewer's answer exactly
+where the decision lives — the whole reason the plan is reviewed in nit instead
+of as a chat prompt. Only when a question genuinely isn't about any one line —
+a concern about the plan as a whole — does a change-level comment become its
+right home.
+
 This is what replaces plan mode's approve/reject prompt: the reviewer reads the
-plan, answers your questions on the lines they sit on, and approves or requests
+plan, answers each question on the line it sits on, and approves or requests
 changes — all in nit. Anchor as tightly as you can (range > line > change-level)
 per the `comment` skill.
 
