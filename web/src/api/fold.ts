@@ -4,9 +4,10 @@
 // folding the live tail onto it and projects the published ChangeDetail — never
 // reimplementing the projection.
 //
-// JSON crosses the wasm boundary as strings, sidestepping wasm-bindgen's
-// u64/BigInt args; the web's plain `number` ids round-trip through serde. A
-// ChangeProj is opaque to the web — only these wrappers (re)hydrate it.
+// serde-wasm-bindgen moves these values across the boundary as structured
+// objects, with no JSON text in between; `u64` rides as a plain `number`, the
+// representation the web already holds. A ChangeProj is opaque to the web —
+// only these wrappers (re)hydrate it.
 
 import { change_detail, fold_entry, replay_proj } from "../wasm/nit_wasm";
 import type { ChangeDetail, ChangeProj, LogEntry } from "./types";
@@ -23,21 +24,19 @@ export interface ReplayInput {
 /** Fold a change's whole log into its `ChangeProj` snapshot — what the mock
  * ships to mirror the server, which folds natively. */
 export function replayProj(input: ReplayInput): ChangeProj {
-  return JSON.parse(replay_proj(JSON.stringify(input))) as ChangeProj;
+  return replay_proj(input) as ChangeProj;
 }
 
 /** Apply one live log entry to a `ChangeProj`, returning the advanced
  * projection. Idempotent across the snapshot/live overlap (an entry below the
  * snapshot's high-water mark is a no-op). */
 export function foldEntry(proj: ChangeProj, entry: LogEntry): ChangeProj {
-  return JSON.parse(
-    fold_entry(JSON.stringify(proj), JSON.stringify(entry)),
-  ) as ChangeProj;
+  return fold_entry(proj, entry) as ChangeProj;
 }
 
 /** Published projection only — drafts and the staged decision are not log
  * state, so they come back empty; the caller overlays its own
  * (`GET /changes/{id}/drafts`). */
 export function changeDetail(proj: ChangeProj): ChangeDetail {
-  return JSON.parse(change_detail(JSON.stringify(proj))) as ChangeDetail;
+  return change_detail(proj) as ChangeDetail;
 }

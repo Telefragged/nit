@@ -2885,6 +2885,13 @@ rec {
             packageId = "cfg-if";
           }
           {
+            name = "futures-util";
+            packageId = "futures-util";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "std" ];
+          }
+          {
             name = "once_cell";
             packageId = "once_cell";
             usesDefaultFeatures = false;
@@ -2900,6 +2907,7 @@ rec {
           "futures-core-03-stream" = [ "dep:futures-util" "dep:futures-core" ];
           "std" = [ "wasm-bindgen/std" "dep:futures-util" ];
         };
+        resolvedDefaultFeatures = [ "default" "std" "unsafe-eval" ];
       };
       "lazy_static" = rec {
         crateName = "lazy_static";
@@ -3429,8 +3437,8 @@ rec {
             features = [ "derive" ];
           }
           {
-            name = "serde_json";
-            packageId = "serde_json";
+            name = "serde-wasm-bindgen";
+            packageId = "serde-wasm-bindgen";
           }
           {
             name = "wasm-bindgen";
@@ -4218,6 +4226,32 @@ rec {
           "unstable" = [ "serde_core/unstable" ];
         };
         resolvedDefaultFeatures = [ "alloc" "default" "derive" "serde_derive" "std" ];
+      };
+      "serde-wasm-bindgen" = rec {
+        crateName = "serde-wasm-bindgen";
+        version = "0.6.5";
+        edition = "2018";
+        sha256 = "0sz1l4v8059hiizf5z7r2spm6ws6sqcrs4qgqwww3p7dy1ly20l3";
+        libName = "serde_wasm_bindgen";
+        authors = [
+          "Ingvar Stepanyan <me@rreverser.com>"
+        ];
+        dependencies = [
+          {
+            name = "js-sys";
+            packageId = "js-sys";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+          }
+        ];
+
       };
       "serde_core" = rec {
         crateName = "serde_core";
