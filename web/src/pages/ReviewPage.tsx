@@ -63,6 +63,7 @@ import { displayPath, fileDomId } from "../lib/diffview";
 import { highlightLine } from "../lib/highlight";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt } from "../lib/scrollspy";
+import { isShortcutKey } from "../lib/shortcutKey";
 import type { SelectionMiss } from "../lib/selection";
 import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
@@ -402,10 +403,7 @@ export default function ReviewPage() {
   // (Escape arrives as its cancel event) and the page behind it is inert.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (replyOpen) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const el = e.target as HTMLElement | null;
-      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (replyOpen || !isShortcutKey(e)) return;
       if (e.key === "[" || e.key === "]") {
         if (fileCount === 0) return;
         const cur = activeFile ?? (e.key === "]" ? -1 : fileCount);

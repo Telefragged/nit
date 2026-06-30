@@ -125,7 +125,7 @@ informational. The gray-not-amber rule is deliberate — `NEWER ELSEWHERE`
 and the terminal states are inert markers, so
 amber stays reserved for "needs reviewer". Compact, no marketing fluff.
 Keyboard shortcuts (`[`/`]` file nav, `n`/`p` change nav, `c` comment, `a`
-reply modal) are optional in v1.
+reply modal, `s` submit the chain's staged decisions) are optional in v1.
 
 ## Mock mode (UI work without a backend)
 

@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearDecision, stageDecision, submitChain } from "../api/client";
 import type { Chain, ChangeDetail, Decision } from "../api/types";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
+import { isShortcutKey } from "../lib/shortcutKey";
 
 /** Human label for a staged decision (the bar chip + the modal's current state). */
 const DECISION_LABEL: Record<Decision, string> = {
@@ -138,6 +139,9 @@ export default function ReviewBar({
     },
   });
 
+  // What gates the Submit button and its `s` shortcut alike.
+  const canSubmit = stagedInChain > 0 && !submit.isPending;
+
   // Seed the cover message from the staged decision when the modal opens —
   // adjust-during-render on the false→true edge (not an effect), so the staged
   // text is in the textarea the frame it mounts and no cascading render fires.
@@ -159,6 +163,21 @@ export default function ReviewBar({
     dialogRef.current?.showModal();
     textareaRef.current?.focus();
   }, [replyOpen]);
+
+  // `s` publishes the chain from the diff — the keyboard twin of the Submit
+  // button, gated by the same `canSubmit`. Inert while the modal owns the
+  // keyboard (replyOpen); `isShortcutKey` mutes modifiers and typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (replyOpen || !isShortcutKey(e)) return;
+      if (e.key !== "s" || !canSubmit) return;
+      submit.mutate();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [replyOpen, canSubmit, submit]);
 
   // Closing discards only the typed cover message (after confirmation when it
   // diverges from what is staged) — the staged decision lives server-side.
@@ -197,7 +216,7 @@ export default function ReviewBar({
         <div className="review-bar-actions">
           <button
             className="btn-primary"
-            disabled={submit.isPending || stagedInChain === 0}
+            disabled={!canSubmit}
             title={
               stagedInChain === 0
                 ? "Stage a decision first (Review)"
@@ -207,7 +226,7 @@ export default function ReviewBar({
               submit.mutate();
             }}
           >
-            Submit chain{stagedInChain > 0 ? ` (${stagedInChain})` : ""}
+            Submit chain (s){stagedInChain > 0 ? ` · ${stagedInChain}` : ""}
           </button>
           <button
             className="btn-primary"

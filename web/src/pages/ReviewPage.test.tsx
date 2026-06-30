@@ -4,8 +4,14 @@
 // tests/rotation.rs — i.e. file-0 .. file-3.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReviewPage from "./ReviewPage";
 
@@ -264,6 +270,61 @@ describe("comment counts in the diff-range dropdowns", () => {
     await railItem("src/auth/store.rs");
     const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");
     expect(baseSelect.value).toBe("0");
+  });
+});
+
+// `s` is the keyboard twin of the Submit button: inert until something is
+// staged, then publishes the chain (change 20 is a single-member chain, so
+// staging doesn't auto-advance the page off it first).
+describe("the s key submits the chain's staged decisions", () => {
+  // jsdom has no top-layer, so the review modal's showModal() is absent — stub
+  // it so opening the modal to stage a decision doesn't throw.
+  beforeEach(() => {
+    HTMLDialogElement.prototype.showModal = function () {
+      this.open = true;
+    };
+  });
+
+  let path = "";
+  function LocationProbe() {
+    const loc = useLocation();
+    path = loc.pathname + loc.hash;
+    return null;
+  }
+  function renderChange20() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/changes/20"]}>
+          <LocationProbe />
+          <Routes>
+            <Route path="/changes/:id" element={<ReviewPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("is inert with nothing staged, and publishes once a decision is staged", async () => {
+    renderChange20();
+    await screen.findByTitle("src/wal.rs");
+
+    // Nothing staged: the shortcut no-ops, like the disabled button.
+    fireEvent.keyDown(window, { key: "s" });
+    expect(path).toBe("/changes/20");
+
+    // Stage a decision through the modal, then fire the shortcut.
+    fireEvent.click(screen.getByRole("button", { name: "Review (a)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+    await screen.findByRole("button", { name: /Submit chain \(s\) · 1/ });
+
+    fireEvent.keyDown(window, { key: "s" });
+    // A clean submit returns to the chain's drawer in the repo view.
+    await waitFor(() => {
+      expect(path).toBe("/repos/2#chain-20");
+    });
   });
 });
 
