@@ -509,14 +509,14 @@ function snapshotLineText(
 }
 
 /** Reconstruct a file's full-context diff lines from its shown hunks,
- * filling the gaps between (and above) them with synthesized context. The
- * mock has no real file bodies, so this is what `/lines` returns. */
+ * filling the gaps between, above, and below them with synthesized context.
+ * The mock has no real file bodies, so this is what `/lines` returns. */
 function fullLines(file: AuthoredFile): Line[] {
   const out: Line[] = [];
   let oldN = 1;
   let newN = 1;
-  for (const hunk of file.hunks) {
-    while (newN < hunk.new_start) {
+  const fill = (until: number) => {
+    while (newN < until) {
       out.push({
         kind: "context",
         old: oldN,
@@ -526,12 +526,16 @@ function fullLines(file: AuthoredFile): Line[] {
       oldN++;
       newN++;
     }
+  };
+  for (const hunk of file.hunks) {
+    fill(hunk.new_start);
     for (const l of hunk.lines) {
       out.push(l);
       if (l.old !== undefined) oldN = l.old + 1;
       if (l.new !== undefined) newN = l.new + 1;
     }
   }
+  fill(newSideEnd(file) + 1); // the run below the last hunk, to EOF
   return out;
 }
 

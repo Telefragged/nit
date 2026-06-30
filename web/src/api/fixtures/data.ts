@@ -399,6 +399,8 @@ const change11: ChangeRecord = {
           binary: false,
           additions: 5,
           deletions: 0,
+          // Body runs past the last hunk, so the diff can expand down to EOF.
+          new_total: 78,
           hunks: [
             {
               old_start: 52,

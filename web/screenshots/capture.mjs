@@ -126,6 +126,22 @@ const captures = [
       await page.waitForTimeout(150);
     },
   },
+  // Trailing context: the run below the last hunk gets its own separator
+  // (no `@@` header, one downward button), so a file's tail is reachable too
+  // (docs/api.md "Expanding context"). Clicks it to reveal lines toward EOF.
+  {
+    name: "review-expand-context-eof",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      const btn = page.locator(
+        ".hunk-row:not(:has(.hunk-header)) .hunk-expand.expand-down",
+      );
+      await btn.scrollIntoViewIfNeeded();
+      await btn.click();
+      await page.waitForTimeout(150);
+    },
+  },
   // Collapsed-by-default file sections: only the synthetic commit message
   // starts expanded, the code files are header-only rows.
   { name: "review-files-collapsed", path: "/changes/11?against=base" },

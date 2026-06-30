@@ -32,6 +32,7 @@ import {
   pairLines,
   rangeSliceOnLine,
   type RowPair,
+  skippedAfter,
   skippedBefore,
   statusLetter,
 } from "../../lib/diffview";
@@ -102,14 +103,15 @@ const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
 /** Lines revealed per click of a context-expand button. */
 const EXPAND_STEP = 10;
 
-/** The `@@` row before a hunk, shown only while a gap of unchanged lines
+/** A separator over a gap of `more` unchanged lines, shown only while the gap
  * remains (a fully-revealed gap leaves the hunks contiguous, so it vanishes).
- * When the file is expandable, two `+N` buttons float on the separator's
- * edges — half over the marker, half over the diff (docs/api.md "Expanding
- * context"): the top one pulls down from the hunk above, the bottom one up
- * from the hunk below. The top button is absent at the top of the file. */
+ * When the file is expandable a `+N` button floats on each edge it can pull
+ * from — half over the marker, half over the diff (docs/api.md "Expanding
+ * context"): `onDown` pulls down from the hunk above, `onUp` up from the hunk
+ * below. The top gap has no hunk above (no `onDown`); the bottom gap no hunk
+ * below (no `onUp`, and no `@@` header). */
 function HunkSeparator({
-  prev,
+  more,
   hunk,
   expandable,
   busyUp,
@@ -117,15 +119,14 @@ function HunkSeparator({
   onUp,
   onDown,
 }: {
-  prev: Hunk | undefined;
-  hunk: Hunk;
+  more: number;
+  hunk: Hunk | undefined;
   expandable: boolean;
   busyUp: boolean;
   busyDown: boolean;
-  onUp: () => void;
+  onUp: (() => void) | null;
   onDown: (() => void) | null;
 }) {
-  const more = skippedBefore(prev, hunk);
   if (more === 0) return null;
   const step = Math.min(EXPAND_STEP, more);
   const plural = step === 1 ? "" : "s";
@@ -142,7 +143,7 @@ function HunkSeparator({
           +{step}
         </button>
       ) : null}
-      {expandable ? (
+      {expandable && onUp ? (
         <button
           type="button"
           className="hunk-expand expand-up"
@@ -154,10 +155,12 @@ function HunkSeparator({
         </button>
       ) : null}
       <span className="hunk-skip">⋯ {more} unchanged lines</span>
-      <span className="hunk-header">
-        @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines}{" "}
-        @@ {hunk.header}
-      </span>
+      {hunk ? (
+        <span className="hunk-header">
+          @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},
+          {hunk.new_lines} @@ {hunk.header}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -233,10 +236,11 @@ export default function DiffFileView({
       const upN = up.get(i) ?? 0;
       const before = gapLines(full, file.hunks[i - 1], hunk);
       const pre = upN > 0 ? before.slice(before.length - upN) : [];
+      // `next` is undefined for the last hunk; its down-gap is the run to
+      // EOF, which gapLines bounds by the file's end.
       const next = file.hunks[i + 1];
-      const downN = next ? (down.get(i + 1) ?? 0) : 0;
-      const post =
-        downN > 0 && next ? gapLines(full, hunk, next).slice(0, downN) : [];
+      const downN = down.get(i + 1) ?? 0;
+      const post = downN > 0 ? gapLines(full, hunk, next).slice(0, downN) : [];
       if (pre.length === 0 && post.length === 0) return hunk;
       // A revealed line shifts each side's start/count only where it has a
       // number, so a drift del moves the old side without the new.
@@ -273,16 +277,16 @@ export default function DiffFileView({
 
   /** Reveal the next ≤`EXPAND_STEP` hidden lines at one end of the gap before
    * hunk `sep` (docs/api.md "Expanding context"). `down` pulls from the gap's
-   * top, `up` from its bottom; both walk toward the middle. */
+   * top, `up` from its bottom; both walk toward the middle. `sep` past the
+   * last hunk is the run to EOF, expanded only from its top (`down`). */
   async function expand(end: "down" | "up", sep: number) {
     const key = `${end}:${sep}`;
     if (busy.has(key)) return;
     setBusy((b) => new Set(b).add(key));
     try {
       const lines = await loadFull();
-      const hunk = file.hunks[sep];
-      if (!lines || fileRef.current !== file || !hunk) return;
-      const gap = gapLines(lines, file.hunks[sep - 1], hunk);
+      if (!lines || fileRef.current !== file) return;
+      const gap = gapLines(lines, file.hunks[sep - 1], file.hunks[sep]);
       const remaining = gap.length - (down.get(sep) ?? 0) - (up.get(sep) ?? 0);
       if (remaining <= 0) return;
       const step = Math.min(EXPAND_STEP, remaining);
@@ -657,7 +661,7 @@ export default function DiffFileView({
               {hunks.map((hunk, hi) => (
                 <Fragment key={hi}>
                   <HunkSeparator
-                    prev={hunks[hi - 1]}
+                    more={skippedBefore(hunks[hi - 1], hunk)}
                     hunk={hunk}
                     expandable={expandable}
                     busyUp={busy.has(`up:${hi}`)}
@@ -668,6 +672,19 @@ export default function DiffFileView({
                   {layout === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
                 </Fragment>
               ))}
+              {/* The run below the last hunk reveals from its top only,
+                  toward new_total (no hunk beneath to pull up from). Like the
+                  interior separators it always renders; skippedAfter → 0
+                  collapses it when the last hunk already reaches EOF. */}
+              <HunkSeparator
+                more={skippedAfter(hunks.at(-1), file.new_total)}
+                hunk={undefined}
+                expandable={expandable}
+                busyUp={false}
+                busyDown={busy.has(`down:${hunks.length}`)}
+                onUp={null}
+                onDown={() => void expand("down", hunks.length)}
+              />
             </div>
           )}
         </>
