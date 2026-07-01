@@ -91,12 +91,12 @@ pub(super) async fn revision_lines(
         let repo = open_repo(&revs.git_dir)?;
         let new_tree = commit_tree(&repo, &revs.rev.commit_sha)?;
         let (old_tree, _, against_rev) = old_side(&repo, &revs)?;
-        let mut wire = diff::diff_trees_full(&repo, &old_tree, &new_tree)?;
+        let mut wire = diff::diff_trees_full(&repo, &old_tree, &new_tree, &q.path)?;
         tag_interdiff_drift(&repo, &mut wire, &revs.rev, against_rev.as_ref());
         let lines = wire
             .files
             .into_iter()
-            .find(|f| f.path == q.path)
+            .next()
             .map(|f| f.hunks.into_iter().flat_map(|h| h.lines).collect())
             .unwrap_or_default();
         Ok(Json(FileLines { lines }))

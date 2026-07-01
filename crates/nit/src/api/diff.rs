@@ -32,21 +32,30 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
 /// # Errors
 /// When git can't build or read the diff's patches.
 pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<Diff> {
-    diff_trees_ctx(repo, old, new, 3)
+    diff_trees_ctx(repo, old, new, 3, None)
 }
 
-/// The same diff with every unchanged line kept as context — the source the
+/// One file's diff with every unchanged line kept as context — the source the
 /// UI reveals from when expanding a hunk's surroundings (docs/api.md
-/// "Expanding context"). Identical classification and drift handling to the
-/// shown diff, so revealed lines match it exactly.
+/// "Expanding context"). Bounded to `only` (the file being viewed) so the
+/// costly per-file patch build runs for it alone. Identical classification and
+/// drift handling to the shown diff, so revealed lines match it exactly.
 ///
 /// # Errors
 /// When git can't build or read the diff's patches.
-pub fn diff_trees_full(repo: &Repository, old: &Tree, new: &Tree) -> Result<Diff> {
-    diff_trees_ctx(repo, old, new, u32::MAX)
+pub fn diff_trees_full(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Result<Diff> {
+    diff_trees_ctx(repo, old, new, u32::MAX, Some(only))
 }
 
-fn diff_trees_ctx(repo: &Repository, old: &Tree, new: &Tree, context: u32) -> Result<Diff> {
+/// `only` bounds the result to the file whose new-side path matches, skipping
+/// every other delta before its patch is built.
+fn diff_trees_ctx(
+    repo: &Repository,
+    old: &Tree,
+    new: &Tree,
+    context: u32,
+    only: Option<&str>,
+) -> Result<Diff> {
     let mut opts = DiffOptions::new();
     opts.context_lines(context);
     let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), Some(&mut opts))?;
@@ -72,6 +81,9 @@ fn diff_trees_ctx(repo: &Repository, old: &Tree, new: &Tree, context: u32) -> Re
         } else {
             path(delta.new_file())
         };
+        if only.is_some_and(|p| p != file_path) {
+            continue;
+        }
         let old_path = (status == FileStatus::Renamed).then(|| path(delta.old_file()));
 
         let mut file = DiffFile {
@@ -553,7 +565,9 @@ mod tests {
         let shown = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff builds");
         assert_eq!(shown.files[0].hunks.len(), 2); // a gap the UI would expand
 
-        let full = diff_trees_full(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff builds");
+        let full =
+            diff_trees_full(&r.repo, &r.find(t_old), &r.find(t_new), "a.txt").expect("diff builds");
+        assert_eq!(full.files.len(), 1); // bounded to the requested file
         let f = &full.files[0];
         assert_eq!(f.hunks.len(), 1); // one run, no gap
         let lines = &f.hunks[0].lines;
