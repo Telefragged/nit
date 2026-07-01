@@ -29,6 +29,7 @@ import type {
   StagedDecision,
   Verdict,
 } from "../types";
+import { verdictStatus } from "../verdict";
 import { changeDetail as foldDetail, replayProj } from "../fold";
 import { logFor, mockAppend } from "./stream";
 import { diffKey, newSideEnd } from "./builders";
@@ -201,12 +202,7 @@ function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
     .sort((a, b) => a.id - b.id)
     .at(-1);
   if (!review) return "pending";
-  const byVerdict: Record<Verdict, ChangeStatus> = {
-    approve: "approved",
-    request_changes: "changes_requested",
-    comment: "commented",
-  };
-  return byVerdict[review.verdict];
+  return verdictStatus[review.verdict];
 }
 
 /** Walk a tip back to base through parent_sha, oldest-first (base → tip).

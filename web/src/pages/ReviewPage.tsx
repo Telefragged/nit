@@ -20,14 +20,8 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { createDraft, getChain, getDiff, getRepo } from "../api/client";
-import type {
-  ChangeDetail,
-  ChangeStatus,
-  Decision,
-  Review,
-  Revision,
-  Verdict,
-} from "../api/types";
+import type { ChangeDetail, Decision, Review, Revision } from "../api/types";
+import { verdictStatus } from "../api/verdict";
 import { StatusChip } from "../components/badges";
 import ChainNav from "../components/ChainNav";
 import CommentEditor from "../components/CommentEditor";
@@ -70,13 +64,6 @@ import { ReviewContext, sameTarget } from "./reviewContext";
 
 const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
-
-// badges.tsx owns the label and color.
-const VERDICT_STATUS: Record<Verdict, ChangeStatus> = {
-  approve: "approved",
-  request_changes: "changes_requested",
-  comment: "commented",
-};
 
 /** Why `c` did nothing — several misses are policy, not user error, so
  * they deserve words (docs/frontend.md). */
@@ -176,7 +163,7 @@ function ReviewItem({ review }: { review: Review }) {
   }, [review.message]);
   return (
     <div className="review-item">
-      <StatusChip status={VERDICT_STATUS[review.verdict]} />
+      <StatusChip status={verdictStatus[review.verdict]} />
       <span className="mono dim">r{review.revision}</span>
       <span
         ref={msgRef}
