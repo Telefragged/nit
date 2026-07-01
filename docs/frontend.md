@@ -122,8 +122,7 @@ still poll/refetch; moving them onto the stream is the next step.
   - **Review bar** (sticky bottom): draft count, pending unresolved count,
     and `Review (a)` opening the reply modal — cover message + `Approve` /
     `Request changes` / `Comment` → `POST /api/changes/{id}/reviews` against
-    the selected `revision`, then navigate to the next pending member in path
-    order (else back to the chain, else home). On a 409 (the targeted
+    the selected `revision`, staying on the change. On a 409 (the targeted
     patchset went stale, or the agent pushed meanwhile) the modal stays open,
     keeps the message and drafts, refetches, and re-offers submit.
 - 404/error: plain message + link home. Loading: skeleton rows, no

@@ -269,8 +269,7 @@ describe("comment counts in the diff-range dropdowns", () => {
 });
 
 // `s` is the keyboard twin of the Submit button: inert until something is
-// staged, then publishes the chain (change 20 is a single-member chain, so
-// staging doesn't auto-advance the page off it first).
+// staged, then publishes the chain.
 describe("the s key submits the chain's staged decisions", () => {
   // jsdom has no top-layer, so the review modal's showModal() is absent — stub
   // it so opening the modal to stage a decision doesn't throw.

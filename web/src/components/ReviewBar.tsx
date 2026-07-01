@@ -45,10 +45,10 @@ export default function ReviewBar({
   onReplyOpenChange,
 }: {
   change: ChangeDetail;
-  /** The selected revision's chain context, for submit + next-change nav. */
+  /** The selected revision's chain context, for the chain-wide submit. */
   chain: Chain | undefined;
   /** Each chain member's staged decision (or null), keyed by change id —
-   * the source for the chain-wide submit count and the next-undecided sweep. */
+   * the source for the chain-wide submit count. */
   memberDecisions: Map<number, Decision | null>;
   selectedRevision: number;
   /** Threads that would stay open once the staged drafts publish. */
@@ -84,8 +84,8 @@ export default function ReviewBar({
     void queryClient.invalidateQueries({ queryKey: ["chain"] });
   };
 
-  // Stage a decision (does not publish) — auto-advances to the next undecided
-  // member so the reviewer can sweep the chain before submitting.
+  // Stage a decision (does not publish); the reviewer sweeps the chain and
+  // submits when every member is decided.
   const stage = useMutation({
     mutationFn: (decision: Decision) =>
       stageDecision(change.id, { decision, message: message.trim() }),
@@ -93,14 +93,6 @@ export default function ReviewBar({
       setError(null);
       onReplyOpenChange(false);
       invalidate();
-      const next =
-        here &&
-        chain?.path.find(
-          (c) =>
-            (memberDecisions.get(c.change_id) ?? null) === null &&
-            c.position > here.position,
-        );
-      if (next) void navigate(`/changes/${next.change_id}`);
     },
     onError: (e) => {
       setError(e instanceof Error ? e.message : String(e));
