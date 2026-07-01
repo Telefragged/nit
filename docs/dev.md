@@ -131,7 +131,7 @@ finding to fix, and reviewer agents are told so):
 ## Restarting the server
 
 Rebuild, ctrl-c the running `nit serve`, restart with the same `--db`.
-Parked `nit wait`s ride it out (backoff retry, persisted cursor — no events
+Parked `nit log --wait`s ride it out (backoff retry, persisted cursor — no events
 missed); `push`/`status`/`reply` during the gap fail fast, so rerun them.
 
 ## Screenshot harness (frontend checking for AI agents)

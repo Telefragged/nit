@@ -13,15 +13,15 @@ about — not scattered through the chat.
 
 ```sh
 # open a NEW thread, anchored to code:
-nit comment --change <id> --file <path> --line <n> [--range S-E] [--side new|old] -m "…"
+nit comment --change-id <Change-Id> --file <path> --line <n> [--range S-E] [--side new|old] -m "…"
 # reply to an EXISTING thread (anchor flags ignored):
-nit comment --change <id> --thread <thread-id> [--resolve|--unresolve] -m "…"
+nit comment --change-id <Change-Id> --thread <thread-id> [--resolve|--unresolve] -m "…"
 ```
 
-Get `<id>` from `nit status` — each change in the path shows its numeric
-`change_id` (use `--change <id>`) and its `change_key` (use
-`--change-id <key>`). A range is `START-END`, each endpoint `line:char` (e.g.
-`42:8-42:30`).
+Target a change by the `Change-Id:` trailer on the commit you're commenting on,
+with `--change-id <Change-Id>`. (`--change <id>` takes the numeric change id
+instead, for when a human hands you one.) A range is `START-END`, each endpoint
+`line:char` (e.g. `42:8-42:30`).
 
 ## Anchor as tightly as you can
 
@@ -31,13 +31,13 @@ it is about.
 
 ```sh
 # RANGE — best: the exact characters
-nit comment --change <id> --file src/queue.rs --line 42 --range 42:8-42:30 \
+nit comment --change-id <Change-Id> --file src/queue.rs --line 42 --range 42:8-42:30 \
   -m "Bounded channel over unbounded — backpressure matters more than never
       blocking the producer."
 # LINE — when the whole line is the point
-nit comment --change <id> --file src/config.rs --line 14 -m "Defaulted to 30s."
+nit comment --change-id <Change-Id> --file src/config.rs --line 14 -m "Defaulted to 30s."
 # CHANGE-LEVEL — last resort, when it isn't about specific lines
-nit comment --change <id> -m "Skipped the legacy migration — assuming no live data."
+nit comment --change-id <Change-Id> -m "Skipped the legacy migration — assuming no live data."
 ```
 
 Leave a thread **open** when the reviewer should weigh in; add `--resolve` for

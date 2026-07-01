@@ -20,7 +20,7 @@ reviewer action invalidates the affected queries so its result shows at once.
 
 The **change page is event-driven**: it subscribes to the change and every
 chain member over the change websocket (`WS /api/stream`, the same feed
-`nit wait` / `nit log --follow` consume) in snapshot mode — the server folds a
+`nit log --wait` / `--follow` consume) in snapshot mode — the server folds a
 `ChangeProj` snapshot once and ships it, then attaches the live tail — and the
 browser resumes folding that tail with the **shared fold compiled to
 WebAssembly** (`crates/nit-wasm`, the very code the server runs;

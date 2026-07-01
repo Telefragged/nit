@@ -39,29 +39,28 @@ Run a parked monitor under the **Monitor tool** (set it persistent), not under
 background `Bash`:
 
 ```sh
-nit log --follow --oneline --reviewer-only --chain <tip_change_id> 0
+nit log --follow --reviewer-only 0
 ```
 
 `--follow` streams each new entry as it lands and never exits — so a background
 `Bash` task (which only notifies you when a command _exits_) would silently
 swallow the stream. The Monitor tool turns each relayed line into a
-notification you act on. `--reviewer-only` mutes your own echoes;
-`<tip_change_id>` is the numeric chain id from `nit push`/`nit status`; `0`
-streams from the start (resume after a restart by passing the last seq you
-saw).
+notification you act on. Run it from the worktree so it resolves the cwd's tip
+from HEAD — no id to look up. `--reviewer-only` mutes your own echoes; each
+relayed review carries its cover message and every comment with its file and
+line, so you act on it directly. `0` streams from the start (resume after a
+restart by passing the last seq you saw).
 
-`--chain <id>` follows the chain _as seen from `<id>`_, so once `<id>` is no
-longer the tip — every time you stack a new commit on top — entries on the
-commits above it stop streaming reliably. Re-arm the monitor at the new tip
-change id whenever the tip moves, resuming from the last seq you consumed (not
-`0`) so you don't replay what you've already handled.
+The monitor resolves the tip once, when it starts, so after you stack a new
+commit on top, re-run it to pick up the new tip — resuming from the last seq
+you consumed (not `0`) so you don't replay what you've already handled.
 
 Each relayed line is a doorbell: read the full picture with `nit status`, and
 use `nit log` for entry detail. Its positional argument is a range of log
 positions, not a single index — a bare `N` reads only position `N`:
 
 ```sh
-nit log --chain <tip_change_id> N..   # all log entries from index N on
+nit log N..   # all log entries from position N on (resolves the cwd's chain)
 ```
 
 `..` (the default) reads everything. Act on all of it, then let the monitor

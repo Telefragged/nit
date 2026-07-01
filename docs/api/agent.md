@@ -4,7 +4,7 @@ The agent drives the loop with a per-change cursor it owns (a vector of
 `change_id → idx`); `nit push`/`nit comment` return no index, so an entry
 that lands between two of its own actions is never skipped
 (docs/agent-workflow.md). One-shot reads (`nit status`, `nit log`) read the
-cursor's gap; the live followers (`nit wait`, `nit log --follow`) drive it
+cursor's gap; the live followers (`nit log --wait`/`--follow`) drive it
 over the websocket ("Events").
 
 - `POST /api/changes/{id}/comments` —

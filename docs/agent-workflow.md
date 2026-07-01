@@ -12,9 +12,10 @@ the human reviews separately.
 This doc is the **agent-driven** push/read/reply loop. Human-operator CLI
 conveniences belong in the `clap` help, not here.
 
-After the last commit, `nit wait` blocks on the websocket change stream
+After the last commit, `nit log --wait` blocks on the websocket change stream
 (docs/api.md "Events") until the reviewer responds — no polling. `nit status`
-and `nit log` stay for one-shot reads.
+and `nit log` stay for one-shot reads. Every command prints concise text for
+you to act on, not JSON.
 
 ## Conventions for your commits
 
@@ -55,9 +56,11 @@ nit repo create --base <branch>   # once per repo: register it, pinning the cano
 # after EVERY completed commit (green, formatter-clean, one concern, Change-Id'd):
 nit push                   # push the checked-out commit; base comes from the repo
 #   first push creates the change(s) and the chain — review starts here, on commit one
+#   push prints the whole chain digest (state + one line per change), so you see
+#   what you pushed without a second command
 
-# then read the chain and act on feedback:
-nit status                 # the derived chain digest (state + one line per change)
+# then act on feedback:
+nit status                 # re-read the chain digest (state + one line per change)
 #   for each change changes_requested/commented: fix by amending the commit it
 #     targets (fixup! + autosquash), or answer its thread:
 #     nit comment --change-id <Change-Id> --thread <id> [--resolve] -m "…"
@@ -93,23 +96,26 @@ return **no cursor** — an entry that lands between two of your own actions is
 caught only because you re-read the change's log run, not because a push told
 you about it. Advance a change's slot to its log `head` after you drain it.
 
-- `nit wait` — **block** on the websocket until something past your cursor
-  should wake you, then print `{cursor, entries, feedback}` and exit. Call it
-  when you have nothing else to do; it derives its watch set from local HEAD,
-  rides out a server restart, and wakes on any new entry past your cursor
-  (docs/data-model.md "Wake rule"). Pass the printed `cursor` back next call.
+- `nit log --wait <cursor>` — **block** on the websocket until something past
+  the `seq` cursor should wake you, then print the chain digest and the new
+  entries, and exit. Call it when you have nothing else to do; it derives its
+  watch set from local HEAD, rides out a server restart, and wakes on any new
+  entry past the cursor (docs/data-model.md "Wake rule"). Pass the printed
+  `cursor` back next call.
 - `nit log --follow [--reviewer-only] <cursor>` — a **parked monitor** that
-  relays each new entry as it lands (raw, or filtered to reviewer activity with
-  `--reviewer-only`). Unlike `nit wait` it never exits — a long-lived watcher.
+  relays each new entry as it lands (all, or filtered to reviewer activity with
+  `--reviewer-only`). Unlike `--wait` it never exits — a long-lived watcher.
 - `nit status` — the derived **chain digest** for a one-shot read: `state`
   plus, per member, `position change_key status rN Nu subject`.
 - `nit log` — the **aggregated chain log**: every member's entries merged and
-  sorted by the global `seq`, sliced by position (`3`, `5..9`, `..`).
+  sorted by the global `seq`, sliced by position (`3`, `5..9`, `..`). Each entry
+  renders its own payload — a review shows its cover message and one comment per
+  thread (led by the thread id), so you can reply without a second lookup.
 
 Two coordinates sit on every entry (docs/api.md): the per-change `idx` (what a
 change's own cursor slot advances) and the global `seq` (the aggregated log's
-order). `nit wait`/`--follow` own a **vector cursor** (`change_id → idx`) and
-subscribe their watch set over one websocket (docs/api.md "Events").
+order). `nit log --wait`/`--follow` own a **vector cursor** (`change_id → idx`)
+and subscribe their watch set over one websocket (docs/api.md "Events").
 
 ### Reading the chain state
 
@@ -209,26 +215,31 @@ observes that itself.)
   (once per repo), pinning its canonical base ref: `--base` is required and
   must resolve to a commit — any git ref, e.g. `origin/main` (400 otherwise);
   nit never guesses it. 409 if the repo is already registered. Prints the
-  `Repo`. A `nit push` into an unregistered repo is a 404.
+  registered repo line. A `nit push` into an unregistered repo is a 404.
 - `nit push [<commit>] [--server <url>]` — push the
   cwd's checked-out commit (HEAD — a detached HEAD or tag included), or an
   explicit `<commit>` (any rev). The repo is the cwd's git-common-dir and must
   already be registered (`nit repo create`); the canonical branch is the repo's
   stored one. Server defaults to `$NIT_SERVER` or
-  `http://127.0.0.1:8877`. Prints the `PushResult` (the pushed tip change).
-  Idempotent — a re-push where nothing moved records
-  nothing and succeeds (200); an unregistered repo is a 404, a structural fault
-  a 400, a revision to an abandoned change or an already-merged tip a 409.
-  No cursor returned.
-- `nit status [--chain <tip-change-id>] [--oneline] [--server <url>]` — the
-  derived `Chain` for the cwd's tip (or `--chain`), no blocking. `--oneline`
-  prints a `state=` header plus one line per member
-  (`position change_key status rN Nu subject`).
-- `nit log [<ranges>…] [--chain <tip-change-id>] [--oneline] [--server <url>]` —
-  the aggregated chain log (members merged, sorted by global `seq`), sliced by
-  **position**: `3`, `5..9`, `5..`, `..9`, `..` (all, the default), several at
-  once. Positions clamp to the log length. `--chain` reads any chain by its tip
-  change id (no cwd needed). Read-only; advances no cursor.
+  `http://127.0.0.1:8877`. Prints the resulting chain digest — every change the
+  push registered, so no follow-up read. Idempotent — a re-push where nothing
+  moved records nothing and succeeds (200); an unregistered repo is a 404, a
+  structural fault a 400, a revision to an abandoned change or an already-merged
+  tip a 409. No cursor returned.
+- `nit status [--chain <tip-change-id>] [--server <url>]` — the derived chain
+  digest for the cwd's tip (or `--chain`), no blocking: a `state=` header plus
+  one line per member (`position change_key status rN Nu subject`).
+- `nit log [<ranges>…] [--chain <tip-change-id>] [--oneline] [--follow | --wait] [--reviewer-only] [--server <url>]`
+  — the aggregated chain log (members merged, sorted by global `seq`). One-shot,
+  it slices by **position**: `3`, `5..9`, `5..`, `..9`, `..` (all, the default),
+  several at once; positions clamp to the log length. Each entry renders its own
+  payload as text (a review shows its cover message and one comment per thread,
+  led by the thread id); `--oneline` is the opt-in terse digest instead.
+  `--follow <cursor>` parks as a monitor relaying each new entry
+  (`--reviewer-only` drops your own echoes and the auto-merge); `--wait <cursor>`
+  blocks until entries land past the `seq` cursor, prints the chain digest and
+  those entries, and exits. `--chain` reads any chain by its tip change id (no
+  cwd needed). Read-only; advances no cursor.
 - `nit comment (--change-id <Change-Id> | --change <id>) [--thread <id>] [anchor] [--resolve | --unresolve] [-m "text"]`
   — comment as the agent. `--change-id` is the full trailer (a human can use
   `--change <numeric id>`). Without `--thread`: opens a thread, anchored

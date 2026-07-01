@@ -54,9 +54,9 @@ The follower's resume state is a **vector** `change_id → idx` (the count of
 that change's entries consumed). An **absent key ⇒ 0**, so a change newly
 stacked into a chain replays from the start; a change that left the path keeps
 its (inert) key. `subscribe` is the vector handed to the server, expanded to
-explicit zeros. A `nit wait`/`nit log --follow` return prints the advanced
+explicit zeros. A `nit log --wait`/`--follow` return prints the advanced
 vector; the agent passes it back next call. The wake rule (which entries end a
-parked `nit wait`) is a **client** concern (docs/data-model.md "Wake rule"):
+parked `nit log --wait`) is a **client** concern (docs/data-model.md "Wake rule"):
 the server ships raw tagged entries.
 
 ### State table (normative)

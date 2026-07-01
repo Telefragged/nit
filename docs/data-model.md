@@ -20,7 +20,7 @@ git objects stay in the user's repo, pinned against `git gc` ("Keep refs");
 diffs are computed on demand from the commit shas a revision carries, never
 stored ("Diffs").
 
-Live followers (`nit wait`, `nit log --follow`) watch a set of changes over
+Live followers (`nit log --wait`/`--follow`) watch a set of changes over
 one websocket (docs/api.md "Events"); which entries **wake** a parked wait is
 a client decision ("Wake rule" below). The web polls the same folds.
 
@@ -487,7 +487,7 @@ SHA-walk, a vs-parent diff, or the timer's `base_sha..canonical` walk needs).
 
 ## Wake rule
 
-The server streams every tagged entry unfiltered; a parked `nit wait` wakes on
+The server streams every tagged entry unfiltered; a parked `nit log --wait` wakes on
 **every** new entry past its cursor. A reviewer action reaches the agent the
 moment it lands — no client-side filtering (the agent's own pushes sit behind
 the cursor it passes back, so they never wake it). The return hands back the
