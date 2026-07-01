@@ -8,8 +8,10 @@ use anyhow::{Result, bail};
 
 use nit_types::chains::Chain;
 use nit_types::changes::ChangeDetail;
-use nit_types::log::{LogEntry, LogPayload};
+use nit_types::comments::CommentRange;
+use nit_types::log::{CommentInput, LogEntry, LogPayload};
 
+use crate::gitscan::identity::subject_of;
 use crate::gitscan::short_sha;
 
 use super::client::Client;
@@ -41,11 +43,13 @@ impl ChangeTarget {
     }
 }
 
+/// The opt-in terse form (`--oneline`): one whitespace-separated line per entry
+/// keyed by its global `seq`.
 pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
     for e in entries {
         println!(
-            "{}\t{}\t{}",
-            e.idx,
+            "seq {}  {}  {}",
+            e.seq,
             e.payload.kind().as_str(),
             entry_summary(e)
         );
@@ -168,6 +172,132 @@ fn short_key(key: &str) -> String {
     key.chars().take(8).collect()
 }
 
+/// The multi-line rendering of one log entry (no trailing blank line), a pure
+/// function of that entry. Two facts a raw entry omits are deliberately not
+/// reconstructed, to keep rendering stateless: a `revision` entry shows no minted
+/// revision number (it returns once the number rides on the log entry itself),
+/// and a reply names only its thread — a reply's anchor lives on the thread's
+/// opening entry, not here.
+pub(crate) fn render_entry(entry: &LogEntry) -> String {
+    let seq = entry.seq;
+    let change = entry.change_id;
+    match &entry.payload {
+        LogPayload::Revision(p) => format!(
+            "seq {seq}  change {change}  revision {}  {}",
+            short_sha(&p.commit_sha),
+            subject_of(&p.message),
+        ),
+        LogPayload::Review(p) => {
+            let mut out = format!(
+                "seq {seq}  change {change} r{}  reviewer: {}",
+                p.revision,
+                p.verdict.as_str()
+            );
+            if !p.message.is_empty() {
+                out.push('\n');
+                out.push_str(&indent(&p.message, 4));
+            }
+            for c in &p.comments {
+                out.push('\n');
+                out.push_str(&render_comment(c));
+            }
+            out
+        }
+        LogPayload::Comment(c) => {
+            let head = match comment_target(c) {
+                Some(target) => format!("seq {seq}  change {change}  comment on {target}"),
+                None => format!("seq {seq}  change {change}  comment"),
+            };
+            format!("{head}\n{}", indent(&c.body, 4))
+        }
+        LogPayload::Lifecycle(p) => match &p.message {
+            Some(m) if !m.is_empty() => {
+                format!("seq {seq}  change {change}  {}: {m}", p.action.as_str())
+            }
+            _ => format!("seq {seq}  change {change}  {}", p.action.as_str()),
+        },
+    }
+}
+
+/// One comment inside a `review`: `t<id>  <anchor>  [resolved]`, then the body on
+/// its own line indented one level deeper. The anchor shows only when this entry
+/// opened the thread; a reply carries none.
+fn render_comment(c: &CommentInput) -> String {
+    let resolved = if c.resolved == Some(true) {
+        "  [resolved]"
+    } else {
+        ""
+    };
+    let loc = opening_anchor(c);
+    let head = match c.thread_id {
+        Some(id) => format!("    t{id}{loc}{resolved}"),
+        None => format!("    {loc}{resolved}"),
+    };
+    format!("{head}\n{}", indent(&c.body, 8))
+}
+
+/// The `thread N (location)` target of an agent `comment` entry — the location
+/// only when this entry opened the thread.
+fn comment_target(c: &CommentInput) -> Option<String> {
+    let tid = c.thread_id?;
+    Some(if c.side.is_some() {
+        format!("thread {tid} ({})", anchor(c))
+    } else {
+        format!("thread {tid}")
+    })
+}
+
+/// The `  <anchor>` an opening comment carries in its own payload; empty for a
+/// reply, whose `side` is unset (its anchor lives on the opening entry).
+fn opening_anchor(c: &CommentInput) -> String {
+    if c.side.is_some() {
+        format!("  {}", anchor(c))
+    } else {
+        String::new()
+    }
+}
+
+/// The anchor label of an opening comment.
+fn anchor(c: &CommentInput) -> String {
+    anchor_str(c.file.as_deref(), c.line, c.range.as_ref())
+}
+
+/// The anchor label from raw parts: `(change-level)`, `file:line`, or the full
+/// `file:start_line:start_char-end_line:end_char` for a range. Shared by the log
+/// renderer and the `nit comment` confirmation.
+fn anchor_str(file: Option<&str>, line: Option<u64>, range: Option<&CommentRange>) -> String {
+    let Some(file) = file else {
+        return "(change-level)".to_string();
+    };
+    if let Some(r) = range {
+        format!(
+            "{file}:{}:{}-{}:{}",
+            r.start_line, r.start_char, r.end_line, r.end_char
+        )
+    } else if let Some(line) = line {
+        format!("{file}:{line}")
+    } else {
+        file.to_string()
+    }
+}
+
+/// Prefix every line of `text` with `n` spaces.
+fn indent(text: &str, n: usize) -> String {
+    let pad = " ".repeat(n);
+    text.lines()
+        .map(|line| format!("{pad}{line}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Print each entry's rich rendering, a blank line between entries.
+pub(crate) fn print_entries(entries: &[LogEntry]) {
+    let blocks: Vec<String> = entries.iter().map(render_entry).collect();
+    if !blocks.is_empty() {
+        println!("{}", blocks.join("\n\n"));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,6 +347,105 @@ mod tests {
         assert_eq!(entry_summary(&opened), "agent opened a thread on change 7");
         let life = entry(LogPayload::lifecycle(LifecycleAction::Merged, None, None));
         assert_eq!(entry_summary(&life), "change 7 merged");
+    }
+
+    #[test]
+    fn log_render_review_and_revision() {
+        use nit_types::comments::CommentRange;
+        use nit_types::enums::{Side, Verdict};
+        use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
+        let entry = |change_id, idx, seq, payload| LogEntry {
+            change_id,
+            idx,
+            seq,
+            created_at: String::new(),
+            payload,
+        };
+        let opening = |tid, file: Option<&str>, line, range, resolved, body: &str| CommentInput {
+            thread_id: Some(tid),
+            revision: Some(2),
+            file: file.map(String::from),
+            line,
+            side: Some(Side::New),
+            range,
+            line_text: None,
+            body: body.to_string(),
+            resolved,
+        };
+        let review = entry(
+            42,
+            5,
+            12,
+            LogPayload::Review(ReviewPayload {
+                review_id: 1,
+                revision: 2,
+                verdict: Verdict::RequestChanges,
+                message: "Cover one.\nCover two.".to_string(),
+                comments: vec![
+                    opening(3, None, None, None, None, "Change-level question?"),
+                    opening(
+                        4,
+                        Some("src/queue.rs"),
+                        Some(42),
+                        None,
+                        None,
+                        "Bounded channel.",
+                    ),
+                    opening(
+                        5,
+                        Some("src/queue.rs"),
+                        Some(42),
+                        Some(CommentRange {
+                            start_line: 42,
+                            start_char: 8,
+                            end_line: 42,
+                            end_char: 30,
+                        }),
+                        Some(true),
+                        "Overflow on 32-bit.",
+                    ),
+                ],
+            }),
+        );
+        // Verdict header, indented cover message, then one comment per line led
+        // by its thread id, body indented one level deeper; the range anchor is
+        // the full form and the resolved marker sits on the anchor line.
+        assert_eq!(
+            render_entry(&review),
+            "seq 12  change 42 r2  reviewer: request_changes\n\
+             \x20   Cover one.\n\
+             \x20   Cover two.\n\
+             \x20   t3  (change-level)\n\
+             \x20       Change-level question?\n\
+             \x20   t4  src/queue.rs:42\n\
+             \x20       Bounded channel.\n\
+             \x20   t5  src/queue.rs:42:8-42:30  [resolved]\n\
+             \x20       Overflow on 32-bit."
+        );
+
+        // A revision entry shows its short sha and subject — no minted number.
+        let rev = |idx, seq, sha: &str, msg: &str| {
+            entry(
+                42,
+                idx,
+                seq,
+                LogPayload::Revision(RevisionPayload {
+                    commit_sha: sha.to_string(),
+                    parent_sha: String::new(),
+                    base_sha: String::new(),
+                    message: msg.to_string(),
+                    resets_status: true,
+                }),
+            )
+        };
+        assert_eq!(
+            render_entry(&rev(0, 3, "abcdef0123456789", "queue: first\n\nbody")),
+            "seq 3  change 42  revision abcdef012345  queue: first"
+        );
+        assert_eq!(
+            render_entry(&rev(6, 20, "1234567890abcdef", "queue: second")),
+            "seq 20  change 42  revision 1234567890ab  queue: second"
+        );
     }
 
     #[test]

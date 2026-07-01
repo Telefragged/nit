@@ -1,34 +1,44 @@
-//! `nit log` — print entries of the aggregated chain log by position/range, or
-//! `--follow` it as a parked monitor over the websocket change stream.
+//! `nit log` — print entries of the aggregated chain log by position/range,
+//! `--follow` it as a parked monitor over the websocket change stream, or
+//! `--wait` for the next entries past a cursor and exit.
 
 use anyhow::{Context, Result, anyhow, bail};
 
+use nit_types::chains::Chain;
 use nit_types::enums::LifecycleAction;
 use nit_types::events::StreamMsg;
 use nit_types::log::{ChainLog, LogEntry, LogPayload};
 
-use super::client::{Client, Retry, ServerOpt, next_text, print_json, server_url};
-use super::format::print_oneline_entries;
+use super::client::{Client, Retry, ServerOpt, next_text, server_url};
+use super::format::{print_chain_digest, print_entries, print_oneline_entries, render_entry};
 use super::resolve::resolve_chain;
 
 #[derive(clap::Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent CLI flags, not encodable state"
+)]
 pub struct LogArgs {
-    /// Without `--follow`: entry positions or half-open ranges into the
+    /// Default (one-shot): entry positions or half-open ranges into the
     /// aggregated chain log (sorted by global seq): `3`, `5..9`, `5..`, `..9`,
-    /// `..` (all, the default). With `--follow`: a single global `seq` cursor
-    /// to stream from.
+    /// `..` (all, the default). With `--follow`/`--wait`: a single global `seq`
+    /// cursor to stream/drain from.
     #[arg(default_value = "..")]
     pub ranges: Vec<String>,
     /// Chain to read, by its tip change id; overrides the cwd lookup.
     #[arg(long)]
     pub chain: Option<u64>,
-    /// Print a one-line digest per entry instead of full payloads
+    /// Print the terse one-line-per-entry digest instead of the full rendering.
     #[arg(long)]
     pub oneline: bool,
     /// Follow the log: replay from the cursor, then stream each new entry as it
     /// lands — a parked monitor. Rides out restarts; runs until stopped.
     #[arg(long)]
     pub follow: bool,
+    /// Block until entries land past the seq cursor, print them once beneath the
+    /// chain digest, then exit — the one-shot wait.
+    #[arg(long, conflicts_with = "follow")]
+    pub wait: bool,
     /// With `--follow`, relay only the reviewer's activity: drop the agent's
     /// own entries (`revision`/`comment`) and the automatic `merged`
     /// lifecycle.
@@ -38,19 +48,24 @@ pub struct LogArgs {
     pub server: ServerOpt,
 }
 
-/// Print entries of the aggregated chain log by position/range.
+/// Print entries of the aggregated chain log by position/range, or stream/drain
+/// past a cursor with `--follow`/`--wait`.
 ///
 /// # Errors
 /// When a range is malformed or the server can't be reached.
 pub fn log(args: LogArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
-    if args.follow {
+    if args.follow || args.wait {
         let [spec] = args.ranges.as_slice() else {
-            bail!("--follow takes a single starting seq cursor (e.g. `0` or `..`)");
+            bail!("--follow/--wait take a single starting seq cursor (e.g. `0` or `..`)");
         };
         let cursor = follow_cursor(spec)?;
         let change_id = resolve_chain(&client, args.chain, Retry::No)?;
-        return follow(&client, change_id, cursor, args.oneline, args.reviewer_only);
+        return if args.wait {
+            wait(&client, change_id, cursor, args.oneline)
+        } else {
+            follow(&client, change_id, cursor, args.oneline, args.reviewer_only)
+        };
     }
     let change_id = resolve_chain(&client, args.chain, Retry::No)?;
     let log: ChainLog = client.get(&format!("/api/chains/{change_id}/log"))?;
@@ -63,9 +78,56 @@ pub fn log(args: LogArgs) -> Result<()> {
     if args.oneline {
         print_oneline_entries(&entries);
     } else {
-        print_json(&ChainLog { entries })?;
+        print_entries(&entries);
     }
     Ok(())
+}
+
+/// Block until the chain's aggregated log holds entries past the `seq` cursor,
+/// then print the chain digest and those entries, and exit. Each pass drains
+/// `(cursor, head]` from the log (the source of truth); otherwise it parks the
+/// websocket as a doorbell until any new entry lands. Rides out restarts.
+///
+/// # Errors
+/// When the server returns a malformed response or a fatal client error.
+fn wait(client: &Client, change_id: u64, mut cursor: u64, oneline: bool) -> Result<()> {
+    let retry = Retry::UntilUp;
+    loop {
+        let log: ChainLog = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
+        let fresh: Vec<LogEntry> = log
+            .entries
+            .iter()
+            .filter(|e| e.seq > cursor)
+            .cloned()
+            .collect();
+        cursor = max_seq(&log.entries).max(cursor);
+        if !fresh.is_empty() {
+            let chain: Chain = client.get_retry(&format!("/api/chains/{change_id}"), retry)?;
+            print_chain_digest(client, &chain, Some(cursor))?;
+            println!("--- new since cursor ---");
+            if oneline {
+                print_oneline_entries(&fresh);
+            } else {
+                print_entries(&fresh);
+            }
+            return Ok(());
+        }
+        wait_for_entry(client, &log.entries, retry)?;
+    }
+}
+
+/// Park the websocket as a doorbell: subscribe the chain's changes at their
+/// current heads (no backlog replay) and block until the first live frame, then
+/// return so the caller re-drains the log. Rides out restarts.
+fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result<()> {
+    let subs = heads(entries);
+    loop {
+        let mut socket = client.ws_connect(&subs, retry)?;
+        if next_text(&mut socket).is_some() {
+            return Ok(());
+        }
+        // close/error: reconnect.
+    }
 }
 
 /// Follow the aggregated chain log as a parked monitor: replay `(cursor, head]`,
@@ -90,7 +152,7 @@ fn follow(
         for e in &log.entries {
             if e.seq > cursor {
                 cursor = cursor.max(e.seq);
-                relay(e, oneline, reviewer_only)?;
+                relay(e, oneline, reviewer_only);
             }
         }
         let mut socket = client.ws_connect(&heads(&log.entries), retry)?;
@@ -102,26 +164,25 @@ fn follow(
                 continue;
             };
             cursor = cursor.max(entry.seq);
-            relay(&entry, oneline, reviewer_only)?;
+            relay(&entry, oneline, reviewer_only);
         }
     }
 }
 
-fn relay(entry: &LogEntry, oneline: bool, reviewer_only: bool) -> Result<()> {
+fn relay(entry: &LogEntry, oneline: bool, reviewer_only: bool) {
     if reviewer_only && muted_by_reviewer_only(entry) {
-        return Ok(());
+        return;
     }
     if oneline {
         print_oneline_entries(std::slice::from_ref(entry));
-        Ok(())
     } else {
-        print_json(entry)
+        println!("{}\n", render_entry(entry));
     }
 }
 
 /// Each change's head idx (max idx + 1) from the aggregated log — the
 /// from-idx to subscribe at so the backlog replay is empty (doorbell mode).
-pub(super) fn heads(entries: &[LogEntry]) -> std::collections::HashMap<u64, u64> {
+fn heads(entries: &[LogEntry]) -> std::collections::HashMap<u64, u64> {
     let mut heads: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
     for e in entries {
         heads
@@ -132,7 +193,7 @@ pub(super) fn heads(entries: &[LogEntry]) -> std::collections::HashMap<u64, u64>
     heads
 }
 
-pub(super) fn max_seq(entries: &[LogEntry]) -> u64 {
+fn max_seq(entries: &[LogEntry]) -> u64 {
     entries.iter().map(|e| e.seq).max().unwrap_or(0)
 }
 

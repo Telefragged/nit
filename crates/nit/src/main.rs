@@ -27,11 +27,9 @@ enum Cmd {
     Serve(server::ServeArgs),
     /// Push the cwd's checked-out commit (or [COMMIT]) for review (idempotent)
     Push(cli::PushArgs),
-    /// Block until log entries land beyond the seq cursor; prints {cursor, entries, feedback}
-    Wait(cli::WaitArgs),
-    /// Print the chain's status (--oneline for a digest)
+    /// Print the chain's status: derived state and one line per member
     Status(cli::StatusArgs),
-    /// Print the aggregated chain log, or stream it live with --follow
+    /// Print the aggregated chain log; --follow to stream, --wait to drain and exit
     Log(cli::LogArgs),
     /// Comment on a change (--change / --change-id): open a thread or reply (--thread)
     Comment(cli::CommentArgs),
@@ -64,7 +62,6 @@ fn main() -> Result<()> {
     match cmd {
         Cmd::Serve(args) => server::run(args),
         Cmd::Push(args) => cli::push(args),
-        Cmd::Wait(args) => cli::wait(args),
         Cmd::Status(args) => cli::status(args),
         Cmd::Log(args) => cli::log(args),
         Cmd::Comment(args) => cli::comment(args),

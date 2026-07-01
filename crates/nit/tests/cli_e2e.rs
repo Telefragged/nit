@@ -1,7 +1,7 @@
 //! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside a
 //! fixture repo against a real server. The agent drives push / status /
-//! log / comment / reopen one-shot (the live followers `nit wait` /
-//! `nit log --follow` return in a later stage) — docs/agent-workflow.md.
+//! log / comment / reopen one-shot (the live followers `nit log --follow` /
+//! `--wait` live in `cli_wait.rs`) — docs/agent-workflow.md.
 //!
 //! `nit push` walks the change-centric model: oldest-first, upsert each change
 //! by its `Change-Id`, append a revision iff the sha moved (revisions are
@@ -46,10 +46,11 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
 
     let (ok, log, stderr) = nit(&server, &g, &["log"]);
     assert!(ok, "{stderr}");
-    let entries = log["entries"].as_array().unwrap();
-    assert_eq!(entries.len(), 1, "{log}");
-    assert_eq!(entries[0]["kind"], "revision");
-    assert!(entries[0]["change_id"].is_u64(), "{log}");
+    let log = log.as_str().expect("log prints text");
+    assert!(
+        log.contains("revision "),
+        "one revision entry rendered: {log}"
+    );
 }
 
 /// An amend (same Change-Id, new sha) appends a second revision (rev 1); a
@@ -76,15 +77,22 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
 
     let (ok, log, stderr) = nit(&server, &g, &["log"]);
     assert!(ok, "{stderr}");
-    let entries = log["entries"].as_array().unwrap();
-    assert_eq!(entries.len(), 2, "{log}");
-    assert!(entries.iter().all(|e| e["kind"] == "revision"));
+    let log = log.as_str().expect("log prints text");
+    assert_eq!(
+        log.matches("revision ").count(),
+        2,
+        "two revision entries: {log}"
+    );
 
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     assert!(push.as_str().is_some_and(|d| d.contains("r1")), "{push}");
     let (_ok, log, _) = nit(&server, &g, &["log"]);
-    assert_eq!(log["entries"].as_array().unwrap().len(), 2, "{log}");
+    assert_eq!(
+        log.as_str().unwrap().matches("revision ").count(),
+        2,
+        "{log}"
+    );
 }
 
 /// `nit comment --change-id` opens a thread; `--thread … --resolve` replies and

@@ -1,5 +1,6 @@
-//! `nit wait` over the websocket: it drains the log, waking on any new entry,
-//! and parks on the stream until fresh activity lands (docs/agent-workflow.md).
+//! `nit log --wait` over the websocket: it drains the log, waking on any new
+//! entry, and parks on the stream until fresh activity lands
+//! (docs/agent-workflow.md).
 
 mod common;
 
@@ -22,8 +23,8 @@ fn push_head(server: &TestServer, g: &GitRepo) -> u64 {
         .expect("tip change id")
 }
 
-/// `nit wait 0` wakes immediately on any existing activity past the cursor
-/// (here, the agent's own push revision).
+/// `nit log --wait 0` wakes immediately on any existing activity past the cursor
+/// (here, the agent's own push revision), printing the digest and the entry.
 #[test]
 fn wait_returns_existing_activity() {
     let g = GitRepo::new();
@@ -33,16 +34,18 @@ fn wait_returns_existing_activity() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     push_head(&server, &g);
 
-    let (ok, out, err) = nit_bounded(&server, &g, &["wait", "0"], Duration::from_secs(15));
-    assert!(ok, "wait failed: {err}");
-    let entries = out["entries"].as_array().expect("entries");
-    assert!(
-        entries.iter().any(|e| e["kind"] == "revision"),
-        "wait surfaced the revision: {out}"
+    let (ok, out, err) = nit_bounded(
+        &server,
+        &g,
+        &["log", "--wait", "0"],
+        Duration::from_secs(15),
     );
+    assert!(ok, "wait failed: {err}");
+    let out = out.as_str().expect("wait prints text");
+    assert!(out.contains("cursor="), "prints the digest header: {out}");
     assert!(
-        out["cursor"].as_u64().unwrap() > 0,
-        "cursor advanced: {out}"
+        out.contains("revision"),
+        "surfaced the revision entry: {out}"
     );
 }
 
@@ -85,17 +88,16 @@ fn wait_blocks_then_wakes_on_a_review() {
     let (ok, out, err) = nit_bounded(
         &server,
         &g,
-        &["wait", &head_seq.to_string()],
+        &["log", "--wait", &head_seq.to_string()],
         Duration::from_secs(20),
     );
     reviewer.join().unwrap();
     assert!(ok, "wait failed: {err}");
-    let entries = out["entries"].as_array().expect("entries");
+    let out = out.as_str().expect("wait prints text");
     assert!(
-        entries
-            .iter()
-            .any(|e| e["kind"] == "review" && e["payload"]["verdict"] == "request_changes"),
-        "wait woke on the review: {out}"
+        out.contains("reviewer: request_changes"),
+        "woke on the review: {out}"
     );
-    assert_eq!(out["feedback"]["state"], "agents_turn");
+    // The digest header reflects the chain flipping to the agent's turn.
+    assert!(out.contains("state=agents_turn"), "{out}");
 }
