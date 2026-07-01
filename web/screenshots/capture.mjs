@@ -532,7 +532,21 @@ async function liveCaptures(baseUrl) {
   return caps;
 }
 
-async function waitForServer(url, timeoutMs = 30_000) {
+/** Every page renders `.skeleton` placeholders until its data (in mock mode,
+ * the lazily-imported fixture stream) lands, so an empty `.skeleton` set means
+ * the page has settled into real content. This replaces Playwright's
+ * `networkidle`, which its own docs call "inherently racy": vite's on-demand
+ * dep pre-bundle and the mock stream's dynamic import make the network go
+ * quiet mid-render, so `networkidle` could resolve on a half-built page. */
+const waitForReady = (page) =>
+  page.waitForFunction(() => {
+    // `load` can fire before React mounts, when the tree has neither content
+    // nor skeleton yet — require real content in #root, not just its absence.
+    const root = document.getElementById("root");
+    return !!root?.firstElementChild && !root.querySelector(".skeleton");
+  });
+
+async function waitForServer(url, timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -588,14 +602,28 @@ async function main() {
       colorScheme: "dark",
       reducedMotion: "reduce",
     });
+    // Under a loaded CI box the defaults (30s) brush against first paint +
+    // wasm instantiation; give every action and navigation room to spare.
+    context.setDefaultTimeout(60_000);
+    context.setDefaultNavigationTimeout(60_000);
     // Keep captures order-independent (e.g. the persisted diff layout).
     await context.addInitScript(() => localStorage.clear());
+
+    // A fresh sandbox has no `node_modules/.vite` cache, so vite pre-bundles
+    // deps on the first request and then broadcasts a full-page reload. Absorb
+    // that one-time reload here so it can't detach a real capture's DOM
+    // mid-action (the primary flake this harness suffered).
+    const warm = await context.newPage();
+    await warm.goto(baseUrl, { waitUntil: "load" });
+    await waitForReady(warm);
+    await warm.close();
 
     for (const cap of list) {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (err) => errors.push(String(err)));
-      await page.goto(baseUrl + cap.path, { waitUntil: "networkidle" });
+      await page.goto(baseUrl + cap.path, { waitUntil: "load" });
+      await waitForReady(page);
       if (cap.actions) await cap.actions(page);
       // Fixed elements repeat confusingly in full-page captures; pin the
       // review bar to the end of the document instead. Viewport captures
