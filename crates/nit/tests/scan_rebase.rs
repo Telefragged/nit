@@ -55,7 +55,6 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     approve(&server, tip_id);
     assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
 
-    // Same diffs and messages, new shas + new parents → pure rebases.
     let m1 = g.commit(&[g.root], "main: unrelated\n", &[("m.txt", "m\n")]);
     g.branch("main", m1);
     let c1r = g.commit(&[m1], &msg("one", "Ia"), &[("a.txt", a_txt)]);
@@ -90,8 +89,8 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     );
     assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
 
-    // A reword (message changed, same diff + parent) is reviewable, so it
-    // resets the change to pending — a new revision the reviewer hasn't seen.
+    // A reword changes reviewable content, so it resets to pending — a new
+    // revision the reviewer hasn't seen.
     let c2w = g.commit(&[c1r], &msg("two: explained", "Ib"), &[("b.txt", b_txt)]);
     g.branch("feat", c2w);
     let (st, pr) = push(&server, &g, "feat", "main");

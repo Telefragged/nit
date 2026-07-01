@@ -8,7 +8,6 @@ mod common;
 
 use common::{GitRepo, TestServer, http_get, member_id, msg, push};
 
-/// The single chain summary in the repo (one tip), failing loudly otherwise.
 fn only_chain(server: &TestServer) -> serde_json::Value {
     let (st, list) = http_get(&server.url("/api/chains"));
     assert_eq!(st, 200, "{list}");
@@ -125,7 +124,6 @@ fn extending_the_branch_adds_a_change() {
     let (st, _) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
 
-    // A new commit on top is a new change; the chain extends, prior change untouched.
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
     g.branch("feat", c2);
     let (st, res) = push(&server, &g, "feat", "main");
@@ -138,7 +136,6 @@ fn extending_the_branch_adds_a_change() {
     assert_eq!(path[1]["change_key"], "I002");
     assert_eq!(path[1]["position"], 1);
 
-    // The untouched first change keeps revision 0 (one revision only).
     let id1 = member_id(&server, &res, "I001");
     let (_, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
     assert_eq!(detail["revisions"].as_array().unwrap().len(), 1);
@@ -154,7 +151,6 @@ fn amend_opens_revision_one_on_the_change() {
     assert_eq!(st, 200);
     let id = member_id(&server, &res, "I001");
 
-    // Amend: same Change-Id, new content → revision 1 on the same change.
     let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "different\n")]);
     g.branch("feat", c1b);
     let (st, res) = push(&server, &g, "feat", "main");
@@ -187,7 +183,7 @@ fn merge_commit_rejects_the_push() {
         e["error"].as_str().unwrap().contains("merge commits"),
         "{e}"
     );
-    // All-or-nothing: nothing was recorded.
+    // All-or-nothing: c1 alone would push fine, but the merge commit voids it too.
     let (_, list) = http_get(&server.url("/api/chains"));
     assert!(list["chains"].as_array().unwrap().is_empty(), "{list}");
 }
@@ -209,7 +205,7 @@ fn already_merged_commit_rejects_the_push() {
         e["error"].as_str().unwrap().contains("already merged"),
         "{e}"
     );
-    // All-or-nothing: nothing — not even the repo — was recorded.
+    // All-or-nothing: the already-merged push records no changes either.
     let (_, list) = http_get(&server.url("/api/chains"));
     assert!(list["chains"].as_array().unwrap().is_empty(), "{list}");
 }

@@ -3,11 +3,11 @@ import { skipToken, useQueries } from "@tanstack/react-query";
 import { getChange } from "../api/client";
 import type { ChangeDetail } from "../api/types";
 
-/** Each change's published detail, keyed ["change", id]. By default fetches via
- * getChange — the dashboard's activity feed, where nothing else populates the
- * cache. With `cacheOnly`, reads the cache without fetching: the review page
- * folds each member off the websocket (useChangeStream), so a getChange would
- * re-fetch what the snapshot already delivers. Ids still loading are absent. */
+/** Each change's published detail. Default: fetches via getChange for the
+ * dashboard's activity feed, where nothing else populates the cache. With
+ * `cacheOnly`, reads the cache without fetching — the review page already
+ * folds each member off the websocket (useChangeStream), so a getChange
+ * would re-fetch what the snapshot already delivers. */
 export function useChangeDetails(
   ids: number[],
   cacheOnly = false,

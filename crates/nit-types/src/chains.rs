@@ -17,7 +17,6 @@ pub struct ChainList {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Chain {
     pub tip_change_id: u64,
-    /// The repo this chain belongs to (registry id).
     pub repo_id: u64,
     pub state: ChainState,
     /// Oldest-first, base → tip.

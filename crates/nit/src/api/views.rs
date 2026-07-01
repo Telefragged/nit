@@ -110,7 +110,7 @@ pub fn build_graph(
         shas.insert(h.sha.clone());
     }
 
-    // Open region: active changes ascending, deduplicated by commit-sha.
+    // Open region: active changes, in ascending (tip-walk) order.
     for node in view.open_nodes() {
         if !shas.insert(node.commit_sha.clone()) {
             continue; // already placed (an anchor/history sha)

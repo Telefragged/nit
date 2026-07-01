@@ -5,15 +5,15 @@
 import type { DiffFile } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
 
-/** Fresh per-diff default: everything collapsed except the synthetic
- * commit message — it is the natural entry point for reviewing a commit
- * and the full message lives only there (not in the page header). */
+/** Called fresh per diff: the commit message starts expanded since it's
+ * the natural review entry point, and its full text lives only here, not
+ * in the page header. */
 export function defaultExpanded(): ReadonlySet<string> {
   return new Set([COMMIT_MSG_PATH]);
 }
 
-/** Returns the input set unchanged (same reference) when already expanded,
- * so callers can setState without a redundant render. */
+/** Same-reference return when already expanded, so callers can setState
+ * without a redundant render. */
 export function expand(
   cur: ReadonlySet<string>,
   path: string,
@@ -41,8 +41,8 @@ export function collapseAll(): ReadonlySet<string> {
   return new Set();
 }
 
-/** True when every file of the diff is expanded (drives the rail's
- * expand-all ⇄ collapse-all toggle; an empty diff is never "all"). */
+/** Drives the rail's expand-all ⇄ collapse-all toggle; an empty diff is
+ * never "all" (vacuous `every` would otherwise say yes). */
 export function allExpanded(
   cur: ReadonlySet<string>,
   files: DiffFile[],

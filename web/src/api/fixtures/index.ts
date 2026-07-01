@@ -252,12 +252,12 @@ function derivePath(tip: TipRecord): PathEntry[] {
   return walkPath(tip).map((m, i) => pathEntry(m, i));
 }
 
-/** A chain's derived state from its path members (docs/api.md state table).
- * Abandonment is derivation-inert: abandoned members are dropped before the
- * rollup, and there is no abandoned chain state. */
+/** Mirrors docs/api.md's chain state table. Abandonment is derivation-inert:
+ * abandoned members are dropped before the rollup, and there is no abandoned
+ * chain state. */
 function chainState(path: PathEntry[]): ChainState {
   const live = path.filter((e) => e.status !== "abandoned");
-  if (live.length === 0) return "agents_turn"; // empty or all-abandoned tip
+  if (live.length === 0) return "agents_turn";
   if (live.every((e) => e.status === "merged")) return "merged";
   if (
     live.some(
@@ -531,7 +531,7 @@ function fullLines(file: AuthoredFile): Line[] {
       if (l.new !== undefined) newN = l.new + 1;
     }
   }
-  fill(newSideEnd(file) + 1); // the run below the last hunk, to EOF
+  fill(newSideEnd(file) + 1);
   return out;
 }
 

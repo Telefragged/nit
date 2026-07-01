@@ -165,9 +165,8 @@ export default function ReviewBar({
     textareaRef.current?.focus();
   }, [replyOpen]);
 
-  // `s` publishes the chain from the diff — the keyboard twin of the Submit
-  // button, gated by the same `canSubmit`. Inert while the modal owns the
-  // keyboard (replyOpen); `isShortcutKey` mutes modifiers and typing.
+  // Keyboard twin of the Submit button — same `canSubmit` gate;
+  // `isShortcutKey` mutes modifiers and typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (replyOpen || !isShortcutKey(e)) return;

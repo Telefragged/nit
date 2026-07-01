@@ -121,8 +121,6 @@ fn abandon(server: &TestServer, change_id: u64) {
 
 #[test]
 fn branchless_change_stays_live_without_auto_abandon() {
-    // The core inversion: a change off every branch is NOT abandoned. Only the
-    // explicit action abandons.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);

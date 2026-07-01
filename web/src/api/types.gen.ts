@@ -54,9 +54,6 @@ export type RepoList = { repos: Array<Repo> };
 
 export type Chain = {
   tip_change_id: number;
-  /**
-   * The repo this chain belongs to (registry id).
-   */
   repo_id: number;
   state: ChainState;
   /**
@@ -144,13 +141,10 @@ export type ChangeDetail = {
    */
   threads: Array<Thread>;
   /**
-   * The reviewer's unpublished comments, all revisions.
+   * All revisions.
    */
   drafts: Array<Draft>;
   reviews: Array<Review>;
-  /**
-   * The reviewer's staged decision.
-   */
   draft_decision: StagedDecision | null;
 };
 
@@ -482,7 +476,7 @@ export type ChangeProj = {
   reviews: Array<ReviewProj>;
   lifecycle: Lifecycle;
   /**
-   * The next thread id to mint — bumped each time a thread is opened.
+   * Bumped each time a thread is opened.
    */
   next_thread_id: number;
   /**

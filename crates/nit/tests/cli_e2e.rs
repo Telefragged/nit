@@ -189,7 +189,6 @@ fn reopen_an_abandoned_change() {
     assert!(ok, "{stderr}");
     assert_eq!(detail["id"], change_id);
 
-    // Clears the change back to non-terminal status.
     let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change", &change_id.to_string()]);
     assert!(ok, "{stderr}");
     assert_eq!(detail["id"], change_id);
@@ -205,7 +204,6 @@ fn reopen_an_abandoned_change() {
 #[test]
 fn push_without_change_id_fails_with_a_helpful_message() {
     let g = GitRepo::new();
-    // No Change-Id trailer on this commit.
     let c1 = g.commit(&[g.root], "core: add a\n", &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
@@ -219,7 +217,6 @@ fn push_without_change_id_fails_with_a_helpful_message() {
     );
 }
 
-/// `nit status` before any push fails non-zero, telling the agent to push first.
 #[test]
 fn status_before_any_push_says_run_nit_push_first() {
     let g = GitRepo::new();
@@ -263,8 +260,7 @@ fn push_to_a_dead_server_reports_unreachable() {
     assert!(stderr.contains("is 'nit serve' running?"), "{stderr}");
 }
 
-/// Bare `nit push` (no args) resolves the cwd's checked-out commit — the agent
-/// registers the repo, commits, and simply pushes.
+/// Bare `nit push` (no args) resolves the cwd's checked-out commit.
 #[test]
 fn bare_push_resolves_head() {
     let g = GitRepo::new();

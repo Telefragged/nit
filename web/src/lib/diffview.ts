@@ -49,7 +49,6 @@ export function diffTotals(files: DiffFile[]): {
   return { count, additions, deletions };
 }
 
-/** One visual row in side-by-side view. */
 export interface RowPair {
   left: Line | null;
   right: Line | null;
@@ -194,7 +193,6 @@ export function rangeSliceOnLine(
   return window[0] < window[1] ? window : null;
 }
 
-/** Lines skipped between the previous hunk (if any) and this one. */
 export function skippedBefore(prev: Hunk | undefined, hunk: Hunk): number {
   if (!prev) {
     return Math.max(hunk.old_start - 1, hunk.new_start - 1, 0);
@@ -204,10 +202,8 @@ export function skippedBefore(prev: Hunk | undefined, hunk: Hunk): number {
   return Math.max(oldSkip, newSkip, 0);
 }
 
-/** Lines hidden below the last hunk: the new-side run from its end to the
- * file's end (`newTotal`) — skippedBefore's bottom counterpart. Unchanged
- * context moves a hunk's old and new ends together, so the new side bounds
- * the run on its own. */
+/** skippedBefore's counterpart. Unchanged context keeps a hunk's old and new
+ * ends in lockstep, so the new side alone bounds the run to `newTotal`. */
 export function skippedAfter(last: Hunk | undefined, newTotal: number): number {
   if (!last) return 0;
   return Math.max(newTotal - (last.new_start + last.new_lines - 1), 0);

@@ -1,8 +1,6 @@
-// The mock side of WS /api/stream (docs/api.md "Events"): a per-change log the
-// fixtures synthesize once, fold into a snapshot on subscribe, and append to on
-// mutation — so the event-driven change page runs against the same protocol in
-// mock mode (tests, screenshots) as in production. This synth log is the single
-// source of truth: the REST change read folds it too (./index).
+// The mock side of WS /api/stream (docs/api.md "Events"): the single source of
+// truth for mock mode. The REST change read (./index) folds this same synth
+// log, so mock WS and mock REST agree in tests/screenshots as they do in prod.
 
 import { replayProj } from "../fold";
 import type { ChangeProj, LogEntry, LogPayload, StreamMsg } from "../types";

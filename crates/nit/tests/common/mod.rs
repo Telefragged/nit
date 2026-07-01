@@ -425,7 +425,7 @@ pub fn ws_read(socket: &mut WsSock) -> Option<Value> {
                 let _ = socket.send(tungstenite::Message::Pong(p));
             }
             Ok(_) => {}
-            Err(_) => return None, // timeout or close
+            Err(_) => return None,
         }
     }
 }

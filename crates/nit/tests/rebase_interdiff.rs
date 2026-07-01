@@ -72,7 +72,7 @@ fn drift_lines(f: &DiffFile) -> Vec<(char, u64)> {
 }
 
 // ---------------------------------------------------------------------------
-// Properties 3 & 5 — motivating case: pure rebase collapses to nothing.
+// Properties 3 & 5.
 
 /// The motivating case: an earlier change C1 is amended, which rewrites the
 /// later change C2 onto a new parent. C2's own delta is unchanged (a pure
@@ -82,7 +82,7 @@ fn drift_lines(f: &DiffFile) -> Vec<(char, u64)> {
 fn stacked_amend_leaks_into_a_later_change_until_contained() {
     let g = GitRepo::new();
     let base = ["fn one() {}", "fn two() {}", "fn three() {}"];
-    let drifted = ["fn one() {}", "fn TWO() {}", "fn three() {}"]; // C1 amended line 2
+    let drifted = ["fn one() {}", "fn TWO() {}", "fn three() {}"];
     let feat = body(&["pub const C2: u8 = 1;"]);
 
     // parent(m)=C1@r0, m=C2@r0; parent(n)=C1@r1 (amended), n=C2@r1 (rebased).
@@ -127,16 +127,15 @@ fn same_parent_interdiff_is_unchanged() {
 }
 
 // ---------------------------------------------------------------------------
-// Property 4/6/7 — a mixed hunk keeps the real edit, tags drift, counts only
-// the real lines.
+// Property 4/6/7.
 
 #[test]
 fn mixed_hunk_keeps_real_edit_and_tags_drift() {
     let g = GitRepo::new();
     // base.rs lines 2 (B) and 4 (D) are near enough to share one hunk.
     let parent_m = snapshot(&g, &[("base.rs", &body(&["A", "B", "C", "D", "E"]))]);
-    let m = snapshot(&g, &[("base.rs", &body(&["A", "Bm", "C", "D", "E"]))]); // C2 edits B
-    let parent_n = snapshot(&g, &[("base.rs", &body(&["A", "B", "C", "Dx", "E"]))]); // drift on D
+    let m = snapshot(&g, &[("base.rs", &body(&["A", "Bm", "C", "D", "E"]))]);
+    let parent_n = snapshot(&g, &[("base.rs", &body(&["A", "B", "C", "Dx", "E"]))]);
     let n = snapshot(&g, &[("base.rs", &body(&["A", "Bn", "C", "Dx", "E"]))]); // C2 re-edits B
 
     let (_, tagged) = interdiff(&g, m, parent_m, n, parent_n);
@@ -217,8 +216,7 @@ fn agent_removing_a_base_line_in_a_later_revision_is_real() {
 
     let (_, tagged) = interdiff(&g, m, parent_m, n, parent_n);
     let f = file(&tagged, "lib.rs").expect("lib.rs stays in the list");
-    // `use b;` removed by the agent is a real deletion; the keep() body change
-    // is base drift, tagged and uncounted.
+    // The keep() body change is base drift, tagged and excluded from real_dels.
     let real_dels: Vec<&str> = f
         .hunks
         .iter()
@@ -239,14 +237,12 @@ fn agent_removing_a_base_line_in_a_later_revision_is_real() {
 fn duplicate_lines_never_hide_the_agents_edit() {
     let g = GitRepo::new();
     let parent_m = snapshot(&g, &[("f.rs", &body(&["b", "c"]))]);
-    let m = snapshot(&g, &[("f.rs", &body(&["b", "c", "SAME"]))]); // agent appends
-    let parent_n = snapshot(&g, &[("f.rs", &body(&["c", "a", "c"]))]); // base moved
-    let n = snapshot(&g, &[("f.rs", &body(&["c", "a", "c", "DIFF"]))]); // appends, differs
+    let m = snapshot(&g, &[("f.rs", &body(&["b", "c", "SAME"]))]);
+    let parent_n = snapshot(&g, &[("f.rs", &body(&["c", "a", "c"]))]);
+    let n = snapshot(&g, &[("f.rs", &body(&["c", "a", "c", "DIFF"]))]);
 
     let (_, tagged) = interdiff(&g, m, parent_m, n, parent_n);
     let f = file(&tagged, "f.rs").expect("tagged f.rs");
-    // The agent's real edit (SAME → DIFF) is always shown as a real change —
-    // never swallowed into drift — even where alignment leaves base churn.
     let real: Vec<&str> = f
         .hunks
         .iter()
@@ -286,7 +282,7 @@ fn isolated_drift_hunk_is_dropped_real_hunk_kept() {
         drift_lines(f).is_empty(),
         "no drift renders in the kept hunk"
     );
-    // The surviving hunk is the real one (line 1), not the drift (line 12).
+    // Line 1 is the real edit; line 12 is the drift.
     assert_eq!(f.hunks[0].new_start, 1);
 }
 
@@ -331,9 +327,6 @@ fn overlapping_edit_is_real_not_drift() {
     assert_eq!((f.additions, f.deletions), (1, 1));
 }
 
-// ---------------------------------------------------------------------------
-// Files the rebase adds or deletes are entirely drift and drop out.
-
 #[test]
 fn file_added_or_deleted_by_the_rebase_is_dropped() {
     let g = GitRepo::new();
@@ -341,7 +334,6 @@ fn file_added_or_deleted_by_the_rebase_is_dropped() {
     let cfg = body(&["added by the base"]);
     let old = body(&["removed by the base"]);
 
-    // Added by the rebase: present only on the n side.
     let parent_m = snapshot(&g, &[("keep.rs", &body(&["k"]))]);
     let m = snapshot(&g, &[("keep.rs", &body(&["k"])), ("feat.rs", &feat)]);
     let parent_n = snapshot(&g, &[("keep.rs", &body(&["k"])), ("cfg.toml", &cfg)]);
@@ -357,7 +349,6 @@ fn file_added_or_deleted_by_the_rebase_is_dropped() {
     assert!(file(&plain, "cfg.toml").is_some(), "plain leaks the add");
     assert!(tagged.files.is_empty(), "added-by-rebase file drops out");
 
-    // Deleted by the rebase: present only on the m side.
     let parent_m = snapshot(&g, &[("keep.rs", &body(&["k"])), ("old.rs", &old)]);
     let m = snapshot(
         &g,
@@ -536,7 +527,6 @@ fn http_interdiff_contains_a_pure_rebase() {
     let (st, p1) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "re-push: {p1}");
 
-    // C2 revision 1 is a pure rebase — its own delta is unchanged, only the parent moved.
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
     assert_eq!(st, 200, "change detail: {detail}");
     let revs = detail["revisions"].as_array().expect("revisions");

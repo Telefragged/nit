@@ -70,7 +70,6 @@ function renderFile(layout: "unified" | "split") {
 describe("rebase drift rendering", () => {
   it("tags only the drift line's code cells in unified layout", () => {
     const { container } = renderFile("unified");
-    // The two drift lines (del + add), and only those, carry .drift.
     expect(container.querySelectorAll(".code.drift").length).toBe(2);
     const realChanges = container.querySelectorAll(
       ".code.del:not(.drift), .code.add:not(.drift)",

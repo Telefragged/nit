@@ -23,8 +23,6 @@ pub struct StatusArgs {
     pub server: ServerOpt,
 }
 
-/// Print the chain's status: the derived state plus one line per member.
-///
 /// # Errors
 /// When the server can't be reached or no chain matches the current branch.
 pub fn status(args: StatusArgs) -> Result<()> {
@@ -40,10 +38,10 @@ pub fn status(args: StatusArgs) -> Result<()> {
     }
 }
 
-/// Unresolved-thread count per member, read from each member's change snapshot
-/// (`GET /api/changes/{id}`). The chain path carries only structure, so the
-/// `--oneline` digest composes the activity it shows from the snapshots — the
-/// folded state is in memory, so each is a cheap read.
+/// Unresolved-thread count per member. The chain path carries only
+/// structure, so the `--oneline` digest reads each member's change
+/// snapshot for its activity — cheap since the folded state is in memory
+/// server-side.
 ///
 /// # Errors
 /// When a member's change snapshot can't be fetched.

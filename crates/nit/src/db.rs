@@ -151,17 +151,18 @@ const MIGRATIONS: &[&str] = &[
     // when it has drifted); NULL only for a change that has never appended (a
     // torn push), until its next append or restart.
     "ALTER TABLE changes ADD COLUMN status TEXT;",
-    // v4: rename the canonical-base column to `base_ref` — the stored value is
-    // a git ref, not necessarily a local branch (docs/data-model.md "Tables").
+    // v4: `base_ref` stores a git ref, not necessarily a local branch
+    // (docs/data-model.md "Tables").
     "ALTER TABLE repos RENAME COLUMN base_branch TO base_ref;",
-    // v5: retire the `partial` log kind. The flag never affected a change's
-    // stored status (it only gated the read-derived `approved` chain state), so
-    // its entries are inert — drop them so replay no longer meets an unknown
-    // kind. Revision payloads keep a now-dead `partial` field, ignored by
-    // omission: `RevisionPayload` is not `deny_unknown_fields`, so serde drops
-    // the unrecognized key on deserialize. Deleting interior entries leaves idx
-    // gaps, harmless: the next idx is `MAX(idx) + 1` and the fold orders by
-    // idx, never assuming contiguity.
+    // v5: the `partial` log kind's flag never affected a change's stored
+    // status (it only gated the read-derived `approved` chain state), so
+    // its entries are inert — drop them so replay no longer meets an
+    // unknown kind. Revision payloads keep a now-dead `partial` field,
+    // ignored by omission: `RevisionPayload` is not `deny_unknown_fields`,
+    // so serde drops the unrecognized key on deserialize. Deleting
+    // interior entries leaves idx gaps, harmless: the next idx is
+    // `MAX(idx) + 1` and the fold orders by idx, never assuming
+    // contiguity.
     "DELETE FROM log WHERE kind = 'partial';",
 ];
 
@@ -652,8 +653,6 @@ pub fn get_draft(conn: &Connection, id: u64) -> Result<Option<DraftRow>> {
     .map_err(Into::into)
 }
 
-/// Update a draft's body and its staged resolution decision.
-///
 /// # Errors
 /// On a database failure.
 pub fn update_draft(
@@ -680,7 +679,7 @@ pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
     Ok(())
 }
 
-/// Drafts for one change, id-ascending.
+/// Id-ascending (creation order).
 ///
 /// # Errors
 /// On a database failure.
@@ -705,8 +704,8 @@ pub fn delete_drafts_for_change(conn: &Connection, change_id: u64) -> Result<()>
 }
 
 // ---------------------------------------------------------------------------
-// Draft reviews (the reviewer's staged DECISION; one row per change, never
-// in the log — docs/data-model.md "Reviewer decisions")
+// Draft reviews: staged, never written to the log until published —
+// docs/data-model.md "Reviewer decisions".
 
 /// A reviewer's staged decision on a change.
 #[derive(Debug, Clone)]
@@ -927,7 +926,6 @@ mod tests {
         assert_eq!(staged.decision, Decision::RequestChanges);
         assert_eq!(staged.message, "fix this");
 
-        // One row per change: a second stage replaces the first.
         upsert_draft_review(&conn, c, Decision::Approve, "lgtm").expect("restage");
         let staged = get_draft_review(&conn, c).expect("get").expect("some");
         assert_eq!(staged.decision, Decision::Approve);

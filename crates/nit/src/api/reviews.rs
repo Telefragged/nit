@@ -189,8 +189,6 @@ pub(super) async fn submit_chain(
     .await
 }
 
-/// Why a staged decision cannot publish against the member's current lifecycle,
-/// or `None` when it is legal.
 fn decision_block(lifecycle: Lifecycle, decision: Decision) -> Option<&'static str> {
     match (lifecycle, decision.as_lifecycle()) {
         (Lifecycle::Merged { .. }, _) => Some("change is merged — nothing to submit"),

@@ -72,7 +72,7 @@ pub fn require_keys(messages: &[String], short_shas: &[String]) -> Result<Vec<St
         ));
     }
 
-    let mut seen: HashMap<&str, &str> = HashMap::new(); // token → first sha
+    let mut seen: HashMap<&str, &str> = HashMap::new();
     for (key, sha) in keys.iter().zip(short_shas) {
         if let Some(first) = seen.insert(key.as_str(), sha.as_str()) {
             return Err(format!(

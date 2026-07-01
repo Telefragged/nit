@@ -4,9 +4,8 @@ import { getChangeDrafts } from "../api/client";
 import type { ChangeDrafts } from "../api/types";
 
 /** The reviewer's overlay (drafts + staged decision) per change, REST-read from
- * GET /changes/{id}/drafts and keyed ["drafts", id] — separate from the
- * websocket-folded ["change", id] published projection, and refetched on the
- * reviewer's own mutations. Ids still loading are absent from the Map. */
+ * GET /changes/{id}/drafts — separate from the websocket-folded ["change", id]
+ * published projection, and refetched on the reviewer's own mutations. */
 export function useDrafts(ids: number[]): Map<number, ChangeDrafts> {
   const queries = useQueries({
     queries: ids.map((id) => ({

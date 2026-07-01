@@ -55,7 +55,6 @@ describe("toggle", () => {
     expect(once.has("src/a.rs")).toBe(true);
     const twice = toggle(once, "src/a.rs");
     expect(twice.has("src/a.rs")).toBe(false);
-    // The rest of the set is untouched either way.
     expect(twice.has(COMMIT_MSG_PATH)).toBe(true);
   });
 });

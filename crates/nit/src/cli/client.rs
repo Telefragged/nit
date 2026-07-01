@@ -231,8 +231,6 @@ impl Client {
         Self::read(response, path)
     }
 
-    /// Deserialize a success body into `T`; on a non-2xx, decode the
-    /// `{"error": …}` envelope into a fatal error.
     fn read<T: DeserializeOwned>(
         mut response: ureq::http::Response<ureq::Body>,
         path: &str,

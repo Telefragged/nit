@@ -36,7 +36,7 @@ async function request<T = void>(
   body?: unknown,
 ): Promise<T> {
   if (import.meta.env.VITE_MOCK) {
-    // Loaded lazily so fixtures stay out of production bundles.
+    // Keeps fixtures out of production bundles.
     const { mockRequest } = await import("./fixtures");
     return mockRequest(method, path, body) as Promise<T>;
   }

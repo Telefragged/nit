@@ -13,7 +13,6 @@ use crate::db;
 use super::canonical_git_dir;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
 
-/// A repo row plus its derived live-tip count, as the wire `Repo`.
 fn repo_json(state: &AppState, row: db::RepoRow) -> Repo {
     let active = u64::try_from(state.repo_view(row.id).tips().len()).unwrap_or(u64::MAX);
     Repo {
@@ -46,9 +45,6 @@ pub(super) async fn create_repo(
                 existing.id
             )));
         }
-        // Resolve the base to a commit up front — any git ref (a local branch,
-        // `origin/main`, a tag, a sha), not only a local branch; seeds the merge
-        // timer's baseline below. nit never guesses the base.
         let base_commit = repo
             .revparse_single(&req.base)
             .and_then(|o| o.peel_to_commit())

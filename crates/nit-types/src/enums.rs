@@ -294,8 +294,7 @@ pub enum ChainState {
 }
 
 impl ChainState {
-    /// The wire spelling (mirrors the serde renaming), for Value-free display
-    /// in the CLI.
+    /// The wire spelling, for Value-free display in the CLI.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {

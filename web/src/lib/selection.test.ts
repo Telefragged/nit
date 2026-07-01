@@ -130,7 +130,7 @@ describe("selectionTarget, unified layout", () => {
 
   it("ends a selection reaching a line's first char on the previous line", () => {
     const s = mountUnified([ROWS]);
-    // Triple-click shape: ends at offset 0 of the next row's text.
+    // Triple-click shape (browsers land the selection end there).
     const r = rangeOf(textNode(s, 1), 0, textNode(s, 2), 0);
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",

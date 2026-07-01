@@ -18,10 +18,9 @@ pub struct ChangeDetail {
     /// Published threads, all revisions; anchors verbatim (the client places
     /// them by diff range, docs/api.md "Comment placement").
     pub threads: Vec<Thread>,
-    /// The reviewer's unpublished comments, all revisions.
+    /// All revisions.
     pub drafts: Vec<Draft>,
     pub reviews: Vec<Review>,
-    /// The reviewer's staged decision.
     pub draft_decision: Option<StagedDecision>,
 }
 

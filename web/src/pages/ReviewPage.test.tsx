@@ -70,7 +70,7 @@ const section = (i: number): HTMLElement =>
 const isExpanded = (el: HTMLElement): boolean =>
   el.querySelector(".file-header")?.getAttribute("aria-expanded") === "true";
 
-/** Awaits diff load: resolves once the named rail item appears in the DOM. */
+/** Awaits diff load, signaled by the rail item's appearance. */
 const railItem = (path: string) => screen.findByTitle(path);
 
 describe("collapsed-by-default file sections", () => {
@@ -115,13 +115,10 @@ describe("collapsed-by-default file sections", () => {
 
     fireEvent.click(screen.getByTitle("src/auth/store.rs"));
 
-    // Exactly one scroll, on the clicked file's section, and the section
-    // already carried its expanded body when the call was issued.
     expect(scrollCalls).toEqual([{ id: "file-2", expandedAtCall: true }]);
     // …plus the rail keeping the newly active item visible on its side.
     expect(railScrolls).toBe(1);
     expect(isExpanded(section(2))).toBe(true);
-    // Only the target expanded; its collapsed neighbor stayed collapsed.
     expect(isExpanded(section(1))).toBe(false);
   });
 
@@ -129,8 +126,8 @@ describe("collapsed-by-default file sections", () => {
     renderReview();
     await railItem("src/auth/store.rs");
 
-    fireEvent.keyDown(window, { key: "]" }); // → file-0 (already expanded)
-    fireEvent.keyDown(window, { key: "]" }); // → file-1 (was collapsed)
+    fireEvent.keyDown(window, { key: "]" }); // already expanded (not the regression-guard case)
+    fireEvent.keyDown(window, { key: "]" }); // was collapsed — this is the regression-guard case
 
     expect(scrollCalls).toEqual([
       { id: "file-0", expandedAtCall: true },
@@ -149,7 +146,6 @@ describe("collapsed-by-default file sections", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "collapse all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(false);
-    // Bulk toggling never scrolls — neither sections nor the rail.
     expect(scrollCalls).toEqual([]);
     expect(railScrolls).toBe(0);
   });
@@ -163,9 +159,8 @@ describe("collapse with an open dirty comment editor", () => {
     vi.restoreAllMocks();
   });
 
-  /** Open the inline draft editor on section(1)'s first commentable line and
-   * leave it dirty: place a caret in .code-text, then press 'c'
-   * (see lib/selection — clicking a line does not open an editor). */
+  /** Leaves a dirty draft open on section(1); needs a manual caret + 'c'
+   * because clicking a line doesn't open an editor (see lib/selection). */
   async function openDirtyEditor() {
     renderReview();
     await railItem("src/auth/store.rs");
@@ -311,25 +306,21 @@ describe("the s key submits the chain's staged decisions", () => {
     renderChange20();
     await screen.findByTitle("src/wal.rs");
 
-    // Nothing staged: the shortcut no-ops, like the disabled button.
     fireEvent.keyDown(window, { key: "s" });
     expect(path).toBe("/changes/20");
 
-    // Stage a decision through the modal, then fire the shortcut.
     fireEvent.click(screen.getByRole("button", { name: "Review (a)" }));
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
     await screen.findByRole("button", { name: /Submit chain \(s\) · 1/ });
 
     fireEvent.keyDown(window, { key: "s" });
-    // A clean submit returns to the chain's drawer in the repo view.
     await waitFor(() => {
       expect(path).toBe("/repos/2#chain-20");
     });
   });
 });
 
-// Each file header tallies the threads visible for that file in the shown
-// diff range — counting comments pinned to a hidden revision would lie.
+// Counting comments pinned to a hidden revision would lie about what's shown.
 describe("comment counts in the file headers", () => {
   const fcomments = (i: number): string | null =>
     section(i).querySelector(".fcomments")?.textContent ?? null;

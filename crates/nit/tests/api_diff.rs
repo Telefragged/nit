@@ -17,7 +17,7 @@ fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
     })
 }
 
-/// The pushed tip change's id (revision 0 lives there after the first push).
+/// Revision 0 of the tip change lives here after the first push.
 fn tip_change_id(push_result: &Value) -> u64 {
     push_result["tip_change"]["change_id"]
         .as_u64()
@@ -83,8 +83,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
     let (st, diff) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff")));
     assert_eq!(st, 200, "{diff}");
 
-    // The synthetic commit-message file is the FIRST entry, the whole message
-    // as one all-add hunk (docs/api.md "The commit message as a file").
+    // Contract: docs/api.md "The commit message as a file".
     assert_eq!(
         diff["files"][0],
         json!({
@@ -146,7 +145,6 @@ fn diff_vs_parent_leads_with_commit_msg() {
         })
     );
 
-    // An added file: one all-add hunk, 1-based new line numbers.
     assert_eq!(
         by_path(&diff, "fresh.txt"),
         json!({

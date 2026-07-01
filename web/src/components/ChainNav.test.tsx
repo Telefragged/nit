@@ -133,9 +133,8 @@ describe("ChainNav", () => {
       "/changes/12",
     ]);
 
-    // Current member: a div not a link (current page is never self-linked),
-    // aria-current="page" for assistive tech, and the only row carrying an
-    // open-thread count.
+    // A div, not a link, so the current page never self-links; aria-current
+    // flags it for assistive tech.
     const current = must(
       document.querySelector<HTMLElement>(".chain-nav-row.current"),
       ".chain-nav-row.current",

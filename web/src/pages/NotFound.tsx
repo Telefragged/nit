@@ -12,7 +12,6 @@ export default function NotFound() {
   );
 }
 
-/** Shared error panel for failed queries. */
 export function ErrorPanel({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error);
   return (

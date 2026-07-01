@@ -87,7 +87,6 @@ fn subscribe_at_head_skips_backlog() {
     assert_eq!(live["idx"], 1);
 }
 
-/// Only entries for currently-subscribed changes reach a socket.
 #[test]
 fn unsubscribed_changes_are_silent() {
     let g = GitRepo::new();

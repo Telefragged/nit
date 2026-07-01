@@ -31,8 +31,7 @@ fn node<'a>(graph: &'a Value, sha: &str) -> &'a Value {
     &graph["nodes"].as_array().unwrap()[row_of(graph, sha)]
 }
 
-// main advances root→c1→c2→c3 while a topic forks at c1, two commits behind
-// HEAD. The open topic must order ABOVE the HEAD anchor (the partition: a
+// The open topic must order ABOVE the HEAD anchor (the partition: a
 // childless HEAD must not float to row 0) and keep c1 — its real fork point —
 // as its parent, never re-rooted onto the anchor.
 #[test]

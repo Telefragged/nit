@@ -1,12 +1,10 @@
 import { useLayoutEffect, type RefObject } from "react";
 
 /**
- * Grow a textarea to fit its content. Collapse to `auto` to measure, then
- * set the height to the scrolled content height. Runs on every `value`
- * change — so newlines expand the box as you type — and on mount, so an
- * editor opened with existing text (editing a comment) fits it from the
- * first frame. Layout effect so the resize happens before paint, with no
- * one-frame jump. The CSS `min-height` stays the floor for short text.
+ * Resizes on mount and on every `value` change, so existing text sizes
+ * immediately and typed newlines grow the box live. Uses a layout effect
+ * so the resize lands before paint, avoiding a one-frame jump. CSS
+ * `min-height` remains the floor for short text.
  */
 export function useAutosize(
   ref: RefObject<HTMLTextAreaElement | null>,

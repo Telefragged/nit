@@ -17,7 +17,7 @@ const markedText = (root: DocumentFragment, selector: string): string =>
 describe("markTextRange", () => {
   it("wraps the raw-text slice across entities and token spans", () => {
     const raw = 'if a < b && c > "x" {';
-    const html = highlightLine(raw, "rust"); // contains &lt;/&gt; + hljs spans
+    const html = highlightLine(raw, "rust");
     const root = parse(markTextRange(html, 3, 16, "comment-range"));
     expect(markedText(root, ".comment-range")).toBe(raw.slice(3, 16));
     expect(root.textContent).toBe(raw);

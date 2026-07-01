@@ -1,4 +1,4 @@
-// Pure scroll-spy decision, kept out of components so it stays testable.
+// Kept out of components so it stays testable.
 
 /**
  * Which file section is current for a scroll position: the last section

@@ -1245,7 +1245,7 @@ export const tips: TipRecord[] = [
 // client places them by diff range, docs/api.md "Comment placement")
 
 export const threads: ThreadRecord[] = [
-  // change 10 — a change-level remark, published with the approval.
+  // Published alongside the approving review.
   {
     id: 70,
     change_id: 10,
@@ -1265,7 +1265,7 @@ export const threads: ThreadRecord[] = [
     created_at: ago(22 * 60),
     updated_at: ago(22 * 60),
   },
-  // change 11 — resolved thread (anchor survives the amend, line shifts).
+  // Anchor survives the amend, line shifts.
   {
     id: 71,
     change_id: 11,
@@ -1408,7 +1408,7 @@ export const threads: ThreadRecord[] = [
     created_at: ago(21 * 60),
     updated_at: ago(96),
   },
-  // Two unresolved threads from the request_changes review.
+  // Two threads from the request_changes review.
   {
     id: 80,
     change_id: 20,

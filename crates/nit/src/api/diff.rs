@@ -198,7 +198,6 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<DiffFile> {
     let (_, additions, deletions) = patch.line_stats()?;
     let mut hunks = patch_hunks(&mut patch)?;
     if hunks.is_empty() && !new.is_empty() {
-        // Identical interdiff: synthesize the all-context hunk.
         let lines: Vec<Line> = new
             .lines()
             .enumerate()
@@ -298,7 +297,6 @@ mod tests {
             Repo { _dir: dir, repo }
         }
 
-        /// Bytes allow binary content.
         fn tree(&self, files: &[(&str, &[u8])]) -> git2::Oid {
             let mut builder = self
                 .repo

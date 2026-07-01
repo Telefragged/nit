@@ -257,18 +257,14 @@ export default function DiffFileView({
     },
   });
 
-  // Split layout only: while a drag is in flight, lock selection to the
-  // side it started on (styles/diff.css `sel-old`/`sel-new` set the other column
-  // user-select: none) so a cross-column drag yields one side's contiguous
-  // text — the shape a comment range needs. This bounds the *captured* text
-  // in engines that honor user-select across a spanning selection; the
-  // cross-column *paint* is handled separately and unconditionally by the
-  // diff column's data-sel-side ::selection rule (ReviewPage). Done
-  // imperatively on the grid node, not via React state: a state change on
-  // mousedown re-renders mid-gesture and drops the nascent selection, and
-  // the lock would land too late to keep the drag on one side. Cleared on
-  // mouseup so the finished selection (which c consumes) survives and later
-  // selections (Ctrl+A, find-and-select) are never constrained.
+  // Split layout only: lock selection to the side a drag started on via
+  // grid classes (diff.css sel-old/sel-new set user-select: none on the
+  // other column) so cross-column drags yield one contiguous-text side —
+  // the shape a comment range needs. Paint across columns is handled
+  // separately by ReviewPage's ::selection rule. Imperative on the grid
+  // node, not React state, since a mousedown re-render would drop the
+  // nascent selection mid-gesture; cleared on mouseup so later selections
+  // (Ctrl+A, find) aren't constrained.
   const lockSelectionSide = (e: ReactMouseEvent) => {
     const side = selectionAnchorSide(e.target as Node);
     if (side === null) return;
@@ -365,8 +361,7 @@ export default function DiffFileView({
     return items.length > 0 ? <div className="meta-row">{items}</div> : null;
   }
 
-  /** Split meta row: old-side items go under the left column, new-side
-   * under the right — each pinned to that side (docs/api.md placement). */
+  /** Old/new items pin left/right per docs/api.md "Comment placement". */
   function splitMeta(pair: RowPair): ReactNode {
     const left = metaItems("old", pair.left?.old);
     const right = metaItems("new", pair.right?.new);

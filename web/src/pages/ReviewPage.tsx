@@ -764,8 +764,6 @@ export default function ReviewPage() {
               onSelect={revealFile}
               allExpanded={allFilesExpanded}
               onToggleAll={() => {
-                // Collapse-all with every file expanded covers the editor's
-                // section whenever a target is set; expand-all never collapses.
                 if (
                   !confirmEditorCollapse(
                     allFilesExpanded && editingTarget !== null,
@@ -830,8 +828,6 @@ export default function ReviewPage() {
                   domId={fileDomId(i)}
                   collapsed={!expanded.has(file.path)}
                   onToggle={() => {
-                    // A toggle on an expanded file is a collapse; it hides
-                    // the editor when the target anchors in that file.
                     if (
                       !confirmEditorCollapse(
                         expanded.has(file.path) &&

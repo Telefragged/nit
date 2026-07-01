@@ -369,7 +369,6 @@ mod tests {
 
     #[test]
     fn project_clipped_handles_after_and_full_cover() {
-        // A mapping entirely after the position leaves it untouched.
         assert_eq!(
             project_clipped(span(2, 3), &[edit((5, 8), (5, 8))]),
             vec![span(2, 3)]
@@ -384,8 +383,8 @@ mod tests {
         // base region straddles the agent's edit [5,8), and the untouched
         // remainder still projects (size-neutral mapping ⇒ no shift).
         let m = [edit((5, 8), (5, 8))];
-        assert_eq!(project_clipped(span(4, 6), &m), vec![span(4, 5)]); // prefix
-        assert_eq!(project_clipped(span(7, 9), &m), vec![span(8, 9)]); // suffix
+        assert_eq!(project_clipped(span(4, 6), &m), vec![span(4, 5)]);
+        assert_eq!(project_clipped(span(7, 9), &m), vec![span(8, 9)]);
         // An interior agent edit splits the base region in two.
         assert_eq!(
             project_clipped(span(1, 9), &[edit((4, 5), (4, 5))]),

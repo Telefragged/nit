@@ -27,8 +27,7 @@ export function replayProj(input: ReplayInput): ChangeProj {
   return replay_proj(input) as ChangeProj;
 }
 
-/** Apply one live log entry to a `ChangeProj`, returning the advanced
- * projection. Idempotent across the snapshot/live overlap (an entry below the
+/** Idempotent across the snapshot/live overlap (an entry below the
  * snapshot's high-water mark is a no-op). */
 export function foldEntry(proj: ChangeProj, entry: LogEntry): ChangeProj {
   return fold_entry(proj, entry) as ChangeProj;

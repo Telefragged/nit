@@ -72,7 +72,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                         }
                     }
                     Message::Close(_) => break,
-                    _ => {} // ping/pong/binary: ignored
+                    _ => {}
                 }
             }
             Some((change_id, item)) = feeds.next(), if !feeds.is_empty() => {

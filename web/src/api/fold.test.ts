@@ -40,7 +40,7 @@ describe("the shared wasm fold", () => {
       change_key: "I1",
       entries: [revision],
     });
-    // Only the revision is folded: the high-water mark is the next idx.
+    // entries_folded is the high-water mark (next idx to fold), not a count.
     expect(proj.entries_folded).toBe(1);
 
     const detail = changeDetail(proj);

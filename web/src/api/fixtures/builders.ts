@@ -1,6 +1,4 @@
-// Pure fixture builders: deterministic shas, relative timestamps, diff-line
-// constructors, and the small diff helpers the fixture records lean on. No
-// state lives here — see ./data for the mutable store, ./index for the server.
+// No state lives here — see ./data for the mutable store, ./index for the server.
 
 import { COMMIT_MSG_PATH } from "../types";
 import type { Diff, DiffFile, Hunk, Line } from "../types";
@@ -9,7 +7,6 @@ const NOW = Date.now();
 export const ago = (minutes: number) =>
   new Date(NOW - minutes * 60_000).toISOString();
 
-/** Deterministic fake 40-hex sha from a numeric seed. */
 export function sha(seed: number): string {
   let x = (seed * 2654435761) >>> 0;
   let out = "";

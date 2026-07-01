@@ -297,9 +297,8 @@ mod tests {
     use super::detect_landings;
     use crate::review::{ChangeProj, RevisionProj};
 
-    /// Commit `files` onto `parent` (none → root) with `message`, returning the
-    /// new commit's sha. Flat paths only — a `TreeBuilder` seeded from the
-    /// parent is all these tests need.
+    /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
+    /// tests need.
     fn commit(
         repo: &Repository,
         parent: Option<Oid>,
@@ -349,7 +348,6 @@ mod tests {
         (dir, repo, root)
     }
 
-    /// The open-change lookup `detect_landings` takes (`change_key` → change).
     fn open<'a>(changes: &[&'a ChangeProj]) -> HashMap<String, &'a ChangeProj> {
         changes.iter().map(|c| (c.change_key.clone(), *c)).collect()
     }
@@ -386,8 +384,6 @@ mod tests {
         assert_eq!(got, vec![]);
     }
 
-    /// A landing that stripped its Change-Id is not detected — the keyless
-    /// patch-id fallback is deliberately gone.
     #[test]
     fn keyless_landing_is_not_detected() {
         let (_dir, repo, root) = repo();
@@ -486,7 +482,6 @@ mod tests {
         assert_eq!(got, vec![]);
     }
 
-    /// The caller re-baselines when the baseline oid can no longer be resolved.
     #[test]
     fn unresolvable_baseline_detects_nothing() {
         let (_dir, repo, root) = repo();

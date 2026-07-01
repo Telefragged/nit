@@ -23,8 +23,6 @@ fn revision_entry() -> LogEntry {
 
 #[test]
 fn log_entry_flattens_to_an_adjacent_tag() {
-    // The flattened LogPayload contributes the sibling `kind` + `payload` keys,
-    // after the entry's own fields — the exact wire shape.
     let json = serde_json::to_string(&revision_entry()).expect("serialize");
     assert_eq!(
         json,

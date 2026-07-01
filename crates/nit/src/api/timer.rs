@@ -77,7 +77,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
             .flatten()
             .and_then(|r| r.base_head);
         if recorded.as_deref() == Some(head.as_str()) {
-            continue; // canonical branch unmoved — nothing to scan
+            continue;
         }
         // First observation has no baseline -- no landings are detected;
         // landings that predate tracking are not this timer's concern.

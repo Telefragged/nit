@@ -43,8 +43,8 @@ const edge = (g: GraphLayout, from: string, to: string) =>
     `${from}>${to}`,
   );
 
-// The change-graph mock topology, in row order: two open tips (A1, A2) fanning
-// from A3 → A4 → HEAD, then merged history H → G1 → G2(merge of G3,G4) → G5.
+// Node order below is the row order layoutGraph keys off (array index →
+// row); reordering these nodes shifts every row-based assertion below.
 function mockGraph(): RepoGraph {
   return {
     repo_id: 1,
@@ -105,7 +105,6 @@ describe("layoutGraph node semantics", () => {
     expect(g.collapsed).toBeNull();
 
     expect(find(g, "G2").isMerge).toBe(true);
-    // A3 is shared by two chains (its two children A1, A2).
     expect(find(g, "A3").childCount).toBe(2);
 
     // Opacity floor 0.3 — not yet reached; G5 at depth 5 gives 0.35.
@@ -149,7 +148,7 @@ describe("layoutGraph behind-HEAD base (in window)", () => {
       ],
     });
     expect(laneOf(g, "B")).toBe(1);
-    expect(edge(g, "B", "c2e8e4d").kind).toBe("open"); // base is a visible node
+    expect(edge(g, "B", "c2e8e4d").kind).toBe("open");
     expect(edge(g, "B", "c2e8e4d").lane).toBe(1); // the edge keeps B's color
     expect(edge(g, "J", "H").kind).toBe("open"); // normal fork at HEAD
     expect(g.collapsed).toBeNull();

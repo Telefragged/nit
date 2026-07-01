@@ -46,9 +46,6 @@ pub enum Lifecycle {
     Abandoned,
 }
 
-// ---------------------------------------------------------------------------
-// Projection (the folded state of ONE change)
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RevisionProj {
@@ -152,7 +149,7 @@ pub struct ChangeProj {
     pub threads: Vec<ThreadProj>,
     pub reviews: Vec<ReviewProj>,
     pub lifecycle: Lifecycle,
-    /// The next thread id to mint — bumped each time a thread is opened.
+    /// Bumped each time a thread is opened.
     pub next_thread_id: u64,
     /// Count of entries folded = the next unconsumed `idx` (a high-water mark).
     /// Carried in the snapshot so the client resumes folding the live tail at
@@ -161,8 +158,7 @@ pub struct ChangeProj {
 }
 
 impl ChangeProj {
-    /// An empty projection for the change `(id, repo_id, change_key)`. The fold
-    /// builds the rest from the log.
+    /// The fold builds the rest from the log.
     #[must_use]
     pub fn new(id: u64, repo_id: u64, change_key: String) -> ChangeProj {
         ChangeProj {
@@ -376,7 +372,7 @@ fn open_thread(
     });
 }
 
-/// Rebuild a change's projection by folding its entries (ascending `idx`).
+/// Rebuild a change's projection from `entries`; requires ascending `idx` — `fold()`'s high-water mark silently skips anything out of order.
 #[must_use]
 pub fn replay(id: u64, repo_id: u64, change_key: String, entries: Vec<LogEntry>) -> ChangeProj {
     let mut change = ChangeProj::new(id, repo_id, change_key);
@@ -412,8 +408,6 @@ pub fn review_view(review: &ReviewProj) -> Review {
     }
 }
 
-/// A published thread → its wire shape, projecting its [`Anchor`] back to the
-/// flat `file`/`line`/`side`/`range`/`line_text` fields.
 #[must_use]
 pub fn thread_view(t: &ThreadProj, change_id: u64) -> Thread {
     let (file, line, side, range, line_text) = match &t.anchor {
@@ -602,7 +596,6 @@ mod tests {
         let c = folded(vec![
             revision("A", "base", "base", true),
             review(0, Verdict::Approve),
-            // r1 is a reword (resets_status = true): back to pending.
             revision("B", "base", "base", true),
         ]);
         assert_eq!(c.status_at(1), ChangeStatus::Pending);
@@ -610,7 +603,6 @@ mod tests {
 
     #[test]
     fn current_status_tracks_the_latest_revision() {
-        // No revisions yet: the cached value is pending.
         assert_eq!(empty().current_status(), ChangeStatus::Pending);
         // current_status is the displayed status at the latest revision: r1 has no
         // review, so pending — even though r0 was approved.
@@ -778,7 +770,6 @@ mod tests {
         assert_eq!(c.reviews.len(), 1);
         assert_eq!(c.entries_folded, 2);
         assert_eq!(c.status_at(0), ChangeStatus::Approved);
-        // The next contiguous entry resumes folding.
         fold(&mut c, entry(2, review(0, Verdict::RequestChanges)));
         assert_eq!(c.reviews.len(), 2);
         assert_eq!(c.entries_folded, 3);

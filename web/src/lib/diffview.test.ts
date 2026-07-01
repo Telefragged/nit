@@ -88,7 +88,6 @@ describe("skippedBefore", () => {
   });
 
   it("takes the larger of the old/new gaps between hunks", () => {
-    // prev covers old 1..3 / new 1..5; next starts at old 10 / new 8.
     expect(skippedBefore(hunk(1, 3, 1, 5), hunk(10, 2, 8, 2))).toBe(6);
   });
 
@@ -118,7 +117,6 @@ describe("gapLines", () => {
   ];
 
   it("returns the run between two hunks, del lines included", () => {
-    // prev ends at old 3 / new 3; next starts at old 6 / new 5.
     const out = gapLines(full, hunk(3, 3), hunk(6, 5));
     expect(out).toEqual([del(4, "dropped by the base"), ctx(5, 4)]);
   });

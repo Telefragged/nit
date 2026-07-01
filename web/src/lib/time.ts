@@ -1,4 +1,3 @@
-/** Compact relative time: "now", "4m", "3h", "2d", then a date. */
 export function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   if (ms < 60_000) return "now";

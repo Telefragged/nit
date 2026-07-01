@@ -38,7 +38,7 @@ pub struct CommentArgs {
     /// Mark the thread resolved (a new thread is born resolved).
     #[arg(long)]
     pub resolve: bool,
-    /// Reopen the thread (mark it unresolved)
+    /// Reopen the thread
     #[arg(long, conflicts_with = "resolve")]
     pub unresolve: bool,
     #[command(flatten)]

@@ -15,8 +15,7 @@ import {
 const anchor = (revision: number, side: "old" | "new", line: number | null) =>
   ({ revision, side, line }) satisfies CommentAnchor;
 
-/** A published thread anchored on src/main.rs; only the fields the test
- * exercises are spelled out, the rest take sensible defaults. */
+/** A published thread anchored on src/main.rs. */
 const thread = (over: Partial<Thread> & { id: number }): Thread => ({
   change_id: 1,
   revision: 1,
@@ -71,7 +70,6 @@ describe("assembleThreads", () => {
     const d0 = draft({ id: 10, thread_id: 1, created_at: "t1", body: "first" });
     const [u] = assembleThreads([t], [d1, d0]);
     expect(u?.id).toBe(1);
-    // Reply drafts collected onto the thread, sorted oldest-first.
     expect(u?.drafts.map((d) => d.id)).toEqual([10, 11]);
   });
 
@@ -165,8 +163,6 @@ describe("draftAnchor", () => {
   });
 
   it("is the inverse of commentPlacement", () => {
-    // A draft on a column round-trips: store it, then place it back into
-    // the same range and it lands on the column it was drawn on.
     for (const [selected, against] of [
       [3, undefined],
       [3, 1],

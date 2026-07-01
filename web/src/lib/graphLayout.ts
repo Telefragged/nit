@@ -18,11 +18,10 @@ import type { GraphNode, RepoGraph } from "../api/types";
 /** Visual constants for the change-graph layout (the approved "trunk &
  * branches" design: dense rows, hollow ringed nodes, elbow connectors). */
 export const LAYOUT_B = {
-  /** Row height; the SVG node centers align to each table row's center. */
+  /** The SVG node centers align to each table row's center. */
   rowH: 46,
   /** Center of lane 0 (the canonical spine) from the rail's left edge. */
   railPadL: 42,
-  /** Horizontal gap between lane centers. */
   laneGap: 42,
   railPadR: 26,
   nodeR: 5,
@@ -117,9 +116,9 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
   // The collapsed-history marker row (one below the last node), or -1.
   const markerRow = graph.history_truncated && n > 0 ? n : -1;
 
-  // 1. The canonical spine (lane 0): from the anchor, down the first-parent
-  //    chain and up the primary (smallest-row) child chain. With no anchor,
-  //    the first-parent chain from the top row.
+  // 1. Spine: first-parent chain down from the anchor (top row if none);
+  //    then up via the primary (smallest-row, per the childRows sort
+  //    above) child.
   const spine = new Set<number>();
   let cur = anchorRow >= 0 ? anchorRow : 0;
   while (cur >= 0 && cur < n && !spine.has(cur)) {
@@ -178,7 +177,7 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
     branches.push({ rows, top, bot });
   }
 
-  // 3. Interval-graph coloring (longest span first, then by top).
+  // 3. Interval-graph coloring.
   const ordered = [...branches].sort((a, b) => {
     const la = a.bot - a.top;
     const lb = b.bot - b.top;

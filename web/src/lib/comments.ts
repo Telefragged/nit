@@ -145,8 +145,8 @@ export function threadCountByRevision(
   return counts;
 }
 
-/** "1 comment" / "3 comments" — the count label the revision dropdowns and
- * the file headers share, so the wording stays in one place. */
+/** The count label the revision dropdowns and the file headers share, so
+ * the wording stays in one place. */
 export function commentCountLabel(n: number): string {
   return `${n} comment${n === 1 ? "" : "s"}`;
 }

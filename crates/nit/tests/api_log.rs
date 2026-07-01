@@ -6,7 +6,6 @@ mod common;
 use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push};
 use serde_json::Value;
 
-/// The `seq` column of a `{entries}` log body, in order.
 fn seqs(resp: &Value) -> Vec<u64> {
     entries(resp)
         .iter()

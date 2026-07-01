@@ -8,8 +8,8 @@ use std::time::Duration;
 use common::{GitRepo, TestServer, http_get, http_post, http_put, msg, nit, nit_bounded};
 use serde_json::{Value, json};
 
-/// `nit push` from the cwd HEAD (no args — resolves the checked-out commit),
-/// returning its `PushResult`. Registers the repo first so the push lands.
+/// Registers the repo first (a push needs one to exist), then bare-pushes
+/// the cwd HEAD.
 fn push_head(server: &TestServer, g: &GitRepo) -> Value {
     let (ok, _, err) = nit(server, g, &["repo", "create", "--base", "main"]);
     assert!(ok, "repo create failed: {err}");
@@ -42,8 +42,6 @@ fn wait_returns_existing_activity() {
     );
 }
 
-/// Parked at the current head, `nit wait` blocks until a reviewer entry lands
-/// over the stream, then wakes with it.
 #[test]
 fn wait_blocks_then_wakes_on_a_review() {
     let g = GitRepo::new();

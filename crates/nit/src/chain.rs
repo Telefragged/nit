@@ -325,10 +325,8 @@ mod tests {
         let ce = change(14, "Ie", vec![rev(0, "E", "Bp", "m")]);
         let view = RepoView::new(vec![ca, cb, cc, cd, ce]);
 
-        // Tips are C and E (leaves over latest revisions).
         assert_eq!(view.tips(), vec!["C".to_string(), "E".to_string()]);
 
-        // The C-chain walks B at rev0; the E-chain walks B at rev1.
         let c_path = view.path_from_tip("C");
         assert_eq!(
             c_path
@@ -374,7 +372,6 @@ mod tests {
 
     #[test]
     fn prefix_branch_is_subsumed() {
-        // m → A → B, then extended to m → A → B → C: only C is a tip.
         let a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);
         let b = change(2, "Ib", vec![rev(0, "B", "A", "m")]);
         let c = change(3, "Ic", vec![rev(0, "C", "B", "m")]);
@@ -455,10 +452,9 @@ mod tests {
             message: String::new(),
             created_at: "t1".to_string(),
         });
-        let b = change(2, "Ib", vec![rev(0, "B", "A", "m")]); // pending
+        let b = change(2, "Ib", vec![rev(0, "B", "A", "m")]);
         let view = RepoView::new(vec![a, b]);
         let path = view.path_from_tip("B");
-        // A approved, B pending → waiting_for_review.
         assert_eq!(derive_state(&view, &path), ChainState::WaitingForReview);
     }
 }

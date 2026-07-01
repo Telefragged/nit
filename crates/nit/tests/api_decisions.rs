@@ -62,8 +62,6 @@ fn draft_comment(server: &TestServer, change_id: u64, file: &str, line: u64, bod
     assert_eq!(st, 200);
 }
 
-/// A staged decision surfaces on both the change detail (with its message) and
-/// the chain path member (change-wide); clearing it removes it.
 #[test]
 fn stage_surfaces_then_clears() {
     let g = GitRepo::new();
@@ -79,7 +77,6 @@ fn stage_surfaces_then_clears() {
     assert_eq!(d["draft_decision"]["decision"], "approve");
     assert_eq!(d["draft_decision"]["message"], "lgtm");
 
-    // Staging again overwrites.
     stage(&server, id, "request_changes", "actually, no");
     assert_eq!(
         detail(&server, id)["draft_decision"]["decision"],
@@ -136,8 +133,6 @@ fn drafts_endpoint_returns_the_overlay() {
     assert_eq!(st, 404);
 }
 
-/// Batch submit publishes a staged verdict, draining the change's comment
-/// drafts into the review and clearing the staged decision.
 #[test]
 fn batch_submit_publishes_verdict_and_drains_comments() {
     let g = GitRepo::new();
@@ -225,7 +220,6 @@ fn batch_submit_abandon_decision_drains_and_records_reason() {
         "comment published"
     );
 
-    // The reason rides the lifecycle{abandoned} entry.
     let (_, log) = http_get(&server.url(&format!("/api/chains/{id}/log")));
     let abandoned = log["entries"]
         .as_array()
@@ -347,7 +341,6 @@ fn batch_submit_publishes_at_pinned_revision() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let id = push_one(&server, &g, "feat", "Ia");
 
-    // Amend (content change → r1); the chain now pins r1.
     let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a1\na2\n")]);
     g.branch("feat", c1);
     let id2 = push_one(&server, &g, "feat", "Ia");

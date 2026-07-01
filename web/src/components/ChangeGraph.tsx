@@ -26,9 +26,8 @@ function edgeClass(e: LaidEdge): string {
 
 const shortSha = (sha: string): string => sha.slice(0, 12);
 
-/** The CSS modifier for a node's ring: its branch (lane) color, matching the
- * edges; the HEAD anchor and merged history are special-cased. The review
- * status lives in the STATUS column. */
+/** The CSS modifier for a node's ring, matching branch-edge colors (not
+ * review status, which lives in the STATUS column). */
 function nodeColor(ln: LaidNode): string {
   if (ln.isHead) return "head";
   if (ln.node.section === "history") return "gray";
