@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use nit_types::changes::{AbandonRequest, ChangeDetail};
 
-use super::client::{Client, ServerOpt, print_json, server_url};
-use super::format::ChangeTarget;
+use super::client::{Client, ServerOpt, server_url};
+use super::format::{ChangeTarget, short_key};
 
 #[derive(clap::Args)]
 pub struct ReopenArgs {
@@ -35,7 +35,12 @@ pub fn reopen(args: ReopenArgs) -> Result<()> {
     let change_id = args.target.resolve(&client)?;
     // The server only reads the path id; no request body needed.
     let detail: ChangeDetail = client.post(&format!("/api/changes/{change_id}/reopen"), &())?;
-    print_json(&detail)
+    println!(
+        "change {} {} reopened",
+        detail.id,
+        short_key(&detail.change_key)
+    );
+    Ok(())
 }
 
 /// Mark a change abandoned — a reviewer/agent judgment that it is dead
@@ -50,5 +55,10 @@ pub fn abandon(args: AbandonArgs) -> Result<()> {
         message: args.message,
     };
     let detail: ChangeDetail = client.post(&format!("/api/changes/{change_id}/abandon"), &body)?;
-    print_json(&detail)
+    println!(
+        "change {} {} abandoned",
+        detail.id,
+        short_key(&detail.change_key)
+    );
+    Ok(())
 }

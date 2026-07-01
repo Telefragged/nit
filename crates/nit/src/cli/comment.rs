@@ -5,8 +5,8 @@ use anyhow::{Context, Result, anyhow};
 use nit_types::comments::{CommentRange, NewComment, Thread};
 use nit_types::enums::Side;
 
-use super::client::{Client, ServerOpt, print_json, server_url};
-use super::format::ChangeTarget;
+use super::client::{Client, ServerOpt, server_url};
+use super::format::{ChangeTarget, print_comment};
 
 #[derive(clap::Args)]
 pub struct CommentArgs {
@@ -63,6 +63,7 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         .range
         .map(|spec| parse_comment_range(&spec))
         .transpose()?;
+    let replied = args.thread.is_some();
     let req = NewComment {
         thread_id: args.thread,
         revision: args.revision,
@@ -74,7 +75,8 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         resolved,
     };
     let thread: Thread = client.post(&format!("/api/changes/{change_id}/comments"), &req)?;
-    print_json(&thread)
+    print_comment(&thread, replied);
+    Ok(())
 }
 
 /// Parse a `--range` spec `START-END`, each endpoint `line:char`.

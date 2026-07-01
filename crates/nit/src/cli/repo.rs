@@ -4,7 +4,8 @@ use anyhow::{Result, anyhow};
 
 use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
 
-use super::client::{Client, ServerOpt, print_json, server_url};
+use super::client::{Client, ServerOpt, server_url};
+use super::format::{aligned_row, column_widths};
 use super::git::{discover_repo, repo_git_dir};
 
 /// `nit repo` — inspect and manage the repository registry.
@@ -53,9 +54,26 @@ pub fn repo(args: RepoArgs) -> Result<()> {
         RepoCmd::List => {
             let client = Client::new(server_url(args.server.server));
             let list: RepoList = client.get("/api/repos")?;
-            print_json(&list)
+            print_repos(&list);
+            Ok(())
         }
         RepoCmd::Move(a) => repo_move(&a, args.server.server),
+    }
+}
+
+/// One aligned line per repo: `id  git_dir  base_ref  N active`.
+fn print_repos(list: &RepoList) {
+    let rows: Vec<[String; 3]> = list
+        .repos
+        .iter()
+        .map(|r| [r.id.to_string(), r.git_dir.clone(), r.base_ref.clone()])
+        .collect();
+    let widths = column_widths(&rows);
+    for (r, cols) in list.repos.iter().zip(&rows) {
+        println!(
+            "{}",
+            aligned_row(cols, widths, &format!("{} active", r.active_chains))
+        );
     }
 }
 
@@ -67,7 +85,11 @@ fn repo_create(args: &RepoCreateArgs, server: Option<String>) -> Result<()> {
         base: args.base.clone(),
     };
     let repo: Repo = client.post("/api/repos", &body)?;
-    print_json(&repo)
+    println!(
+        "registered repo {}  {}  base={}",
+        repo.id, repo.git_dir, repo.base_ref
+    );
+    Ok(())
 }
 
 fn repo_move(args: &RepoMoveArgs, server: Option<String>) -> Result<()> {
@@ -89,5 +111,6 @@ fn repo_move(args: &RepoMoveArgs, server: Option<String>) -> Result<()> {
             anyhow!("no repo registered at '{from}' — run 'nit repo list' to see the exact paths")
         })?;
     let updated: Repo = client.patch(&format!("/api/repos/{id}"), &RelocateRepo { git_dir: to })?;
-    print_json(&updated)
+    println!("repo {} moved  {}", updated.id, updated.git_dir);
+    Ok(())
 }

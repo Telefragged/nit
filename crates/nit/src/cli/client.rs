@@ -1,8 +1,8 @@
 //! HTTP/websocket transport for the CLI: the [`Client`] over the nit server's
 //! JSON API, the unreachable-vs-fatal [`CallError`] split, the [`Retry`] policy
-//! that rides out server restarts, and the shared `print_json`/`server_url`
-//! helpers. Every request and response is a typed `nit-types` shape — no
-//! `serde_json::Value` crosses this boundary.
+//! that rides out server restarts, and the shared `server_url` helper. Every
+//! request and response is a typed `nit-types` shape — no `serde_json::Value`
+//! crosses this boundary.
 
 use anyhow::{Result, anyhow};
 use nit_types::error::ApiError;
@@ -267,11 +267,6 @@ pub(crate) fn next_text(socket: &mut WsConn) -> Option<String> {
             Ok(_) => {}
         }
     }
-}
-
-pub(crate) fn print_json<T: Serialize>(value: &T) -> Result<()> {
-    println!("{}", serde_json::to_string_pretty(value)?);
-    Ok(())
 }
 
 #[cfg(test)]

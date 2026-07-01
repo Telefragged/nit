@@ -1,7 +1,7 @@
 //! `nit push` / `status` / `log` / `comment` / `reopen` — thin CLI
 //! clients of the HTTP API, run by coding agents from inside a git repo
-//! (docs/agent-workflow.md). They print API JSON to stdout and decide purely on
-//! the documented shapes; all review logic lives server-side.
+//! (docs/agent-workflow.md). They print concise text for the agent to act on;
+//! all review logic lives server-side.
 //!
 //! A chain is addressed by its **tip change id**. `nit status`/`nit log`
 //! resolve the cwd's tip change from local HEAD; `nit comment` targets a change

@@ -107,9 +107,9 @@ fn comment_opens_replies_resolves() {
     let (ok, _push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
 
-    // Open a new thread on the change, resolved by the cwd's Change-Id. Returns
-    // a Thread (review_id null → agent), born unresolved.
-    let (ok, thread, stderr) = nit(
+    // Open a new thread on the change, resolved by the cwd's Change-Id. The
+    // confirmation names the thread, its anchor, and its state.
+    let (ok, opened, stderr) = nit(
         &server,
         &g,
         &[
@@ -125,11 +125,15 @@ fn comment_opens_replies_resolves() {
         ],
     );
     assert!(ok, "{stderr}");
-    assert_eq!(thread["resolved"], false);
-    assert!(thread["comments"][0]["review_id"].is_null());
-    assert_eq!(thread["comments"][0]["body"], "is this right?");
-    let thread_id = thread["id"].as_u64().unwrap();
-    let change_num = thread["change_id"].as_u64().unwrap();
+    let opened = opened.as_str().expect("comment prints text");
+    assert!(opened.contains("opened thread"), "{opened}");
+    assert!(opened.contains("a.txt:1"), "anchor shown: {opened}");
+    assert!(
+        opened.trim_end().ends_with("open"),
+        "born unresolved: {opened}"
+    );
+    let thread_id = field_after(opened, "thread ");
+    let change_num = field_after(opened, "on change ");
 
     let (ok, reply, stderr) = nit(
         &server,
@@ -146,13 +150,15 @@ fn comment_opens_replies_resolves() {
         ],
     );
     assert!(ok, "{stderr}");
-    assert_eq!(reply["resolved"], true);
-    let comments = reply["comments"].as_array().unwrap();
-    assert_eq!(comments.len(), 2);
-    assert_eq!(comments.last().unwrap()["body"], "fixed it");
+    let reply = reply.as_str().expect("comment prints text");
+    assert!(
+        reply.contains(&format!("replied on thread {thread_id}")),
+        "{reply}"
+    );
+    assert!(reply.trim_end().ends_with("resolved"), "{reply}");
 
     // `--change <numeric id>` targets the same change as `--change-id Ia`.
-    let (ok, opened, stderr) = nit(
+    let (ok, by_num, stderr) = nit(
         &server,
         &g,
         &[
@@ -164,8 +170,21 @@ fn comment_opens_replies_resolves() {
         ],
     );
     assert!(ok, "{stderr}");
-    assert_eq!(opened["change_id"], change_num);
-    assert_eq!(opened["comments"][0]["body"], "by numeric id");
+    let by_num = by_num.as_str().expect("comment prints text");
+    assert!(
+        by_num.contains(&format!("on change {change_num}")),
+        "{by_num}"
+    );
+}
+
+/// The number following `marker` in a confirmation line (e.g. the id in
+/// `opened thread 5 …` via `"thread "`).
+fn field_after(text: &str, marker: &str) -> u64 {
+    text.split(marker)
+        .nth(1)
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|tok| tok.parse().ok())
+        .unwrap_or_else(|| panic!("no number after {marker:?} in {text:?}"))
 }
 
 /// `nit reopen` clears an abandoned change back to its retained status so a new
@@ -186,11 +205,21 @@ fn reopen_an_abandoned_change() {
     // timer — targeted by the cwd's Change-Id.
     let (ok, detail, stderr) = nit(&server, &g, &["abandon", "--change-id", "Ia"]);
     assert!(ok, "{stderr}");
-    assert_eq!(detail["change_key"], "Ia");
+    assert!(
+        detail
+            .as_str()
+            .is_some_and(|d| d.contains("Ia") && d.contains("abandoned")),
+        "{detail}"
+    );
 
     let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change-id", "Ia"]);
     assert!(ok, "{stderr}");
-    assert_eq!(detail["change_key"], "Ia");
+    assert!(
+        detail
+            .as_str()
+            .is_some_and(|d| d.contains("Ia") && d.contains("reopened")),
+        "{detail}"
+    );
 
     // No 409 gate after reopen — the change accepts a new push.
     let (ok, push, stderr) = nit_register(&server, &g, "feat");

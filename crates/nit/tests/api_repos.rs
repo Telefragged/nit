@@ -236,9 +236,11 @@ fn nit_repo_create_cli() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let repo: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
-    assert_eq!(repo["base_ref"], "main");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(&g.git_dir()) && stdout.contains("base=main"),
+        "{stdout}"
+    );
 
     // nit repo list ≡ GET /api/repos.
     let (_, list) = http_get(&server.url("/api/repos"));
@@ -347,8 +349,11 @@ fn nit_repo_move_cli() {
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let updated: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(updated["git_dir"].as_str().unwrap(), new_git_dir);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("moved") && stdout.contains(new_git_dir.as_str()),
+        "{stdout}"
+    );
 
     let (_, list) = http_get(&server.url("/api/repos"));
     assert_eq!(list["repos"][0]["git_dir"].as_str().unwrap(), new_git_dir);

@@ -8,7 +8,7 @@ use anyhow::{Result, bail};
 
 use nit_types::chains::Chain;
 use nit_types::changes::ChangeDetail;
-use nit_types::comments::CommentRange;
+use nit_types::comments::{CommentRange, Thread};
 use nit_types::log::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::identity::subject_of;
@@ -141,7 +141,7 @@ fn chain_digest(chain: &Chain, unresolved: &HashMap<u64, u64>, cursor: Option<u6
 }
 
 /// The max display width of each column across `rows`, for space alignment.
-fn column_widths<const N: usize>(rows: &[[String; N]]) -> [usize; N] {
+pub(crate) fn column_widths<const N: usize>(rows: &[[String; N]]) -> [usize; N] {
     let mut widths = [0usize; N];
     for row in rows {
         for (width, cell) in widths.iter_mut().zip(row) {
@@ -168,8 +168,27 @@ pub(crate) fn aligned_row<const N: usize>(
     format!("{body}  {tail}")
 }
 
-fn short_key(key: &str) -> String {
+pub(crate) fn short_key(key: &str) -> String {
     key.chars().take(8).collect()
+}
+
+/// Confirm a posted comment: `opened thread N on change M  <anchor>  <state>`
+/// for a new thread, or `replied on thread N (change M)  <state>` for a reply.
+pub(crate) fn print_comment(thread: &Thread, replied: bool) {
+    let state = if thread.resolved { "resolved" } else { "open" };
+    if replied {
+        println!(
+            "replied on thread {} (change {})  {state}",
+            thread.id, thread.change_id
+        );
+    } else {
+        println!(
+            "opened thread {} on change {}  {}  {state}",
+            thread.id,
+            thread.change_id,
+            anchor_str(thread.file.as_deref(), thread.line, thread.range.as_ref()),
+        );
+    }
 }
 
 /// The multi-line rendering of one log entry (no trailing blank line), a pure
