@@ -106,14 +106,11 @@ pub(super) async fn push(
             .expect("the empty-walk guard guarantees at least one target");
         let tip_change = {
             let proj = tip.entry.read();
-            let rev = proj.latest_revision();
             TipChange {
                 change_id: tip.change_id,
                 change_key: proj.change_key.clone(),
-                revision: rev.map_or(0, |r| r.number),
-                status: rev.map_or(nit_types::enums::ChangeStatus::Pending, |r| {
-                    proj.status_at(r.number)
-                }),
+                revision: proj.latest_revision().map_or(0, |r| r.number),
+                status: proj.current_status(),
             }
         };
         Ok(Json(PushResult { tip_change }))
