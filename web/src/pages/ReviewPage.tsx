@@ -256,9 +256,26 @@ export default function ReviewPage() {
   // --- derive revision/diff mode (before any early return: no hooks below)
   const revisions = published?.revisions ?? [];
   const latest = revisions[revisions.length - 1];
+
+  // The revision the page defaults to (until the URL pins one) is frozen at
+  // first sight, not read from the live `latest`: a revision folding in over
+  // the websocket must not move it. A patchset arriving before the pin effect
+  // (below) commits would otherwise slide the default forward and jump the
+  // view to the just-pushed revision — a live-build bug, not just a flake.
+  // Keyed by change (the component is reused across /changes/:id without
+  // remounting) via the adjust-during-render idiom used for `shownDiff` below.
+  const [pinnedRev, setPinnedRev] = useState<{
+    changeId: number;
+    rev: number;
+  }>();
+  if (latest !== undefined && pinnedRev?.changeId !== changeId) {
+    setPinnedRev({ changeId, rev: latest.number });
+  }
+  const defaultRev =
+    pinnedRev?.changeId === changeId ? pinnedRev.rev : undefined;
+
   const selectedRev =
-    revisions.find((r) => r.number === (revisionParam ?? latest?.number)) ??
-    latest;
+    revisions.find((r) => r.number === (revisionParam ?? defaultRev)) ?? latest;
   const selected = selectedRev?.number ?? 1;
 
   // The chain context is the derived chain through this change rooted at the
@@ -288,23 +305,23 @@ export default function ReviewPage() {
     [published, overlay],
   );
 
-  // Pin the viewed revision into the URL on first load. A new revision arriving
-  // over the websocket then becomes selectable (it joins `revisions`) without
-  // the view jumping to it — `selected` follows the pinned ?revision, not the
-  // moving latest. The pin is to the revision already shown, so nothing moves.
-  const latestNumber = latest?.number;
+  // Pin the frozen default into the URL on first load, so the address reflects
+  // the viewed revision. It writes `defaultRev` (the first-seen revision), not
+  // the live latest — a patchset arriving in this effect's post-commit gap
+  // can't be captured as the pin, and `selected` already falls back to
+  // `defaultRev`, so nothing moves regardless of when the effect flushes.
   useEffect(() => {
-    if (revisionParam === undefined && latestNumber !== undefined) {
+    if (revisionParam === undefined && defaultRev !== undefined) {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set("revision", String(latestNumber));
+          next.set("revision", String(defaultRev));
           return next;
         },
         { replace: true },
       );
     }
-  }, [revisionParam, latestNumber, setSearchParams]);
+  }, [revisionParam, defaultRev, setSearchParams]);
 
   // Each chain member's published projection comes from the ["change", id]
   // cache the stream keeps live (ChainNav reads each member's
