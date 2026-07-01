@@ -1,4 +1,4 @@
-//! `nit log` — print entries of the aggregated chain log by position/range,
+//! `nit log` — print entries of the aggregated chain log by global `seq`,
 //! `--follow` it as a parked monitor over the websocket change stream, or
 //! `--wait` for the next entries past a cursor and exit.
 
@@ -19,10 +19,11 @@ use super::resolve::resolve_chain;
     reason = "independent CLI flags, not encodable state"
 )]
 pub struct LogArgs {
-    /// Default (one-shot): entry positions or half-open ranges into the
-    /// aggregated chain log (sorted by global seq): `3`, `5..9`, `5..`, `..9`,
-    /// `..` (all, the default). With `--follow`/`--wait`: a single global `seq`
-    /// cursor to stream/drain from.
+    /// Default (one-shot): global `seq` values or half-open `seq` ranges into
+    /// the aggregated chain log: `3`, `5..9`, `5..`, `..9`, `..` (all, the
+    /// default). A range may span seqs absent from this chain (they belong to
+    /// other changes); those simply match nothing. With `--follow`/`--wait`: a
+    /// single global `seq` cursor to stream/drain from.
     #[arg(default_value = "..")]
     pub ranges: Vec<String>,
     /// Chain to read, by its tip change id; overrides the cwd lookup.
@@ -48,7 +49,7 @@ pub struct LogArgs {
     pub server: ServerOpt,
 }
 
-/// Print entries of the aggregated chain log by position/range, or stream/drain
+/// Print entries of the aggregated chain log by global `seq`, or stream/drain
 /// past a cursor with `--follow`/`--wait`.
 ///
 /// # Errors
@@ -69,12 +70,16 @@ pub fn log(args: LogArgs) -> Result<()> {
     }
     let change_id = resolve_chain(&client, args.chain, Retry::No)?;
     let log: ChainLog = client.get(&format!("/api/chains/{change_id}/log"))?;
-    let all = log.entries;
-    let mut entries: Vec<LogEntry> = Vec::new();
-    for spec in &args.ranges {
-        let (from, to) = LogRange::parse(spec)?.bounds(all.len());
-        entries.extend(all.get(from..to).unwrap_or(&[]).iter().cloned());
-    }
+    let ranges = args
+        .ranges
+        .iter()
+        .map(|s| LogRange::parse(s))
+        .collect::<Result<Vec<_>>>()?;
+    let entries: Vec<LogEntry> = log
+        .entries
+        .into_iter()
+        .filter(|e| ranges.iter().any(|r| r.contains(e.seq)))
+        .collect();
     if args.oneline {
         print_oneline_entries(&entries);
     } else {
@@ -221,8 +226,8 @@ fn muted_by_reviewer_only(entry: &LogEntry) -> bool {
     }
 }
 
-/// A parsed `nit log` position selector, half-open. `bounds(len)` clamps to the
-/// aggregated log's length (positions, not idx/seq).
+/// A parsed `nit log` selector over global `seq`, half-open. `contains(seq)`
+/// tests membership; a bare `N` is the singleton `[N, N+1)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LogRange {
     Open { from: u64 },
@@ -254,14 +259,10 @@ impl LogRange {
         Ok(LogRange::Closed { from, to })
     }
 
-    fn bounds(self, len: usize) -> (usize, usize) {
-        let clamp = |n: u64| usize::try_from(n).unwrap_or(usize::MAX).min(len);
+    fn contains(self, seq: u64) -> bool {
         match self {
-            LogRange::Open { from } => (clamp(from), len),
-            LogRange::Closed { from, to } => {
-                let from = clamp(from);
-                (from, clamp(to).max(from))
-            }
+            LogRange::Open { from } => seq >= from,
+            LogRange::Closed { from, to } => seq >= from && seq < to,
         }
     }
 }
@@ -285,12 +286,18 @@ mod tests {
     }
 
     #[test]
-    fn log_range_bounds_clamp_to_len() {
-        assert_eq!(LogRange::Open { from: 2 }.bounds(5), (2, 5));
-        assert_eq!(LogRange::Open { from: 9 }.bounds(5), (5, 5));
-        assert_eq!(LogRange::Closed { from: 1, to: 3 }.bounds(5), (1, 3));
-        assert_eq!(LogRange::Closed { from: 1, to: 9 }.bounds(5), (1, 5));
-        assert_eq!(LogRange::Closed { from: 9, to: 10 }.bounds(5), (5, 5));
+    fn log_range_contains_by_seq() {
+        // A bare `N` is the singleton `[N, N+1)`.
+        assert!(LogRange::Closed { from: 3, to: 4 }.contains(3));
+        assert!(!LogRange::Closed { from: 3, to: 4 }.contains(2));
+        assert!(!LogRange::Closed { from: 3, to: 4 }.contains(4));
+        // Half-open: end excluded.
+        assert!(LogRange::Closed { from: 3, to: 6 }.contains(5));
+        assert!(!LogRange::Closed { from: 3, to: 6 }.contains(6));
+        // Open-ended matches every seq at or past `from`.
+        assert!(!LogRange::Open { from: 2 }.contains(1));
+        assert!(LogRange::Open { from: 2 }.contains(2));
+        assert!(LogRange::Open { from: 2 }.contains(1000));
     }
 
     #[test]

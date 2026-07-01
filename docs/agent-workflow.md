@@ -108,7 +108,7 @@ you about it. Advance a change's slot to its log `head` after you drain it.
 - `nit status` — the derived **chain digest** for a one-shot read: `state`
   plus, per member, `position change_key status rN Nu subject`.
 - `nit log` — the **aggregated chain log**: every member's entries merged and
-  sorted by the global `seq`, sliced by position (`3`, `5..9`, `..`). Each entry
+  sorted by the global `seq`, selected by `seq` (`3`, `5..9`, `..`). Each entry
   renders its own payload — a review shows its cover message and one comment per
   thread (led by the thread id), so you can reply without a second lookup.
 
@@ -231,8 +231,10 @@ observes that itself.)
   one line per member (`position change_key status rN Nu subject`).
 - `nit log [<ranges>…] [--chain <tip-change-id>] [--oneline] [--follow | --wait] [--reviewer-only] [--server <url>]`
   — the aggregated chain log (members merged, sorted by global `seq`). One-shot,
-  it slices by **position**: `3`, `5..9`, `5..`, `..9`, `..` (all, the default),
-  several at once; positions clamp to the log length. Each entry renders its own
+  it selects by global **`seq`**: `3`, `5..9`, `5..`, `..9`, `..` (all, the
+  default), several at once; a range may span seqs this chain doesn't hold
+  (they belong to other changes) and those just match nothing. Each entry
+  renders its own
   payload as text (a review shows its cover message and one comment per thread,
   led by the thread id); `--oneline` is the opt-in terse digest instead.
   `--follow <cursor>` parks as a monitor relaying each new entry

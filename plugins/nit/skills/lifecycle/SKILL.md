@@ -56,11 +56,12 @@ commit on top, re-run it to pick up the new tip — resuming from the last seq
 you consumed (not `0`) so you don't replay what you've already handled.
 
 Each relayed line is a doorbell: read the full picture with `nit status`, and
-use `nit log` for entry detail. Its positional argument is a range of log
-positions, not a single index — a bare `N` reads only position `N`:
+use `nit log` for entry detail. Its positional argument selects by global `seq`
+(the value every entry prints), not list position — a bare `N` reads only the
+entry whose seq is `N`:
 
 ```sh
-nit log N..   # all log entries from position N on (resolves the cwd's chain)
+nit log N..   # every entry from seq N on (resolves the cwd's chain)
 ```
 
 `..` (the default) reads everything. Act on all of it, then let the monitor
