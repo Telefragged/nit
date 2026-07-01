@@ -90,7 +90,11 @@ export default tseslint.config(
 
   // ── Build/tooling files — not in tsconfig, so lint without type info ──
   {
-    files: ["*.config.{ts,js}", "screenshots/**/*.{mjs,js}"],
+    files: [
+      "*.config.{ts,js}",
+      "vite-plugin-gen-wasm.ts",
+      "screenshots/**/*.{mjs,js}",
+    ],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: {
       parserOptions: { projectService: false, project: null },

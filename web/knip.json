@@ -2,5 +2,6 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["screenshots/*.mjs", "src/api/types.gen.ts"],
   "project": ["src/**/*.{ts,tsx}", "screenshots/*.mjs"],
-  "ignoreDependencies": ["@html-eslint/parser"]
+  "ignoreDependencies": ["@html-eslint/parser"],
+  "ignoreBinaries": ["gen-wasm"]
 }

@@ -4,9 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "ensure-wasm": "test -e src/wasm/nit_wasm.js || gen-wasm",
     "dev": "vite",
+    "prebuild": "npm run ensure-wasm",
     "build": "tsc -b && vite build",
+    "precheck": "npm run ensure-wasm",
     "check": "tsc -b",
+    "prelint": "npm run ensure-wasm",
     "lint": "eslint . && stylelint \"src/**/*.css\" && knip",
     "lint:css": "stylelint \"src/**/*.css\"",
     "lint:unused": "knip",

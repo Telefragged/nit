@@ -193,12 +193,32 @@
 
       # Drop the generated wasm glue into a web build's tree before it runs.
       # web/src/wasm is gitignored (so absent from the npm-package source), so
-      # every web derivation injects it the way `nix run .#gen-wasm` does for
-      # local dev — the artifact is built by nix, never committed.
+      # every web derivation injects it the way `gen-wasm` does for local dev
+      # — the artifact is built by nix, never committed.
       injectWasm = pkgs: ''
         mkdir -p src/wasm
         cp ${wasmPkg pkgs}/* src/wasm/
       '';
+
+      # Writes the WebAssembly fold into web/src/wasm for local dev. One
+      # derivation shared two ways: `nix run .#gen-wasm` (no devShell needed)
+      # and, added to the devShell below, a bare `gen-wasm` on PATH inside
+      # `nix develop` — so generating it doesn't require `nix run`. Finds the
+      # tree via git so it also works from a worktree or the web/ subdir
+      # (`npm run` scripts shell out to it with that cwd).
+      genWasmApp =
+        pkgs:
+        pkgs.writeShellApplication {
+          name = "gen-wasm";
+          runtimeInputs = [ pkgs.git ];
+          text = ''
+            cd "$(git rev-parse --show-toplevel)"
+            rm -rf web/src/wasm
+            install -d web/src/wasm
+            install -m644 ${wasmPkg pkgs}/* web/src/wasm/
+            echo "wrote web/src/wasm/"
+          '';
+        };
     in
     {
       devShells = forAllSystems (
@@ -220,9 +240,11 @@
               # Regenerates Cargo.nix
               crate2nix
 
-              # Compiles nit-wasm's glue (`nix run .#gen-wasm`); version pinned
-              # to nit-wasm's wasm-bindgen dep.
+              # `gen-wasm`, on PATH here, writes web/src/wasm (docs/dev.md).
+              # wasm-bindgen-cli's version is pinned to nit-wasm's
+              # wasm-bindgen dep.
               wasm-bindgen-cli
+              (genWasmApp pkgs)
 
               # Web frontend
               nodejs_22
@@ -407,26 +429,9 @@
           }/bin/gen-types";
         };
 
-        # `nix run .#gen-wasm` writes the WebAssembly fold into the tree. The
-        # artifacts are gitignored (binary, derived) and injected into the web
-        # build by nix; this is the local-dev equivalent for `npm run` loops.
         gen-wasm = {
           type = "app";
-          program = "${
-            pkgs.writeShellApplication {
-              name = "gen-wasm";
-              text = ''
-                if [ ! -e Cargo.toml ] || [ ! -d crates/nit-wasm ]; then
-                  echo "run from the repo root" >&2
-                  exit 1
-                fi
-                rm -rf web/src/wasm
-                install -d web/src/wasm
-                install -m644 ${wasmPkg pkgs}/* web/src/wasm/
-                echo "wrote web/src/wasm/"
-              '';
-            }
-          }/bin/gen-wasm";
+          program = "${genWasmApp pkgs}/bin/gen-wasm";
         };
       });
 
