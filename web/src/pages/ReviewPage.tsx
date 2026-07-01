@@ -793,7 +793,17 @@ export default function ReviewPage() {
               }}
             />
           </aside>
-          <div className="diff-column" ref={diffColumnRef}>
+          {/* The resolved diff base, present only once the query for the
+              current range has settled — absent through the skeleton while a
+              base switch refetches. A deterministic gate for the screenshot
+              harness, which otherwise raced the refetch on a fixed timeout. */}
+          <div
+            className="diff-column"
+            ref={diffColumnRef}
+            data-diff-ready={
+              diffQ.isSuccess ? String(against ?? "base") : undefined
+            }
+          >
             {changeLevelThreads.length > 0 || changeCommentOpen ? (
               <section className="change-threads">
                 <div className="outdated-title">Change discussion</div>

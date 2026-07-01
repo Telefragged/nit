@@ -334,7 +334,11 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await page.getByLabel("Diff base").selectOption("0");
-      await page.waitForTimeout(200);
+      // Wait for the r0 interdiff to actually render: the switch refetches
+      // under a new query key (skeleton meanwhile), and data-diff-ready
+      // carries the resolved base only once that settles. Keyed to "0", not a
+      // bare flag, so it can't pass on the still-mounted base diff.
+      await page.waitForSelector('[data-diff-ready="0"]');
     },
   },
   {
