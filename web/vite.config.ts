@@ -22,5 +22,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     env: { VITE_MOCK: "1" },
+    setupFiles: ["./src/test-setup.ts"],
+    // Must clear src/test-setup's asyncUtilTimeout so a load-stretched poll
+    // isn't killed by the per-test cap before its findBy resolves.
+    testTimeout: 20_000,
   },
 });

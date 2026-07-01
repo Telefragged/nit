@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { ASYNC_TIMEOUT_MS } from "../test-setup";
 import { mockAppend } from "./fixtures/stream";
 import { openStream } from "./stream";
 import type { StreamMsg } from "./types";
@@ -13,11 +14,16 @@ describe("openStream (mock mode)", () => {
     // add() is called before the lazy mock import resolves — it must queue.
     handle.add([30]);
 
-    await vi.waitFor(() => {
-      expect(got.some((m) => "snapshot" in m && m.snapshot.id === 30)).toBe(
-        true,
-      );
-    });
+    // vi.waitFor keeps its own 1000ms default — testing-library's config
+    // doesn't reach it, so size it for load the same way (src/test-setup).
+    await vi.waitFor(
+      () => {
+        expect(got.some((m) => "snapshot" in m && m.snapshot.id === 30)).toBe(
+          true,
+        );
+      },
+      { timeout: ASYNC_TIMEOUT_MS },
+    );
 
     const before = got.length;
     mockAppend(30, "t-live", {
