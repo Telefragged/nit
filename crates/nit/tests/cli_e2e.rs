@@ -14,11 +14,11 @@ use std::process::Command;
 
 use common::{GitRepo, TestServer, msg, nit, nit_register};
 
-/// `nit push` prints a `PushResult` (`tip_change`) and registers the chain;
+/// `nit push` prints the resulting chain digest and registers the chain;
 /// `nit status`/`nit log` then read the derived chain back, resolved from the
 /// cwd HEAD.
 #[test]
-fn push_prints_result_then_status_and_log_read_it_back() {
+fn push_prints_digest_then_status_and_log_read_it_back() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
     g.branch("feat", c1);
@@ -27,37 +27,29 @@ fn push_prints_result_then_status_and_log_read_it_back() {
 
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
-    assert_eq!(push["tip_change"]["change_key"], "Ia");
-    assert_eq!(push["tip_change"]["revision"], 0, "{push}");
-    assert_eq!(push["tip_change"]["status"], "pending");
+    // push prints the chain digest — a `state=` header and one member line
+    // (position change_key status rN Nu subject) — so no follow-up read.
+    let push = push.as_str().expect("push prints text");
+    assert!(push.contains("state=waiting_for_review"), "{push}");
+    assert!(
+        push.contains("Ia") && push.contains("pending") && push.contains("r0"),
+        "{push}"
+    );
 
-    // status (no --oneline) reads the derived chain back from
-    // `GET /api/chains/{tip}` for the cwd HEAD.
+    // status reads the derived chain back from the cwd HEAD and prints the same
+    // digest.
     let (ok, status, stderr) = nit(&server, &g, &["status"]);
     assert!(ok, "{stderr}");
-    assert_eq!(status["state"], "waiting_for_review");
-    assert_eq!(status["path"].as_array().unwrap().len(), 1);
-    assert_eq!(status["path"][0]["position"], 0);
-    assert_eq!(status["path"][0]["change_key"], "Ia");
-    assert_eq!(status["path"][0]["revision"], 0);
-
-    let out = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(["status", "--oneline"])
-        .current_dir(g.workdir())
-        .env("NIT_SERVER", &server.base)
-        .output()
-        .unwrap();
-    assert!(out.status.success());
-    let text = String::from_utf8_lossy(&out.stdout);
-    assert!(text.contains("state=waiting_for_review"), "{text}");
-    assert!(text.contains("\tIa\t"), "one line per member: {text}");
+    let status = status.as_str().expect("status prints text");
+    assert!(status.contains("state=waiting_for_review"), "{status}");
+    assert!(status.contains("Ia") && status.contains("r0"), "{status}");
 
     let (ok, log, stderr) = nit(&server, &g, &["log"]);
     assert!(ok, "{stderr}");
     let entries = log["entries"].as_array().unwrap();
     assert_eq!(entries.len(), 1, "{log}");
     assert_eq!(entries[0]["kind"], "revision");
-    assert_eq!(entries[0]["change_id"], push["tip_change"]["change_id"]);
+    assert!(entries[0]["change_id"].is_u64(), "{log}");
 }
 
 /// An amend (same Change-Id, new sha) appends a second revision (rev 1); a
@@ -77,7 +69,10 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
     g.branch("feat", c1b);
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
-    assert_eq!(push["tip_change"]["revision"], 1, "amend is rev 1: {push}");
+    assert!(
+        push.as_str().is_some_and(|d| d.contains("r1")),
+        "amend is rev 1: {push}"
+    );
 
     let (ok, log, stderr) = nit(&server, &g, &["log"]);
     assert!(ok, "{stderr}");
@@ -87,7 +82,7 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
 
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
-    assert_eq!(push["tip_change"]["revision"], 1);
+    assert!(push.as_str().is_some_and(|d| d.contains("r1")), "{push}");
     let (_ok, log, _) = nit(&server, &g, &["log"]);
     assert_eq!(log["entries"].as_array().unwrap().len(), 2, "{log}");
 }
@@ -176,28 +171,23 @@ fn reopen_an_abandoned_change() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, _push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
-    let change_id = push["tip_change"]["change_id"].as_u64().unwrap();
 
-    // CLI abandon — a reviewer/agent judgment, distinct from the background timer.
-    let (ok, detail, stderr) = nit(
-        &server,
-        &g,
-        &["abandon", "--change", &change_id.to_string()],
-    );
+    // CLI abandon — a reviewer/agent judgment, distinct from the background
+    // timer — targeted by the cwd's Change-Id.
+    let (ok, detail, stderr) = nit(&server, &g, &["abandon", "--change-id", "Ia"]);
     assert!(ok, "{stderr}");
-    assert_eq!(detail["id"], change_id);
+    assert_eq!(detail["change_key"], "Ia");
 
-    let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change", &change_id.to_string()]);
+    let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change-id", "Ia"]);
     assert!(ok, "{stderr}");
-    assert_eq!(detail["id"], change_id);
     assert_eq!(detail["change_key"], "Ia");
 
     // No 409 gate after reopen — the change accepts a new push.
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "reopened change accepts a push: {stderr}");
-    assert_eq!(push["tip_change"]["change_key"], "Ia");
+    assert!(push.as_str().is_some_and(|d| d.contains("Ia")), "{push}");
 }
 
 /// Push fails when any commit lacks a `Change-Id` — the all-or-nothing walk rejects the branch.
@@ -273,7 +263,7 @@ fn bare_push_resolves_head() {
     assert!(ok, "repo create: {stderr}");
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "bare push resolves HEAD: {stderr}");
-    assert_eq!(push["tip_change"]["change_key"], "Ia");
+    assert!(push.as_str().is_some_and(|d| d.contains("Ia")), "{push}");
 }
 
 /// A detached HEAD has no branch name, yet bare `nit push` resolves the
@@ -289,5 +279,5 @@ fn push_resolves_detached_head() {
     assert!(ok, "repo create: {stderr}");
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "detached HEAD resolves: {stderr}");
-    assert_eq!(push["tip_change"]["change_key"], "Ia");
+    assert!(push.as_str().is_some_and(|d| d.contains("Ia")), "{push}");
 }

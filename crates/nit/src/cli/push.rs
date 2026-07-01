@@ -3,9 +3,11 @@
 
 use anyhow::Result;
 
+use nit_types::chains::Chain;
 use nit_types::push::{PushRequest, PushResult};
 
-use super::client::{Client, ServerOpt, print_json, server_url};
+use super::client::{Client, ServerOpt, server_url};
+use super::format::print_chain_digest;
 use super::git::{discover_repo, resolve_tip};
 
 #[derive(clap::Args)]
@@ -19,7 +21,9 @@ pub struct PushArgs {
 
 /// Push the cwd's checked-out commit (or an explicit rev) for review;
 /// idempotent. The repo must already be registered (`nit repo create`). The
-/// canonical branch comes from the registered repo, so no base is sent.
+/// canonical branch comes from the registered repo, so no base is sent. Prints
+/// the resulting chain digest — every change the push registered, not just the
+/// tip — so the agent needs no follow-up read.
 ///
 /// # Errors
 /// When the cwd is not a git repo, the rev can't be resolved, the server is
@@ -30,5 +34,6 @@ pub fn push(args: PushArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
     let body = PushRequest { git_dir, tip };
     let result: PushResult = client.post("/api/push", &body)?;
-    print_json(&result)
+    let chain: Chain = client.get(&format!("/api/chains/{}", result.tip_change.change_id))?;
+    print_chain_digest(&client, &chain, None)
 }

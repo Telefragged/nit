@@ -238,7 +238,10 @@ pub fn nit(server: &TestServer, repo: &GitRepo, args: &[&str]) -> (bool, Value, 
         .expect("running nit");
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
-    let value = serde_json::from_str(stdout.trim()).unwrap_or(Value::Null);
+    // Text-output commands (status/push/comment/…) aren't JSON; keep their raw
+    // stdout as a string so a test can assert on the rendered lines.
+    let value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|_| Value::String(stdout.trim().to_string()));
     (out.status.success(), value, stderr)
 }
 
@@ -452,7 +455,10 @@ pub fn nit_bounded(
             let out = child.wait_with_output().expect("output");
             let stdout = String::from_utf8_lossy(&out.stdout);
             let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
-            let value = serde_json::from_str(stdout.trim()).unwrap_or(Value::Null);
+            // Text-output commands (status/push/comment/…) aren't JSON; keep their raw
+            // stdout as a string so a test can assert on the rendered lines.
+            let value = serde_json::from_str(stdout.trim())
+                .unwrap_or_else(|_| Value::String(stdout.trim().to_string()));
             return (out.status.success(), value, stderr);
         }
         if start.elapsed() >= deadline {

@@ -6,16 +6,20 @@ mod common;
 use std::time::Duration;
 
 use common::{GitRepo, TestServer, http_get, http_post, http_put, msg, nit, nit_bounded};
-use serde_json::{Value, json};
+use serde_json::json;
 
-/// Registers the repo first (a push needs one to exist), then bare-pushes
-/// the cwd HEAD.
-fn push_head(server: &TestServer, g: &GitRepo) -> Value {
+/// Registers the repo (a push needs one to exist), bare-pushes the cwd HEAD,
+/// and returns the chain's tip change id (the push prints text, so the id comes
+/// from the chain list).
+fn push_head(server: &TestServer, g: &GitRepo) -> u64 {
     let (ok, _, err) = nit(server, g, &["repo", "create", "--base", "main"]);
     assert!(ok, "repo create failed: {err}");
-    let (ok, res, err) = nit(server, g, &["push"]);
+    let (ok, _, err) = nit(server, g, &["push"]);
     assert!(ok, "push failed: {err}");
-    res
+    let (_, chains) = http_get(&server.url("/api/chains"));
+    chains["chains"][0]["tip_change_id"]
+        .as_u64()
+        .expect("tip change id")
 }
 
 /// `nit wait 0` wakes immediately on any existing activity past the cursor
@@ -49,8 +53,7 @@ fn wait_blocks_then_wakes_on_a_review() {
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let res = push_head(&server, &g);
-    let change_id = res["tip_change"]["change_id"].as_u64().unwrap();
+    let change_id = push_head(&server, &g);
 
     // The head seq after the push (the agent's revision entry).
     let (_, log) = http_get(&server.url(&format!("/api/chains/{change_id}/log")));
