@@ -493,8 +493,8 @@ moment it lands — no client-side filtering (the agent's own pushes sit behind
 the cursor it passes back, so they never wake it). The return hands back the
 whole gap since the cursor plus the derived chain-state (`feedback`).
 
-`nit log --follow --reviewer-only` mutes the agent's own entries
-(`revision`/`comment`) and the automatic `merged` lifecycle (the
+`nit log --reviewer-only` (a filter, in any mode) mutes the agent's own
+entries (`revision`/`comment`) and the automatic `merged` lifecycle (the
 timer's, not the reviewer's) client-side, relaying only reviewer activity —
 verdicts plus the `abandoned`/`reopened` decisions.
 **Deferred:** muting a sibling-chain note on a revision the follower's path

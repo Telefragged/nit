@@ -102,9 +102,11 @@ you about it. Advance a change's slot to its log `head` after you drain it.
   watch set from local HEAD, rides out a server restart, and wakes on any new
   entry past the cursor (docs/data-model.md "Wake rule"). Pass the printed
   `cursor` back next call.
-- `nit log --follow [--reviewer-only] <cursor>` — a **parked monitor** that
-  relays each new entry as it lands (all, or filtered to reviewer activity with
-  `--reviewer-only`). Unlike `--wait` it never exits — a long-lived watcher.
+- `nit log --follow <cursor>` — a **parked monitor** that relays each new entry
+  as it lands. Unlike `--wait` it never exits — a long-lived watcher.
+- `--reviewer-only` — a filter for any of these reads: keep only the reviewer's
+  activity, dropping the agent's own `revision`/`comment` echoes and the
+  automatic `merged`. On `--wait` it blocks until reviewer activity lands.
 - `nit status` — the derived **chain digest** for a one-shot read: `state`
   plus, per member, `position change_key status rN Nu subject`.
 - `nit log` — the **aggregated chain log**: every member's entries merged and
@@ -234,14 +236,15 @@ observes that itself.)
   it selects by global **`seq`**: `3`, `5..9`, `5..`, `..9`, `..` (all, the
   default), several at once; a range may span seqs this chain doesn't hold
   (they belong to other changes) and those just match nothing. Each entry
-  renders its own
-  payload as text (a review shows its cover message and one comment per thread,
-  led by the thread id); `--oneline` is the opt-in terse digest instead.
-  `--follow <cursor>` parks as a monitor relaying each new entry
-  (`--reviewer-only` drops your own echoes and the auto-merge); `--wait <cursor>`
-  blocks until entries land past the `seq` cursor, prints the chain digest and
-  those entries, and exits. `--chain` reads any chain by its tip change id (no
-  cwd needed). Read-only; advances no cursor.
+  renders its own payload as text (a review shows its cover message and one
+  comment per thread, led by the thread id); `--oneline` is the opt-in terse
+  digest instead. `--follow <cursor>` parks as a monitor relaying each new
+  entry; `--wait <cursor>` blocks until entries land past the `seq` cursor,
+  prints the chain digest and those entries, and exits. `--reviewer-only` is a
+  filter for any mode: keep only reviewer activity, dropping your own echoes
+  and the auto-merge (on `--wait`, block until reviewer activity lands).
+  `--chain` reads any chain by its tip change id (no cwd needed). Read-only;
+  advances no cursor.
 - `nit comment (--change-id <Change-Id> | --change <id>) [--thread <id>] [anchor] [--resolve | --unresolve] [-m "text"]`
   — comment as the agent. `--change-id` is the full trailer (a human can use
   `--change <numeric id>`). Without `--thread`: opens a thread, anchored

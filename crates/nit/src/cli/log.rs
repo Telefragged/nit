@@ -40,10 +40,10 @@ pub struct LogArgs {
     /// chain digest, then exit — the one-shot wait.
     #[arg(long, conflicts_with = "follow")]
     pub wait: bool,
-    /// With `--follow`, relay only the reviewer's activity: drop the agent's
-    /// own entries (`revision`/`comment`) and the automatic `merged`
-    /// lifecycle.
-    #[arg(long, requires = "follow")]
+    /// Keep only the reviewer's activity: drop the agent's own entries
+    /// (`revision`/`comment`) and the automatic `merged` lifecycle. A filter,
+    /// so it composes with any mode — one-shot, `--wait`, or `--follow`.
+    #[arg(long)]
     pub reviewer_only: bool,
     #[command(flatten)]
     pub server: ServerOpt,
@@ -63,7 +63,7 @@ pub fn log(args: LogArgs) -> Result<()> {
         let cursor = follow_cursor(spec)?;
         let change_id = resolve_chain(&client, args.chain, Retry::No)?;
         return if args.wait {
-            wait(&client, change_id, cursor, args.oneline)
+            wait(&client, change_id, cursor, args.oneline, args.reviewer_only)
         } else {
             follow(&client, change_id, cursor, args.oneline, args.reviewer_only)
         };
@@ -79,6 +79,7 @@ pub fn log(args: LogArgs) -> Result<()> {
         .entries
         .into_iter()
         .filter(|e| ranges.iter().any(|r| r.contains(e.seq)))
+        .filter(|e| !(args.reviewer_only && muted_by_reviewer_only(e)))
         .collect();
     if args.oneline {
         print_oneline_entries(&entries);
@@ -92,10 +93,19 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// then print the chain digest and those entries, and exit. Each pass drains
 /// `(cursor, head]` from the log (the source of truth); otherwise it parks the
 /// websocket as a doorbell until any new entry lands. Rides out restarts.
+/// `reviewer_only` drops the agent's own entries, so the wait blocks until
+/// reviewer activity lands (its own echoes advance the cursor but don't wake
+/// it).
 ///
 /// # Errors
 /// When the server returns a malformed response or a fatal client error.
-fn wait(client: &Client, change_id: u64, mut cursor: u64, oneline: bool) -> Result<()> {
+fn wait(
+    client: &Client,
+    change_id: u64,
+    mut cursor: u64,
+    oneline: bool,
+    reviewer_only: bool,
+) -> Result<()> {
     let retry = Retry::UntilUp;
     loop {
         let log: ChainLog = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
@@ -103,6 +113,7 @@ fn wait(client: &Client, change_id: u64, mut cursor: u64, oneline: bool) -> Resu
             .entries
             .iter()
             .filter(|e| e.seq > cursor)
+            .filter(|e| !(reviewer_only && muted_by_reviewer_only(e)))
             .cloned()
             .collect();
         cursor = max_seq(&log.entries).max(cursor);
