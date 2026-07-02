@@ -98,14 +98,13 @@ describe("layoutGraph coordinates", () => {
 });
 
 describe("layoutGraph node semantics", () => {
-  it("marks the head, merges, and fan-out, and fades history by depth", () => {
+  it("marks the head and merges, and fades history by depth", () => {
     const g = layoutGraph(mockGraph());
     expect(find(g, "H").isHead).toBe(true);
     expect(g.anchorRow).toBe(4);
     expect(g.collapsed).toBeNull();
 
     expect(find(g, "G2").isMerge).toBe(true);
-    expect(find(g, "A3").childCount).toBe(2);
 
     // Opacity floor 0.3 — not yet reached; G5 at depth 5 gives 0.35.
     expect(find(g, "A1").opacity).toBe(1);

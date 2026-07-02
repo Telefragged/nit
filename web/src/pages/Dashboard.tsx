@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { useMemo } from "react";
+import { Link, useParams } from "react-router-dom";
 import { getRepo, getRepoGraph } from "../api/client";
 import ChangeGraph from "../components/ChangeGraph";
 import { repoPath } from "../lib/repo";
@@ -40,15 +40,6 @@ export default function Dashboard() {
   const activity = useChangeDetails(activityIds);
 
   const repo = repoQuery.data;
-
-  // Honor the post-submit navigate's #chain-<tip> scroll (ReviewBar lands here
-  // after publishing a chain's review): react-router doesn't scroll to a
-  // fragment, and the target row only exists once the async graph query resolves.
-  const { hash } = useLocation();
-  useEffect(() => {
-    if (!hash || !graphQuery.data) return;
-    document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
-  }, [hash, graphQuery.data]);
 
   return (
     <main className="page">

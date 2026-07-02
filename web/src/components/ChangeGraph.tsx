@@ -111,15 +111,6 @@ function GraphRow({
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
       className={`graph-row${isHistory ? " is-history" : ""}${to ? " is-clickable" : ""}`}
-      // The post-submit navigate's `#chain-<tip>` scroll target (ReviewBar
-      // lands here after publishing a chain's review) — only the tip (a leaf in
-      // the open region) carries it, so a change live at two revisions
-      // (B-in-two-chains) never emits a duplicate id.
-      id={
-        isOpen && node.change_id !== null && ln.childCount === 0
-          ? `chain-${node.change_id}`
-          : undefined
-      }
       onClick={to ? rowNav.onClick : undefined}
       style={{ opacity: ln.opacity, cursor: to ? "pointer" : undefined }}
     >

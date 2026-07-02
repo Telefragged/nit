@@ -46,8 +46,6 @@ export interface LaidNode {
   isMerge: boolean;
   /** Rows below the HEAD anchor (0 off the history region) — drives the fade. */
   depth: number;
-  /** A tip — the breadcrumb anchor — has 0. */
-  childCount: number;
   opacity: number;
 }
 
@@ -225,7 +223,6 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
       isHead,
       isMerge,
       depth,
-      childCount: childrenAt(i).length,
       opacity: nd.section === "history" ? fade(depth) : 1,
     };
   });

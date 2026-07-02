@@ -39,12 +39,14 @@ describe("repo dashboard change graph", () => {
 
   it("preserves the Activity column with each change's draft state", async () => {
     renderDashboard();
-    await screen.findByText("auth: document rotation and ship flow diagram");
+    const subject = await screen.findByText(
+      "auth: document rotation and ship flow diagram",
+    );
 
     expect(screen.getByText("Activity")).toBeTruthy();
     // Change 12's seeded staged decision shows in its activity cell — it
     // arrives from the per-change fetch, so await it rather than reading sync.
-    const row = document.getElementById("chain-12");
+    const row = subject.closest(".graph-row");
     if (!(row instanceof HTMLElement)) throw new Error("no row for change 12");
     expect(await within(row).findByText("✎ request_changes")).toBeTruthy();
   });
