@@ -48,7 +48,7 @@ import {
 } from "../lib/comments";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { displayPath, fileDomId } from "../lib/diffview";
-import { highlightLine } from "../lib/highlight";
+import { highlight } from "../lib/highlight";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt } from "../lib/scrollspy";
 import { isShortcutKey } from "../lib/shortcutKey";
@@ -888,7 +888,7 @@ export default function ReviewPage() {
                             </span>
                             <span
                               dangerouslySetInnerHTML={{
-                                __html: highlightLine(t.line_text, null),
+                                __html: highlight(t.line_text, null),
                               }}
                             />
                           </div>

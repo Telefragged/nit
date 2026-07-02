@@ -1,5 +1,6 @@
-// Per-line syntax highlighting for diffs. Language comes from the file
-// extension; unknown extensions are skipped silently (docs/frontend.md).
+// Syntax highlighting for diff lines and comment code fences. A diff's
+// language comes from the file extension; unknown extensions are skipped
+// silently (docs/frontend.md).
 
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
@@ -88,10 +89,10 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Returns an HTML string. Line-at-a-time loses multi-line constructs
- * (block comments resume as code) — accepted for v1.
+ * Highlight any span — a single diff line or a whole fenced block — to an
+ * HTML string; unknown/null languages fall back to escaped text.
  */
-export function highlightLine(text: string, language: string | null): string {
+export function highlight(text: string, language: string | null): string {
   if (!language) return escapeHtml(text);
   try {
     return hljs.highlight(text, { language, ignoreIllegals: true }).value;

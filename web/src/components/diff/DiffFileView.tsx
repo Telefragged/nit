@@ -32,7 +32,7 @@ import {
   statusLetter,
 } from "../../lib/diffview";
 import {
-  highlightLine,
+  highlight,
   languageFor,
   markIntraline,
   markTextRange,
@@ -68,7 +68,9 @@ function Code({
   className?: string;
 }) {
   const html = useMemo(() => {
-    let h = highlightLine(text, lang);
+    // Line-at-a-time, so multi-line constructs (block comments) don't
+    // carry across rows — accepted for v1.
+    let h = highlight(text, lang);
     if (mark) h = markIntraline(h, mark[0], mark[1]);
     for (const r of rangeMarks ?? []) {
       h = markTextRange(

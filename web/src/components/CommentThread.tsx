@@ -6,6 +6,7 @@ import type { UiThread } from "../lib/comments";
 import { pendingResolved } from "../lib/comments";
 import { timeAgo } from "../lib/time";
 import CommentEditor from "./CommentEditor";
+import Markdown from "./Markdown";
 
 /** A published comment, read-only: it has no id/state/resolved and is never
  * editable (only the reviewer's own drafts are). */
@@ -19,7 +20,9 @@ function PublishedComment({ comment }: { comment: ThreadComment }) {
         </span>
         <span className="comment-time">{timeAgo(comment.created_at)}</span>
       </div>
-      <div className="comment-body">{comment.body}</div>
+      <div className="comment-body">
+        <Markdown text={comment.body} />
+      </div>
     </div>
   );
 }
@@ -95,7 +98,9 @@ function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
           {draft.resolved ? "Resolving this thread" : "Reopening this thread"}
         </div>
       ) : (
-        <div className="comment-body">{draft.body}</div>
+        <div className="comment-body">
+          <Markdown text={draft.body} />
+        </div>
       )}
     </div>
   );

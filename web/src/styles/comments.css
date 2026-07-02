@@ -57,10 +57,87 @@
   gap: 10px;
 }
 
+/* markdown body: blocks own their spacing (remark-breaks keeps single
+   newlines as hard breaks, so no pre-wrap) */
 .comment-body {
   font-size: 12.5px;
-  white-space: pre-wrap;
   color: var(--text);
+}
+
+.comment-body > :first-child {
+  margin-top: 0;
+}
+
+.comment-body > :last-child {
+  margin-bottom: 0;
+}
+
+.comment-body p,
+.comment-body ul,
+.comment-body ol,
+.comment-body pre,
+.comment-body blockquote,
+.comment-body table {
+  margin: 0 0 6px;
+}
+
+/* a heading in a comment is emphasis, not a page title */
+.comment-body h1,
+.comment-body h2,
+.comment-body h3,
+.comment-body h4,
+.comment-body h5,
+.comment-body h6 {
+  font-size: 12.5px;
+  margin: 8px 0 4px;
+}
+
+.comment-body ul,
+.comment-body ol {
+  padding-left: 20px;
+}
+
+.comment-body code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.comment-body pre {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  overflow-x: auto;
+}
+
+.comment-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.comment-body blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 8px;
+  color: var(--text-dim);
+}
+
+.comment-body table {
+  border-collapse: collapse;
+}
+
+.comment-body th,
+.comment-body td {
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+}
+
+.comment-body a {
+  color: var(--blue);
 }
 
 .thread-actions {
