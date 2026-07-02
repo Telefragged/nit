@@ -189,8 +189,8 @@ caught it.
 invariant, a non-obvious constraint, a subtle ordering).
 
 **Reject:** comments that narrate history, restate the code, or congratulate
-the author. `docs/dev.md` ("Commit & branch discipline") already bans the
-"what it got to be" narration; enforce it.
+the author. Golden rule 10 already bans the "what it got to be" narration;
+enforce it.
 
 ```rust
 // BAD

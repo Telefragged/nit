@@ -167,7 +167,6 @@ catches a skew and gives you the gallery in `result/`.
 
 ## Commit & branch discipline
 
-- Small commits, one concern each.
 - **Hard-wrap the commit message at 72 columns.** This is not optional and is
   checked in review. The subject is a single line stating the _what_ (for
   indexing); after a blank line, the body explains _why_ as 72-column-wrapped
@@ -176,13 +175,9 @@ catches a skew and gives you the gallery in `result/`.
   newlines (a `-m` per paragraph, lines pre-wrapped), not a single sentence.
 - Keep messages **timeless** — no process narration ("rebased onto X", branch
   ordering); that goes in the `nit` reply or terminal, not git history.
-- Code comments follow golden rule 10 — the non-obvious _why_, never how it
-  got there ("now / no longer / replaced"); git blame holds the history.
-- Every commit treefmt-clean (re-format after a rebase — "Formatting").
 - Never mix refactors with behavior changes.
-- **Every change starts in its own worktree** on a `track/*` branch — the
-  default for _all_ work unless the user has explicitly said otherwise — so
-  `main` stays put and chains never serialize on a shared branch:
+- **Every change starts in its own worktree** on a `track/*` branch (golden
+  rule 6), so `main` stays put and chains never serialize on a shared branch:
 
   ```sh
   git worktree add .worktrees/<slug> -b track/<slug> main
@@ -245,18 +240,9 @@ the resolution is mechanical.
 
 ### Review exemptions
 
-**The default is unconditional: unless the user has said otherwise, every
-change runs through nit.** Start it in a worktree and drive the review loop —
-regardless of size, triviality, or whether it "looks self-contained." This is
-not an agent judgement call; a one-line docs fix takes the same path as a
-feature.
-
-A change may land on `main` directly **only** with an explicit, up-front
-instruction for that change — the user saying "skip nit" / "land directly" —
-or under a standing entry in the list below. Absent that, route through nit.
-You do not get to reclassify a change as exempt after the fact, and "I already
-edited `main`" is never a justification — move it to a worktree. When in
-doubt, review.
+Golden rule 6 is the default: every change runs through nit, in a worktree,
+regardless of size. The only exits are an explicit, up-front "skip nit" /
+"land directly" from the user for that change, or a standing entry below.
 
 Standing exemptions (same discipline, still green):
 
