@@ -23,6 +23,18 @@ with `--change-id <Change-Id>`. (`--change <id>` takes the numeric change id
 instead, for when a human hands you one.) A range is `START-END`, each endpoint
 `line:char` (e.g. `42:8-42:30`).
 
+Write the body as markdown (GFM + hard line breaks). Quote code in a fenced
+block with a language tag — it renders with the same syntax highlighting as
+the diff, so the quote reads like a reference:
+
+````sh
+nit comment --change-id <Change-Id> --file src/queue.rs --line 42 -m 'Bounded:
+
+```rust
+let (tx, rx) = mpsc::channel(64);
+```'
+````
+
 ## Anchor as tightly as you can
 
 Pin the note to the smallest span that carries it. **Prefer a range, then a

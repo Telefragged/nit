@@ -2,8 +2,10 @@
 
 React 19 + TypeScript, Vite, in `web/`. Libraries: `react-router-dom`,
 `@tanstack/react-query` (fetching + caching), `highlight.js` (diff
-syntax highlighting). Keep the dependency list short; justify additions in
-the commit message.
+syntax highlighting), `react-markdown` + `remark-gfm` + `remark-breaks`
+(comment bodies — renders to React elements so embedded raw HTML stays
+escaped, which an HTML-string pipeline would need a sanitizer for). Keep
+the dependency list short; justify additions in the commit message.
 
 `web/src/api/types.ts` re-exports `types.gen.ts`, which is generated from
 `crates/nit-types` (`nix run .#gen-types`) and matches [api.md](api.md)
@@ -113,7 +115,11 @@ still poll/refetch; moving them onto the stream is the next step.
     neither FROM nor TO drops out entirely. Ranged threads tint their text;
     drafts get a dashed border + `DRAFT` tag. The server returns published
     **threads** and the reviewer's **drafts** separately; the client merges
-    them (`assembleThreads`).
+    them (`assembleThreads`). Bodies render as markdown (`Markdown`
+    component: GFM + hard line breaks, raw HTML escaped); a fenced code
+    block with a language tag highlights through the diff's hljs theme.
+    Anchored `line_text` excerpts and the resolution-only placeholder stay
+    plain — they are not authored prose.
   - **Thread resolution** is drafted, gerrit-style ([api.md](api.md) "Thread
     resolution"): Reply / Resolve / Reopen open the editor with a `Resolved`
     checkbox; saving stores a draft reply (empty body allowed when only the

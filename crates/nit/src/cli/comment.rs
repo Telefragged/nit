@@ -34,8 +34,8 @@ pub struct CommentArgs {
     /// New thread: revision to anchor to (defaults to the change's latest).
     #[arg(long, conflicts_with = "thread")]
     pub revision: Option<u64>,
-    /// Comment body (optional only for a `--thread` reply that just
-    /// resolves/reopens).
+    /// Comment body, markdown (optional only for a `--thread` reply that
+    /// just resolves/reopens).
     #[arg(short = 'm', long = "message")]
     pub message: Option<String>,
     /// Mark the thread resolved (a new thread is born resolved).

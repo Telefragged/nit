@@ -182,7 +182,7 @@ Thread = {"id": 7, "change_id": 10, "revision": 2,
           "resolved": false,            // the thread's rolled-up state
           "comments": [ThreadComment],  // chronological
           "created_at": "…", "updated_at": "…"}
-ThreadComment = {"body": "…",
+ThreadComment = {"body": "…",           // markdown (GFM + hard line breaks)
                  "review_id": 5,        // the review that published it; null for an agent comment — the client derives reviewer/agent from this
                  "created_at": "…"}
 Draft = {"id": 31, "change_id": 10,     // a reviewer's unpublished comment
@@ -190,7 +190,7 @@ Draft = {"id": 31, "change_id": 10,     // a reviewer's unpublished comment
          "revision": 2,                 // the request's anchor revision; only a new thread uses it (a reply keeps the thread's)
          "file": "src/main.rs", "line": 14, "side": "new",
          "range": CommentRange, "line_text": "…",
-         "body": "…",                   // may be empty for a resolution-only reply draft
+         "body": "…",                   // markdown; may be empty for a resolution-only reply draft
          "resolved": false,             // the staged thread decision (see "Thread resolution")
          "created_at": "…", "updated_at": "…"}
 ```

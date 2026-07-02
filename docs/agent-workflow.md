@@ -159,9 +159,12 @@ nit comment --change-id <Change-Id> --file Cargo.toml --line 14 --resolve \
   -m "Added serde — alternatives pull it in transitively anyway."
 ```
 
-Anchor as tightly as you can so the note pins to the code. An agent-opened
-thread is an ordinary thread — the reviewer replies and resolves it like any
-other. Make the call, annotate it, keep going.
+Anchor as tightly as you can so the note pins to the code. Write the body as
+markdown (GFM + hard line breaks) — when you quote code, fence it with a
+language tag (` ```rust `) and it renders with the diff's syntax
+highlighting, so the quote reads like a reference. An agent-opened thread is
+an ordinary thread — the reviewer replies and resolves it like any other.
+Make the call, annotate it, keep going.
 
 ## Where the conversation happens
 
@@ -239,7 +242,8 @@ observes that itself.)
   (or change-level with no anchor); `--range` is `START-END`, each endpoint
   `line:char`, and anchors the thread under END's line. With `--thread`: replies to that thread (anchor flags ignored).
   `--resolve`/`--unresolve` set the thread state; a `--thread` reply may carry
-  no `-m` when it only resolves/reopens. Appends a `comment`; no cursor.
+  no `-m` when it only resolves/reopens. The body is markdown (GFM + hard
+  line breaks). Appends a `comment`; no cursor.
 - `nit abandon (--change-id <Change-Id> | --change <id>) [-m "reason"] [--server <url>]`
   — mark a change dead (terminal until reopened), optionally recording a
   reason. A push that would revise an abandoned change is a 409.

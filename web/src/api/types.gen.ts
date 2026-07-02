@@ -232,6 +232,9 @@ export type Draft = {
   side: Side;
   range: CommentRange | null;
   line_text: string | null;
+  /**
+   * May be empty for a resolution-only reply draft.
+   */
   body: string;
   /**
    * The staged thread-resolution decision (false when unset).
