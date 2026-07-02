@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { clearDecision, stageDecision, submitChain } from "../api/client";
 import type { Chain, ChangeDetail, Decision } from "../api/types";
 import { useAutosize } from "../lib/useAutosize";
@@ -60,7 +59,6 @@ export default function ReviewBar({
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   useAutosize(textareaRef, message);
@@ -110,7 +108,7 @@ export default function ReviewBar({
 
   // Publish every staged decision in this chain. Best-effort per change: a
   // member skipped for a stale/terminal lifecycle comes back in `errors` and
-  // keeps the modal-equivalent banner; a clean run returns to the chain drawer.
+  // keeps the modal-equivalent banner.
   const submit = useMutation({
     mutationFn: () => {
       if (!chain) throw new Error("no chain context to submit");
@@ -118,14 +116,12 @@ export default function ReviewBar({
     },
     onSuccess: (result) => {
       invalidate();
-      if (result.errors.length > 0) {
-        setError(
-          `${result.submitted} submitted; ${result.errors.length} skipped: ` +
-            result.errors.map((e) => e.message).join("; "),
-        );
-      } else if (chain) {
-        void navigate(`/repos/${chain.repo_id}#chain-${chain.tip_change_id}`);
-      }
+      setError(
+        result.errors.length > 0
+          ? `${result.submitted} submitted; ${result.errors.length} skipped: ` +
+              result.errors.map((e) => e.message).join("; ")
+          : null,
+      );
     },
     onError: (e) => {
       setError(e instanceof Error ? e.message : String(e));

@@ -4,13 +4,7 @@
 // tests/rotation.rs — i.e. file-0 .. file-3.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReviewPage from "./ReviewPage";
@@ -313,9 +307,9 @@ describe("the s key submits the chain's staged decisions", () => {
     await screen.findByRole("button", { name: /Submit chain \(s\) · 1/ });
 
     fireEvent.keyDown(window, { key: "s" });
-    await waitFor(() => {
-      expect(path).toBe("/repos/2#chain-20");
-    });
+    // The staged count drains once the invalidated drafts overlay refetches.
+    await screen.findByRole("button", { name: "Submit chain (s)" });
+    expect(path).toBe("/changes/20");
   });
 });
 
