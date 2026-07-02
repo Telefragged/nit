@@ -408,6 +408,19 @@ const captures = [
     path: "/changes/11?against=0",
     actions: expandAllFiles,
   },
+  // Markdown comment bodies (docs/frontend.md "Comments"): the RNG
+  // thread's agent reply, its fence highlighted like the diff.
+  {
+    name: "review-markdown-comment",
+    path: "/changes/11?against=0",
+    fullPage: false,
+    actions: async (page) => {
+      await expandAllFiles(page);
+      const thread = page.locator(".thread", { hasText: "ChaCha12" });
+      await thread.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(150);
+    },
+  },
   // Selecting diff text and pressing c: the inline editor opens on the
   // selection's last line with the pending range tinted "active".
   {

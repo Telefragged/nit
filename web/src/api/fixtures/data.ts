@@ -1283,10 +1283,16 @@ export const threads: ThreadRecord[] = [
         review_id: 5,
         created_at: ago(21 * 60),
       },
+      // The review-markdown-comment scenario captures this body rendered.
       {
         body:
-          "ChaCha12 keystream behind the lock costs ~11ns per token; a " +
-          "thread-local would add per-thread reseeding. Keeping the mutex.",
+          "Measured both:\n\n" +
+          "- `ChaCha12` keystream behind the lock costs **~11ns** per token\n" +
+          "- a thread-local RNG adds per-thread reseeding\n\n" +
+          "Keeping the mutex:\n\n" +
+          "```rust\n" +
+          "let fresh = Token::generate(&mut self.rng.lock());\n" +
+          "```",
         review_id: null,
         created_at: ago(110),
       },
