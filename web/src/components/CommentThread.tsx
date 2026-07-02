@@ -170,11 +170,7 @@ export default function CommentThread({
   const isDraftThread = thread.id === null;
 
   return (
-    <div
-      className={`thread ${isDraftThread ? "thread-draft" : ""} ${
-        resolved ? "thread-resolved" : ""
-      }`}
-    >
+    <div className={`thread ${isDraftThread ? "thread-draft" : ""}`}>
       {thread.comments.map((c, i) => (
         <PublishedComment key={i} comment={c} />
       ))}
