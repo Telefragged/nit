@@ -12,8 +12,8 @@ important one — read it first.
 
 ## Meta-rule: a first draft errs by _adding_, so review by _removing_
 
-Almost every correction in the case study below was the same move: **delete a
-moving part.** A column became no column. Two counters became one. A
+Almost every design correction reviews here have issued was the same move:
+**delete a moving part.** A column became no column. Two counters became one. A
 re-derivation became a stored value. A serialized field on a struct became a
 typed one. The reviewer's note was a one-liner every time ("there shouldn't be
 a column", "single place", "why is this even a field?") and the fix was always
@@ -179,9 +179,9 @@ fn fold(change, mut entry: Entry) -> Entry { match &mut entry.payload { ... } en
 build). State it ran and passed.
 
 **Reject:** "clippy is clean locally" as sufficient. A local `cargo clippy`
-cache silently skipped a `clippy::pedantic` warning in the case study; the
-author reported green and the warning was still there. The clean-room check
-caught it.
+cache has silently skipped a `clippy::pedantic` warning here; the author
+reported green and the warning was still there. The clean-room check caught
+it.
 
 ## 7. Comments: the non-obvious _why_, or nothing
 
@@ -204,32 +204,3 @@ enforce it.
 // GOOD
 // The write lock makes this id allocation race-free against a concurrent push.
 ```
-
-## Case study: "thread ids in comment events" (8 revisions)
-
-The change: a comment's thread id is assigned by creation order in the fold, so
-the stored log entry and the event it broadcasts did not carry it — consumers
-had to re-fold to learn which thread a comment opened. The fix should have been
-small. It took eight revisions because each draft added machinery the next
-review removed.
-
-| Round | What the draft did                                                                                | Reviewer's note (paraphrased)                   |
-| ----- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| r0    | Re-derived ids on every read: fold returns ids, zip onto entries, replay+slice for the ws backlog | "extremely ugly"                                |
-| r1    | Stored ids in a new `NOT NULL` log column + a startup backfill that rewrote old rows              | "so so ugly" (and it mutates the log)           |
-| r2    | Made the column nullable, dropped the backfill                                                    | still a column — not needed                     |
-| r3/r4 | Put the id in the existing payload, but minted via a separate pass with its own counter           | invert it; one source of truth (rule 4)         |
-| r5    | Minted inside the fold, but `Entry` still held a `serde_json::Value`, so the fold re-serialized   | serialization is not a folding concern (rule 5) |
-| r6    | `Entry` holds the typed payload; serialize only at the boundary                                   | (logic accepted)                                |
-| r7/r8 | (no logic change) removed comments that stated what/history/brag                                  | comment the why, not the obvious (rule 7)       |
-
-What good finally looked like: the thread id is minted **once**, in the fold,
-by `ChangeProj::mint_thread_id`, which is the only writer of the single
-`next_thread_id` field; it is written into the **existing** `payload.thread_id`;
-the `Entry` the fold works on is **typed**; serialization happens only in
-`db::append_log` and the wire view; there is **no new column, no backfill, no
-second counter, no re-derivation, and no serialize-on-replay.** The net change
-ended up _smaller_ than the first draft while doing strictly more.
-
-Every one of those removals was predictable from the meta-rule. Apply it in
-round one.
