@@ -151,7 +151,7 @@ hoping the diff speaks:
 
 ```sh
 # a choice the reviewer should weigh in on — leave it OPEN (counts unresolved):
-nit comment --change-id <Change-Id> --file src/queue.rs --line 42 --range 42:8-42:30 \
+nit comment --change-id <Change-Id> --file src/queue.rs --range 42:8-42:30 \
   -m "Bounded channel over unbounded: backpressure matters more than never
       blocking the producer. Happy to flip it."
 # a settled decision that just needs recording — open it --resolve'd:
@@ -235,9 +235,9 @@ observes that itself.)
 - `nit comment (--change-id <Change-Id> | --change <id>) [--thread <id>] [anchor] [--resolve | --unresolve] [-m "text"]`
   — comment as the agent. `--change-id` is the full trailer (a human can use
   `--change <numeric id>`). Without `--thread`: opens a thread, anchored
-  `--file <path> --line <n> [--side new|old] [--range S-E] [--revision <n>]` (or
-  change-level with no anchor); `--range` is `START-END`, each endpoint
-  `line:char`. With `--thread`: replies to that thread (anchor flags ignored).
+  `--file <path> (--line <n> | --range S-E) [--side new|old] [--revision <n>]`
+  (or change-level with no anchor); `--range` is `START-END`, each endpoint
+  `line:char`, and anchors the thread under END's line. With `--thread`: replies to that thread (anchor flags ignored).
   `--resolve`/`--unresolve` set the thread state; a `--thread` reply may carry
   no `-m` when it only resolves/reopens. Appends a `comment`; no cursor.
 - `nit abandon (--change-id <Change-Id> | --change <id>) [-m "reason"] [--server <url>]`

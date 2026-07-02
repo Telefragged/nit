@@ -7,8 +7,9 @@ log entry and deletes the rows (docs/data-model.md).
 - `POST /api/changes/{id}/drafts` →
   `req: {"revision": 2, "file": "src/main.rs", "line": 14, "side": "new", "range": CommentRange, "body": "…", "thread_id": null, "resolved": false}`
   → Draft. `file`/`line` optional (change-/file-level). `side` defaults
-  `"new"`. `range` optional: requires a `line` and must satisfy the
-  "Range comments" rules, else 400. `file` may be the reserved
+  `"new"`. `range` optional, mutually exclusive with `line` (the stored
+  `line` becomes `range.end_line`); must satisfy the "Range comments"
+  rules, else 400. `file` may be the reserved
   `/COMMIT_MSG` (commit-message comments; `side` must be `"new"`, else
   400). `thread_id` references an existing thread on this change (a reply
   draft); absent, the draft opens a new thread anchored by the fields

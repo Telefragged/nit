@@ -45,7 +45,7 @@ pub(super) async fn create_comment(
                     resolved: req.resolved,
                 }
             } else {
-                let (side, range) =
+                let (side, line, range) =
                     validate_anchor(req.side, req.file.as_deref(), req.line, req.range)?;
                 let revision = match req.revision {
                     Some(r) => r,
@@ -61,13 +61,12 @@ pub(super) async fn create_comment(
                     .revision(revision)
                     .ok_or_else(|| Error::bad_request(format!("revision {revision} not found")))?;
                 let git_dir = state.git_dir(proj.repo_id)?;
-                let line_text =
-                    snapshot_line_text(&git_dir, rev, req.file.as_deref(), req.line, side);
+                let line_text = snapshot_line_text(&git_dir, rev, req.file.as_deref(), line, side);
                 CommentInput {
                     thread_id: None,
                     revision: Some(revision),
                     file: req.file.clone(),
-                    line: req.line,
+                    line,
                     side: Some(side),
                     range,
                     line_text,

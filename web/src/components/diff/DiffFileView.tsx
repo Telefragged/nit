@@ -240,9 +240,12 @@ export default function DiffFileView({
       return createDraft(ctx.changeId, {
         revision: anchor.revision,
         file: input.target.file,
-        line: input.target.line,
         side: anchor.side,
-        range: input.target.range,
+        // line and range are mutually exclusive anchors (docs/api.md
+        // "Range comments") — a range anchors under its own end line.
+        ...(input.target.range
+          ? { range: input.target.range }
+          : { line: input.target.line }),
         body: input.body,
       });
     },

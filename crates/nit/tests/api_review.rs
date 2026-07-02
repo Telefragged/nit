@@ -143,9 +143,11 @@ fn draft_anchor_validation() {
     let id = push_one(&server, &g, "feat", "Ix");
     let url = drafts_url(&server, id);
 
+    // A range is a standalone anchor; the draft's line derives from its
+    // end_line.
     let (st, ranged) = http_post(
         &url,
-        &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "sel",
+        &json!({"revision": 0, "file": "x.txt", "body": "sel",
                 "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 2}}),
     );
     assert_eq!(st, 200, "{ranged}");
@@ -153,31 +155,32 @@ fn draft_anchor_validation() {
         ranged["range"],
         json!({"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 2})
     );
+    assert_eq!(ranged["line"], 1, "line derives from range.end_line");
 
     // The "Range comments" 400s of docs/api.md.
     let range_400s: &[(Value, &str)] = &[
         (
-            json!({"revision": 0, "file": "x.txt", "body": "x",
-                   "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1}}),
-            "range without a line anchor",
-        ),
-        (
-            json!({"revision": 0, "file": "x.txt", "line": 2, "body": "x",
-                   "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1}}),
-            "range.end_line != line",
-        ),
-        (
             json!({"revision": 0, "file": "x.txt", "line": 1, "body": "x",
+                   "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1}}),
+            "line and range together",
+        ),
+        (
+            json!({"revision": 0, "body": "x",
+                   "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1}}),
+            "range without a file",
+        ),
+        (
+            json!({"revision": 0, "file": "x.txt", "body": "x",
                    "range": {"start_line": 1, "start_char": 3, "end_line": 1, "end_char": 3}}),
             "empty range",
         ),
         (
-            json!({"revision": 0, "file": "x.txt", "line": 1, "body": "x",
+            json!({"revision": 0, "file": "x.txt", "body": "x",
                    "range": {"start_line": 2, "start_char": 0, "end_line": 1, "end_char": 1}}),
             "backwards range",
         ),
         (
-            json!({"revision": 0, "file": "x.txt", "line": 2, "body": "x",
+            json!({"revision": 0, "file": "x.txt", "body": "x",
                    "range": {"start_line": 1, "start_char": 0, "end_line": 2, "end_char": 0}}),
             "multi-line range ending before its last line's first char",
         ),

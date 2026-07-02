@@ -252,33 +252,32 @@ fn change_detail_json(
     Ok(Json(views::build_change_detail(conn, &change)?))
 }
 
-/// The "Range comments" rules of docs/api.md.
-fn validate_range(range: CommentRange, line: Option<u64>) -> Result<CommentRange, Error> {
-    if line.is_none() {
-        return Err(Error::bad_request("a range requires a line anchor"));
-    }
-    if line != Some(range.end_line) {
-        return Err(Error::bad_request(
-            "range.end_line must equal the comment's line",
-        ));
-    }
-    let forward = range.start_line < range.end_line
-        || (range.start_line == range.end_line && range.start_char < range.end_char);
-    if range.start_line < 1 || range.end_char < 1 || !forward {
-        return Err(Error::bad_request(
-            "range must be non-empty and forward (docs/api.md \"Range comments\")",
-        ));
-    }
-    Ok(range)
-}
-
+/// Validate a new thread's anchor per docs/api.md "Range comments":
+/// `line` and `range` are mutually exclusive anchor kinds; a ranged
+/// thread anchors under the selection's last line. Returns the resolved
+/// `(side, line, range)`.
 fn validate_anchor(
     side: Option<Side>,
     file: Option<&str>,
     line: Option<u64>,
     range: Option<CommentRange>,
-) -> Result<(Side, Option<CommentRange>), Error> {
+) -> Result<(Side, Option<u64>, Option<CommentRange>), Error> {
     let side = side.unwrap_or_default();
+    if line.is_some() && range.is_some() {
+        return Err(Error::bad_request(
+            "line and range are mutually exclusive anchors — pass one",
+        ));
+    }
+    if let Some(r) = &range {
+        let forward =
+            r.start_line < r.end_line || (r.start_line == r.end_line && r.start_char < r.end_char);
+        if r.start_line < 1 || r.end_char < 1 || !forward {
+            return Err(Error::bad_request(
+                "range must be non-empty and forward (docs/api.md \"Range comments\")",
+            ));
+        }
+    }
+    let line = line.or_else(|| range.as_ref().map(|r| r.end_line));
     if line.is_some() && file.is_none() {
         return Err(Error::bad_request("a line anchor requires a file"));
     }
@@ -287,8 +286,7 @@ fn validate_anchor(
             "/COMMIT_MSG has no old side — comment with side \"new\"",
         ));
     }
-    let range = range.map(|r| validate_range(r, line)).transpose()?;
-    Ok((side, range))
+    Ok((side, line, range))
 }
 
 fn snapshot_line_text(

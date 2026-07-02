@@ -214,12 +214,14 @@ CommentRange = {"start_line": 12, "start_char": 4,
 
 - Lines are 1-based on the comment's `side`; chars are 0-based offsets
   into the line text, `end_char` exclusive.
-- `end_line` equals the comment's `line` (the thread renders under the
-  selection's last line) and the range is non-empty and forward:
-  `start_line < end_line`, or `start_line == end_line` with
-  `start_char < end_char`; `end_char >= 1` always (a selection ending
-  before a line's first character belongs to the previous line).
-  Violations → 400.
+- `range` and `line` are mutually exclusive request anchors — they are
+  different anchor kinds, and a request carrying both is a 400. A ranged
+  thread's stored `line` is `range.end_line` (the thread renders under
+  the selection's last line).
+- The range is non-empty and forward: `start_line < end_line`, or
+  `start_line == end_line` with `start_char < end_char`; `end_char >= 1`
+  always (a selection ending before a line's first character belongs to
+  the previous line). Violations → 400.
 - Char offsets are not validated against file contents (the repo may not
   even be readable at draft time); the UI clamps when rendering.
 

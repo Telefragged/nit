@@ -16,7 +16,8 @@ pub struct CommentArgs {
     /// a new one.
     #[arg(long)]
     pub thread: Option<u64>,
-    /// New thread: file to anchor to (a `--line` requires a `--file`).
+    /// New thread: file to anchor to (`--line`/`--range` require a
+    /// `--file`).
     #[arg(long, conflicts_with = "thread")]
     pub file: Option<String>,
     /// New thread: line to anchor to (1-based).
@@ -25,8 +26,10 @@ pub struct CommentArgs {
     /// New thread: side — `new` (default) or `old`.
     #[arg(long, conflicts_with = "thread", value_enum)]
     pub side: Option<Side>,
-    /// New thread: selected-text range `START-END`, each `line:char`.
-    #[arg(long, conflicts_with = "thread")]
+    /// New thread: selected-text range `START-END`, each `line:char`;
+    /// anchors the thread under END's line (mutually exclusive with
+    /// `--line`).
+    #[arg(long, conflicts_with_all = ["thread", "line"])]
     pub range: Option<String>,
     /// New thread: revision to anchor to (defaults to the change's latest).
     #[arg(long, conflicts_with = "thread")]

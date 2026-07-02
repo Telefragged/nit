@@ -674,6 +674,9 @@ export async function mockRequest(
     const c = getChange(Number(m[1]));
     const req = body as NewDraft;
     const side: Side = req.side ?? "new";
+    // Like the server: a ranged draft anchors under the selection's last
+    // line (docs/api.md "Range comments").
+    const line = req.line ?? req.range?.end_line ?? null;
     const now = new Date().toISOString();
     const record: DraftRecord = {
       id: nextDraftId++,
@@ -681,10 +684,16 @@ export async function mockRequest(
       thread_id: req.thread_id ?? null,
       revision: req.revision,
       file: req.file ?? null,
-      line: req.line ?? null,
+      line,
       side,
       range: req.range ?? null,
-      line_text: snapshotLineText(c, req.revision, req.file, req.line, side),
+      line_text: snapshotLineText(
+        c,
+        req.revision,
+        req.file,
+        line ?? undefined,
+        side,
+      ),
       body: req.body,
       resolved: req.resolved ?? false,
       created_at: now,
