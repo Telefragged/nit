@@ -263,7 +263,8 @@ export default function ReviewPage() {
   // (below) commits would otherwise slide the default forward and jump the
   // view to the just-pushed revision — a live-build bug, not just a flake.
   // Keyed by change (the component is reused across /changes/:id without
-  // remounting) via the adjust-during-render idiom used for `shownDiff` below.
+  // remounting) via the adjust-during-render idiom used for `shownChange`
+  // below.
   const [pinnedRev, setPinnedRev] = useState<{
     changeId: number;
     rev: number;
@@ -344,17 +345,18 @@ export default function ReviewPage() {
   });
   const files = useMemo(() => diffQ.data?.files ?? [], [diffQ.data]);
 
-  // Collapsed-by-default file sections. Expansion is keyed by file path
-  // and reset whenever a different diff is shown (other change, revision
-  // or base); only the commit message starts expanded (lib/collapse.ts).
+  // Collapsed-by-default file sections, keyed by file path so the
+  // reviewer's open files survive revision/base switches; only another
+  // change resets them (lib/collapse.ts). Keyed on the raw route param:
+  // a malformed id parses to NaN, which never equals itself and would
+  // re-fire this reset every render.
   const [expanded, setExpanded] =
     useState<ReadonlySet<string>>(defaultExpanded);
-  const diffIdentity = `${changeId}:${selected}:${against ?? "base"}`;
-  const [shownDiff, setShownDiff] = useState(diffIdentity);
-  if (shownDiff !== diffIdentity) {
+  const [shownChange, setShownChange] = useState(id);
+  if (shownChange !== id) {
     // Adjust-during-render, not an effect: the reset is part of the same
-    // render that switches diffs, so stale expansion never paints.
-    setShownDiff(diffIdentity);
+    // render that switches changes, so stale expansion never paints.
+    setShownChange(id);
     setExpanded(defaultExpanded());
   }
 

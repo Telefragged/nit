@@ -13,6 +13,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { COMMIT_MSG_PATH } from "../api/types";
 import ReviewPage from "./ReviewPage";
 
 // No vitest globals → testing-library cannot auto-cleanup; without this,
@@ -148,6 +149,66 @@ describe("collapsed-by-default file sections", () => {
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(false);
     expect(scrollCalls).toEqual([]);
     expect(railScrolls).toBe(0);
+  });
+});
+
+describe("expansion across diff-range navigation", () => {
+  const queryPath = (path: string) =>
+    document.querySelector<HTMLElement>(`section[data-diff-path="${path}"]`);
+  const byPath = (path: string): HTMLElement =>
+    must(queryPath(path), `section for ${path}`);
+
+  /** Renders change 11 at r1 vs base and expands rotate.rs. */
+  async function expandRotate() {
+    renderReview();
+    await railItem("src/auth/store.rs");
+    fireEvent.click(
+      must(
+        byPath("src/auth/rotate.rs").querySelector(".file-header"),
+        ".file-header",
+      ),
+    );
+    expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
+  }
+
+  it("keeps expanded files expanded when the base or revision changes", async () => {
+    await expandRotate();
+
+    // r0 → r1 interdiff: same files, reordered — store.rs moves from
+    // file-2 to file-3, which signals the new diff has rendered.
+    fireEvent.change(screen.getByLabelText("Diff base"), {
+      target: { value: "0" },
+    });
+    await waitFor(() => {
+      expect(byPath("src/auth/store.rs").id).toBe("file-3");
+    });
+    expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
+    expect(isExpanded(byPath("src/auth/store.rs"))).toBe(false);
+
+    // r0 vs base (the invalid against=0 snaps back to Base): rotate.rs is
+    // still open; store.rs stays collapsed; tests/rotation.rs drops out.
+    fireEvent.change(screen.getByLabelText("Revision"), {
+      target: { value: "0" },
+    });
+    await waitFor(() => {
+      // Every section is absent during the refetch gap, so the removal
+      // alone would pass before the new diff renders.
+      expect(queryPath("src/auth/rotate.rs")).not.toBeNull();
+      expect(queryPath("tests/rotation.rs")).toBeNull();
+    });
+    expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
+    expect(isExpanded(byPath("src/auth/store.rs"))).toBe(false);
+  });
+
+  it("navigating to another change resets to the default expansion", async () => {
+    await expandRotate();
+
+    fireEvent.keyDown(window, { key: "n" }); // next change in the chain
+    // Not railItem: the file is renamed, so its rail title is the
+    // "old → new" pair, not the bare path.
+    await waitFor(() => byPath("docs/auth-rotation.md"));
+    expect(isExpanded(byPath(COMMIT_MSG_PATH))).toBe(true);
+    expect(isExpanded(byPath("docs/auth-rotation.md"))).toBe(false);
   });
 });
 

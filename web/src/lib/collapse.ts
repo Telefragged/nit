@@ -5,7 +5,7 @@
 import type { DiffFile } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
 
-/** Called fresh per diff: the commit message starts expanded since it's
+/** Called fresh per change: the commit message starts expanded since it's
  * the natural review entry point, and its full text lives only here, not
  * in the page header. */
 export function defaultExpanded(): ReadonlySet<string> {
