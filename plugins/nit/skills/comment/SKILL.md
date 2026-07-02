@@ -16,6 +16,8 @@ about — not scattered through the chat.
 nit comment --change-id <Change-Id> --file <path> --line <n> [--range S-E] [--side new|old] -m "…"
 # reply to an EXISTING thread (anchor flags ignored):
 nit comment --change-id <Change-Id> --thread <thread-id> [--resolve|--unresolve] -m "…"
+# body from stdin instead of -m (also: -F <path> for a file):
+nit comment --change-id <Change-Id> --thread <thread-id> -F -
 ```
 
 Target a change by the `Change-Id:` trailer on the commit you're commenting on,
@@ -23,16 +25,19 @@ with `--change-id <Change-Id>`. (`--change <id>` takes the numeric change id
 instead, for when a human hands you one.) A range is `START-END`, each endpoint
 `line:char` (e.g. `42:8-42:30`).
 
-Write the body as markdown (GFM + hard line breaks). Quote code in a fenced
-block with a language tag — it renders with the same syntax highlighting as
-the diff, so the quote reads like a reference:
+Write the body as markdown. Quote code in a fenced block with a language
+tag — it renders with the same syntax highlighting as the diff, so the
+quote reads like a reference. For anything beyond a one-liner, prefer
+`-F -` with a quoted heredoc over `-m` — no shell escaping to get wrong:
 
 ````sh
-nit comment --change-id <Change-Id> --file src/queue.rs --line 42 -m 'Bounded:
+nit comment --change-id <Change-Id> --file src/queue.rs --line 42 -F - <<'EOF'
+Bounded over unbounded — backpressure matters more here:
 
 ```rust
 let (tx, rx) = mpsc::channel(64);
-```'
+```
+EOF
 ````
 
 ## Anchor as tightly as you can

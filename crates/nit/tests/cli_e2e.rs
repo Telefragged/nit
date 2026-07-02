@@ -10,6 +10,7 @@
 
 mod common;
 
+use std::io::Write;
 use std::process::Command;
 
 use common::{GitRepo, TestServer, msg, nit, nit_register};
@@ -175,6 +176,66 @@ fn comment_opens_replies_resolves() {
         by_num.contains(&format!("on change {change_num}")),
         "{by_num}"
     );
+}
+
+/// `-F` reads the body from a file; `-F -` reads stdin. `nit log` shows
+/// both bodies back.
+#[test]
+fn comment_body_from_file_and_stdin() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (ok, _push, stderr) = nit_register(&server, &g, "feat");
+    assert!(ok, "{stderr}");
+
+    let body_path = g.dir.path().join("body.md");
+    std::fs::write(&body_path, "a body from a **file**\n").unwrap();
+    let (ok, opened, stderr) = nit(
+        &server,
+        &g,
+        &[
+            "comment",
+            "--change-id",
+            "Ia",
+            "-F",
+            body_path.to_str().unwrap(),
+        ],
+    );
+    assert!(ok, "{stderr}");
+    assert!(
+        opened.as_str().is_some_and(|o| o.contains("opened thread")),
+        "{opened}"
+    );
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_nit"))
+        .args(["comment", "--change-id", "Ia", "-F", "-"])
+        .current_dir(g.workdir())
+        .env("NIT_SERVER", &server.base)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("running nit");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"a body from stdin\n")
+        .unwrap();
+    let out = child.wait_with_output().expect("nit exits");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let (ok, log, stderr) = nit(&server, &g, &["log"]);
+    assert!(ok, "{stderr}");
+    let log = log.as_str().expect("log prints text");
+    assert!(log.contains("a body from a **file**"), "{log}");
+    assert!(log.contains("a body from stdin"), "{log}");
 }
 
 /// The number following `marker` in a confirmation line (e.g. the id in

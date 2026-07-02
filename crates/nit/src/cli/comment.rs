@@ -38,6 +38,10 @@ pub struct CommentArgs {
     /// just resolves/reopens).
     #[arg(short = 'm', long = "message")]
     pub message: Option<String>,
+    /// Read the body from a file, or stdin for `-` — multi-line markdown
+    /// without shell escaping.
+    #[arg(short = 'F', long = "message-file", conflicts_with = "message")]
+    pub message_file: Option<String>,
     /// Mark the thread resolved (a new thread is born resolved).
     #[arg(long)]
     pub resolve: bool,
@@ -66,6 +70,10 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         .range
         .map(|spec| parse_comment_range(&spec))
         .transpose()?;
+    let body = match args.message_file {
+        Some(path) => read_body(&path)?,
+        None => args.message.unwrap_or_default(),
+    };
     let replied = args.thread.is_some();
     let req = NewComment {
         thread_id: args.thread,
@@ -74,12 +82,25 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         line: args.line,
         side: args.side,
         range,
-        body: args.message.unwrap_or_default(),
+        body,
         resolved,
     };
     let thread: Thread = client.post(&format!("/api/changes/{change_id}/comments"), &req)?;
     print_comment(&thread, replied);
     Ok(())
+}
+
+/// Read a `-F` body: a file path, or stdin for `-`. Trailing newlines are
+/// trimmed — a heredoc or editor always appends one, and it would read as
+/// a trailing hard break in the rendered markdown.
+fn read_body(path: &str) -> Result<String> {
+    let mut text = if path == "-" {
+        std::io::read_to_string(std::io::stdin()).context("reading body from stdin")?
+    } else {
+        std::fs::read_to_string(path).with_context(|| format!("reading body from {path}"))?
+    };
+    text.truncate(text.trim_end_matches(['\n', '\r']).len());
+    Ok(text)
 }
 
 /// Parse a `--range` spec `START-END`, each endpoint `line:char`.
