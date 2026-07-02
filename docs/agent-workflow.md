@@ -141,7 +141,7 @@ the commit message (1-based lines) — answer by rewording the commit (keep the
 path member is scoped to the pinned revision.
 
 Never submit a verdict yourself (`POST /api/changes/*/reviews` is the human's
-side). The agent surface is push / status / log / comment / reopen.
+side). The agent surface is push / status / log / comment / abandon / reopen.
 
 ## Annotate the choices you make
 
@@ -240,12 +240,15 @@ observes that itself.)
   `line:char`. With `--thread`: replies to that thread (anchor flags ignored).
   `--resolve`/`--unresolve` set the thread state; a `--thread` reply may carry
   no `-m` when it only resolves/reopens. Appends a `comment`; no cursor.
+- `nit abandon (--change-id <Change-Id> | --change <id>) [-m "reason"] [--server <url>]`
+  — mark a change dead (terminal until reopened), optionally recording a
+  reason. A push that would revise an abandoned change is a 409.
 - `nit reopen (--change-id <Change-Id> | --change <id>) [--server <url>]` —
   clear an abandoned change back to its retained status, so a new revision may
   be pushed. A no-op on a non-abandoned change.
 
 `nit status`/`nit log` resolve the cwd's tip change from local HEAD (the chain
 whose tip commit-sha equals HEAD), so run them from the worktree;
-`nit comment`/`nit reopen` target a change directly. The human's review verbs
+`nit comment`/`nit abandon`/`nit reopen` target a change directly. The human's review verbs
 (drafts, reviews) are the web UI and the reviewer endpoints (docs/api.md), not
 the agent CLI.

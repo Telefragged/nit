@@ -5,8 +5,8 @@ nit is a single-machine, local-first review server. Three parts:
 1. **`nit` binary** (`crates/nit`, Rust) — one executable:
    - `nit serve` — axum HTTP server: JSON API under `/api`, serves the
      built web UI (`--web-dist` / `$NIT_WEB_DIST`) for everything else.
-   - `nit push` / `status` / `log` / `comment` / `reopen` — thin
-     CLI clients of that API, run by agents from inside a git repo.
+   - `nit push` / `status` / `log` / `comment` / `abandon` / `reopen` —
+     thin CLI clients of that API, run by agents from inside a git repo.
 2. **Web UI** (`web/`) — React/TS SPA (Vite). Talks only to `/api`.
 3. **State** — an append-only **log per change** in SQLite, folded into an
    in-memory per-change state machine (rebuilt by replaying the log on
