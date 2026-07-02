@@ -87,37 +87,24 @@ setups every worker drives its own `nit push` from its own worktree
 the moment its first commit is green; the orchestrator must not centralize,
 batch, or phase-gate pushing. An unpushed branch is invisible to the reviewer.
 
-## The per-change cursor
+## The cursor
 
-The agent owns a **per-change cursor**: a vector of `change_id → idx`, the
-0-based count of each change's log entries it has consumed (an absent key ⇒ 0,
-so a newly stacked change replays from the start). `nit push` and `nit comment`
-return **no cursor** — an entry that lands between two of your own actions is
-caught only because you re-read the change's log run, not because a push told
-you about it. Advance a change's slot to its log `head` after you drain it.
+The agent owns one cursor: the highest global `seq` it has consumed of the
+aggregated chain log. `nit push` and `nit comment` return **no cursor** — an
+entry that lands between two of your own actions is caught only because you
+re-read the log, not because a push told you about it.
 
-- `nit log --wait <cursor>` — **block** on the websocket until something past
-  the `seq` cursor should wake you, then print the chain digest and the new
-  entries, and exit. Call it when you have nothing else to do; it derives its
-  watch set from local HEAD, rides out a server restart, and wakes on any new
-  entry past the cursor (docs/data-model.md "Wake rule"). Pass the printed
-  `cursor` back next call.
+- `nit log --wait <cursor>` — **block** on the websocket until entries land
+  past the cursor, then print the chain digest (its header carries the new
+  `cursor=`) and those entries, and exit. Call it when you have nothing else
+  to do; it derives its watch set from local HEAD, rides out a server
+  restart, and wakes on any new entry past the cursor (docs/data-model.md
+  "Wake rule"). Pass the printed `cursor` back next call.
 - `nit log --follow <cursor>` — a **parked monitor** that relays each new entry
   as it lands. Unlike `--wait` it never exits — a long-lived watcher.
 - `--reviewer-only` — a filter for any of these reads: keep only the reviewer's
   activity, dropping the agent's own `revision`/`comment` echoes and the
   automatic `merged`. On `--wait` it blocks until reviewer activity lands.
-- `nit status` — the derived **chain digest** for a one-shot read: `state`
-  plus, per member, `position change_key status rN Nu subject`.
-- `nit log` — the **aggregated chain log**: every member's entries merged and
-  sorted by the global `seq`, selected by `seq` (`3`, `5..9`, `..`). Each entry
-  renders its own payload — a review shows its cover message and one comment per
-  thread (led by the thread id), so you can reply without a second lookup.
-
-Two coordinates sit on every entry (docs/api.md): the per-change `idx` (what a
-change's own cursor slot advances) and the global `seq` (the aggregated log's
-order). `nit log --wait`/`--follow` own a **vector cursor** (`change_id → idx`)
-and subscribe their watch set over one websocket (docs/api.md "Events").
 
 ### Reading the chain state
 
