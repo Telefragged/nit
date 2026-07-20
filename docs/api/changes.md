@@ -133,8 +133,15 @@ drift-processed — they are the plain diff byte-for-byte. When
   carries a real edit; drift renders only inside such a hunk. An all-drift
   hunk is omitted, and an all-drift file drops out entirely (so a pure
   rebase of a change collapses to just its `/COMMIT_MSG`).
-- **Renamed/copied files are not drift-processed**; their edits all render
-  as real.
+- **Renames follow gerrit's path re-keying.** A file's name in each of the
+  four trees is resolved through each side's own rename detection, so base
+  movement is contained even inside a file the agent renamed. A rename made
+  wholly by the base is itself drift: the entry drops out when no real edit
+  remains, and a base rename does not resurface in the interdiff. The
+  agent's own rename always stays — even when every content edit inside it
+  is drift — with the base's edits tagged within it. A file whose parent
+  names the base movement does not connect (the base deleted it, or rename
+  detection disagreed) is left plain.
 
 `parent(m) → parent(n)` for a change is exactly its **parent change's** own
 `m → n` interdiff — down a stack each change subtracts its parent's movement.

@@ -47,6 +47,21 @@ pub fn diff_trees_full(repo: &Repository, old: &Tree, new: &Tree, only: &str) ->
     diff_trees_ctx(repo, old, new, u32::MAX, Some(only))
 }
 
+/// The raw git diff `old → new` with rename detection — the one definition of
+/// how nit pairs a delete with an add.
+pub(super) fn git_diff<'r>(
+    repo: &'r Repository,
+    old: &Tree<'_>,
+    new: &Tree<'_>,
+    opts: Option<&mut DiffOptions>,
+) -> Result<git2::Diff<'r>> {
+    let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), opts)?;
+    let mut find = git2::DiffFindOptions::new();
+    find.renames(true);
+    diff.find_similar(Some(&mut find))?;
+    Ok(diff)
+}
+
 /// `only` bounds the result to the file whose new-side path matches, skipping
 /// every other delta before its patch is built.
 fn diff_trees_ctx(
@@ -58,10 +73,7 @@ fn diff_trees_ctx(
 ) -> Result<Diff> {
     let mut opts = DiffOptions::new();
     opts.context_lines(context);
-    let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), Some(&mut opts))?;
-    let mut find = git2::DiffFindOptions::new();
-    find.renames(true);
-    diff.find_similar(Some(&mut find))?;
+    let diff = git_diff(repo, old, new, Some(&mut opts))?;
 
     let mut files = Vec::new();
     for idx in 0..diff.deltas().len() {

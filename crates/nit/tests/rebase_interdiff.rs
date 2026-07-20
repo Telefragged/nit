@@ -19,10 +19,22 @@ use nit::api::rebase::tag_drift;
 use nit_types::diff::{Diff, DiffFile};
 use nit_types::enums::{FileStatus, LineKind};
 
-fn body(lines: &[&str]) -> Vec<u8> {
+fn body<S: std::borrow::Borrow<str>>(lines: &[S]) -> Vec<u8> {
     let mut s = lines.join("\n");
     s.push('\n');
     s.into_bytes()
+}
+
+/// `n` numbered lines — long enough for rename detection to fire on a move.
+fn numbered(n: usize) -> Vec<String> {
+    (1..=n).map(|i| format!("line {i}")).collect()
+}
+
+/// `lines` with line `n` rewritten, numbered as a diff numbers them (from 1).
+fn edit(lines: &[String], n: usize, text: &str) -> Vec<String> {
+    let mut out = lines.to_vec();
+    out[n - 1] = text.into();
+    out
 }
 
 /// A commit whose tree is the repo root plus `files` (root carries only an
@@ -366,16 +378,14 @@ fn file_added_or_deleted_by_the_rebase_is_dropped() {
 }
 
 // ---------------------------------------------------------------------------
-// Renamed files are left as plain (their blobs live under different paths
-// across the four trees, so drift detection is skipped — documented limit).
+// A rename the agent made, of a file the base movement never touched, is
+// real work: the rename and its edits render plain, never drift.
 
 #[test]
-fn renamed_file_is_left_as_a_plain_diff() {
+fn agents_own_rename_is_left_as_a_plain_diff() {
     let g = GitRepo::new();
-    // A long file so rename detection fires when it moves a.rs → b.rs.
-    let long: Vec<&str> = (0..40).map(|_| "shared line of content").collect();
-    let mut tweaked = long.clone();
-    tweaked[0] = "shared line of content (touched)";
+    let long = numbered(40);
+    let tweaked = edit(&long, 1, "line 1 (touched)");
 
     let parent_m = snapshot(
         &g,
@@ -403,6 +413,133 @@ fn renamed_file_is_left_as_a_plain_diff() {
         "renamed file is not drift-processed"
     );
     assert!(file(&tagged, "base.rs").is_none(), "base.rs drift dropped");
+}
+
+// ---------------------------------------------------------------------------
+// A rename the base movement itself made is drift like any other base edit:
+// the interdiff entry drops when nothing real remains, and a base content
+// tweak riding the rename is tagged.
+
+#[test]
+fn file_renamed_by_the_rebase_is_dropped() {
+    let g = GitRepo::new();
+    let long = numbered(40);
+    let feat = body(&["C2 line"]);
+
+    // Pure base rename a.rs → b.rs; the agent's delta (feat.rs) is unchanged.
+    let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
+    let m = snapshot(&g, &[("a.rs", &body(&long)), ("feat.rs", &feat)]);
+    let parent_n = snapshot(&g, &[("b.rs", &body(&long))]);
+    let n = snapshot(&g, &[("b.rs", &body(&long)), ("feat.rs", &feat)]);
+    let (plain, tagged) = interdiff(&g, m, parent_m, n, parent_n);
+    let leaked = file(&plain, "b.rs").expect("plain leaks the rename");
+    assert_eq!(leaked.status, FileStatus::Renamed);
+    assert!(tagged.files.is_empty(), "base rename drops out");
+
+    // The same rename plus a base content tweak: still nothing real.
+    let tweaked = edit(&long, 5, "line 5 (rebased)");
+    let parent_n = snapshot(&g, &[("b.rs", &body(&tweaked))]);
+    let n = snapshot(&g, &[("b.rs", &body(&tweaked)), ("feat.rs", &feat)]);
+    let (plain, tagged) = interdiff(&g, m, parent_m, n, parent_n);
+    assert!(file(&plain, "b.rs").is_some(), "plain leaks the tweak");
+    assert!(tagged.files.is_empty(), "base rename + tweak drops out");
+}
+
+#[test]
+fn base_rename_keeps_the_agents_real_edit_and_tags_drift() {
+    let g = GitRepo::new();
+    let long = numbered(40);
+    // The agent edits line 20 at both revisions (differently); the base
+    // renames a.rs → b.rs and tweaks line 18 — near enough to share a hunk.
+    let at_m = edit(&long, 20, "AGENT v1");
+    let base_n = edit(&long, 18, "line 18 (rebased)");
+    let at_n = edit(&base_n, 20, "AGENT v2");
+
+    let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
+    let m = snapshot(&g, &[("a.rs", &body(&at_m))]);
+    let parent_n = snapshot(&g, &[("b.rs", &body(&base_n))]);
+    let n = snapshot(&g, &[("b.rs", &body(&at_n))]);
+
+    let (_, tagged) = interdiff(&g, m, parent_m, n, parent_n);
+    let f = file(&tagged, "b.rs").expect("file kept for its real edit");
+    assert_eq!(f.status, FileStatus::Renamed);
+    assert_eq!(f.old_path.as_deref(), Some("a.rs"));
+    // The base tweak at line 18 is drift; the agent's v1 → v2 edit is real.
+    assert_eq!(drift_lines(f), vec![('-', 18), ('+', 18)]);
+    assert_eq!((f.additions, f.deletions), (1, 1));
+}
+
+// ---------------------------------------------------------------------------
+// Path re-keying: base movement is found under the file's per-side names,
+// so it is contained even inside a file the agent renamed.
+
+#[test]
+fn base_edit_is_found_inside_a_file_the_agent_renamed() {
+    let g = GitRepo::new();
+    let long = numbered(40);
+    let drifted = edit(&long, 5, "line 5 (rebased)");
+
+    // The agent renamed a.rs → b.rs at both revisions; the base modified
+    // a.rs. The interdiff shows b.rs as modified — every edit the base's.
+    let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
+    let m = snapshot(&g, &[("b.rs", &body(&long))]);
+    let parent_n = snapshot(&g, &[("a.rs", &body(&drifted))]);
+    let n = snapshot(&g, &[("b.rs", &body(&drifted))]);
+
+    let (plain, tagged) = interdiff(&g, m, parent_m, n, parent_n);
+    assert!(file(&plain, "b.rs").is_some(), "plain leaks the base edit");
+    assert!(
+        tagged.files.is_empty(),
+        "base edit under the agent's rename drops out"
+    );
+}
+
+// The agent's rename between revisions is real work and must stay visible
+// even when every content edit inside it is base drift (the bug gerrit's
+// implicitRename flag fixed).
+
+#[test]
+fn agents_rename_survives_an_all_drift_interdiff() {
+    let g = GitRepo::new();
+    let long = numbered(40);
+    let drifted = edit(&long, 5, "line 5 (rebased)");
+
+    // The base modified a.rs; the agent renamed it to b.rs at n only.
+    let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
+    let m = snapshot(&g, &[("a.rs", &body(&long))]);
+    let parent_n = snapshot(&g, &[("a.rs", &body(&drifted))]);
+    let n = snapshot(&g, &[("b.rs", &body(&drifted))]);
+
+    let (_, tagged) = interdiff(&g, m, parent_m, n, parent_n);
+    let f = file(&tagged, "b.rs").expect("the agent's rename stays");
+    assert_eq!(f.status, FileStatus::Renamed);
+    assert_eq!(f.old_path.as_deref(), Some("a.rs"));
+    assert!(f.hunks.is_empty(), "the base's edit is all drift");
+    assert_eq!((f.additions, f.deletions), (0, 0));
+}
+
+// The base deleting a file the agent then re-adds under a new name is NOT a
+// base rename: the parent names don't connect, so nothing is drift-processed
+// and the agent's deletions inside the re-add stay real (projecting a
+// fabricated whole-file delete would claim them as drift).
+
+#[test]
+fn base_delete_with_agent_readd_is_left_plain() {
+    let g = GitRepo::new();
+    let long = numbered(40);
+    let mut readded = long.clone();
+    readded.remove(9); // the agent drops line 10 in the re-added copy
+
+    let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
+    let m = snapshot(&g, &[("a.rs", &body(&long))]);
+    let parent_n = snapshot(&g, &[]); // base deletes a.rs
+    let n = snapshot(&g, &[("b.rs", &body(&readded))]);
+
+    let (_, tagged) = interdiff(&g, m, parent_m, n, parent_n);
+    let f = file(&tagged, "b.rs").expect("the re-add stays");
+    assert_eq!(f.status, FileStatus::Renamed);
+    assert!(drift_lines(f).is_empty(), "nothing is claimed as drift");
+    assert_eq!((f.additions, f.deletions), (0, 1));
 }
 
 // ---------------------------------------------------------------------------

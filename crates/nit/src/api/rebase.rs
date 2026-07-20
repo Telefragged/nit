@@ -14,6 +14,12 @@
 //! does not explain — including the agent removing a pre-existing line in a
 //! later revision — stays a real change.
 //!
+//! File identity across renames follows gerrit's path re-keying: every blob
+//! is read under the file's name in its own tree, resolved through each
+//! side's rename detection, so base movement is contained even inside a
+//! file the agent renamed, and a rename made wholly by the base is itself
+//! drift.
+//!
 //! The projection ([`project_clipped`] / [`drift_ranges`]) is the bug-prone
 //! core gerrit shipped a false-negative in (2.15.0), and is unit-tested
 //! below. It is **line-level**, with two inherent limitations matching
@@ -29,7 +35,7 @@
 //!   did **not** touch (the common "also drop this line" case) is unaffected
 //!   and stays a real change.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
@@ -186,48 +192,32 @@ fn blob_bytes(repo: &Repository, tree: &Tree, path: &Path) -> Option<Vec<u8>> {
     Some(blob.content().to_vec())
 }
 
-/// Paths touched by `old → new` (both sides, so renames/deletes are
-/// covered) — the pre-filter for which interdiff files can carry drift.
-fn changed_paths(repo: &Repository, old: &Tree, new: &Tree) -> Result<HashSet<String>> {
-    let diff = repo.diff_tree_to_tree(Some(old), Some(new), None)?;
-    let mut paths = HashSet::new();
-    for delta in diff.deltas() {
-        for file in [delta.old_file(), delta.new_file()] {
-            if let Some(p) = file.path() {
-                paths.insert(p.to_string_lossy().into_owned());
-            }
-        }
-    }
-    Ok(paths)
+/// Every path a tree diff touches, as `(name in old, name in new)` — the two
+/// differ exactly when rename detection paired a delete with an add.
+fn moves(repo: &Repository, old: &Tree, new: &Tree) -> Result<Vec<(String, String)>> {
+    let diff = diff::git_diff(repo, old, new, None)?;
+    let name = |f: git2::DiffFile<'_>| f.path().map(|p| p.to_string_lossy().into_owned());
+    Ok(diff
+        .deltas()
+        .filter_map(|d| Some((name(d.old_file())?, name(d.new_file())?)))
+        .collect())
 }
 
-/// Tag one interdiff file with drift in place; returns `true` when the file
-/// became fully drift (the caller drops it from the file list). Leaves the
-/// file untouched (byte-identical) when it carries no drift.
-fn tag_file(
-    repo: &Repository,
-    file: &mut DiffFile,
-    parent_m: &Tree,
-    tree_m: &Tree,
-    parent_n: &Tree,
-    tree_n: &Tree,
-) -> Result<bool> {
-    let path = Path::new(&file.path);
-    let (Some(bpm), Some(bm), Some(bpn), Some(bn)) = (
-        blob_bytes(repo, parent_m, path),
-        blob_bytes(repo, tree_m, path),
-        blob_bytes(repo, parent_n, path),
-        blob_bytes(repo, tree_n, path),
-    ) else {
-        return Ok(false); // Binary on some side — leave plain.
-    };
+/// Tag one interdiff file's drift lines in place: mark them, drop
+/// fully-drift hunks, recount the non-drift totals. Returns whether a real
+/// (non-drift) edit remains. Leaves the file untouched (byte-identical) when
+/// it carries no drift.
+///
+/// The blobs are the file's content in `parent(m)`, `m`, `parent(n)` and `n`,
+/// each read under its name in that tree.
+fn tag_file(file: &mut DiffFile, bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> Result<bool> {
     // parent(m) → m and parent(n) → n are the change's own delta at each
     // revision; parent(m) → parent(n) is the base movement. Projecting the
     // base movement through the agent's deltas gives the drifted lines, in
     // the interdiff's own m/n coordinates.
-    let ovp = buffer_edits(&bpm, &bm)?;
-    let nvp = buffer_edits(&bpn, &bn)?;
-    let pvp = buffer_edits(&bpm, &bpn)?;
+    let ovp = buffer_edits(bpm, bm)?;
+    let nvp = buffer_edits(bpn, bn)?;
+    let pvp = buffer_edits(bpm, bpn)?;
     let (old_ranges, new_ranges) = drift_ranges(&pvp, &ovp, &nvp);
 
     let mut any_drift = false;
@@ -244,23 +234,21 @@ fn tag_file(
             }
         }
     }
-    if !any_drift {
-        return Ok(false);
-    }
-
-    // Region selection follows the agent's real delta.
-    file.hunks.retain(|h| h.lines.iter().any(is_real_change));
-    let (mut additions, mut deletions) = (0u64, 0u64);
-    for line in file.hunks.iter().flat_map(|h| &h.lines) {
-        match line.kind {
-            LineKind::Add if !line.drift => additions += 1,
-            LineKind::Del if !line.drift => deletions += 1,
-            _ => {}
+    if any_drift {
+        // Region selection follows the agent's real delta.
+        file.hunks.retain(|h| h.lines.iter().any(is_real_change));
+        let (mut additions, mut deletions) = (0u64, 0u64);
+        for line in file.hunks.iter().flat_map(|h| &h.lines) {
+            match line.kind {
+                LineKind::Add if !line.drift => additions += 1,
+                LineKind::Del if !line.drift => deletions += 1,
+                _ => {}
+            }
         }
+        file.additions = additions;
+        file.deletions = deletions;
     }
-    file.additions = additions;
-    file.deletions = deletions;
-    Ok(file.hunks.is_empty())
+    Ok(!file.hunks.is_empty())
 }
 
 fn is_real_change(line: &Line) -> bool {
@@ -270,13 +258,15 @@ fn is_real_change(line: &Line) -> bool {
 /// Tag the interdiff `diff` (already rendered `tree(m) → tree(n)`) with
 /// rebase drift in place: mark drift lines, drop fully-drift hunks, recount
 /// the non-drift totals, and drop fully-drift files (docs/api.md
-/// "Rebase-aware interdiffs"). A no-op for files the base movement does not
-/// touch, so a same-parent interdiff is unchanged. The caller invokes this
-/// only when `parent(m) != parent(n)`.
+/// "Rebase-aware interdiffs"). A file the agent renamed always stays, even
+/// when every edit inside it is drift. A no-op for files the base movement
+/// does not touch, so a same-parent interdiff is unchanged. The caller
+/// invokes this only when `parent(m) != parent(n)`.
 ///
-/// Best-effort and per-file: a file that is binary or renamed, whose blobs
-/// cannot be read, or whose per-file diff fails is left as a plain diff (the
-/// others are still contained); `/COMMIT_MSG` is never drift-processed. So a
+/// Best-effort and per-file: a file that is binary, whose blobs cannot be
+/// read, whose per-file diff fails, or whose parent names the base
+/// movement does not connect is left as a plain diff (the others are
+/// still contained); `/COMMIT_MSG` is never drift-processed. So a
 /// failure never leaves a half-tagged file behind, and a returned error means
 /// nothing was tagged at all (the caller serves the plain interdiff).
 ///
@@ -299,30 +289,55 @@ pub fn tag_drift(
         return Ok(()); // A tree won't resolve → leave the interdiff plain.
     };
 
-    let drifted = changed_paths(repo, &parent_m, &parent_n)?;
-    if drifted.is_empty() {
+    let base: HashMap<String, String> = moves(repo, &parent_m, &parent_n)?.into_iter().collect();
+    if base.is_empty() {
         return Ok(());
     }
+    // Each side's names read backwards, tree → parent: the seam that finds a
+    // file under the name it was renamed away from.
+    let from_parent = |pairs: Vec<(String, String)>| -> HashMap<String, String> {
+        pairs.into_iter().map(|(old, new)| (new, old)).collect()
+    };
+    let in_parent_m = from_parent(moves(repo, &parent_m, &tree_m)?);
+    let in_parent_n = from_parent(moves(repo, &parent_n, &tree_n)?);
 
-    let mut drop_files = Vec::new();
-    for (idx, file) in diff.files.iter_mut().enumerate() {
-        if file.path == COMMIT_MSG_PATH
-            || file.binary
-            || file.status == FileStatus::Renamed
-            || !drifted.contains(&file.path)
-        {
-            continue;
+    diff.files.retain_mut(|file| {
+        if file.path == COMMIT_MSG_PATH || file.binary {
+            return true;
         }
-        match tag_file(repo, file, &parent_m, &tree_m, &parent_n, &tree_n) {
-            Ok(true) => drop_files.push(idx),
-            Ok(false) => {}
-            // Leave just this file plain; the rest are still contained.
-            Err(e) => tracing::warn!("drift tagging skipped for {}: {e:#}", file.path),
+        let name_m = file.old_path.as_deref().unwrap_or(&file.path);
+        let name_n = file.path.as_str();
+        let name_pm = in_parent_m.get(name_m).map_or(name_m, String::as_str);
+        let name_pn = in_parent_n.get(name_n).map_or(name_n, String::as_str);
+        // The base movement must itself carry one parent name to the other.
+        // Anything else (the base deleted the file, rename detection
+        // disagreed) is left plain: diffing unrelated parent blobs could
+        // claim the agent's real edits as drift.
+        if base.get(name_pm).map(String::as_str) != Some(name_pn) {
+            return true;
         }
-    }
-    for idx in drop_files.into_iter().rev() {
-        diff.files.remove(idx);
-    }
+        // Gerrit's implicitRename: a rename either side's delta produced is
+        // the agent's own and stays visible even when fully drifted.
+        let agent_rename =
+            file.status == FileStatus::Renamed && (name_pm != name_m || name_pn != name_n);
+        let blob = |tree: &Tree, name: &str| blob_bytes(repo, tree, Path::new(name));
+        let (Some(bpm), Some(bm), Some(bpn), Some(bn)) = (
+            blob(&parent_m, name_pm),
+            blob(&tree_m, name_m),
+            blob(&parent_n, name_pn),
+            blob(&tree_n, name_n),
+        ) else {
+            return true; // Binary on some side — leave plain.
+        };
+        match tag_file(file, &bpm, &bm, &bpn, &bn) {
+            Ok(real) => real || agent_rename,
+            Err(e) => {
+                // Leave just this file plain; the rest are still contained.
+                tracing::warn!("drift tagging skipped for {}: {e:#}", file.path);
+                true
+            }
+        }
+    });
     Ok(())
 }
 
