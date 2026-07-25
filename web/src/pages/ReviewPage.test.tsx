@@ -4,7 +4,13 @@
 // tests/rotation.rs — i.e. file-0 .. file-3.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReviewPage from "./ReviewPage";
@@ -341,5 +347,31 @@ describe("comment counts in the file headers", () => {
     // rotate.rs: three r0 threads (lines 21/22/23) on the left + one r1
     // draft on the right; the old-side r1 draft has no column here.
     expect(fcomments(1)).toBe("4 comments");
+  });
+});
+
+// The reveal-all button on a separator folds the gap into a neighbouring
+// hunk, leaving the hunks contiguous — so the separator disappears. The top
+// gap is the case with no hunk above it: it must fold up into the hunk
+// below (docs/api.md "Expanding context").
+describe("context expansion", () => {
+  it("reveals a whole top gap in one click", async () => {
+    renderReview();
+    await railItem("src/auth/rotate.rs");
+    fireEvent.click(screen.getByRole("button", { name: "expand all" }));
+
+    // rotate.rs hides a run above its first hunk and another between the two.
+    const gaps = () => section(1).querySelectorAll(".hunk-row");
+    expect(gaps()).toHaveLength(2);
+    // The section's first reveal-all button is the top gap's.
+    fireEvent.click(
+      must(section(1).querySelector(".expand-all"), ".expand-all"),
+    );
+
+    await waitFor(() => {
+      expect(gaps()).toHaveLength(1);
+    });
+    // Every hidden line came in, starting at the file's first.
+    expect(section(1).textContent).toContain("unchanged line 1");
   });
 });

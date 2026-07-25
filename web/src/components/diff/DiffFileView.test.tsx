@@ -1,13 +1,15 @@
-// Rebase-drift lines (docs/api.md "Rebase-aware interdiffs") render
-// contained: the .drift class lands on the changed line's gutter and code
-// cell so the CSS can tint them, while the real edit beside them stays
-// untagged. Rendered with a minimal ReviewContext so the assertion is about
-// the line markup alone.
+// Diff markup, rendered with a minimal ReviewContext so the assertions are
+// about the markup alone: rebase-drift lines (docs/api.md "Rebase-aware
+// interdiffs") render contained — the .drift class lands on the changed
+// line's gutter and code cell so the CSS can tint them, while the real edit
+// beside them stays untagged — and a gap separator carries the reveal
+// buttons its size warrants.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DiffFile } from "../../api/types";
+import { EXPAND_STEP } from "../../lib/useHunkExpansion";
 import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
 
@@ -21,6 +23,49 @@ const ctx: ReviewCtx = {
   setEditingTarget: () => false,
   setEditorDirty: () => undefined,
 };
+
+/** Two hunks with a hidden run of `gap` unchanged lines above the first and
+ * another between them — a top separator with no hunk above it, then an
+ * interior one — and the file ending at the second hunk, so there is no
+ * separator below. */
+const gapped = (gap: number): DiffFile => ({
+  path: "src/gap.rs",
+  status: "modified",
+  binary: false,
+  additions: 1,
+  deletions: 0,
+  new_total: 5 + 2 * gap,
+  hunks: [
+    {
+      old_start: 1 + gap,
+      old_lines: 2,
+      new_start: 1 + gap,
+      new_lines: 3,
+      header: "",
+      lines: [
+        { kind: "context", old: 1 + gap, new: 1 + gap, text: "fn a() {" },
+        { kind: "add", new: 2 + gap, text: "    added();" },
+        { kind: "context", old: 2 + gap, new: 3 + gap, text: "}" },
+      ],
+    },
+    {
+      old_start: 3 + 2 * gap,
+      old_lines: 2,
+      new_start: 4 + 2 * gap,
+      new_lines: 2,
+      header: "",
+      lines: [
+        {
+          kind: "context",
+          old: 3 + 2 * gap,
+          new: 4 + 2 * gap,
+          text: "fn b() {",
+        },
+        { kind: "context", old: 4 + 2 * gap, new: 5 + 2 * gap, text: "}" },
+      ],
+    },
+  ],
+});
 
 // A mixed hunk: a real edit (line 1) and a drift edit (line 2) tagged.
 const mixed: DiffFile = {
@@ -49,13 +94,13 @@ const mixed: DiffFile = {
   ],
 };
 
-function renderFile(layout: "unified" | "split") {
+function renderFile(layout: "unified" | "split", file: DiffFile = mixed) {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <ReviewContext.Provider value={ctx}>
         <DiffFileView
-          file={mixed}
+          file={file}
           layout={layout}
           threads={[]}
           domId="file-0"
@@ -81,5 +126,37 @@ describe("rebase drift rendering", () => {
     const { container } = renderFile("split");
     expect(container.querySelector(".code.drift")).not.toBeNull();
     expect(container.querySelector(".g.drift")).not.toBeNull();
+  });
+});
+
+describe("context-expand buttons", () => {
+  /** Each separator's buttons, as [class suffix, label] pairs. */
+  const buttons = (container: HTMLElement) =>
+    [...container.querySelectorAll(".hunk-row")].map((row) =>
+      [...row.querySelectorAll("button")].map((b) => [
+        b.className.replace("hunk-expand ", ""),
+        b.textContent,
+      ]),
+    );
+
+  it("offers the whole gap beside the stepped reveals", () => {
+    expect(buttons(renderFile("unified", gapped(25)).container)).toEqual([
+      // The top gap has no hunk above to step down from.
+      [
+        ["expand-all", "+25"],
+        ["expand-up", "+10"],
+      ],
+      [
+        ["expand-all", "+25"],
+        ["expand-down", "+10"],
+        ["expand-up", "+10"],
+      ],
+    ]);
+  });
+
+  it("drops the stepped reveals once one step covers the gap", () => {
+    expect(
+      buttons(renderFile("unified", gapped(EXPAND_STEP)).container),
+    ).toEqual([[["expand-all", "+10"]], [["expand-all", "+10"]]]);
   });
 });

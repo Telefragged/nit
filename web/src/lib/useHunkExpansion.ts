@@ -95,11 +95,12 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
     return fetching.current.lines;
   }
 
-  /** Reveal the next ≤`EXPAND_STEP` hidden lines at one end of the gap before
-   * hunk `sep` (docs/api.md "Expanding context"). `down` pulls from the gap's
-   * top, `up` from its bottom; both walk toward the middle. `sep` past the
-   * last hunk is the run to EOF, expanded only from its top (`down`). */
-  async function expand(end: "down" | "up", sep: number) {
+  /** Reveal the next `count` hidden lines — capped by what the gap before
+   * hunk `sep` still hides — at one of its ends (docs/api.md "Expanding
+   * context"). `down` pulls from the gap's top, `up` from its bottom; both
+   * walk toward the middle. `sep` past the last hunk is the run to EOF,
+   * expanded only from its top (`down`). */
+  async function expand(end: "down" | "up", sep: number, count = EXPAND_STEP) {
     const key = `${end}:${sep}`;
     if (busy.has(key)) return;
     setBusy((b) => new Set(b).add(key));
@@ -109,7 +110,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
       const gap = gapLines(lines, file.hunks[sep - 1], file.hunks[sep]);
       const remaining = gap.length - (down.get(sep) ?? 0) - (up.get(sep) ?? 0);
       if (remaining <= 0) return;
-      const step = Math.min(EXPAND_STEP, remaining);
+      const step = Math.min(count, remaining);
       (end === "down" ? setDown : setUp)((m) =>
         new Map(m).set(sep, (m.get(sep) ?? 0) + step),
       );

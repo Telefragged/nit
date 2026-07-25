@@ -98,56 +98,90 @@ const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
  * interdiffs"), so its gutter and code cell render contained. */
 const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
 
+/** One reveal button, floating over a separator; `kind` is both its class
+ * suffix and which lines it takes. */
+const ExpandButton = ({
+  kind,
+  count,
+  title,
+  busy,
+  onClick,
+}: {
+  kind: "all" | "down" | "up";
+  count: number;
+  title: string;
+  busy: boolean;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    className={`hunk-expand expand-${kind}`}
+    onClick={onClick}
+    disabled={busy}
+    title={title}
+  >
+    +{count}
+  </button>
+);
+
 /** A separator over a gap of `more` unchanged lines, shown only while the gap
  * remains (a fully-revealed gap leaves the hunks contiguous, so it vanishes).
- * When the file is expandable a `+N` button floats on each edge it can pull
- * from — half over the marker, half over the diff (docs/api.md "Expanding
- * context"): `onDown` pulls down from the hunk above, `onUp` up from the hunk
- * below. The top gap has no hunk above (no `onDown`); the bottom gap no hunk
- * below (no `onUp`, and no `@@` header). */
+ * When the file is expandable the gap's reveal buttons float over it
+ * (docs/api.md "Expanding context"): the whole run, then a stepped button per
+ * edge it can pull from — down from `hunk`'s predecessor, up from `hunk`
+ * itself. The top gap (`sep` 0) has no hunk above, the bottom gap no `hunk`
+ * below (nor a `@@` header), and a gap one step covers needs no stepped
+ * button at all. */
 function HunkSeparator({
   more,
   hunk,
-  expandable,
-  busyUp,
-  busyDown,
-  onUp,
-  onDown,
+  sep,
+  expansion,
 }: {
   more: number;
   hunk: Hunk | undefined;
-  expandable: boolean;
-  busyUp: boolean;
-  busyDown: boolean;
-  onUp: (() => void) | null;
-  onDown: (() => void) | null;
+  sep: number;
+  expansion: ReturnType<typeof useHunkExpansion>;
 }) {
+  const { expandable, expand, busyAt } = expansion;
   if (more === 0) return null;
-  const step = Math.min(EXPAND_STEP, more);
-  const plural = step === 1 ? "" : "s";
+  // The whole run folds into the hunk above — or below, for the top gap,
+  // which has none.
+  const end = sep > 0 ? "down" : "up";
   return (
     <div className="hunk-row">
-      {expandable && onDown ? (
-        <button
-          type="button"
-          className="hunk-expand expand-down"
-          onClick={onDown}
-          disabled={busyDown}
-          title={`Show ${step} more line${plural} below`}
-        >
-          +{step}
-        </button>
-      ) : null}
-      {expandable && onUp ? (
-        <button
-          type="button"
-          className="hunk-expand expand-up"
-          onClick={onUp}
-          disabled={busyUp}
-          title={`Show ${step} more line${plural} above`}
-        >
-          +{step}
-        </button>
+      {expandable ? (
+        <div className="hunk-expanders">
+          <ExpandButton
+            kind="all"
+            count={more}
+            title={`Show all ${more} line${more === 1 ? "" : "s"}`}
+            busy={busyAt(end, sep)}
+            onClick={() => void expand(end, sep, Infinity)}
+          />
+          {more > EXPAND_STEP ? (
+            <div className="hunk-expand-steps">
+              {sep > 0 ? (
+                <ExpandButton
+                  kind="down"
+                  count={EXPAND_STEP}
+                  title={`Show ${EXPAND_STEP} more lines below`}
+                  busy={busyAt("down", sep)}
+                  onClick={() => void expand("down", sep)}
+                />
+              ) : null}
+              {hunk ? (
+                <ExpandButton
+                  kind="up"
+                  count={EXPAND_STEP}
+                  title={`Show ${EXPAND_STEP} more lines above`}
+                  busy={busyAt("up", sep)}
+                  onClick={() => void expand("up", sep)}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       ) : null}
       <span className="hunk-skip">⋯ {more} unchanged lines</span>
       {hunk ? (
@@ -185,7 +219,8 @@ export default function DiffFileView({
   const queryClient = useQueryClient();
   const lang = languageFor(file.path);
 
-  const { hunks, expandable, expand, busyAt } = useHunkExpansion(file, ctx);
+  const expansion = useHunkExpansion(file, ctx);
+  const { hunks } = expansion;
 
   // Intraline emphasis for modified line pairs, per hunk (keyed by line
   // object identity, so unified and split rows share the same map).
@@ -546,11 +581,8 @@ export default function DiffFileView({
                   <HunkSeparator
                     more={skippedBefore(hunks[hi - 1], hunk)}
                     hunk={hunk}
-                    expandable={expandable}
-                    busyUp={busyAt("up", hi)}
-                    busyDown={busyAt("down", hi)}
-                    onUp={() => void expand("up", hi)}
-                    onDown={hi > 0 ? () => void expand("down", hi) : null}
+                    sep={hi}
+                    expansion={expansion}
                   />
                   {layout === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
                 </Fragment>
@@ -562,11 +594,8 @@ export default function DiffFileView({
               <HunkSeparator
                 more={skippedAfter(hunks.at(-1), file.new_total)}
                 hunk={undefined}
-                expandable={expandable}
-                busyUp={false}
-                busyDown={busyAt("down", hunks.length)}
-                onUp={null}
-                onDown={() => void expand("down", hunks.length)}
+                sep={hunks.length}
+                expansion={expansion}
               />
             </div>
           )}

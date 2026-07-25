@@ -111,10 +111,11 @@ const captures = [
     path: "/changes/11?against=base",
     actions: expandAllFiles,
   },
-  // Context expansion: each gap separator carries two centred +N buttons —
-  // the top one reveals downward from the hunk above, the bottom one upward
-  // from the hunk below (docs/api.md "Expanding context"). Clicks the top
-  // (downward) button to show the revealed lines and the dropped count.
+  // Context expansion: a gap separator carries a centred unit of +N buttons
+  // — the whole gap on the left, then the stepped pair, the top one
+  // revealing downward from the hunk above and the bottom one upward from
+  // the hunk below (docs/api.md "Expanding context"). Clicks the stepped
+  // downward button to show the revealed lines and the dropped count.
   {
     name: "review-expand-context",
     path: "/changes/11?against=base",

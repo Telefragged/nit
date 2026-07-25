@@ -201,14 +201,34 @@
   border-top: none;
 }
 
-/* The two expand buttons float centred on the separator's edges — each
-   straddling a border so it sits half over the marker and half over the
-   adjacent diff: the top one reveals downward (from the hunk above), the
-   bottom one upward (from the hunk below). */
-.hunk-expand {
+/* The expand buttons float over the separator, centred on the stepped pair
+   — the reveal-all button hangs off its left rather than shifting it. The
+   pair spans the row's full height so each of its buttons straddles a
+   border, half over the marker and half over the adjacent diff: the top one
+   reveals downward (from the hunk above), the bottom one upward (from the
+   hunk below). */
+.hunk-expanders {
   position: absolute;
+  top: 0;
+  bottom: 0;
   left: 50%;
   z-index: 1;
+  display: flex;
+  transform: translateX(-50%);
+}
+
+/* The stepped buttons share one cell spanning the row, so each aligns to a
+   border on its own — stacking them in flow instead would overflow the row
+   (two buttons are taller than it) and push the lower one off the border. */
+.hunk-expand-steps {
+  display: grid;
+}
+
+.hunk-expand-steps > .hunk-expand {
+  grid-area: 1 / 1;
+}
+
+.hunk-expand {
   padding: 0 8px;
   font: inherit;
   line-height: 1.5;
@@ -219,14 +239,27 @@
   cursor: pointer;
 }
 
+.hunk-expand.expand-all {
+  align-self: center;
+}
+
+/* Out of flow, so the stepped pair alone decides where the centre falls;
+   with no pair to hang off, the button keeps the centre itself. */
+.hunk-expand.expand-all:not(:only-child) {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  transform: translateY(-50%);
+}
+
 .hunk-expand.expand-down {
-  top: 0;
-  transform: translate(-50%, -50%);
+  align-self: start;
+  transform: translateY(-50%);
 }
 
 .hunk-expand.expand-up {
-  bottom: 0;
-  transform: translate(-50%, 50%);
+  align-self: end;
+  transform: translateY(50%);
 }
 
 .hunk-expand:hover:not(:disabled) {
