@@ -160,9 +160,9 @@ fn mixed_hunk_keeps_real_edit_and_tags_drift() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression: duplicate lines let the parent→parent diff fold the agent's own
-// edit into a base-movement hunk. The drifted lines beside it must still be
-// tagged and excluded from the count — not mis-attributed to the agent.
+// Regression: duplicate lines let the parent→parent diff fold the change's
+// own edit into a base-movement hunk. The drifted lines beside it must still
+// be tagged and excluded from the count — not mis-attributed to the change.
 
 #[test]
 fn drift_kept_when_the_diff_folds_it_against_a_duplicate_line() {
@@ -172,7 +172,7 @@ fn drift_kept_when_the_diff_folds_it_against_a_duplicate_line() {
         &g,
         &[("f.rs", &body(&["a", "a", "a", "b", "b", "a", "b", "a"]))],
     );
-    // The agent edits old line 3 at m.
+    // The change edits old line 3 at m.
     let m = snapshot(
         &g,
         &[("f.rs", &body(&["a", "a", "RM", "b", "b", "a", "b", "a"]))],
@@ -182,14 +182,14 @@ fn drift_kept_when_the_diff_folds_it_against_a_duplicate_line() {
         &g,
         &[("f.rs", &body(&["DA", "a", "a", "D4", "D5", "a", "b", "a"]))],
     );
-    // The agent edits line 1 at n and carries the base drift.
+    // The change edits line 1 at n and carries the base drift.
     let n = snapshot(
         &g,
         &[("f.rs", &body(&["RN", "a", "a", "D4", "D5", "a", "b", "a"]))],
     );
 
     let (plain, tagged) = interdiff(&g, m, parent_m, n, parent_n);
-    // The problem: the plain interdiff counts the base movement as the agent's.
+    // The problem: the plain interdiff counts the base movement as the change's.
     assert_eq!(
         {
             let f = file(&plain, "f.rs").expect("plain f.rs");
@@ -198,7 +198,7 @@ fn drift_kept_when_the_diff_folds_it_against_a_duplicate_line() {
         (3, 3)
     );
 
-    // Contained: only the agent's two real edits (RN at new 1, RM removed at
+    // Contained: only the change's two real edits (RN at new 1, RM removed at
     // old 3) count; the base movement (D4,D5 at new 4,5 / old b,b at 4,5) is
     // tagged drift and excluded.
     let f = file(&tagged, "f.rs").expect("tagged f.rs");
@@ -206,18 +206,18 @@ fn drift_kept_when_the_diff_folds_it_against_a_duplicate_line() {
     assert_eq!(drift_lines(f), vec![('-', 4), ('-', 5), ('+', 4), ('+', 5)]);
 }
 
-// The agent removing a pre-existing (base) line in a later revision is the
-// agent's real work — the base did not remove it — so it must show as a real
+// A change removing a pre-existing (base) line in a later revision is its
+// own real work — the base did not remove it — so it must show as a real
 // deletion, never tagged drift and hidden.
 
 #[test]
-fn agent_removing_a_base_line_in_a_later_revision_is_real() {
+fn change_removing_a_base_line_in_a_later_revision_is_real() {
     let g = GitRepo::new();
     let base = ["use a;", "use b;", "fn keep() {}"];
     // The change adds feat.rs on top of the base, unchanged across revisions.
     let parent_m = snapshot(&g, &[("lib.rs", &body(&base))]);
     let m = snapshot(&g, &[("lib.rs", &body(&base)), ("feat.rs", &body(&["F"]))]);
-    // The base drifts (keep() body changes); the agent ALSO drops `use b;` at n.
+    // The base drifts (keep() body changes); the change ALSO drops `use b;` at n.
     let drifted = ["use a;", "use b;", "fn keep() { work(); }"];
     let dropped = ["use a;", "fn keep() { work(); }"];
     let parent_n = snapshot(&g, &[("lib.rs", &body(&drifted))]);
@@ -236,17 +236,17 @@ fn agent_removing_a_base_line_in_a_later_revision_is_real() {
         .filter(|l| l.kind == LineKind::Del && !l.drift)
         .map(|l| l.text.as_str())
         .collect();
-    assert_eq!(real_dels, vec!["use b;"], "the agent's deletion is real");
+    assert_eq!(real_dels, vec!["use b;"], "the change's deletion is real");
     assert_eq!(f.deletions, 1);
 }
 
 // Line-level limitation, asserted as a safe invariant: on runs of identical
 // lines the two diffs can anchor a duplicate differently, so some base
-// movement may show as a real change (counts a little high). That is the safe
-// direction — the agent's own edit is still shown, never hidden as drift.
+// movement may show as a real edit (counts a little high). That is the safe
+// direction — the change's own edit is still shown, never hidden as drift.
 
 #[test]
-fn duplicate_lines_never_hide_the_agents_edit() {
+fn duplicate_lines_never_hide_the_changes_edit() {
     let g = GitRepo::new();
     let parent_m = snapshot(&g, &[("f.rs", &body(&["b", "c"]))]);
     let m = snapshot(&g, &[("f.rs", &body(&["b", "c", "SAME"]))]);
@@ -262,8 +262,8 @@ fn duplicate_lines_never_hide_the_agents_edit() {
         .filter(|l| l.kind != LineKind::Context && !l.drift)
         .map(|l| l.text.as_str())
         .collect();
-    assert!(real.contains(&"SAME"), "the agent's deletion is shown");
-    assert!(real.contains(&"DIFF"), "the agent's addition is shown");
+    assert!(real.contains(&"SAME"), "the change's deletion is shown");
+    assert!(real.contains(&"DIFF"), "the change's addition is shown");
 }
 
 // ---------------------------------------------------------------------------
@@ -299,12 +299,12 @@ fn isolated_drift_hunk_is_dropped_real_hunk_kept() {
 }
 
 // ---------------------------------------------------------------------------
-// Property 9 — coordinate correctness: the agent's own edit shifts the drift
+// Property 9 — coordinate correctness: the change's own edit shifts the drift
 // to a different line number than it had in the parents, and it is still
 // recognised (a naive parent-line comparison would tag the wrong line).
 
 #[test]
-fn drift_is_found_after_the_agents_edits_shift_it() {
+fn drift_is_found_after_the_changes_edits_shift_it() {
     let g = GitRepo::new();
     // After X is inserted, E sits at line 6 in the interdiff but at line 5
     // in the parents.
@@ -322,7 +322,7 @@ fn drift_is_found_after_the_agents_edits_shift_it() {
 }
 
 // ---------------------------------------------------------------------------
-// Property 10 — conservative on overlap: when the agent's real edit touches
+// Property 10 — conservative on overlap: when the change's real edit touches
 // the same lines the base moved, it is shown as a real edit, not drift.
 
 #[test]
@@ -378,11 +378,11 @@ fn file_added_or_deleted_by_the_rebase_is_dropped() {
 }
 
 // ---------------------------------------------------------------------------
-// A rename the agent made, of a file the base movement never touched, is
+// A rename the change made, of a file the base movement never touched, is
 // real work: the rename and its edits render plain, never drift.
 
 #[test]
-fn agents_own_rename_is_left_as_a_plain_diff() {
+fn changes_own_rename_is_left_as_a_plain_diff() {
     let g = GitRepo::new();
     let long = numbered(40);
     let tweaked = edit(&long, 1, "line 1 (touched)");
@@ -426,7 +426,7 @@ fn file_renamed_by_the_rebase_is_dropped() {
     let long = numbered(40);
     let feat = body(&["C2 line"]);
 
-    // Pure base rename a.rs → b.rs; the agent's delta (feat.rs) is unchanged.
+    // Pure base rename a.rs → b.rs; the change's delta (feat.rs) is unchanged.
     let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
     let m = snapshot(&g, &[("a.rs", &body(&long)), ("feat.rs", &feat)]);
     let parent_n = snapshot(&g, &[("b.rs", &body(&long))]);
@@ -446,14 +446,14 @@ fn file_renamed_by_the_rebase_is_dropped() {
 }
 
 #[test]
-fn base_rename_keeps_the_agents_real_edit_and_tags_drift() {
+fn base_rename_keeps_the_changes_real_edit_and_tags_drift() {
     let g = GitRepo::new();
     let long = numbered(40);
-    // The agent edits line 20 at both revisions (differently); the base
+    // The change edits line 20 at both revisions (differently); the base
     // renames a.rs → b.rs and tweaks line 18 — near enough to share a hunk.
-    let at_m = edit(&long, 20, "AGENT v1");
+    let at_m = edit(&long, 20, "EDIT v1");
     let base_n = edit(&long, 18, "line 18 (rebased)");
-    let at_n = edit(&base_n, 20, "AGENT v2");
+    let at_n = edit(&base_n, 20, "EDIT v2");
 
     let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
     let m = snapshot(&g, &[("a.rs", &body(&at_m))]);
@@ -464,22 +464,22 @@ fn base_rename_keeps_the_agents_real_edit_and_tags_drift() {
     let f = file(&tagged, "b.rs").expect("file kept for its real edit");
     assert_eq!(f.status, FileStatus::Renamed);
     assert_eq!(f.old_path.as_deref(), Some("a.rs"));
-    // The base tweak at line 18 is drift; the agent's v1 → v2 edit is real.
+    // The base tweak at line 18 is drift; the change's v1 → v2 edit is real.
     assert_eq!(drift_lines(f), vec![('-', 18), ('+', 18)]);
     assert_eq!((f.additions, f.deletions), (1, 1));
 }
 
 // ---------------------------------------------------------------------------
 // Path re-keying: base movement is found under the file's per-side names,
-// so it is contained even inside a file the agent renamed.
+// so it is contained even inside a file the change renamed.
 
 #[test]
-fn base_edit_is_found_inside_a_file_the_agent_renamed() {
+fn base_edit_is_found_inside_a_file_the_change_renamed() {
     let g = GitRepo::new();
     let long = numbered(40);
     let drifted = edit(&long, 5, "line 5 (rebased)");
 
-    // The agent renamed a.rs → b.rs at both revisions; the base modified
+    // The change renamed a.rs → b.rs at both revisions; the base modified
     // a.rs. The interdiff shows b.rs as modified — every edit the base's.
     let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
     let m = snapshot(&g, &[("b.rs", &body(&long))]);
@@ -490,45 +490,45 @@ fn base_edit_is_found_inside_a_file_the_agent_renamed() {
     assert!(file(&plain, "b.rs").is_some(), "plain leaks the base edit");
     assert!(
         tagged.files.is_empty(),
-        "base edit under the agent's rename drops out"
+        "base edit under the change's rename drops out"
     );
 }
 
-// The agent's rename between revisions is real work and must stay visible
+// The change's rename between revisions is real work and must stay visible
 // even when every content edit inside it is base drift (the bug gerrit's
 // implicitRename flag fixed).
 
 #[test]
-fn agents_rename_survives_an_all_drift_interdiff() {
+fn changes_rename_survives_an_all_drift_interdiff() {
     let g = GitRepo::new();
     let long = numbered(40);
     let drifted = edit(&long, 5, "line 5 (rebased)");
 
-    // The base modified a.rs; the agent renamed it to b.rs at n only.
+    // The base modified a.rs; the change renamed it to b.rs at n only.
     let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
     let m = snapshot(&g, &[("a.rs", &body(&long))]);
     let parent_n = snapshot(&g, &[("a.rs", &body(&drifted))]);
     let n = snapshot(&g, &[("b.rs", &body(&drifted))]);
 
     let (_, tagged) = interdiff(&g, m, parent_m, n, parent_n);
-    let f = file(&tagged, "b.rs").expect("the agent's rename stays");
+    let f = file(&tagged, "b.rs").expect("the change's rename stays");
     assert_eq!(f.status, FileStatus::Renamed);
     assert_eq!(f.old_path.as_deref(), Some("a.rs"));
     assert!(f.hunks.is_empty(), "the base's edit is all drift");
     assert_eq!((f.additions, f.deletions), (0, 0));
 }
 
-// The base deleting a file the agent then re-adds under a new name is NOT a
+// The base deleting a file the change then re-adds under a new name is NOT a
 // base rename: the parent names don't connect, so nothing is drift-processed
-// and the agent's deletions inside the re-add stay real (projecting a
+// and the change's deletions inside the re-add stay real (projecting a
 // fabricated whole-file delete would claim them as drift).
 
 #[test]
-fn base_delete_with_agent_readd_is_left_plain() {
+fn base_delete_with_change_readd_is_left_plain() {
     let g = GitRepo::new();
     let long = numbered(40);
     let mut readded = long.clone();
-    readded.remove(9); // the agent drops line 10 in the re-added copy
+    readded.remove(9); // the change drops line 10 in the re-added copy
 
     let parent_m = snapshot(&g, &[("a.rs", &body(&long))]);
     let m = snapshot(&g, &[("a.rs", &body(&long))]);
@@ -609,7 +609,7 @@ fn vs_parent_diff_is_never_drift_processed() {
     assert_eq!(
         paths,
         vec![COMMIT_MSG_PATH, "feat.rs"],
-        "vs-parent shows only the agent's added file plus the message"
+        "vs-parent shows only the change's added file plus the message"
     );
 }
 

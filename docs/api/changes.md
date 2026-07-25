@@ -57,7 +57,7 @@ Hunk = {"old_start": 1, "old_lines": 5, "new_start": 1, "new_lines": 7,
 Line = {"kind": "context",      // context | add | del
         "old": 1,               // old line number; absent for add
         "new": 1,               // new line number; absent for del
-        "drift": false,         // changed by a rebase, not the agent (omitted
+        "drift": false,         // changed by a rebase, not by the change (omitted
                                 // when false; see "Rebase-aware interdiffs")
         "text": "fn main() {"}  // without trailing newline
 ```
@@ -109,7 +109,7 @@ rejected with 400.
 An interdiff `m → n` is `tree(m) → tree(n)`. When `m` and `n` have
 **different parents** (the base moved, or an earlier change in the chain
 got a revision, rewriting every later one), the gap between the two parents
-folds into the interdiff alongside the agent's real edits. nit detects that
+folds into the interdiff alongside the change's real edits. nit detects that
 **drift** and contains it (gerrit's "due to rebase"), so the reviewer is
 not shown base movement they did not make.
 
@@ -119,12 +119,12 @@ drift-processed — they are the plain diff byte-for-byte. When
 
 - **Detection.** Diff the two parents (`parent(m) → parent(n)`) and project
   those edits into `m`/`n` coordinates through the change's own delta at
-  each revision, so a base edit is recognised wherever the agent's edits
-  shifted it; lines the agent also touched are clipped out and show as real.
+  each revision, so a base edit is recognised wherever the change's own edits
+  shifted it; lines the change also touched are clipped out and show as real.
   Matching is **line-level**, with two gerrit-like limitations (no
   intraline/move detection): on runs of identical lines some base movement
-  can show as a real change (the safe direction), and a base _reorder_ of a
-  line the agent also deletes can tag that deletion as drift.
+  can show as a real edit (the safe direction), and a base _reorder_ of a
+  line the change also deletes can tag that deletion as drift.
 - **`drift: true`** marks each base-movement line; the UI tints them,
   otherwise they are ordinary lines.
 - **Counts exclude drift** — `additions`/`deletions` count only non-drift
@@ -135,10 +135,10 @@ drift-processed — they are the plain diff byte-for-byte. When
   rebase of a change collapses to just its `/COMMIT_MSG`).
 - **Renames follow gerrit's path re-keying.** A file's name in each of the
   four trees is resolved through each side's own rename detection, so base
-  movement is contained even inside a file the agent renamed. A rename made
+  movement is contained even inside a file the change renamed. A rename made
   wholly by the base is itself drift: the entry drops out when no real edit
   remains, and a base rename does not resurface in the interdiff. The
-  agent's own rename always stays — even when every content edit inside it
+  change's own rename always stays — even when every content edit inside it
   is drift — with the base's edits tagged within it. A file whose parent
   names the base movement does not connect (the base deleted it, or rename
   detection disagreed) is left plain.

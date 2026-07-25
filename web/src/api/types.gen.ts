@@ -306,8 +306,8 @@ export type Line = {
    */
   new?: number;
   /**
-   * Changed by a rebase, not the agent (docs/api.md "Rebase-aware
-   * interdiffs").
+   * Changed by a rebase, not by the change itself (docs/api.md
+   * "Rebase-aware interdiffs").
    */
   drift?: boolean;
   /**

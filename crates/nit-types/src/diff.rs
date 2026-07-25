@@ -63,8 +63,8 @@ pub struct Line {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub new: Option<u64>,
-    /// Changed by a rebase, not the agent (docs/api.md "Rebase-aware
-    /// interdiffs").
+    /// Changed by a rebase, not by the change itself (docs/api.md
+    /// "Rebase-aware interdiffs").
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub drift: bool,
     /// Without trailing newline.

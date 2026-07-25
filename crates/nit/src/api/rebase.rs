@@ -1,23 +1,22 @@
 //! Rebase-aware interdiffs: detect and contain "drift" — the parts of an
 //! interdiff `m → n` caused by the change's base moving (a rebase) rather
-//! than by the agent editing the change (docs/api.md "Rebase-aware
-//! interdiffs").
+//! than by the change's own edits (docs/api.md "Rebase-aware interdiffs").
 //!
 //! Gerrit's mechanism, line-level: diff the two parents
 //! (`parent(m) → parent(n)`) to find the base movement, then project those
 //! edits into the interdiff's `m`/`n` line coordinates through the change's
 //! own delta at each revision (`parent(m) → tree(m)` and
-//! `parent(n) → tree(n)`), so a base edit is recognised wherever the agent's
-//! own edits shifted it (spec property 9). Projection clips out the lines the
-//! agent also touched, so an agent edit is shown as a real change, never
-//! claimed as drift (property 10), and an interdiff change the base movement
-//! does not explain — including the agent removing a pre-existing line in a
-//! later revision — stays a real change.
+//! `parent(n) → tree(n)`), so a base edit is recognised wherever the
+//! change's own edits shifted it (spec property 9). Projection clips out the
+//! lines the change also touched, so its own edit is shown as a real edit,
+//! never claimed as drift (property 10), and an interdiff line the base
+//! movement does not explain — including the change removing a pre-existing
+//! line in a later revision — stays real.
 //!
 //! File identity across renames follows gerrit's path re-keying: every blob
 //! is read under the file's name in its own tree, resolved through each
 //! side's rename detection, so base movement is contained even inside a
-//! file the agent renamed, and a rename made wholly by the base is itself
+//! file the change renamed, and a rename made wholly by the base is itself
 //! drift.
 //!
 //! The projection ([`project_clipped`] / [`drift_ranges`]) is the bug-prone
@@ -27,13 +26,13 @@
 //!
 //! - On runs of identical lines (blank lines, `}`, repeated imports) the two
 //!   diffs can anchor a duplicate differently, leaving a base-movement line
-//!   shown as a real change rather than drift — extra base churn, the safe
+//!   shown as a real edit rather than drift — extra base churn, the safe
 //!   direction.
-//! - When the base *reorders* a line that the agent also deletes, the
+//! - When the base *reorders* a line that the change also deletes, the
 //!   line-level diff cannot tell "base moved line X" from "base deleted line
-//!   X", so the agent's deletion can be tagged drift. A deletion the base
+//!   X", so the change's deletion can be tagged drift. A deletion the base
 //!   did **not** touch (the common "also drop this line" case) is unaffected
-//!   and stays a real change.
+//!   and stays a real edit.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -117,10 +116,11 @@ fn net_delta(e: &Edit) -> i64 {
 /// Map the parts of `pos` that the change's own edits (`mappings`) did **not**
 /// touch into the mappings' B-coordinate space, shifting each surviving
 /// sub-range by the running insert/delete delta of the mappings before it.
-/// A part of `pos` covered by a mapping's A-range is dropped — the agent
+/// A part of `pos` covered by a mapping's A-range is dropped — the change
 /// edited those lines, so they show as a real edit, not drift (gerrit's
 /// `OmitPositionOnConflict`, refined to line granularity: a base edit that
-/// straddles one agent-edited line still contributes its untouched lines).
+/// straddles one of the change's own lines still contributes its untouched
+/// lines).
 ///
 /// `mappings` must be ascending by `a.start` and disjoint — `buffer_edits`
 /// (one edit per ascending hunk) yields them that way.
@@ -149,7 +149,7 @@ fn project_clipped(pos: Span, mappings: &[Edit]) -> Vec<Span> {
             continue;
         }
         emit(cursor, m.a.start, shift); // the untouched gap before this edit
-        cursor = m.a.end; // step over the agent-edited region
+        cursor = m.a.end; // step over the change's own edited region
         shift += net_delta(m);
     }
     emit(cursor, pos.end, shift);
@@ -159,8 +159,8 @@ fn project_clipped(pos: Span, mappings: &[Edit]) -> Vec<Span> {
 /// Project every base-movement (`pvp`) edit into the interdiff's `m`/`n` line
 /// coordinates, independently per side: the A-range through the change's own
 /// delta at `m` (`ovp`, `parent(m) → m`) and the B-range through its delta at
-/// `n` (`nvp`, `parent(n) → n`). Per-side clipping keeps the lines the agent
-/// didn't touch, so an edit the diff folded across an agent-edited line still
+/// `n` (`nvp`, `parent(n) → n`). Per-side clipping keeps the lines the change
+/// didn't touch, so an edit the diff folded across one of its own lines still
 /// yields its drifted lines. Returns the drift line ranges on the old (`m`)
 /// and new (`n`) sides of the interdiff.
 fn drift_ranges(pvp: &[Edit], ovp: &[Edit], nvp: &[Edit]) -> (Vec<Span>, Vec<Span>) {
@@ -213,8 +213,8 @@ fn moves(repo: &Repository, old: &Tree, new: &Tree) -> Result<Vec<(String, Strin
 fn tag_file(file: &mut DiffFile, bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> Result<bool> {
     // parent(m) → m and parent(n) → n are the change's own delta at each
     // revision; parent(m) → parent(n) is the base movement. Projecting the
-    // base movement through the agent's deltas gives the drifted lines, in
-    // the interdiff's own m/n coordinates.
+    // base movement through those deltas gives the drifted lines, in the
+    // interdiff's own m/n coordinates.
     let ovp = buffer_edits(bpm, bm)?;
     let nvp = buffer_edits(bpn, bn)?;
     let pvp = buffer_edits(bpm, bpn)?;
@@ -235,7 +235,7 @@ fn tag_file(file: &mut DiffFile, bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -
         }
     }
     if any_drift {
-        // Region selection follows the agent's real delta.
+        // Region selection follows the change's own real edits.
         file.hunks.retain(|h| h.lines.iter().any(is_real_change));
         let (mut additions, mut deletions) = (0u64, 0u64);
         for line in file.hunks.iter().flat_map(|h| &h.lines) {
@@ -258,7 +258,7 @@ fn is_real_change(line: &Line) -> bool {
 /// Tag the interdiff `diff` (already rendered `tree(m) → tree(n)`) with
 /// rebase drift in place: mark drift lines, drop fully-drift hunks, recount
 /// the non-drift totals, and drop fully-drift files (docs/api.md
-/// "Rebase-aware interdiffs"). A file the agent renamed always stays, even
+/// "Rebase-aware interdiffs"). A file the change renamed always stays, even
 /// when every edit inside it is drift. A no-op for files the base movement
 /// does not touch, so a same-parent interdiff is unchanged. The caller
 /// invokes this only when `parent(m) != parent(n)`.
@@ -312,13 +312,13 @@ pub fn tag_drift(
         // The base movement must itself carry one parent name to the other.
         // Anything else (the base deleted the file, rename detection
         // disagreed) is left plain: diffing unrelated parent blobs could
-        // claim the agent's real edits as drift.
+        // claim the change's real edits as drift.
         if base.get(name_pm).map(String::as_str) != Some(name_pn) {
             return true;
         }
         // Gerrit's implicitRename: a rename either side's delta produced is
-        // the agent's own and stays visible even when fully drifted.
-        let agent_rename =
+        // the change's own and stays visible even when fully drifted.
+        let own_rename =
             file.status == FileStatus::Renamed && (name_pm != name_m || name_pn != name_n);
         let blob = |tree: &Tree, name: &str| blob_bytes(repo, tree, Path::new(name));
         let (Some(bpm), Some(bm), Some(bpn), Some(bn)) = (
@@ -330,7 +330,7 @@ pub fn tag_drift(
             return true; // Binary on some side — leave plain.
         };
         match tag_file(file, &bpm, &bm, &bpn, &bn) {
-            Ok(real) => real || agent_rename,
+            Ok(real) => real || own_rename,
             Err(e) => {
                 // Leave just this file plain; the rest are still contained.
                 tracing::warn!("drift tagging skipped for {}: {e:#}", file.path);
@@ -388,19 +388,19 @@ mod tests {
             project_clipped(span(2, 3), &[edit((5, 8), (5, 8))]),
             vec![span(2, 3)]
         );
-        // A position wholly inside an agent edit is dropped (real, not drift).
+        // A position inside the change's own edit is dropped, not drift.
         assert!(project_clipped(span(6, 7), &[edit((5, 8), (5, 8))]).is_empty());
     }
 
     #[test]
-    fn project_clipped_keeps_the_part_outside_an_agent_edit() {
-        // The fix for drift the diff folds across an agent-edited line: the
-        // base region straddles the agent's edit [5,8), and the untouched
+    fn project_clipped_keeps_the_part_outside_the_changes_edit() {
+        // The fix for drift the diff folds across one of the change's own
+        // lines: the base region straddles that edit [5,8), and the untouched
         // remainder still projects (size-neutral mapping ⇒ no shift).
         let m = [edit((5, 8), (5, 8))];
         assert_eq!(project_clipped(span(4, 6), &m), vec![span(4, 5)]);
         assert_eq!(project_clipped(span(7, 9), &m), vec![span(8, 9)]);
-        // An interior agent edit splits the base region in two.
+        // An interior edit by the change splits the base region in two.
         assert_eq!(
             project_clipped(span(1, 9), &[edit((4, 5), (4, 5))]),
             vec![span(1, 4), span(5, 9)]
@@ -408,8 +408,8 @@ mod tests {
     }
 
     #[test]
-    fn drift_ranges_shifts_with_the_agents_edits_and_clips_overlap() {
-        // Property 9: base inserts a line; the agent inserts 2 above it at both
+    fn drift_ranges_shifts_with_the_changes_edits_and_clips_overlap() {
+        // Property 9: base inserts a line; the change inserts 2 above it at both
         // revisions, so the drift lands 2 lines lower in m/n.
         let (old, new) = drift_ranges(
             &[edit((3, 3), (3, 4))],
@@ -419,7 +419,7 @@ mod tests {
         assert!(old.is_empty()); // a pure insertion has no old-side line
         assert_eq!(new, vec![span(5, 6)]); // new index 5 == line 6
 
-        // Property 10: the agent edits the same line the base moved → not drift.
+        // Property 10: the change edits the same line the base moved → not drift.
         let (old, new) = drift_ranges(
             &[edit((3, 4), (3, 4))],
             &[edit((3, 4), (3, 4))],
