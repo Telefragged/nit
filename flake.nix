@@ -319,6 +319,12 @@
           # Compile the WebAssembly fold — surfaces a wasm32 build break or a
           # wasm-bindgen version skew independently of the web build.
           wasm-build = wasmPkg pkgs;
+          # `wasm-build` runs a bare `cargo build`, so it is the one crate the
+          # workspace lints would otherwise miss. Built here through crate2nix
+          # (host target) purely to put it under clippy like every other crate;
+          # its lib has no `cfg(target_arch)` branch, so the host lint covers
+          # the same code wasm32 compiles.
+          clippy-nit-wasm = cargoNix.workspaceMembers."nit-wasm".build;
           # Check that all files are formatted (same treefmt as `nix fmt`).
           treefmt = pkgs.stdenvNoCC.mkDerivation {
             name = "treefmt-check";
