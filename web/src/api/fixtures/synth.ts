@@ -124,8 +124,12 @@ export function synthLog(
       kind: "lifecycle",
       payload:
         change.terminal === "merged"
-          ? { action: "merged", revision: tip?.number ?? 0, message: null }
-          : { action: "abandoned", revision: null, message: null },
+          ? {
+              action: "merged",
+              commit_sha: tip?.commit_sha ?? null,
+              message: null,
+            }
+          : { action: "abandoned", message: null },
     });
   }
 

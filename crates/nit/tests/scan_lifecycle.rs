@@ -1,5 +1,5 @@
 //! Change lifecycle (docs/api.md "State table", docs/data-model.md
-//! "Lifecycle"): merged detection when a change's patch lands on the canonical
+//! "Lifecycle"): merged detection when a change lands on the canonical
 //! branch (the background timer's only job, prefix-merge included), plus the
 //! explicit `abandon`/`reopen` actions and the 409-then-200 push gate around an
 //! abandoned change.
@@ -44,8 +44,8 @@ fn change_landed_on_main_becomes_merged() {
     assert_eq!(res["tip_change"]["revision"], 0);
     assert_eq!(res["tip_change"]["status"], "pending");
 
-    // Land the same change on the canonical branch: same Change-Id, same
-    // patch-id (identical tree edit). The timer recognises the patch.
+    // Land the same change on the canonical branch: the timer recognises
+    // its Change-Id.
     let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("main", landed);
 
@@ -130,10 +130,10 @@ fn branchless_change_stays_live_without_auto_abandon() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
 
-    // Delete the only branch, then move main with an unrelated commit (distinct
-    // patch-id, so no false landing) so the sweep does real work over the open
-    // set containing this change — and demonstrably leaves it pending, never
-    // auto-abandoned.
+    // Delete the only branch, then move main with an unrelated commit (a
+    // foreign Change-Id, so no false landing) so the sweep does real work
+    // over the open set containing this change — and demonstrably leaves it
+    // pending, never auto-abandoned.
     g.delete_branch("feat");
     let other = g.commit(&[g.root], &msg("unrelated", "I999"), &[("z.txt", "z\n")]);
     g.branch("main", other);
@@ -171,6 +171,29 @@ fn reopen_clears_abandoned_to_retained_status() {
         Some("approved"),
         "reopen surfaces the retained verdict"
     );
+}
+
+#[test]
+fn push_to_merged_change_409s() {
+    // A Change-Id is never reused: without the gate, a new revision would
+    // paint the merged overlay onto unreviewed content.
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{res}");
+
+    let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("main", landed);
+    sweep(&server);
+
+    let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
+    g.branch("feat", c1b);
+    let (st, e) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 409, "{e}");
+    assert!(e["error"].as_str().unwrap().contains("merged"), "{e}");
 }
 
 #[test]

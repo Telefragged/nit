@@ -384,7 +384,7 @@ export type CommentInput = {
 
 export type LifecyclePayload = {
   action: LifecycleAction;
-  revision?: number | null;
+  commit_sha?: string | null;
   message?: string | null;
 };
 
@@ -412,10 +412,7 @@ export type ClientMsg =
 
 export type StreamMsg = { snapshot: ChangeProj } | { entry: LogEntry };
 
-export type Lifecycle =
-  | "active"
-  | { merged: { revision: number } }
-  | "abandoned";
+export type Lifecycle = "active" | "merged" | "abandoned";
 
 export type Anchor =
   | "change"

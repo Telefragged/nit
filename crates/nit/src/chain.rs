@@ -351,7 +351,7 @@ mod tests {
         // the canonical branch, so B's path is the open member alone — the
         // merged ancestor sits below the branch now, not in the chain.
         let mut a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);
-        a.lifecycle = Lifecycle::Merged { revision: 0 };
+        a.lifecycle = Lifecycle::Merged;
         let b = change(2, "Ib", vec![rev(0, "B", "A", "m")]);
         let view = RepoView::new(vec![a, b]);
 

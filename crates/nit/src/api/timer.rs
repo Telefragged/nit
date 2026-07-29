@@ -84,9 +84,9 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         if let Some(since) = &recorded {
             let view = state.repo_view(repo_id);
             let open = open_changes_by_key(&view);
-            for (change_id, revision) in gitscan::detect_landings(&repo, since, &head, &open) {
+            for (change_id, sha) in gitscan::detect_landings(&repo, since, &head, &open) {
                 if let Some(entry) = state.change_entry(change_id) {
-                    record_landing(conn, &entry, change_id, revision);
+                    record_landing(conn, &entry, change_id, sha);
                 }
             }
         }
@@ -110,8 +110,8 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
 }
 
 /// The merge sweep's only lifecycle write.
-fn record_landing(conn: &mut Connection, entry: &ChangeEntry, change_id: u64, revision: u64) {
-    let new = LogPayload::lifecycle(LifecycleAction::Merged, Some(revision), None);
+fn record_landing(conn: &mut Connection, entry: &ChangeEntry, change_id: u64, sha: String) {
+    let new = LogPayload::lifecycle(LifecycleAction::Merged, Some(sha), None);
     if let Err(e) = append_to_change(conn, entry, change_id, vec![new]) {
         tracing::warn!(change_id, "lifecycle append failed: {e:#}");
     }

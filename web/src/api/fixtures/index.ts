@@ -168,7 +168,7 @@ function emitLifecycle(
 ): void {
   mockAppend(changeId, now, {
     kind: "lifecycle",
-    payload: { action, revision: null, message: null },
+    payload: { action, message: null },
   });
 }
 

@@ -19,7 +19,7 @@ nit is a single-machine, local-first review server. Three parts:
   rusqlite/git2 work runs in `spawn_blocking`. A background lifecycle timer
   runs alongside `serve` (`api/mod.rs` `run_lifecycle_timer`).
 - **git layer** (`gitscan/`) — pure with respect to the database: the push
-  walk (`walk_push`), merge detection (`landed_revision`), query-time tip
+  walk (`walk_push`), merge detection (`detect_landings`), query-time tip
   names (`tip_name`), patch-ids and keep refs (`gitscan/objects.rs`). It reads
   git and returns values the api layer folds.
 - **SQLite** (`db/`) — the four-table log; nothing in it is ever mutated or
@@ -102,8 +102,9 @@ tip)..tip` oldest-first, upserts each change by its `Change-Id`, and appends
   branch** ([data-model.md](data-model.md) "Push"). There are **no read-time
   scans** — a read never walks git to discover structure.
 - **The lifecycle timer** (`api/mod.rs` `run_lifecycle_timer`) is the only
-  writer of `merged`: per repo it sweeps each live change, marking it `merged`
-  when its patch lands on the canonical branch (`landed_revision`). A push
+  writer of `merged`: per repo it walks the canonical branch's new commits,
+  marking a live change `merged` when a commit carrying its `Change-Id`
+  lands (`detect_landings`). A push
   cannot observe the base advancing, so it never writes merged. Abandonment is
   an explicit action (`nit abandon`), not a sweep; `nit reopen` clears it.
   `NIT_TIMER_INTERVAL_MS` configures the sweep interval.

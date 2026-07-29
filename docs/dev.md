@@ -221,13 +221,10 @@ git worktree remove <worktree> && git branch -d <branch>
 printing one line per step and stopping with a hint when it can't proceed —
 a rebase conflict, a commit that fails `nix flake check`, or `main` moving
 mid-check (re-run to retry). The lifecycle timer marks the chain `merged` once
-the commits are on `main`, matching each change's latest revision patch-id
-against the canonical branch. A pure rebase keeps its patch-id (and its
-approval), so the script needs no `nit push`. The exception is when it stops
-on a conflict: resolving it **changes** those patch-ids, so run `nit push`
-after finishing that rebase (never _after_ the ff-merge — the tip is on `main`
-then, an empty walk, a 409) or the timer never matches them and they never
-flip to `merged`.
+the commits are on `main`, identified by their `Change-Id` trailers, so the
+script needs no `nit push`. When it stops on a conflict, still run `nit push`
+after finishing that rebase (never _after_ the ff-merge — the tip is on
+`main` then, a 409): the resolution is content the reviewer hasn't seen.
 
 Landing is the agent's responsibility **all the way to `merged`; you stop
 only when it is fundamentally impossible** — an unresolvable rebase, or you

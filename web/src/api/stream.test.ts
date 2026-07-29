@@ -28,7 +28,7 @@ describe("openStream (mock mode)", () => {
     const before = got.length;
     mockAppend(30, "t-live", {
       kind: "lifecycle",
-      payload: { action: "abandoned", revision: null, message: null },
+      payload: { action: "abandoned", message: null },
     });
     expect(got).toHaveLength(before + 1);
     const last = got.at(-1);

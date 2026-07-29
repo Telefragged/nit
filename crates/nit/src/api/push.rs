@@ -68,6 +68,15 @@ pub(super) async fn push(
                     wc.change_key
                 )));
             }
+            // A Change-Id is never reused (docs/data-model.md "Lifecycle
+            // timer"): without this gate a new revision would paint the
+            // merged overlay onto unreviewed content.
+            if moves && proj.is_merged() {
+                return Err(Error::conflict(format!(
+                    "change {} is merged — new work needs its own Change-Id",
+                    wc.change_key
+                )));
+            }
             drop(proj);
             targets.push(Target { entry, change_id });
         }

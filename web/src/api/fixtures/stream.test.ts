@@ -18,7 +18,7 @@ describe("mock stream", () => {
 
     mockAppend(11, "t-live", {
       kind: "lifecycle",
-      payload: { action: "abandoned", revision: null, message: null },
+      payload: { action: "abandoned", message: null },
     });
     expect(got).toHaveLength(2);
     const live = got[1];
@@ -27,7 +27,7 @@ describe("mock stream", () => {
     handle.close();
     mockAppend(11, "t-after", {
       kind: "lifecycle",
-      payload: { action: "reopened", revision: null, message: null },
+      payload: { action: "reopened", message: null },
     });
     // No delivery after close.
     expect(got).toHaveLength(2);

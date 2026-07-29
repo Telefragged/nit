@@ -4,9 +4,8 @@
 use anyhow::Result;
 use git2::{Commit, Oid, Repository, Tree};
 
-/// Patch-id of the empty diff: the sha1 of the empty string (the
-/// merged-test sentinel for trivially-matched empty diffs).
-pub const EMPTY_PATCH_ID: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
+/// Patch-id of the empty diff: the sha1 of the empty string.
+const EMPTY_PATCH_ID: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
 
 /// `git patch-id --stable`-equivalent id of the diff `old → new`.
 ///

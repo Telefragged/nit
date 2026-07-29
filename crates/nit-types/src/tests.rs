@@ -68,7 +68,7 @@ fn lifecycle_skips_absent_fields_under_flatten() {
         created_at: "t".to_string(),
         payload: LogPayload::Lifecycle(LifecyclePayload {
             action: LifecycleAction::Merged,
-            revision: None,
+            commit_sha: None,
             message: None,
         }),
     };

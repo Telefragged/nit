@@ -371,8 +371,8 @@ fn merged_chain_drops_out_of_active_chains() {
     let id = first_repo(&server);
     assert_eq!(active_chains(&server, id), 1, "one live tip after the push");
 
-    // The sweep detects the patch-id on `main` and marks the change merged, so
-    // the chain leaves the live-tip set.
+    // The sweep detects the Change-Id on `main` and marks the change merged,
+    // so the chain leaves the live-tip set.
     g.branch("main", c1);
     sweep(&server);
     assert_eq!(active_chains(&server, id), 0);

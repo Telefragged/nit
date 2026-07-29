@@ -36,13 +36,15 @@ use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
 use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
 /// A change's terminal lifecycle, folded from its `lifecycle` entries
-/// (docs/data-model.md "Lifecycle"). `Merged` records which patchset landed.
+/// (docs/data-model.md "Lifecycle"). The landed commit's sha stays on the
+/// `merged` log entry, not here — the fold answers "is it landed", the log
+/// answers "as what".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Lifecycle {
     Active,
-    Merged { revision: u64 },
+    Merged,
     Abandoned,
 }
 
@@ -199,7 +201,7 @@ impl ChangeProj {
     /// an enumerable member/tip of its chains (abandonment is membership-inert).
     #[must_use]
     pub fn is_merged(&self) -> bool {
-        matches!(self.lifecycle, Lifecycle::Merged { .. })
+        matches!(self.lifecycle, Lifecycle::Merged)
     }
 
     /// The change's current status: [`status_at`](Self::status_at) its latest
@@ -212,17 +214,17 @@ impl ChangeProj {
     }
 
     /// The displayed status at a pinned revision: the lifecycle overlay
-    /// (`abandoned` change-wide, `merged` only for the landed patchset) over
-    /// the verdict-derived review status (docs/data-model.md "Per-change,
+    /// (`abandoned` change-wide, `merged` at the latest patchset) over the
+    /// verdict-derived review status (docs/data-model.md "Per-change,
     /// per-revision status").
     #[must_use]
     pub fn status_at(&self, revision: u64) -> ChangeStatus {
         if matches!(self.lifecycle, Lifecycle::Abandoned) {
             return ChangeStatus::Abandoned;
         }
-        if let Lifecycle::Merged { revision: landed } = self.lifecycle
-            && landed == revision
-        {
+        // The landed content may match no recorded patchset (docs/
+        // data-model.md "Lifecycle timer"), so the latest stands in for it.
+        if self.is_merged() && self.latest_revision().is_some_and(|r| r.number == revision) {
             return ChangeStatus::Merged;
         }
         self.review_status_at(revision)
@@ -314,9 +316,7 @@ fn fold_revision(change: &mut ChangeProj, p: &RevisionPayload, now: &str) {
 
 fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
     change.lifecycle = match p.action {
-        LifecycleAction::Merged => Lifecycle::Merged {
-            revision: p.revision.unwrap_or(0),
-        },
+        LifecycleAction::Merged => Lifecycle::Merged,
         LifecycleAction::Abandoned => Lifecycle::Abandoned,
         LifecycleAction::Reopened => Lifecycle::Active,
     };
@@ -628,14 +628,14 @@ mod tests {
     }
 
     #[test]
-    fn merged_is_per_revision() {
+    fn merged_paints_at_latest() {
         let c = folded(vec![
             revision("A", "base", "base", true),
             review(0, Verdict::Approve),
             revision("B", "base", "base", true),
-            LogPayload::lifecycle(LifecycleAction::Merged, Some(1), None),
+            LogPayload::lifecycle(LifecycleAction::Merged, Some("C".to_string()), None),
         ]);
-        // Only the landed revision shows merged; older ones show their own status.
+        // Merged shows at the latest revision; older ones keep their own status.
         assert_eq!(c.status_at(1), ChangeStatus::Merged);
         assert_eq!(c.status_at(0), ChangeStatus::Approved);
         assert!(c.is_terminal());

@@ -219,7 +219,7 @@ impl std::str::FromStr for Decision {
 
 /// A change's displayed status at a pinned revision (docs/api.md state
 /// table): the verdict-derived value (the [`Verdict`] arms) under the
-/// lifecycle overlay (`merged` for the landed patchset, `abandoned`
+/// lifecycle overlay (`merged` at the latest patchset, `abandoned`
 /// change-wide). Per `(change, revision)`, never a change-wide scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

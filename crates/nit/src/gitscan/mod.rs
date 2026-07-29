@@ -12,7 +12,7 @@
 pub mod identity;
 pub mod objects;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use git2::{Commit, Oid, Repository, Sort};
 
@@ -158,10 +158,9 @@ pub fn resolve_head(repo: &Repository, base_ref: &str) -> Option<String> {
 
 /// Landings observed on the canonical branch in the window `since..head` (the
 /// commits added since the last sweep): each open change whose `Change-Id`
-/// appears on a new single-parent commit whose patch-id equals that change's
-/// latest revision, paired with the landed revision number (docs/data-model.md
-/// "Lifecycle timer"). One walk covers every change; `open` maps `change_key →`
-/// the change. At most one landing per change.
+/// appears on a new single-parent commit, paired with the landed commit's
+/// sha (docs/data-model.md "Lifecycle timer"). One walk covers every change;
+/// `open` maps `change_key →` the change. At most one landing per change.
 ///
 /// A landing that *stripped* its Change-Id is not detected — nit's own approve
 /// action preserves the trailer through rebase + fast-forward, and chasing
@@ -172,7 +171,7 @@ pub fn detect_landings<S: std::hash::BuildHasher>(
     since: &str,
     head: &str,
     open: &HashMap<String, &ChangeProj, S>,
-) -> Vec<(u64, u64)> {
+) -> Vec<(u64, String)> {
     let (Ok(since), Ok(head)) = (Oid::from_str(since), Oid::from_str(head)) else {
         return Vec::new();
     };
@@ -185,14 +184,11 @@ pub fn detect_landings<S: std::hash::BuildHasher>(
         return Vec::new();
     }
 
-    let mut landings = Vec::new();
-    let mut seen: HashSet<u64> = HashSet::new();
+    let mut landings: HashMap<u64, String> = HashMap::new();
     for oid in walk.flatten() {
         let Ok(commit) = repo.find_commit(oid) else {
             continue;
         };
-        // The diff/identity model is single-parent throughout; a merge commit
-        // carries no patch-id to match.
         if commit.parent_count() != 1 {
             continue;
         }
@@ -204,25 +200,11 @@ pub fn detect_landings<S: std::hash::BuildHasher>(
         let Some(change) = open.get(&key) else {
             continue;
         };
-        if !seen.contains(&change.id)
-            && let Some(revision) = landed_at(repo, change, &oid.to_string())
-        {
-            seen.insert(change.id);
-            landings.push((change.id, revision));
-        }
+        // First seen wins: the unsorted walk is newest-first, so a key
+        // appearing on several new commits records the newest landing.
+        landings.entry(change.id).or_insert_with(|| oid.to_string());
     }
-    landings
-}
-
-/// The revision number the landed commit `sha` carries, if it is the change's
-/// **latest** revision: a patch-id match against the latest ⇒ landed; a match
-/// against an older revision is "landed earlier, since amended" and returns
-/// `None` (the change stays open). An empty diff never counts.
-fn landed_at(repo: &Repository, change: &ChangeProj, sha: &str) -> Option<u64> {
-    let latest = change.latest_revision()?;
-    let landed = objects::sha_patch_id(repo, sha)?;
-    let target = objects::sha_patch_id(repo, &latest.commit_sha)?;
-    (landed == target && landed != objects::EMPTY_PATCH_ID).then_some(latest.number)
+    landings.into_iter().collect()
 }
 
 /// One commit on the canonical branch, for the graph's HEAD anchor and merged
@@ -354,13 +336,16 @@ mod tests {
 
     // The positive single-match path is covered by `stacked_prefix_detects_…`
     // below (which lands one commit per change through the same logic) and
-    // end-to-end by `change_landed_on_main_becomes_merged`; the tests here pin
-    // the branches those don't reach.
+    // end-to-end by `change_landed_on_main_becomes_merged`; the tests here
+    // pin the branches those don't reach — and `drifted_landing_is_detected`
+    // pins the walk's content-blindness (no fixture elsewhere lands a diff
+    // that matches no pushed revision).
 
-    /// A landing carrying the key but a *different* patch-id (the revision was
-    /// amended after an earlier patchset landed) keeps the change open.
+    /// The landing rebase may adapt the diff, so the landed content can
+    /// match no pushed revision; the Change-Id still identifies the landing
+    /// and the landed commit's sha is recorded.
     #[test]
-    fn amended_since_is_not_detected() {
+    fn drifted_landing_is_detected() {
         let (_dir, repo, root) = repo();
         let feat = commit(
             &repo,
@@ -373,7 +358,7 @@ mod tests {
             &repo,
             Some(root),
             &keyed("feat", "I001"),
-            &[("a.txt", "b\n")],
+            &[("a.txt", "a adapted\n")],
         );
         let got = detect_landings(
             &repo,
@@ -381,7 +366,7 @@ mod tests {
             &landed.to_string(),
             &open(&[&change]),
         );
-        assert_eq!(got, vec![]);
+        assert_eq!(got, vec![(1, landed.to_string())]);
     }
 
     #[test]
@@ -400,23 +385,6 @@ mod tests {
             "landed without a trailer\n",
             &[("a.txt", "a\n")],
         );
-        let got = detect_landings(
-            &repo,
-            &root.to_string(),
-            &landed.to_string(),
-            &open(&[&change]),
-        );
-        assert_eq!(got, vec![]);
-    }
-
-    /// An empty-diff revision never counts as landed, even against an identical
-    /// empty commit carrying the key.
-    #[test]
-    fn empty_diff_is_not_detected() {
-        let (_dir, repo, root) = repo();
-        let noop = commit(&repo, Some(root), &keyed("noop", "I001"), &[]);
-        let change = change_proj(1, "I001", noop, root);
-        let landed = commit(&repo, Some(root), &keyed("noop", "I001"), &[]);
         let got = detect_landings(
             &repo,
             &root.to_string(),
@@ -454,7 +422,10 @@ mod tests {
             &open(&[&a, &b]),
         );
         got.sort_unstable();
-        assert_eq!(got, vec![(1, 0), (2, 0)]);
+        assert_eq!(
+            got,
+            vec![(1, landed_a.to_string()), (2, landed_b.to_string())]
+        );
     }
 
     #[test]

@@ -68,14 +68,15 @@ pub struct CommentInput {
 }
 
 /// A `lifecycle` entry: the merge timer (`merged`) and the `nit abandon` /
-/// `nit reopen` actions. `revision` is set only for `merged` (which patchset
-/// landed); `message` is an optional reason on `abandoned`.
+/// `nit reopen` actions. `commit_sha` is set only for `merged` — the landed
+/// commit on the canonical branch; `message` is an optional reason on
+/// `abandoned`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LifecyclePayload {
     pub action: LifecycleAction,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revision: Option<u64>,
+    pub commit_sha: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
@@ -112,12 +113,12 @@ impl LogPayload {
     #[must_use]
     pub fn lifecycle(
         action: LifecycleAction,
-        revision: Option<u64>,
+        commit_sha: Option<String>,
         message: Option<String>,
     ) -> LogPayload {
         LogPayload::Lifecycle(LifecyclePayload {
             action,
-            revision,
+            commit_sha,
             message,
         })
     }

@@ -105,7 +105,6 @@ fn publish_member(
     Ok(())
 }
 
-/// A `lifecycle` entry (revision is set only by the merge timer).
 /// `PUT /api/changes/{id}/decision` — stage (or overwrite) the change's draft
 /// decision. Validated only as an enum; legality against the lifecycle is a
 /// submit-time concern (a draft is reviewer scratch).
@@ -191,7 +190,7 @@ pub(super) async fn submit_chain(
 
 fn decision_block(lifecycle: Lifecycle, decision: Decision) -> Option<&'static str> {
     match (lifecycle, decision.as_lifecycle()) {
-        (Lifecycle::Merged { .. }, _) => Some("change is merged — nothing to submit"),
+        (Lifecycle::Merged, _) => Some("change is merged — nothing to submit"),
         (Lifecycle::Abandoned, Some(LifecycleAction::Reopened)) => None,
         (Lifecycle::Abandoned, _) => Some("change is abandoned — stage Reopen first"),
         (Lifecycle::Active, Some(LifecycleAction::Reopened)) => {

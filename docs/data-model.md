@@ -178,8 +178,9 @@ unknown `kind` is rejected when the entry is parsed, never folded.
 }
 
 // lifecycle — the merge timer (merged), and `nit abandon` / `nit reopen`
-{"action": "merged", "revision": 2}    // merged | abandoned | reopened;
-                                       // `revision` set only for merged (which patchset landed);
+{"action": "merged", "commit_sha": "…"} // merged | abandoned | reopened;
+                                       // `commit_sha` set only for merged: the landed
+                                       // commit on the canonical branch;
                                        // `message` optional reason on abandoned
 ```
 
@@ -189,7 +190,7 @@ Per change, the fold holds its **revisions** (each with its shas, message,
 and `resets_status`), its **threads** (each a located, resolvable
 conversation: an anchor — revision/file/line/side/range/line_text — a rolled-up
 `resolved` flag, and ordered comments — each a body + `review_id`), its **reviews**, and
-its **lifecycle** (active / merged{revision} / abandoned). Replaying the log in
+its **lifecycle** (active / merged / abandoned). Replaying the log in
 order yields this. Each kind's effect:
 
 - **`revision`** — mint the next revision number (0-based) and push a revision
@@ -200,8 +201,9 @@ order yields this. Each kind's effect:
 - **`comment`** — apply the one comment with no `review_id` — which is what
   marks it agent-authored. Adds no review and leaves status untouched — an
   agent note is not a verdict.
-- **`lifecycle`** — set the change's lifecycle: `merged{revision}`,
-  `abandoned`, or `reopened` (back to active).
+- **`lifecycle`** — set the change's lifecycle: `merged`, `abandoned`, or
+  `reopened` (back to active). The landed `commit_sha` stays on the entry —
+  the fold answers "is it landed", the log answers "as what".
 
 **Applying a comment** (shared by `review` and `comment`): with no `thread_id`,
 mint the next id and open a thread at the comment's anchor — first comment =
@@ -232,9 +234,9 @@ status:  pending | approved | changes_requested | commented | merged | abandoned
   revision (`resets_status == false`) carries the **prior** revision's status
   forward; otherwise `pending`.
 - **Lifecycle overlay**: `abandoned` is terminal **change-wide** (every
-  revision). `merged` is terminal only for the **landed** patchset — a path
-  pinning a non-landed revision of a merged change shows that member live with
-  its own review status, not `merged`.
+  revision). `merged` paints at the **latest** revision — which patchset
+  landed is unknowable ("Lifecycle timer"). A path pinning an older revision
+  shows that member with its own review status, not `merged`.
 
 Two tips pinning two patchsets carry two independent verdicts — an approve in
 one chain never overwrites a request_changes in another, because each is scoped
@@ -390,13 +392,16 @@ moved. A repo whose branch is idle costs one ref resolution and nothing else —
 no per-change walk, no diffs.
 
 When the branch has moved, `detect_landings` walks only the **new** commits
-`base_head..HEAD` (one walk for the whole repo) and, for each commit carrying a
-non-terminal change's `Change-Id` whose patch-id equals that change's latest
-revision, appends `lifecycle{merged, revision}` — which patchset landed. A key
-present with a _different_ patch-id is "landed earlier, since amended": the
-change stays open. An empty diff never counts. Then the sweep records `HEAD` as
-the new baseline. Prefix merge falls out for free: in one delta, landing A and B
-marks them merged while C — not in the delta — stays live, no chain-level gate.
+`base_head..HEAD` (one walk for the whole repo) and appends
+`lifecycle{merged, commit_sha}` for each single-parent commit carrying a
+non-terminal change's `Change-Id`. A Change-Id is never reused, so the
+trailer alone identifies the landing — and the landed content may have
+drifted from every pushed patchset (a rebase onto a moved base), which is
+why the sha, not a revision number, is recorded. Push enforces the
+never-reused axiom: a new revision to a merged change is a 409, like the
+abandoned gate. Then the sweep records `HEAD` as the new baseline. Prefix
+merge falls out for free: in one delta, landing A and B marks them merged
+while C — not in the delta — stays live, no chain-level gate.
 
 The baseline is seeded at `nit repo create` to the branch's then-HEAD, so the
 first landing after registration shows up in a delta. Persisting it means a
@@ -406,7 +411,8 @@ branch) is re-adopted with nothing detected that sweep. **Detection is by
 `Change-Id` only** — a landing that _stripped_ its trailer is not detected. nit's
 own approve action preserves the trailer through rebase + fast-forward, and
 chasing keyless landings is what would force an unbounded per-change diff every
-sweep; a missed keyless landing is recoverable by re-push or manual abandon.
+sweep. A missed landing sits behind the recorded baseline; recovery is
+re-pointing `repos.base_head` behind it so the sweep re-scans.
 
 The sweep skips already-terminal changes (merged or abandoned) — there is no
 point merge-checking a dead change. It never abandons: **abandonment is an
