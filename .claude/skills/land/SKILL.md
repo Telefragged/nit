@@ -53,9 +53,8 @@ the no-conflict case end to end; the failure modes hand you the repo to finish
 by hand:
 
 - **Merge conflict** (rebasing onto a moved main) — resolve it,
-  `git rebase --continue`, then `nit push`. Resolving conflicts rewrites the
-  patch-id the merge timer matches on, so the new revision has to be recorded
-  before landing. Re-run the script.
+  `git rebase --continue`, then `nit push` the resolution and re-run the
+  script.
 - **`nix flake check` failed on a commit** — you're left on that commit. Fix
   it, `git rebase --continue`, then re-run. A fix that changes the commit's
   content is new work the reviewer hasn't seen: `nit push` it (expect another

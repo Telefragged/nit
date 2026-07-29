@@ -23,8 +23,7 @@ if git merge-base --is-ancestor HEAD "$base"; then
   exit 1
 fi
 
-# 1. Rebase onto $base only if it moved; a pure rebase keeps each commit's
-#    patch-id (and its approval). Quiet when HEAD is already on top.
+# 1. Rebase onto $base only if it moved. Quiet when HEAD is already on top.
 if ! git merge-base --is-ancestor "$base" HEAD; then
   if ! out=$(git rebase "$base" 2>&1); then
     echo "$out" >&2
