@@ -217,7 +217,10 @@
   --trees-border-color-override: var(--border);
   --trees-indent-guide-bg-override: var(--border);
   --trees-git-added-color-override: var(--green);
-  --trees-git-modified-color-override: var(--amber);
+
+  /* The tree tints the filename with its status color, so grey here is
+     what leaves a modified row reading like an untouched one. */
+  --trees-git-modified-color-override: var(--text-dim);
   --trees-git-deleted-color-override: var(--red);
   --trees-git-renamed-color-override: var(--blue);
   --trees-padding-inline-override: 0;
@@ -428,9 +431,12 @@
   background: var(--green-dim);
 }
 
+/* A modification is what nearly every file in a diff is, so its badge
+   carries the filename's own grey — the colored ones then read as the
+   exceptions they are. */
 .fstat-M {
-  color: var(--amber);
-  background: var(--amber-dim);
+  color: var(--text);
+  background: var(--gray-dim);
 }
 
 .fstat-D {
