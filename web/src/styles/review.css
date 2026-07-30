@@ -206,7 +206,11 @@
   --trees-accent-override: var(--blue);
   --trees-fg-override: var(--text-dim);
   --trees-fg-muted-override: var(--text-faint);
-  --trees-bg-override: transparent;
+
+  /* The page's own colour, not `transparent`: the truncation ellipsis is
+     painted over the end of the name and masks it with this, so a
+     see-through backdrop leaves the two overlapping. */
+  --trees-bg-override: var(--bg);
   --trees-bg-muted-override: var(--bg-hover);
   --trees-selected-bg-override: var(--blue-dim);
   --trees-selected-fg-override: var(--text);

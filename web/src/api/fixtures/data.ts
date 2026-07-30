@@ -734,6 +734,29 @@ const change12: ChangeRecord = {
           ],
         },
         {
+          // A basename long enough to fill the rail: the churn counts must
+          // survive it (the name ellipsizes, not the lane).
+          path: "docs/operations/refresh-token-rotation-runbook.md",
+          status: "modified",
+          binary: false,
+          additions: 17,
+          deletions: 17,
+          hunks: [
+            {
+              old_start: 1,
+              old_lines: 2,
+              new_start: 1,
+              new_lines: 2,
+              header: "",
+              lines: [
+                del(1, "Rotate the signing key every 30 days."),
+                add(1, "Rotate the signing key every 7 days."),
+                ctx(2, 2, ""),
+              ],
+            },
+          ],
+        },
+        {
           path: "assets/rotation-flow.png",
           status: "added",
           binary: true,

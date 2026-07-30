@@ -94,6 +94,11 @@ export default function FileRail({
     density: 0.8,
     initialExpansion: "open",
     flattenEmptyDirectories: true,
+    // The lane ships as `flex: 1 1 0`, so a long filename leaves it no
+    // width to grow into and the counts clip from the left — "+17 −17"
+    // renders as "−17", or vanishes. Growing but never shrinking makes the
+    // name ellipsize instead, which it is already built to do.
+    unsafeCSS: '[data-item-section="decoration"] { flex: 1 0 auto; }',
     onSelectionChange: ([path]) => {
       // The selection pushed below echoes back here; reporting it would
       // reveal the file a second time.
