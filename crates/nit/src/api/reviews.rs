@@ -156,7 +156,7 @@ pub(super) async fn submit_chain(
             let Some(staged) = db::get_draft_review(conn, member.change_id)? else {
                 continue; // leave its comment drafts
             };
-            let Some(member_entry) = state.change_entry(member.change_id) else {
+            let Some(member_entry) = state.change(conn, member.change_id)? else {
                 continue;
             };
             let lifecycle = member_entry.read().lifecycle;

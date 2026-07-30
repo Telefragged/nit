@@ -182,15 +182,15 @@ pub async fn serve_on_state(
     Ok(())
 }
 
-/// Loads from the DB log on a cache miss (an evicted terminal change); may
-/// replay one change off disk, so every caller must resolve inside [`with_conn`].
+/// Loads from the DB log on a miss; may replay one change off disk, so every
+/// caller must resolve inside [`with_conn`].
 fn change_or_404(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
     change_id: u64,
 ) -> Result<Arc<ChangeEntry>, Error> {
     state
-        .load_change(conn, change_id)?
+        .change(conn, change_id)?
         .ok_or_else(|| Error::not_found(format!("change {change_id} not found")))
 }
 

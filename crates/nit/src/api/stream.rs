@@ -11,7 +11,7 @@ use nit_types::events::{ClientMsg, StreamMsg};
 use nit_types::log::LogEntry;
 
 use crate::db;
-use crate::review;
+use crate::review::{self, ChangeProj};
 
 use super::{AppState, with_conn};
 
@@ -86,33 +86,23 @@ async fn apply_client_msg(
 ) -> Result<(), ()> {
     match client {
         ClientMsg::Subscribe(map) => {
-            for (id_str, from) in map {
-                let Ok(change_id) = id_str.parse::<u64>() else {
-                    continue;
-                };
-                if state.change_entry(change_id).is_none() {
-                    continue;
-                }
-                let backlog = read_backlog(state, change_id, from).await;
-                let mut next = from;
+            let cursors = map
+                .iter()
+                .filter_map(|(id, from)| Some((id.parse::<u64>().ok()?, *from)))
+                .collect();
+            for (change_id, next, backlog) in read_backlogs(state, cursors).await {
+                watermark.insert(change_id, next);
                 for e in backlog {
-                    next = e.idx + 1;
                     send(socket, &StreamMsg::Entry(e)).await?;
                 }
-                watermark.insert(change_id, next);
             }
         }
         ClientMsg::SubscribeSnapshot(ids) => {
-            for change_id in ids {
-                let Some(entry) = state.change_entry(change_id) else {
-                    continue;
-                };
+            for (change_id, proj) in read_snapshots(state, ids).await {
                 // The snapshot's `entries_folded` is the high-water mark, so an
                 // append that lands after it rides the channel and is deduped
                 // there: the snapshot and its live tail neither gap nor double
-                // (docs/api.md "Events"). Clone out from under the read lock —
-                // no guard is held across the send.
-                let proj = entry.read().clone();
+                // (docs/api.md "Events").
                 watermark.insert(change_id, proj.entries_folded);
                 send(socket, &StreamMsg::Snapshot(proj)).await?;
             }
@@ -129,15 +119,51 @@ async fn send(socket: &mut WebSocket, msg: &StreamMsg) -> Result<(), ()> {
         .map_err(|_| ())
 }
 
-/// A change's log slice `[from, head)` as tagged entries, for the backlog
-/// replay. Errors collapse to empty (the follower re-reads on reconnect).
-async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<LogEntry> {
+/// Each cursor's log slice `[from, head)` as tagged entries and the idx that
+/// slice ends at, over one borrowed
+/// connection — a subscribe carries a whole chain, so the frames it answers
+/// with are sent after the read rather than between two of them. A change left
+/// out of the result is left unsubscribed: it does not exist, or the read
+/// failed and the follower re-reads on reconnect.
+async fn read_backlogs(
+    state: &Arc<AppState>,
+    cursors: Vec<(u64, u64)>,
+) -> Vec<(u64, u64, Vec<LogEntry>)> {
     with_conn(state.pool(), move |conn| {
-        let rows = db::log_entries(conn, change_id, from, None)?;
-        rows.iter()
-            .map(|r| review::entry_from_row(change_id, r))
-            .collect::<anyhow::Result<Vec<_>>>()
-            .map_err(Into::into)
+        let mut out = Vec::with_capacity(cursors.len());
+        for (change_id, from) in cursors {
+            // Existence is a row read: cursor mode replays the log itself and
+            // never touches the fold.
+            if db::get_change(conn, change_id)?.is_none() {
+                continue;
+            }
+            let rows = db::log_entries(conn, change_id, from, None)?;
+            let entries = rows
+                .iter()
+                .map(|r| review::entry_from_row(change_id, r))
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            let next = entries.last().map_or(from, |e| e.idx + 1);
+            out.push((change_id, next, entries));
+        }
+        Ok(out)
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Each change's folded projection, cloned out from under its read lock (no
+/// guard is held across a send) — the one place a fold is resolved without a
+/// connection already in hand, so it borrows one for the whole batch.
+async fn read_snapshots(state: &Arc<AppState>, ids: Vec<u64>) -> Vec<(u64, ChangeProj)> {
+    let st = state.clone();
+    with_conn(state.pool(), move |conn| {
+        let mut out = Vec::with_capacity(ids.len());
+        for change_id in ids {
+            if let Some(entry) = st.change(conn, change_id)? {
+                out.push((change_id, entry.read().clone()));
+            }
+        }
+        Ok(out)
     })
     .await
     .unwrap_or_default()

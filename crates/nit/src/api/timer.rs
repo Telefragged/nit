@@ -16,7 +16,7 @@ use crate::db;
 use crate::gitscan;
 use crate::review::ChangeProj;
 
-use super::{AppState, ChangeEntry, append_to_change, with_conn};
+use super::{AppState, append_to_change, with_conn};
 
 /// Interval between timer sweeps, env-configurable for tests.
 fn timer_interval() -> Duration {
@@ -85,9 +85,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
             let view = state.repo_view(repo_id);
             let open = open_changes_by_key(&view);
             for (change_id, sha) in gitscan::detect_landings(&repo, since, &head, &open) {
-                if let Some(entry) = state.change_entry(change_id) {
-                    record_landing(state, conn, &entry, change_id, sha);
-                }
+                record_landing(state, conn, change_id, sha);
             }
         }
         // Record the baseline last: a crash before this re-scans the same delta
@@ -110,15 +108,17 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
 }
 
 /// The merge sweep's only lifecycle write.
-fn record_landing(
-    state: &AppState,
-    conn: &mut Connection,
-    entry: &ChangeEntry,
-    change_id: u64,
-    sha: String,
-) {
+fn record_landing(state: &AppState, conn: &mut Connection, change_id: u64, sha: String) {
+    let entry = match state.change(conn, change_id) {
+        Ok(Some(entry)) => entry,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(change_id, "landed change failed to load: {e:#}");
+            return;
+        }
+    };
     let new = LogPayload::lifecycle(LifecycleAction::Merged, Some(sha), None);
-    if let Err(e) = append_to_change(state, conn, entry, change_id, vec![new]) {
+    if let Err(e) = append_to_change(state, conn, &entry, change_id, vec![new]) {
         tracing::warn!(change_id, "lifecycle append failed: {e:#}");
     }
 }

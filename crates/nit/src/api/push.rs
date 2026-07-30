@@ -55,9 +55,9 @@ pub(super) async fn push(
         let mut targets = Vec::with_capacity(walk.commits.len());
         for wc in &walk.commits {
             let change_id = db::upsert_change(conn, repo_row.id, &wc.change_key)?;
-            let row = db::get_change(conn, change_id)?
+            let entry = state
+                .change(conn, change_id)?
                 .ok_or_else(|| Error::internal("change vanished after upsert"))?;
-            let entry = state.ensure_change(conn, &row)?;
             let proj = entry.read();
             let moves = proj
                 .latest_revision()

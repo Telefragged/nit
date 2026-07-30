@@ -183,18 +183,6 @@ impl AppState {
         self.shutdown.subscribe()
     }
 
-    /// The coordination entry for a loaded change, if any.
-    ///
-    /// # Panics
-    /// When the change map mutex is poisoned.
-    pub fn change_entry(&self, change_id: u64) -> Option<Arc<ChangeEntry>> {
-        self.changes
-            .lock()
-            .expect("change map poisoned")
-            .get(&change_id)
-            .cloned()
-    }
-
     /// The cached repo state, if loaded.
     ///
     /// # Panics
@@ -253,50 +241,32 @@ impl AppState {
         state
     }
 
-    /// Ensure a [`ChangeEntry`] for `row` is loaded into the cache — replaying
-    /// its log when absent and **seeding the global id allocator** from the
-    /// replayed entries — then return it. A brand-new change with no log
-    /// entries starts with an empty projection.
+    /// The change's entry: the resident fold, else replayed from its log. The
+    /// single way to reach a change — nothing reads the map directly, so a
+    /// change absent from it is a miss to serve, never a change to skip. A
+    /// brand-new change with no log entries folds to an empty projection.
+    /// Touches the DB only on a miss, so pass the caller's pooled connection.
     ///
-    /// # Errors
-    /// When replay fails.
-    ///
-    /// # Panics
-    /// When the change map mutex is poisoned.
-    pub fn ensure_change(
-        &self,
-        conn: &Connection,
-        row: &db::ChangeRow,
-    ) -> anyhow::Result<Arc<ChangeEntry>> {
-        if let Some(existing) = self.change_entry(row.id) {
-            return Ok(existing);
-        }
-        let rows = db::log_entries(conn, row.id, 0, None)?;
-        let proj = review::replay_rows(row, &rows)?;
-        let max_review = proj.reviews.iter().map(|r| r.id).max().unwrap_or(0);
-        self.next_id.fetch_max(max_review + 1, Ordering::SeqCst);
-        let entry = Arc::new(ChangeEntry::new(proj));
-        let mut map = self.changes.lock().expect("change map poisoned");
-        Ok(map.entry(row.id).or_insert(entry).clone())
-    }
-
-    /// The coordination entry for a change — **optimistically** from the cache,
-    /// else replayed from its DB log **transiently** (not re-cached). An evicted
-    /// terminal change is reachable this way without pulling it back into the
-    /// working set; the replayed entry has its own (follower-less) event feed,
-    /// which is fine because a terminal change takes no further appends. The
-    /// allocator was already seeded past this change's ids at startup, so no
-    /// reseed is needed. Touches the DB only on a miss — pass the caller's
-    /// pooled connection.
+    /// The allocator was seeded past every fold-assigned id at startup and
+    /// mints the ones written since, so a replay here seeds nothing.
     ///
     /// # Errors
     /// When the DB read or replay fails.
-    pub fn load_change(
+    ///
+    /// # Panics
+    /// When the change map mutex is poisoned.
+    pub fn change(
         &self,
         conn: &Connection,
         change_id: u64,
     ) -> anyhow::Result<Option<Arc<ChangeEntry>>> {
-        if let Some(existing) = self.change_entry(change_id) {
+        if let Some(existing) = self
+            .changes
+            .lock()
+            .expect("change map poisoned")
+            .get(&change_id)
+            .cloned()
+        {
             return Ok(Some(existing));
         }
         let Some(row) = db::get_change(conn, change_id)? else {
@@ -304,7 +274,9 @@ impl AppState {
         };
         let rows = db::log_entries(conn, row.id, 0, None)?;
         let proj = review::replay_rows(&row, &rows)?;
-        Ok(Some(Arc::new(ChangeEntry::new(proj))))
+        let entry = Arc::new(ChangeEntry::new(proj));
+        let mut map = self.changes.lock().expect("change map poisoned");
+        Ok(Some(map.entry(change_id).or_insert(entry).clone()))
     }
 
     /// Snapshot every loaded change of one repo (each cloned out from under its
