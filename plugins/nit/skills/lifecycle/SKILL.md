@@ -45,7 +45,8 @@ nit log --follow --reviewer-only 0
 `--follow` streams each new entry as it lands and never exits — so a background
 `Bash` task (which only notifies you when a command _exits_) would silently
 swallow the stream. The Monitor tool turns each relayed line into a
-notification you act on. Run it from the worktree so it resolves the cwd's tip
+notification you act on. Leave the monitor's stderr alone — never redirect it
+into stdout with `2>&1`. Run it from the worktree so it resolves the cwd's tip
 from HEAD — no id to look up. `--reviewer-only` mutes your own echoes; each
 relayed review carries its cover message and every comment with its file and
 line, so you act on it directly. `0` streams from the start (resume after a
