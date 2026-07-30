@@ -343,6 +343,35 @@ const captures = [
     },
   },
   {
+    name: "review-selection-miss",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      // rotate.rs rewrites its line 20 — one del cell, one add cell, so a
+      // sweep across the pair belongs to neither side and `c` explains
+      // itself instead of drafting.
+      await page.evaluate(() => {
+        const cells = [
+          ...document.querySelectorAll(
+            '[data-diff-path="src/auth/rotate.rs"] .code',
+          ),
+        ];
+        const code = (kind) =>
+          cells
+            .find((c) => c.classList.contains(kind))
+            .querySelector(".code-text");
+        const range = document.createRange();
+        range.setStart(code("del"), 0);
+        range.setEndAfter(code("add"));
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+      await page.keyboard.press("c");
+      await page.waitForSelector(".selection-miss");
+    },
+  },
+  {
     name: "review-draft-editor",
     path: "/changes/11?against=base",
     actions: async (page) => {

@@ -335,6 +335,10 @@
 .diff-column {
   flex: 1;
   min-width: 0;
+
+  /* the containing block for the selection-miss bubble, which is placed in
+     this column's coordinates so it scrolls with the lines it points at */
+  position: relative;
 }
 
 /* file sections */

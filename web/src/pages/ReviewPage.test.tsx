@@ -69,6 +69,17 @@ const section = (i: number): HTMLElement =>
   must(document.getElementById(`file-${i}`), `#file-${i}`);
 const isExpanded = (el: HTMLElement): boolean =>
   el.querySelector(".file-header")?.getAttribute("aria-expanded") === "true";
+/** Clicks a section's header — the toggle every expansion test drives. */
+const toggleSection = (i: number) =>
+  fireEvent.click(
+    must(section(i).querySelector(".file-header"), ".file-header"),
+  );
+
+const select = (range: Range) => {
+  const sel = must(window.getSelection(), "selection");
+  sel.removeAllRanges();
+  sel.addRange(range);
+};
 
 const queryPath = (path: string) =>
   document.querySelector<HTMLElement>(`section[data-diff-path="${path}"]`);
@@ -228,6 +239,67 @@ describe("expansion across diff-range navigation", () => {
   });
 });
 
+// `c` on a selection that no comment range can express explains itself in a
+// bubble by the selection. The reviewer's next move is to select again, so
+// the bubble outlives the keystroke and dies with the selection it answers.
+describe("the selection-miss bubble", () => {
+  // jsdom has no layout, and no Range.getBoundingClientRect at all — the
+  // bubble's anchor asks the rejected range where it sits.
+  beforeEach(() => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect();
+  });
+
+  const bubble = () => document.querySelector(".selection-miss");
+
+  /** Selects the del/add pair rotate.rs rewrites at line 20 — one line per
+   * side, so no side can express the range (lib/selection's mixed-sides). */
+  async function selectAcrossSides() {
+    renderReview();
+    await diffLoaded("src/auth/rotate.rs");
+    toggleSection(1);
+    const codeText = (kind: string) => {
+      const cell = [...section(1).querySelectorAll(".code")].find((c) =>
+        c.classList.contains(kind),
+      );
+      return must(must(cell, `a ${kind} cell`).querySelector(".code-text"), "");
+    };
+    const range = document.createRange();
+    range.setStart(codeText("del"), 0);
+    range.setEndAfter(codeText("add"));
+    select(range);
+  }
+
+  it("names the rule, and stays until the next selection", async () => {
+    await selectAcrossSides();
+
+    fireEvent.keyDown(window, { key: "c" });
+    expect(bubble()?.textContent).toContain("one side of the diff");
+    // No editor: the press drafted nothing.
+    expect(document.querySelector("textarea")).toBeNull();
+
+    // Idle keystrokes leave it be, and so does the selectionchange the
+    // rejected selection itself queues — only a new one retires it.
+    fireEvent.keyDown(window, { key: "]" });
+    fireEvent(document, new Event("selectionchange"));
+    expect(bubble()).not.toBeNull();
+
+    fireEvent(document, new Event("selectstart"));
+    expect(bubble()).toBeNull();
+  });
+
+  it("goes with the diff it was measured against", async () => {
+    await selectAcrossSides();
+    fireEvent.keyDown(window, { key: "c" });
+    expect(bubble()).not.toBeNull();
+
+    // Switching the range leaves different lines where it hangs.
+    fireEvent.change(screen.getByLabelText("Diff base"), {
+      target: { value: "0" },
+    });
+    expect(bubble()).toBeNull();
+  });
+});
+
 // Collapsing the section that hosts the open inline editor unmounts it,
 // which is a discard path: it must route through confirmDiscard (i.e.
 // window.confirm while dirty) like every other editor teardown.
@@ -241,16 +313,12 @@ describe("collapse with an open dirty comment editor", () => {
   async function openDirtyEditor() {
     renderReview();
     await diffLoaded("src/auth/store.rs");
-    fireEvent.click(
-      must(section(1).querySelector(".file-header"), ".file-header"),
-    );
+    toggleSection(1);
     const code = must(section(1).querySelector(".code-text"), ".code-text");
     const range = document.createRange();
     range.selectNodeContents(code);
     range.collapse(true);
-    const sel = must(window.getSelection(), "selection");
-    sel.removeAllRanges();
-    sel.addRange(range);
+    select(range);
     fireEvent.keyDown(window, { key: "c" });
     fireEvent.change(must(section(1).querySelector("textarea"), "textarea"), {
       target: { value: "half-typed nit" },
@@ -261,9 +329,7 @@ describe("collapse with an open dirty comment editor", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await openDirtyEditor();
 
-    fireEvent.click(
-      must(section(1).querySelector(".file-header"), ".file-header"),
-    );
+    toggleSection(1);
 
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(isExpanded(section(1))).toBe(true);
@@ -274,16 +340,12 @@ describe("collapse with an open dirty comment editor", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     await openDirtyEditor();
 
-    fireEvent.click(
-      must(section(1).querySelector(".file-header"), ".file-header"),
-    );
+    toggleSection(1);
 
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(isExpanded(section(1))).toBe(false);
     // Re-expanding must not resurrect an empty editor at the stale anchor.
-    fireEvent.click(
-      must(section(1).querySelector(".file-header"), ".file-header"),
-    );
+    toggleSection(1);
     expect(isExpanded(section(1))).toBe(true);
     expect(section(1).querySelector("textarea")).toBeNull();
   });

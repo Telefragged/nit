@@ -65,10 +65,8 @@ import { ReviewContext, sameTarget } from "./reviewContext";
 const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
 
-/** Why `c` drafted nothing. Each states the rule the selection broke and
- * the selection that would satisfy it — the reviewer's next move is to
- * select again, so naming the symptom alone leaves them guessing
- * (docs/frontend.md). */
+/** Why `c` drafted nothing — each names the rule the selection broke and
+ * the selection that satisfies it (docs/frontend.md). */
 const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
   "mixed-sides":
     "A comment can only span one side of the diff. Select from the old or the new side, not both.",
@@ -76,6 +74,23 @@ const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
   "hunk-gap":
     "A comment can only span consecutive lines. This selection jumps a hunk gap.",
 };
+
+/** Where to hang the miss bubble, in the diff column's own coordinates so
+ * it scrolls with the lines it is about: under the rejected selection, and
+ * flush with the column its code text starts in — measuring the selection's
+ * own left edge would hang the bubble off the line-number gutters, which
+ * the union rect of a multi-line range reaches. */
+function missAnchor(range: Range, col: DOMRect): { top: number; left: number } {
+  const start =
+    range.startContainer instanceof Element
+      ? range.startContainer
+      : range.startContainer.parentElement;
+  const text = start?.closest(".code")?.querySelector(".code-text") ?? null;
+  return {
+    top: range.getBoundingClientRect().bottom - col.top,
+    left: (text?.getBoundingClientRect().left ?? col.left) - col.left,
+  };
+}
 
 /** Resolve the ?against param into a diff base for the selected revision.
  * Grammar: "base" or absent → full diff vs parent; "M" → interdiff
@@ -242,20 +257,9 @@ export default function ReviewPage() {
   const [changeCommentOpen, setChangeCommentOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
 
-  // Transient "why c did nothing" notice; a fresh object per press keeps
-  // the timeout effect retriggering on repeated identical misses.
-  const [selectionMiss, setSelectionMiss] = useState<SelectionMiss | null>(
-    null,
-  );
-  useEffect(() => {
-    if (selectionMiss === null) return undefined;
-    const timer = setTimeout(() => {
-      setSelectionMiss(null);
-    }, 4000);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [selectionMiss]);
+  const [selectionMiss, setSelectionMiss] = useState<
+    (SelectionMiss & { top: number; left: number; diff: string }) | null
+  >(null);
 
   // --- derive revision/diff mode (before any early return: no hooks below)
   const revisions = published?.revisions ?? [];
@@ -340,6 +344,13 @@ export default function ReviewPage() {
 
   const againstRaw = searchParams.get("against");
   const against = deriveDiffBase(againstRaw, selected);
+
+  // The miss bubble's offset was measured against one diff, and the page
+  // outlives every way of replacing it (it is reused across /changes/:id).
+  // Adjust-during-render, like `shownChange` below: a bubble hanging over
+  // code it never described must not paint even once.
+  const diffKey = `${changeId}:${selected}:${String(against)}:${layout}`;
+  if (selectionMiss && selectionMiss.diff !== diffKey) setSelectionMiss(null);
 
   const diffQ = useQuery({
     queryKey: ["diff", changeId, selected, against ?? null],
@@ -472,12 +483,20 @@ export default function ReviewPage() {
         // the caret's line when the selection is collapsed.
         const sel = document.getSelection();
         if (!sel || sel.rangeCount === 0) return;
-        const result = selectionTarget(sel.getRangeAt(0));
+        const range = sel.getRangeAt(0);
+        const result = selectionTarget(range);
         if (!result) return;
         // preventDefault, or the keystroke lands in the editor's textarea.
         e.preventDefault();
         if ("miss" in result) {
-          setSelectionMiss(result);
+          const col = diffColumnRef.current?.getBoundingClientRect();
+          if (col) {
+            setSelectionMiss({
+              ...result,
+              ...missAnchor(range, col),
+              diff: diffKey,
+            });
+          }
           return;
         }
         // The editor renders its own range highlight; the DOM selection
@@ -503,6 +522,7 @@ export default function ReviewPage() {
     navigate,
     replyOpen,
     ctxValue,
+    diffKey,
   ]);
 
   // Side-by-side selection paint: tag the diff column with the side the
@@ -529,6 +549,21 @@ export default function ReviewPage() {
     document.addEventListener("selectionchange", onSelectionChange);
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
+    };
+  }, []);
+
+  // A miss answers one selection, so it stands until the reviewer starts
+  // another. `selectstart`, not `selectionchange`: the latter also fires
+  // for the very selection the miss is about, and it is queued as a task,
+  // so it can arrive after the keystroke and blink the answer away as it
+  // appears.
+  useEffect(() => {
+    const onSelectStart = () => {
+      setSelectionMiss(null);
+    };
+    document.addEventListener("selectstart", onSelectStart);
+    return () => {
+      document.removeEventListener("selectstart", onSelectStart);
     };
   }, []);
 
@@ -733,11 +768,6 @@ export default function ReviewPage() {
             />
           </div>
           <div className="diffbar-toggles">
-            {selectionMiss ? (
-              <span className="selection-miss">
-                {MISS_TEXT[selectionMiss.miss]}
-              </span>
-            ) : null}
             <button
               className="linkish change-comment-btn"
               onClick={() => {
@@ -812,6 +842,15 @@ export default function ReviewPage() {
               diffQ.isSuccess ? String(against ?? "base") : undefined
             }
           >
+            {selectionMiss ? (
+              <div
+                className="selection-miss"
+                role="status"
+                style={{ top: selectionMiss.top, left: selectionMiss.left }}
+              >
+                {MISS_TEXT[selectionMiss.miss]}
+              </div>
+            ) : null}
             {changeLevelThreads.length > 0 || changeCommentOpen ? (
               <section className="change-threads">
                 <div className="outdated-title">Change discussion</div>

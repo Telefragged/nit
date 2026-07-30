@@ -179,10 +179,43 @@
   border-bottom-style: solid;
 }
 
-/* Transient "why c did nothing" notice in the diffbar. */
+/* The "why c drafted nothing" bubble, hung under the selection it rejected
+   (ReviewPage supplies the offset within the diff column) so the rule reads
+   beside the lines that broke it. Inert to the pointer: the reviewer's next
+   act is to select again, right underneath it. */
 .selection-miss {
+  position: absolute;
+
+  /* over the sticky file headers (10), under the sticky diffbar (20) */
+  z-index: 15;
+
+  /* `right` only caps the width — `left` wins the placement — so a bubble
+     anchored in a narrow column shrinks instead of overhanging the page. */
+  right: 12px;
+  max-width: 360px;
+  padding: 5px 9px;
+  border: 1px solid var(--amber);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 45%);
   color: var(--amber);
   font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+/* The tail, pointing back up at the selection. */
+.selection-miss::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 13px;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--amber);
+  border-left: 1px solid var(--amber);
+  background: var(--bg-raised);
+  transform: rotate(45deg);
 }
 
 .hunk-row {

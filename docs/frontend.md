@@ -111,7 +111,10 @@ still poll/refetch; moving them onto the stream is the next step.
   - **Comments**: select diff text (partial or multi-line, one side at a
     time) and press `c` → the editor opens under the selection with the
     range recorded ([api.md](api.md) "Range comments"); `c` on a line
-    comments it. Either column is commentable — the new column anchors to the
+    comments it. A selection no comment range can express — both sides of the
+    diff, two files, or a jump across a hunk gap — drafts nothing and instead
+    states the rule it broke in a bubble under the selection, which stands
+    until the next selection starts. Either column is commentable — the new column anchors to the
     selected revision, the old to its parent (or, in an interdiff, the FROM
     revision's side). A comment renders only when its `(revision, side)` is
     one of the two displayed sides ([api.md](api.md) "Comment placement"); a
