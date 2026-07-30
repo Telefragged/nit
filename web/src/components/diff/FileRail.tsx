@@ -98,7 +98,17 @@ export default function FileRail({
     // width to grow into and the counts clip from the left — "+17 −17"
     // renders as "−17", or vanishes. Growing but never shrinking makes the
     // name ellipsize instead, which it is already built to do.
-    unsafeCSS: '[data-item-section="decoration"] { flex: 1 0 auto; }',
+    //
+    // The tree dots every directory holding a changed descendant, which in
+    // a diff is every directory it draws — a mark carrying no information.
+    // Only the icon goes; the lane keeps its width so the file statuses
+    // below stay in one column.
+    unsafeCSS: `
+      [data-item-section="decoration"] { flex: 1 0 auto; }
+      [data-item-section="git"] [data-icon-name="file-tree-icon-dot"] {
+        display: none;
+      }
+    `,
     onSelectionChange: ([path]) => {
       // The selection pushed below echoes back here; reporting it would
       // reveal the file a second time.
