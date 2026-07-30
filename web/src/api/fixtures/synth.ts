@@ -3,7 +3,8 @@
 // snapshots it and the REST change read folds it (./index), both through the
 // shared crates/nit-wasm fold, so the two never disagree. Thread ids are
 // emitted explicitly so the fold reproduces the record ids the reviewer's
-// drafts reference.
+// drafts reference; a review's id is its entry's `idx`, so the records number
+// their reviews by where this places them.
 
 import type { CommentInput, LogEntry, LogPayload } from "../types";
 import type { ChangeRecord, ThreadRecord } from "./store";
@@ -100,7 +101,6 @@ export function synthLog(
       payload: {
         kind: "review",
         payload: {
-          review_id: r.id,
           revision: r.revision,
           verdict: r.verdict,
           message: r.message,

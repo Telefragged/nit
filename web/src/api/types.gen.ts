@@ -343,7 +343,6 @@ export type RevisionPayload = {
 };
 
 export type ReviewPayload = {
-  review_id: number;
   revision: number;
   verdict: Verdict;
   message: string;
@@ -460,6 +459,10 @@ export type ThreadProj = {
 };
 
 export type ReviewProj = {
+  /**
+   * The `idx` of the `review` entry this is the fold of (docs/data-model.md
+   * "Identity within the log").
+   */
   id: number;
   revision: number;
   verdict: Verdict;

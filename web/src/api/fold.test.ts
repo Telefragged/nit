@@ -24,7 +24,6 @@ const review: LogEntry = {
   created_at: "t1",
   kind: "review",
   payload: {
-    review_id: 5,
     revision: 0,
     verdict: "approve",
     message: "lgtm",

@@ -25,7 +25,6 @@ pub struct RevisionPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReviewPayload {
-    pub review_id: u64,
     pub revision: u64,
     pub verdict: Verdict,
     pub message: String,

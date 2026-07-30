@@ -64,7 +64,6 @@ describe("event-driven change page", () => {
     mockAppend(12, "2026-06-28T00:00:00.000Z", {
       kind: "review",
       payload: {
-        review_id: 9001,
         revision: 0,
         verdict: "comment",
         message: "folded-live cover note",

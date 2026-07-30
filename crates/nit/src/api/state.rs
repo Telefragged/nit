@@ -44,8 +44,9 @@ pub struct AppState {
     events: Sender<LogEntry>,
     /// A parked receiver so the channel never closes for lack of followers.
     events_keepalive: InactiveReceiver<LogEntry>,
-    /// Process-global allocator for fold-assigned ids (reviews, drafts). Change
-    /// ids are `changes` rowids, never allocated here.
+    /// Process-global allocator for draft ids, seeded past the `draft_comments`
+    /// rows in use. Change ids are `changes` rowids and review ids are log
+    /// coordinates — neither is allocated here.
     next_id: AtomicU64,
     shutdown: watch::Sender<bool>,
 }
@@ -97,8 +98,8 @@ impl ChangeEntry {
 }
 
 impl AppState {
-    /// Initialize from `db_path`, seeding the id allocator above every
-    /// fold-assigned id in use to prevent reuse after restart.
+    /// Initialize from `db_path`, seeding the id allocator above every draft
+    /// id in use to prevent reuse after restart.
     ///
     /// # Errors
     /// When the pool can't be built, the schema migration fails, or a log fails
@@ -112,14 +113,11 @@ impl AppState {
         let (changes, repos, max_id) = conn
             .interact(|conn| -> anyhow::Result<_> {
                 db::migrate(conn)?;
-                let mut max_id = db::max_draft_id(conn)?;
+                let max_id = db::max_draft_id(conn)?;
                 let mut changes = HashMap::new();
                 for row in db::all_changes(conn)? {
                     let rows = db::log_entries(conn, row.id, 0, None)?;
                     let proj = review::replay_rows(&row, &rows)?;
-                    // Review ids are minted into the fold, so the projection
-                    // already carries the max — no second parse of the rows.
-                    max_id = max_id.max(proj.reviews.iter().map(|r| r.id).max().unwrap_or(0));
                     // Reconcile the cached status, writing only when it has
                     // drifted from the fold — an unchanged restart rewrites no
                     // rows.
@@ -167,7 +165,6 @@ impl AppState {
         self.events_keepalive.activate_cloned()
     }
 
-    /// Allocate the next fold-assigned id (reviews, drafts).
     pub fn alloc_id(&self) -> u64 {
         self.next_id.fetch_add(1, Ordering::SeqCst)
     }

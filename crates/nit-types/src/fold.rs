@@ -130,6 +130,8 @@ pub struct ThreadComment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReviewProj {
+    /// The `idx` of the `review` entry this is the fold of (docs/data-model.md
+    /// "Identity within the log").
     pub id: u64,
     pub revision: u64,
     pub verdict: Verdict,
@@ -277,11 +279,15 @@ pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
     }
     change.entries_folded = entry.idx + 1;
     let now = entry.created_at.clone();
+    // A review is identified by where it sits in its change's log: replay
+    // reproduces the id with nothing stored and nothing minted, and no reader
+    // outside this fold references a review at all.
+    let review_id = entry.idx;
     match &mut entry.payload {
         LogPayload::Revision(p) => fold_revision(change, p, &now),
         LogPayload::Review(p) => {
             change.reviews.push(ReviewProj {
-                id: p.review_id,
+                id: review_id,
                 revision: p.revision,
                 verdict: p.verdict,
                 message: p.message.clone(),
@@ -289,7 +295,7 @@ pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
             });
             for c in &mut p.comments {
                 change.mint_thread_id(c);
-                apply_comment(change, c, Some(p.review_id), &now);
+                apply_comment(change, c, Some(review_id), &now);
             }
         }
         LogPayload::Comment(c) => {
@@ -508,7 +514,6 @@ mod tests {
 
     fn review(revision: u64, verdict: Verdict) -> LogPayload {
         LogPayload::Review(ReviewPayload {
-            review_id: 100 + revision,
             revision,
             verdict,
             message: "msg".to_string(),
@@ -667,14 +672,12 @@ mod tests {
         let c = folded(vec![
             revision("A", "base", "base", true),
             LogPayload::Review(ReviewPayload {
-                review_id: 200,
                 revision: 0,
                 verdict: Verdict::Comment,
                 message: String::new(),
                 comments: vec![anchored("src/x.rs", 3, "look")],
             }),
             LogPayload::Review(ReviewPayload {
-                review_id: 201,
                 revision: 0,
                 verdict: Verdict::Approve,
                 message: String::new(),

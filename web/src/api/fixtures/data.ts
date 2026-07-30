@@ -94,7 +94,7 @@ const change10: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 4,
+      id: 1,
       revision: 0,
       verdict: "approve",
       message:
@@ -212,7 +212,7 @@ const change11: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 5,
+      id: 2,
       revision: 0,
       verdict: "request_changes",
       message:
@@ -794,7 +794,7 @@ const change40: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 8,
+      id: 1,
       revision: 0,
       verdict: "approve",
       message: "",
@@ -866,7 +866,7 @@ const change20: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 6,
+      id: 1,
       revision: 0,
       verdict: "request_changes",
       message:
@@ -980,7 +980,7 @@ const change30: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 7,
+      id: 1,
       revision: 0,
       verdict: "approve",
       message: "Nice catch.",
@@ -1080,7 +1080,7 @@ const changeA: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 20,
+      id: 1,
       revision: 0,
       verdict: "approve",
       message: "Clean extraction.",
@@ -1145,7 +1145,7 @@ const changeB: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 21,
+      id: 2,
       revision: 0,
       verdict: "approve",
       message: "Weighting looks right; LGTM on this patchset.",
@@ -1281,7 +1281,7 @@ export const threads: ThreadRecord[] = [
     comments: [
       {
         body: "Consider a partial index on revoked=0 if the table grows; not blocking.",
-        review_id: 4,
+        review_id: 1,
         created_at: ago(22 * 60),
       },
     ],
@@ -1303,7 +1303,7 @@ export const threads: ThreadRecord[] = [
         body:
           "Locking the RNG mutex inside rotate() serializes every refresh — " +
           "worth a thread-local RNG?",
-        review_id: 5,
+        review_id: 2,
         created_at: ago(21 * 60),
       },
       // The review-markdown-comment scenario captures this body rendered.
@@ -1337,7 +1337,7 @@ export const threads: ThreadRecord[] = [
         body:
           "Why clone the pool for a second connection? lookup() and " +
           "mark_rotated() on different connections lose the transaction.",
-        review_id: 5,
+        review_id: 2,
         created_at: ago(21 * 60),
       },
       {
@@ -1369,7 +1369,7 @@ export const threads: ThreadRecord[] = [
         body:
           "Generate-then-mark isn't atomic: a crash between these two " +
           "statements hands out a token the store never recorded.",
-        review_id: 5,
+        review_id: 2,
         created_at: ago(21 * 60),
       },
     ],
@@ -1392,7 +1392,7 @@ export const threads: ThreadRecord[] = [
         body:
           "This unwrap is a production panic on any unknown token — return a " +
           "typed error and map it to 401 at the edge.",
-        review_id: 5,
+        review_id: 2,
         created_at: ago(21 * 60),
       },
       {
@@ -1423,7 +1423,7 @@ export const threads: ThreadRecord[] = [
         body:
           "The body never says what happens on token *reuse* — state the " +
           "family-revocation behavior here; it's the headline of this change.",
-        review_id: 5,
+        review_id: 2,
         created_at: ago(21 * 60),
       },
       {
@@ -1450,7 +1450,7 @@ export const threads: ThreadRecord[] = [
     comments: [
       {
         body: "Hard-coded 4MiB will thrash small deployments — read it from Config.",
-        review_id: 6,
+        review_id: 1,
         created_at: ago(3 * 60),
       },
     ],
@@ -1469,7 +1469,7 @@ export const threads: ThreadRecord[] = [
     comments: [
       {
         body: "compactor.rs still calls jitter(); this won't build.",
-        review_id: 6,
+        review_id: 1,
         created_at: ago(3 * 60),
       },
     ],
@@ -1492,7 +1492,7 @@ export const threads: ThreadRecord[] = [
         body:
           "Recent-share window: is it EWMA or a fixed ring? Spell it out — it " +
           "decides how fast a task recovers priority.",
-        review_id: 21,
+        review_id: 2,
         created_at: ago(5 * 60),
       },
     ],

@@ -202,9 +202,10 @@ Draft = {"id": 31, "change_id": 10,     // a reviewer's unpublished comment
          "created_at": "…", "updated_at": "…"}
 ```
 
-A thread's `id` is fold-assigned by fold order (not stored); its
-`change_id` and a comment's `review_id` are fold ids from the log; a
-draft's `id` is its row id in the `drafts` table. A thread is born from its
+A thread's `id` is fold-assigned by fold order (not stored); a comment's
+`review_id` is the `idx` of the `review` entry that published it, so it is
+scoped to the change like every other fold id; a draft's `id` is its row id in
+the `drafts` table. A thread is born from its
 first comment — reviewer- **or** agent-initiated — so a thread whose
 `comments[0].review_id` is `null` is a note the agent left on its own change,
 and the reviewer engages with it exactly like any other (reply, resolve).

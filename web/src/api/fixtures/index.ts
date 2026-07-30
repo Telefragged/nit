@@ -145,7 +145,6 @@ function publishMember(
     mockAppend(c.id, now, {
       kind: "review",
       payload: {
-        review_id: review.id,
         revision,
         verdict,
         message: review.message,

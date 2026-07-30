@@ -25,7 +25,6 @@ fn revision(sha: &str) -> LogPayload {
 
 fn review(revision: u64, verdict: Verdict) -> LogPayload {
     LogPayload::Review(ReviewPayload {
-        review_id: 100 + revision,
         revision,
         verdict,
         message: "msg".to_string(),
@@ -34,7 +33,8 @@ fn review(revision: u64, verdict: Verdict) -> LogPayload {
 }
 
 /// The storage boundary round-trips: payloads serialized into `db::LogRow`s
-/// replay to the same projection, the review id among them.
+/// replay to the same projection — the review's id among them, which is the
+/// `idx` of the row it came from and so needs nothing stored to survive.
 #[test]
 fn replay_rows_round_trips_stored_log() {
     let rows: Vec<db::LogRow> = [revision("A"), review(0, Verdict::Approve)]
@@ -51,5 +51,5 @@ fn replay_rows_round_trips_stored_log() {
     let c = replay_rows(&change_row(), &rows).expect("replay");
     assert_eq!(c.revisions.len(), 1);
     assert_eq!(c.status_at(0), ChangeStatus::Approved);
-    assert_eq!(c.reviews.iter().map(|r| r.id).max(), Some(100));
+    assert_eq!(c.reviews[0].id, 1, "the review entry sits at idx 1");
 }

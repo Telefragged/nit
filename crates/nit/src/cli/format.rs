@@ -352,7 +352,6 @@ mod tests {
         }));
         assert_eq!(entry_summary(&rev), "change 7 new revision abcdef012345");
         let review = entry(LogPayload::Review(ReviewPayload {
-            review_id: 0,
             revision: 2,
             verdict: Verdict::RequestChanges,
             message: String::new(),
@@ -396,7 +395,6 @@ mod tests {
             5,
             12,
             LogPayload::Review(ReviewPayload {
-                review_id: 1,
                 revision: 2,
                 verdict: Verdict::RequestChanges,
                 message: "Cover one.\nCover two.".to_string(),

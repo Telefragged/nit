@@ -73,7 +73,6 @@ fn publish_member(
     }
     if let Some(verdict) = verdict {
         news.push(LogPayload::Review(ReviewPayload {
-            review_id: state.alloc_id(),
             revision,
             verdict,
             // The cover message rides a real verdict; for a lifecycle decision

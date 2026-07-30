@@ -114,10 +114,11 @@ Three kinds of id, all opaque and stable across replays:
 
 - **`change_key`** — the `Change-Id:` trailer verbatim. The change's `id` is
   the `changes` rowid the `UNIQUE(repo_id, change_key)` upsert assigns.
-- **Review ids** — minted from a process-global counter at append time and
-  written into the `review` payload. Replay trusts the stored id and resumes
-  the counter at `max(seen) + 1`; a draft's id is drawn from the same counter,
-  so it never collides.
+- **Review ids** are the `idx` of the `review` entry itself — not minted, not
+  stored, not global. A comment's `review_id` is the same coordinate, so it
+  points at the entry that published it; `null` marks an agent comment. Nothing
+  outside a change's own fold references a review, so a per-change coordinate
+  is the whole requirement, and replay reproduces it by construction.
 - **Revision numbers** are **not stored** — they are minted **in the fold** by
   creation order (0-based, assigned to each `revision` entry as it folds), a
   pure function of the log, so every replay assigns the same number.
@@ -154,7 +155,6 @@ unknown `kind` is rejected when the entry is parsed, never folded.
 // drafts. Each comment opens a new thread (thread_id null, anchor used) or
 // replies to an existing one (thread_id set, anchor ignored).
 {
-  "review_id": 5,                      // fold-assigned (stored)
   "revision": 2,                       // the reviewed patchset (some live tip pins it)
   "verdict": "request_changes",        // approve | request_changes | comment
   "message": "cover note",
@@ -195,9 +195,9 @@ order yields this. Each kind's effect:
 
 - **`revision`** — mint the next revision number (0-based) and push a revision
   with the payload's shas/message/`resets_status`.
-- **`review`** — record the review (id, verdict, message, reviewed revision),
-  then apply each comment to the change's threads (below), tagged with the
-  review's `review_id`.
+- **`review`** — record the review (the entry's `idx` as its id, plus verdict,
+  message, reviewed revision), then apply each comment to the change's threads
+  (below), tagged with that same id.
 - **`comment`** — apply the one comment with no `review_id` — which is what
   marks it agent-authored. Adds no review and leaves status untouched — an
   agent note is not a verdict.

@@ -348,7 +348,6 @@ mod tests {
         };
         let review = || {
             LogPayload::Review(ReviewPayload {
-                review_id: 0,
                 revision: 0,
                 verdict: Verdict::Comment,
                 message: String::new(),
