@@ -177,25 +177,46 @@
 }
 
 /* The sidebar is the one sticky, height-bounded column; the chain nav and
-   the file list stack inside it and split that height. The chain nav leads
+   the file tree stack inside it and split that height. The chain nav leads
    at a fixed position (so its rows don't jump when you switch changes) and
-   caps its own list; the file list takes what's left below and scrolls — so
+   caps its own list; the tree takes what's left below and scrolls — so
    neither can push the other off-screen. */
 .review-sidebar {
   width: 270px;
   flex: none;
   position: sticky;
   top: 78px;
-  max-height: calc(100vh - 140px);
+
+  /* Definite, not a max: the virtualized file tree below has no intrinsic
+     height and sizes its scrollport against this one. */
+  height: calc(100vh - 140px);
   display: flex;
   flex-direction: column;
 }
 
-.file-rail {
+/* The @pierre/trees host. It renders in a shadow root and scrolls itself,
+   so the rail's palette and metrics reach it only as custom properties —
+   which inherit through the boundary. */
+.rail-tree {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  padding-right: 6px;
+
+  --trees-font-family-override: var(--mono);
+  --trees-font-size-override: 11.5px;
+  --trees-accent-override: var(--blue);
+  --trees-fg-override: var(--text-dim);
+  --trees-fg-muted-override: var(--text-faint);
+  --trees-bg-override: transparent;
+  --trees-bg-muted-override: var(--bg-hover);
+  --trees-selected-bg-override: var(--blue-dim);
+  --trees-selected-fg-override: var(--text);
+  --trees-border-color-override: var(--border);
+  --trees-indent-guide-bg-override: var(--border);
+  --trees-git-added-color-override: var(--green);
+  --trees-git-modified-color-override: var(--amber);
+  --trees-git-deleted-color-override: var(--red);
+  --trees-git-renamed-color-override: var(--blue);
+  --trees-padding-inline-override: 0;
 }
 
 .rail-title {
@@ -221,42 +242,6 @@
   text-transform: none;
   letter-spacing: normal;
   font-weight: 400;
-}
-
-.rail-item {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 3px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--text-dim);
-}
-
-.rail-item:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.rail-item.active {
-  background: var(--blue-dim);
-  color: var(--text);
-}
-
-.rail-item .pathname {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: rtl;
-  text-align: left;
-}
-
-.rail-counts {
-  font-size: 10.5px;
-  white-space: nowrap;
 }
 
 /* chain nav — the chain's changes stacked above the file list (ChainNav.tsx).

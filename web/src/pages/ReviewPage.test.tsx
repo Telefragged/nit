@@ -13,6 +13,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FILE_TREE_TAG_NAME } from "@pierre/trees";
 import { COMMIT_MSG_PATH } from "../api/types";
 import ReviewPage from "./ReviewPage";
 
@@ -24,21 +25,13 @@ afterEach(cleanup);
 /** Every scrollIntoView call on a file section: which one, and whether its
  * diff body was already in the DOM when the call happened. The latter is
  * the regression guard for the collapse pitfall — a scroll issued before
- * the expansion commit would see (and target) the pre-reflow layout.
- * Rail items scroll separately (FileRail keeps the active item visible in
- * the rail's own scrollport whenever activeFile moves); those nudges are
- * counted apart so the section assertions stay exact. */
+ * the expansion commit would see (and target) the pre-reflow layout. The
+ * rail scrolls its own port by scrollTop, so it never lands here. */
 let scrollCalls: { id: string; expandedAtCall: boolean }[];
-let railScrolls: number;
 
 beforeEach(() => {
   scrollCalls = [];
-  railScrolls = 0;
   Element.prototype.scrollIntoView = function (this: Element) {
-    if (this.classList.contains("rail-item")) {
-      railScrolls += 1;
-      return;
-    }
     scrollCalls.push({
       id: this.id,
       expandedAtCall: this.querySelector(".diff-grid") !== null,
@@ -71,13 +64,33 @@ const section = (i: number): HTMLElement =>
 const isExpanded = (el: HTMLElement): boolean =>
   el.querySelector(".file-header")?.getAttribute("aria-expanded") === "true";
 
-/** Awaits diff load, signaled by the rail item's appearance. */
-const railItem = (path: string) => screen.findByTitle(path);
+const queryPath = (path: string) =>
+  document.querySelector<HTMLElement>(`section[data-diff-path="${path}"]`);
+const byPath = (path: string): HTMLElement =>
+  must(queryPath(path), `section for ${path}`);
+
+/** Awaits diff load, signaled by a file's own section — not by the rail,
+ * whose tree paints on its own schedule. */
+const diffLoaded = (path: string): Promise<HTMLElement> =>
+  waitFor(() => byPath(path));
+
+/** The rail renders into a shadow root, out of reach of `screen`. */
+const railQuery = (selector: string): Element | null =>
+  document
+    .querySelector(FILE_TREE_TAG_NAME)
+    ?.shadowRoot?.querySelector(selector) ?? null;
+
+const railRow = (path: string): Element | null =>
+  railQuery(`[data-item-path="${path}"]`);
+
+/** The path of the rail's active row — the tree's selection. */
+const railActive = (): string | null =>
+  railQuery('[aria-selected="true"]')?.getAttribute("data-item-path") ?? null;
 
 describe("collapsed-by-default file sections", () => {
   it("starts with every file collapsed except the commit message", async () => {
     renderReview();
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
 
     expect(isExpanded(section(0))).toBe(true); // /COMMIT_MSG
     expect(section(0).querySelector(".diff-grid")).not.toBeNull();
@@ -90,7 +103,7 @@ describe("collapsed-by-default file sections", () => {
 
   it("toggles a section from its header without scrolling", async () => {
     renderReview();
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
 
     const header = must(
       section(1).querySelector(".file-header"),
@@ -102,30 +115,32 @@ describe("collapsed-by-default file sections", () => {
     expect(isExpanded(section(1))).toBe(false);
     // The active file never moved.
     expect(scrollCalls).toEqual([]);
-    expect(railScrolls).toBe(0);
+    expect(railActive()).toBeNull();
   });
 
   it("rail click expands the target and scrolls only after the expansion is committed", async () => {
     renderReview();
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
 
     // layout-shift case: expanded content sits above the collapsed target.
     expect(isExpanded(section(0))).toBe(true);
     expect(isExpanded(section(1))).toBe(false);
     expect(isExpanded(section(2))).toBe(false);
 
-    fireEvent.click(screen.getByTitle("src/auth/store.rs"));
+    fireEvent.click(must(railRow("src/auth/store.rs"), "rail row"));
 
     expect(scrollCalls).toEqual([{ id: "file-2", expandedAtCall: true }]);
-    // …plus the rail keeping the newly active item visible on its side.
-    expect(railScrolls).toBe(1);
+    // …and the rail follows the reveal (the tree repaints off-cycle).
+    await waitFor(() => {
+      expect(railActive()).toBe("src/auth/store.rs");
+    });
     expect(isExpanded(section(2))).toBe(true);
     expect(isExpanded(section(1))).toBe(false);
   });
 
   it("the ] key reveals the next file like a rail click", async () => {
     renderReview();
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
 
     fireEvent.keyDown(window, { key: "]" }); // already expanded (not the regression-guard case)
     fireEvent.keyDown(window, { key: "]" }); // was collapsed — this is the regression-guard case
@@ -134,13 +149,15 @@ describe("collapsed-by-default file sections", () => {
       { id: "file-0", expandedAtCall: true },
       { id: "file-1", expandedAtCall: true },
     ]);
-    expect(railScrolls).toBe(2);
+    await waitFor(() => {
+      expect(railActive()).toBe("src/auth/rotate.rs");
+    });
     expect(isExpanded(section(1))).toBe(true);
   });
 
   it("expand all / collapse all flips every section", async () => {
     renderReview();
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
 
     fireEvent.click(screen.getByRole("button", { name: "expand all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(true);
@@ -148,20 +165,15 @@ describe("collapsed-by-default file sections", () => {
     fireEvent.click(screen.getByRole("button", { name: "collapse all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(false);
     expect(scrollCalls).toEqual([]);
-    expect(railScrolls).toBe(0);
+    expect(railActive()).toBeNull();
   });
 });
 
 describe("expansion across diff-range navigation", () => {
-  const queryPath = (path: string) =>
-    document.querySelector<HTMLElement>(`section[data-diff-path="${path}"]`);
-  const byPath = (path: string): HTMLElement =>
-    must(queryPath(path), `section for ${path}`);
-
   /** Renders change 11 at r1 vs base and expands rotate.rs. */
   async function expandRotate() {
     renderReview();
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
     fireEvent.click(
       must(
         byPath("src/auth/rotate.rs").querySelector(".file-header"),
@@ -204,9 +216,7 @@ describe("expansion across diff-range navigation", () => {
     await expandRotate();
 
     fireEvent.keyDown(window, { key: "n" }); // next change in the chain
-    // Not railItem: the file is renamed, so its rail title is the
-    // "old → new" pair, not the bare path.
-    await waitFor(() => byPath("docs/auth-rotation.md"));
+    await diffLoaded("docs/auth-rotation.md");
     expect(isExpanded(byPath(COMMIT_MSG_PATH))).toBe(true);
     expect(isExpanded(byPath("docs/auth-rotation.md"))).toBe(false);
   });
@@ -224,7 +234,7 @@ describe("collapse with an open dirty comment editor", () => {
    * because clicking a line doesn't open an editor (see lib/selection). */
   async function openDirtyEditor() {
     renderReview();
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
     fireEvent.click(
       must(section(1).querySelector(".file-header"), ".file-header"),
     );
@@ -300,7 +310,7 @@ describe("collapse with an open dirty comment editor", () => {
 describe("comment counts in the diff-range dropdowns", () => {
   it("tags each revision option with its thread count", async () => {
     renderReview(); // full r1 diff; the counts are range-independent anyway
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
 
     // change 11: r0 carries 5 root threads, r1 the 3 drafts on it. Replies
     // ride with their thread and are not counted separately.
@@ -323,7 +333,7 @@ describe("comment counts in the diff-range dropdowns", () => {
     // r0 is a valid interdiff base — selecting it must stick; an M >= 1 guard
     // would wrongly reject it.
     renderReview("/changes/11?against=0");
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
     const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");
     expect(baseSelect.value).toBe("0");
   });
@@ -364,7 +374,7 @@ describe("the s key submits the chain's staged decisions", () => {
 
   it("is inert with nothing staged, and publishes once a decision is staged", async () => {
     renderChange20();
-    await screen.findByTitle("src/wal.rs");
+    await diffLoaded("src/wal.rs");
 
     fireEvent.keyDown(window, { key: "s" });
     expect(path).toBe("/changes/20");
@@ -388,7 +398,7 @@ describe("comment counts in the file headers", () => {
   it("counts only this file's threads visible in the current range", async () => {
     // base → r1: the r0 threads are pinned away, so only the r1 drafts show.
     renderReview("/changes/11?against=base");
-    await railItem("src/auth/store.rs");
+    await diffLoaded("src/auth/store.rs");
 
     // rotate.rs (file-1): two drafts on r1 — one new-side, one old-side.
     expect(fcomments(1)).toBe("2 comments");
@@ -403,7 +413,7 @@ describe("comment counts in the file headers", () => {
   it("follows the range: the r0 → r1 interdiff surfaces the r0 threads", async () => {
     // The left column is r0's own tree, so r0-pinned threads reappear there.
     renderReview("/changes/11?against=0");
-    await railItem("src/auth/rotate.rs");
+    await diffLoaded("src/auth/rotate.rs");
 
     // rotate.rs: three r0 threads (lines 21/22/23) on the left + one r1
     // draft on the right; the old-side r1 draft has no column here.
@@ -418,7 +428,7 @@ describe("comment counts in the file headers", () => {
 describe("context expansion", () => {
   it("reveals a whole top gap in one click", async () => {
     renderReview();
-    await railItem("src/auth/rotate.rs");
+    await diffLoaded("src/auth/rotate.rs");
     fireEvent.click(screen.getByRole("button", { name: "expand all" }));
 
     // rotate.rs hides a run above its first hunk and another between the two.

@@ -152,7 +152,7 @@ const captures = [
     name: "review-files-mixed",
     path: "/changes/11?against=base",
     actions: async (page) => {
-      await page.locator('.rail-item[title="src/auth/store.rs"]').click();
+      await page.locator('[data-item-path="src/auth/store.rs"]').click();
       await page.waitForTimeout(300);
     },
   },
