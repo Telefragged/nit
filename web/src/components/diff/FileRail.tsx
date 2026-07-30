@@ -108,6 +108,12 @@ export default function FileRail({
       [data-item-section="git"] [data-icon-name="file-tree-icon-dot"] {
         display: none;
       }
+      /* Directories are the tree's scaffolding, and the files under them
+         read in the dim grey of an unremarkable modification, so they
+         take the brighter foreground to stay legible as structure. */
+      [data-item-type="folder"] [data-item-section="content"] {
+        color: var(--text);
+      }
     `,
     onSelectionChange: ([path]) => {
       // The selection pushed below echoes back here; reporting it would
