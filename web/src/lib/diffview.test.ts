@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { Line } from "../api/types";
+import type { DiffFile, Line } from "../api/types";
+import { COMMIT_MSG_PATH } from "../api/types";
 import {
   gapLines,
   intralineDiff,
   pairLines,
   rangeSliceOnLine,
   skippedBefore,
+  treeOrder,
 } from "./diffview";
 
 const ctx = (old: number, nw: number, text = "ctx"): Line => ({
@@ -159,5 +161,58 @@ describe("rangeSliceOnLine", () => {
     const one = { start_line: 5, start_char: 2, end_line: 5, end_char: 6 };
     expect(rangeSliceOnLine(one, 5, 10)).toEqual([2, 6]);
     expect(rangeSliceOnLine(one, 4, 10)).toBeNull();
+  });
+});
+
+describe("treeOrder", () => {
+  const file = (path: string): DiffFile => ({
+    path,
+    status: "modified",
+    binary: false,
+    additions: 1,
+    deletions: 1,
+    new_total: 0,
+    hunks: [],
+  });
+  const paths = (files: DiffFile[]) => treeOrder(files).map((f) => f.path);
+
+  it("puts directories before files at every level", () => {
+    // Git's own order is the plain path sort this shuffles: flake.nix and
+    // web/package.json both sort ahead of their sibling directories there.
+    expect(
+      paths([
+        file("docs/dev.md"),
+        file("flake.nix"),
+        file("web/package.json"),
+        file("web/src/App.tsx"),
+        file("docs/api.md"),
+      ]),
+    ).toEqual([
+      "docs/api.md",
+      "docs/dev.md",
+      "web/src/App.tsx",
+      "web/package.json",
+      "flake.nix",
+    ]);
+  });
+
+  it("counts digit runs, so a9 precedes a10", () => {
+    expect(paths([file("m/a10.sql"), file("m/a9.sql")])).toEqual([
+      "m/a9.sql",
+      "m/a10.sql",
+    ]);
+  });
+
+  it("leads with the commit message, which is not a file", () => {
+    expect(paths([file("a.rs"), file(COMMIT_MSG_PATH)])).toEqual([
+      COMMIT_MSG_PATH,
+      "a.rs",
+    ]);
+  });
+
+  it("leaves the caller's array alone", () => {
+    const input = [file("b.rs"), file("a.rs")];
+    treeOrder(input);
+    expect(input.map((f) => f.path)).toEqual(["b.rs", "a.rs"]);
   });
 });

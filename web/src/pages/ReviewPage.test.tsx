@@ -186,13 +186,13 @@ describe("expansion across diff-range navigation", () => {
   it("keeps expanded files expanded when the base or revision changes", async () => {
     await expandRotate();
 
-    // r0 → r1 interdiff: same files, reordered — store.rs moves from
-    // file-2 to file-3, which signals the new diff has rendered.
+    // r0 → r1 interdiff: the same files in the same (tree) order, so the
+    // settled range is the signal that the new diff has rendered.
     fireEvent.change(screen.getByLabelText("Diff base"), {
       target: { value: "0" },
     });
     await waitFor(() => {
-      expect(byPath("src/auth/store.rs").id).toBe("file-3");
+      expect(document.querySelector('[data-diff-ready="0"]')).not.toBeNull();
     });
     expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
     expect(isExpanded(byPath("src/auth/store.rs"))).toBe(false);

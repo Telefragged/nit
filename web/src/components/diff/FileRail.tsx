@@ -1,29 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import type {
-  FileTreeRowDecoration,
-  FileTreeSortEntry,
-  GitStatusEntry,
-} from "@pierre/trees";
+import { preparePresortedFileTreeInput } from "@pierre/trees";
+import type { FileTreeRowDecoration, GitStatusEntry } from "@pierre/trees";
 import type { DiffFile } from "../../api/types";
 import { COMMIT_MSG_PATH } from "../../api/types";
 import type { UiThread } from "../../lib/comments";
 import { diffTotals, displayPath } from "../../lib/diffview";
-
-/** The row the synthetic /COMMIT_MSG file rides as. A tree path is also its
- * own label, so the display name is the path — and a leading slash would
- * nest the whole diff under an empty root directory. */
-const COMMIT_MSG_ROW = displayPath(COMMIT_MSG_PATH);
-
-/** Directories first, then names — a copy of the package's own ordering,
- * whose comparator it does not export — plus the commit message pinned
- * above it all (gerrit-style, and it is not a file). */
-function railSort(a: FileTreeSortEntry, b: FileTreeSortEntry): number {
-  if (a.path === COMMIT_MSG_ROW) return -1;
-  if (b.path === COMMIT_MSG_ROW) return 1;
-  if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-  return a.basename.localeCompare(b.basename);
-}
 
 /** The row's trailing lane: draft and published comment counts, then the
  * +/- churn. Binary files carry no churn. */
@@ -72,7 +54,9 @@ export default function FileRail({
 }) {
   // The tree is path-keyed throughout — rows, status entries and every
   // callback — so the diff is indexed by the path each file rides under
-  // once, here.
+  // once, here. The paths go over presorted: `files` arrives in tree order
+  // (`treeOrder`) and the tree renders them in the order it is given, so
+  // the rail cannot drift from the sections it navigates.
   const tree = useMemo(() => {
     const byPath = new Map<string, { file: DiffFile; index: number }>();
     const gitStatus: GitStatusEntry[] = [];
@@ -83,7 +67,13 @@ export default function FileRail({
         gitStatus.push({ path, status: file.status });
       }
     });
-    return { byPath, gitStatus, paths: [...byPath.keys()] };
+    const paths = [...byPath.keys()];
+    return {
+      byPath,
+      gitStatus,
+      paths,
+      input: preparePresortedFileTreeInput(paths),
+    };
   }, [files]);
 
   const activePath =
@@ -98,9 +88,8 @@ export default function FileRail({
   });
 
   const { model } = useFileTree({
-    paths: tree.paths,
+    preparedInput: tree.input,
     gitStatus: tree.gitStatus,
-    sort: railSort,
     itemHeight: 22,
     density: 0.8,
     initialExpansion: "open",
@@ -127,7 +116,7 @@ export default function FileRail({
   // the decorations come with it — but it also re-expands every directory,
   // which is why comment traffic cannot ride this path.
   useEffect(() => {
-    model.resetPaths(tree.paths);
+    model.resetPaths({ preparedInput: tree.input });
     model.setGitStatus(tree.gitStatus);
   }, [model, tree]);
 

@@ -47,7 +47,7 @@ import {
   type UiThread,
 } from "../lib/comments";
 import { confirmDiscard } from "../lib/confirmDiscard";
-import { displayPath, fileDomId } from "../lib/diffview";
+import { displayPath, fileDomId, treeOrder } from "../lib/diffview";
 import { highlight } from "../lib/highlight";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt } from "../lib/scrollspy";
@@ -343,7 +343,9 @@ export default function ReviewPage() {
     enabled: published !== undefined,
     retry: false,
   });
-  const files = useMemo(() => diffQ.data?.files ?? [], [diffQ.data]);
+  // Tree order, not git's: the rail renders the same list as a tree, and
+  // the sections below must scroll in the order it reads (`treeOrder`).
+  const files = useMemo(() => treeOrder(diffQ.data?.files ?? []), [diffQ.data]);
 
   // Collapsed-by-default file sections, keyed by file path so the
   // reviewer's open files survive revision/base switches; only another

@@ -92,8 +92,10 @@ still poll/refetch; moving them onto the stream is the next step.
     unresolved count; current highlighted; collapsible), file tree below
     (diff totals, then the diff as a directory tree — `@pierre/trees`, with
     each file's comment counts and +/- churn in the decoration lane and its
-    status letter in the git lane). The commit message leads the tree, above
-    the directories. The two
+    status letter in the git lane). Both the tree and the diff sections it
+    navigates run in tree order — the commit message, then depth-first with
+    directories ahead of files (`treeOrder`), not the plain path order git
+    emits deltas in. The two
     share the height so neither pushes the other off-screen. Selecting a file
     expands and scrolls to it; scroll-spy highlights the file under the sticky
     chrome. One scroll column; unified ⇄ side-by-side toggle persisted in

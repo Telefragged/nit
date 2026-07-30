@@ -1,5 +1,6 @@
 // Pure diff-presentation logic, kept out of components so it stays testable.
 
+import { prepareFileTreeInput } from "@pierre/trees";
 import type { CommentRange, DiffFile, Hunk, Line } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
 
@@ -13,6 +14,24 @@ export function displayPath(path: string): string {
  * rail navigation use it to find and scroll sections. */
 export function fileDomId(index: number): string {
   return `file-${index}`;
+}
+
+/** The diff in tree order: the commit message first (it is not a file),
+ * then the order the rail's tree itself renders — directories before
+ * files, natural digit runs, case-insensitive. Git emits deltas in plain
+ * path order, which interleaves directories and files, so the sections
+ * would otherwise scroll in an order the rail never reads. */
+export function treeOrder(files: DiffFile[]): DiffFile[] {
+  const rank = new Map(
+    prepareFileTreeInput(
+      files.filter((f) => f.path !== COMMIT_MSG_PATH).map((f) => f.path),
+    ).paths.map((path, index) => [path, index]),
+  );
+  return [...files].sort((a, b) => {
+    if (a.path === COMMIT_MSG_PATH) return -1;
+    if (b.path === COMMIT_MSG_PATH) return 1;
+    return (rank.get(a.path) ?? 0) - (rank.get(b.path) ?? 0);
+  });
 }
 
 const STATUS_LETTER: Record<DiffFile["status"], string> = {
