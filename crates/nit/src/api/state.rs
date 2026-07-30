@@ -279,25 +279,21 @@ impl AppState {
         Ok(Some(map.entry(change_id).or_insert(entry).clone()))
     }
 
-    /// Snapshot every loaded change of one repo (each cloned out from under its
-    /// lock), and build a [`RepoView`] for chain derivation.
+    /// Snapshot every change of one repo (each cloned out from under its lock)
+    /// and build a [`RepoView`] for chain derivation. The `changes` table is
+    /// the enumeration, so the view covers the repo whatever the map holds;
+    /// every member resolves through [`AppState::change`].
     ///
-    /// # Panics
-    /// When the change map mutex is poisoned.
-    #[must_use]
-    pub fn repo_view(&self, repo_id: u64) -> RepoView {
-        let entries: Vec<Arc<ChangeEntry>> = {
-            let map = self.changes.lock().expect("change map poisoned");
-            map.values().cloned().collect()
-        };
-        let changes: Vec<ChangeProj> = entries
-            .iter()
-            .filter_map(|e| {
-                let proj = e.read();
-                (proj.repo_id == repo_id).then(|| proj.clone())
-            })
-            .collect();
-        RepoView::new(changes)
+    /// # Errors
+    /// When the DB read or a replay fails.
+    pub fn repo_view(&self, conn: &Connection, repo_id: u64) -> anyhow::Result<RepoView> {
+        let mut changes: Vec<ChangeProj> = Vec::new();
+        for id in db::repo_change_ids(conn, repo_id)? {
+            if let Some(entry) = self.change(conn, id)? {
+                changes.push(entry.read().clone());
+            }
+        }
+        Ok(RepoView::new(changes))
     }
 
     /// A handle to the connection pool (cheaply cloned — it is `Arc`-backed).

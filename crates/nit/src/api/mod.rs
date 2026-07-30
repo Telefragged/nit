@@ -204,7 +204,7 @@ fn chain_context(
     revision: Option<u64>,
 ) -> Result<(RepoView, u64, String), Error> {
     let repo_id = change_or_404(state, conn, change_id)?.read().repo_id;
-    let view = state.repo_view(repo_id);
+    let view = state.repo_view(conn, repo_id)?;
     let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, revision)?;
     Ok((view, repo_id, tip_sha))
 }

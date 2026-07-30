@@ -38,14 +38,14 @@ pub(super) async fn list_chains(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<ListChainsQuery>,
 ) -> Result<Json<ChainList>, Error> {
-    tokio::task::spawn_blocking(move || {
+    with_conn(state.pool(), move |conn| {
         let include_terminal = matches!(q.status, ChainFilter::All);
         let mut chains = Vec::new();
         for repo_id in state.repo_ids() {
             if q.repo.is_some_and(|r| r != repo_id) {
                 continue;
             }
-            let view = state.repo_view(repo_id);
+            let view = state.repo_view(conn, repo_id)?;
             let tips = if include_terminal {
                 view.all_tips()
             } else {
@@ -55,10 +55,9 @@ pub(super) async fn list_chains(
                 chains.push(views::build_chain(&view, repo_id, &tip));
             }
         }
-        Json(ChainList { chains })
+        Ok(Json(ChainList { chains }))
     })
     .await
-    .map_err(|e| Error::internal(format!("chain list task panicked: {e}")))
 }
 
 /// The repo's spine-centered change graph (docs/api.md "Graph").
@@ -66,13 +65,13 @@ pub(super) async fn repo_graph(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
 ) -> Result<Json<RepoGraph>, Error> {
-    tokio::task::spawn_blocking(move || {
+    with_conn(state.pool(), move |conn| {
         let repo_state = state
             .repo_state(repo_id)
             .ok_or_else(|| Error::not_found(format!("no such repo: {repo_id}")))?;
         let repo = Repository::open(repo_state.git_dir())
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
-        let view = state.repo_view(repo_id);
+        let view = state.repo_view(conn, repo_id)?;
         Ok(Json(views::build_graph(
             &repo,
             &view,
@@ -82,7 +81,6 @@ pub(super) async fn repo_graph(
         )?))
     })
     .await
-    .map_err(|e| Error::internal(format!("repo graph task panicked: {e}")))?
 }
 
 pub(super) async fn get_chain(

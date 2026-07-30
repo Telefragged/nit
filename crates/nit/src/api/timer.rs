@@ -82,7 +82,9 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         // First observation has no baseline -- no landings are detected;
         // landings that predate tracking are not this timer's concern.
         if let Some(since) = &recorded {
-            let view = state.repo_view(repo_id);
+            let Ok(view) = state.repo_view(conn, repo_id) else {
+                continue;
+            };
             let open = open_changes_by_key(&view);
             for (change_id, sha) in gitscan::detect_landings(&repo, since, &head, &open) {
                 record_landing(state, conn, change_id, sha);

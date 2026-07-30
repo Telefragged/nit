@@ -5,6 +5,7 @@ use std::sync::Arc;
 use axum::Json;
 use axum::extract::State;
 use git2::Repository;
+use rusqlite::Connection;
 
 use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
 
@@ -13,14 +14,14 @@ use crate::db;
 use super::canonical_git_dir;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
 
-fn repo_json(state: &AppState, row: db::RepoRow) -> Repo {
-    let active = u64::try_from(state.repo_view(row.id).tips().len()).unwrap_or(u64::MAX);
-    Repo {
+fn repo_json(state: &AppState, conn: &Connection, row: db::RepoRow) -> Result<Repo, Error> {
+    let tips = state.repo_view(conn, row.id)?.tips().len();
+    Ok(Repo {
         id: row.id,
         git_dir: row.git_dir,
         base_ref: row.base_ref,
-        active_chains: active,
-    }
+        active_chains: u64::try_from(tips).unwrap_or(u64::MAX),
+    })
 }
 
 /// Register a repo (`nit repo create`), configuring its one canonical base
@@ -61,7 +62,7 @@ pub(super) async fn create_repo(
         // being swallowed as pre-tracking history (docs/data-model.md).
         db::update_repo_base_head(conn, row.id, &base_commit.id().to_string())?;
         state.ensure_repo(&row);
-        Ok(Json(repo_json(&state, row)))
+        Ok(Json(repo_json(&state, conn, row)?))
     })
     .await
 }
@@ -73,8 +74,8 @@ pub(super) async fn list_repos(
     with_conn(state.pool(), move |conn| {
         let repos = db::all_repos(conn)?
             .into_iter()
-            .map(|r| repo_json(&state, r))
-            .collect();
+            .map(|r| repo_json(&state, conn, r))
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(Json(RepoList { repos }))
     })
     .await
@@ -88,7 +89,7 @@ pub(super) async fn get_repo(
     with_conn(state.pool(), move |conn| {
         let row = db::get_repo(conn, repo_id)?
             .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;
-        Ok(Json(repo_json(&state, row)))
+        Ok(Json(repo_json(&state, conn, row)?))
     })
     .await
 }
@@ -125,7 +126,7 @@ pub(super) async fn relocate_repo(
             base_head: existing.base_head,
         };
         state.ensure_repo(&row);
-        Ok(Json(repo_json(&state, row)))
+        Ok(Json(repo_json(&state, conn, row)?))
     })
     .await
 }

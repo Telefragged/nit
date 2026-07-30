@@ -401,6 +401,19 @@ pub fn get_change(conn: &Connection, id: u64) -> Result<Option<ChangeRow>> {
     .map_err(Into::into)
 }
 
+/// One repo's change ids, id-ascending (creation order) — the enumeration a
+/// repo view derives its chains over.
+///
+/// # Errors
+/// On a database failure.
+pub fn repo_change_ids(conn: &Connection, repo_id: u64) -> Result<Vec<u64>> {
+    let mut stmt = conn.prepare("SELECT id FROM changes WHERE repo_id = ?1 ORDER BY id")?;
+    let ids = stmt
+        .query_map(params![i64::try_from(repo_id)?], |r| col_u64(r.get(0)?))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(ids)
+}
+
 /// All change rows, id-ascending (creation order) — for replay on startup.
 ///
 /// # Errors
