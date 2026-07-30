@@ -1,6 +1,6 @@
 //! Shared server state: the in-memory fold of every **change's** log, the
-//! repo registry cache, the per-change append primitive, and the API error
-//! type.
+//! repo registry cache, the per-change append primitive, the server-wide event
+//! channel, and the API error type.
 //!
 //! Each change's [`ChangeProj`](crate::review::ChangeProj) is rebuilt by
 //! replaying its log on startup and kept current by [`append_to_change`],
@@ -28,15 +28,22 @@ use crate::chain::RepoView;
 use crate::db;
 use crate::review::{self, ChangeProj};
 
-/// Per-change live-event buffer. A follower lagging more than this many entries
-/// behind is dropped from the stream and reconnects + re-reads the gap from the
-/// log (the log is the source of truth). Far above any single review burst.
-const EVENTS_BUFFER: usize = 256;
+/// Live-event buffer. The channel carries every change's entries, so this
+/// covers the server's traffic rather than one change's burst. A follower
+/// lagging more than this many entries behind is dropped from the stream and
+/// reconnects + re-reads the gap from the log (the log is the source of truth).
+const EVENTS_BUFFER: usize = 1024;
 
 pub struct AppState {
     pool: Pool,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
     changes: StdMutex<HashMap<u64, Arc<ChangeEntry>>>,
+    /// Every appended entry, for every change. One channel keeps following
+    /// orthogonal to a change's residency and lifecycle, and is the seam for
+    /// the filters that don't exist yet (by repo, by branch, by session).
+    events: Sender<LogEntry>,
+    /// A parked receiver so the channel never closes for lack of followers.
+    events_keepalive: InactiveReceiver<LogEntry>,
     /// Process-global allocator for fold-assigned ids (reviews, drafts). Change
     /// ids are `changes` rowids, never allocated here.
     next_id: AtomicU64,
@@ -72,23 +79,13 @@ impl RepoState {
 /// Per-change coordination: write-locking `proj` both serializes appenders and
 /// guards the fold; held only inside `spawn_blocking`, never across `.await`.
 pub struct ChangeEntry {
-    pub proj: StdRwLock<ChangeProj>,
-    events: Sender<LogEntry>,
-    /// A parked receiver so the channel never closes for lack of followers.
-    events_keepalive: InactiveReceiver<LogEntry>,
+    proj: StdRwLock<ChangeProj>,
 }
 
 impl ChangeEntry {
     fn new(proj: ChangeProj) -> ChangeEntry {
-        let (mut events, rx) = async_broadcast::broadcast(EVENTS_BUFFER);
-        // Overflow rather than block: a publisher (holding no async lock) must
-        // never stall on a slow follower. An overflowed follower reconnects and
-        // re-reads the gap from the log.
-        events.set_overflow(true);
         ChangeEntry {
             proj: StdRwLock::new(proj),
-            events,
-            events_keepalive: rx.deactivate(),
         }
     }
 
@@ -96,18 +93,6 @@ impl ChangeEntry {
     /// When the projection lock is poisoned.
     pub fn read(&self) -> std::sync::RwLockReadGuard<'_, ChangeProj> {
         self.proj.read().expect("projection lock poisoned")
-    }
-
-    /// Publish a message to live followers. Best-effort: with none, the channel
-    /// is inactive and the message is dropped (it is durable in the log).
-    pub fn publish(&self, msg: LogEntry) {
-        let _ = self.events.try_broadcast(msg);
-    }
-
-    /// An active subscription to this change's live feed. Arm it **before**
-    /// reading the backlog so no append slips the arm/read gap.
-    pub fn subscribe(&self) -> Receiver<LogEntry> {
-        self.events_keepalive.activate_cloned()
     }
 }
 
@@ -153,13 +138,33 @@ impl AppState {
             .await
             .map_err(|e| anyhow::anyhow!("database init: {e}"))??;
         let (shutdown, _) = watch::channel(false);
+        let (mut events, rx) = async_broadcast::broadcast(EVENTS_BUFFER);
+        // A publisher (holding no async lock) must never stall on a slow
+        // follower; an overflowed follower reconnects and re-reads the gap from
+        // the log.
+        events.set_overflow(true);
         Ok(Arc::new(AppState {
             pool,
             repos: StdMutex::new(repos),
             changes: StdMutex::new(changes),
+            events,
+            events_keepalive: rx.deactivate(),
             next_id: AtomicU64::new(max_id + 1),
             shutdown,
         }))
+    }
+
+    /// Publish an entry to live followers. Best-effort: with none, the channel
+    /// is inactive and the message is dropped (it is durable in the log).
+    pub fn publish(&self, msg: LogEntry) {
+        let _ = self.events.try_broadcast(msg);
+    }
+
+    /// A subscription to the server's event stream, carrying every change. It
+    /// sees only entries published after this call, so arming it **before**
+    /// reading a backlog leaves no gap for an append to slip through.
+    pub fn subscribe(&self) -> Receiver<LogEntry> {
+        self.events_keepalive.activate_cloned()
     }
 
     /// Allocate the next fold-assigned id (reviews, drafts).
@@ -337,12 +342,13 @@ impl AppState {
 /// # Errors
 /// See [`append_to_change_with`].
 pub fn append_to_change(
+    state: &AppState,
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
     news: Vec<LogPayload>,
 ) -> anyhow::Result<Vec<LogEntry>> {
-    append_to_change_with(conn, entry, change_id, news, |_| Ok(()))
+    append_to_change_with(state, conn, entry, change_id, news, |_| Ok(()))
 }
 
 /// Append entries to one change, running `pre_commit` inside the **same**
@@ -366,6 +372,7 @@ pub fn append_to_change(
 /// # Panics
 /// When the projection lock is poisoned.
 pub fn append_to_change_with(
+    state: &AppState,
     conn: &mut Connection,
     entry: &ChangeEntry,
     change_id: u64,
@@ -427,15 +434,18 @@ pub fn append_to_change_with(
     db::update_change_status(&tx, change_id, next.current_status())?;
     tx.commit()?;
 
-    // Install the validated projection after the durable commit, then release
-    // the lock before publishing so readers unblock.
+    // Install the validated projection after the durable commit, and publish to
+    // live followers while the write lock is still held. Only that lock orders
+    // two appenders on one change: publishing outside it, a follower could be
+    // handed an entry behind one that was folded after it, and a follower's own
+    // fold drops what arrives late. Publishing cannot block — an overflowing
+    // channel drops its oldest slot — so this stalls a reader of this change on
+    // memory, never on I/O.
     *proj = next;
-    drop(proj);
-    // Publish to live followers only after the durable commit + fold, so a
-    // follower reconciling against its backlog never sees a half-applied entry.
     for e in &applied {
-        entry.publish(e.clone());
+        state.publish(e.clone());
     }
+    drop(proj);
     Ok(applied)
 }
 

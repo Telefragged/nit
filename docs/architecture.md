@@ -68,9 +68,10 @@ to the fork on the canonical branch (`chain/` `path_from_tip`). Nothing about
 a chain is stored or scanned at read time.
 
 Live followers (`nit log --wait`/`--follow`) watch a set of changes over
-one websocket (`WS /api/stream`); the server joins the subscribed changes'
-per-change broadcast channels in a `tokio-stream` `StreamMap`, and the wake
-rule is a client concern (docs/data-model.md). The web polls the same folds.
+one websocket (`WS /api/stream`); every change's entries ride one server-wide
+broadcast channel that each socket filters against its subscription set, and
+the wake rule is a client concern (docs/data-model.md). The web polls the same
+folds.
 
 ## Key decisions
 

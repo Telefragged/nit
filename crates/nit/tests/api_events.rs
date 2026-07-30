@@ -98,8 +98,8 @@ fn unsubscribed_changes_are_silent() {
     let one = member_id(&server, &res, "I001");
     let two = member_id(&server, &res, "I002");
 
-    // Subscribe only to change one; reading its backlog revision arms the feed
-    // (the sync point) before any review broadcasts.
+    // Subscribe only to change one; reading its backlog revision is the sync
+    // point that puts the subscription in place before any review broadcasts.
     let mut socket = ws_subscribe(&server, &[(one, 0)], READ);
     assert_eq!(
         ws_entry(&mut socket).expect("backlog for one")["kind"],

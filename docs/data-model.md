@@ -471,12 +471,12 @@ no per-chain lock.
   first-seeing the same key race one SQLite-serialized statement, the loser is a
   no-op, both read the same `change_id`. No read-decide-insert, no owner routing,
   no per-repo lock.
-- **Live followers** subscribe to per-change broadcast channels. Each append
-  publishes its tagged entry **after** the durable commit and fold; the
-  websocket joins the subscribed changes' channels in a `tokio-stream`
-  `StreamMap` (dynamic membership), arming each before replaying the change's
-  backlog and watermark-deduping the arm/read overlap (docs/api.md "Events").
-  Publish is non-blocking, so a slow follower never stalls an appender.
+- **Live followers** share one server-wide broadcast channel. Each append
+  publishes its tagged entry **after** the durable commit and fold; a websocket
+  holds a receiver on that channel for its whole life and forwards only the
+  changes it subscribed to, so a backlog replay is always read behind an armed
+  feed and the overlap is watermark-deduped (docs/api.md "Events"). Publish is
+  non-blocking, so a slow follower never stalls an appender.
 
 ## Keep refs
 

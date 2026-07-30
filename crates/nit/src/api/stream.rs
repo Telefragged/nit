@@ -1,15 +1,11 @@
 //! Events (WS `/api/stream`): the client-driven per-change change stream.
 
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
-use async_broadcast::{Receiver, RecvError};
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
-use tokio_stream::{StreamExt, StreamMap};
 
 use nit_types::events::{ClientMsg, StreamMsg};
 use nit_types::log::LogEntry;
@@ -29,30 +25,15 @@ pub(super) async fn stream(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-/// A per-change feed that **surfaces** broadcast overflow instead of silently
-/// skipping past it. `async_broadcast`'s own `Stream` impl swallows
-/// `Overflowed` (it `continue`s to the next slot), which would let a follower
-/// that fell more than `EVENTS_BUFFER` behind lose entries with no signal.
-/// Yielding the error lets `handle_socket` close the socket so the client
-/// reconnects and re-reads the gap from the log (docs/api.md "Events").
-struct Feed(Receiver<LogEntry>);
-
-impl tokio_stream::Stream for Feed {
-    type Item = Result<LogEntry, RecvError>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.0).poll_recv(cx)
-    }
-}
-
-/// Drive one follower's socket: `subscribe` messages drive a keyed
-/// `StreamMap` of per-change feeds (dynamic membership); each arms the feed
-/// **before** reading the change's backlog (a `[from, head)` replay, or a
-/// `ChangeProj` snapshot) and records an idx watermark so the arm/read overlap
-/// is deduped, never gapped. A feed that overflows closes the socket — the
-/// client reconnects and re-reads the log.
+/// Drive one follower's socket. It holds one receiver on the server's event
+/// channel for its whole life, so every subscribe is armed before it reads its
+/// backlog (a `[from, head)` replay, or a `ChangeProj` snapshot) and the
+/// arm/read overlap is deduped by an idx watermark, never gapped. `watermark`
+/// is also the subscription set: an entry is forwarded only for a change the
+/// client asked for. An overflowed receiver closes the socket — the client
+/// reconnects and re-reads the log.
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
-    let mut feeds: StreamMap<u64, Feed> = StreamMap::new();
+    let mut events = state.subscribe();
     let mut watermark: HashMap<u64, u64> = HashMap::new();
     let mut shutdown = state.shutdown_watch();
     loop {
@@ -64,7 +45,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                         let Ok(client) = serde_json::from_str::<ClientMsg>(&text) else {
                             continue;
                         };
-                        if apply_client_msg(&mut socket, &state, &mut feeds, &mut watermark, client)
+                        if apply_client_msg(&mut socket, &state, &mut watermark, client)
                             .await
                             .is_err()
                         {
@@ -75,11 +56,15 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                     _ => {}
                 }
             }
-            Some((change_id, item)) = feeds.next(), if !feeds.is_empty() => {
-                // Overflow (or a closed feed): this follower fell behind. Close
-                // the socket so it reconnects and re-reads the gap from the log.
+            item = events.recv() => {
+                // Overflow (or a closed channel): this follower fell behind.
+                // Close the socket so it reconnects and re-reads the gap from
+                // the log.
                 let Ok(entry) = item else { break };
-                if entry.idx < watermark.get(&change_id).copied().unwrap_or(0) {
+                let Some(&mark) = watermark.get(&entry.change_id) else {
+                    continue;
+                };
+                if entry.idx < mark {
                     continue;
                 }
                 if send(&mut socket, &StreamMsg::Entry(entry)).await.is_err() {
@@ -96,7 +81,6 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 async fn apply_client_msg(
     socket: &mut WebSocket,
     state: &Arc<AppState>,
-    feeds: &mut StreamMap<u64, Feed>,
     watermark: &mut HashMap<u64, u64>,
     client: ClientMsg,
 ) -> Result<(), ()> {
@@ -106,12 +90,9 @@ async fn apply_client_msg(
                 let Ok(change_id) = id_str.parse::<u64>() else {
                     continue;
                 };
-                let Some(entry) = state.change_entry(change_id) else {
+                if state.change_entry(change_id).is_none() {
                     continue;
-                };
-                // Subscribe before reading the backlog, so events that land
-                // mid-read are caught here and deduped by the watermark.
-                feeds.insert(change_id, Feed(entry.subscribe()));
+                }
                 let backlog = read_backlog(state, change_id, from).await;
                 let mut next = from;
                 for e in backlog {
@@ -126,12 +107,11 @@ async fn apply_client_msg(
                 let Some(entry) = state.change_entry(change_id) else {
                     continue;
                 };
-                // Arm the feed, then snapshot the projection: an append that
-                // lands between the two rides the feed and is deduped by the
-                // high-water mark, so the snapshot and its live tail neither
-                // gap nor double (docs/api.md "Events"). Clone out from under
-                // the read lock — no guard is held across the send.
-                feeds.insert(change_id, Feed(entry.subscribe()));
+                // The snapshot's `entries_folded` is the high-water mark, so an
+                // append that lands after it rides the channel and is deduped
+                // there: the snapshot and its live tail neither gap nor double
+                // (docs/api.md "Events"). Clone out from under the read lock —
+                // no guard is held across the send.
                 let proj = entry.read().clone();
                 watermark.insert(change_id, proj.entries_folded);
                 send(socket, &StreamMsg::Snapshot(proj)).await?;
@@ -161,36 +141,4 @@ async fn read_backlog(state: &Arc<AppState>, change_id: u64, from: u64) -> Vec<L
     })
     .await
     .unwrap_or_default()
-}
-
-#[cfg(test)]
-mod tests {
-    use nit_types::enums::LifecycleAction;
-    use nit_types::log::LogPayload;
-
-    use super::*;
-
-    /// `Feed` yields `Err(Overflowed)` when the broadcast buffer is full, not a
-    /// silent skip.
-    #[tokio::test]
-    async fn feed_surfaces_overflow() {
-        let (mut tx, rx) = async_broadcast::broadcast::<LogEntry>(2);
-        tx.set_overflow(true);
-        let mut feed = Feed(rx);
-        // Overflow mode drops the oldest slot; the reader sees
-        // RecvError::Overflowed, not the sender.
-        for idx in 0..3 {
-            let _ = tx.try_broadcast(LogEntry {
-                change_id: 0,
-                idx,
-                seq: idx,
-                created_at: String::new(),
-                payload: LogPayload::lifecycle(LifecycleAction::Reopened, None, None),
-            });
-        }
-        assert!(matches!(
-            feed.next().await,
-            Some(Err(RecvError::Overflowed(_)))
-        ));
-    }
 }

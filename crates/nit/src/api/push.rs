@@ -106,7 +106,7 @@ pub(super) async fn push(
                 message: wc.message.clone(),
                 resets_status,
             });
-            append_to_change(conn, &t.entry, t.change_id, vec![new]).map_err(map_busy)?;
+            append_to_change(&state, conn, &t.entry, t.change_id, vec![new]).map_err(map_busy)?;
             gitscan::maintain_keep_refs(&repo, &t.entry.read());
         }
 

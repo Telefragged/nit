@@ -95,7 +95,7 @@ fn publish_member(
         ));
     }
 
-    append_to_change_with(conn, entry, change_id, news, |tx| {
+    append_to_change_with(state, conn, entry, change_id, news, |tx| {
         if drained {
             db::delete_drafts_for_change(tx, change_id)?;
         }

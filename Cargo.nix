@@ -3372,10 +3372,6 @@ rec {
             features = [ "macros" "net" "rt-multi-thread" "signal" "sync" "time" ];
           }
           {
-            name = "tokio-stream";
-            packageId = "tokio-stream";
-          }
-          {
             name = "tower";
             packageId = "tower";
             usesDefaultFeatures = false;
@@ -5170,50 +5166,6 @@ rec {
           }
         ];
 
-      };
-      "tokio-stream" = rec {
-        crateName = "tokio-stream";
-        version = "0.1.18";
-        edition = "2021";
-        sha256 = "0w3cj33605ab58wqd382gnla5pnd9hnr00xgg333np5bka04knij";
-        libName = "tokio_stream";
-        authors = [
-          "Tokio Contributors <team@tokio.rs>"
-        ];
-        dependencies = [
-          {
-            name = "futures-core";
-            packageId = "futures-core";
-          }
-          {
-            name = "pin-project-lite";
-            packageId = "pin-project-lite";
-          }
-          {
-            name = "tokio";
-            packageId = "tokio";
-            features = [ "sync" ];
-          }
-        ];
-        devDependencies = [
-          {
-            name = "tokio";
-            packageId = "tokio";
-            features = [ "full" "test-util" ];
-          }
-        ];
-        features = {
-          "default" = [ "time" ];
-          "fs" = [ "tokio/fs" ];
-          "full" = [ "time" "net" "io-util" "fs" "sync" "signal" ];
-          "io-util" = [ "tokio/io-util" ];
-          "net" = [ "tokio/net" ];
-          "signal" = [ "tokio/signal" ];
-          "sync" = [ "tokio/sync" "tokio-util" ];
-          "time" = [ "tokio/time" ];
-          "tokio-util" = [ "dep:tokio-util" ];
-        };
-        resolvedDefaultFeatures = [ "default" "time" ];
       };
       "tokio-tungstenite" = rec {
         crateName = "tokio-tungstenite";

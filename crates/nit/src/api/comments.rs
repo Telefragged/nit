@@ -77,7 +77,7 @@ pub(super) async fn create_comment(
         };
         let new = LogPayload::Comment(comment);
         // A new thread's id is minted during the append, so read it back here.
-        let applied = append_to_change(conn, &entry, id, vec![new]).map_err(map_busy)?;
+        let applied = append_to_change(&state, conn, &entry, id, vec![new]).map_err(map_busy)?;
         let thread_id = match applied.first().map(|e| &e.payload) {
             Some(LogPayload::Comment(c)) => c.thread_id,
             _ => None,
@@ -95,6 +95,7 @@ pub(super) async fn create_comment(
 /// Append a guarded lifecycle entry (a no-op unless `guard` holds for the
 /// current state) then rebuild the change detail. Shared by abandon/reopen.
 fn set_lifecycle(
+    state: &AppState,
     conn: &mut Connection,
     entry: &ChangeEntry,
     id: u64,
@@ -104,7 +105,7 @@ fn set_lifecycle(
 ) -> Result<Json<ChangeDetail>, Error> {
     if guard(&entry.read().lifecycle) {
         let new = LogPayload::lifecycle(action, None, message);
-        append_to_change(conn, entry, id, vec![new]).map_err(map_busy)?;
+        append_to_change(state, conn, entry, id, vec![new]).map_err(map_busy)?;
     }
     change_detail_json(conn, entry)
 }
@@ -120,6 +121,7 @@ pub(super) async fn abandon_change(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         set_lifecycle(
+            &state,
             conn,
             &entry,
             id,
@@ -140,6 +142,7 @@ pub(super) async fn reopen_change(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         set_lifecycle(
+            &state,
             conn,
             &entry,
             id,
