@@ -94,23 +94,23 @@ const mixed: DiffFile = {
   ],
 };
 
-function renderFile(layout: "unified" | "split", file: DiffFile = mixed) {
-  const queryClient = new QueryClient();
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ReviewContext.Provider value={ctx}>
-        <DiffFileView
-          file={file}
-          layout={layout}
-          threads={[]}
-          domId="file-0"
-          collapsed={false}
-          onToggle={() => undefined}
-        />
-      </ReviewContext.Provider>
-    </QueryClientProvider>,
-  );
-}
+const tree = (layout: "unified" | "split", file: DiffFile = mixed) => (
+  <QueryClientProvider client={new QueryClient()}>
+    <ReviewContext.Provider value={ctx}>
+      <DiffFileView
+        file={file}
+        layout={layout}
+        threads={[]}
+        domId="file-0"
+        collapsed={false}
+        onToggle={() => undefined}
+      />
+    </ReviewContext.Provider>
+  </QueryClientProvider>
+);
+
+const renderFile = (layout: "unified" | "split", file?: DiffFile) =>
+  render(tree(layout, file));
 
 describe("rebase drift rendering", () => {
   it("tags only the drift line's code cells in unified layout", () => {
@@ -126,6 +126,30 @@ describe("rebase drift rendering", () => {
     const { container } = renderFile("split");
     expect(container.querySelector(".code.drift")).not.toBeNull();
     expect(container.querySelector(".g.drift")).not.toBeNull();
+  });
+});
+
+// The reviewer's DOM selection is the input `c` reads (lib/selection) and
+// it lives in these text nodes, so replacing them mid-selection makes the
+// browser remap the range out to whole lines.
+describe("code cell text nodes", () => {
+  it("survive a re-render", () => {
+    const { container, rerender } = renderFile("unified");
+    const nodes = () =>
+      [...container.querySelectorAll(".code-text")].flatMap((c) => [
+        ...c.childNodes,
+      ]);
+    const before = nodes();
+    expect(before.length).toBeGreaterThan(0);
+
+    rerender(tree("unified"));
+
+    // Identity, node by node — an equal-looking replacement is the bug.
+    const after = nodes();
+    expect(after).toHaveLength(before.length);
+    after.forEach((node, i) => {
+      expect(node).toBe(before[i]);
+    });
   });
 });
 

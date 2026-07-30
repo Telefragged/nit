@@ -82,13 +82,15 @@ function Code({
     }
     return h;
   }, [text, lang, mark, rangeMarks]);
+  // React re-applies dangerouslySetInnerHTML on the prop object's identity,
+  // never comparing the html: an inline literal rewrites every cell's text
+  // nodes each render, dropping the reviewer's in-progress selection — the
+  // input `c` reads. The html memo alone won't do: a tinted line's
+  // `rangeMarks` is a fresh array per render, so it recomputes an equal
+  // string, and only keying on the string keeps the object.
+  const inner = useMemo(() => ({ __html: html || "​" }), [html]);
   // Highlight.js escapes its input; nothing user-controlled is injected raw.
-  return (
-    <span
-      className={className}
-      dangerouslySetInnerHTML={{ __html: html || "​" }}
-    />
-  );
+  return <span className={className} dangerouslySetInnerHTML={inner} />;
 }
 
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>

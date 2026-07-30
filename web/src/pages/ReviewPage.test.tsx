@@ -30,6 +30,12 @@ afterEach(cleanup);
 let scrollCalls: { id: string; expandedAtCall: boolean }[];
 
 beforeEach(() => {
+  // jsdom lays nothing out, so the spy's rAF sample reads every section at
+  // rect 0 and can only answer "the last file", overwriting the reveal under
+  // test. In a browser that is self-correcting — the sample is taken at the
+  // scroll target — but the scrollIntoView double below never scrolls, so
+  // here it just wins. No layout, no scroll to spy on: drop the frame.
+  window.requestAnimationFrame = () => 0;
   scrollCalls = [];
   Element.prototype.scrollIntoView = function (this: Element) {
     scrollCalls.push({
