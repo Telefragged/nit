@@ -65,12 +65,16 @@ import { ReviewContext, sameTarget } from "./reviewContext";
 const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
 
-/** Why `c` did nothing — several misses are policy, not user error, so
- * they deserve words (docs/frontend.md). */
+/** Why `c` drafted nothing. Each states the rule the selection broke and
+ * the selection that would satisfy it — the reviewer's next move is to
+ * select again, so naming the symptom alone leaves them guessing
+ * (docs/frontend.md). */
 const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
-  "mixed-sides": "selection doesn't lie on one side of the diff",
-  "cross-file": "selection crosses file sections",
-  "hunk-gap": "selection spans a hunk gap",
+  "mixed-sides":
+    "A comment can only span one side of the diff. Select from the old or the new side, not both.",
+  "cross-file": "A comment can only span one file. Select within a file.",
+  "hunk-gap":
+    "A comment can only span consecutive lines. This selection jumps a hunk gap.",
 };
 
 /** Resolve the ?against param into a diff base for the selected revision.
