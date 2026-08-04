@@ -3,7 +3,7 @@ import type { DiffFile, Line } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
 import {
   gapLines,
-  intralineDiff,
+  intralineMarks,
   pairLines,
   rangeSliceOnLine,
   skippedBefore,
@@ -49,20 +49,32 @@ describe("pairLines", () => {
   });
 });
 
-describe("intralineDiff", () => {
-  it("marks only the differing middle of a similar pair", () => {
-    expect(intralineDiff("let x = old_value;", "let x = new_value;")).toEqual([
-      [8, 11],
-      [8, 11],
+describe("intralineMarks", () => {
+  it("marks a replacement block whose sides differ in length", () => {
+    const gone = del(1, "out = compute(x, y) + 1;");
+    const first = add(1, "temp = compute(x, y);");
+    const second = add(2, "out = temp + 1;");
+    const marks = intralineMarks([gone, first, second]);
+    expect(marks.get(gone)).toEqual([[0, 3]]);
+    expect(marks.get(first)).toEqual([
+      [0, 4],
+      [20, 21],
+    ]);
+    expect(marks.get(second)).toEqual([[0, 10]]);
+  });
+
+  it("marks every changed run of a line", () => {
+    const d = del(1, "fn f(a: u8, b: u8)");
+    const a = add(1, "fn f(a: u32, b: u32)");
+    expect(intralineMarks([d, a]).get(a)).toEqual([
+      [9, 11],
+      [17, 19],
     ]);
   });
 
-  it("returns null for identical lines", () => {
-    expect(intralineDiff("same", "same")).toBeNull();
-  });
-
-  it("returns null for a mostly rewritten line (similarity gate)", () => {
-    expect(intralineDiff("abcdefghij", "a000000000")).toBeNull();
+  it("leaves a run with no counterpart unmarked", () => {
+    const lines = [del(1, "gone"), del(2, "also gone"), ctx(3, 1)];
+    expect(intralineMarks(lines).size).toBe(0);
   });
 });
 

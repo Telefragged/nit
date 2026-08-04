@@ -3,6 +3,7 @@
 import { prepareFileTreeInput } from "@pierre/trees";
 import type { CommentRange, DiffFile, Hunk, Line } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
+import { intraline_marks } from "../wasm/nit_wasm";
 
 /** Display label for a diff path: the synthetic /COMMIT_MSG file reads
  * "Commit message" (gerrit-style); real paths are themselves. */
@@ -132,62 +133,46 @@ export function pairLines(lines: Line[]): RowPair[] {
 /** Character range [start, end) to emphasize inside a changed line. */
 export type IntralineRange = [number, number];
 
-/**
- * Intraline (word-level) emphasis for a hunk: del runs are aligned with the
- * add run that follows (same pairing as `pairLines`), and each aligned pair
- * gets the common prefix/suffix stripped so only the differing middle is
- * marked. Keyed by line object identity; absent lines render unmarked.
- */
-export function intralineMarks(lines: Line[]): Map<Line, IntralineRange> {
-  const marks = new Map<Line, IntralineRange>();
-  for (const block of diffBlocks(lines)) {
-    if ("context" in block) continue;
-    const { dels, adds } = block;
-    const n = Math.min(dels.length, adds.length);
-    for (let k = 0; k < n; k++) {
-      const del = dels[k];
-      const add = adds[k];
-      if (del === undefined || add === undefined) break;
-      const pair = intralineDiff(del.text, add.text);
-      if (!pair) continue;
-      const [delRange, addRange] = pair;
-      if (delRange[0] < delRange[1]) marks.set(del, delRange);
-      if (addRange[0] < addRange[1]) marks.set(add, addRange);
-    }
-  }
-  return marks;
+/** What `intraline_marks` returns for one replacement block: the ranges of
+ * each of its lines, in the order the block's lines were sent. */
+interface RegionMarks {
+  old: IntralineRange[][];
+  new: IntralineRange[][];
 }
 
 /**
- * Common-prefix/suffix split of an old/new line pair (predictable, no LCS).
- * Returns null when the pair shares too little — emphasis on a mostly
- * rewritten line is noise, so it stays uniformly tinted.
+ * Intraline emphasis for a hunk, keyed by line object identity; absent lines
+ * render unmarked. Each replacement block is marked as a whole (crates/nit-wasm
+ * `intraline`) rather than line against line, so a block whose sides differ in
+ * length marks throughout and text that moved between lines still pairs up.
  */
-export function intralineDiff(
-  oldText: string,
-  newText: string,
-): [IntralineRange, IntralineRange] | null {
-  if (oldText === newText) return null;
-  const limit = Math.min(oldText.length, newText.length);
-  let prefix = 0;
-  while (prefix < limit && oldText[prefix] === newText[prefix]) prefix++;
-  let suffix = 0;
-  while (
-    suffix < limit - prefix &&
-    oldText[oldText.length - 1 - suffix] ===
-      newText[newText.length - 1 - suffix]
-  ) {
-    suffix++;
-  }
-  // Similarity gate: the differing middle of either side must stay well
-  // under the full line, or the pair is effectively a rewrite.
-  const maxLen = Math.max(oldText.length, newText.length);
-  const maxMid = maxLen - prefix - suffix;
-  if (maxMid > 0.55 * maxLen) return null;
-  return [
-    [prefix, oldText.length - suffix],
-    [prefix, newText.length - suffix],
-  ];
+export function intralineMarks(lines: Line[]): Map<Line, IntralineRange[]> {
+  const blocks = [...diffBlocks(lines)].flatMap((block) =>
+    "context" in block || block.dels.length === 0 || block.adds.length === 0
+      ? []
+      : [block],
+  );
+  const regions = intraline_marks(
+    blocks.map((block) => ({
+      old: block.dels.map((line) => line.text),
+      new: block.adds.map((line) => line.text),
+    })),
+  ) as RegionMarks[];
+
+  const marks = new Map<Line, IntralineRange[]>();
+  blocks.forEach((block, index) => {
+    const region = regions[index];
+    if (!region) return;
+    const take = (lines: Line[], ranges: IntralineRange[][]) => {
+      lines.forEach((line, k) => {
+        const on = ranges[k];
+        if (on && on.length > 0) marks.set(line, on);
+      });
+    };
+    take(block.dels, region.old);
+    take(block.adds, region.new);
+  });
+  return marks;
 }
 
 /**

@@ -3,7 +3,7 @@
 // marks — the offsets the comment-range contract anchors to.
 
 import { describe, expect, it } from "vitest";
-import { highlight, markIntraline, markTextRange } from "./highlight";
+import { highlight, markTextRange } from "./highlight";
 
 function parse(html: string): DocumentFragment {
   const tpl = document.createElement("template");
@@ -26,7 +26,7 @@ describe("markTextRange", () => {
   it("stacks with an intraline mark, each wrapping its own chars", () => {
     const raw = "let value = compute(input);";
     let html = highlight(raw, "rust");
-    html = markIntraline(html, 4, 9);
+    html = markTextRange(html, 4, 9, "intraline");
     html = markTextRange(html, 6, 19, "comment-range");
     const root = parse(html);
     expect(markedText(root, ".intraline")).toBe(raw.slice(4, 9));

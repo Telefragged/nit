@@ -141,12 +141,3 @@ export function markTextRange(
   }
   return tpl.innerHTML;
 }
-
-/** Intraline change emphasis: [`markTextRange`] with the diff tint. */
-export function markIntraline(
-  html: string,
-  start: number,
-  end: number,
-): string {
-  return markTextRange(html, start, end, "intraline");
-}

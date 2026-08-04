@@ -31,12 +31,7 @@ import {
   skippedBefore,
   statusLetter,
 } from "../../lib/diffview";
-import {
-  highlight,
-  languageFor,
-  markIntraline,
-  markTextRange,
-} from "../../lib/highlight";
+import { highlight, languageFor, markTextRange } from "../../lib/highlight";
 import { selectionAnchorSide } from "../../lib/selection";
 import { EXPAND_STEP, useHunkExpansion } from "../../lib/useHunkExpansion";
 import type { DraftTarget } from "../../pages/reviewContext";
@@ -55,13 +50,14 @@ interface RangeMark {
 function Code({
   text,
   lang,
-  mark,
+  marks,
   rangeMarks,
   className,
 }: {
   text: string;
   lang: string | null;
-  mark?: IntralineRange;
+  /** The changed spans of a replaced line; a line can hold several. */
+  marks?: IntralineRange[];
   /** Comment-range tints; overlaps stack (nested spans layer the rgba). */
   rangeMarks?: RangeMark[];
   /** `code-text` on diff cells — the selection contract (lib/selection). */
@@ -71,7 +67,7 @@ function Code({
     // Line-at-a-time, so multi-line constructs (block comments) don't
     // carry across rows — accepted for v1.
     let h = highlight(text, lang);
-    if (mark) h = markIntraline(h, mark[0], mark[1]);
+    for (const m of marks ?? []) h = markTextRange(h, m[0], m[1], "intraline");
     for (const r of rangeMarks ?? []) {
       h = markTextRange(
         h,
@@ -81,7 +77,7 @@ function Code({
       );
     }
     return h;
-  }, [text, lang, mark, rangeMarks]);
+  }, [text, lang, marks, rangeMarks]);
   // React re-applies dangerouslySetInnerHTML on the prop object's identity,
   // never comparing the html: an inline literal rewrites every cell's text
   // nodes each render, dropping the reviewer's in-progress selection — the
@@ -227,7 +223,7 @@ export default function DiffFileView({
   // Intraline emphasis for modified line pairs, per hunk (keyed by line
   // object identity, so unified and split rows share the same map).
   const marks = useMemo(() => {
-    const map = new Map<Line, IntralineRange>();
+    const map = new Map<Line, IntralineRange[]>();
     for (const hunk of hunks) {
       for (const [line, range] of intralineMarks(hunk.lines)) {
         map.set(line, range);
@@ -437,7 +433,7 @@ export default function DiffFileView({
             <Code
               text={line.text}
               lang={lang}
-              mark={marks.get(line)}
+              marks={marks.get(line)}
               rangeMarks={cellRangeMarks(line, ["old", "new"])}
               className="code-text"
             />
@@ -470,7 +466,7 @@ export default function DiffFileView({
             <Code
               text={line.text}
               lang={lang}
-              mark={marks.get(line)}
+              marks={marks.get(line)}
               rangeMarks={cellRangeMarks(line, [side])}
               className="code-text"
             />
