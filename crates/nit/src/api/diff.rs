@@ -4,6 +4,8 @@
 //! `parent_sha → commit tree` of the selected revision, an interdiff is
 //! `tree(m) → tree(n)` (docs/data-model.md).
 
+use std::collections::HashSet;
+use std::hash::BuildHasher;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
@@ -26,30 +28,14 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
         .ok()
 }
 
-/// Render the diff `old → new` as the wire shape: context 3, rename
-/// detection, binary files flagged with no hunks.
-///
-/// # Errors
-/// When git can't build or read the diff's patches.
-pub fn diff_trees(repo: &Repository, old: &Tree, new: &Tree) -> Result<Diff> {
-    diff_trees_ctx(repo, old, new, 3, None)
-}
-
-/// One file's diff with every unchanged line kept as context — the source the
-/// UI reveals from when expanding a hunk's surroundings (docs/api.md
-/// "Expanding context"). Bounded to `only` (the file being viewed) so the
-/// costly per-file patch build runs for it alone. Identical classification and
-/// drift handling to the shown diff, so revealed lines match it exactly.
-///
-/// # Errors
-/// When git can't build or read the diff's patches.
-pub fn diff_trees_full(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Result<Diff> {
-    diff_trees_ctx(repo, old, new, u32::MAX, Some(only))
-}
-
 /// The raw git diff `old → new` with rename detection — the one definition of
-/// how nit pairs a delete with an add.
-pub(super) fn git_diff<'r>(
+/// how nit pairs a delete with an add. Built separately from [`render`] so a
+/// caller can resolve rebase drift ([`super::rebase::analyze`]) against the
+/// same deltas before deciding which of them are worth rendering.
+///
+/// # Errors
+/// When git can't build the diff or run rename detection.
+pub fn git_diff<'r>(
     repo: &'r Repository,
     old: &Tree<'_>,
     new: &Tree<'_>,
@@ -62,19 +48,51 @@ pub(super) fn git_diff<'r>(
     Ok(diff)
 }
 
-/// `only` bounds the result to the file whose new-side path matches, skipping
-/// every other delta before its patch is built.
-fn diff_trees_ctx(
-    repo: &Repository,
-    old: &Tree,
-    new: &Tree,
-    context: u32,
-    only: Option<&str>,
-) -> Result<Diff> {
+/// The options behind every nit diff, so the interdiff's hunks and the drift
+/// projection's edit spans ([`super::rebase`]) are cut the same way.
+#[must_use]
+pub fn diff_opts(context: u32) -> DiffOptions {
     let mut opts = DiffOptions::new();
     opts.context_lines(context);
-    let diff = git_diff(repo, old, new, Some(&mut opts))?;
+    opts
+}
 
+/// A delta's wire identity: the path the wire carries it under — the new-side
+/// name, or the old-side one for a deletion — and the old-side name when a
+/// rename made the two differ.
+pub(super) fn delta_path(delta: &git2::DiffDelta) -> (String, Option<String>) {
+    let path = |f: git2::DiffFile| {
+        f.path()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    let wire = if delta.status() == Delta::Deleted {
+        path(delta.old_file())
+    } else {
+        path(delta.new_file())
+    };
+    let old =
+        (delta_status(delta.status()) == Some(FileStatus::Renamed)).then(|| path(delta.old_file()));
+    (wire, old)
+}
+
+/// Render `diff`'s deltas as the wire shape. `totals` reads each file's
+/// new-side line count, the anchor the trailing-context expander needs; the
+/// full-context path (`/lines`) drops it, so it skips that blob read.
+///
+/// `only` bounds the result to one file and `skip` drops the files the caller
+/// has already proved it will discard ([`super::rebase::Drift`]) — both before
+/// the costly per-file patch build, which is the whole point of taking them.
+///
+/// # Errors
+/// When git can't read the diff's patches.
+pub fn render<S: BuildHasher>(
+    repo: &Repository,
+    diff: &git2::Diff,
+    totals: bool,
+    only: Option<&str>,
+    skip: &HashSet<String, S>,
+) -> Result<Diff> {
     let mut files = Vec::new();
     for idx in 0..diff.deltas().len() {
         let delta = diff
@@ -83,20 +101,10 @@ fn diff_trees_ctx(
         let Some(status) = delta_status(delta.status()) else {
             continue;
         };
-        let path = |f: git2::DiffFile| {
-            f.path()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_default()
-        };
-        let file_path = if delta.status() == Delta::Deleted {
-            path(delta.old_file())
-        } else {
-            path(delta.new_file())
-        };
-        if only.is_some_and(|p| p != file_path) {
+        let (file_path, old_path) = delta_path(&delta);
+        if only.is_some_and(|p| p != file_path) || skip.contains(&file_path) {
             continue;
         }
-        let old_path = (status == FileStatus::Renamed).then(|| path(delta.old_file()));
 
         let mut file = DiffFile {
             path: file_path,
@@ -108,7 +116,7 @@ fn diff_trees_ctx(
             new_total: 0,
             hunks: Vec::new(),
         };
-        match Patch::from_diff(&diff, idx)? {
+        match Patch::from_diff(diff, idx)? {
             Some(mut patch) => {
                 if patch.delta().flags().is_binary() {
                     file.binary = true;
@@ -116,10 +124,7 @@ fn diff_trees_ctx(
                     let (_, additions, deletions) = patch.line_stats()?;
                     file.additions = u64::try_from(additions)?;
                     file.deletions = u64::try_from(deletions)?;
-                    // new_total anchors the trailing-context expander. The
-                    // full-context path (/lines) keeps only one file's hunks
-                    // and drops new_total, so skip the blob read it'd waste.
-                    if context != u32::MAX {
+                    if totals {
                         file.new_total = blob_line_count(repo, delta.new_file().id())?;
                     }
                     file.hunks = patch_hunks(&mut patch)?;
@@ -198,14 +203,12 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<Hunk>> {
 /// # Errors
 /// When git can't build or read the buffer diff.
 pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<DiffFile> {
-    let mut opts = DiffOptions::new();
-    opts.context_lines(3);
     let mut patch = Patch::from_buffers(
         old.unwrap_or_default().as_bytes(),
         None,
         new.as_bytes(),
         None,
-        Some(&mut opts),
+        Some(&mut diff_opts(3)),
     )?;
     let (_, additions, deletions) = patch.line_stats()?;
     let mut hunks = patch_hunks(&mut patch)?;
@@ -328,6 +331,19 @@ mod tests {
         }
     }
 
+    /// The shown diff `old → new`: context 3, every file, totals read.
+    fn shown(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
+        let diff = git_diff(repo, old, new, Some(&mut diff_opts(3))).expect("diff builds");
+        render(repo, &diff, true, None, &HashSet::new()).expect("diff renders")
+    }
+
+    /// One file's diff with every unchanged line kept as context — what the UI
+    /// reveals from when expanding a hunk's surroundings.
+    fn full(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
+        let diff = git_diff(repo, old, new, Some(&mut diff_opts(u32::MAX))).expect("diff builds");
+        render(repo, &diff, false, Some(only), &HashSet::new()).expect("diff renders")
+    }
+
     fn lines(n: std::ops::RangeInclusive<u64>) -> String {
         use std::fmt::Write;
         n.fold(String::new(), |mut s, i| {
@@ -345,7 +361,7 @@ mod tests {
             .replace("line 17\n", "line 17\nline 17.5\n");
         let t_old = r.tree(&[("a.txt", old.as_bytes())]);
         let t_new = r.tree(&[("a.txt", new.as_bytes())]);
-        let diff = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff should build");
+        let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
 
         assert_eq!(diff.files.len(), 1);
         let f = &diff.files[0];
@@ -412,7 +428,7 @@ mod tests {
             ("keep.txt", keep.as_bytes()),
             ("new_name.txt", renamed_tweaked.as_bytes()),
         ]);
-        let diff = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff should build");
+        let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
 
         let by_path = |p: &str| {
             diff.files
@@ -572,11 +588,10 @@ mod tests {
         let t_old = r.tree(&[("a.txt", old.as_bytes())]);
         let t_new = r.tree(&[("a.txt", new.as_bytes())]);
 
-        let shown = diff_trees(&r.repo, &r.find(t_old), &r.find(t_new)).expect("diff builds");
+        let shown = shown(&r.repo, &r.find(t_old), &r.find(t_new));
         assert_eq!(shown.files[0].hunks.len(), 2); // a gap the UI would expand
 
-        let full =
-            diff_trees_full(&r.repo, &r.find(t_old), &r.find(t_new), "a.txt").expect("diff builds");
+        let full = full(&r.repo, &r.find(t_old), &r.find(t_new), "a.txt");
         assert_eq!(full.files.len(), 1); // bounded to the requested file
         let f = &full.files[0];
         assert_eq!(f.hunks.len(), 1); // one run, no gap

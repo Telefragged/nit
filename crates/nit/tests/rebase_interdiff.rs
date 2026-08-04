@@ -1,21 +1,24 @@
 //! Rebase-aware interdiffs (docs/api.md "Rebase-aware interdiffs"): the
 //! problem reproduced and each observable property checked against real git.
 //!
-//! Most tests drive the diff machinery directly — `diff_trees` is the plain
-//! interdiff (what leaked the base movement before), `tag_drift` is the
-//! containment — over four commits standing in for parent(m)/m/parent(n)/n.
-//! `tag_drift` reads only the shas it is given, so the four commits need no
-//! real parent/child wiring; their *trees* are what matter. One end-to-end
-//! test exercises the HTTP handler so the wiring (threading parent(m),
-//! invoking the tagger) is covered too — built by pushing a stack and amending
-//! an earlier change so a later one is rewritten by rebase only.
+//! Most tests drive the diff machinery directly — an unfiltered `render` is
+//! the plain interdiff (what leaked the base movement before), `analyze` plus
+//! its `skip`/`tag` is the containment — over four commits standing in for
+//! parent(m)/m/parent(n)/n. `analyze` reads only the shas it is given, so the
+//! four commits need no real parent/child wiring; their *trees* are what
+//! matter. One end-to-end test exercises the HTTP handler so the wiring
+//! (threading parent(m), invoking the analysis) is covered too — built by
+//! pushing a stack and amending an earlier change so a later one is rewritten
+//! by rebase only.
 
 mod common;
 
+use std::collections::HashSet;
+
 use common::*;
 use git2::Oid;
-use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, diff_trees};
-use nit::api::rebase::tag_drift;
+use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, diff_opts, git_diff, render};
+use nit::api::rebase::analyze;
 use nit_types::diff::{Diff, DiffFile};
 use nit_types::enums::{FileStatus, LineKind};
 
@@ -43,23 +46,29 @@ fn snapshot(g: &GitRepo, files: &[(&str, &[u8])]) -> Oid {
     g.commit_full(&[g.root], "snapshot\n", files, &[])
 }
 
-/// The plain interdiff `tree(m) → tree(n)` and the rebase-aware one
-/// (`tag_drift` applied), so a test can compare what leaked vs. what is
-/// contained.
+/// The plain interdiff `tree(m) → tree(n)` and the rebase-aware one, so a test
+/// can compare what leaked vs. what is contained. The second follows the
+/// endpoint exactly: analyse first, render only the files the drift leaves
+/// standing, then tag them.
 fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff, Diff) {
     let tm = commit_tree(&g.repo, &m.to_string()).expect("m tree resolves");
     let tn = commit_tree(&g.repo, &n.to_string()).expect("n tree resolves");
-    let plain = diff_trees(&g.repo, &tm, &tn).expect("plain interdiff builds");
-    let mut tagged = plain.clone();
-    tag_drift(
+    let git = git_diff(&g.repo, &tm, &tn, Some(&mut diff_opts(3))).expect("interdiff builds");
+    let plain =
+        render(&g.repo, &git, true, None, &HashSet::new()).expect("plain interdiff renders");
+    let drift = analyze(
         &g.repo,
-        &mut tagged,
+        &git,
         &m.to_string(),
         &parent_m.to_string(),
         &n.to_string(),
         &parent_n.to_string(),
+        None,
     )
-    .expect("drift tagging succeeds");
+    .expect("drift analysis succeeds");
+    let mut tagged =
+        render(&g.repo, &git, true, None, drift.skip()).expect("contained interdiff renders");
+    drift.tag(&mut tagged);
     (plain, tagged)
 }
 

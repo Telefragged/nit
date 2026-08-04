@@ -59,12 +59,14 @@ pub(super) async fn revision_diff(
         let repo = open_repo(&revs.git_dir)?;
         let new_tree = commit_tree(&repo, &revs.rev.commit_sha)?;
         let (old_tree, against_message, against_rev) = old_side(&repo, &revs)?;
-        let mut wire = diff::diff_trees(&repo, &old_tree, &new_tree)?;
+        let git = diff::git_diff(&repo, &old_tree, &new_tree, Some(&mut diff::diff_opts(3)))?;
+        let drift = interdiff_drift(&repo, &git, &revs.rev, against_rev.as_ref(), None);
+        let mut wire = diff::render(&repo, &git, true, None, drift.skip())?;
         wire.files.insert(
             0,
             diff::commit_msg_file(against_message.as_deref(), &revs.rev.message)?,
         );
-        tag_interdiff_drift(&repo, &mut wire, &revs.rev, against_rev.as_ref());
+        drift.tag(&mut wire);
         Ok(Json(wire))
     })
     .await
@@ -91,8 +93,15 @@ pub(super) async fn revision_lines(
         let repo = open_repo(&revs.git_dir)?;
         let new_tree = commit_tree(&repo, &revs.rev.commit_sha)?;
         let (old_tree, _, against_rev) = old_side(&repo, &revs)?;
-        let mut wire = diff::diff_trees_full(&repo, &old_tree, &new_tree, &q.path)?;
-        tag_interdiff_drift(&repo, &mut wire, &revs.rev, against_rev.as_ref());
+        let git = diff::git_diff(
+            &repo,
+            &old_tree,
+            &new_tree,
+            Some(&mut diff::diff_opts(u32::MAX)),
+        )?;
+        let drift = interdiff_drift(&repo, &git, &revs.rev, against_rev.as_ref(), Some(&q.path));
+        let mut wire = diff::render(&repo, &git, false, Some(&q.path), drift.skip())?;
+        drift.tag(&mut wire);
         let lines = wire
             .files
             .into_iter()
@@ -156,28 +165,32 @@ fn old_side<'r>(
     }
 }
 
-/// Contain rebase drift in an interdiff whose two revisions have different
-/// parents (docs/api.md "Rebase-aware interdiffs"); a no-op otherwise. Best
-/// effort: on failure the plain interdiff is served.
-fn tag_interdiff_drift(
+/// The rebase drift of an interdiff whose two revisions have different parents
+/// (docs/api.md "Rebase-aware interdiffs"); empty otherwise, and empty on
+/// failure so the plain interdiff is served.
+fn interdiff_drift(
     repo: &Repository,
-    wire: &mut Diff,
+    git: &git2::Diff,
     rev: &review::RevisionProj,
     against: Option<&AgainstRev>,
-) {
-    if let Some((m_sha, parent_m)) = against
-        && *parent_m != rev.parent_sha
-        && let Err(e) = rebase::tag_drift(
-            repo,
-            wire,
-            m_sha,
-            parent_m,
-            &rev.commit_sha,
-            &rev.parent_sha,
-        )
-    {
-        tracing::warn!("rebase-aware interdiff tagging failed; serving plain interdiff: {e:#}");
-    }
+    only: Option<&str>,
+) -> rebase::Drift {
+    let Some((m_sha, parent_m)) = against.filter(|(_, p)| *p != rev.parent_sha) else {
+        return rebase::Drift::default();
+    };
+    rebase::analyze(
+        repo,
+        git,
+        m_sha,
+        parent_m,
+        &rev.commit_sha,
+        &rev.parent_sha,
+        only,
+    )
+    .unwrap_or_else(|e| {
+        tracing::warn!("rebase-aware interdiff analysis failed; serving plain interdiff: {e:#}");
+        rebase::Drift::default()
+    })
 }
 
 fn open_repo(git_dir: &str) -> Result<Repository, Error> {

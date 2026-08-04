@@ -34,16 +34,16 @@
 //!   did **not** touch (the common "also drop this line" case) is unaffected
 //!   and stays a real edit.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use anyhow::Result;
-use git2::{DiffOptions, Patch, Repository, Tree};
+use anyhow::{Result, anyhow};
+use git2::{Patch, Repository, Tree};
 
-use nit_types::diff::{Diff, DiffFile, Line};
-use nit_types::enums::{FileStatus, LineKind};
+use nit_types::diff::{Diff, Line};
+use nit_types::enums::LineKind;
 
-use super::diff::{self, COMMIT_MSG_PATH};
+use super::diff;
 
 /// A 0-based, half-open line range.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,9 +93,7 @@ fn edit_from_header(old_start: u64, old_lines: u64, new_start: u64, new_lines: u
 /// One edit per hunk of a context-0 patch of `old → new` (both already known
 /// non-binary).
 fn buffer_edits(old: &[u8], new: &[u8]) -> Result<Vec<Edit>> {
-    let mut opts = DiffOptions::new();
-    opts.context_lines(0);
-    let patch = Patch::from_buffers(old, None, new, None, Some(&mut opts))?;
+    let patch = Patch::from_buffers(old, None, new, None, Some(&mut diff::diff_opts(0)))?;
     (0..patch.num_hunks())
         .map(|h| {
             let (hunk, _) = patch.hunk(h)?;
@@ -203,14 +201,12 @@ fn moves(repo: &Repository, old: &Tree, new: &Tree) -> Result<Vec<(String, Strin
         .collect())
 }
 
-/// Tag one interdiff file's drift lines in place: mark them, drop
-/// fully-drift hunks, recount the non-drift totals. Returns whether a real
-/// (non-drift) edit remains. Leaves the file untouched (byte-identical) when
-/// it carries no drift.
+/// One interdiff file's drifted line ranges, on the old (`m`) and new (`n`)
+/// sides.
 ///
 /// The blobs are the file's content in `parent(m)`, `m`, `parent(n)` and `n`,
 /// each read under its name in that tree.
-fn tag_file(file: &mut DiffFile, bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> Result<bool> {
+fn file_drift(bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> Result<(Vec<Span>, Vec<Span>)> {
     // parent(m) → m and parent(n) → n are the change's own delta at each
     // revision; parent(m) → parent(n) is the base movement. Projecting the
     // base movement through those deltas gives the drifted lines, in the
@@ -218,80 +214,121 @@ fn tag_file(file: &mut DiffFile, bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -
     let ovp = buffer_edits(bpm, bm)?;
     let nvp = buffer_edits(bpn, bn)?;
     let pvp = buffer_edits(bpm, bpn)?;
-    let (old_ranges, new_ranges) = drift_ranges(&pvp, &ovp, &nvp);
+    Ok(drift_ranges(&pvp, &ovp, &nvp))
+}
 
-    let mut any_drift = false;
-    for hunk in &mut file.hunks {
-        for line in &mut hunk.lines {
-            let drift = match line.kind {
-                LineKind::Del => line.old.is_some_and(|l| in_ranges(&old_ranges, l)),
-                LineKind::Add => line.new.is_some_and(|l| in_ranges(&new_ranges, l)),
-                LineKind::Context => false,
-            };
-            if drift {
-                line.drift = true;
-                any_drift = true;
-            }
-        }
-    }
-    if any_drift {
-        // Region selection follows the change's own real edits.
-        file.hunks.retain(|h| h.lines.iter().any(is_real_change));
-        let (mut additions, mut deletions) = (0u64, 0u64);
-        for line in file.hunks.iter().flat_map(|h| &h.lines) {
-            match line.kind {
-                LineKind::Add if !line.drift => additions += 1,
-                LineKind::Del if !line.drift => deletions += 1,
-                _ => {}
-            }
-        }
-        file.additions = additions;
-        file.deletions = deletions;
-    }
-    Ok(!file.hunks.is_empty())
+/// Whether any line of `edit` escapes the drift ranges — an edit the change
+/// made itself, which the reviewer must still see.
+fn escapes_drift(edit: &Edit, old: &[Span], new: &[Span]) -> bool {
+    let free = |span: Span, ranges: &[Span]| {
+        (span.start..span.end).any(|l| !ranges.iter().any(|r| r.contains(l)))
+    };
+    free(edit.a, old) || free(edit.b, new)
 }
 
 fn is_real_change(line: &Line) -> bool {
     matches!(line.kind, LineKind::Add | LineKind::Del) && !line.drift
 }
 
-/// Tag the interdiff `diff` (already rendered `tree(m) → tree(n)`) with
-/// rebase drift in place: mark drift lines, drop fully-drift hunks, recount
-/// the non-drift totals, and drop fully-drift files (docs/api.md
-/// "Rebase-aware interdiffs"). A file the change renamed always stays, even
-/// when every edit inside it is drift. A no-op for files the base movement
-/// does not touch, so a same-parent interdiff is unchanged. The caller
+/// An interdiff's rebase drift, resolved from context-0 edit spans alone —
+/// before any file is rendered (docs/api.md "Rebase-aware interdiffs"). A
+/// file the base movement fully explains is named in [`Drift::skip`] and so
+/// never costs a patch build, which is why the analysis runs first: a rebase
+/// over a long base moves far more files than the change itself touches, and
+/// rendering them only to discard them is the bulk of the work.
+///
+/// A file in neither map is left plain — it carries no drift, or it is
+/// binary, or its blobs, per-file diff or parent names did not resolve.
+#[derive(Default)]
+pub struct Drift {
+    /// Drifted line ranges, old (`m`) and new (`n`) side, per file that keeps
+    /// a real edit.
+    tagged: HashMap<String, (Vec<Span>, Vec<Span>)>,
+    /// Files whose every edit is base movement.
+    skip: HashSet<String>,
+}
+
+impl Drift {
+    /// The files the render must not build a patch for.
+    #[must_use]
+    pub fn skip(&self) -> &HashSet<String> {
+        &self.skip
+    }
+
+    /// Mark each analysed file's drift lines in place, drop its fully-drift
+    /// hunks and recount its non-drift totals. Leaves every other file
+    /// byte-identical, so a same-parent interdiff is untouched.
+    pub fn tag(&self, diff: &mut Diff) {
+        for file in &mut diff.files {
+            let Some((old_ranges, new_ranges)) = self.tagged.get(&file.path) else {
+                continue;
+            };
+            let mut any_drift = false;
+            for line in file.hunks.iter_mut().flat_map(|h| h.lines.iter_mut()) {
+                let drift = match line.kind {
+                    LineKind::Del => line.old.is_some_and(|l| in_ranges(old_ranges, l)),
+                    LineKind::Add => line.new.is_some_and(|l| in_ranges(new_ranges, l)),
+                    LineKind::Context => false,
+                };
+                if drift {
+                    line.drift = true;
+                    any_drift = true;
+                }
+            }
+            if !any_drift {
+                continue;
+            }
+            // Region selection follows the change's own real edits.
+            file.hunks.retain(|h| h.lines.iter().any(is_real_change));
+            let (mut additions, mut deletions) = (0u64, 0u64);
+            for line in file.hunks.iter().flat_map(|h| &h.lines) {
+                match line.kind {
+                    LineKind::Add if !line.drift => additions += 1,
+                    LineKind::Del if !line.drift => deletions += 1,
+                    _ => {}
+                }
+            }
+            file.additions = additions;
+            file.deletions = deletions;
+        }
+    }
+}
+
+/// Resolve the drift of `interdiff` (`tree(m) → tree(n)`, built by the caller
+/// so its tree diff and rename detection are paid once). `only` bounds the
+/// analysis to a single file, matching the render's own bound. The caller
 /// invokes this only when `parent(m) != parent(n)`.
 ///
 /// Best-effort and per-file: a file that is binary, whose blobs cannot be
-/// read, whose per-file diff fails, or whose parent names the base
-/// movement does not connect is left as a plain diff (the others are
-/// still contained); `/COMMIT_MSG` is never drift-processed. So a
+/// read, whose per-file diff fails, or whose parent names the base movement
+/// does not connect is left plain (the others are still contained). So a
 /// failure never leaves a half-tagged file behind, and a returned error means
-/// nothing was tagged at all (the caller serves the plain interdiff).
+/// nothing is tagged at all (the caller serves the plain interdiff).
 ///
 /// # Errors
-/// When git cannot diff the two parents (before any file is touched).
-pub fn tag_drift(
+/// When git cannot diff the two parents, or a delta vanishes mid-walk.
+pub fn analyze(
     repo: &Repository,
-    diff: &mut Diff,
+    interdiff: &git2::Diff,
     m_sha: &str,
     parent_m_sha: &str,
     n_sha: &str,
     parent_n_sha: &str,
-) -> Result<()> {
+    only: Option<&str>,
+) -> Result<Drift> {
+    let mut drift = Drift::default();
     let (Some(tree_m), Some(tree_n), Some(parent_m), Some(parent_n)) = (
         diff::commit_tree(repo, m_sha),
         diff::commit_tree(repo, n_sha),
         diff::commit_tree(repo, parent_m_sha),
         diff::commit_tree(repo, parent_n_sha),
     ) else {
-        return Ok(()); // A tree won't resolve → leave the interdiff plain.
+        return Ok(drift); // A tree won't resolve → leave the interdiff plain.
     };
 
     let base: HashMap<String, String> = moves(repo, &parent_m, &parent_n)?.into_iter().collect();
     if base.is_empty() {
-        return Ok(());
+        return Ok(drift);
     }
     // Each side's names read backwards, tree → parent: the seam that finds a
     // file under the name it was renamed away from.
@@ -301,12 +338,16 @@ pub fn tag_drift(
     let in_parent_m = from_parent(moves(repo, &parent_m, &tree_m)?);
     let in_parent_n = from_parent(moves(repo, &parent_n, &tree_n)?);
 
-    diff.files.retain_mut(|file| {
-        if file.path == COMMIT_MSG_PATH || file.binary {
-            return true;
+    for idx in 0..interdiff.deltas().len() {
+        let delta = interdiff
+            .get_delta(idx)
+            .ok_or_else(|| anyhow!("interdiff delta {idx} vanished"))?;
+        let (path, old_path) = diff::delta_path(&delta);
+        if only.is_some_and(|p| p != path) {
+            continue;
         }
-        let name_m = file.old_path.as_deref().unwrap_or(&file.path);
-        let name_n = file.path.as_str();
+        let name_m = old_path.as_deref().unwrap_or(&path);
+        let name_n = path.as_str();
         let name_pm = in_parent_m.get(name_m).map_or(name_m, String::as_str);
         let name_pn = in_parent_n.get(name_n).map_or(name_n, String::as_str);
         // The base movement must itself carry one parent name to the other.
@@ -314,12 +355,11 @@ pub fn tag_drift(
         // disagreed) is left plain: diffing unrelated parent blobs could
         // claim the change's real edits as drift.
         if base.get(name_pm).map(String::as_str) != Some(name_pn) {
-            return true;
+            continue;
         }
         // Gerrit's implicitRename: a rename either side's delta produced is
         // the change's own and stays visible even when fully drifted.
-        let own_rename =
-            file.status == FileStatus::Renamed && (name_pm != name_m || name_pn != name_n);
+        let own_rename = old_path.is_some() && (name_pm != name_m || name_pn != name_n);
         let blob = |tree: &Tree, name: &str| blob_bytes(repo, tree, Path::new(name));
         let (Some(bpm), Some(bm), Some(bpn), Some(bn)) = (
             blob(&parent_m, name_pm),
@@ -327,18 +367,28 @@ pub fn tag_drift(
             blob(&parent_n, name_pn),
             blob(&tree_n, name_n),
         ) else {
-            return true; // Binary on some side — leave plain.
+            continue; // Binary on some side — leave plain.
         };
-        match tag_file(file, &bpm, &bm, &bpn, &bn) {
-            Ok(real) => real || own_rename,
-            Err(e) => {
-                // Leave just this file plain; the rest are still contained.
-                tracing::warn!("drift tagging skipped for {}: {e:#}", file.path);
-                true
+        // The file's own m → n edits decide whether anything survives the base
+        // movement — the verdict the rendered lines would give, without
+        // rendering them.
+        let analysed = file_drift(&bpm, &bm, &bpn, &bn).and_then(|ranges| {
+            let own = buffer_edits(&bm, &bn)?;
+            let real = own.iter().any(|e| escapes_drift(e, &ranges.0, &ranges.1));
+            Ok((ranges, real))
+        });
+        match analysed {
+            Ok((ranges, real)) if real || own_rename => {
+                drift.tagged.insert(path, ranges);
             }
+            Ok(_) => {
+                drift.skip.insert(path);
+            }
+            // Leave just this file plain; the rest are still contained.
+            Err(e) => tracing::warn!("drift analysis skipped for {path}: {e:#}"),
         }
-    });
-    Ok(())
+    }
+    Ok(drift)
 }
 
 #[cfg(test)]
