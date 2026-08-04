@@ -40,18 +40,9 @@ fn submit_chain(server: &TestServer, tip: u64) -> Value {
     out
 }
 
-/// A path member's `status` off the change's derived chain (the change is its
-/// own tip for a single-commit chain).
+/// The change's status at the revision its own chain pins.
 fn status_at(server: &TestServer, change_id: u64) -> String {
-    let (_, chain) = http_get(&server.url(&format!("/api/chains/{change_id}")));
-    chain["path"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["change_id"].as_u64() == Some(change_id))
-        .and_then(|m| m["status"].as_str())
-        .unwrap_or("?")
-        .to_string()
+    common::status_at(server, change_id, None).unwrap_or_else(|| "?".to_string())
 }
 
 fn draft_comment(server: &TestServer, change_id: u64, file: &str, line: u64, body: &str) {

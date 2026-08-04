@@ -331,6 +331,23 @@ pub fn review(server: &TestServer, change_id: u64, verdict: &str, message: &str)
     out
 }
 
+/// A change's displayed status off its derived chain path (docs/api.md "State
+/// table") — the change is its own degenerate tip once terminal. `revision`
+/// pins a patchset; `None` reads the one the chain's tip pins. `None` back
+/// means the chain did not resolve.
+pub fn status_at(server: &TestServer, change_id: u64, revision: Option<u64>) -> Option<String> {
+    let query = revision.map_or(String::new(), |r| format!("?revision={r}"));
+    let (st, chain) = http_get(&server.url(&format!("/api/chains/{change_id}{query}")));
+    if st != 200 {
+        return None;
+    }
+    chain["path"]
+        .as_array()?
+        .iter()
+        .find(|m| m["change_id"].as_u64() == Some(change_id))
+        .and_then(|m| m["status"].as_str().map(str::to_string))
+}
+
 pub fn first_repo_id(server: &TestServer) -> u64 {
     let (_, repos) = http_get(&server.url("/api/repos"));
     repos["repos"][0]["id"].as_u64().expect("a repo")

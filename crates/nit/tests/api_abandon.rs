@@ -5,23 +5,8 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push};
+use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push, status_at};
 use serde_json::json;
-
-/// Per-revision status of `change_id` off its derived chain path (the change is
-/// its own degenerate tip once terminal).
-fn status_at(server: &TestServer, change_id: u64, revision: u64) -> Option<String> {
-    let (st, chain) =
-        http_get(&server.url(&format!("/api/chains/{change_id}?revision={revision}")));
-    if st != 200 {
-        return None;
-    }
-    chain["path"]
-        .as_array()?
-        .iter()
-        .find(|m| m["change_id"].as_u64() == Some(change_id))
-        .and_then(|m| m["status"].as_str().map(str::to_string))
-}
 
 #[test]
 fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
@@ -32,7 +17,10 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
-    assert_eq!(status_at(&server, change_id, 0).as_deref(), Some("pending"));
+    assert_eq!(
+        status_at(&server, change_id, Some(0)).as_deref(),
+        Some("pending")
+    );
 
     let (st, detail) = http_post(
         &server.url(&format!("/api/changes/{change_id}/abandon")),
@@ -40,7 +28,7 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     );
     assert_eq!(st, 200, "{detail}");
     assert_eq!(
-        status_at(&server, change_id, 0).as_deref(),
+        status_at(&server, change_id, Some(0)).as_deref(),
         Some("abandoned")
     );
 
@@ -63,7 +51,7 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     );
     assert_eq!(st, 200);
     assert_eq!(
-        status_at(&server, change_id, 0).as_deref(),
+        status_at(&server, change_id, Some(0)).as_deref(),
         Some("abandoned")
     );
 
@@ -73,5 +61,8 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
         &json!({}),
     );
     assert_eq!(st, 200);
-    assert_eq!(status_at(&server, change_id, 0).as_deref(), Some("pending"));
+    assert_eq!(
+        status_at(&server, change_id, Some(0)).as_deref(),
+        Some("pending")
+    );
 }

@@ -12,24 +12,10 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, first_repo_id, http_get, http_post, member_id, msg, push, review, sweep,
+    GitRepo, TestServer, first_repo_id, http_get, http_post, member_id, msg, push, review,
+    status_at, sweep,
 };
 use serde_json::json;
-
-/// The per-revision status of `change_id` at `revision`, read off the derived
-/// chain path (the change is its own degenerate tip after it goes terminal).
-fn status_at(server: &TestServer, change_id: u64, revision: u64) -> Option<String> {
-    let (st, chain) =
-        http_get(&server.url(&format!("/api/chains/{change_id}?revision={revision}")));
-    if st != 200 {
-        return None;
-    }
-    chain["path"]
-        .as_array()?
-        .iter()
-        .find(|m| m["change_id"].as_u64() == Some(change_id))
-        .and_then(|m| m["status"].as_str().map(str::to_string))
-}
 
 #[test]
 fn change_landed_on_main_becomes_merged() {
@@ -50,7 +36,10 @@ fn change_landed_on_main_becomes_merged() {
     g.branch("main", landed);
 
     sweep(&server);
-    assert_eq!(status_at(&server, change_id, 0).as_deref(), Some("merged"));
+    assert_eq!(
+        status_at(&server, change_id, Some(0)).as_deref(),
+        Some("merged")
+    );
 
     // A fully-merged chain drops off the active dashboard but stays reachable
     // by id (and under ?status=all).
@@ -83,8 +72,11 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     g.branch("main", landed);
 
     sweep(&server);
-    assert_eq!(status_at(&server, ancestor, 0).as_deref(), Some("merged"));
-    assert_eq!(status_at(&server, tip, 0).as_deref(), Some("pending"));
+    assert_eq!(
+        status_at(&server, ancestor, Some(0)).as_deref(),
+        Some("merged")
+    );
+    assert_eq!(status_at(&server, tip, Some(0)).as_deref(), Some("pending"));
 
     // One live member keeps the partially-landed stack on the active list, but
     // the walk stops at the canonical branch: the ancestor has landed, so it
@@ -107,14 +99,15 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     );
 }
 
+/// ≡ `nit abandon`, asserting the overlay took.
 fn abandon(server: &TestServer, change_id: u64) {
-    let (st, _) = http_post(
+    let (st, body) = http_post(
         &server.url(&format!("/api/changes/{change_id}/abandon")),
         &json!({}),
     );
-    assert_eq!(st, 200);
+    assert_eq!(st, 200, "abandon change {change_id}: {body}");
     assert_eq!(
-        status_at(server, change_id, 0).as_deref(),
+        status_at(server, change_id, Some(0)).as_deref(),
         Some("abandoned")
     );
 }
@@ -139,7 +132,7 @@ fn branchless_change_stays_live_without_auto_abandon() {
     g.branch("main", other);
     sweep(&server);
     assert_eq!(
-        status_at(&server, change_id, 0).as_deref(),
+        status_at(&server, change_id, Some(0)).as_deref(),
         Some("pending"),
         "a branch-less change stays live"
     );
@@ -167,7 +160,7 @@ fn reopen_clears_abandoned_to_retained_status() {
     assert_eq!(st, 200, "{detail}");
     assert_eq!(detail["id"], change_id);
     assert_eq!(
-        status_at(&server, change_id, 0).as_deref(),
+        status_at(&server, change_id, Some(0)).as_deref(),
         Some("approved"),
         "reopen surfaces the retained verdict"
     );
