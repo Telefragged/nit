@@ -3458,6 +3458,11 @@ rec {
         libName = "nit_wasm";type = [ "cdylib" ];
         dependencies = [
           {
+            name = "imara-diff";
+            packageId = "imara-diff";
+            usesDefaultFeatures = false;
+          }
+          {
             name = "nit-types";
             packageId = "nit-types";
           }

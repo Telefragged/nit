@@ -1,8 +1,9 @@
-//! WebAssembly bindings for the shared change fold (`nit_types::fold`): the
-//! browser folds the websocket stream client-side with the very same Rust code
-//! the server runs. The server ships a `ChangeProj` snapshot; the browser
-//! resumes folding the live tail onto it and projects the published
-//! `ChangeDetail` — never reimplementing the fold.
+//! The Rust the browser runs: the shared change fold (`nit_types::fold`), so
+//! the websocket stream folds client-side with the very same code the server
+//! runs — the server ships a `ChangeProj` snapshot, the browser resumes folding
+//! the live tail onto it and projects the published `ChangeDetail`, never
+//! reimplementing the fold — and the intraline diff, whose per-character Myers
+//! wants a compiled language.
 //!
 //! Values cross the boundary as structured `JsValue`s via `serde-wasm-bindgen`,
 //! with no JSON text in between. `u64` rides as a JS `number` — the same
@@ -12,6 +13,8 @@ use nit_types::fold::{self, ChangeProj};
 use nit_types::log::LogEntry;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
+
+mod intraline;
 
 /// Serialize a fold value to a `JsValue`. `serialize_missing_as_null` keeps
 /// `Option::None` as JS `null` (the default is `undefined`), which the web's
@@ -55,6 +58,19 @@ pub fn fold_entry(proj: JsValue, entry: JsValue) -> Result<JsValue, JsValue> {
     let entry: LogEntry = serde_wasm_bindgen::from_value(entry)?;
     fold::fold(&mut proj, entry);
     to_js(&proj)
+}
+
+/// Mark the characters that changed inside each replacement block of a diff,
+/// one list of ranges per line of the block (docs/frontend.md "Intraline
+/// emphasis").
+///
+/// # Errors
+/// When `regions` is not a list of replacement blocks or the marks fail to
+/// serialize.
+#[wasm_bindgen]
+pub fn intraline_marks(regions: JsValue) -> Result<JsValue, JsValue> {
+    let regions: Vec<intraline::Region> = serde_wasm_bindgen::from_value(regions)?;
+    to_js(&intraline::marks(&regions))
 }
 
 /// Project a `ChangeProj` to its published `ChangeDetail` (docs/api.md
