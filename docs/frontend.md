@@ -106,8 +106,9 @@ still poll/refetch; moving them onto the stream is the next step.
   - **Diff**: monospace, old/new line-number gutters, add/del coloring,
     per-line syntax highlighting (by extension; skipped silently when
     unknown), hunk separators. A `drift: true` line (base movement folded
-    into a rebase interdiff) is tinted and excluded from counts
-    ([api.md](api.md) "Rebase-aware interdiffs").
+    into a rebase interdiff) keeps its direction but not the green/red of a
+    real edit — blue for an added line, purple for a removed one, dimmed and
+    excluded from counts ([api.md](api.md) "Rebase-aware interdiffs").
   - **Comments**: select diff text (partial or multi-line, one side at a
     time) and press `c` → the editor opens under the selection with the
     range recorded ([api.md](api.md) "Range comments"); `c` on a line

@@ -13,6 +13,7 @@
   --amber: #d29922;
   --blue: #58a6ff;
   --green: #3fb950;
+  --purple: #a371f7;
   --red: #f85149;
   --gray: #6e7681;
   --amber-dim: rgb(210 153 34 / 15%);
@@ -26,8 +27,17 @@
   --del-bg: rgb(248 81 73 / 9%);
   --del-gutter: rgb(248 81 73 / 16%);
   --del-intraline: rgb(248 81 73 / 28%);
-  --drift-bg: rgb(110 118 129 / 13%);
-  --drift-gutter: rgb(110 118 129 / 22%);
+
+  /* Rebase drift keeps a hue per direction (gerrit's rebased-add /
+     rebased-remove highlights): blue for an added line, purple for a removed
+     one. Neither is green or red, so drift never reads as the agent's own
+     edit, and each sits below its add/del counterpart above. */
+  --drift-add-bg: rgb(88 166 255 / 9%);
+  --drift-add-gutter: rgb(88 166 255 / 16%);
+  --drift-add-intraline: rgb(88 166 255 / 24%);
+  --drift-del-bg: rgb(163 113 247 / 10%);
+  --drift-del-gutter: rgb(163 113 247 / 18%);
+  --drift-del-intraline: rgb(163 113 247 / 26%);
 
   /* change graph (docs/api.md "Graph"): the HEAD ring, the merged-history
      edge, and a per-lane branch palette (gleisbau-style — a whole branch

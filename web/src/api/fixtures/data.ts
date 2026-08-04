@@ -630,9 +630,10 @@ const change11: ChangeRecord = {
         },
         // A rebase landed in this file: the agent's real edit (lookup, line
         // 16) sits beside base movement (insert's signature, line 19) that
-        // the rebase pulled in. The drift renders contained and grey and is
-        // excluded from the counts (additions/deletions are the real edit
-        // only) — docs/api.md "Rebase-aware interdiffs".
+        // the rebase pulled in. The drift renders contained, in its own
+        // blue/purple hues, and is excluded from the counts
+        // (additions/deletions are the real edit only) — docs/api.md
+        // "Rebase-aware interdiffs".
         {
           path: "src/auth/store.rs",
           status: "modified",
