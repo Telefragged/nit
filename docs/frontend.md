@@ -142,6 +142,26 @@ still poll/refetch; moving them onto the stream is the next step.
 - 404/error: plain message + link home. Loading: skeleton rows, no
   spinner-only screens.
 
+## Intraline emphasis
+
+Inside a replacement block — a run of deleted lines and the added lines that
+follow it — the characters that actually changed are marked, so the eye lands
+on the words that moved instead of a uniformly tinted line. The block is diffed
+**as one text** (the deleted lines joined, the added lines joined), per
+character, by `crates/nit-wasm`'s `intraline`, with Gerrit's `IntraLineLoader`
+rules applied over the result; `lib/diffview.ts` hands it each block and keys
+the ranges that come back by line. So a line carries as many marks as it has
+changed spans, a block whose two sides differ in length is marked throughout,
+and text that moved to another line still pairs up. A mark covering a whole
+line is dropped — the add/del tint already says that much.
+
+It is Rust rather than TypeScript because the diff is Myers over characters —
+compiled, an ordinary block costs a few milliseconds. Myers is O(N·D) even with
+imara-diff's search heuristic, and repetitive text (a generated file, a
+lockfile) gives the search no unique anchor to cut on, so a block past a
+code-unit budget goes unmarked rather than stalling the render: at that size
+the add/del tint is the whole story anyway.
+
 ## Design language
 
 Expert-dense, dark-first (single dark theme for v1). Background

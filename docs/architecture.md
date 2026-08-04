@@ -39,7 +39,8 @@ nit is a single-machine, local-first review server. Three parts:
   The change page is **event-driven**: it subscribes over `WS /api/stream` for a
   `ChangeProj` snapshot and folds the live tail with `crates/nit-wasm` (the
   shared fold), so the browser resumes the server's projection rather than
-  reimplementing it.
+  reimplementing it. The same crate marks the changed characters inside a
+  replacement block ([frontend.md](frontend.md) "Intraline emphasis").
 - **The CLI** — `nit push` and the agent read/comment commands
   ([agent-workflow.md](agent-workflow.md)).
 
