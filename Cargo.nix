@@ -1892,7 +1892,7 @@ rec {
           "rustc-dep-of-std" = [ "nightly" "core" "alloc" "rustc-internal-api" ];
           "serde" = [ "dep:serde" ];
         };
-        resolvedDefaultFeatures = [ "default-hasher" ];
+        resolvedDefaultFeatures = [ "default-hasher" "inline-more" ];
       };
       "hashbrown 0.16.1" = rec {
         crateName = "hashbrown";
@@ -2638,6 +2638,31 @@ rec {
         };
         resolvedDefaultFeatures = [ "compiled_data" ];
       };
+      "imara-diff" = rec {
+        crateName = "imara-diff";
+        version = "0.2.0";
+        edition = "2021";
+        sha256 = "0p2wmak4pbqfa93fihply18kq8q0nxg6zl0dhampipv6yxid809g";
+        libName = "imara_diff";
+        authors = [
+          "pascalkuthe <pascalkuthe@pm.me>"
+        ];
+        dependencies = [
+          {
+            name = "hashbrown";
+            packageId = "hashbrown 0.15.5";
+            usesDefaultFeatures = false;
+            features = [ "default-hasher" "inline-more" ];
+          }
+          {
+            name = "memchr";
+            packageId = "memchr";
+          }
+        ];
+        features = {
+          "default" = [ "unified_diff" ];
+        };
+      };
       "indexmap" = rec {
         crateName = "indexmap";
         version = "2.14.0";
@@ -3312,6 +3337,11 @@ rec {
           {
             name = "git2";
             packageId = "git2";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "imara-diff";
+            packageId = "imara-diff";
             usesDefaultFeatures = false;
           }
           {

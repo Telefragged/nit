@@ -34,81 +34,36 @@
 //!   did **not** touch (the common "also drop this line" case) is unaffected
 //!   and stays a real edit.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::ops::Range;
 use std::path::Path;
 
-use anyhow::{Result, anyhow};
-use git2::{Patch, Repository, Tree};
+use anyhow::Result;
+use git2::{Oid, Repository, Tree};
+use imara_diff::InternedInput;
 
 use nit_types::diff::{Diff, Line};
 use nit_types::enums::LineKind;
 
 use super::diff;
 
-/// A 0-based, half-open line range.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Span {
-    start: u64,
-    end: u64,
-}
+/// A 0-based, half-open line range, and an edit turning one into another —
+/// [`imara_diff::Hunk`]'s `before`/`after`, which is already what the
+/// projection speaks. A pure insertion has an empty `before`, a pure deletion
+/// an empty `after`.
+type Span = Range<u32>;
+type Edit = imara_diff::Hunk;
 
-impl Span {
-    fn len(self) -> u64 {
-        self.end - self.start
-    }
+/// One file's drifted lines, on the old (`m`) and new (`n`) side.
+type DriftRanges = (Vec<Span>, Vec<Span>);
 
-    fn contains(self, point: u64) -> bool {
-        self.start <= point && point < self.end
-    }
-}
-
-/// A line-level edit: the A-range (old side) becomes the B-range (new side).
-/// `JGit` semantics — a pure insertion has an empty A, a pure deletion an
-/// empty B.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Edit {
-    a: Span,
-    b: Span,
-}
-
-/// The edit a single context-0 hunk header describes (a context-0 hunk is
-/// exactly one contiguous change region). libgit2 reports a 1-based start and
-/// a line count per side; an **empty** range (count 0) reports the position
-/// *after which* the change sits, so its 0-based start is the reported start,
-/// while a non-empty range's is `start - 1`.
-fn edit_from_header(old_start: u64, old_lines: u64, new_start: u64, new_lines: u64) -> Edit {
-    let span = |start: u64, lines: u64| {
-        let begin = if lines == 0 { start } else { start - 1 };
-        Span {
-            start: begin,
-            end: begin + lines,
-        }
-    };
-    Edit {
-        a: span(old_start, old_lines),
-        b: span(new_start, new_lines),
-    }
-}
-
-/// One edit per hunk of a context-0 patch of `old → new` (both already known
-/// non-binary).
-fn buffer_edits(old: &[u8], new: &[u8]) -> Result<Vec<Edit>> {
-    let patch = Patch::from_buffers(old, None, new, None, Some(&mut diff::diff_opts(0)))?;
-    (0..patch.num_hunks())
-        .map(|h| {
-            let (hunk, _) = patch.hunk(h)?;
-            Ok(edit_from_header(
-                u64::from(hunk.old_start()),
-                u64::from(hunk.old_lines()),
-                u64::from(hunk.new_start()),
-                u64::from(hunk.new_lines()),
-            ))
-        })
-        .collect()
+/// One edit per contiguous change region of `old → new`.
+fn buffer_edits(old: &[u8], new: &[u8]) -> Vec<Edit> {
+    diff::line_edits(&InternedInput::new(old, new))
 }
 
 fn net_delta(e: &Edit) -> i64 {
-    i64::try_from(e.b.len()).unwrap_or(i64::MAX) - i64::try_from(e.a.len()).unwrap_or(i64::MAX)
+    i64::from(e.after.end - e.after.start) - i64::from(e.before.end - e.before.start)
 }
 
 /// Map the parts of `pos` that the change's own edits (`mappings`) did **not**
@@ -120,34 +75,36 @@ fn net_delta(e: &Edit) -> i64 {
 /// straddles one of the change's own lines still contributes its untouched
 /// lines).
 ///
-/// `mappings` must be ascending by `a.start` and disjoint — `buffer_edits`
-/// (one edit per ascending hunk) yields them that way.
-fn project_clipped(pos: Span, mappings: &[Edit]) -> Vec<Span> {
+/// `mappings` must be ascending by `before.start` and disjoint —
+/// `buffer_edits` (one edit per ascending hunk) yields them that way.
+fn project_clipped(pos: &Span, mappings: &[Edit]) -> Vec<Span> {
     debug_assert!(
-        mappings.windows(2).all(|w| w[0].a.end <= w[1].a.start),
+        mappings
+            .windows(2)
+            .all(|w| w[0].before.end <= w[1].before.start),
         "mappings must be ascending and disjoint"
     );
     let mut out = Vec::new();
     let mut cursor = pos.start; // start of the next not-yet-covered gap
     let mut shift: i64 = 0; // net delta of the mappings before `cursor`
-    let mut emit = |from: u64, to: u64, shift: i64| {
-        let shifted = |x: u64| u64::try_from(i64::try_from(x).ok()? + shift).ok();
+    let mut emit = |from: u32, to: u32, shift: i64| {
+        let shifted = |x: u32| u32::try_from(i64::from(x) + shift).ok();
         if from < to
             && let (Some(start), Some(end)) = (shifted(from), shifted(to))
         {
-            out.push(Span { start, end });
+            out.push(start..end);
         }
     };
     for m in mappings {
-        if m.a.start >= pos.end {
+        if m.before.start >= pos.end {
             break;
         }
-        if m.a.end <= cursor {
+        if m.before.end <= cursor {
             shift += net_delta(m);
             continue;
         }
-        emit(cursor, m.a.start, shift); // the untouched gap before this edit
-        cursor = m.a.end; // step over the change's own edited region
+        emit(cursor, m.before.start, shift);
+        cursor = m.before.end;
         shift += net_delta(m);
     }
     emit(cursor, pos.end, shift);
@@ -161,39 +118,33 @@ fn project_clipped(pos: Span, mappings: &[Edit]) -> Vec<Span> {
 /// didn't touch, so an edit the diff folded across one of its own lines still
 /// yields its drifted lines. Returns the drift line ranges on the old (`m`)
 /// and new (`n`) sides of the interdiff.
-fn drift_ranges(pvp: &[Edit], ovp: &[Edit], nvp: &[Edit]) -> (Vec<Span>, Vec<Span>) {
+fn drift_ranges(pvp: &[Edit], ovp: &[Edit], nvp: &[Edit]) -> DriftRanges {
     let mut old_ranges = Vec::new();
     let mut new_ranges = Vec::new();
     for e in pvp {
-        old_ranges.extend(project_clipped(e.a, ovp));
-        new_ranges.extend(project_clipped(e.b, nvp));
+        old_ranges.extend(project_clipped(&e.before, ovp));
+        new_ranges.extend(project_clipped(&e.after, nvp));
     }
     (old_ranges, new_ranges)
 }
 
-/// True if the 1-based `line` falls inside any 0-based span.
-fn in_ranges(ranges: &[Span], line: u64) -> bool {
-    line >= 1 && ranges.iter().any(|r| r.contains(line - 1))
+/// True if the 0-based `line` falls inside any span.
+fn drifted(ranges: &[Span], line: u32) -> bool {
+    ranges.iter().any(|r| r.contains(&line))
 }
 
-/// The file's blob bytes in `tree`: `Some(empty)` when the path is absent
-/// (added/deleted across the four trees), `None` when it is binary (the
-/// caller then leaves the file as a plain diff).
-fn blob_bytes(repo: &Repository, tree: &Tree, path: &Path) -> Option<Vec<u8>> {
-    let Ok(entry) = tree.get_path(path) else {
-        return Some(Vec::new());
-    };
-    let blob = repo.find_blob(entry.id()).ok()?;
-    if blob.is_binary() {
-        return None;
-    }
-    Some(blob.content().to_vec())
+/// The oid of `path` in `tree`, zero when it is absent — the null oid every
+/// git tree diff already uses for the missing side of an add or delete, and
+/// what [`diff::blob_bytes`] reads as the empty text.
+fn entry_oid(tree: &Tree, path: &str) -> Oid {
+    tree.get_path(Path::new(path))
+        .map_or(Oid::zero(), |e| e.id())
 }
 
 /// Every path a tree diff touches, as `(name in old, name in new)` — the two
 /// differ exactly when rename detection paired a delete with an add.
 fn moves(repo: &Repository, old: &Tree, new: &Tree) -> Result<Vec<(String, String)>> {
-    let diff = diff::git_diff(repo, old, new, None)?;
+    let diff = diff::git_diff(repo, old, new)?;
     let name = |f: git2::DiffFile<'_>| f.path().map(|p| p.to_string_lossy().into_owned());
     Ok(diff
         .deltas()
@@ -206,24 +157,22 @@ fn moves(repo: &Repository, old: &Tree, new: &Tree) -> Result<Vec<(String, Strin
 ///
 /// The blobs are the file's content in `parent(m)`, `m`, `parent(n)` and `n`,
 /// each read under its name in that tree.
-fn file_drift(bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> Result<(Vec<Span>, Vec<Span>)> {
+fn file_drift(bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> DriftRanges {
     // parent(m) → m and parent(n) → n are the change's own delta at each
     // revision; parent(m) → parent(n) is the base movement. Projecting the
     // base movement through those deltas gives the drifted lines, in the
     // interdiff's own m/n coordinates.
-    let ovp = buffer_edits(bpm, bm)?;
-    let nvp = buffer_edits(bpn, bn)?;
-    let pvp = buffer_edits(bpm, bpn)?;
-    Ok(drift_ranges(&pvp, &ovp, &nvp))
+    let ovp = buffer_edits(bpm, bm);
+    let nvp = buffer_edits(bpn, bn);
+    let pvp = buffer_edits(bpm, bpn);
+    drift_ranges(&pvp, &ovp, &nvp)
 }
 
 /// Whether any line of `edit` escapes the drift ranges — an edit the change
 /// made itself, which the reviewer must still see.
 fn escapes_drift(edit: &Edit, old: &[Span], new: &[Span]) -> bool {
-    let free = |span: Span, ranges: &[Span]| {
-        (span.start..span.end).any(|l| !ranges.iter().any(|r| r.contains(l)))
-    };
-    free(edit.a, old) || free(edit.b, new)
+    let free = |span: &Span, ranges: &[Span]| span.clone().any(|l| !drifted(ranges, l));
+    free(&edit.before, old) || free(&edit.after, new)
 }
 
 fn is_real_change(line: &Line) -> bool {
@@ -231,28 +180,24 @@ fn is_real_change(line: &Line) -> bool {
 }
 
 /// An interdiff's rebase drift, resolved from context-0 edit spans alone —
-/// before any file is rendered (docs/api.md "Rebase-aware interdiffs"). A
-/// file the base movement fully explains is named in [`Drift::skip`] and so
-/// never costs a patch build, which is why the analysis runs first: a rebase
-/// over a long base moves far more files than the change itself touches, and
-/// rendering them only to discard them is the bulk of the work.
+/// before any file is rendered (docs/api.md "Rebase-aware interdiffs"). A file
+/// the base movement fully explains never costs a blob read or a line diff,
+/// which is why the analysis runs first: a rebase over a long base moves far
+/// more files than the change itself touches, and rendering them only to
+/// discard them is the bulk of the work.
 ///
-/// A file in neither map is left plain — it carries no drift, or it is
-/// binary, or its blobs, per-file diff or parent names did not resolve.
+/// Per analysed file: `None` — every edit is base movement, so don't render it
+/// at all; `Some(ranges)` — render it and tag these old/new lines. A file in
+/// neither state is absent and left plain: it carries no drift, or it is
+/// binary, or its parent names did not resolve.
 #[derive(Default)]
-pub struct Drift {
-    /// Drifted line ranges, old (`m`) and new (`n`) side, per file that keeps
-    /// a real edit.
-    tagged: HashMap<String, (Vec<Span>, Vec<Span>)>,
-    /// Files whose every edit is base movement.
-    skip: HashSet<String>,
-}
+pub struct Drift(HashMap<String, Option<DriftRanges>>);
 
 impl Drift {
-    /// The files the render must not build a patch for.
+    /// Whether the render should build `path` at all.
     #[must_use]
-    pub fn skip(&self) -> &HashSet<String> {
-        &self.skip
+    pub fn renders(&self, path: &str) -> bool {
+        !matches!(self.0.get(path), Some(None))
     }
 
     /// Mark each analysed file's drift lines in place, drop its fully-drift
@@ -260,36 +205,24 @@ impl Drift {
     /// byte-identical, so a same-parent interdiff is untouched.
     pub fn tag(&self, diff: &mut Diff) {
         for file in &mut diff.files {
-            let Some((old_ranges, new_ranges)) = self.tagged.get(&file.path) else {
+            let Some(Some((old_ranges, new_ranges))) = self.0.get(&file.path) else {
                 continue;
             };
-            let mut any_drift = false;
+            // The wire numbers lines from 1; the spans index from 0.
+            let hit = |ranges: &[Span], n: Option<u64>| {
+                n.and_then(|n| u32::try_from(n).ok()?.checked_sub(1))
+                    .is_some_and(|l| drifted(ranges, l))
+            };
             for line in file.hunks.iter_mut().flat_map(|h| h.lines.iter_mut()) {
-                let drift = match line.kind {
-                    LineKind::Del => line.old.is_some_and(|l| in_ranges(old_ranges, l)),
-                    LineKind::Add => line.new.is_some_and(|l| in_ranges(new_ranges, l)),
+                line.drift = match line.kind {
+                    LineKind::Del => hit(old_ranges, line.old),
+                    LineKind::Add => hit(new_ranges, line.new),
                     LineKind::Context => false,
                 };
-                if drift {
-                    line.drift = true;
-                    any_drift = true;
-                }
-            }
-            if !any_drift {
-                continue;
             }
             // Region selection follows the change's own real edits.
             file.hunks.retain(|h| h.lines.iter().any(is_real_change));
-            let (mut additions, mut deletions) = (0u64, 0u64);
-            for line in file.hunks.iter().flat_map(|h| &h.lines) {
-                match line.kind {
-                    LineKind::Add if !line.drift => additions += 1,
-                    LineKind::Del if !line.drift => deletions += 1,
-                    _ => {}
-                }
-            }
-            file.additions = additions;
-            file.deletions = deletions;
+            (file.additions, file.deletions) = diff::stats(&file.hunks);
         }
     }
 }
@@ -300,28 +233,25 @@ impl Drift {
 /// invokes this only when `parent(m) != parent(n)`.
 ///
 /// Best-effort and per-file: a file that is binary, whose blobs cannot be
-/// read, whose per-file diff fails, or whose parent names the base movement
-/// does not connect is left plain (the others are still contained). So a
-/// failure never leaves a half-tagged file behind, and a returned error means
-/// nothing is tagged at all (the caller serves the plain interdiff).
+/// read, or whose parent names the base movement does not connect is left
+/// plain (the others are still contained). A returned error means nothing is
+/// tagged at all (the caller serves the plain interdiff).
 ///
 /// # Errors
-/// When git cannot diff the two parents, or a delta vanishes mid-walk.
+/// When git cannot diff the two parents.
 pub fn analyze(
     repo: &Repository,
     interdiff: &git2::Diff,
-    m_sha: &str,
-    parent_m_sha: &str,
-    n_sha: &str,
-    parent_n_sha: &str,
+    m: &Rev,
+    n: &Rev,
     only: Option<&str>,
 ) -> Result<Drift> {
     let mut drift = Drift::default();
     let (Some(tree_m), Some(tree_n), Some(parent_m), Some(parent_n)) = (
-        diff::commit_tree(repo, m_sha),
-        diff::commit_tree(repo, n_sha),
-        diff::commit_tree(repo, parent_m_sha),
-        diff::commit_tree(repo, parent_n_sha),
+        diff::commit_tree(repo, m.commit),
+        diff::commit_tree(repo, n.commit),
+        diff::commit_tree(repo, m.parent),
+        diff::commit_tree(repo, n.parent),
     ) else {
         return Ok(drift); // A tree won't resolve → leave the interdiff plain.
     };
@@ -338,11 +268,10 @@ pub fn analyze(
     let in_parent_m = from_parent(moves(repo, &parent_m, &tree_m)?);
     let in_parent_n = from_parent(moves(repo, &parent_n, &tree_n)?);
 
-    for idx in 0..interdiff.deltas().len() {
-        let delta = interdiff
-            .get_delta(idx)
-            .ok_or_else(|| anyhow!("interdiff delta {idx} vanished"))?;
-        let (path, old_path) = diff::delta_path(&delta);
+    for delta in interdiff.deltas() {
+        let Some((_, path, old_path)) = diff::delta_file(&delta) else {
+            continue;
+        };
         if only.is_some_and(|p| p != path) {
             continue;
         }
@@ -360,62 +289,92 @@ pub fn analyze(
         // Gerrit's implicitRename: a rename either side's delta produced is
         // the change's own and stays visible even when fully drifted.
         let own_rename = old_path.is_some() && (name_pm != name_m || name_pn != name_n);
-        let blob = |tree: &Tree, name: &str| blob_bytes(repo, tree, Path::new(name));
+        // The interdiff's own delta already carries the two tree(m)/tree(n) ids.
+        let (oid_pm, oid_m) = (entry_oid(&parent_m, name_pm), delta.old_file().id());
+        let (oid_pn, oid_n) = (entry_oid(&parent_n, name_pn), delta.new_file().id());
+        // The change left this file exactly as it found it at both revisions,
+        // so every line of the interdiff is the base's. Diffing would only
+        // rediscover that: with no delta of the change's own to project
+        // through, the drift ranges come out equal to the base movement and
+        // nothing escapes them. This is the common case under a long rebase —
+        // hundreds of files moved by the base, none of them the change's — and
+        // deciding it on tree oids alone keeps their blobs unread.
+        if oid_pm == oid_m && oid_pn == oid_n && !own_rename {
+            drift.0.insert(path, None);
+            continue;
+        }
+        let blob = |name: &str, oid| diff::blob_bytes(repo, name, oid);
         let (Some(bpm), Some(bm), Some(bpn), Some(bn)) = (
-            blob(&parent_m, name_pm),
-            blob(&tree_m, name_m),
-            blob(&parent_n, name_pn),
-            blob(&tree_n, name_n),
+            blob(name_pm, oid_pm)?,
+            blob(name_m, oid_m)?,
+            blob(name_pn, oid_pn)?,
+            blob(name_n, oid_n)?,
         ) else {
             continue; // Binary on some side — leave plain.
         };
+        let ranges = file_drift(&bpm, &bm, &bpn, &bn);
         // The file's own m → n edits decide whether anything survives the base
         // movement — the verdict the rendered lines would give, without
-        // rendering them.
-        let analysed = file_drift(&bpm, &bm, &bpn, &bn).and_then(|ranges| {
-            let own = buffer_edits(&bm, &bn)?;
-            let real = own.iter().any(|e| escapes_drift(e, &ranges.0, &ranges.1));
-            Ok((ranges, real))
-        });
-        match analysed {
-            Ok((ranges, real)) if real || own_rename => {
-                drift.tagged.insert(path, ranges);
-            }
-            Ok(_) => {
-                drift.skip.insert(path);
-            }
-            // Leave just this file plain; the rest are still contained.
-            Err(e) => tracing::warn!("drift analysis skipped for {path}: {e:#}"),
-        }
+        // rendering them. A rename of the change's own is kept regardless, so
+        // it need not be asked.
+        let keep = own_rename
+            || buffer_edits(&bm, &bn)
+                .iter()
+                .any(|e| escapes_drift(e, &ranges.0, &ranges.1));
+        drift.0.insert(path, keep.then_some(ranges));
     }
     Ok(drift)
+}
+
+/// A revision and the parent its diff is taken against — the pair `analyze`
+/// needs at each end of an interdiff, named so the two cannot be swapped.
+pub struct Rev<'a> {
+    pub commit: &'a str,
+    pub parent: &'a str,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn span(start: u64, end: u64) -> Span {
-        Span { start, end }
+    fn span(start: u32, end: u32) -> Span {
+        start..end
     }
 
-    fn edit(a: (u64, u64), b: (u64, u64)) -> Edit {
+    fn edit(before: (u32, u32), after: (u32, u32)) -> Edit {
         Edit {
-            a: span(a.0, a.1),
-            b: span(b.0, b.1),
+            before: span(before.0, before.1),
+            after: span(after.0, after.1),
         }
     }
 
     #[test]
-    fn edit_from_header_covers_every_range_shape() {
-        // Replace 2 old lines (3,4) with 3 new (3,4,5).
-        assert_eq!(edit_from_header(3, 2, 3, 3), edit((2, 4), (2, 5)));
-        // Pure insertion of 2 lines after old line 5; pure deletion of 3,4.
-        assert_eq!(edit_from_header(5, 0, 6, 2), edit((5, 5), (5, 7)));
-        assert_eq!(edit_from_header(3, 2, 2, 0), edit((2, 4), (2, 2)));
-        // Whole file added / deleted (the empty side has start 0).
-        assert_eq!(edit_from_header(0, 0, 1, 3), edit((0, 0), (0, 3)));
-        assert_eq!(edit_from_header(1, 3, 0, 0), edit((0, 3), (0, 0)));
+    fn buffer_edits_span_every_range_shape() {
+        let text = |lines: &[&str]| lines.join("\n").into_bytes();
+        let base = text(&["a", "b", "c", "d", "e", ""]);
+        // Every shape a span can take, since the projection reads both ends of
+        // both sides: replace, insert (empty before), delete (empty after),
+        // and each side empty for a whole-file add or delete.
+        assert_eq!(
+            buffer_edits(&base, &text(&["a", "b", "C", "D", "E", "e", ""])),
+            vec![edit((2, 4), (2, 5))]
+        );
+        assert_eq!(
+            buffer_edits(&base, &text(&["a", "b", "c", "d", "e", "f", "g", ""])),
+            vec![edit((5, 5), (5, 7))]
+        );
+        assert_eq!(
+            buffer_edits(&base, &text(&["a", "b", "e", ""])),
+            vec![edit((2, 4), (2, 2))]
+        );
+        assert_eq!(
+            buffer_edits(b"", &text(&["a", "b", "c", ""])),
+            vec![edit((0, 0), (0, 3))]
+        );
+        assert_eq!(
+            buffer_edits(&text(&["a", "b", "c", ""]), b""),
+            vec![edit((0, 3), (0, 0))]
+        );
     }
 
     #[test]
@@ -423,11 +382,11 @@ mod tests {
         // +2 at the top shifts a later position down by 2; a 3-line delete
         // before it shifts up by 3.
         assert_eq!(
-            project_clipped(span(5, 6), &[edit((0, 0), (0, 2))]),
+            project_clipped(&span(5, 6), &[edit((0, 0), (0, 2))]),
             vec![span(7, 8)]
         );
         assert_eq!(
-            project_clipped(span(8, 9), &[edit((5, 8), (5, 5))]),
+            project_clipped(&span(8, 9), &[edit((5, 8), (5, 5))]),
             vec![span(5, 6)]
         );
     }
@@ -435,11 +394,11 @@ mod tests {
     #[test]
     fn project_clipped_handles_after_and_full_cover() {
         assert_eq!(
-            project_clipped(span(2, 3), &[edit((5, 8), (5, 8))]),
+            project_clipped(&span(2, 3), &[edit((5, 8), (5, 8))]),
             vec![span(2, 3)]
         );
         // A position inside the change's own edit is dropped, not drift.
-        assert!(project_clipped(span(6, 7), &[edit((5, 8), (5, 8))]).is_empty());
+        assert!(project_clipped(&span(6, 7), &[edit((5, 8), (5, 8))]).is_empty());
     }
 
     #[test]
@@ -448,11 +407,11 @@ mod tests {
         // lines: the base region straddles that edit [5,8), and the untouched
         // remainder still projects (size-neutral mapping ⇒ no shift).
         let m = [edit((5, 8), (5, 8))];
-        assert_eq!(project_clipped(span(4, 6), &m), vec![span(4, 5)]);
-        assert_eq!(project_clipped(span(7, 9), &m), vec![span(8, 9)]);
+        assert_eq!(project_clipped(&span(4, 6), &m), vec![span(4, 5)]);
+        assert_eq!(project_clipped(&span(7, 9), &m), vec![span(8, 9)]);
         // An interior edit by the change splits the base region in two.
         assert_eq!(
-            project_clipped(span(1, 9), &[edit((4, 5), (4, 5))]),
+            project_clipped(&span(1, 9), &[edit((4, 5), (4, 5))]),
             vec![span(1, 4), span(5, 9)]
         );
     }
@@ -476,15 +435,5 @@ mod tests {
             &[edit((3, 4), (3, 4))],
         );
         assert!(old.is_empty() && new.is_empty());
-    }
-
-    #[test]
-    fn in_ranges_is_one_based_against_zero_based_spans() {
-        let ranges = [span(1, 3)]; // 0-based indices 1,2 → 1-based lines 2,3
-        assert!(!in_ranges(&ranges, 1));
-        assert!(in_ranges(&ranges, 2));
-        assert!(in_ranges(&ranges, 3));
-        assert!(!in_ranges(&ranges, 4));
-        assert!(!in_ranges(&ranges, 0));
     }
 }

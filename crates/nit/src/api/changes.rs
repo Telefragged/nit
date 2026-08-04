@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
-use git2::{Oid, Repository, Tree};
+use git2::{Repository, Tree};
 use serde::Deserialize;
 
 use nit_types::changes::{ChangeDetail, ChangeDrafts};
@@ -56,17 +56,15 @@ pub(super) async fn revision_diff(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let revs = resolve_revs(&state, &entry, n, q.against)?;
-        let repo = open_repo(&revs.git_dir)?;
-        let new_tree = commit_tree(&repo, &revs.rev.commit_sha)?;
-        let (old_tree, against_message, against_rev) = old_side(&repo, &revs)?;
-        let git = diff::git_diff(&repo, &old_tree, &new_tree, Some(&mut diff::diff_opts(3)))?;
-        let drift = interdiff_drift(&repo, &git, &revs.rev, against_rev.as_ref(), None);
-        let mut wire = diff::render(&repo, &git, true, None, drift.skip())?;
+        let mut wire = contained_diff(&revs, 3, None)?;
+        // After tagging: the message is not a git delta, so it is never drift.
         wire.files.insert(
             0,
-            diff::commit_msg_file(against_message.as_deref(), &revs.rev.message)?,
+            diff::commit_msg_file(
+                revs.against.as_ref().map(|a| a.message.as_str()),
+                &revs.rev.message,
+            ),
         );
-        drift.tag(&mut wire);
         Ok(Json(wire))
     })
     .await
@@ -90,18 +88,7 @@ pub(super) async fn revision_lines(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let revs = resolve_revs(&state, &entry, n, q.against)?;
-        let repo = open_repo(&revs.git_dir)?;
-        let new_tree = commit_tree(&repo, &revs.rev.commit_sha)?;
-        let (old_tree, _, against_rev) = old_side(&repo, &revs)?;
-        let git = diff::git_diff(
-            &repo,
-            &old_tree,
-            &new_tree,
-            Some(&mut diff::diff_opts(u32::MAX)),
-        )?;
-        let drift = interdiff_drift(&repo, &git, &revs.rev, against_rev.as_ref(), Some(&q.path));
-        let mut wire = diff::render(&repo, &git, false, Some(&q.path), drift.skip())?;
-        drift.tag(&mut wire);
+        let wire = contained_diff(&revs, u32::MAX, Some(&q.path))?;
         let lines = wire
             .files
             .into_iter()
@@ -140,57 +127,51 @@ fn resolve_revs(
     })
 }
 
-/// The diff's old side, plus (for an interdiff) the FROM message and the
-/// `(m_sha, parent_m)` that [`tag_interdiff_drift`] needs.
-type AgainstRev = (String, String);
-fn old_side<'r>(
-    repo: &'r Repository,
-    revs: &Revs,
-) -> Result<(Tree<'r>, Option<String>, Option<AgainstRev>), Error> {
-    match &revs.against {
-        None => {
-            let parent = repo
-                .find_commit(parse_oid(&revs.rev.parent_sha)?)
-                .map_err(|e| Error::internal(format!("parent commit missing: {e}")))?;
-            let tree = parent
-                .tree()
-                .map_err(|e| Error::internal(format!("parent tree missing: {e}")))?;
-            Ok((tree, None, None))
-        }
-        Some(a) => Ok((
-            commit_tree(repo, &a.commit_sha)?,
-            Some(a.message.clone()),
-            Some((a.commit_sha.clone(), a.parent_sha.clone())),
-        )),
-    }
+/// The wire diff for `revs` with rebase drift contained (docs/api.md
+/// "Rebase-aware interdiffs"): `parent → commit` of the revision, or
+/// `tree(m) → tree(n)` when it names a counterpart to diff against. Resolve
+/// the drift first so a file the base movement fully explains is never
+/// rendered, then tag what survives — the order is the point, and owning it
+/// here is what keeps `/diff` and `/lines` from having to agree on it
+/// separately.
+///
+/// A plain diff when the two revisions share a parent, and on analysis
+/// failure — the drift is then empty, which renders and tags nothing.
+fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff, Error> {
+    let repo = open_repo(&revs.git_dir)?;
+    let rev = &revs.rev;
+    let new_tree = commit_tree(&repo, &rev.commit_sha)?;
+    let old_tree = commit_tree(
+        &repo,
+        revs.against
+            .as_ref()
+            .map_or(&rev.parent_sha, |a| &a.commit_sha),
+    )?;
+    let git = diff::git_diff(&repo, &old_tree, &new_tree)?;
+
+    let drift = match revs
+        .against
+        .as_ref()
+        .filter(|a| a.parent_sha != rev.parent_sha)
+    {
+        None => rebase::Drift::default(),
+        Some(m) => rebase::analyze(&repo, &git, &at(m), &at(rev), only).unwrap_or_else(|e| {
+            tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
+            rebase::Drift::default()
+        }),
+    };
+    let mut wire = diff::render(&repo, &git, context, |path| {
+        only.is_none_or(|p| p == path) && drift.renders(path)
+    })?;
+    drift.tag(&mut wire);
+    Ok(wire)
 }
 
-/// The rebase drift of an interdiff whose two revisions have different parents
-/// (docs/api.md "Rebase-aware interdiffs"); empty otherwise, and empty on
-/// failure so the plain interdiff is served.
-fn interdiff_drift(
-    repo: &Repository,
-    git: &git2::Diff,
-    rev: &review::RevisionProj,
-    against: Option<&AgainstRev>,
-    only: Option<&str>,
-) -> rebase::Drift {
-    let Some((m_sha, parent_m)) = against.filter(|(_, p)| *p != rev.parent_sha) else {
-        return rebase::Drift::default();
-    };
-    rebase::analyze(
-        repo,
-        git,
-        m_sha,
-        parent_m,
-        &rev.commit_sha,
-        &rev.parent_sha,
-        only,
-    )
-    .unwrap_or_else(|e| {
-        tracing::warn!("rebase-aware interdiff analysis failed; serving plain interdiff: {e:#}");
-        rebase::Drift::default()
-    })
+fn at(r: &review::RevisionProj) -> rebase::Rev<'_> {
+    rebase::Rev {
+        commit: &r.commit_sha,
+        parent: &r.parent_sha,
+    }
 }
 
 fn open_repo(git_dir: &str) -> Result<Repository, Error> {
@@ -200,8 +181,4 @@ fn open_repo(git_dir: &str) -> Result<Repository, Error> {
 
 fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Result<Tree<'r>, Error> {
     diff::commit_tree(repo, sha).ok_or_else(|| Error::internal(format!("tree for {sha} missing")))
-}
-
-fn parse_oid(sha: &str) -> Result<Oid, Error> {
-    Oid::from_str(sha).map_err(|e| Error::internal(format!("bad sha {sha:?}: {e}")))
 }

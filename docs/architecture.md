@@ -11,7 +11,8 @@ nit is a single-machine, local-first review server. Three parts:
 3. **State** — an append-only **log per change** in SQLite, folded into an
    in-memory per-change state machine (rebuilt by replaying the log on
    startup). Git data is never copied and diffs never stored: commits and
-   diffs are computed from the registered repos with git2 on demand.
+   diffs are computed from the registered repos on demand, with git2 for the
+   trees and imara-diff for the lines.
 
 ## Components
 

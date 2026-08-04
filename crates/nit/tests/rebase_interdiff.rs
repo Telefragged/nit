@@ -13,12 +13,10 @@
 
 mod common;
 
-use std::collections::HashSet;
-
 use common::*;
 use git2::Oid;
-use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, diff_opts, git_diff, render};
-use nit::api::rebase::analyze;
+use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, git_diff, render};
+use nit::api::rebase::{Rev, analyze};
 use nit_types::diff::{Diff, DiffFile};
 use nit_types::enums::{FileStatus, LineKind};
 
@@ -51,23 +49,28 @@ fn snapshot(g: &GitRepo, files: &[(&str, &[u8])]) -> Oid {
 /// endpoint exactly: analyse first, render only the files the drift leaves
 /// standing, then tag them.
 fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff, Diff) {
-    let tm = commit_tree(&g.repo, &m.to_string()).expect("m tree resolves");
-    let tn = commit_tree(&g.repo, &n.to_string()).expect("n tree resolves");
-    let git = git_diff(&g.repo, &tm, &tn, Some(&mut diff_opts(3))).expect("interdiff builds");
-    let plain =
-        render(&g.repo, &git, true, None, &HashSet::new()).expect("plain interdiff renders");
+    let sha = |o: Oid| o.to_string();
+    let (m, parent_m, n, parent_n) = (sha(m), sha(parent_m), sha(n), sha(parent_n));
+    let tm = commit_tree(&g.repo, &m).expect("m tree resolves");
+    let tn = commit_tree(&g.repo, &n).expect("n tree resolves");
+    let git = git_diff(&g.repo, &tm, &tn).expect("interdiff builds");
+    let plain = render(&g.repo, &git, 3, |_| true).expect("plain interdiff renders");
     let drift = analyze(
         &g.repo,
         &git,
-        &m.to_string(),
-        &parent_m.to_string(),
-        &n.to_string(),
-        &parent_n.to_string(),
+        &Rev {
+            commit: &m,
+            parent: &parent_m,
+        },
+        &Rev {
+            commit: &n,
+            parent: &parent_n,
+        },
         None,
     )
     .expect("drift analysis succeeds");
     let mut tagged =
-        render(&g.repo, &git, true, None, drift.skip()).expect("contained interdiff renders");
+        render(&g.repo, &git, 3, |p| drift.renders(p)).expect("contained interdiff renders");
     drift.tag(&mut tagged);
     (plain, tagged)
 }

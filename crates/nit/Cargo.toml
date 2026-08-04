@@ -15,6 +15,7 @@ axum = { version = "0.8", features = ["ws"] }
 clap = { version = "4", features = ["derive"] }
 deadpool-sqlite = "0.13.0"
 git2 = { version = "0.20", default-features = false }
+imara-diff = { version = "0.2.0", default-features = false }
 jiff = "0.2"
 nit-types = { workspace = true, features = ["clap"] }
 rusqlite = "0.38"

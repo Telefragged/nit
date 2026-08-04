@@ -4,12 +4,12 @@
 //! `parent_sha → commit tree` of the selected revision, an interdiff is
 //! `tree(m) → tree(n)` (docs/data-model.md).
 
-use std::collections::HashSet;
-use std::hash::BuildHasher;
+use std::ops::Range;
 use std::path::Path;
 
-use anyhow::{Result, anyhow};
-use git2::{Delta, DiffOptions, Patch, Repository, Tree};
+use anyhow::Result;
+use git2::{Delta, Repository, Tree};
+use imara_diff::{Algorithm, InternedInput};
 
 use nit_types::diff::{Diff, DiffFile, Hunk, Line};
 use nit_types::enums::{FileStatus, LineKind};
@@ -29,9 +29,10 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
 }
 
 /// The raw git diff `old → new` with rename detection — the one definition of
-/// how nit pairs a delete with an add. Built separately from [`render`] so a
-/// caller can resolve rebase drift ([`super::rebase::analyze`]) against the
-/// same deltas before deciding which of them are worth rendering.
+/// how nit pairs a delete with an add. Git supplies the deltas only; the lines
+/// inside each of them come from [`line_hunks`]. Built separately from
+/// [`render`] so a caller can resolve rebase drift ([`super::rebase::analyze`])
+/// against the same deltas before deciding which are worth rendering.
 ///
 /// # Errors
 /// When git can't build the diff or run rename detection.
@@ -39,28 +40,34 @@ pub fn git_diff<'r>(
     repo: &'r Repository,
     old: &Tree<'_>,
     new: &Tree<'_>,
-    opts: Option<&mut DiffOptions>,
 ) -> Result<git2::Diff<'r>> {
-    let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), opts)?;
+    let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), None)?;
     let mut find = git2::DiffFindOptions::new();
     find.renames(true);
     diff.find_similar(Some(&mut find))?;
     Ok(diff)
 }
 
-/// The options behind every nit diff, so the interdiff's hunks and the drift
-/// projection's edit spans ([`super::rebase`]) are cut the same way.
-#[must_use]
-pub fn diff_opts(context: u32) -> DiffOptions {
-    let mut opts = DiffOptions::new();
-    opts.context_lines(context);
-    opts
+/// The line diff `old → new`, as the ranges of changed lines on each side.
+///
+/// Histogram, gerrit's algorithm (`JGit`'s `HistogramDiff`): it anchors on the
+/// rarest line the two sides share, so a unique signature pins the alignment
+/// where myers — which only minimises the edit script — pairs whatever lies
+/// nearest and steals a brace from the neighbouring block. `postprocess_lines`
+/// then applies git's indent heuristic to the hunks whose placement is still
+/// ambiguous.
+pub(super) fn line_edits<T: AsRef<[u8]>>(input: &InternedInput<T>) -> Vec<imara_diff::Hunk> {
+    let mut diff = imara_diff::Diff::compute(Algorithm::Histogram, input);
+    diff.postprocess_lines(input);
+    diff.hunks().collect()
 }
 
-/// A delta's wire identity: the path the wire carries it under — the new-side
-/// name, or the old-side one for a deletion — and the old-side name when a
-/// rename made the two differ.
-pub(super) fn delta_path(delta: &git2::DiffDelta) -> (String, Option<String>) {
+/// A delta as the wire carries it — its status, the path it appears under (the
+/// new-side name, or the old-side one for a deletion) and the old-side name
+/// when a rename made the two differ. `None` for a status the wire never
+/// renders, so every walk over the same deltas agrees on which exist.
+pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<(FileStatus, String, Option<String>)> {
+    let status = delta_status(delta.status())?;
     let path = |f: git2::DiffFile| {
         f.path()
             .map(|p| p.to_string_lossy().into_owned())
@@ -71,83 +78,81 @@ pub(super) fn delta_path(delta: &git2::DiffDelta) -> (String, Option<String>) {
     } else {
         path(delta.new_file())
     };
-    let old =
-        (delta_status(delta.status()) == Some(FileStatus::Renamed)).then(|| path(delta.old_file()));
-    (wire, old)
+    let old = (status == FileStatus::Renamed).then(|| path(delta.old_file()));
+    Some((status, wire, old))
 }
 
-/// Render `diff`'s deltas as the wire shape. `totals` reads each file's
-/// new-side line count, the anchor the trailing-context expander needs; the
-/// full-context path (`/lines`) drops it, so it skips that blob read.
+/// Render `diff`'s deltas as the wire shape, with `context` unchanged lines
+/// around each change ([`u32::MAX`] for the full-context `/lines` source).
 ///
-/// `only` bounds the result to one file and `skip` drops the files the caller
-/// has already proved it will discard ([`super::rebase::Drift`]) — both before
-/// the costly per-file patch build, which is the whole point of taking them.
+/// `keep` decides which paths are worth rendering — the caller's chance to drop
+/// a file (the one it is viewing, or one it has already proved to be pure
+/// rebase drift) before its blobs are read and diffed, which is the whole point
+/// of taking it.
 ///
 /// # Errors
-/// When git can't read the diff's patches.
-pub fn render<S: BuildHasher>(
+/// When git can't read a delta's blobs.
+pub fn render(
     repo: &Repository,
     diff: &git2::Diff,
-    totals: bool,
-    only: Option<&str>,
-    skip: &HashSet<String, S>,
+    context: u32,
+    keep: impl Fn(&str) -> bool,
 ) -> Result<Diff> {
     let mut files = Vec::new();
-    for idx in 0..diff.deltas().len() {
-        let delta = diff
-            .get_delta(idx)
-            .ok_or_else(|| anyhow!("diff delta {idx} vanished"))?;
-        let Some(status) = delta_status(delta.status()) else {
+    for delta in diff.deltas() {
+        let Some((status, path, old_path)) = delta_file(&delta) else {
             continue;
         };
-        let (file_path, old_path) = delta_path(&delta);
-        if only.is_some_and(|p| p != file_path) || skip.contains(&file_path) {
+        if !keep(&path) {
             continue;
         }
-
+        // Binary until the blobs prove otherwise, so every unreadable or
+        // undiffable file lands in the one place that says so.
         let mut file = DiffFile {
-            path: file_path,
+            path,
             old_path,
             status,
-            binary: false,
+            binary: true,
             additions: 0,
             deletions: 0,
             new_total: 0,
             hunks: Vec::new(),
         };
-        match Patch::from_diff(diff, idx)? {
-            Some(mut patch) => {
-                if patch.delta().flags().is_binary() {
-                    file.binary = true;
-                } else {
-                    let (_, additions, deletions) = patch.line_stats()?;
-                    file.additions = u64::try_from(additions)?;
-                    file.deletions = u64::try_from(deletions)?;
-                    if totals {
-                        file.new_total = blob_line_count(repo, delta.new_file().id())?;
-                    }
-                    file.hunks = patch_hunks(&mut patch)?;
-                }
-            }
-            // git2 yields no patch for binary entries in a tree diff.
-            None => file.binary = true,
+        if let (Some(old), Some(new)) = (
+            blob_bytes(repo, &file.path, delta.old_file().id())?,
+            blob_bytes(repo, &file.path, delta.new_file().id())?,
+        ) {
+            let (old, new) = (String::from_utf8_lossy(&old), String::from_utf8_lossy(&new));
+            let input = InternedInput::new(&*old, &*new);
+            file.binary = false;
+            file.new_total = input.after.len() as u64;
+            file.hunks = line_hunks(&input, context);
+            (file.additions, file.deletions) = stats(&file.hunks);
         }
         files.push(file);
     }
     Ok(Diff { files })
 }
 
-/// New-side line count of `oid`'s blob — the EOF the client expands toward
-/// below the last hunk. The null oid (the new side of a deletion) is empty.
-fn blob_line_count(repo: &Repository, oid: git2::Oid) -> Result<u64> {
+/// A blob's bytes, `None` when it is binary. The null oid — the absent side of
+/// an add or delete — is the empty text.
+///
+/// `path` decides it as git does, by `.gitattributes` first: a file marked
+/// `binary` or `-diff` is binary whatever its bytes look like. Content is only
+/// the fallback, and git's own — a NUL byte early in the blob.
+///
+/// # Errors
+/// When git can't read the blob.
+pub(super) fn blob_bytes(repo: &Repository, path: &str, oid: git2::Oid) -> Result<Option<Vec<u8>>> {
     if oid.is_zero() {
-        return Ok(0);
+        return Ok(Some(Vec::new()));
+    }
+    let attr = repo.get_attr(Path::new(path), "diff", git2::AttrCheckFlags::default());
+    if git2::AttrValue::from_string(attr.ok().flatten()) == git2::AttrValue::False {
+        return Ok(None);
     }
     let blob = repo.find_blob(oid)?;
-    Ok(u64::try_from(
-        String::from_utf8_lossy(blob.content()).lines().count(),
-    )?)
+    Ok((!blob.is_binary()).then(|| blob.content().to_vec()))
 }
 
 fn delta_status(delta: Delta) -> Option<FileStatus> {
@@ -160,38 +165,130 @@ fn delta_status(delta: Delta) -> Option<FileStatus> {
     }
 }
 
-fn patch_hunks(patch: &mut Patch) -> Result<Vec<Hunk>> {
-    let mut hunks = Vec::new();
-    for h in 0..patch.num_hunks() {
-        let (hunk, _) = patch.hunk(h)?;
-        let mut lines = Vec::new();
-        for l in 0..patch.num_lines_in_hunk(h)? {
-            let line = patch.line_in_hunk(h, l)?;
-            let kind = match line.origin() {
-                ' ' => LineKind::Context,
-                '+' => LineKind::Add,
-                '-' => LineKind::Del,
-                _ => continue, // eofnl markers etc.
-            };
-            let text = String::from_utf8_lossy(line.content());
-            lines.push(Line {
-                kind,
-                old: line.old_lineno().map(u64::from),
-                new: line.new_lineno().map(u64::from),
-                drift: false,
-                text: text.strip_suffix('\n').unwrap_or(&text).to_string(),
-            });
+/// A file's wire counts. Drift lines are the base's work, not the change's, so
+/// they never count ([`super::rebase::Drift`] tags them after rendering).
+pub(super) fn stats(hunks: &[Hunk]) -> (u64, u64) {
+    let (mut additions, mut deletions) = (0, 0);
+    for line in hunks.iter().flat_map(|h| &h.lines).filter(|l| !l.drift) {
+        match line.kind {
+            LineKind::Add => additions += 1,
+            LineKind::Del => deletions += 1,
+            LineKind::Context => {}
         }
-        hunks.push(Hunk {
-            old_start: u64::from(hunk.old_start()),
-            old_lines: u64::from(hunk.old_lines()),
-            new_start: u64::from(hunk.new_start()),
-            new_lines: u64::from(hunk.new_lines()),
-            header: hunk_function_context(hunk.header()),
-            lines,
-        });
     }
-    Ok(hunks)
+    (additions, deletions)
+}
+
+/// The wire hunks of `old → new`: each run of changed lines with `context`
+/// unchanged lines on either side, runs closer than twice that merged into one
+/// hunk (git's grouping, so a hunk never shows the same line twice).
+fn line_hunks(input: &InternedInput<&str>, context: u32) -> Vec<Hunk> {
+    let edits: Vec<(Range<usize>, Range<usize>)> = line_edits(input)
+        .into_iter()
+        .map(|h| (range(h.before), range(h.after)))
+        .collect();
+    // The tokens carry their line separator; the wire text never does.
+    let text = |token| {
+        let line: &str = input.interner[token];
+        line.strip_suffix('\n').unwrap_or(line)
+    };
+    let ctx = context as usize;
+
+    // The header is git's default rule: the nearest line above the hunk whose
+    // first character is alphabetic, `_` or `$` (no support for the
+    // per-language `diff` drivers a `.gitattributes` can name). Hunks ascend,
+    // so a cursor that only moves forward reads the file once — searching
+    // backwards would re-read it per hunk on one with no declaration at all.
+    let (mut scanned, mut header) = (0usize, "");
+    let mut header_above = |line: usize| {
+        for token in &input.before[scanned..line] {
+            let text: &str = input.interner[*token];
+            if text.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$') {
+                header = text.trim_end();
+            }
+        }
+        scanned = line;
+        header.to_string()
+    };
+
+    let context_upto = |lines: &mut Vec<Line>, b: &mut usize, a: &mut usize, upto: usize| {
+        while *b < upto {
+            let line = wire_line(
+                LineKind::Context,
+                Some(*b),
+                Some(*a),
+                text(input.before[*b]),
+            );
+            lines.push(line);
+            *b += 1;
+            *a += 1;
+        }
+    };
+
+    edits
+        .chunk_by(|a, b| b.0.start - a.0.end <= 2 * ctx)
+        .map(|group| {
+            let (first, last) = (&group[0], &group[group.len() - 1]);
+            // Both sides are identical outside the group, so one reach bounds
+            // both: before the first edit their line numbers agree.
+            let back = ctx.min(first.0.start);
+            let before_end = (last.0.end + ctx).min(input.before.len());
+            let (before_start, after_start) = (first.0.start - back, first.1.start - back);
+            let (mut b, mut a) = (before_start, after_start);
+
+            let mut lines = Vec::new();
+            for (before, after) in group {
+                context_upto(&mut lines, &mut b, &mut a, before.start);
+                for i in before.clone() {
+                    lines.push(wire_line(
+                        LineKind::Del,
+                        Some(i),
+                        None,
+                        text(input.before[i]),
+                    ));
+                }
+                for i in after.clone() {
+                    lines.push(wire_line(
+                        LineKind::Add,
+                        None,
+                        Some(i),
+                        text(input.after[i]),
+                    ));
+                }
+                (b, a) = (before.end, after.end);
+            }
+            context_upto(&mut lines, &mut b, &mut a, before_end);
+
+            // An empty side reports the line it sits after, not a line it
+            // covers, so its start is the 0-based index, not the 1-based
+            // number.
+            let start = |begin: usize, len: usize| if len == 0 { begin } else { begin + 1 } as u64;
+            let (old_lines, new_lines) = (b - before_start, a - after_start);
+            Hunk {
+                old_start: start(before_start, old_lines),
+                old_lines: old_lines as u64,
+                new_start: start(after_start, new_lines),
+                new_lines: new_lines as u64,
+                header: header_above(before_start),
+                lines,
+            }
+        })
+        .collect()
+}
+
+fn range(r: Range<u32>) -> Range<usize> {
+    r.start as usize..r.end as usize
+}
+
+fn wire_line(kind: LineKind, old: Option<usize>, new: Option<usize>, text: &str) -> Line {
+    let no = |n: Option<usize>| n.map(|n| n as u64 + 1);
+    Line {
+        kind,
+        old: no(old),
+        new: no(new),
+        drift: false,
+        text: text.to_string(),
+    }
 }
 
 /// The synthetic [`COMMIT_MSG_PATH`] entry injected at the front of every
@@ -199,35 +296,18 @@ fn patch_hunks(patch: &mut Patch) -> Result<Vec<Hunk>> {
 /// (`old: None`) the whole message as one all-`add` hunk; interdiff a
 /// real line diff `old → new`, identical messages rendered as a single
 /// all-`context` hunk so the message stays visible and commentable.
-///
-/// # Errors
-/// When git can't build or read the buffer diff.
-pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<DiffFile> {
-    let mut patch = Patch::from_buffers(
-        old.unwrap_or_default().as_bytes(),
-        None,
-        new.as_bytes(),
-        None,
-        Some(&mut diff_opts(3)),
-    )?;
-    let (_, additions, deletions) = patch.line_stats()?;
-    let mut hunks = patch_hunks(&mut patch)?;
+#[must_use]
+pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
+    let input = InternedInput::new(old.unwrap_or_default(), new);
+    let mut hunks = line_hunks(&input, 3);
+    let (additions, deletions) = stats(&hunks);
     if hunks.is_empty() && !new.is_empty() {
         let lines: Vec<Line> = new
             .lines()
             .enumerate()
-            .map(|(i, text)| {
-                let n = u64::try_from(i)? + 1;
-                Ok(Line {
-                    kind: LineKind::Context,
-                    old: Some(n),
-                    new: Some(n),
-                    drift: false,
-                    text: text.to_string(),
-                })
-            })
-            .collect::<Result<_>>()?;
-        let count = u64::try_from(lines.len())?;
+            .map(|(i, text)| wire_line(LineKind::Context, Some(i), Some(i), text))
+            .collect();
+        let count = lines.len() as u64;
         hunks.push(Hunk {
             old_start: 1,
             old_lines: count,
@@ -237,7 +317,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<DiffFile> {
             lines,
         });
     }
-    Ok(DiffFile {
+    DiffFile {
         path: COMMIT_MSG_PATH.to_string(),
         old_path: None,
         status: if old.is_some() {
@@ -246,20 +326,10 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> Result<DiffFile> {
             FileStatus::Added
         },
         binary: false,
-        additions: u64::try_from(additions)?,
-        deletions: u64::try_from(deletions)?,
-        new_total: u64::try_from(new.lines().count())?,
+        additions,
+        deletions,
+        new_total: input.after.len() as u64,
         hunks,
-    })
-}
-
-/// The function-context part of a raw hunk header:
-/// `"@@ -1,5 +1,7 @@ fn main()\n"` → `"fn main()"`.
-fn hunk_function_context(header: &[u8]) -> String {
-    let s = String::from_utf8_lossy(header);
-    match s.splitn(3, "@@").nth(2) {
-        Some(rest) => rest.trim().to_string(),
-        None => String::new(),
     }
 }
 
@@ -278,10 +348,9 @@ pub fn nth_line(text: &str, line: u64) -> Option<String> {
 /// The full text of `file` in `tree`, `None` for a missing/binary path —
 /// the shared read behind [`line_text`] and [`line_range`].
 fn blob_text(repo: &Repository, tree: &Tree, file: &str) -> Option<String> {
-    let blob = repo
-        .find_blob(tree.get_path(Path::new(file)).ok()?.id())
-        .ok()?;
-    (!blob.is_binary()).then(|| String::from_utf8_lossy(blob.content()).into_owned())
+    let oid = tree.get_path(Path::new(file)).ok()?.id();
+    let bytes = blob_bytes(repo, file, oid).ok()??;
+    Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Snapshot of line `line` (1-based) of `file` in `tree`, for
@@ -329,19 +398,24 @@ mod tests {
         fn find(&self, oid: git2::Oid) -> Tree<'_> {
             self.repo.find_tree(oid).expect("tree should exist")
         }
+
+        fn write_attributes(&self, rules: &str) {
+            let workdir = self.repo.workdir().expect("test repo has a workdir");
+            std::fs::write(workdir.join(".gitattributes"), rules)
+                .expect(".gitattributes should write");
+        }
     }
 
-    /// The shown diff `old → new`: context 3, every file, totals read.
     fn shown(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
-        let diff = git_diff(repo, old, new, Some(&mut diff_opts(3))).expect("diff builds");
-        render(repo, &diff, true, None, &HashSet::new()).expect("diff renders")
+        let diff = git_diff(repo, old, new).expect("diff builds");
+        render(repo, &diff, 3, |_| true).expect("diff renders")
     }
 
     /// One file's diff with every unchanged line kept as context — what the UI
     /// reveals from when expanding a hunk's surroundings.
     fn full(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
-        let diff = git_diff(repo, old, new, Some(&mut diff_opts(u32::MAX))).expect("diff builds");
-        render(repo, &diff, false, Some(only), &HashSet::new()).expect("diff renders")
+        let diff = git_diff(repo, old, new).expect("diff builds");
+        render(repo, &diff, u32::MAX, |p| p == only).expect("diff renders")
     }
 
     fn lines(n: std::ops::RangeInclusive<u64>) -> String {
@@ -412,6 +486,44 @@ mod tests {
     }
 
     #[test]
+    fn gitattributes_marks_a_text_file_binary() {
+        let r = Repo::new();
+        r.write_attributes("*.bin -diff\n");
+        let t_old = r.tree(&[("data.bin", b"one\ntwo\n".as_slice())]);
+        let t_new = r.tree(&[("data.bin", b"one\nTWO\n".as_slice())]);
+        let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
+
+        // Plain text by content, but the repo says not to diff it — as git
+        // does, the attribute wins and no lines are rendered.
+        let f = &diff.files[0];
+        assert!(f.binary);
+        assert!(f.hunks.is_empty());
+        assert_eq!((f.additions, f.deletions), (0, 0));
+    }
+
+    #[test]
+    fn ambiguous_insertion_lands_on_the_block_boundary() {
+        let r = Repo::new();
+        let old = "outer = [\n  {\n    a: 1,\n  },\n  {\n    b: 2,\n  },\n]\n";
+        let new =
+            "outer = [\n  {\n    a: 1,\n  },\n  {\n    c: 3,\n  },\n  {\n    b: 2,\n  },\n]\n";
+        let t_old = r.tree(&[("a.js", old.as_bytes())]);
+        let t_new = r.tree(&[("a.js", new.as_bytes())]);
+        let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
+
+        // Every shift of this insertion costs the same three lines, so only
+        // the indent heuristic decides where it lands: the whole inserted
+        // object, not a tail of one object plus the head of the next.
+        let added: Vec<&str> = diff.files[0].hunks[0]
+            .lines
+            .iter()
+            .filter(|l| l.kind == LineKind::Add)
+            .map(|l| l.text.as_str())
+            .collect();
+        assert_eq!(added, vec!["  {", "    c: 3,", "  },"]);
+    }
+
+    #[test]
     fn added_deleted_renamed_binary() {
         let r = Repo::new();
         let keep = lines(1..=30);
@@ -461,7 +573,7 @@ mod tests {
     #[test]
     fn commit_msg_file_vs_parent_is_all_add() {
         let msg = "feat: subject\n\nA body line.\n\nChange-Id: Iabc\n";
-        let f = commit_msg_file(None, msg).expect("message file should build");
+        let f = commit_msg_file(None, msg);
         assert_eq!(f.path, COMMIT_MSG_PATH);
         assert_eq!(f.old_path, None);
         assert_eq!(f.status, FileStatus::Added);
@@ -494,7 +606,7 @@ mod tests {
     fn commit_msg_file_interdiff_diffs_messages() {
         let old = "feat: subject\n\nOld body.\n\nChange-Id: Iabc\n";
         let new = "feat: subject\n\nNew body,\nover two lines.\n\nChange-Id: Iabc\n";
-        let f = commit_msg_file(Some(old), new).expect("message file should build");
+        let f = commit_msg_file(Some(old), new);
         assert_eq!(f.path, COMMIT_MSG_PATH);
         assert_eq!(f.status, FileStatus::Modified);
         assert_eq!((f.additions, f.deletions), (2, 1));
@@ -520,7 +632,7 @@ mod tests {
     #[test]
     fn commit_msg_file_identical_interdiff_is_all_context() {
         let msg = "feat: subject\n\nSame body.\n\nChange-Id: Iabc\n";
-        let f = commit_msg_file(Some(msg), msg).expect("message file should build");
+        let f = commit_msg_file(Some(msg), msg);
         assert_eq!(f.status, FileStatus::Modified);
         assert_eq!((f.additions, f.deletions), (0, 0));
         assert_eq!(f.hunks.len(), 1);
@@ -540,13 +652,22 @@ mod tests {
     }
 
     #[test]
-    fn hunk_header_function_context() {
-        assert_eq!(
-            hunk_function_context(b"@@ -1,5 +1,7 @@ fn main()\n"),
-            "fn main()"
-        );
-        assert_eq!(hunk_function_context(b"@@ -1,5 +1,7 @@\n"), "");
-        assert_eq!(hunk_function_context(b"garbage"), "");
+    fn hunk_header_names_the_enclosing_declaration() {
+        let old = "fn main() {\n    a();\n    b();\n    c();\n    d();\n}\n";
+        let new = old.replace("    d();\n", "    D();\n");
+        let r = Repo::new();
+        let t_old = r.tree(&[("a.rs", old.as_bytes())]);
+        let t_new = r.tree(&[("a.rs", new.as_bytes())]);
+        let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
+        assert_eq!(diff.files[0].hunks[0].header, "fn main() {");
+
+        // Nothing above the hunk starts a declaration: no header.
+        let old = "    a();\n    b();\n";
+        let new = "    a();\n    B();\n";
+        let t_old = r.tree(&[("b.rs", old.as_bytes())]);
+        let t_new = r.tree(&[("b.rs", new.as_bytes())]);
+        let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
+        assert_eq!(diff.files[0].hunks[0].header, "");
     }
 
     #[test]

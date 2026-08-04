@@ -433,8 +433,10 @@ auto-correction.
 
 Diffs are never stored. The fold holds each revision's `commit_sha`,
 `parent_sha` and `base_sha`; the diff endpoint opens the repo and computes
-`parent_tree → commit_tree` (or `tree(m) → tree(n)` for an interdiff) with
-libgit2 per request. Commit messages render as the synthetic `/COMMIT_MSG`
+`parent_tree → commit_tree` (or `tree(m) → tree(n)` for an interdiff) per
+request — libgit2 for the trees, deltas and rename detection, imara-diff
+(histogram, gerrit's algorithm) for the lines inside each delta. Commit
+messages render as the synthetic `/COMMIT_MSG`
 file, and an interdiff across re-parented revisions is drift-processed
 (docs/api.md "Rebase-aware interdiffs").
 
