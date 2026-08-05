@@ -253,6 +253,7 @@ impl Drift {
 /// tagged at all (the caller serves the plain interdiff).
 ///
 /// # Errors
+///
 /// When git cannot diff the two parents.
 pub fn analyze(
     repo: &Repository,

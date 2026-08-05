@@ -38,6 +38,7 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
 /// which are worth rendering.
 ///
 /// # Errors
+///
 /// When git can't build the diff or run rename detection.
 pub fn git_diff<'r>(
     repo: &'r Repository,
@@ -98,6 +99,7 @@ pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<(FileStatus, String,
 /// of taking it.
 ///
 /// # Errors
+///
 /// When git can't read a delta's blobs.
 pub fn render(
     repo: &Repository,
@@ -151,6 +153,7 @@ pub fn render(
 /// the fallback, and git's own — a NUL byte early in the blob.
 ///
 /// # Errors
+///
 /// When git can't read the blob.
 pub(super) fn blob_bytes(repo: &Repository, path: &str, oid: git2::Oid) -> Result<Option<Vec<u8>>> {
     if oid.is_zero() {

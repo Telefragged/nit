@@ -86,6 +86,7 @@ pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<String>
 /// path-walking tip is found via [`tip_for`].
 ///
 /// # Errors
+///
 /// 404 if the change has no revisions, or if `requested` names a revision with
 /// no enclosing tip.
 pub fn resolve_revision_tip(
@@ -131,6 +132,7 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
 /// same overlay in.
 ///
 /// # Errors
+///
 /// When reading drafts fails.
 pub fn change_overlay(conn: &Connection, change_id: u64) -> Result<ChangeDrafts> {
     Ok(ChangeDrafts {
@@ -151,6 +153,7 @@ pub fn change_overlay(conn: &Connection, change_id: u64) -> Result<ChangeDrafts>
 /// (`GET /api/chains/{id}`), so a change read builds no view.
 ///
 /// # Errors
+///
 /// When reading drafts fails.
 pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<ChangeDetail> {
     // The published view (revisions/threads/reviews) is the shared fold; the

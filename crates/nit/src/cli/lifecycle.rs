@@ -29,6 +29,7 @@ pub struct AbandonArgs {
 /// Reopens an abandoned change so a new revision may be pushed.
 ///
 /// # Errors
+///
 /// When the server can't be reached or the arguments name no change.
 pub fn reopen(args: ReopenArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
@@ -48,6 +49,7 @@ pub fn reopen(args: ReopenArgs) -> Result<()> {
 /// A reviewer/agent judgment that it is dead (reversible by `nit reopen`).
 ///
 /// # Errors
+///
 /// When the server can't be reached or the arguments name no change.
 pub fn abandon(args: AbandonArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));

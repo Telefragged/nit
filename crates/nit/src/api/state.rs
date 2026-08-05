@@ -81,6 +81,7 @@ impl RepoState {
     /// The current git-common-dir.
     ///
     /// # Panics
+    ///
     /// When the git-dir lock is poisoned.
     #[must_use]
     pub fn git_dir(&self) -> String {
@@ -104,6 +105,7 @@ impl ChangeEntry {
     }
 
     /// # Panics
+    ///
     /// When the projection lock is poisoned.
     pub fn read(&self) -> std::sync::RwLockReadGuard<'_, ChangeProj> {
         self.proj.read().expect("projection lock poisoned")
@@ -117,6 +119,7 @@ impl AppState {
     /// after restart.
     ///
     /// # Errors
+    ///
     /// When the pool can't be built, the schema migration fails, or a log fails
     /// to replay.
     pub async fn load(db_path: PathBuf) -> anyhow::Result<Arc<Self>> {
@@ -202,6 +205,7 @@ impl AppState {
     /// The cached repo state, if loaded.
     ///
     /// # Panics
+    ///
     /// When the repo map mutex is poisoned.
     pub fn repo_state(&self, repo_id: u64) -> Option<Arc<RepoState>> {
         self.repos
@@ -214,6 +218,7 @@ impl AppState {
     /// The git-common-dir of a loaded repo (the read-side git work needs it).
     ///
     /// # Errors
+    ///
     /// When the repo is not in the registry cache.
     pub fn git_dir(&self, repo_id: u64) -> Result<String, Error> {
         Ok(self
@@ -225,6 +230,7 @@ impl AppState {
     /// Loaded repo ids, ascending.
     ///
     /// # Panics
+    ///
     /// When the repo map mutex is poisoned.
     pub fn repo_ids(&self) -> Vec<u64> {
         let mut ids: Vec<u64> = self
@@ -241,6 +247,7 @@ impl AppState {
     /// Cache (or refresh the git dir of) a repo's registry row.
     ///
     /// # Panics
+    ///
     /// When the repo map mutex is poisoned.
     pub fn ensure_repo(&self, row: &db::RepoRow) -> Arc<RepoState> {
         let mut map = self.repos.lock().expect("repo map poisoned");
@@ -269,9 +276,11 @@ impl AppState {
     /// mints the ones written since, so a replay here seeds nothing.
     ///
     /// # Errors
+    ///
     /// When the DB read or replay fails.
     ///
     /// # Panics
+    ///
     /// When the change map mutex is poisoned.
     pub fn change(
         &self,
@@ -305,6 +314,7 @@ impl AppState {
     /// resolves through [`AppState::change`].
     ///
     /// # Errors
+    ///
     /// When the DB read or a replay fails.
     pub fn repo_view(&self, conn: &Connection, repo_id: u64) -> anyhow::Result<RepoView> {
         Ok(RepoView::new(self.repo_changes(conn, repo_id, &[])?))
@@ -361,6 +371,7 @@ impl AppState {
 /// case.
 ///
 /// # Errors
+///
 /// See [`append_to_change_with`].
 pub fn append_to_change(
     state: &AppState,
@@ -388,11 +399,13 @@ pub fn append_to_change(
 /// appends share one transaction, so either both land or neither does.
 ///
 /// # Errors
+///
 /// On a database failure (the projection is left untouched), a fold failure
 /// (nothing is written), or a `pre_commit` failure (the transaction rolls
 /// back).
 ///
 /// # Panics
+///
 /// When the projection lock is poisoned.
 pub fn append_to_change_with(
     state: &AppState,
@@ -480,6 +493,7 @@ pub fn append_to_change_with(
 /// through.
 ///
 /// # Errors
+///
 /// When the pool can't hand out a connection, the blocking task is cancelled or
 /// panics, or `f` itself returns an error.
 pub async fn with_conn<T, F>(pool: Pool, f: F) -> Result<T, Error>

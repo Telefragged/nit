@@ -46,6 +46,7 @@ pub struct RepoMoveArgs {
 /// `nit repo` dispatch.
 ///
 /// # Errors
+///
 /// Per subcommand: server unreachable, the cwd not a git repo (`create`), or
 /// an unresolvable path (`move`).
 pub fn repo(args: RepoArgs) -> Result<()> {

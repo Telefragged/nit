@@ -9,6 +9,7 @@ const EMPTY_PATCH_ID: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
 /// `git patch-id --stable`-equivalent id of the diff `old → new`.
 ///
 /// # Errors
+///
 /// When git can't diff the trees or compute the patch-id.
 fn tree_patch_id(repo: &Repository, old: &Tree, new: &Tree) -> Result<String> {
     let diff = repo.diff_tree_to_tree(Some(old), Some(new), None)?;
@@ -21,6 +22,7 @@ fn tree_patch_id(repo: &Repository, old: &Tree, new: &Tree) -> Result<String> {
 /// Patch-id of a commit against its first parent.
 ///
 /// # Errors
+///
 /// When `commit` has no first parent or the diff fails.
 fn commit_patch_id(repo: &Repository, commit: &Commit) -> Result<String> {
     let parent_tree = commit.parent(0)?.tree()?;

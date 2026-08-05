@@ -64,6 +64,7 @@ fn resolve_commit(repo: &Repository, refish: &str) -> Result<Oid, String> {
 /// `Err(message)` the caller maps to a 400.
 ///
 /// # Errors
+///
 /// When the repo/base/tip can't be resolved, there is no merge base, or the
 /// walk contains a merge/root commit, a missing/duplicate `Change-Id`, or a
 /// `fixup!`/`squash!` subject.
@@ -242,6 +243,7 @@ pub struct HistoryCommit {
 /// marker and dangles deep forks to it).
 ///
 /// # Errors
+///
 /// When the canonical branch can't be resolved or the walk fails.
 pub fn canonical_history(
     repo: &Repository,

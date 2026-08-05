@@ -34,6 +34,7 @@ pub fn change_id_trailer(message: &str) -> Option<String> {
 /// error texts.
 ///
 /// # Errors
+///
 /// The documented scan-failure message for the first violated rule.
 pub fn require_keys(messages: &[String], short_shas: &[String]) -> Result<Vec<String>, String> {
     debug_assert_eq!(messages.len(), short_shas.len());

@@ -90,6 +90,7 @@ fn entry_summary(entry: &LogEntry) -> String {
 /// cheap read.
 ///
 /// # Errors
+///
 /// When a member's change snapshot can't be fetched.
 pub(crate) fn print_chain_digest(
     client: &Client,

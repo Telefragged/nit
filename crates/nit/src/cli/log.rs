@@ -56,6 +56,7 @@ pub struct LogArgs {
 /// With `--follow`/`--wait`, streams or drains past a cursor instead.
 ///
 /// # Errors
+///
 /// When a range is malformed or the server can't be reached.
 pub fn log(args: LogArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
@@ -102,6 +103,7 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// wake it).
 ///
 /// # Errors
+///
 /// When the server returns a malformed response or a fatal client error.
 fn wait(
     client: &Client,
@@ -159,6 +161,7 @@ fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result
 /// `reviewer_only` drops the agent's own entries (`revision`/`comment`).
 ///
 /// # Errors
+///
 /// When a connect fails fatally or stdout can't be written.
 fn follow(
     client: &Client,

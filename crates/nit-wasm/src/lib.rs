@@ -50,6 +50,7 @@ struct ReplayInput {
 /// natively.
 ///
 /// # Errors
+///
 /// When `input` is not a valid input or the projection fails to serialize.
 #[wasm_bindgen]
 pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
@@ -64,6 +65,7 @@ pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
 /// overlap: an entry below the snapshot's high-water mark is a no-op.
 ///
 /// # Errors
+///
 /// When either argument fails to parse or the result fails to serialize.
 #[wasm_bindgen]
 pub fn fold_entry(proj: JsValue, entry: JsValue) -> Result<JsValue, JsValue> {
@@ -94,6 +96,7 @@ pub fn repo_graph(changes: JsValue, history: JsValue) -> Result<JsValue, JsValue
 /// `intraline`).
 ///
 /// # Errors
+///
 /// When `regions` is not a list of replacement blocks or the marks fail to
 /// serialize.
 #[wasm_bindgen]
@@ -109,6 +112,7 @@ pub fn intraline_marks(regions: JsValue) -> Result<JsValue, JsValue> {
 /// browser overlays its own from `GET /changes/{id}/drafts`.
 ///
 /// # Errors
+///
 /// When `proj` is not a valid projection or the result fails to serialize.
 #[wasm_bindgen]
 pub fn change_detail(proj: JsValue) -> Result<JsValue, JsValue> {

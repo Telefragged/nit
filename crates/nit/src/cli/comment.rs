@@ -55,6 +55,7 @@ pub struct CommentArgs {
 /// Comment on a change: open a new thread or reply to one.
 ///
 /// # Errors
+///
 /// When the server can't be reached or the arguments name no change.
 pub fn comment(args: CommentArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));

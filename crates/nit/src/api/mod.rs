@@ -143,6 +143,7 @@ pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
 /// Runs the background lifecycle timer alongside the server.
 ///
 /// # Errors
+///
 /// When the database can't be loaded or accepting connections fails.
 pub async fn serve_on(
     listener: tokio::net::TcpListener,
@@ -169,6 +170,7 @@ pub async fn serve_on(
 /// projections the server reads, instead of going over the wire.
 ///
 /// # Errors
+///
 /// When accepting connections fails.
 pub async fn serve_on_state(
     listener: tokio::net::TcpListener,

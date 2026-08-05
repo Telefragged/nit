@@ -20,6 +20,7 @@ pub struct StatusArgs {
 /// Prints the chain's derived state plus one line per member.
 ///
 /// # Errors
+///
 /// When the server can't be reached or no chain matches the current branch.
 pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));

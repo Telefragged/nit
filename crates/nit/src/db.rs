@@ -34,6 +34,7 @@ pub fn now_rfc3339() -> String {
 /// Falls back to `~/.local/share/nit/nit.sqlite3`.
 ///
 /// # Errors
+///
 /// When neither `$XDG_DATA_HOME` nor `$HOME` is set.
 pub fn default_db_path() -> Result<PathBuf> {
     data_dir(
@@ -61,6 +62,7 @@ fn data_dir(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> Result<Pat
 /// pooled connection in `AppState::load`.
 ///
 /// # Errors
+///
 /// When the parent directory can't be created.
 pub fn pool(path: &Path) -> Result<Pool> {
     if let Some(parent) = path.parent()
@@ -260,6 +262,7 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
 /// race.
 ///
 /// # Errors
+///
 /// On a database failure, including the `UNIQUE(git_dir)` clash.
 pub fn create_repo(conn: &Connection, git_dir: &str, base_ref: &str) -> Result<RepoRow> {
     conn.execute(
@@ -275,6 +278,7 @@ pub fn create_repo(conn: &Connection, git_dir: &str, base_ref: &str) -> Result<R
 }
 
 /// # Errors
+///
 /// On a database failure.
 pub fn find_repo(conn: &Connection, git_dir: &str) -> Result<Option<RepoRow>> {
     conn.query_row(
@@ -289,6 +293,7 @@ pub fn find_repo(conn: &Connection, git_dir: &str) -> Result<Option<RepoRow>> {
 /// All repos, id-ascending (registration order).
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn all_repos(conn: &Connection) -> Result<Vec<RepoRow>> {
     let mut stmt = conn.prepare("SELECT * FROM repos ORDER BY id")?;
@@ -299,6 +304,7 @@ pub fn all_repos(conn: &Connection) -> Result<Vec<RepoRow>> {
 }
 
 /// # Errors
+///
 /// On a database failure.
 pub fn get_repo(conn: &Connection, id: u64) -> Result<Option<RepoRow>> {
     conn.query_row(
@@ -317,6 +323,7 @@ pub fn get_repo(conn: &Connection, id: u64) -> Result<Option<RepoRow>> {
 /// it to a 409).
 ///
 /// # Errors
+///
 /// On a database failure, including the `UNIQUE(git_dir)` clash.
 pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<()> {
     conn.execute(
@@ -331,6 +338,7 @@ pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<
 /// The next sweep then scans only newer commits.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn update_repo_base_head(conn: &Connection, id: u64, base_head: &str) -> Result<()> {
     conn.execute(
@@ -376,6 +384,7 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
 /// `SELECT`, and both read the same id.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &str) -> Result<u64> {
     conn.execute(
@@ -417,6 +426,7 @@ pub fn change_id_by_key(conn: &Connection, repo_id: u64, change_key: &str) -> Re
 /// backfill from replay.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn update_change_status(conn: &Connection, id: u64, status: ChangeStatus) -> Result<()> {
     conn.execute(
@@ -427,6 +437,7 @@ pub fn update_change_status(conn: &Connection, id: u64, status: ChangeStatus) ->
 }
 
 /// # Errors
+///
 /// On a database failure.
 pub fn get_change(conn: &Connection, id: u64) -> Result<Option<ChangeRow>> {
     conn.query_row(
@@ -443,6 +454,7 @@ pub fn get_change(conn: &Connection, id: u64) -> Result<Option<ChangeRow>> {
 /// The enumeration a repo view derives its chains over.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn repo_change_ids(
     conn: &Connection,
@@ -470,6 +482,7 @@ pub fn repo_change_ids(
 /// All change rows, id-ascending (creation order) — for replay on startup.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn all_changes(conn: &Connection) -> Result<Vec<ChangeRow>> {
     let mut stmt = conn.prepare("SELECT * FROM changes ORDER BY id")?;
@@ -496,6 +509,7 @@ pub struct LogRow {
 /// `head` = number of entries for a change = idx of its next entry.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn log_head(conn: &Connection, change_id: u64) -> Result<u64> {
     let max: Option<i64> = conn.query_row(
@@ -516,6 +530,7 @@ pub fn log_head(conn: &Connection, change_id: u64) -> Result<u64> {
 /// `SQLite` minted for the entry.
 ///
 /// # Errors
+///
 /// On a database failure (including a `UNIQUE(change_id, idx)` clash).
 pub fn append_log(
     conn: &Connection,
@@ -554,6 +569,7 @@ fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
 /// `to = None` means through head.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn log_entries(
     conn: &Connection,
@@ -661,6 +677,7 @@ pub struct NewDraft<'a> {
 /// collides with any other id.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
     let (rsl, rsc, rel, rec) = match d.range {
@@ -703,6 +720,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
 /// The maximum draft id, for seeding the global id counter on startup.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn max_draft_id(conn: &Connection) -> Result<u64> {
     let max: Option<i64> =
@@ -714,6 +732,7 @@ pub fn max_draft_id(conn: &Connection) -> Result<u64> {
 }
 
 /// # Errors
+///
 /// On a database failure.
 pub fn get_draft(conn: &Connection, id: u64) -> Result<Option<DraftRow>> {
     conn.query_row(
@@ -726,6 +745,7 @@ pub fn get_draft(conn: &Connection, id: u64) -> Result<Option<DraftRow>> {
 }
 
 /// # Errors
+///
 /// On a database failure.
 pub fn update_draft(
     conn: &Connection,
@@ -742,6 +762,7 @@ pub fn update_draft(
 }
 
 /// # Errors
+///
 /// On a database failure.
 pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
     conn.execute(
@@ -754,6 +775,7 @@ pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
 /// Id-ascending (creation order).
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn drafts_for_change(conn: &Connection, change_id: u64) -> Result<Vec<DraftRow>> {
     let mut stmt = conn.prepare("SELECT * FROM draft_comments WHERE change_id = ?1 ORDER BY id")?;
@@ -766,6 +788,7 @@ pub fn drafts_for_change(conn: &Connection, change_id: u64) -> Result<Vec<DraftR
 /// Called when a change's drafts publish.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn delete_drafts_for_change(conn: &Connection, change_id: u64) -> Result<()> {
     conn.execute(
@@ -802,6 +825,7 @@ fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
 /// message.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn upsert_draft_review(
     conn: &Connection,
@@ -820,6 +844,7 @@ pub fn upsert_draft_review(
 /// The change's staged decision, if any.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn get_draft_review(conn: &Connection, change_id: u64) -> Result<Option<DraftReviewRow>> {
     conn.query_row(
@@ -837,6 +862,7 @@ pub fn get_draft_review(conn: &Connection, change_id: u64) -> Result<Option<Draf
 /// nothing is staged.
 ///
 /// # Errors
+///
 /// On a database failure.
 pub fn delete_draft_review(conn: &Connection, change_id: u64) -> Result<()> {
     conn.execute(

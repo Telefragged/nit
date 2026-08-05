@@ -26,6 +26,7 @@ pub use nit_types::fold::*;
 /// crosses it.
 ///
 /// # Errors
+///
 /// When the payload fails to serialize — impossible for these plain structs.
 pub(crate) fn payload_to_json(payload: &LogPayload) -> Result<String> {
     match payload {
@@ -42,6 +43,7 @@ pub(crate) fn payload_to_json(payload: &LogPayload) -> Result<String> {
 /// The read half of the storage boundary (mirrors [`payload_to_json`]).
 ///
 /// # Errors
+///
 /// When the JSON does not match the payload shape for `kind`.
 pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload> {
     Ok(match kind {
@@ -58,6 +60,7 @@ pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload>
 /// caller's — a row knows only its own per-change coordinates.
 ///
 /// # Errors
+///
 /// When the stored `kind` is unknown or the payload is not valid JSON.
 pub fn entry_from_row(change_id: u64, row: &db::LogRow) -> Result<LogEntry> {
     let kind: LogKind = row
@@ -79,6 +82,7 @@ pub fn entry_from_row(change_id: u64, row: &db::LogRow) -> Result<LogEntry> {
 /// The log rows are in ascending idx order.
 ///
 /// # Errors
+///
 /// When a log payload fails to parse.
 pub fn replay_rows(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangeProj> {
     let entries = rows

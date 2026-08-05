@@ -28,6 +28,7 @@ pub struct PushArgs {
 /// tip — so the agent needs no follow-up read.
 ///
 /// # Errors
+///
 /// When the cwd is not a git repo, the rev can't be resolved, the server is
 /// unreachable, or the push is rejected (including an unregistered repo).
 pub fn push(args: PushArgs) -> Result<()> {
