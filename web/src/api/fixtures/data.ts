@@ -5,10 +5,9 @@
 // Chains are DERIVED, never stored: a tip is a (tip_change_id, repo) pair,
 // and its path is computed by walking the tip revision's parent_sha back to
 // the repo's base through the commit-sha → (change, revision) index (a
-// gerrit relation chain — docs/data-model.md "Scan
-// algorithm"). A change's displayed status is per (change, revision): the
-// verdict of the latest review at that revision, else pending (terminal
-// merged/abandoned win).
+// gerrit relation chain). A change's displayed status is per (change,
+// revision): the verdict of the latest review at that revision, else
+// pending (terminal merged/abandoned win).
 //
 // Coverage on purpose:
 //   repo 1 (acme-runtime)
@@ -1554,10 +1553,10 @@ export const drafts: DraftRecord[] = [
   },
 ];
 
-// Reviewer decision drafts: one staged
-// decision per change, published on chain batch submit — the mock of the
-// server's draft_reviews side table. Seed one so the dashboard drawer's
-// submit button + draft-state pill and the change-page staged chip render.
+// Reviewer decision drafts: one staged decision per change, published on
+// chain batch submit — the mock of the server's draft_reviews side table.
+// Seed one so the dashboard drawer's submit button + draft-state pill and
+// the change-page staged chip render.
 export const draftReviews = new Map<
   number,
   { decision: Decision; message: string }

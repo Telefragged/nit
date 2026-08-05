@@ -2,7 +2,7 @@
 //!
 //! All functions take trees, not commits: a change's diff is always
 //! `parent_sha → commit tree` of the selected revision, an interdiff is
-//! `tree(m) → tree(n)` (docs/data-model.md).
+//! `tree(m) → tree(n)`.
 
 use std::ops::Range;
 use std::path::Path;

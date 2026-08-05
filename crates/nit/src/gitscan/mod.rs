@@ -1,5 +1,5 @@
 //! The git layer: the push walk and merged/abandoned detection for the
-//! background timer — docs/data-model.md ("Push", "Lifecycle") is the
+//! background timer — [`walk_push`] and [`detect_landings`] carry the
 //! contract.
 //!
 //! Everything here is pure with respect to the database: it reads git and
@@ -52,9 +52,9 @@ fn resolve_commit(repo: &Repository, refish: &str) -> Result<Oid, String> {
         .map_err(|e| format!("cannot resolve '{refish}': {}", e.message()))
 }
 
-/// Walk `merge-base(base, tip)..tip` oldest-first and validate it
-/// (docs/data-model.md "Push"). The whole walk is all-or-nothing: any
-/// structural fault is an `Err(message)` the caller maps to a 400.
+/// Walk `merge-base(base, tip)..tip` oldest-first and validate it. The
+/// whole walk is all-or-nothing: any structural fault is an `Err(message)`
+/// the caller maps to a 400.
 ///
 /// # Errors
 /// When the repo/base/tip can't be resolved, there is no merge base, or the
@@ -159,8 +159,8 @@ pub fn resolve_head(repo: &Repository, base_ref: &str) -> Option<String> {
 /// Landings observed on the canonical branch in the window `since..head` (the
 /// commits added since the last sweep): each open change whose `Change-Id`
 /// appears on a new single-parent commit, paired with the landed commit's
-/// sha (docs/data-model.md "Lifecycle timer"). One walk covers every change;
-/// `open` maps `change_key →` the change. At most one landing per change.
+/// sha. One walk covers every change; `open` maps `change_key →` the change.
+/// At most one landing per change.
 ///
 /// A landing that *stripped* its Change-Id is not detected — nit's own approve
 /// action preserves the trailer through rebase + fast-forward, and chasing
@@ -262,8 +262,7 @@ pub fn canonical_history(
     Ok((out, truncated))
 }
 
-/// The keep-ref maintenance for one change's revisions — idempotent
-/// (docs/data-model.md "Keep refs").
+/// The keep-ref maintenance for one change's revisions — idempotent.
 pub fn maintain_keep_refs(repo: &Repository, change: &ChangeProj) {
     for rev in &change.revisions {
         objects::ensure_keep_ref(repo, change.id, rev.number, &rev.commit_sha);

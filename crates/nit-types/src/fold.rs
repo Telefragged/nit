@@ -1,17 +1,17 @@
 //! The fold: a **change's** reviewable state is the replay of its append-only
-//! event log (docs/data-model.md "The fold"). [`ChangeProj`] is the in-memory
-//! state machine; [`fold`] applies one wire [`LogEntry`]; [`replay`] rebuilds a
-//! change's projection from its entries. A chain is never folded — it is
-//! composed at read time from member projections (`crate::chain`).
+//! event log. [`ChangeProj`] is the in-memory state machine; [`fold`] applies
+//! one wire [`LogEntry`]; [`replay`] rebuilds a change's projection from its
+//! entries. A chain is never folded — it is composed at read time from member
+//! projections (`crate::chain`).
 //!
 //! Pure over `nit_types` alone: no database, no storage serialization, no event
 //! publishing. The server's db/storage adapters (`crate::review`) feed it wire
 //! `LogEntry`s and store/broadcast the entries it returns; the same code folds
 //! the websocket stream client-side once compiled to WebAssembly.
 //!
-//! Fold-assigned ids: review ids arrive already allocated inside the entry
-//! payloads (the server mints them from a process-global counter at append
-//! time). The change id is the `changes` rowid, carried on the projection.
+//! Fold-assigned ids: a review's id is its `review` entry's `idx` — a log
+//! coordinate, reproduced by replay with nothing stored and nothing minted.
+//! The change id is the `changes` rowid, carried on the projection.
 //! Revision numbers (0-based) are minted **in the fold** by creation order — a
 //! pure function of the log, never stored. Thread ids are minted in the fold
 //! too: [`fold`] takes an entry by value and, via
@@ -20,8 +20,7 @@
 //! so the caller stores and broadcasts that one value. `next_thread_id` is the
 //! single source of truth — the only field minting touches — so a concurrent
 //! shared-change push can't duplicate an id, and replay (ids already set) just
-//! advances it (docs/data-model.md "Identity"). The fold therefore requires
-//! entries in ascending `idx` order.
+//! advances it. The fold therefore requires entries in ascending `idx` order.
 //!
 //! [`ChangeProj::entries_folded`] is the count of entries consumed (the next
 //! `idx`): the server stamps it into a snapshot so a follower resumes folding
@@ -35,10 +34,9 @@ use crate::comments::{CommentRange, Thread};
 use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
 use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
-/// A change's terminal lifecycle, folded from its `lifecycle` entries
-/// (docs/data-model.md "Lifecycle"). The landed commit's sha stays on the
-/// `merged` log entry, not here — the fold answers "is it landed", the log
-/// answers "as what".
+/// A change's terminal lifecycle, folded from its `lifecycle` entries. The
+/// landed commit's sha stays on the `merged` log entry, not here — the fold
+/// answers "is it landed", the log answers "as what".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -129,8 +127,8 @@ pub struct ThreadComment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReviewProj {
-    /// The `idx` of the `review` entry this is the fold of (docs/data-model.md
-    /// "Identity within the log").
+    /// The `idx` of the `review` entry this is the fold of — a log
+    /// coordinate, reproduced by replay with nothing stored.
     pub id: u64,
     pub revision: u64,
     pub verdict: Verdict,
@@ -207,8 +205,8 @@ impl ChangeProj {
 
     /// The change's current status: [`status_at`](Self::status_at) its latest
     /// revision (pending when it has none). The denormalized `changes.status`
-    /// column caches this so a query can filter changes without folding their
-    /// logs (docs/data-model.md "Tables").
+    /// column (`crates/nit/src/db.rs`) caches this so a query can filter
+    /// changes without folding their logs.
     #[must_use]
     pub fn current_status(&self) -> ChangeStatus {
         self.status_at(self.latest_revision().map_or(0, |r| r.number))
@@ -216,15 +214,15 @@ impl ChangeProj {
 
     /// The displayed status at a pinned revision: the lifecycle overlay
     /// (`abandoned` change-wide, `merged` at the latest patchset) over the
-    /// verdict-derived review status (docs/data-model.md "Per-change,
-    /// per-revision status").
+    /// verdict-derived review status (`review_status_at`).
     #[must_use]
     pub fn status_at(&self, revision: u64) -> ChangeStatus {
         if matches!(self.lifecycle, Lifecycle::Abandoned) {
             return ChangeStatus::Abandoned;
         }
-        // The landed content may match no recorded patchset (docs/
-        // data-model.md "Lifecycle timer"), so the latest stands in for it.
+        // A landing may carry content matching no recorded patchset (the
+        // approve action rebases before merging; the timer only records the
+        // landing by Change-Id), so the latest stands in for it.
         if self.is_merged() && self.latest_revision().is_some_and(|r| r.number == revision) {
             return ChangeStatus::Merged;
         }
@@ -251,10 +249,9 @@ impl ChangeProj {
     }
 
     /// Resolve a comment's thread id and keep `next_thread_id` — the single
-    /// source of truth — past it (docs/data-model.md "Identity"). Called before
-    /// each fold: a live append mints (the stored payload then carries the id)
-    /// while replay, seeing the id already set, only advances the counter —
-    /// no double count.
+    /// source of truth — past it. Called before each fold: a live append mints
+    /// (the stored payload then carries the id) while replay, seeing the id
+    /// already set, only advances the counter — no double count.
     pub fn mint_thread_id(&mut self, comment: &mut CommentInput) {
         if comment.thread_id.is_none() && !comment.body.trim().is_empty() {
             comment.thread_id = Some(self.next_thread_id);
@@ -265,9 +262,9 @@ impl ChangeProj {
     }
 }
 
-/// Apply one wire entry to a change's projection (docs/data-model.md "The
-/// fold"), minting any new-thread ids into the entry's typed payload and
-/// returning the id-bearing entry (the server stores and broadcasts that one).
+/// Apply one wire entry to a change's projection, minting any new-thread ids
+/// into the entry's typed payload and returning the id-bearing entry (the
+/// server stores and broadcasts that one).
 pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
     // Idempotent across the snapshot/live overlap: an entry already folded into
     // this projection (its idx below the high-water mark) leaves it untouched,
@@ -329,8 +326,8 @@ fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
 
 /// Apply one comment — its `thread_id` already resolved by
 /// [`ChangeProj::mint_thread_id`] — to a change's threads (shared by `review`
-/// and `comment`; docs/data-model.md "The fold"). An unset id is a no-op:
-/// the mint left it alone because the body was empty.
+/// and `comment`). An unset id is a no-op: the mint left it alone because the
+/// body was empty.
 fn apply_comment(change: &mut ChangeProj, c: &CommentInput, review_id: Option<u64>, now: &str) {
     let Some(tid) = c.thread_id else { return };
     if let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) {

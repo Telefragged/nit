@@ -459,8 +459,8 @@ export type ThreadProj = {
 
 export type ReviewProj = {
   /**
-   * The `idx` of the `review` entry this is the fold of (docs/data-model.md
-   * "Identity within the log").
+   * The `idx` of the `review` entry this is the fold of — a log
+   * coordinate, reproduced by replay with nothing stored.
    */
   id: number;
   revision: number;

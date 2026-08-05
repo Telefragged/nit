@@ -7,10 +7,10 @@
 //!
 //! All rusqlite/git2 work runs off the async runtime; database work goes
 //! through a pooled connection ([`state::with_conn`]). Every appender to one
-//! change serializes through its projection write lock and folds in lock-step
-//! (docs/data-model.md "Concurrency"). A chain owns nothing — it is derived at
-//! read time. Merged/abandoned detection runs in a background timer
-//! ([`timer::run_lifecycle_timer`]); there are no read-time scans.
+//! change serializes through its projection write lock and folds in lock-step.
+//! A chain owns nothing — it is derived at read time. Merged/abandoned
+//! detection runs in a background timer ([`timer::run_lifecycle_timer`]);
+//! there are no read-time scans.
 
 pub mod diff;
 pub mod rebase;

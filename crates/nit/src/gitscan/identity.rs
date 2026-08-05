@@ -1,6 +1,5 @@
 //! Change identity helpers: `Change-Id:` trailer extraction, the
-//! required-Change-Id validation (docs/data-model.md "Change identity"),
-//! and commit subject extraction.
+//! required-Change-Id validation, and commit subject extraction.
 
 use std::collections::HashMap;
 

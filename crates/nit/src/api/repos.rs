@@ -59,7 +59,7 @@ pub(super) async fn create_repo(
         let row = db::create_repo(conn, &canonical, &req.base)?;
         // Seed the merge timer's baseline at the base ref's current HEAD, so the
         // first landing after registration shows up in a delta scan rather than
-        // being swallowed as pre-tracking history (docs/data-model.md).
+        // being swallowed as pre-tracking history.
         db::update_repo_base_head(conn, row.id, &base_commit.id().to_string())?;
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, conn, row)?))

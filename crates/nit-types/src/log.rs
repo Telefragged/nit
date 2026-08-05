@@ -1,5 +1,5 @@
-//! The typed payloads of the append-only log (docs/data-model.md "Payloads"):
-//! one struct per `kind`, shared by the server's fold and the wire `LogEntry`.
+//! The typed payloads of the append-only log: one struct per `kind`,
+//! shared by the server's fold and the wire `LogEntry`.
 
 use serde::{Deserialize, Serialize};
 

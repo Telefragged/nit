@@ -5,14 +5,14 @@
 //! - [`nit_types::enums`] — the shared closed vocabularies (sides, verdicts,
 //!   statuses, kinds): one serde enum per fixed value set, used by the domain,
 //!   the wire, and the CLI alike (never a `String`).
-//! - [`db`] — `SQLite` persistence: open/migrate, typed rows, query helpers
-//!   (schema contract: `docs/data-model.md`).
+//! - [`db`] — `SQLite` persistence: open/migrate, typed rows, query helpers;
+//!   its own doc-comments are the schema contract.
 //! - [`review`] — the per-change fold: a change's reviewable state is the
 //!   replay of its append-only log.
 //! - [`chain`] — chain derivation: walks a tip's `parent_sha` back to the
 //!   canonical base, a pure function of the per-change folds.
 //! - [`gitscan`] — the git layer: the push walk, merged/abandoned detection,
-//!   and GC-safety keep refs (`docs/data-model.md`).
+//!   and GC-safety keep refs ([`gitscan::objects`]).
 //! - [`api`] — the axum HTTP layer (wire contract: the `nit_types`
 //!   crate) plus the `nit serve` wiring.
 //! - [`cli`] — `nit push`/`status`/`log`/`comment`, thin clients of the API.

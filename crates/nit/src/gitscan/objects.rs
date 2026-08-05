@@ -1,5 +1,4 @@
-//! Git object plumbing: patch-ids and the GC-safety keep refs
-//! (docs/data-model.md "Keep refs").
+//! Git object plumbing: patch-ids and the GC-safety keep refs.
 
 use anyhow::Result;
 use git2::{Commit, Oid, Repository, Tree};
@@ -38,6 +37,11 @@ pub fn sha_patch_id(repo: &Repository, sha: &str) -> Option<String> {
 /// Ref name pinning one revision's git objects against `git gc`. Keyed on the
 /// change (a chain is not stored), so a commit a prefix-merged ancestor still
 /// walks through keeps its objects.
+///
+/// Deleting these refs is deferred on purpose — nothing prunes them, even
+/// for merged/abandoned changes. Over-pinning is fail-safe; dropping a ref
+/// can orphan objects the sha-walk, a vs-parent diff of retained history,
+/// or the timer's `base_sha..canonical` walk still needs.
 #[must_use]
 pub fn keep_ref_name(change_id: u64, revision_number: u64) -> String {
     format!("refs/nit/keep/{change_id}/{revision_number}")

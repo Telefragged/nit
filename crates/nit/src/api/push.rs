@@ -42,7 +42,7 @@ pub(super) async fn push(
         // A tip that is ancestor-or-equal of the base walks to nothing: the work
         // already landed (or you pushed the base itself). Reject it loudly rather
         // than recording nothing, so a stray push of a merged commit is a visible
-        // mistake, not a silent no-op (docs/data-model.md "Push").
+        // mistake, not a silent no-op.
         if walk.commits.is_empty() {
             return Err(Error::conflict(format!(
                 "tip {} is already merged into '{}' — no commits to review",
@@ -68,9 +68,8 @@ pub(super) async fn push(
                     wc.change_key
                 )));
             }
-            // A Change-Id is never reused (docs/data-model.md "Lifecycle
-            // timer"): without this gate a new revision would paint the
-            // merged overlay onto unreviewed content.
+            // A Change-Id is never reused: without this gate a new revision
+            // would paint the merged overlay onto unreviewed content.
             if moves && proj.is_merged() {
                 return Err(Error::conflict(format!(
                     "change {} is merged — new work needs its own Change-Id",

@@ -5,8 +5,8 @@
 //! Each change's [`ChangeProj`](crate::review::ChangeProj) is rebuilt by
 //! replaying its log on startup and kept current by [`append_to_change`],
 //! which appends to the DB log and folds in lock-step under the change's
-//! projection write lock (docs/data-model.md "Concurrency"). A chain owns no
-//! state — it is derived at read time from member folds (`crate::chain`).
+//! projection write lock. A chain owns no state — it is derived at read
+//! time from member folds (`crate::chain`).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -53,7 +53,7 @@ pub struct AppState {
 
 /// Cached repo registry entry; `git_dir` is in an `RwLock` because `nit repo move`
 /// repoints it in-place. The merge timer's baseline is not cached here — it lives
-/// only in `repos.base_head` (docs/data-model.md "Lifecycle timer").
+/// only in `repos.base_head` (the merge sweep's cursor, `crate::api::timer`).
 pub struct RepoState {
     pub base_ref: String,
     pub git_dir: StdRwLock<String>,
@@ -395,7 +395,7 @@ pub fn append_to_change_with(
         applied.push(LogEntry { seq, ..e });
     }
     // Re-stamp the denormalized status from the validated projection, in the
-    // same transaction as the appends (docs/data-model.md "Tables").
+    // same transaction as the appends.
     db::update_change_status(&tx, change_id, next.current_status())?;
     tx.commit()?;
 

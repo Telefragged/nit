@@ -1,8 +1,8 @@
 //! `SQLite` persistence layer.
 //!
-//! Schema contract: `docs/data-model.md` ("Tables"). Five tables: the
-//! `repos` registry, the `changes` identity registry, the append-only event
-//! `log` (keyed on the change, with a global `seq`), and the reviewer's
+//! This module's docs are the schema contract. Five tables: the `repos`
+//! registry, the `changes` identity registry, the append-only event `log`
+//! (keyed on the change, with a global `seq`), and the reviewer's
 //! `draft_comments` and staged `draft_reviews`. All reviewable state is the
 //! fold of the per-change logs (`crate::review`), held in memory and rebuilt
 //! by replay. Nothing in the log is ever mutated or deleted.
@@ -89,8 +89,8 @@ fn prepare(conn: &mut Connection) -> rusqlite::Result<()> {
 }
 
 const MIGRATIONS: &[&str] = &[
-    // v1: the schema — docs/data-model.md "Tables". One `PRAGMA user_version`
-    // step per entry; later schema changes append as v2, v3, ….
+    // v1: the schema. One `PRAGMA user_version` step per entry; later
+    // schema changes append as v2, v3, ….
     "
     CREATE TABLE repos (
       id          INTEGER PRIMARY KEY,
@@ -139,20 +139,19 @@ const MIGRATIONS: &[&str] = &[
     ",
     // v2: the merge timer's baseline — the canonical-branch HEAD it last
     // reconciled against, so each sweep scans only the new commits and resumes
-    // across restarts (docs/data-model.md "Lifecycle timer"). NULL until the
-    // first observation; set at `nit repo create` to the branch's then-HEAD.
+    // across restarts. NULL until the first observation; set at
+    // `nit repo create` to the branch's then-HEAD.
     "ALTER TABLE repos ADD COLUMN base_head TEXT;",
     // v3: a denormalized cache of each change's current status — the displayed
     // status at its latest revision (`review::ChangeProj::current_status`). The
     // fold of the change's log stays authoritative; this column exists so a
-    // query can filter/scan changes by status without replaying every log
-    // (docs/data-model.md "Tables"). Re-stamped inside every append's
-    // transaction and reconciled against the fold on startup (rewritten only
-    // when it has drifted); NULL only for a change that has never appended (a
-    // torn push), until its next append or restart.
+    // query can filter/scan changes by status without replaying every log.
+    // Re-stamped inside every append's transaction and reconciled against
+    // the fold on startup (rewritten only when it has drifted); NULL only
+    // for a change that has never appended (a torn push), until its next
+    // append or restart.
     "ALTER TABLE changes ADD COLUMN status TEXT;",
-    // v4: `base_ref` stores a git ref, not necessarily a local branch
-    // (docs/data-model.md "Tables").
+    // v4: `base_ref` stores a git ref, not necessarily a local branch.
     "ALTER TABLE repos RENAME COLUMN base_branch TO base_ref;",
     // v5: the `partial` log kind's flag never affected a change's stored
     // status (it only gated the read-derived `approved` chain state), so
@@ -219,7 +218,7 @@ fn col_change_status(s: &str) -> rusqlite::Result<ChangeStatus> {
 
 // ---------------------------------------------------------------------------
 // Repos (the registry: a canonical git-common-dir → id + its one canonical
-// branch — docs/data-model.md "Tables")
+// branch)
 
 #[derive(Debug, Clone)]
 pub struct RepoRow {
@@ -228,8 +227,8 @@ pub struct RepoRow {
     pub git_dir: String,
     /// The repo's one canonical branch; mergedness always tracks it.
     pub base_ref: String,
-    /// The canonical-branch HEAD the merge timer last reconciled against
-    /// (docs/data-model.md "Lifecycle timer"); `None` until first observed.
+    /// The canonical-branch HEAD the merge timer last reconciled against;
+    /// `None` until first observed.
     pub base_head: Option<String>,
 }
 
@@ -312,8 +311,7 @@ pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<
 }
 
 /// Record the canonical-branch HEAD the merge timer last reconciled against,
-/// so the next sweep scans only newer commits (docs/data-model.md "Lifecycle
-/// timer").
+/// so the next sweep scans only newer commits.
 ///
 /// # Errors
 /// On a database failure.
@@ -333,8 +331,8 @@ pub struct ChangeRow {
     pub id: u64,
     pub repo_id: u64,
     pub change_key: String,
-    /// The denormalized status cache (docs/data-model.md "Tables"); `None`
-    /// before the change's first append. Authoritative state is the fold.
+    /// The denormalized status cache; `None` before the change's first
+    /// append. Authoritative state is the fold.
     pub status: Option<ChangeStatus>,
     pub created_at: String,
 }
@@ -373,11 +371,10 @@ pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &str) -> Resul
     Ok(col_u64(id)?)
 }
 
-/// Re-stamp a change's denormalized `status` (docs/data-model.md "Tables") —
-/// the fold's current status, cached so a query need not replay the log. The
-/// change's log stays the source of truth; this is called inside the same
-/// transaction as the append that moved the fold, and on startup to backfill
-/// from replay.
+/// Re-stamp a change's denormalized `status` — the fold's current status,
+/// cached so a query need not replay the log. The change's log stays the
+/// source of truth; this is called inside the same transaction as the append
+/// that moved the fold, and on startup to backfill from replay.
 ///
 /// # Errors
 /// On a database failure.
@@ -717,8 +714,8 @@ pub fn delete_drafts_for_change(conn: &Connection, change_id: u64) -> Result<()>
 }
 
 // ---------------------------------------------------------------------------
-// Draft reviews: staged, never written to the log until published —
-// docs/data-model.md "Reviewer decisions".
+// Draft reviews: staged, never written to the log until published
+// (`crate::api::reviews`).
 
 /// A reviewer's staged decision on a change.
 #[derive(Debug, Clone)]

@@ -58,8 +58,8 @@ impl std::str::FromStr for Side {
     }
 }
 
-/// The kind of one log entry (docs/data-model.md "The log"). The fold
-/// dispatches on it; the db `log.kind` TEXT column stores its [`as_str`].
+/// The kind of one log entry. The fold dispatches on it; the db
+/// `log.kind` TEXT column stores its [`as_str`].
 /// Each entry belongs to one **change**: a `revision` records a new
 /// commit-sha for the change, a `lifecycle` records a merge/abandon/reopen.
 ///
@@ -100,9 +100,8 @@ impl std::str::FromStr for LogKind {
     }
 }
 
-/// What a `lifecycle` log entry records about a change (docs/data-model.md
-/// "Payloads"). The merge/abandon timer writes `merged`/`abandoned`;
-/// `nit reopen` writes `reopened`.
+/// What a `lifecycle` log entry records about a change. The merge/abandon
+/// timer writes `merged`/`abandoned`; `nit reopen` writes `reopened`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -266,8 +265,7 @@ impl std::str::FromStr for ChangeStatus {
 
 impl From<Verdict> for ChangeStatus {
     /// The review status a verdict produces, before the lifecycle overlay
-    /// (`merged`/`abandoned`) the server's fold layers on top
-    /// (docs/data-model.md "The fold").
+    /// (`merged`/`abandoned`) the server's fold layers on top.
     fn from(verdict: Verdict) -> ChangeStatus {
         match verdict {
             Verdict::Approve => ChangeStatus::Approved,

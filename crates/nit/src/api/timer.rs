@@ -29,9 +29,9 @@ fn timer_interval() -> Duration {
 }
 
 /// The background sweep: detect **merged** changes (a change landed on the
-/// canonical branch) and append `lifecycle{merged}` entries
-/// (docs/data-model.md "Lifecycle"). The only writer of `merged`. It never
-/// abandons — abandonment is an explicit action (`abandon_change`).
+/// canonical branch) and append `lifecycle{merged}` entries. The only
+/// writer of `merged`. It never abandons — abandonment is an explicit
+/// action (`abandon_change`).
 pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
     let interval = timer_interval();
     let mut shutdown = state.shutdown_watch();

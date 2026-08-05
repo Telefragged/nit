@@ -1,7 +1,7 @@
-//! Change lifecycle (docs/data-model.md "Lifecycle"): merged detection
-//! when a change lands on the canonical branch (the background timer's
-//! only job, prefix-merge included), plus the explicit `abandon`/`reopen`
-//! actions and the 409-then-200 push gate around an abandoned change.
+//! Change lifecycle: merged detection when a change lands on the canonical
+//! branch (the background timer's only job, prefix-merge included), plus
+//! the explicit `abandon`/`reopen` actions and the 409-then-200 push gate
+//! around an abandoned change.
 //!
 //! `merged` is written only by the background sweep, so the merged tests drive
 //! one sweep synchronously through `sweep()` and assert. Abandonment is an

@@ -68,7 +68,6 @@ identity across rewrites. Product spec: `nit.md`.
 - `crates/nit/` — Rust: axum server, git2 scanning, sqlite state, CLI
 - `web/` — React/TS SPA (Vite)
 - `docs/` — read the one you need:
-  - `data-model.md` — schema, change identity, scan algorithm, status machine
   - `dev.md` — verification, formatting, screenshot harness, testing,
     commit discipline, landing
   - `design-review-guide.md` — design anti-patterns to catch when reviewing

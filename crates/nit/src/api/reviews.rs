@@ -43,15 +43,15 @@ fn drafts_to_comments(
 }
 
 /// Publish one reviewer `decision` for a change in **one** per-change
-/// transaction (docs/data-model.md "Reviewer decisions"): a `reopen` lifecycle
-/// (so a following review lands on a now-active change), then a `review` entry
-/// draining the change's comment drafts (the decision's verdict, or `comment`
-/// to carry staged comments when the decision is purely lifecycle), then an
-/// `abandon` lifecycle — whichever the decision calls for. The drained comment
-/// drafts and the change's `draft_reviews` row are deleted in the same
-/// transaction, so a half-published batch never strands work and a re-submit is
-/// idempotent. The shared core of `POST /reviews` and the chain batch submit;
-/// callers validate the target revision/lifecycle first.
+/// transaction: a `reopen` lifecycle (so a following review lands on a
+/// now-active change), then a `review` entry draining the change's comment
+/// drafts (the decision's verdict, or `comment` to carry staged comments when
+/// the decision is purely lifecycle), then an `abandon` lifecycle — whichever
+/// the decision calls for. The drained comment drafts and the change's
+/// `draft_reviews` row are deleted in the same transaction, so a
+/// half-published batch never strands work and a re-submit is idempotent.
+/// Called per member by the chain batch submit — the only publish path;
+/// the caller validates the target revision/lifecycle first.
 fn publish_member(
     conn: &mut rusqlite::Connection,
     state: &Arc<AppState>,

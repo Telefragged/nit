@@ -3,7 +3,7 @@
 //! tip back to the canonical base through each revision's recorded
 //! `parent_sha` (gerrit relation chains), and derives the live tip set and a
 //! chain's actionable state. Everything here is a **pure function** of an
-//! owned snapshot of the changes (docs/data-model.md "Chain derivation").
+//! owned snapshot of the changes.
 
 use std::collections::{HashMap, HashSet};
 
