@@ -115,6 +115,35 @@ code comments in one way: restating the _what_ is welcome. `/// Pushes
 an element to the back of the vector.` is a fine doc for `Vec::push`,
 where the same sentence inside the body would be narration.
 
+The first paragraph — everything up to the first blank line — is also
+the item's **summary**: rustdoc lifts it into module item tables and
+search results, and IDE hovers lead with it. Keep it to a single line
+in the third person present indicative (`Returns the tip`, not `Return
+the tip`). Those tables render at a fixed width, so a long summary
+wraps into a multi-line cell and the list stops being skimmable — 15
+words is about the ceiling. Everything past that first sentence goes
+below the blank line, where it costs a skimming reader nothing.
+
+<example type="summary line — split the detail out">
+
+```rust
+/// Returns the change the reviewer is looking at, resolving to the
+/// chain tip when the request names no revision and to the latest
+/// approved change otherwise.
+```
+
+Three lines of item table for one entry. Split at the first sentence
+and the summary fits on one:
+
+```rust
+/// Returns the change the reviewer is looking at.
+///
+/// Resolves to the chain tip when the request names no revision, and
+/// to the latest approved change otherwise.
+```
+
+</example>
+
 What a doc-comment must carry is the **contract**: invariants the
 caller may rely on, panics, error conditions, ordering guarantees.
 `crates/nit-types` doc-comments are the wire contract itself — their
