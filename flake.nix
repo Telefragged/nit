@@ -384,7 +384,6 @@
           test-nit-wasm = cargoNix.workspaceMembers."nit-wasm".build.override {
             runTests = true;
           };
-          # Check that all files are formatted (same treefmt as `nix fmt`).
           treefmt = pkgs.stdenvNoCC.mkDerivation {
             name = "treefmt-check";
             src = self;
@@ -414,11 +413,9 @@
             features = [ ];
           };
           # The frontend lint (eslint + stylelint + knip) as a validator, the
-          # web counterpart to clippy — it mirrors the devShell `npm run lint`.
-          # Shares nit-web's source and npm dependency closure (webArgs) but
-          # runs the lint in place of the build, so a stylelint, eslint, or
-          # knip regression fails `nix flake check` instead of slipping in.
-          # The lint report is the derivation's output.
+          # web counterpart to clippy — it mirrors the devShell `npm run lint`,
+          # so a stylelint, eslint, or knip regression fails `nix flake check`
+          # instead of slipping in.
           # web-lint/web-test set dontNpmBuild, which disables the build phase
           # (and its preBuild hook), so inject the wasm at the head of the
           # install phase that runs the lint/test instead.
@@ -464,8 +461,6 @@
               NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
             '';
           };
-          # The committed web/src/api/types.gen.ts must match a fresh
-          # generation from nit-types — `nix run .#gen-types` to refresh it.
           types-drift = pkgs.runCommand "types-drift-check" { } ''
             if ! diff -u ${self}/web/src/api/types.gen.ts ${wireTypesTs pkgs}; then
               echo "web/src/api/types.gen.ts is stale — run: nix run .#gen-types" >&2
