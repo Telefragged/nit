@@ -13,10 +13,10 @@ use rusqlite::Connection;
 use nit_types::enums::LifecycleAction;
 use nit_types::log::LogPayload;
 
-use crate::chain::RepoView;
 use crate::db;
 use crate::gitscan;
 use crate::review::ChangeProj;
+use nit_types::chain::RepoView;
 
 use super::{AppState, append_to_change, with_conn};
 

@@ -1,9 +1,9 @@
 //! View assembly: folds + chain derivation + drafts → wire shapes.
 //!
 //! The per-change folds (`crate::review`), chain derivation
-//! (`crate::chain`) and reviewer drafts become the `nit_types` wire shapes.
-//! Chain views take a [`RepoView`] snapshot plus the repo handle (for
-//! query-time tip names); draft rows come from the database.
+//! (`nit_types::chain`) and reviewer drafts become the `nit_types` wire
+//! shapes. Chain views take a [`RepoView`] snapshot plus the repo handle
+//! (for query-time tip names); draft rows come from the database.
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,10 +17,10 @@ use nit_types::comments::Draft;
 use nit_types::enums::{ChangeStatus, GraphSection};
 use nit_types::graph::{GraphNode, RepoGraph};
 
-use crate::chain::{self, PathMember, RepoView};
 use crate::db;
 use crate::gitscan::{self, identity::subject_of};
 use crate::review::ChangeProj;
+use nit_types::chain::{self, PathMember, RepoView};
 
 use super::Error;
 

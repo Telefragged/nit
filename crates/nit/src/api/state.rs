@@ -8,7 +8,7 @@
 //! replaying its log on startup and kept current by [`append_to_change`],
 //! which appends to the DB log and folds in lock-step under the change's
 //! projection write lock. A chain owns no state — it is derived at read
-//! time from member folds (`crate::chain`).
+//! time from member folds (`nit_types::chain`).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -26,9 +26,9 @@ use tokio::sync::watch;
 use nit_types::error::ApiError;
 use nit_types::log::{LogEntry, LogPayload};
 
-use crate::chain::RepoView;
 use crate::db;
 use crate::review::{self, ChangeProj};
+use nit_types::chain::RepoView;
 
 /// Live-event buffer.
 ///

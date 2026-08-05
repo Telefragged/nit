@@ -45,8 +45,8 @@ use nit_types::comments::CommentRange;
 use nit_types::enums::Side;
 use nit_types::health::Health;
 
-use crate::chain::RepoView;
 use crate::review;
+use nit_types::chain::RepoView;
 
 pub use state::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change,

@@ -8,9 +8,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use nit_types::enums::{ChainState, ChangeStatus};
+use crate::enums::{ChainState, ChangeStatus};
 
-use crate::review::ChangeProj;
+use crate::fold::ChangeProj;
 
 /// One member of a derived path, pinned to the revision the walk selected.
 #[derive(Debug, Clone)]
@@ -308,9 +308,9 @@ pub fn graph_row_order(nodes: &[(String, Vec<String>)]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::enums::Verdict;
+    use crate::enums::Verdict;
 
-    use crate::review::{ChangeProj, Lifecycle, ReviewProj, RevisionProj};
+    use crate::fold::{ChangeProj, Lifecycle, ReviewProj, RevisionProj};
 
     fn rev(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProj {
         RevisionProj {

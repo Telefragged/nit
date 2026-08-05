@@ -16,6 +16,7 @@
 //! web build can share these types without pulling in the server, and every
 //! payload is a typed shape rather than dynamic JSON.
 
+pub mod chain;
 pub mod chains;
 pub mod changes;
 pub mod comments;

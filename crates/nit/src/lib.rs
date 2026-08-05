@@ -9,8 +9,8 @@
 //!   its own doc-comments are the schema contract.
 //! - [`review`] — the per-change fold: a change's reviewable state is the
 //!   replay of its append-only log.
-//! - [`chain`] — chain derivation: walks a tip's `parent_sha` back to the
-//!   canonical base, a pure function of the per-change folds.
+//! - [`nit_types::chain`] — chain derivation: walks a tip's `parent_sha`
+//!   back to the canonical base, a pure function of the per-change folds.
 //! - [`gitscan`] — the git layer: the push walk, merged/abandoned detection,
 //!   and GC-safety keep refs ([`gitscan::objects`]).
 //! - [`api`] — the axum HTTP layer (wire contract: the `nit_types`
@@ -27,7 +27,6 @@
 pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), env!("NIT_GIT_SUFFIX"));
 
 pub mod api;
-pub mod chain;
 pub mod cli;
 pub mod db;
 pub mod gitscan;
