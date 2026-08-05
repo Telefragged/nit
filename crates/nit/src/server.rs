@@ -1,5 +1,7 @@
-//! `nit serve` — wires the axum app (`nit::api`) to a listener, the
-//! sqlite database and the optional built web UI.
+//! `nit serve` — the process wiring for the axum app (`nit::api`).
+//!
+//! Wires it to a listener, the sqlite database and the optional built web
+//! UI.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;

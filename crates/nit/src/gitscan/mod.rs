@@ -1,6 +1,7 @@
-//! The git layer: the push walk and merged/abandoned detection for the
-//! background timer — [`walk_push`] and [`detect_landings`] carry the
-//! contract.
+//! The git layer: the push walk and merged/abandoned detection.
+//!
+//! The detection serves the background timer; [`walk_push`] and
+//! [`detect_landings`] carry the contract.
 //!
 //! Everything here is pure with respect to the database: it reads git and
 //! returns values the caller (the api layer) folds into the per-change logs.
@@ -26,9 +27,11 @@ pub fn short_sha(sha: &str) -> String {
     sha.chars().take(12).collect()
 }
 
-/// One commit the push walk recorded, oldest-first. `parent_sha` is its first
-/// parent (the previous member, or the fork for the first); `base_sha` is the
-/// whole walk's fork point on the canonical branch.
+/// One commit the push walk recorded, oldest-first.
+///
+/// `parent_sha` is its first parent (the previous member, or the fork for
+/// the first); `base_sha` is the whole walk's fork point on the canonical
+/// branch.
 #[derive(Debug, Clone)]
 pub struct WalkedCommit {
     pub change_key: String,
@@ -37,8 +40,10 @@ pub struct WalkedCommit {
     pub message: String,
 }
 
-/// The result of a push walk: the fork point on the canonical branch and the
-/// commits between it and the tip, oldest-first.
+/// A push walk's fork point and the commits between it and the tip.
+///
+/// The fork point is on the canonical branch; the commits are
+/// oldest-first.
 #[derive(Debug, Clone)]
 pub struct PushWalk {
     pub fork_sha: String,
@@ -52,9 +57,10 @@ fn resolve_commit(repo: &Repository, refish: &str) -> Result<Oid, String> {
         .map_err(|e| format!("cannot resolve '{refish}': {}", e.message()))
 }
 
-/// Walk `merge-base(base, tip)..tip` oldest-first and validate it. The
-/// whole walk is all-or-nothing: any structural fault is an `Err(message)`
-/// the caller maps to a 400.
+/// Walks `merge-base(base, tip)..tip` oldest-first and validates it.
+///
+/// The whole walk is all-or-nothing: any structural fault is an
+/// `Err(message)` the caller maps to a 400.
 ///
 /// # Errors
 /// When the repo/base/tip can't be resolved, there is no merge base, or the
@@ -101,8 +107,9 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
     })
 }
 
-/// Walk `base..tip` oldest-first, rejecting merge and root commits (the
-/// diff/identity model needs a single first parent everywhere).
+/// Walks `base..tip` oldest-first, rejecting merge and root commits.
+///
+/// The diff/identity model needs a single first parent everywhere.
 fn walk_linear(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>, String> {
     let mut walk = repo.revwalk().map_err(|e| e.to_string())?;
     walk.push(tip).map_err(|e| e.to_string())?;
@@ -128,9 +135,10 @@ fn walk_linear(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>
     Ok(commits)
 }
 
-/// True when a revision differs from the previous one only by a rebase: a
-/// patch-id-equal commit with an unchanged message. Unverifiable objects make
-/// it false.
+/// True when a revision differs from its predecessor only by a rebase.
+///
+/// That is a patch-id-equal commit with an unchanged message.
+/// Unverifiable objects make it false.
 #[must_use]
 pub fn pure_rebase(
     repo: &Repository,
@@ -149,18 +157,21 @@ pub fn pure_rebase(
         )
 }
 
-/// The canonical branch's current HEAD sha, or `None` when it can't be
-/// resolved (the merge timer's per-sweep baseline check).
+/// The canonical branch's current HEAD sha.
+///
+/// `None` when it can't be resolved (the merge timer's per-sweep baseline
+/// check).
 #[must_use]
 pub fn resolve_head(repo: &Repository, base_ref: &str) -> Option<String> {
     Some(resolve_commit(repo, base_ref).ok()?.to_string())
 }
 
-/// Landings observed on the canonical branch in the window `since..head` (the
-/// commits added since the last sweep): each open change whose `Change-Id`
-/// appears on a new single-parent commit, paired with the landed commit's
-/// sha. One walk covers every change; `open` maps `change_key →` the change.
-/// At most one landing per change.
+/// Landings observed on the canonical branch in `since..head`.
+///
+/// That window is the commits added since the last sweep: each open
+/// change whose `Change-Id` appears on a new single-parent commit, paired
+/// with the landed commit's sha. One walk covers every change; `open`
+/// maps `change_key →` the change. At most one landing per change.
 ///
 /// A landing that *stripped* its Change-Id is not detected — nit's own approve
 /// action preserves the trailer through rebase + fast-forward, and chasing
@@ -207,10 +218,12 @@ pub fn detect_landings<S: std::hash::BuildHasher>(
     landings.into_iter().collect()
 }
 
-/// One commit on the canonical branch, for the graph's HEAD anchor and merged
-/// history. `parents` are all parent shas (a merge keeps both); `change_key`
-/// is the commit's `Change-Id` trailer when present, used to enrich the node
-/// from the matching change.
+/// One commit on the canonical branch.
+///
+/// Serves the graph's HEAD anchor and merged history. `parents` are all
+/// parent shas (a merge keeps both); `change_key` is the commit's
+/// `Change-Id` trailer when present, used to enrich the node from the
+/// matching change.
 #[derive(Debug, Clone)]
 pub struct HistoryCommit {
     pub sha: String,
@@ -219,13 +232,15 @@ pub struct HistoryCommit {
     pub change_key: Option<String>,
 }
 
-/// Walk the canonical branch from its HEAD: the HEAD commit (the graph anchor)
-/// followed by up to `window` ancestor commits, newest-first — the merged
-/// history that descends below HEAD. Topological, so every commit precedes its
-/// parents; a merge keeps both parents (the client draws edges only to the
-/// parents inside the window). The returned bool is `truncated`: the branch has
-/// at least one more merged commit below the window (the client shows an
-/// "earlier history hidden" marker and dangles deep forks to it).
+/// Walks the canonical branch from its HEAD, newest-first.
+///
+/// The HEAD commit (the graph anchor) followed by up to `window` ancestor
+/// commits — the merged history that descends below HEAD. Topological, so
+/// every commit precedes its parents; a merge keeps both parents (the
+/// client draws edges only to the parents inside the window). The
+/// returned bool is `truncated`: the branch has at least one more merged
+/// commit below the window (the client shows an "earlier history hidden"
+/// marker and dangles deep forks to it).
 ///
 /// # Errors
 /// When the canonical branch can't be resolved or the walk fails.

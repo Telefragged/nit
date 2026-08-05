@@ -18,10 +18,12 @@ use crate::db;
 
 pub use nit_types::fold::*;
 
-/// Serialize a log payload to the JSON stored in its `log.payload` column: the
-/// inner struct alone, since the entry's `kind` is stored in its own column.
-/// The write half of the storage boundary ([`payload_from_json`] is the read
-/// half) — no `serde_json::Value` crosses it.
+/// Serializes a log payload to the JSON in its `log.payload` column.
+///
+/// The stored JSON is the inner struct alone, since the entry's `kind` is
+/// stored in its own column. The write half of the storage boundary
+/// ([`payload_from_json`] is the read half) — no `serde_json::Value`
+/// crosses it.
 ///
 /// # Errors
 /// When the payload fails to serialize — impossible for these plain structs.
@@ -35,8 +37,9 @@ pub(crate) fn payload_to_json(payload: &LogPayload) -> Result<String> {
     .map_err(Into::into)
 }
 
-/// Parse a stored entry's `kind` + inner JSON back into the typed payload — the
-/// read half of the storage boundary (mirrors [`payload_to_json`]).
+/// Parses a stored entry's `kind` + inner JSON into the typed payload.
+///
+/// The read half of the storage boundary (mirrors [`payload_to_json`]).
 ///
 /// # Errors
 /// When the JSON does not match the payload shape for `kind`.
@@ -49,9 +52,10 @@ pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload>
     })
 }
 
-/// A stored log row → the wire [`LogEntry`] the fold consumes (and the server
-/// broadcasts). The `change_id` is the caller's — a row knows only its own
-/// per-change coordinates.
+/// A stored log row → the wire [`LogEntry`] the fold consumes.
+///
+/// The entry is what the server broadcasts too. The `change_id` is the
+/// caller's — a row knows only its own per-change coordinates.
 ///
 /// # Errors
 /// When the stored `kind` is unknown or the payload is not valid JSON.
@@ -70,7 +74,9 @@ pub fn entry_from_row(change_id: u64, row: &db::LogRow) -> Result<LogEntry> {
     })
 }
 
-/// Rebuild a change's projection from its row and its log rows (ascending idx).
+/// Rebuilds a change's projection from its row and its log rows.
+///
+/// The log rows are in ascending idx order.
 ///
 /// # Errors
 /// When a log payload fails to parse.

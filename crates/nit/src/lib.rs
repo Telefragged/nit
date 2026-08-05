@@ -19,9 +19,11 @@
 
 #![deny(clippy::unwrap_used)]
 
-/// The build's version: the crate semver plus `+<sha>[.dirty]` build metadata
-/// when built from a git tree (`build.rs` sets `NIT_GIT_SUFFIX`, empty for a
-/// tarball build). The single source for `nit --version` and `/api/health`.
+/// The build's version: crate semver plus `+<sha>[.dirty]` metadata.
+///
+/// The build metadata is there when built from a git tree (`build.rs`
+/// sets `NIT_GIT_SUFFIX`, empty for a tarball build). The single source
+/// for `nit --version` and `/api/health`.
 pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), env!("NIT_GIT_SUFFIX"));
 
 pub mod api;

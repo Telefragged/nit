@@ -1,9 +1,10 @@
-//! Chain derivation — a chain is **never stored**. Given a repo's per-change
-//! folds, [`RepoView`] resolves a commit-sha to `(change, revision)`, walks a
-//! tip back to the canonical base through each revision's recorded
-//! `parent_sha` (gerrit relation chains), and derives the live tip set and a
-//! chain's actionable state. Everything here is a **pure function** of an
-//! owned snapshot of the changes.
+//! Chain derivation — a chain is **never stored**.
+//!
+//! Given a repo's per-change folds, [`RepoView`] resolves a commit-sha to
+//! `(change, revision)`, walks a tip back to the canonical base through
+//! each revision's recorded `parent_sha` (gerrit relation chains), and
+//! derives the live tip set and a chain's actionable state. Everything
+//! here is a **pure function** of an owned snapshot of the changes.
 
 use std::collections::{HashMap, HashSet};
 
@@ -19,8 +20,10 @@ pub struct PathMember {
     pub commit_sha: String,
 }
 
-/// One node of the graph's open region: an active change pinned at the
-/// revision its tip walked, plus the commit it parents onto.
+/// One node of the graph's open region.
+///
+/// An active change pinned at the revision its tip walked, plus the
+/// commit it parents onto.
 #[derive(Debug, Clone)]
 pub struct OpenNode {
     pub change_id: u64,
@@ -29,18 +32,21 @@ pub struct OpenNode {
     pub parent_sha: String,
 }
 
-/// A read-time view over one repo's changes: owned snapshots plus the
-/// commit-sha → `(change_id, revision number)` index built from them. All
-/// chain derivation is a pure function of this view, so it holds no locks and
-/// touches no git.
+/// A read-time view over one repo's changes.
+///
+/// Owned snapshots plus the commit-sha → `(change_id, revision number)`
+/// index built from them. All chain derivation is a pure function of
+/// this view, so it holds no locks and touches no git.
 pub struct RepoView {
     changes: HashMap<u64, ChangeProj>,
     index: HashMap<String, (u64, u64)>,
 }
 
 impl RepoView {
-    /// Build the view from owned change snapshots (each cloned out from under
-    /// its lock by the caller, so the view holds nothing live).
+    /// Builds the view from owned change snapshots.
+    ///
+    /// Each is cloned out from under its lock by the caller, so the view
+    /// holds nothing live.
     #[must_use]
     pub fn new(changes: Vec<ChangeProj>) -> RepoView {
         let mut index = HashMap::new();
@@ -67,9 +73,11 @@ impl RepoView {
         self.changes.keys().copied().collect()
     }
 
-    /// Leaf commit-shas (a change's latest-revision sha that no revision records
-    /// as a `parent_sha`) over the changes `keep` admits, sorted. A superseded
-    /// patchset is never a leaf — only the latest revision is a candidate.
+    /// Leaf commit-shas over the changes `keep` admits, sorted.
+    ///
+    /// A leaf is a change's latest-revision sha that no revision records
+    /// as a `parent_sha`. A superseded patchset is never a leaf — only
+    /// the latest revision is a candidate.
     fn leaves_where(&self, keep: impl Fn(&ChangeProj) -> bool) -> Vec<String> {
         let parents: HashSet<&str> = self
             .changes
@@ -88,37 +96,44 @@ impl RepoView {
         tips
     }
 
-    /// Every leaf — the `status=all` view, which still surfaces recently
-    /// merged/abandoned chains.
+    /// Every leaf — the `status=all` view.
+    ///
+    /// It still surfaces recently merged/abandoned chains.
     #[must_use]
     pub fn all_tips(&self) -> Vec<String> {
         self.leaves_where(|_| true)
     }
 
-    /// The **active frontier**: leaves of non-terminal changes (the dashboard's
-    /// `status=active`). A merged change has landed and an abandoned change is
-    /// dead, so neither is an active tip — but an abandoned change is still an
-    /// enumerable member ([`enumerable_tips`](Self::enumerable_tips)).
+    /// The **active frontier**: leaves of non-terminal changes.
+    ///
+    /// The dashboard's `status=active`. A merged change has landed and an
+    /// abandoned change is dead, so neither is an active tip — but an
+    /// abandoned change is still an enumerable member
+    /// ([`enumerable_tips`](Self::enumerable_tips)).
     #[must_use]
     pub fn tips(&self) -> Vec<String> {
         self.leaves_where(|c| !c.is_terminal())
     }
 
-    /// Leaves for **chain enumeration**: drops only merged changes, so an
-    /// abandoned leaf still resolves to its own chain (abandonment is
-    /// membership-inert). The dashboard hides these via [`tips`](Self::tips);
-    /// resolving the chain a change sits on enumerates them.
+    /// Leaves for **chain enumeration**: drops only merged changes.
+    ///
+    /// An abandoned leaf therefore still resolves to its own chain
+    /// (abandonment is membership-inert). The dashboard hides these via
+    /// [`tips`](Self::tips); resolving the chain a change sits on
+    /// enumerates them.
     #[must_use]
     pub fn enumerable_tips(&self) -> Vec<String> {
         self.leaves_where(|c| !c.is_merged())
     }
 
-    /// Walk a tip commit-sha back to the canonical branch through each
-    /// revision's recorded `parent`, returning the path oldest-first. The walk
-    /// stops at the branch: the recorded fork (`parent_sha == base_sha`), or the
-    /// first parent that has since merged — so a partially-landed stack derives
-    /// to its open members alone. **Total**: an unresolved parent (below the
-    /// merge-base, or a torn push) truncates the path, never errors.
+    /// Walks a tip commit-sha back to the canonical branch.
+    ///
+    /// Follows each revision's recorded `parent`, returning the path
+    /// oldest-first. The walk stops at the branch: the recorded fork
+    /// (`parent_sha == base_sha`), or the first parent that has since
+    /// merged — so a partially-landed stack derives to its open members
+    /// alone. **Total**: an unresolved parent (below the merge-base, or a
+    /// torn push) truncates the path, never errors.
     #[must_use]
     pub fn path_from_tip(&self, tip_sha: &str) -> Vec<PathMember> {
         let mut path = Vec::new();
@@ -153,18 +168,21 @@ impl RepoView {
             .is_some_and(ChangeProj::is_merged)
     }
 
-    /// A change by its `Change-Id` key — the graph enriches a merged history
-    /// commit from its commit-message trailer.
+    /// A change by its `Change-Id` key.
+    ///
+    /// The graph enriches a merged history commit from its commit-message
+    /// trailer.
     #[must_use]
     pub fn change_by_key(&self, key: &str) -> Option<&ChangeProj> {
         self.changes.values().find(|c| c.change_key == key)
     }
 
-    /// The graph's **open region**: every active tip walked back to its
-    /// fork, unioned and **deduplicated by commit-sha** — a change shared
-    /// by two tips appears once, while the rare B-in-two-chains case (one
-    /// change live at two revisions) stays two nodes (two shas). In
-    /// tip-walk order, which seeds the graph's row-order tie-break.
+    /// The graph's **open region**: active tips walked back to their forks.
+    ///
+    /// Unioned and **deduplicated by commit-sha** — a change shared by two
+    /// tips appears once, while the rare B-in-two-chains case (one change
+    /// live at two revisions) stays two nodes (two shas). In tip-walk
+    /// order, which seeds the graph's row-order tie-break.
     #[must_use]
     pub fn open_nodes(&self) -> Vec<OpenNode> {
         let mut seen = HashSet::new();
@@ -190,8 +208,10 @@ impl RepoView {
     }
 }
 
-/// Derived chain state over a path's members, each at its pinned revision.
-/// A pure function of the members' displayed status.
+/// Derived chain state over a path's members.
+///
+/// Each member is taken at its pinned revision. A pure function of the
+/// members' displayed status.
 #[must_use]
 pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     if path.is_empty() {
@@ -225,8 +245,9 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     }
 }
 
-/// Row order for the change graph: a topological order in which every node
-/// precedes its parents — children ascend, parents descend, so the
+/// Row order for the change graph: every node precedes its parents.
+///
+/// A topological order — children ascend, parents descend, so the
 /// canonical HEAD sits between its open descendants and its merged
 /// ancestors. `nodes` is `(commit_sha, in-set parent shas)` in a stable
 /// input order; the returned shas are top → bottom.

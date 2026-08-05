@@ -27,17 +27,19 @@ fn commit_patch_id(repo: &Repository, commit: &Commit) -> Result<String> {
     tree_patch_id(repo, &parent_tree, &commit.tree()?)
 }
 
-/// The patch id of the commit `sha` names — its diff against its first
-/// parent, whitespace-normalized.
+/// The patch id of the commit `sha` names.
+///
+/// Its diff against its first parent, whitespace-normalized.
 #[must_use]
 pub fn sha_patch_id(repo: &Repository, sha: &str) -> Option<String> {
     let commit = repo.find_commit(Oid::from_str(sha).ok()?).ok()?;
     commit_patch_id(repo, &commit).ok()
 }
 
-/// Ref name pinning one revision's git objects against `git gc`. Keyed on the
-/// change (a chain is not stored), so a commit a prefix-merged ancestor still
-/// walks through keeps its objects.
+/// Ref name pinning one revision's git objects against `git gc`.
+///
+/// Keyed on the change (a chain is not stored), so a commit a
+/// prefix-merged ancestor still walks through keeps its objects.
 ///
 /// Deleting these refs is deferred on purpose — nothing prunes them, even
 /// for merged/abandoned changes. Over-pinning is fail-safe; dropping a ref
@@ -48,10 +50,11 @@ pub fn keep_ref_name(change_id: u64, revision_number: u64) -> String {
     format!("refs/nit/keep/{change_id}/{revision_number}")
 }
 
-/// Ensure the keep ref for a revision exists, pointing at the revision's
-/// commit — its parent (the diff's old side) is reachable through it.
-/// Best-effort: failures (e.g. objects already pruned) are logged, never
-/// fatal.
+/// Ensures the keep ref for a revision exists.
+///
+/// Points it at the revision's commit — its parent (the diff's old side)
+/// is reachable through it. Best-effort: failures (e.g. objects already
+/// pruned) are logged, never fatal.
 pub fn ensure_keep_ref(repo: &Repository, change_id: u64, number: u64, commit_sha: &str) {
     if let Err(err) = try_ensure_keep_ref(repo, change_id, number, commit_sha) {
         tracing::warn!(

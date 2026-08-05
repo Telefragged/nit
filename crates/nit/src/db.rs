@@ -21,15 +21,17 @@ use nit_types::comments::CommentRange;
 use nit_types::enums::{ChangeStatus, Decision, Side};
 use rusqlite::{Connection, OptionalExtension, params};
 
-/// RFC3339 timestamp for "now" (UTC), the format stored in every
-/// `created_at`/`updated_at` column.
+/// RFC3339 timestamp for "now" (UTC).
+///
+/// The format stored in every `created_at`/`updated_at` column.
 #[must_use]
 pub fn now_rfc3339() -> String {
     jiff::Timestamp::now().to_string()
 }
 
-/// Default database location: `$XDG_DATA_HOME/nit/nit.sqlite3`, falling
-/// back to `~/.local/share/nit/nit.sqlite3`.
+/// Default database location: `$XDG_DATA_HOME/nit/nit.sqlite3`.
+///
+/// Falls back to `~/.local/share/nit/nit.sqlite3`.
 ///
 /// # Errors
 /// When neither `$XDG_DATA_HOME` nor `$HOME` is set.
@@ -51,10 +53,12 @@ fn data_dir(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> Result<Pat
         .ok_or_else(|| anyhow!("cannot determine data directory: $HOME is not set"))
 }
 
-/// A connection pool for the database at `path`, creating parent directories.
-/// Every pooled connection is prepared with `prepare` (WAL, busy timeout,
-/// foreign keys) by a post-create hook; the schema is migrated once at startup
-/// by `migrate`, run on the first pooled connection in `AppState::load`.
+/// A connection pool for the database at `path`.
+///
+/// Creates parent directories. Every pooled connection is prepared with
+/// `prepare` (WAL, busy timeout, foreign keys) by a post-create hook; the
+/// schema is migrated once at startup by `migrate`, run on the first
+/// pooled connection in `AppState::load`.
 ///
 /// # Errors
 /// When the parent directory can't be created.
@@ -79,9 +83,10 @@ pub fn pool(path: &Path) -> Result<Pool> {
     Ok(pool)
 }
 
-/// Per-connection setup applied to every pooled connection: WAL journaling (a
-/// persistent, idempotent database property), a 5-second busy timeout, and
-/// foreign keys ON.
+/// Per-connection setup applied to every pooled connection.
+///
+/// WAL journaling (a persistent, idempotent database property), a
+/// 5-second busy timeout, and foreign keys ON.
 fn prepare(conn: &mut Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
@@ -179,11 +184,13 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Read a column written from a `u64` back as `u64`. Ids, indices and line
-/// numbers are stored in `SQLite`'s signed `INTEGER` (its only integer
-/// type); a stored negative would mean external corruption, surfaced as an
-/// out-of-range error, never a panic. This and [`col_u64_opt`] are the read
-/// half of the DTO↔domain boundary — `db.rs` speaks `u64`, `SQLite` `i64`.
+/// Reads a column written from a `u64` back as `u64`.
+///
+/// Ids, indices and line numbers are stored in `SQLite`'s signed
+/// `INTEGER` (its only integer type); a stored negative would mean
+/// external corruption, surfaced as an out-of-range error, never a panic.
+/// This and [`col_u64_opt`] are the read half of the DTO↔domain boundary
+/// — `db.rs` speaks `u64`, `SQLite` `i64`.
 fn col_u64(v: i64) -> rusqlite::Result<u64> {
     u64::try_from(v).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, v))
 }
@@ -192,9 +199,10 @@ fn col_u64_opt(v: Option<i64>) -> rusqlite::Result<Option<u64>> {
     v.map(col_u64).transpose()
 }
 
-/// Parse a stored TEXT column into a closed-vocab enum (the read half of the
-/// db↔domain boundary, like [`col_u64`]). An unknown value means external
-/// corruption, surfaced as a conversion error.
+/// Parses a stored TEXT column into a closed-vocab enum.
+///
+/// The read half of the db↔domain boundary, like [`col_u64`]. An unknown
+/// value means external corruption, surfaced as a conversion error.
 fn col_enum<T: std::str::FromStr>(s: &str) -> rusqlite::Result<T>
 where
     T::Err: std::fmt::Display,
@@ -208,9 +216,11 @@ where
     })
 }
 
-/// Parse a stored `status` TEXT column into a [`ChangeStatus`] (the read half
-/// of the db↔domain boundary, like [`col_decision`]). An unknown value means
-/// external corruption, surfaced as a conversion error.
+/// Parses a stored `status` TEXT column into a [`ChangeStatus`].
+///
+/// The read half of the db↔domain boundary, like [`col_decision`]. An
+/// unknown value means external corruption, surfaced as a conversion
+/// error.
 fn col_change_status(s: &str) -> rusqlite::Result<ChangeStatus> {
     s.parse().map_err(|e: String| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
@@ -228,7 +238,8 @@ pub struct RepoRow {
     pub git_dir: String,
     /// The repo's one canonical branch; mergedness always tracks it.
     pub base_ref: String,
-    /// The canonical-branch HEAD the merge timer last reconciled against;
+    /// The canonical-branch HEAD the merge timer last reconciled against.
+    ///
     /// `None` until first observed.
     pub base_head: Option<String>,
 }
@@ -242,9 +253,11 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
     })
 }
 
-/// Register a fresh repo by its canonical git-common-dir, returning the new
-/// row. The caller has already rejected an existing `git_dir` (409); the
-/// `UNIQUE(git_dir)` index is the backstop on a race.
+/// Registers a fresh repo by its canonical git-common-dir.
+///
+/// Returns the new row. The caller has already rejected an existing
+/// `git_dir` (409); the `UNIQUE(git_dir)` index is the backstop on a
+/// race.
 ///
 /// # Errors
 /// On a database failure, including the `UNIQUE(git_dir)` clash.
@@ -297,9 +310,11 @@ pub fn get_repo(conn: &Connection, id: u64) -> Result<Option<RepoRow>> {
     .map_err(Into::into)
 }
 
-/// Repoint a repo at a new canonical git-common-dir (after a disk move). The
-/// new `git_dir` must be unique — re-pointing onto another repo's git dir is
-/// a `UNIQUE` violation (the caller maps it to a 409).
+/// Repoints a repo at a new canonical git-common-dir.
+///
+/// Used after a disk move. The new `git_dir` must be unique — re-pointing
+/// onto another repo's git dir is a `UNIQUE` violation (the caller maps
+/// it to a 409).
 ///
 /// # Errors
 /// On a database failure, including the `UNIQUE(git_dir)` clash.
@@ -311,8 +326,9 @@ pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<
     Ok(())
 }
 
-/// Record the canonical-branch HEAD the merge timer last reconciled against,
-/// so the next sweep scans only newer commits.
+/// Records the canonical-branch HEAD the merge timer reconciled against.
+///
+/// The next sweep then scans only newer commits.
 ///
 /// # Errors
 /// On a database failure.
@@ -332,8 +348,9 @@ pub struct ChangeRow {
     pub id: u64,
     pub repo_id: u64,
     pub change_key: String,
-    /// The denormalized status cache; `None` before the change's first
-    /// append. Authoritative state is the fold.
+    /// The denormalized status cache; authoritative state is the fold.
+    ///
+    /// `None` before the change's first append.
     pub status: Option<ChangeStatus>,
     pub created_at: String,
 }
@@ -351,10 +368,12 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
     })
 }
 
-/// Upsert a change by `(repo_id, change_key)`, returning its stable id. The
-/// `UNIQUE` index makes this idempotent and self-serializing — two pushes
-/// first-seeing the same key race one `INSERT … ON CONFLICT DO NOTHING`, the
-/// loser falls back to the `SELECT`, and both read the same id.
+/// Upserts a change by `(repo_id, change_key)`.
+///
+/// Returns its stable id. The `UNIQUE` index makes this idempotent and
+/// self-serializing — two pushes first-seeing the same key race one
+/// `INSERT … ON CONFLICT DO NOTHING`, the loser falls back to the
+/// `SELECT`, and both read the same id.
 ///
 /// # Errors
 /// On a database failure.
@@ -372,10 +391,12 @@ pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &str) -> Resul
     Ok(col_u64(id)?)
 }
 
-/// Re-stamp a change's denormalized `status` — the fold's current status,
-/// cached so a query need not replay the log. The change's log stays the
-/// source of truth; this is called inside the same transaction as the append
-/// that moved the fold, and on startup to backfill from replay.
+/// Re-stamps a change's denormalized `status`.
+///
+/// The fold's current status, cached so a query need not replay the log.
+/// The change's log stays the source of truth; this is called inside the
+/// same transaction as the append that moved the fold, and on startup to
+/// backfill from replay.
 ///
 /// # Errors
 /// On a database failure.
@@ -399,8 +420,9 @@ pub fn get_change(conn: &Connection, id: u64) -> Result<Option<ChangeRow>> {
     .map_err(Into::into)
 }
 
-/// One repo's change ids, id-ascending (creation order) — the enumeration a
-/// repo view derives its chains over.
+/// One repo's change ids, id-ascending (creation order).
+///
+/// The enumeration a repo view derives its chains over.
 ///
 /// # Errors
 /// On a database failure.
@@ -454,9 +476,11 @@ pub fn log_head(conn: &Connection, change_id: u64) -> Result<u64> {
     })
 }
 
-/// Append one entry at `idx` (must equal the change's current head; the caller
-/// computes it under the change's projection write lock) and return the global
-/// `seq` `SQLite` minted for it.
+/// Appends one entry at `idx`.
+///
+/// `idx` must equal the change's current head; the caller computes it
+/// under the change's projection write lock. Returns the global `seq`
+/// `SQLite` minted for the entry.
 ///
 /// # Errors
 /// On a database failure (including a `UNIQUE(change_id, idx)` clash).
@@ -492,8 +516,9 @@ fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
     })
 }
 
-/// One change's entries in `[from, to)`, idx-ascending. `to = None` means
-/// through head.
+/// One change's entries in `[from, to)`, idx-ascending.
+///
+/// `to = None` means through head.
 ///
 /// # Errors
 /// On a database failure.
@@ -541,8 +566,9 @@ pub struct DraftRow {
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub body: String,
-    /// Staged thread-resolution decision; `None` = none. Stored as the
-    /// `resolved` INTEGER column.
+    /// Staged thread-resolution decision; `None` = none.
+    ///
+    /// Stored as the `resolved` INTEGER column.
     pub resolved: Option<bool>,
     pub created_at: String,
     pub updated_at: String,
@@ -595,9 +621,11 @@ pub struct NewDraft<'a> {
     pub resolved: Option<bool>,
 }
 
-/// Insert a draft with a caller-allocated `id` (from the server's global
-/// fold-id counter, so a draft's id stays stable when it later publishes
-/// into a `review` entry — and never collides with any other id).
+/// Inserts a draft with a caller-allocated `id`.
+///
+/// The id comes from the server's global fold-id counter, so a draft's id
+/// stays stable when it later publishes into a `review` entry — and never
+/// collides with any other id.
 ///
 /// # Errors
 /// On a database failure.
@@ -735,8 +763,10 @@ fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
     })
 }
 
-/// Stage (or overwrite) a change's draft decision. One row per change: a later
-/// stage replaces the prior decision and message.
+/// Stages (or overwrites) a change's draft decision.
+///
+/// One row per change: a later stage replaces the prior decision and
+/// message.
 ///
 /// # Errors
 /// On a database failure.
@@ -768,8 +798,10 @@ pub fn get_draft_review(conn: &Connection, change_id: u64) -> Result<Option<Draf
     .map_err(Into::into)
 }
 
-/// Discard a change's staged decision (called when it publishes, or on an
-/// explicit clear). A no-op when nothing is staged.
+/// Discards a change's staged decision.
+///
+/// Called when it publishes, or on an explicit clear. A no-op when
+/// nothing is staged.
 ///
 /// # Errors
 /// On a database failure.

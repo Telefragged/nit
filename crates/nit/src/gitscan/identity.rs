@@ -1,5 +1,7 @@
-//! Change identity helpers: `Change-Id:` trailer extraction, the
-//! required-Change-Id validation, and commit subject extraction.
+//! Change identity helpers.
+//!
+//! `Change-Id:` trailer extraction, the required-Change-Id validation,
+//! and commit subject extraction.
 
 use std::collections::HashMap;
 
@@ -23,7 +25,10 @@ pub fn subject_of(message: &str) -> String {
     para.replace('\n', " ").trim().to_string()
 }
 
-/// When a message (incorrectly) carries several `Change-Id:` trailers, the last one wins.
+/// The message's `Change-Id:` trailer value, if it carries one.
+///
+/// When a message (incorrectly) carries several `Change-Id:` trailers,
+/// the last one wins.
 #[must_use]
 pub fn change_id_trailer(message: &str) -> Option<String> {
     let trailers = git2::message_trailers_strs(message).ok()?;
@@ -39,12 +44,13 @@ pub fn change_id_trailer(message: &str) -> Option<String> {
     found
 }
 
-/// Change keys for the walked commits' messages (walk order, oldest
-/// first), enforcing the required-Change-Id contract: every commit
-/// carries a `Change-Id:` trailer, no two commits share one, and
-/// `fixup!`/`squash!` commits are rejected — squash them locally before
-/// pushing. `short_shas` parallels `messages` and is only used in error
-/// texts.
+/// Change keys for the walked commits' messages, in walk order.
+///
+/// Walk order is oldest first. Enforces the required-Change-Id contract:
+/// every commit carries a `Change-Id:` trailer, no two commits share one,
+/// and `fixup!`/`squash!` commits are rejected — squash them locally
+/// before pushing. `short_shas` parallels `messages` and is only used in
+/// error texts.
 ///
 /// # Errors
 /// The documented scan-failure message for the first violated rule.
