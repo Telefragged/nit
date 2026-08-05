@@ -1,12 +1,13 @@
-//! Intraline emphasis: which characters of a replacement block actually
-//! changed. The block diffs as a single text — the deleted lines joined, the
-//! added lines joined — so content that moved between lines still pairs up,
-//! and a block whose two sides differ in length has no leftovers. A
-//! per-character diff on its own leaves marks too scattered to read, so two of
-//! Gerrit's `IntraLineLoader` rules follow it: near edits join, and matching
-//! edges go back to the context. Its slider is deliberately not among them:
-//! shifting one side's span alone does not preserve the transformation, so the
-//! marks would stop describing the change.
+//! Intraline emphasis: the changed characters of a replacement block.
+//!
+//! The block diffs as a single text — the deleted lines joined, the added
+//! lines joined — so content that moved between lines still pairs up, and a
+//! block whose two sides differ in length has no leftovers. A per-character
+//! diff on its own leaves marks too scattered to read, so two of Gerrit's
+//! `IntraLineLoader` rules follow it: near edits join, and matching edges go
+//! back to the context. Its slider is deliberately not among them: shifting
+//! one side's span alone does not preserve the transformation, so the marks
+//! would stop describing the change.
 //!
 //! Offsets are UTF-16 code units throughout — how the browser indexes the
 //! strings it sends and slices the ranges it gets back.
@@ -19,32 +20,35 @@ use std::slice;
 
 const NL: u16 = b'\n' as u16;
 
-/// Code units a side may hold before its block goes unmarked. Myers is O(N·D),
-/// and repetitive text — a generated file, a lockfile, a long run of
-/// near-identical lines — offers no unique anchor to cut the search grid on:
-/// 10k units a side costs ~20ms compiled, 38k ~270ms, 77k over a second, and
-/// wasm is slower again. Ordinary prose and code stay in the low milliseconds
-/// at any size, but the budget has to hold for the worst shape, and a block
-/// this large is a wholesale rewrite its add/del tint already conveys.
+/// Code units a side may hold before its block goes unmarked.
+///
+/// Myers is O(N·D), and repetitive text — a generated file, a lockfile, a
+/// long run of near-identical lines — offers no unique anchor to cut the
+/// search grid on: 10k units a side costs ~20ms compiled, 38k ~270ms, 77k
+/// over a second, and wasm is slower again. Ordinary prose and code stay in
+/// the low milliseconds at any size, but the budget has to hold for the
+/// worst shape, and a block this large is a wholesale rewrite its add/del
+/// tint already conveys.
 const BUDGET: usize = 10_000;
 
-/// A replacement block: the deleted lines, and the added lines that replace
-/// them.
+/// A replacement block: the deleted lines, and the added lines that
+/// replace them.
 #[derive(Deserialize)]
 pub struct Region {
     old: Vec<String>,
     new: Vec<String>,
 }
 
-/// Character ranges to emphasize, one list per line of the [`Region`] they came
-/// from, in the same order.
+/// Character ranges to emphasize.
+///
+/// One list per line of the [`Region`] they came from, in the same order.
 #[derive(Serialize)]
 pub struct Marks {
     old: Vec<Vec<(usize, usize)>>,
     new: Vec<Vec<(usize, usize)>>,
 }
 
-/// Mark the changed characters of every region.
+/// Marks the changed characters of every region.
 pub fn marks(regions: &[Region]) -> Vec<Marks> {
     regions
         .iter()
@@ -59,9 +63,10 @@ pub fn marks(regions: &[Region]) -> Vec<Marks> {
         .collect()
 }
 
-/// One side of a region: its lines run together, each newline-terminated, plus
-/// where each line sits in the run. Terminating the last line too lets an edit
-/// reach its end the way it reaches any other's.
+/// One side of a region: its lines run together, newline-terminated.
+///
+/// Each line's place in the run is recorded alongside it. Terminating the
+/// last line too lets an edit reach its end the way it reaches any other's.
 struct Side {
     units: Vec<u16>,
     lines: Vec<Range<usize>>,
@@ -83,10 +88,12 @@ impl Side {
         Self { units, lines }
     }
 
-    /// Cut the edit spans up by line. Clamping drops the newlines an edit
-    /// swallowed, so every mark ends where its line's text does. A mark over a
-    /// whole line is dropped: the line already renders as added or deleted, and
-    /// emphasising all of it — indentation included — says nothing more.
+    /// Cuts the edit spans up by line.
+    ///
+    /// Clamping drops the newlines an edit swallowed, so every mark ends
+    /// where its line's text does. A mark over a whole line is dropped: the
+    /// line already renders as added or deleted, and emphasising all of it —
+    /// indentation included — says nothing more.
     fn project<'a>(
         &self,
         spans: impl Iterator<Item = &'a Range<usize>>,
@@ -124,9 +131,9 @@ const fn is_low_surrogate(unit: u16) -> bool {
     matches!(unit, 0xDC00..=0xDFFF)
 }
 
-/// The span of the old text an edit replaces, and the span of the new text it
-/// puts there. Either may be empty: an insertion has no old span, a deletion no
-/// new one.
+/// The old span an edit replaces, and the new span it puts there.
+///
+/// Either may be empty: an insertion has no old span, a deletion no new one.
 struct Edit {
     old: Range<usize>,
     new: Range<usize>,
@@ -167,10 +174,11 @@ fn edits(old: &[u16], new: &[u16]) -> Vec<Edit> {
     edits
 }
 
-/// Join edits a handful of characters apart: over so short a gap, two marks
-/// with a sliver of context between them read worse than one covering both. A
-/// gap crossing a line break is left alone — those marks land on different
-/// lines.
+/// Joins edits a handful of characters apart.
+///
+/// Over so short a gap, two marks with a sliver of context between them
+/// read worse than one covering both. A gap crossing a line break is left
+/// alone — those marks land on different lines.
 fn coalesce(edits: &mut Vec<Edit>, old: &[u16], new: &[u16]) {
     let mut at = 0;
     while at + 1 < edits.len() {
@@ -189,8 +197,10 @@ fn coalesce(edits: &mut Vec<Edit>, old: &[u16], new: &[u16]) {
     }
 }
 
-/// Coalescing can leave matching text inside an edit's own edges; give it back
-/// to the context, so a mark starts and ends where the texts part.
+/// Gives matching text at an edit's own edges back to the context.
+///
+/// Coalescing can leave it inside the edit; handing it back makes a mark
+/// start and end where the texts part.
 fn trim(edit: &mut Edit, old: &[u16], new: &[u16]) {
     while !edit.old.is_empty() && !edit.new.is_empty() && old[edit.old.start] == new[edit.new.start]
     {
