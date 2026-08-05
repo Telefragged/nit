@@ -68,6 +68,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/api/repos/{id}/graph", get(chains::repo_graph))
         .route("/api/push", post(push::push))
+        .route("/api/changes", get(changes::list_changes))
+        .route("/api/history", get(chains::repo_history))
         .route("/api/chains", get(chains::list_chains))
         .route("/api/chains/{id}", get(chains::get_chain))
         .route("/api/chains/{id}/log", get(chains::chain_log))

@@ -217,18 +217,16 @@ pub fn detect_landings<S: std::hash::BuildHasher>(
     landings.into_iter().collect()
 }
 
-/// One commit on the canonical branch.
+/// One walked commit of the canonical branch.
 ///
-/// Serves the graph's HEAD anchor and merged history. `parents` are all
-/// parent shas (a merge keeps both); `change_key` is the commit's
-/// `Change-Id` trailer when present, used to enrich the node from the
-/// matching change.
+/// `trailer` is the commit's raw `Change-Id:` trailer when present; the api
+/// layer resolves it to the change it names when building the wire shape.
 #[derive(Debug, Clone)]
 pub struct HistoryCommit {
     pub sha: String,
     pub parents: Vec<String>,
     pub subject: String,
-    pub change_key: Option<String>,
+    pub trailer: Option<String>,
 }
 
 /// Walks the canonical branch from its HEAD, newest-first.
@@ -270,7 +268,7 @@ pub fn canonical_history(
             sha: oid.to_string(),
             parents: commit.parent_ids().map(|p| p.to_string()).collect(),
             subject: identity::subject_of(&message),
-            change_key: identity::change_id_trailer(&message),
+            trailer: identity::change_id_trailer(&message),
         });
     }
     Ok((out, truncated))

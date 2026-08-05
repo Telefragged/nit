@@ -130,6 +130,39 @@ export type GraphNode = {
   revision: number | null;
 };
 
+export type HistoryCommit = {
+  /**
+   * Full 40-hex commit-sha.
+   */
+  sha: string;
+  /**
+   * Parent commit-shas; more than one is a merge.
+   */
+  parents: Array<string>;
+  subject: string;
+  /**
+   * The landed change this commit carries, matched by its `Change-Id:`
+   * trailer. Coupled with `change_key`: a commit whose trailer names no
+   * known change (a merge, a pre-nit commit, a foreign trailer) reports
+   * both as `None`, never an orphan key.
+   */
+  change_id: number | null;
+  change_key: string | null;
+};
+
+export type RepoHistory = {
+  /**
+   * HEAD-first; each commit's `parents` carry the edges.
+   */
+  commits: Array<HistoryCommit>;
+  /**
+   * The branch has more merged commits below the window.
+   */
+  truncated: boolean;
+};
+
+export type ChangeList = { changes: Array<ChangeProj> };
+
 export type ChangeDetail = {
   id: number;
   repo_id: number;

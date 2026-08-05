@@ -7,8 +7,9 @@ use axum::extract::State;
 use git2::{Repository, Tree};
 use serde::Deserialize;
 
-use nit_types::changes::{ChangeDetail, ChangeDrafts};
+use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList};
 use nit_types::diff::{Diff, FileLines};
+use nit_types::enums::ChangeStatus;
 
 use crate::review;
 
@@ -17,6 +18,32 @@ use super::rebase;
 use super::views;
 use super::{AppPath, AppQuery, AppState, ChangeEntry, Error, with_conn};
 use super::{change_detail_json, change_or_404};
+
+#[derive(Deserialize)]
+pub(super) struct ListChangesQuery {
+    repo: Option<u64>,
+    /// Repeated (`?status=pending&status=commented`); empty means every
+    /// change — no default subset.
+    #[serde(default)]
+    status: Vec<ChangeStatus>,
+}
+
+/// Serves `GET /api/changes`: matching changes as folded projections.
+///
+/// `nit_types::changes::ChangeList` carries the filter semantics.
+pub(super) async fn list_changes(
+    State(state): State<Arc<AppState>>,
+    AppQuery(q): AppQuery<ListChangesQuery>,
+) -> Result<Json<ChangeList>, Error> {
+    with_conn(state.pool(), move |conn| {
+        let mut changes = Vec::new();
+        for repo_id in state.repo_ids_matching(q.repo) {
+            changes.extend(state.repo_changes(conn, repo_id, &q.status)?);
+        }
+        Ok(Json(ChangeList { changes }))
+    })
+    .await
+}
 
 pub(super) async fn get_change_detail(
     State(state): State<Arc<AppState>>,

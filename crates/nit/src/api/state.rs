@@ -23,6 +23,7 @@ use deadpool_sqlite::Pool;
 use rusqlite::{Connection, TransactionBehavior};
 use tokio::sync::watch;
 
+use nit_types::enums::ChangeStatus;
 use nit_types::error::ApiError;
 use nit_types::log::{LogEntry, LogPayload};
 
@@ -306,13 +307,44 @@ impl AppState {
     /// # Errors
     /// When the DB read or a replay fails.
     pub fn repo_view(&self, conn: &Connection, repo_id: u64) -> anyhow::Result<RepoView> {
+        Ok(RepoView::new(self.repo_changes(conn, repo_id, &[])?))
+    }
+
+    /// Returns one repo's change folds as owned snapshots.
+    ///
+    /// The gather behind [`repo_view`](Self::repo_view) and the bulk
+    /// `GET /api/changes` read. `statuses` filters in the database (the
+    /// denormalized `changes.status` column), so a change outside the set is
+    /// never resolved, replayed, or cloned; empty means every change.
+    ///
+    /// # Errors
+    ///
+    /// When enumerating or replaying a change fails.
+    pub fn repo_changes(
+        &self,
+        conn: &Connection,
+        repo_id: u64,
+        statuses: &[ChangeStatus],
+    ) -> anyhow::Result<Vec<ChangeProj>> {
         let mut changes: Vec<ChangeProj> = Vec::new();
-        for id in db::repo_change_ids(conn, repo_id)? {
+        for id in db::repo_change_ids(conn, repo_id, statuses)? {
             if let Some(entry) = self.change(conn, id)? {
                 changes.push(entry.read().clone());
             }
         }
-        Ok(RepoView::new(changes))
+        Ok(changes)
+    }
+
+    /// Returns the repo ids a `?repo=` filter admits.
+    ///
+    /// An unknown id admits none, so a list read filters to empty rather
+    /// than 404ing.
+    #[must_use]
+    pub fn repo_ids_matching(&self, repo: Option<u64>) -> Vec<u64> {
+        self.repo_ids()
+            .into_iter()
+            .filter(|&id| repo.is_none_or(|r| r == id))
+            .collect()
     }
 
     /// A handle to the connection pool (cheaply cloned — it is `Arc`-backed).
@@ -567,15 +599,13 @@ where
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
-        state: &S,
+        _state: &S,
     ) -> Result<Self, Self::Rejection> {
-        match axum::extract::Query::<T>::from_request_parts(parts, state).await {
-            Ok(axum::extract::Query(value)) => Ok(AppQuery(value)),
-            Err(rej) => Err(Error {
-                status: rej.status(),
-                message: rej.body_text(),
-            }),
-        }
+        // serde_html_form, not axum's serde_urlencoded-backed Query: a
+        // repeated key (`?status=a&status=b`) deserializes into a Vec.
+        serde_html_form::from_str(parts.uri.query().unwrap_or_default())
+            .map(AppQuery)
+            .map_err(|e| Error::bad_request(format!("invalid query string: {e}")))
     }
 }
 

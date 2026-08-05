@@ -4,6 +4,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::comments::{Draft, Thread};
 use crate::enums::{Decision, Verdict};
+use crate::fold::ChangeProj;
+
+/// The `GET /api/changes` response: matching changes as folded projections.
+///
+/// The same shape the websocket ships in snapshot mode. `repo` narrows to
+/// one repo (an unknown id matches nothing); `status` is repeatable
+/// (`?status={s}&status={s}`) and matches each change's status at its
+/// **latest revision** (terminal states win). **No `status` param means
+/// every change** — the API bakes in no default subset.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ChangeList {
+    pub changes: Vec<ChangeProj>,
+}
 
 /// `GET /api/changes/{id}` response.
 #[derive(Debug, Clone, Serialize, Deserialize)]

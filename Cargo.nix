@@ -3363,6 +3363,10 @@ rec {
             features = [ "derive" ];
           }
           {
+            name = "serde_html_form";
+            packageId = "serde_html_form";
+          }
+          {
             name = "serde_json";
             packageId = "serde_json";
           }
@@ -4344,6 +4348,40 @@ rec {
         features = {
         };
         resolvedDefaultFeatures = [ "default" ];
+      };
+      "serde_html_form" = rec {
+        crateName = "serde_html_form";
+        version = "0.2.8";
+        edition = "2021";
+        sha256 = "0kqmp0m7vj8lrs1n2hjcp1jhhpzw81f9ycmv30vk6h11ibzxgwmj";
+        dependencies = [
+          {
+            name = "form_urlencoded";
+            packageId = "form_urlencoded";
+          }
+          {
+            name = "indexmap";
+            packageId = "indexmap";
+          }
+          {
+            name = "itoa";
+            packageId = "itoa";
+          }
+          {
+            name = "ryu";
+            packageId = "ryu";
+            optional = true;
+          }
+          {
+            name = "serde_core";
+            packageId = "serde_core";
+          }
+        ];
+        features = {
+          "default" = [ "ryu" ];
+          "ryu" = [ "dep:ryu" ];
+        };
+        resolvedDefaultFeatures = [ "default" "ryu" ];
       };
       "serde_json" = rec {
         crateName = "serde_json";

@@ -8,10 +8,11 @@ use git2::Repository;
 use serde::Deserialize;
 
 use nit_types::chains::{Chain, ChainList};
-use nit_types::graph::RepoGraph;
+use nit_types::graph::{HistoryCommit, RepoGraph, RepoHistory};
 use nit_types::log::ChainLog;
 
 use crate::db;
+use crate::gitscan;
 use crate::review;
 
 use super::views;
@@ -41,10 +42,7 @@ pub(super) async fn list_chains(
     with_conn(state.pool(), move |conn| {
         let include_terminal = matches!(q.status, ChainFilter::All);
         let mut chains = Vec::new();
-        for repo_id in state.repo_ids() {
-            if q.repo.is_some_and(|r| r != repo_id) {
-                continue;
-            }
+        for repo_id in state.repo_ids_matching(q.repo) {
             let view = state.repo_view(conn, repo_id)?;
             let tips = if include_terminal {
                 view.all_tips()
@@ -79,6 +77,48 @@ pub(super) async fn repo_graph(
             &repo_state.base_ref,
             MERGED_WINDOW,
         )?))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(super) struct HistoryQuery {
+    repo: u64,
+}
+
+/// Serves `GET /api/history`: a window of the canonical branch's history.
+///
+/// `nit_types::graph::RepoHistory` carries the walk's contract. `repo` is
+/// required — a walk has no cross-repo meaning; 404 if unknown.
+pub(super) async fn repo_history(
+    State(state): State<Arc<AppState>>,
+    AppQuery(q): AppQuery<HistoryQuery>,
+) -> Result<Json<RepoHistory>, Error> {
+    with_conn(state.pool(), move |conn| {
+        let repo_state = state
+            .repo_state(q.repo)
+            .ok_or_else(|| Error::not_found(format!("no such repo: {}", q.repo)))?;
+        let repo = Repository::open(repo_state.git_dir())
+            .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
+        let (walked, truncated) =
+            gitscan::canonical_history(&repo, &repo_state.base_ref, MERGED_WINDOW)
+                .map_err(Error::internal)?;
+        let mut commits = Vec::with_capacity(walked.len());
+        for c in walked {
+            let change_id = match &c.trailer {
+                Some(key) => db::change_id_by_key(conn, q.repo, key)?,
+                None => None,
+            };
+            commits.push(HistoryCommit {
+                sha: c.sha,
+                parents: c.parents,
+                subject: c.subject,
+                change_id,
+                // Coupled: a trailer naming no known change nulls both.
+                change_key: change_id.and(c.trailer),
+            });
+        }
+        Ok(Json(RepoHistory { commits, truncated }))
     })
     .await
 }

@@ -95,7 +95,7 @@ pub fn build_graph(
     let mut shas: HashSet<String> = HashSet::new();
 
     for (depth, h) in history.iter().enumerate() {
-        let change = h.change_key.as_deref().and_then(|k| view.change_by_key(k));
+        let change = h.trailer.as_deref().and_then(|k| view.change_by_key(k));
         nodes.push(GraphNode {
             commit_sha: h.sha.clone(),
             section: if depth == 0 {

@@ -391,6 +391,24 @@ pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &str) -> Resul
     Ok(col_u64(id)?)
 }
 
+/// Returns the change id a `Change-Id` key names in one repo, if any.
+///
+/// The point-read behind history enrichment (`GET /api/history`).
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn change_id_by_key(conn: &Connection, repo_id: u64, change_key: &str) -> Result<Option<u64>> {
+    let id: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM changes WHERE repo_id = ?1 AND change_key = ?2",
+            params![i64::try_from(repo_id)?, change_key],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(col_u64_opt(id)?)
+}
+
 /// Re-stamps a change's denormalized `status`.
 ///
 /// The fold's current status, cached so a query need not replay the log.
@@ -426,10 +444,25 @@ pub fn get_change(conn: &Connection, id: u64) -> Result<Option<ChangeRow>> {
 ///
 /// # Errors
 /// On a database failure.
-pub fn repo_change_ids(conn: &Connection, repo_id: u64) -> Result<Vec<u64>> {
-    let mut stmt = conn.prepare("SELECT id FROM changes WHERE repo_id = ?1 ORDER BY id")?;
+pub fn repo_change_ids(
+    conn: &Connection,
+    repo_id: u64,
+    statuses: &[ChangeStatus],
+) -> Result<Vec<u64>> {
+    // The denormalized `status` column exists for exactly this: selecting by
+    // status without folding a single log. Empty means every change.
+    let mut sql = String::from("SELECT id FROM changes WHERE repo_id = ?1");
+    if !statuses.is_empty() {
+        sql.push_str(" AND status IN (");
+        sql.push_str(&vec!["?"; statuses.len()].join(", "));
+        sql.push(')');
+    }
+    sql.push_str(" ORDER BY id");
+    let mut values: Vec<rusqlite::types::Value> = vec![i64::try_from(repo_id)?.into()];
+    values.extend(statuses.iter().map(|s| s.as_str().to_string().into()));
+    let mut stmt = conn.prepare(&sql)?;
     let ids = stmt
-        .query_map(params![i64::try_from(repo_id)?], |r| col_u64(r.get(0)?))?
+        .query_map(rusqlite::params_from_iter(values), |r| col_u64(r.get(0)?))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(ids)
 }

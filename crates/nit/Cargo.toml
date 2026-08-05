@@ -20,6 +20,9 @@ jiff = "0.2"
 nit-types = { workspace = true, features = ["clap"] }
 rusqlite = "0.38"
 serde = { workspace = true }
+# Query-string parsing for AppQuery: unlike serde_urlencoded (axum's
+# built-in Query), it deserializes a repeated key into a Vec.
+serde_html_form = "0.2"
 serde_json = "1"
 tokio = { version = "1", features = [
   "macros",
