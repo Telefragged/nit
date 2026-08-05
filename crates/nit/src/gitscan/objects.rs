@@ -27,7 +27,8 @@ fn commit_patch_id(repo: &Repository, commit: &Commit) -> Result<String> {
     tree_patch_id(repo, &parent_tree, &commit.tree()?)
 }
 
-/// [`commit_patch_id`] for the commit `sha` names.
+/// The patch id of the commit `sha` names — its diff against its first
+/// parent, whitespace-normalized.
 #[must_use]
 pub fn sha_patch_id(repo: &Repository, sha: &str) -> Option<String> {
     let commit = repo.find_commit(Oid::from_str(sha).ok()?).ok()?;

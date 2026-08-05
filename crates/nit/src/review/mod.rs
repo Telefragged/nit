@@ -5,7 +5,7 @@
 //! database, no storage serialization, no event publishing — so the same code
 //! folds the websocket stream client-side once compiled to WebAssembly. This
 //! module adds the two things that must **not** follow it to the browser: the
-//! storage boundary ([`payload_to_json`]/[`payload_from_json`], the
+//! storage boundary (`payload_to_json`/`payload_from_json`, the
 //! `log.payload` column split) and the row adapters that build wire
 //! [`LogEntry`]s from `db` rows ([`entry_from_row`]/[`replay_rows`]).
 

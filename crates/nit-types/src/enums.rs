@@ -276,7 +276,7 @@ impl From<Verdict> for ChangeStatus {
 }
 
 /// A chain's derived, actionable state. Computed at read time from the
-/// path's members ([`derive_state`](crate::chain::derive_state)); it is
+/// path's members (the server's `chain::derive_state`); it is
 /// informational on the wire, never stored. Abandonment is derivation-inert
 /// — there is no abandoned chain state (an abandoned member is excluded
 /// from the rollup; the agent reasons about its per-change status).

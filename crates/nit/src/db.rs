@@ -7,8 +7,9 @@
 //! fold of the per-change logs (`crate::review`), held in memory and rebuilt
 //! by replay. Nothing in the log is ever mutated or deleted.
 //!
-//! [`open`] applies pragmas (WAL, `busy_timeout`, foreign keys ON) and runs
-//! `PRAGMA user_version` migrations. Row structs and focused query helpers
+//! [`pool`] hands out connections with the pragmas applied (WAL,
+//! `busy_timeout`, foreign keys ON); `PRAGMA user_version` migrations run
+//! once at startup. Row structs and focused query helpers
 //! live here; multi-statement write flows append under a caller-held
 //! transaction.
 
@@ -51,9 +52,9 @@ fn data_dir(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> Result<Pat
 }
 
 /// A connection pool for the database at `path`, creating parent directories.
-/// Every pooled connection is prepared with [`prepare`] (WAL, busy timeout,
+/// Every pooled connection is prepared with `prepare` (WAL, busy timeout,
 /// foreign keys) by a post-create hook; the schema is migrated once at startup
-/// by [`migrate`], run on the first pooled connection in `AppState::load`.
+/// by `migrate`, run on the first pooled connection in `AppState::load`.
 ///
 /// # Errors
 /// When the parent directory can't be created.

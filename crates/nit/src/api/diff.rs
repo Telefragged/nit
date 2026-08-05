@@ -30,7 +30,7 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
 
 /// The raw git diff `old → new` with rename detection — the one definition of
 /// how nit pairs a delete with an add. Git supplies the deltas only; the lines
-/// inside each of them come from [`line_hunks`]. Built separately from
+/// inside each of them come from `line_hunks`. Built separately from
 /// [`render`] so a caller can resolve rebase drift ([`super::rebase::analyze`])
 /// against the same deltas before deciding which are worth rendering.
 ///

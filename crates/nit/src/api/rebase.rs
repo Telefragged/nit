@@ -19,7 +19,7 @@
 //! file the change renamed, and a rename made wholly by the base is itself
 //! drift.
 //!
-//! The projection ([`project_clipped`] / [`drift_ranges`]) is the bug-prone
+//! The projection (`project_clipped` / `drift_ranges`) is the bug-prone
 //! core gerrit shipped a false-negative in (2.15.0), and is unit-tested
 //! below. It is **line-level**, with two inherent limitations matching
 //! gerrit (the spec deems intraline/move detection out of scope):
