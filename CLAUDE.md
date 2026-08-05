@@ -55,13 +55,14 @@ identity across rewrites. Product spec: `nit.md`.
    crate2nix checks, every crate of ours compiled under `clippy`
    (`-D warnings`). A green `nix build` is necessary but not sufficient — it
    skips tests (docs/dev.md "Verification").
-10. **Comments earn their place — the non-obvious _why_, or nothing.** A
-    comment states what the code cannot: an invariant, a constraint, a
-    subtle ordering. Never restate the code, narrate how it got there
-    ("now / no longer / replaced" — git blame holds that), or brag. Be
-    dense — the fewest words that carry a rationale the reader can't see.
-    Binds review and simplification passes too
-    (docs/design-review-guide.md rule 6).
+10. **One home per fact — load the `comment-style` skill before
+    writing.** Code comments, doc-comments, commit messages, and nit
+    threads each carry a distinct kind of information; the rules, litmus
+    tests, and examples live in `.claude/skills/comment-style/SKILL.md`.
+    Read it before writing or amending code, comments, or commit
+    messages, and at the start of every review pass. A `/simplify` or
+    `/code-review` run additionally spawns the comment-audit agent that
+    skill defines.
 
 ## Layout
 

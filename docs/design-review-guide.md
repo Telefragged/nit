@@ -172,29 +172,7 @@ struct LogEntry { payload: LogPayload, ... }   // typed
 fn fold(change, mut entry: LogEntry) -> LogEntry { match &mut entry.payload { ... } entry }
 ```
 
-## 6. Comments: the non-obvious _why_, or nothing
-
-**Require:** a comment explains something the code cannot — usually _why_ (an
-invariant, a non-obvious constraint, a subtle ordering).
-
-**Reject:** comments that narrate history, restate the code, or congratulate
-the author. Golden rule 10 already bans the "what it got to be" narration;
-enforce it.
-
-```rust
-// BAD
-// Stored entries already carry their thread ids; the returned entry is
-// identical, so discard it.                      <- history + restates the code
-// Commit, serializing each entry's payload to its stored JSON ...  <- restates
-// Operates entirely on typed data — no JSON, so it never serializes! <- a brag
-```
-
-```rust
-// GOOD
-// The write lock makes this id allocation race-free against a concurrent push.
-```
-
-## 7. Let the types make illegal states unrepresentable
+## 6. Let the types make illegal states unrepresentable
 
 **Require:** the type system carries the invariant, not a runtime check or
 a convention:
