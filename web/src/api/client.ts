@@ -7,12 +7,14 @@ import type {
   Chain,
   ChangeDetail,
   ChangeDrafts,
+  ChangeList,
+  ChangeStatus,
   NewDraft,
   Diff,
   Draft,
   FileLines,
   Repo,
-  RepoGraph,
+  RepoHistory,
   RepoList,
   StagedDecision,
   EditDraft,
@@ -74,10 +76,18 @@ export const getChain = (changeId: number, revision?: number) =>
       : `/chains/${changeId}?revision=${revision}`,
   );
 
-/** The repo's spine-centered change graph: the source for the dashboard.
- * The merged-history window is fixed server-side. */
-export const getRepoGraph = (repoId: number) =>
-  request<RepoGraph>("GET", `/repos/${repoId}/graph`);
+/** A repo's changes as folded projections, narrowed to the statuses named —
+ * the filter is explicit and repeatable; the API serves no default subset. */
+export const getChanges = (repoId: number, statuses: ChangeStatus[]) =>
+  request<ChangeList>(
+    "GET",
+    `/changes?repo=${repoId}${statuses.map((s) => `&status=${s}`).join("")}`,
+  );
+
+/** A window of the repo's canonical branch below its HEAD; the window is
+ * fixed server-side. */
+export const getHistory = (repoId: number) =>
+  request<RepoHistory>("GET", `/history?repo=${repoId}`);
 
 export const getChange = (id: number) =>
   request<ChangeDetail>("GET", `/changes/${id}`);

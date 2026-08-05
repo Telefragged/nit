@@ -82,16 +82,10 @@ export type PathEntry = {
 };
 
 export type RepoGraph = {
-  repo_id: number;
   /**
-   * The HEAD node's `commit_sha` — the anchor every region pivots on.
-   */
-  anchor: string;
-  /**
-   * The canonical branch has merged commits below the displayed window.
-   *
-   * The client shows an "earlier history hidden" marker and dangles
-   * deep forks to it.
+   * The canonical branch has merged commits below the displayed window — the
+   * client shows an "earlier history hidden" marker and dangles deep forks
+   * to it.
    */
   history_truncated: boolean;
   /**

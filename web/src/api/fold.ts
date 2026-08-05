@@ -9,8 +9,19 @@
 // representation the web already holds. A ChangeProj is opaque to the web —
 // only these wrappers (re)hydrate it.
 
-import { change_detail, fold_entry, replay_proj } from "../wasm/nit_wasm";
-import type { ChangeDetail, ChangeProj, LogEntry } from "./types";
+import {
+  change_detail,
+  fold_entry,
+  repo_graph,
+  replay_proj,
+} from "../wasm/nit_wasm";
+import type {
+  ChangeDetail,
+  ChangeProj,
+  LogEntry,
+  RepoGraph,
+  RepoHistory,
+} from "./types";
 
 /** A change's identity (not carried in the log) plus its entries, ascending by
  * `idx` — the input to {@link replayProj}. */
@@ -38,4 +49,13 @@ export function foldEntry(proj: ChangeProj, entry: LogEntry): ChangeProj {
  * (`GET /changes/{id}/drafts`). */
 export function changeDetail(proj: ChangeProj): ChangeDetail {
   return change_detail(proj) as ChangeDetail;
+}
+
+/** Assemble the repo's change graph from its change folds
+ * (`GET /api/changes`) and canonical history (`GET /api/history`). */
+export function repoGraph(
+  changes: ChangeProj[],
+  history: RepoHistory,
+): RepoGraph {
+  return repo_graph(changes, history) as RepoGraph;
 }

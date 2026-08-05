@@ -29,7 +29,7 @@ export function logFor(changeId: number): LogEntry[] {
 
 /** A change's snapshot: its synth log folded to a ChangeProj, the same shape the
  * server ships. */
-function snapshot(changeId: number): ChangeProj {
+export function snapshot(changeId: number): ChangeProj {
   const c = changes.find((x) => x.id === changeId);
   return replayProj({
     id: changeId,

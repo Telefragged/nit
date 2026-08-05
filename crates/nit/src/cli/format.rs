@@ -12,8 +12,8 @@ use nit_types::changes::ChangeDetail;
 use nit_types::comments::{CommentRange, Thread};
 use nit_types::log::{CommentInput, LogEntry, LogPayload};
 
-use crate::gitscan::identity::subject_of;
 use crate::gitscan::short_sha;
+use nit_types::fold::subject_of;
 
 use super::client::Client;
 use super::resolve::resolve_change;

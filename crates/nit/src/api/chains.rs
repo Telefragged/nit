@@ -1,4 +1,4 @@
-//! Chain endpoints (derived, on demand): list, graph, fetch, and log.
+//! Chain endpoints (derived, on demand) and the canonical-history read.
 
 use std::sync::Arc;
 
@@ -8,7 +8,7 @@ use git2::Repository;
 use serde::Deserialize;
 
 use nit_types::chains::{Chain, ChainList};
-use nit_types::graph::{HistoryCommit, RepoGraph, RepoHistory};
+use nit_types::graph::{HistoryCommit, RepoHistory};
 use nit_types::log::ChainLog;
 
 use crate::db;
@@ -54,29 +54,6 @@ pub(super) async fn list_chains(
             }
         }
         Ok(Json(ChainList { chains }))
-    })
-    .await
-}
-
-/// The repo's spine-centered change graph.
-pub(super) async fn repo_graph(
-    State(state): State<Arc<AppState>>,
-    AppPath(repo_id): AppPath<u64>,
-) -> Result<Json<RepoGraph>, Error> {
-    with_conn(state.pool(), move |conn| {
-        let repo_state = state
-            .repo_state(repo_id)
-            .ok_or_else(|| Error::not_found(format!("no such repo: {repo_id}")))?;
-        let repo = Repository::open(repo_state.git_dir())
-            .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
-        let view = state.repo_view(conn, repo_id)?;
-        Ok(Json(views::build_graph(
-            &repo,
-            &view,
-            repo_id,
-            &repo_state.base_ref,
-            MERGED_WINDOW,
-        )?))
     })
     .await
 }

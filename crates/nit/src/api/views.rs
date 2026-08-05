@@ -5,20 +5,14 @@
 //! shapes. Chain views take a [`RepoView`] snapshot plus the repo handle
 //! (for query-time tip names); draft rows come from the database.
 
-use std::collections::{HashMap, HashSet};
-
 use anyhow::Result;
-use git2::Repository;
 use rusqlite::Connection;
 
 use nit_types::chains::{Chain, PathEntry};
 use nit_types::changes::{ChangeDetail, ChangeDrafts, StagedDecision};
 use nit_types::comments::Draft;
-use nit_types::enums::{ChangeStatus, GraphSection};
-use nit_types::graph::{GraphNode, RepoGraph};
 
 use crate::db;
-use crate::gitscan::{self, identity::subject_of};
 use crate::review::ChangeProj;
 use nit_types::chain::{self, PathMember, RepoView};
 
@@ -53,138 +47,15 @@ fn path_entries(view: &RepoView, path: &[PathMember]) -> Vec<PathEntry> {
 
 fn path_entry(change: &ChangeProj, member: &PathMember, position: u64) -> PathEntry {
     let revision = member.revision;
-    let subject = change
-        .revision(revision)
-        .map(|r| subject_of(&r.message))
-        .unwrap_or_default();
     PathEntry {
         change_id: change.id,
         position,
         change_key: change.change_key.clone(),
         revision,
         status: change.status_at(revision),
-        subject,
+        subject: change.subject_at(revision),
         commit_sha: member.commit_sha.clone(),
     }
-}
-
-// ---------------------------------------------------------------------------
-// Graph (the spine-centered DAG)
-
-/// Assembles the repo's change graph.
-///
-/// The canonical HEAD anchor and a `merged_window` of merged history below
-/// it (a git walk), plus every active change ascending above it (the same
-/// derivation as a chain, unioned and deduplicated by commit-sha). Nodes are
-/// returned in topological row order.
-///
-/// # Errors
-/// When the canonical branch can't be walked.
-pub fn build_graph(
-    repo: &Repository,
-    view: &RepoView,
-    repo_id: u64,
-    base_ref: &str,
-    merged_window: u64,
-) -> Result<RepoGraph> {
-    let (history, history_truncated) =
-        gitscan::canonical_history(repo, base_ref, merged_window).map_err(anyhow::Error::msg)?;
-    let anchor = history.first().map_or_else(String::new, |h| h.sha.clone());
-
-    let mut nodes: Vec<GraphNode> = Vec::new();
-    let mut shas: HashSet<String> = HashSet::new();
-
-    for (depth, h) in history.iter().enumerate() {
-        let change = h.trailer.as_deref().and_then(|k| view.change_by_key(k));
-        nodes.push(GraphNode {
-            commit_sha: h.sha.clone(),
-            section: if depth == 0 {
-                GraphSection::Head
-            } else {
-                GraphSection::History
-            },
-            subject: h.subject.clone(),
-            status: ChangeStatus::Merged,
-            parents: h.parents.clone(),
-            // change_id/change_key are coupled: both come from the matched
-            // change, so a bare commit (a foreign/pre-nit Change-Id trailer
-            // with no change) reports both null, not an orphan key.
-            change_id: change.map(|c| c.id),
-            change_key: change.map(|c| c.change_key.clone()),
-            revision: None,
-        });
-        shas.insert(h.sha.clone());
-    }
-
-    // Open region: active changes, in ascending (tip-walk) order.
-    for node in view.open_nodes() {
-        if !shas.insert(node.commit_sha.clone()) {
-            continue; // already placed (an anchor/history sha)
-        }
-        let Some(change) = view.change(node.change_id) else {
-            continue;
-        };
-        let subject = change
-            .revision(node.revision)
-            .map(|r| subject_of(&r.message))
-            .unwrap_or_default();
-        nodes.push(GraphNode {
-            commit_sha: node.commit_sha,
-            section: GraphSection::Open,
-            subject,
-            status: change.status_at(node.revision),
-            parents: vec![node.parent_sha],
-            change_id: Some(change.id),
-            change_key: Some(change.change_key.clone()),
-            revision: Some(node.revision),
-        });
-    }
-
-    // An open chain's root keeps its real fork (`base_sha`): the client draws a
-    // "behind" edge to it when it is a visible history node, or dangles it into
-    // the "earlier history hidden" marker when the fork predates the window.
-
-    // Row order: the open region ascends above the canonical HEAD, so order it
-    // topologically among itself (children before parents); the HEAD anchor and
-    // its merged history keep the canonical-branch walk order below it. A single
-    // global topo would let HEAD — a leaf when nothing is built on it — float to
-    // the top, which is wrong whenever the whole chain forks behind HEAD.
-    let open_shas: HashSet<&str> = nodes
-        .iter()
-        .filter(|n| n.section == GraphSection::Open)
-        .map(|n| n.commit_sha.as_str())
-        .collect();
-    let open_pairs: Vec<(String, Vec<String>)> = nodes
-        .iter()
-        .filter(|n| n.section == GraphSection::Open)
-        .map(|n| {
-            let parents = n
-                .parents
-                .iter()
-                .filter(|p| open_shas.contains(p.as_str()))
-                .cloned()
-                .collect();
-            (n.commit_sha.clone(), parents)
-        })
-        .collect();
-    let open_pos: HashMap<String, usize> = chain::graph_row_order(&open_pairs)
-        .into_iter()
-        .enumerate()
-        .map(|(i, sha)| (sha, i))
-        .collect();
-    let (mut open_nodes, rest): (Vec<_>, Vec<_>) = nodes
-        .into_iter()
-        .partition(|n| n.section == GraphSection::Open);
-    open_nodes.sort_by_key(|n| open_pos.get(&n.commit_sha).copied().unwrap_or(usize::MAX));
-    open_nodes.extend(rest); // the HEAD anchor + history, in canonical-walk order
-    let nodes = open_nodes;
-
-    Ok(RepoGraph {
-        repo_id,
-        anchor,
-        history_truncated,
-        nodes,
-    })
 }
 
 /// The tip whose path walks `change` at `revision`.

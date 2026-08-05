@@ -17,6 +17,8 @@ use std::collections::HashMap;
 
 use git2::{Commit, Oid, Repository, Sort};
 
+use nit_types::fold::subject_of;
+
 use crate::review::ChangeProj;
 
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
@@ -267,7 +269,7 @@ pub fn canonical_history(
         out.push(HistoryCommit {
             sha: oid.to_string(),
             parents: commit.parent_ids().map(|p| p.to_string()).collect(),
-            subject: identity::subject_of(&message),
+            subject: subject_of(&message),
             trailer: identity::change_id_trailer(&message),
         });
     }

@@ -19,19 +19,17 @@ import type {
   NewDraft,
   Decision,
   Draft,
-  GraphNode,
   Line,
   PathEntry,
   Repo,
-  RepoGraph,
   Review,
   Revision,
   StagedDecision,
   Verdict,
 } from "../types";
 import { verdictStatus } from "../verdict";
-import { changeDetail as foldDetail, replayProj } from "../fold";
-import { logFor, mockAppend } from "./stream";
+import { changeDetail as foldDetail } from "../fold";
+import { mockAppend, snapshot } from "./stream";
 import { diffKey, newSideEnd } from "./builders";
 import { changes, draftReviews, drafts, repos, tips } from "./data";
 import type {
@@ -307,130 +305,49 @@ function repoList(): Repo[] {
 }
 
 // ---------------------------------------------------------------------------
-// Graph. The open region is the real chain derivation
-// (active tips, unioned and deduped by sha); the canonical history below HEAD
-// is synthetic (see ./data). Includes a merge commit and (per repo) a
-// behind-HEAD base.
-
-/** Topological row order, children before parents — mirrors the backend's
- * chain::graph_row_order (rank = longest path to a leaf, ties by input). */
-function graphRowOrder(nodes: GraphNode[]): GraphNode[] {
-  const index = new Map<string, number>();
-  nodes.forEach((nd, i) => index.set(nd.commit_sha, i));
-  const children: number[][] = nodes.map(() => []);
-  nodes.forEach((nd, i) => {
-    for (const p of nd.parents) {
-      const pi = index.get(p);
-      if (pi !== undefined) children[pi]?.push(i);
-    }
-  });
-  const memo = new Array<number | undefined>(nodes.length).fill(undefined);
-  const onStack = new Array<boolean>(nodes.length).fill(false);
-  const rank = (i: number): number => {
-    const cached = memo[i];
-    if (cached !== undefined) return cached;
-    if (onStack[i]) return 0;
-    onStack[i] = true;
-    const kids = children[i] ?? [];
-    const r = kids.length > 0 ? 1 + Math.max(...kids.map(rank)) : 0;
-    onStack[i] = false;
-    memo[i] = r;
-    return r;
-  };
-  const ranks = nodes.map((_, i) => rank(i));
-  return nodes
-    .map((nd, i) => ({ nd, i }))
-    .sort((a, b) => (ranks[a.i] ?? 0) - (ranks[b.i] ?? 0) || a.i - b.i)
-    .map((x) => x.nd);
-}
+// The graph's two primitive reads. The browser assembles the graph itself
+// (api/graph, the shared wasm derivation), so the mock serves only parts:
+// each repo's change folds and a window of its synthetic canonical history.
 
 /** The fixed merged-history window (mirrors the backend's MERGED_WINDOW). */
 const MERGED_WINDOW = 5;
 
-function buildGraph(repoId: number, window: number): RepoGraph {
-  const repo = repos.find((r) => r.id === repoId) ?? notFound(`repo ${repoId}`);
-  const fullHistory = repo.history;
-  const history = fullHistory.slice(0, window + 1);
-  const historyTruncated = fullHistory.length > window + 1;
-  const anchorSha = history[0]?.sha ?? "";
+/** `GET /api/changes`: folded projections of the repo's changes matching the
+ * explicit `status` filters (none means all), each folded from its synth log
+ * through the shared wasm fold — the same source the websocket snapshots. */
+function listChanges(repoId: number | null, statuses: ChangeStatus[]) {
+  return {
+    changes: changes
+      .filter(
+        (c) =>
+          (repoId === null || c.repo_id === repoId) &&
+          (statuses.length === 0 ||
+            statuses.includes(statusAt(c, latestRevision(c).number))),
+      )
+      .map((c) => snapshot(c.id)),
+  };
+}
 
-  const nodes: GraphNode[] = history.map((h, depth) => {
-    // change_id/change_key are coupled: both come from the matched change, so
-    // a foreign key with no change reports both null, not an orphan key.
+/** `GET /api/history`: the repo's synthetic canonical history, HEAD-first, a
+ * fixed window deep. A node naming a landed change (`change_key`) is enriched
+ * with it; any other commit reports both id and key null (coupled). */
+function repoHistory(repoId: number) {
+  const repo = repos.find((r) => r.id === repoId) ?? notFound(`repo ${repoId}`);
+  const commits = repo.history.slice(0, MERGED_WINDOW + 1).map((h) => {
     const landed = h.change_key
       ? changes.find(
           (c) => c.repo_id === repoId && c.change_key === h.change_key,
         )
       : undefined;
     return {
-      commit_sha: h.sha,
-      section: depth === 0 ? "head" : "history",
-      subject: h.subject,
-      status: "merged",
+      sha: h.sha,
       parents: h.parents,
+      subject: h.subject,
       change_id: landed?.id ?? null,
       change_key: landed?.change_key ?? null,
-      revision: null,
     };
   });
-
-  // Walk tips in tip-sha order, mirroring the backend's leaves_where sort
-  // (chain.rs) so the open-node input order — and thus the lane assignment —
-  // matches production, not just the fixture declaration order.
-  const activeTips = tips
-    .filter((t) => t.repo_id === repoId && t.active)
-    .slice()
-    .sort((a, b) => {
-      const sa = changes.find((c) => c.id === a.tip_change_id);
-      const sb = changes.find((c) => c.id === b.tip_change_id);
-      const ka = sa ? latestRevision(sa).commit_sha : "";
-      const kb = sb ? latestRevision(sb).commit_sha : "";
-      return ka < kb ? -1 : ka > kb ? 1 : 0;
-    });
-  const seen = new Set<string>();
-  for (const tip of activeTips) {
-    for (const m of walkPath(tip)) {
-      const csha = m.revision.commit_sha;
-      if (seen.has(csha)) continue;
-      seen.add(csha);
-      const { change: c, revision: rev } = m;
-      nodes.push({
-        commit_sha: csha,
-        section: "open",
-        subject: c.subject,
-        status: statusAt(c, rev.number),
-        parents: [rev.parent_sha],
-        change_id: c.id,
-        change_key: c.change_key,
-        revision: rev.number,
-      });
-    }
-  }
-
-  // Row order (mirrors build_graph): the open region ascends above HEAD, so
-  // order it topologically among itself; the HEAD anchor + history keep the
-  // canonical-walk order below it.
-  const openNodes = nodes.filter((nd) => nd.section === "open");
-  const rest = nodes.filter((nd) => nd.section !== "open");
-  const openShas = new Set(openNodes.map((nd) => nd.commit_sha));
-  const openOrder = graphRowOrder(
-    openNodes.map((nd) => ({
-      ...nd,
-      parents: nd.parents.filter((p) => openShas.has(p)),
-    })),
-  );
-  const orderIndex = new Map(openOrder.map((nd, i) => [nd.commit_sha, i]));
-  openNodes.sort(
-    (a, b) =>
-      (orderIndex.get(a.commit_sha) ?? 0) - (orderIndex.get(b.commit_sha) ?? 0),
-  );
-
-  return {
-    repo_id: repoId,
-    anchor: anchorSha,
-    history_truncated: historyTruncated,
-    nodes: [...openNodes, ...rest],
-  };
+  return { commits, truncated: repo.history.length > MERGED_WINDOW + 1 };
 }
 
 /** Anchors are served verbatim; the client places them by diff range. */
@@ -443,17 +360,7 @@ function renderDraft(d: DraftRecord): Draft {
 // appends to the log shows up identically over REST and the stream. The
 // reviewer's drafts and staged decision are not log state, so overlay them.
 function changeDetail(c: ChangeRecord): ChangeDetail {
-  return {
-    ...foldDetail(
-      replayProj({
-        id: c.id,
-        repo_id: c.repo_id,
-        change_key: c.change_key,
-        entries: logFor(c.id),
-      }),
-    ),
-    ...changeDrafts(c),
-  };
+  return { ...foldDetail(snapshot(c.id)), ...changeDrafts(c) };
 }
 
 /** The reviewer's overlay alone (`GET /changes/{id}/drafts`). */
@@ -547,10 +454,16 @@ export async function mockRequest(
     return repoList().find((r) => r.id === id) ?? notFound(`repo ${id}`);
   }
 
-  if ((m = /^\/repos\/(\d+)\/graph$/.exec(p)) && method === "GET") {
-    const id = Number(m[1]);
-    if (!repos.some((r) => r.id === id)) return notFound(`repo ${id}`);
-    return buildGraph(id, MERGED_WINDOW);
+  if (method === "GET" && p === "/changes") {
+    const repo = q.get("repo");
+    return listChanges(
+      repo === null ? null : Number(repo),
+      q.getAll("status") as ChangeStatus[],
+    );
+  }
+
+  if (method === "GET" && p === "/history") {
+    return repoHistory(Number(q.get("repo")));
   }
 
   if (method === "GET" && p === "/chains") {

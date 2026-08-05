@@ -36,22 +36,17 @@ pub struct RepoHistory {
     pub truncated: bool,
 }
 
-/// One repo's change graph.
+/// One repo's change graph: a commit-sha-keyed DAG over the canonical branch.
 ///
-/// A single commit-sha-keyed DAG over the canonical branch, the source
-/// for the web dashboard. Nothing about it is stored — it is assembled at
-/// read time from the same folds + sha index as a chain, plus a git walk
-/// of the canonical branch for the merged history.
+/// Not a response body — the browser assembles it (`crates/nit-wasm`) from
+/// the two primitive reads, `GET /api/changes` and `GET /api/history`; the
+/// shape lives here because it crosses the wasm↔JS boundary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RepoGraph {
-    pub repo_id: u64,
-    /// The HEAD node's `commit_sha` — the anchor every region pivots on.
-    pub anchor: String,
-    /// The canonical branch has merged commits below the displayed window.
-    ///
-    /// The client shows an "earlier history hidden" marker and dangles
-    /// deep forks to it.
+    /// The canonical branch has merged commits below the displayed window — the
+    /// client shows an "earlier history hidden" marker and dangles deep forks
+    /// to it.
     pub history_truncated: bool,
     /// Row order, top → bottom: open (top) → head → history (bottom).
     ///

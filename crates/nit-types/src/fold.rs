@@ -171,6 +171,26 @@ pub struct ChangeProj {
     pub entries_folded: u64,
 }
 
+/// Commit subject, matching git's `find_commit_subject` + `format_subject`.
+///
+/// # Examples
+///
+/// ```rust
+/// use nit_types::fold::subject_of;
+///
+/// assert_eq!(subject_of("one line\n\nbody"), "one line");
+/// assert_eq!(subject_of("wrapped\nsubject\n\nbody"), "wrapped subject");
+/// assert_eq!(subject_of("\n\nleading blank"), "leading blank");
+/// assert_eq!(subject_of("trailing newline\n"), "trailing newline");
+/// assert_eq!(subject_of(""), "");
+/// ```
+#[must_use]
+pub fn subject_of(message: &str) -> String {
+    let body = message.trim_start_matches(['\n', '\r']);
+    let para = body.split("\n\n").next().unwrap_or("");
+    para.replace('\n', " ").trim().to_string()
+}
+
 impl ChangeProj {
     /// The fold builds the rest from the log.
     #[must_use]
@@ -216,6 +236,16 @@ impl ChangeProj {
     #[must_use]
     pub fn is_merged(&self) -> bool {
         matches!(self.lifecycle, Lifecycle::Merged)
+    }
+
+    /// Returns one revision's commit-message subject.
+    ///
+    /// Empty when the revision is unknown.
+    #[must_use]
+    pub fn subject_at(&self, revision: u64) -> String {
+        self.revision(revision)
+            .map(|r| subject_of(&r.message))
+            .unwrap_or_default()
     }
 
     /// The change's current status.

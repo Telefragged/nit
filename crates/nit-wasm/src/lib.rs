@@ -11,10 +11,14 @@
 //! with no JSON text in between. `u64` rides as a JS `number` — the same
 //! representation the web already holds — so the wire types are unchanged.
 
+use nit_types::chain::RepoView;
 use nit_types::fold::{self, ChangeProj};
+use nit_types::graph::RepoHistory;
 use nit_types::log::LogEntry;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
+
+pub mod graph;
 
 mod intraline;
 
@@ -67,6 +71,21 @@ pub fn fold_entry(proj: JsValue, entry: JsValue) -> Result<JsValue, JsValue> {
     let entry: LogEntry = serde_wasm_bindgen::from_value(entry)?;
     fold::fold(&mut proj, entry);
     to_js(&proj)
+}
+
+/// Assembles the repo's change graph from the two primitive reads.
+///
+/// The reads are the change folds (`GET /api/changes`) and the canonical
+/// history (`GET /api/history`).
+///
+/// # Errors
+///
+/// When either argument fails to parse or the graph fails to serialize.
+#[wasm_bindgen]
+pub fn repo_graph(changes: JsValue, history: JsValue) -> Result<JsValue, JsValue> {
+    let changes: Vec<ChangeProj> = serde_wasm_bindgen::from_value(changes)?;
+    let history: RepoHistory = serde_wasm_bindgen::from_value(history)?;
+    to_js(&graph::assemble(&RepoView::new(changes), &history))
 }
 
 /// Marks the characters that changed inside a diff's replacement blocks.

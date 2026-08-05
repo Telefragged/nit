@@ -47,8 +47,6 @@ const edge = (g: GraphLayout, from: string, to: string) =>
 // row); reordering these nodes shifts every row-based assertion below.
 function mockGraph(): RepoGraph {
   return {
-    repo_id: 1,
-    anchor: "H",
     history_truncated: false,
     nodes: [
       node("A1", "open", "pending", ["A3"]),
@@ -134,8 +132,6 @@ describe("layoutGraph edges", () => {
 describe("layoutGraph behind-HEAD base (in window)", () => {
   it("attaches to its visible base with a solid edge on a side lane", () => {
     const g = layoutGraph({
-      repo_id: 1,
-      anchor: "H",
       history_truncated: false,
       nodes: [
         node("J", "open", "pending", ["H"]),
@@ -159,8 +155,6 @@ describe("layoutGraph behind-HEAD base (in window)", () => {
 describe("layoutGraph behind-HEAD base (below window)", () => {
   it("dangles a behind edge into the collapsed marker", () => {
     const g = layoutGraph({
-      repo_id: 1,
-      anchor: "H",
       history_truncated: true,
       nodes: [
         node("X", "open", "pending", ["DEEP"]), // DEEP is below the window

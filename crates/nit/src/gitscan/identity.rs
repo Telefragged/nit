@@ -1,29 +1,10 @@
 //! Change identity helpers.
 //!
-//! `Change-Id:` trailer extraction, the required-Change-Id validation,
-//! and commit subject extraction.
+//! `Change-Id:` trailer extraction and the required-Change-Id validation.
 
 use std::collections::HashMap;
 
-/// Commit subject, matching git's `find_commit_subject` + `format_subject`.
-///
-/// # Examples
-///
-/// ```rust
-/// use nit::gitscan::identity::subject_of;
-///
-/// assert_eq!(subject_of("one line\n\nbody"), "one line");
-/// assert_eq!(subject_of("wrapped\nsubject\n\nbody"), "wrapped subject");
-/// assert_eq!(subject_of("\n\nleading blank"), "leading blank");
-/// assert_eq!(subject_of("trailing newline\n"), "trailing newline");
-/// assert_eq!(subject_of(""), "");
-/// ```
-#[must_use]
-pub fn subject_of(message: &str) -> String {
-    let body = message.trim_start_matches(['\n', '\r']);
-    let para = body.split("\n\n").next().unwrap_or("");
-    para.replace('\n', " ").trim().to_string()
-}
+use nit_types::fold::subject_of;
 
 /// The message's `Change-Id:` trailer value, if it carries one.
 ///
