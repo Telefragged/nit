@@ -1,6 +1,12 @@
 import { type CSSProperties, useMemo } from "react";
 import { Link } from "react-router-dom";
-import type { ChangeDetail, GraphNode, RepoGraph } from "../api/types";
+import type {
+  Decision,
+  Draft,
+  GraphNode,
+  RepoGraph,
+  ThreadProj,
+} from "../api/types";
 import { revisionActivity } from "../lib/comments";
 import type { LaidEdge, LaidNode } from "../lib/graphLayout";
 import { layoutGraph } from "../lib/graphLayout";
@@ -34,24 +40,31 @@ function nodeColor(ln: LaidNode): string {
   return `lane-${ln.lane % LANE_COLORS}`;
 }
 
-// A node's activity badges, derived from the change's own detail (fetched per
-// change off the dashboard) rather than denormalized onto the graph node:
-// comment/draft/unresolved counts at the node's pinned revision plus the
-// reviewer's staged decision. `detail` is undefined until that fetch resolves.
+/** What a node's activity badges draw — read off the bulk change folds and
+ * the reviewer's drafts overlay rather than denormalized onto the graph
+ * node. */
+export interface NodeActivity {
+  threads: readonly ThreadProj[];
+  drafts: readonly Draft[];
+  decision: Decision | null;
+}
+
+// Comment/draft/unresolved counts at the node's pinned revision plus the
+// reviewer's staged decision. `act` is undefined until the overlay resolves.
 function Activity({
   node,
-  detail,
+  act,
 }: {
   node: GraphNode;
-  detail: ChangeDetail | undefined;
+  act: NodeActivity | undefined;
 }) {
-  if (!detail || node.revision === null) return null;
+  if (!act || node.revision === null) return null;
   const { threads, drafts, unresolved } = revisionActivity(
-    detail.threads,
-    detail.drafts,
+    act.threads,
+    act.drafts,
     node.revision,
   );
-  const decision = detail.draft_decision?.decision ?? null;
+  const decision = act.decision;
   if (threads === 0 && drafts === 0 && unresolved === 0 && !decision) {
     return null;
   }
@@ -86,10 +99,10 @@ function Activity({
 
 function GraphRow({
   ln,
-  detail,
+  act,
 }: {
   ln: LaidNode;
-  detail: ChangeDetail | undefined;
+  act: NodeActivity | undefined;
 }) {
   const { node } = ln;
   const isOpen = node.section === "open";
@@ -134,7 +147,7 @@ function GraphRow({
         {isOpen && node.revision !== null ? `r${node.revision}` : ""}
       </div>
       <div className="graph-cell-activity">
-        <Activity node={node} detail={detail} />
+        <Activity node={node} act={act} />
       </div>
     </div>
   );
@@ -145,9 +158,9 @@ export default function ChangeGraph({
   activity,
 }: {
   graph: RepoGraph;
-  /** Per-change detail, keyed by change id — the source for each node's
-   * activity badges. */
-  activity: Map<number, ChangeDetail>;
+  /** Per-change activity, keyed by change id — the source for each node's
+   * badges. */
+  activity: Map<number, NodeActivity>;
 }) {
   const layout = useMemo(() => layoutGraph(graph), [graph]);
   const cols = `${layout.railWidth}px minmax(0, 1fr) 168px 52px 184px`;
@@ -213,7 +226,7 @@ export default function ChangeGraph({
           <GraphRow
             key={ln.node.commit_sha}
             ln={ln}
-            detail={
+            act={
               ln.node.change_id !== null
                 ? activity.get(ln.node.change_id)
                 : undefined

@@ -5,7 +5,6 @@
 import type {
   BatchSubmitResult,
   Chain,
-  ChangeDetail,
   ChangeDrafts,
   ChangeList,
   ChangeStatus,
@@ -88,9 +87,6 @@ export const getChanges = (repoId: number, statuses: ChangeStatus[]) =>
  * fixed server-side. */
 export const getHistory = (repoId: number) =>
   request<RepoHistory>("GET", `/history?repo=${repoId}`);
-
-export const getChange = (id: number) =>
-  request<ChangeDetail>("GET", `/changes/${id}`);
 
 /** The reviewer's private overlay alone (drafts + staged decision); the change
  * page reads the published projection over the websocket instead. */

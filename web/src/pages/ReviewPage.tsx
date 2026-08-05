@@ -1,6 +1,7 @@
 import {
   skipToken,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -55,7 +56,6 @@ import { isShortcutKey } from "../lib/shortcutKey";
 import type { SelectionMiss } from "../lib/selection";
 import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
-import { useChangeDetails } from "../lib/useChangeDetails";
 import { useChangeStream } from "../lib/useChangeStream";
 import { useDrafts } from "../lib/useDrafts";
 import { ErrorPanel } from "./NotFound";
@@ -336,7 +336,19 @@ export default function ReviewPage() {
   // cache the stream keeps live (ChainNav reads each member's
   // unresolved/latest-revision); its staged decision comes from the member's
   // drafts overlay, for the review bar's chain-wide "Submit (k)" count + nav.
-  const memberDetails = useChangeDetails(memberIds, true);
+  const memberQueries = useQueries({
+    queries: memberIds.map((id) => ({
+      queryKey: ["change", id],
+      queryFn: skipToken,
+    })),
+  });
+  const memberDetails = new Map<number, ChangeDetail>();
+  memberIds.forEach((id, i) => {
+    // A skipToken-only query never infers its data type; the cache rows are
+    // written as ChangeDetail by useChangeStream.
+    const detail = memberQueries[i]?.data as ChangeDetail | undefined;
+    if (detail) memberDetails.set(id, detail);
+  });
   const memberDecisions = new Map<number, Decision | null>();
   draftsMap.forEach((d, id) => {
     memberDecisions.set(id, d.draft_decision?.decision ?? null);

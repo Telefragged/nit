@@ -166,8 +166,8 @@ export interface RevisionActivity {
 }
 
 export function revisionActivity(
-  threads: readonly Thread[],
-  drafts: readonly Draft[],
+  threads: readonly { revision: number; resolved: boolean }[],
+  drafts: readonly { revision: number }[],
   revision: number,
 ): RevisionActivity {
   const atRevision = threads.filter((t) => t.revision === revision);

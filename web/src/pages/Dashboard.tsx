@@ -4,9 +4,9 @@ import { Link, useParams } from "react-router-dom";
 import { getChanges, getHistory, getRepo } from "../api/client";
 import { repoGraph } from "../api/fold";
 import type { ChangeStatus } from "../api/types";
-import ChangeGraph from "../components/ChangeGraph";
+import ChangeGraph, { type NodeActivity } from "../components/ChangeGraph";
 import { repoPath } from "../lib/repo";
-import { useChangeDetails } from "../lib/useChangeDetails";
+import { useDrafts } from "../lib/useDrafts";
 import { ErrorPanel } from "./NotFound";
 
 /** Every status but `merged`: the open region derives from active tips, but a
@@ -22,7 +22,7 @@ const GRAPH_STATUSES: ChangeStatus[] = [
 
 /** A repo's review dashboard: one spine-centered change graph over the
  * canonical branch — open changes ascending above the HEAD anchor, merged
- * history descending below it — assembled in the browser (api/graph) from the
+ * history descending below it — assembled in the browser (api/fold) from the
  * repo's unmerged change folds and its canonical history. */
 export default function Dashboard() {
   const { repoId } = useParams();
@@ -50,11 +50,10 @@ export default function Dashboard() {
     [changesQuery.data, historyQuery.data],
   );
 
-  // Each open node carries a change; fetch its detail concurrently so the
-  // per-change activity (comment/draft counts, staged decision) is read from
-  // GET /api/changes/{id} rather than denormalized onto the graph node. Keyed
-  // ["change", id] so the fetch shares react-query's cache with the review
-  // page — opening a change off the dashboard is then a warm read.
+  // Each open node's activity badges read straight off the fold the bulk
+  // read already delivered. Only the reviewer's drafts and staged decision
+  // are outside the log, so that overlay is the one per-change read
+  // (GET /changes/{id}/drafts).
   const activityIds = useMemo(
     () =>
       (graph?.nodes ?? []).flatMap((n) =>
@@ -62,7 +61,21 @@ export default function Dashboard() {
       ),
     [graph],
   );
-  const activity = useChangeDetails(activityIds);
+  const overlays = useDrafts(activityIds);
+  const projs = changesQuery.data?.changes;
+  const activity = useMemo(() => {
+    const projById = new Map((projs ?? []).map((p) => [p.id, p]));
+    return new Map<number, NodeActivity>(
+      activityIds.map((id) => [
+        id,
+        {
+          threads: projById.get(id)?.threads ?? [],
+          drafts: overlays.get(id)?.drafts ?? [],
+          decision: overlays.get(id)?.draft_decision?.decision ?? null,
+        },
+      ]),
+    );
+  }, [activityIds, projs, overlays]);
 
   const repo = repoQuery.data;
   const error = changesQuery.error ?? historyQuery.error;
