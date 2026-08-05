@@ -29,9 +29,8 @@ pub fn short_sha(sha: &str) -> String {
 
 /// One commit the push walk recorded, oldest-first.
 ///
-/// `parent_sha` is its first parent (the previous member, or the fork for
-/// the first); `base_sha` is the whole walk's fork point on the canonical
-/// branch.
+/// `parent_sha` is its first parent — the previous member, or the fork for
+/// the first.
 #[derive(Debug, Clone)]
 pub struct WalkedCommit {
     pub change_key: String,
