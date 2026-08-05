@@ -8,11 +8,13 @@ Checks verify a change, not a green build — `nix build` skips tests
 
 - `nix develop -c cargo check` — fast inner-loop gate.
 - `nix flake check` — the pre-commit gate: builds the product and runs the
-  Rust validators (`test`, `test-nit-types`) and the web validators
-  (`web-lint`, `web-test`, `web-screenshots`). Every crate of ours compiles
-  with `clippy-driver` under `-D warnings`, so a lint fails any build; the
-  `test*` checks add the test targets; `web-screenshots` runs the screenshot
-  harness against the nix browsers, so a driver/npm-pin skew fails here. Run
+  Rust validators (`test`, `test-nit-types`, `test-nit-wasm`) and the web
+  validators (`web-lint`, `web-test`, `web-screenshots`). Every crate of ours
+  compiles with `clippy-driver` under `-D warnings`, so a lint fails any
+  build; the `test*` checks add the test targets and run rustdoc over the
+  crate, so a doc test failure or a broken intra-doc link fails there too;
+  `web-screenshots` runs the screenshot harness against the nix browsers, so
+  a driver/npm-pin skew fails here. Run
   one alone with `nix build .#checks.<system>.test` or
   `.#checks.<system>.web-test`.
 

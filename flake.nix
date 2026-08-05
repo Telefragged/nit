@@ -57,40 +57,58 @@
       # Pin rustc from rust-toolchain.toml so nix and rustup builds match.
       rustToolchainFor = pkgs: pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-      # Doc tests, run from inside the crate's own build. `runTests` covers
-      # every test kind but the doc examples: buildRustCrate drives rustc
-      # directly, and only rustdoc extracts examples from doc-comments. But
-      # the flags rustdoc wants are the ones the lib build just used, and
-      # build-crate.nix leaves them in the shell it hands to `postBuild` —
-      # so re-run the compiler it already configured, one flag different.
-      # Gated on `buildTests` to ride the test build, whose dependency set
-      # includes the dev-dependencies cargo also lends to doc examples.
-      docTestPostBuild = ''
-        # Every other variable read here would fail the rustdoc call loudly
-        # if it went away; an unset $buildTests would just skip the doc
-        # tests forever, so make that case an error instead.
+      # Rustdoc, run from inside the crate's own build. `runTests` covers
+      # every test kind but the doc examples, and no build runs rustdoc at
+      # all: buildRustCrate drives rustc directly, so nothing extracts the
+      # examples from doc-comments or resolves the intra-doc links between
+      # them. But the flags rustdoc wants are the ones the lib build just
+      # used, and build-crate.nix leaves them in the shell it hands to
+      # `postBuild` — so re-run the compiler it already configured, one flag
+      # different. Gated on `buildTests` to ride the test build, whose
+      # dependency set includes the dev-dependencies cargo also lends to doc
+      # examples. `docTests` is false for a cdylib, which has no rlib for an
+      # example to link against — cargo skips its doc tests for the same
+      # reason, but still documents it.
+      rustdocPostBuild = docTests: ''
+        # Every other variable read here would fail the rustdoc calls loudly
+        # if it went away; an unset $buildTests would just skip them forever,
+        # so make that case an error instead.
         : "''${buildTests?buildRustCrate no longer sets buildTests}"
         if [ -n "$buildTests" ]; then
-          docTestLib="$LIB_PATH"
-          [ -e "$docTestLib" ] || docTestLib=src/lib.rs
-          if [ -e "$docTestLib" ]; then
-            echo "Doc-testing $CRATE_NAME ($docTestLib)"
-            docTestOpts=""
+          docLib="$LIB_PATH"
+          [ -e "$docLib" ] || docLib=src/lib.rs
+          if [ -e "$docLib" ]; then
+            docOpts=""
             for opt in $LIB_RUSTC_OPTS; do
               case "$opt" in
                 --remap-path-prefix=*) ;;
-                *) docTestOpts="$docTestOpts $opt" ;;
+                *) docOpts="$docOpts $opt" ;;
               esac
             done
-            # $EXTRA_LIB is the --extern for this crate's own rlib, built by
-            # build_lib before the --test pass; the rest is verbatim what
-            # build_lib passes rustc.
-            rustdoc --test "$docTestLib" \
+            # Rendering the docs is what resolves every intra-doc link, so a
+            # broken or private one is a rustdoc lint here — denied by the
+            # `[workspace.lints]` flags already in $LIB_RUSTC_OPTS. The
+            # rendered tree is the by-product; the exit code is the point.
+            # No $EXTRA_LIB: a crate is not an extern of its own docs.
+            rustdoc "$docLib" \
               --crate-name "$CRATE_NAME" \
+              --out-dir target/doc \
               --cap-lints "$CAP_LINTS" \
               --color always \
               -L dependency=target/deps \
-              $docTestOpts $EXTRA_LIB $LINK $BUILD_OUT_DIR $EXTRA_FEATURES
+              $docOpts $LINK $BUILD_OUT_DIR $EXTRA_FEATURES
+            ${nixpkgs.lib.optionalString docTests ''
+              echo "Doc-testing $CRATE_NAME ($docLib)"
+              # $EXTRA_LIB is the --extern for this crate's own rlib, built
+              # by build_lib before the --test pass; the rest is verbatim
+              # what build_lib passes rustc.
+              rustdoc --test "$docLib" \
+                --crate-name "$CRATE_NAME" \
+                --cap-lints "$CAP_LINTS" \
+                --color always \
+                -L dependency=target/deps \
+                $docOpts $EXTRA_LIB $LINK $BUILD_OUT_DIR $EXTRA_FEATURES
+            ''}
           fi
         fi
       '';
@@ -129,11 +147,7 @@
               drv.override (_: {
                 useClippy = true;
                 inherit lints;
-                # A cdylib (nit-wasm) has no rlib for a doc example to link
-                # against — cargo skips its doc tests for the same reason.
-                postBuild = nixpkgs.lib.optionalString (nixpkgs.lib.elem "lib" (
-                  crate.type or [ "lib" ]
-                )) docTestPostBuild;
+                postBuild = rustdocPostBuild (nixpkgs.lib.elem "lib" (crate.type or [ "lib" ]));
               });
         };
 
@@ -381,7 +395,8 @@
           # Also clippy-checks the test targets (lib/bins are linted in every
           # build). Tests run here, not in `nix build`; the differential test
           # shells out to `git rebase`, so it needs git and a committer identity
-          # the sandbox lacks. Doc tests ride the same build (docTestPostBuild).
+          # the sandbox lacks. Rustdoc rides the same build
+          # (rustdocPostBuild): the docs render and the doc tests run.
           test = cargoNix.workspaceMembers."nit".build.override {
             runTests = true;
             testInputs = [ pkgs.gitMinimal ];
