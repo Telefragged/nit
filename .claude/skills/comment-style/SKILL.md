@@ -138,7 +138,7 @@ matrices, failure paths, concurrency.
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// assert_eq!(split_trailer("Change-Id: I123"), Some(("Change-Id", "I123")));
 /// assert_eq!(split_trailer("just prose"), None);
 /// ```
