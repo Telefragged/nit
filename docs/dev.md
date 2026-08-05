@@ -203,7 +203,7 @@ catches a skew and gives you the gallery in `result/`.
 
 This repo dogfoods nit: push finished work as a chain, a human reviews it,
 the approve action lands it on `main`. Drive the loop with the
-`nit:lifecycle` skill; protocol in `docs/agent-workflow.md`. Run the `nit`
+`nit:lifecycle` skill. Run the `nit`
 CLI from the build that matches the running server (normally `main`'s: `nit`
 on PATH, else `nix run '…?ref=main#nit'`), not your branch's binary.
 

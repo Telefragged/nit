@@ -35,7 +35,8 @@ With a cooperative monitor, tail instead of blocking on `nit wait`:
 nit log --follow --reviewer-only   # stream reviewer activity as it lands
 ```
 
-Details for agents: [docs/agent-workflow.md](docs/agent-workflow.md).
+Details for agents: the `nit` plugin's `lifecycle` and `comment` skills, and
+`nit --help`.
 
 ## Hacking
 

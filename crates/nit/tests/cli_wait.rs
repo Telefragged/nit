@@ -1,6 +1,5 @@
 //! `nit log --wait` over the websocket: it drains the log, waking on any new
-//! entry, and parks on the stream until fresh activity lands
-//! (docs/agent-workflow.md).
+//! entry, and parks on the stream until fresh activity lands.
 
 mod common;
 

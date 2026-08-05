@@ -1,7 +1,7 @@
 //! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside a
 //! fixture repo against a real server. The agent drives push / status /
 //! log / comment / reopen one-shot (the live followers `nit log --follow` /
-//! `--wait` live in `cli_wait.rs`) — docs/agent-workflow.md.
+//! `--wait` live in `cli_wait.rs`).
 //!
 //! `nit push` walks the change-centric model: oldest-first, upsert each change
 //! by its `Change-Id`, append a revision iff the sha moved (revisions are

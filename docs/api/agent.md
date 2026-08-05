@@ -2,8 +2,8 @@
 
 The agent drives the loop with a per-change cursor it owns (a vector of
 `change_id → idx`); `nit push`/`nit comment` return no index, so an entry
-that lands between two of its own actions is never skipped
-(docs/agent-workflow.md). One-shot reads (`nit status`, `nit log`) read the
+that lands between two of its own actions is never skipped. One-shot
+reads (`nit status`, `nit log`) read the
 cursor's gap; the live followers (`nit log --wait`/`--follow`) drive it
 over the websocket ("Events").
 
@@ -25,8 +25,7 @@ over the websocket ("Events").
   resolved**; on a reply, `true` resolves / `false` reopens / omitted leaves it
   unchanged. An agent comment never changes the change's review status (it is
   not a verdict). Appends one `comment` log entry; returns no cursor. Used by
-  `nit comment`. (Why an agent comments at all: docs/agent-workflow.md
-  "Annotate the choices you make".)
+  `nit comment`.
 - `POST /api/changes/{id}/abandon` → ChangeDetail — mark a change
   **abandoned** (`nit abandon`): a reviewer/agent judgment that this change is
   dead, never an automatic decision. Optional `req: {"message": "…"}` records a
