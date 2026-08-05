@@ -1,10 +1,9 @@
-//! The outcome of batch-submitting a chain's staged decisions (docs/api.md
-//! "Chains" → submit).
+//! The outcome of batch-submitting a chain's staged decisions.
 
 use serde::{Deserialize, Serialize};
 
 /// `POST /api/chains/{id}/submit` response — the outcome of publishing every
-/// chain member's staged decision (docs/api.md "Chains").
+/// chain member's staged decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct BatchSubmitResult {

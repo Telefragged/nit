@@ -92,8 +92,8 @@ function Code({
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
   a.file === file && a.side === side && a.line === line;
 
-/** Class suffix marking a rebase-drift line (docs/api.md "Rebase-aware
- * interdiffs"), so its gutter and code cell render contained. */
+/** Class suffix marking a rebase-drift line, so its gutter and code cell
+ * render contained. */
 const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
 
 /** One reveal button, floating over a separator; `kind` is both its class
@@ -124,8 +124,8 @@ const ExpandButton = ({
 
 /** A separator over a gap of `more` unchanged lines, shown only while the gap
  * remains (a fully-revealed gap leaves the hunks contiguous, so it vanishes).
- * When the file is expandable the gap's reveal buttons float over it
- * (docs/api.md "Expanding context"): the whole run, then a stepped button per
+ * When the file is expandable the gap's reveal buttons float over it: the
+ * whole run, then a stepped button per
  * edge it can pull from — down from `hunk`'s predecessor, up from `hunk`
  * itself. The top gap (`sep` 0) has no hunk above, the bottom gap no `hunk`
  * below (nor a `@@` header), and a gap one step covers needs no stepped
@@ -194,8 +194,8 @@ function HunkSeparator({
 
 /** One file section: header, off-hunk/file-level threads, hunks with inline
  * threads and the draft editor. Threads place by the diff range — new-side
- * under the right column, old-side under the left (docs/api.md "Comment
- * placement"). Collapsible: when collapsed only the header row renders
+ * under the right column, old-side under the left. Collapsible: when
+ * collapsed only the header row renders
  * (inline threads included — the rail's counts still signal them); the
  * header click toggles. */
 export default function DiffFileView({
@@ -243,8 +243,8 @@ export default function DiffFileView({
     return set;
   }, [hunks]);
 
-  // Bucket each thread by where its anchor lands in the current diff range
-  // (docs/api.md "Comment placement"). A thread pinned to a revision that
+  // Bucket each thread by where its anchor lands in the current diff
+  // range. A thread pinned to a revision that
   // is neither FROM nor TO is dropped — it is not part of this diff.
   // File-level comments (no line) have no column; they group at the top.
   const topThreads: UiThread[] = [];
@@ -276,8 +276,8 @@ export default function DiffFileView({
         revision: anchor.revision,
         file: input.target.file,
         side: anchor.side,
-        // line and range are mutually exclusive anchors (docs/api.md
-        // "Range comments") — a range anchors under its own end line.
+        // line and range are mutually exclusive anchors — a range
+        // anchors under its own end line.
         ...(input.target.range
           ? { range: input.target.range }
           : { line: input.target.line }),
@@ -399,7 +399,7 @@ export default function DiffFileView({
     return items.length > 0 ? <div className="meta-row">{items}</div> : null;
   }
 
-  /** Old/new items pin left/right per docs/api.md "Comment placement". */
+  /** Old-side items pin left, new-side right. */
   function splitMeta(pair: RowPair): ReactNode {
     const left = metaItems("old", pair.left?.old);
     const right = metaItems("new", pair.right?.new);
@@ -533,8 +533,8 @@ export default function DiffFileView({
           </span>
         )}
         {/* Threads visible in the current range for this file: the `threads`
-            prop is already range-filtered (docs/api.md "Comment placement"),
-            so a thread pinned to a hidden revision is not counted. */}
+            prop is already range-filtered, so a thread pinned to a hidden
+            revision is not counted. */}
         {threads.length > 0 ? (
           <span className="fcomments">{commentCountLabel(threads.length)}</span>
         ) : null}

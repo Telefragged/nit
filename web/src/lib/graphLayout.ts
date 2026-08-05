@@ -1,6 +1,6 @@
 // The change-graph layout pass — pure, kept separate from the render so the
 // geometry stays unit-testable. Input: a RepoGraph (nodes already in
-// topological row order, docs/api.md "Graph"). Output: positioned nodes and
+// topological row order). Output: positioned nodes and
 // edge paths, ready for the SVG renderer.
 //
 // Lanes are assigned gleisbau-style (git-graph 0.7's interval-graph coloring):

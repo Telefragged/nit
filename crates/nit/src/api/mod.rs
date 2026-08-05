@@ -1,5 +1,5 @@
-//! HTTP API: every endpoint of `docs/api.md` (the contract), axum 0.8. The
-//! wire shapes are the shared [`nit_types`] crate (golden rule 4).
+//! HTTP API, axum 0.8. The wire shapes are the shared [`nit_types`] crate
+//! (the contract, golden rule 4).
 //!
 //! - [`diff`] — diff JSON rendering and line-text snapshots.
 //! - [`views`] — the per-change folds + chain derivation → wire shapes.
@@ -232,9 +232,9 @@ async fn health() -> Json<Health> {
     })
 }
 
-/// The merged-history window for the change graph (docs/api.md "Graph"): a
-/// fixed depth, not a client knob. `pub` so the HTTP truncation test can build
-/// exactly this many commits.
+/// The merged-history window for the change graph: a fixed depth, not a
+/// client knob. `pub` so the HTTP truncation test can build exactly this
+/// many commits.
 pub const MERGED_WINDOW: u64 = 5;
 
 #[derive(Deserialize)]
@@ -252,10 +252,9 @@ fn change_detail_json(
     Ok(Json(views::build_change_detail(conn, &change)?))
 }
 
-/// Validate a new thread's anchor per docs/api.md "Range comments":
-/// `line` and `range` are mutually exclusive anchor kinds; a ranged
-/// thread anchors under the selection's last line. Returns the resolved
-/// `(side, line, range)`.
+/// Validate a new thread's anchor: `line` and `range` are mutually
+/// exclusive anchor kinds; a ranged thread anchors under the selection's
+/// last line. Returns the resolved `(side, line, range)`.
 fn validate_anchor(
     side: Option<Side>,
     file: Option<&str>,
@@ -272,9 +271,7 @@ fn validate_anchor(
         let forward =
             r.start_line < r.end_line || (r.start_line == r.end_line && r.start_char < r.end_char);
         if r.start_line < 1 || r.end_char < 1 || !forward {
-            return Err(Error::bad_request(
-                "range must be non-empty and forward (docs/api.md \"Range comments\")",
-            ));
+            return Err(Error::bad_request("range must be non-empty and forward"));
         }
     }
     let line = line.or_else(|| range.as_ref().map(|r| r.end_line));

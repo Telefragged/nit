@@ -1,8 +1,8 @@
-//! Push basics over real HTTP (docs/api.md "Push"): an N-commit branch
-//! becomes N changes each at revision 0, the derived chain lists exactly one
-//! tip with its path ordered base→tip, a no-op re-push is idempotent,
-//! extending the branch adds a change, an amend opens revision 1, and every
-//! structural fault rejects the whole push with a 400.
+//! Push basics over real HTTP: an N-commit branch becomes N changes each
+//! at revision 0, the derived chain lists exactly one tip with its path
+//! ordered base→tip, a no-op re-push is idempotent, extending the branch
+//! adds a change, an amend opens revision 1, and every structural fault
+//! rejects the whole push with a 400.
 
 mod common;
 

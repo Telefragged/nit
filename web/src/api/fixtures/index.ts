@@ -1,4 +1,4 @@
-// A tiny in-memory implementation of the API from docs/api.md. client.ts
+// A tiny in-memory implementation of the nit API. client.ts
 // routes every call here when VITE_MOCK is set (via `await import("./fixtures")`),
 // so the whole UI (including drafts, resolve, review submission and 409s)
 // works without a backend.
@@ -55,7 +55,7 @@ let nextReviewId = 50;
 
 /** Drain a change's comment drafts into `CommentInput`s for the review's log
  * entry; a new thread gets a record id stamped on so the websocket fold mints
- * the same id (docs/api.md "Thread resolution"). The fold owns the thread, so
+ * the same id. The fold owns the thread, so
  * nothing is mirrored here — the review_id is attached when the entry folds. */
 function drainComments(c: ChangeRecord): CommentInput[] {
   const comments: CommentInput[] = [];
@@ -175,7 +175,7 @@ function emitLifecycle(
 // Derivations (status, counts, chain state, path) so mutations stay consistent
 
 /** The commit-sha → (change, revision) index — the basis for the SHA-walk
- * that derives every chain path (docs/api.md "Chains"). */
+ * that derives every chain path. */
 const shaIndex = new Map<
   string,
   { change: ChangeRecord; revision: Revision }
@@ -191,9 +191,9 @@ const latestRevision = (c: ChangeRecord): Revision => {
   return r;
 };
 
-/** A change's displayed status at a given revision (docs/api.md "State
- * table"): terminal wins; else the verdict of the latest review at that
- * revision, falling back to pending. */
+/** A change's displayed status at a given revision: terminal wins; else
+ * the verdict of the latest review at that revision, falling back to
+ * pending. */
 function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
   if (c.terminal) return c.terminal;
   const review = c.reviews
@@ -251,7 +251,7 @@ function derivePath(tip: TipRecord): PathEntry[] {
   return walkPath(tip).map((m, i) => pathEntry(m, i));
 }
 
-/** Mirrors docs/api.md's chain state table. Abandonment is derivation-inert:
+/** Mirrors the server's chain-state rollup. Abandonment is derivation-inert:
  * abandoned members are dropped before the rollup, and there is no abandoned
  * chain state. */
 function chainState(path: PathEntry[]): ChainState {
@@ -303,7 +303,7 @@ function resolveTip(
   };
 }
 
-/** Derive the repo registry (docs/api.md `GET /api/repos`). `active_chains`
+/** Derive the repo registry (`GET /api/repos`). `active_chains`
  * is the live tip count for the repo. */
 function repoList(): Repo[] {
   return repos.map((r) => ({
@@ -315,7 +315,7 @@ function repoList(): Repo[] {
 }
 
 // ---------------------------------------------------------------------------
-// Graph (docs/api.md "Graph"). The open region is the real chain derivation
+// Graph. The open region is the real chain derivation
 // (active tips, unioned and deduped by sha); the canonical history below HEAD
 // is synthetic (see ./data). Includes a merge commit and (per repo) a
 // behind-HEAD base.
@@ -451,8 +451,7 @@ function buildGraph(repoId: number, window: number): RepoGraph {
   };
 }
 
-/** Anchors are served verbatim; the client places them by diff range
- * (docs/api.md "Comment placement"). */
+/** Anchors are served verbatim; the client places them by diff range. */
 function renderDraft(d: DraftRecord): Draft {
   return { ...d, range: d.range ?? null };
 }
@@ -542,7 +541,7 @@ const getChange = (id: number): ChangeRecord =>
   changes.find((c) => c.id === id) ?? notFound(`change ${id}`);
 
 // ---------------------------------------------------------------------------
-// The mock router — mirrors the endpoint table in docs/api.md
+// The mock router — one arm per server endpoint
 
 const LATENCY_MS = 40;
 
@@ -600,7 +599,7 @@ export async function mockRequest(
     return chainView(tip);
   }
 
-  // Batch submit (docs/api.md "Chains").
+  // Batch submit.
   if ((m = /^\/chains\/(\d+)\/submit$/.exec(p)) && method === "POST") {
     const id = Number(m[1]);
     const revision = q.has("revision") ? Number(q.get("revision")) : undefined;
@@ -650,8 +649,8 @@ export async function mockRequest(
     return structuredClone({ files });
   }
 
-  // Context expansion (docs/api.md "Expanding context"). The fixtures hold
-  // diffs, not whole files, so reconstruct the full-context lines from the
+  // Context expansion. The fixtures hold diffs, not whole files, so
+  // reconstruct the full-context lines from the
   // shown hunks with synthesized context filling the gaps — enough for the
   // expand controls to reveal rows. (Real drift in a gap is the backend's
   // job; the mock just makes the interaction renderable.)
@@ -674,7 +673,7 @@ export async function mockRequest(
     const req = body as NewDraft;
     const side: Side = req.side ?? "new";
     // Like the server: a ranged draft anchors under the selection's last
-    // line (docs/api.md "Range comments").
+    // line.
     const line = req.line ?? req.range?.end_line ?? null;
     const now = new Date().toISOString();
     const record: DraftRecord = {
@@ -721,8 +720,8 @@ export async function mockRequest(
     return undefined;
   }
 
-  // Stage / clear a reviewer decision (drafted like a comment; published by the
-  // chain batch submit above) — docs/api.md "Reviewer decisions".
+  // Stage / clear a reviewer decision (drafted like a comment; published by
+  // the chain batch submit above).
   if ((m = /^\/changes\/(\d+)\/decision$/.exec(p)) && method === "PUT") {
     const c = getChange(Number(m[1]));
     const req = body as StagedDecision;

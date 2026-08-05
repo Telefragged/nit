@@ -19,7 +19,7 @@ function edgeClass(e: LaidEdge): string {
     : `graph-edge ${lane}`;
 }
 
-// The spine-centered change graph (docs/api.md "Graph"): one DAG over the
+// The spine-centered change graph: one DAG over the
 // canonical branch, rendered as an SVG rail (left column) beside per-row change
 // cards. The layout pass (lib/graphLayout) owns all geometry; this component
 // only paints the computed coordinates and the row content.

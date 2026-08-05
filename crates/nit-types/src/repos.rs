@@ -1,4 +1,4 @@
-//! The repository registry (docs/api.md "Repos").
+//! The repository registry.
 
 use serde::{Deserialize, Serialize};
 

@@ -1,9 +1,10 @@
-//! Staged reviewer decisions + the per-chain batch submit (docs/api.md
-//! "Reviewer decisions", "Chains"). A decision is reviewer scratch like a
-//! comment draft (`PUT`/`DELETE /api/changes/{id}/decision`), published only by
-//! `POST /api/chains/{id}/submit`, which publishes each member's staged decision
-//! at the revision the chain path pins. Abandonment is a decision, not a
-//! separate button; submit is idempotent (a published decision's row is gone).
+//! Staged reviewer decisions + the per-chain batch submit. A decision is
+//! reviewer scratch like a comment draft
+//! (`PUT`/`DELETE /api/changes/{id}/decision`), published only by
+//! `POST /api/chains/{id}/submit`, which publishes each member's staged
+//! decision at the revision the chain path pins. Abandonment is a
+//! decision, not a separate button; submit is idempotent (a published
+//! decision's row is gone).
 
 mod common;
 

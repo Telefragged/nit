@@ -1,7 +1,7 @@
-//! The repo registry over HTTP (docs/api.md "Repos"). A repo is registered
-//! explicitly with `nit repo create` (`POST /api/repos`), pinning its one
-//! canonical `base_ref`; its identity is the git-common-dir, and a push
-//! into an unregistered repo is a 404. `GET /api/repos` lists each repo with
+//! The repo registry over HTTP. A repo is registered explicitly with
+//! `nit repo create` (`POST /api/repos`), pinning its one canonical
+//! `base_ref`; its identity is the git-common-dir, and a push into an
+//! unregistered repo is a 404. `GET /api/repos` lists each repo with
 //! its live-tip `active_chains` count, which excludes a fully merged/abandoned
 //! chain (decided only by the background timer). `GET /api/chains?repo={id}`
 //! scopes the chain list to one repo, and `PATCH /api/repos/{id}`

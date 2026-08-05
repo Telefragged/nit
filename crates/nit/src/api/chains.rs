@@ -60,7 +60,7 @@ pub(super) async fn list_chains(
     .await
 }
 
-/// The repo's spine-centered change graph (docs/api.md "Graph").
+/// The repo's spine-centered change graph.
 pub(super) async fn repo_graph(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,

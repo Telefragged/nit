@@ -1,5 +1,4 @@
-//! The error envelope: every non-2xx response is `{"error": "..."}`
-//! (docs/api.md).
+//! The error envelope: every non-2xx response is `{"error": "..."}`.
 
 use serde::{Deserialize, Serialize};
 

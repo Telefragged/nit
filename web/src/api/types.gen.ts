@@ -1,5 +1,5 @@
 // @generated from crates/nit-types by `nix run .#gen-types` — DO NOT EDIT.
-// Change the Rust wire types (and docs/api.md), then regenerate.
+// Change the Rust wire types, then regenerate.
 
 export type Side = "old" | "new";
 
@@ -136,8 +136,8 @@ export type ChangeDetail = {
    */
   revisions: Array<Revision>;
   /**
-   * Published threads, all revisions; anchors verbatim (the client places
-   * them by diff range, docs/api.md "Comment placement").
+   * Published threads, all revisions; anchors verbatim (the client
+   * places them by diff range).
    */
   threads: Array<Thread>;
   /**
@@ -274,8 +274,8 @@ export type DiffFile = {
   deletions: number;
   /**
    * New-side line count: the EOF anchor that lets the client reveal the
-   * unchanged run below the last hunk, which no hunk bounds from beneath
-   * (docs/api.md "Expanding context"). 0 when deleted or binary.
+   * unchanged run below the last hunk, which no hunk bounds from
+   * beneath. 0 when deleted or binary.
    */
   new_total: number;
   /**
@@ -306,8 +306,7 @@ export type Line = {
    */
   new?: number;
   /**
-   * Changed by a rebase, not by the change itself (docs/api.md
-   * "Rebase-aware interdiffs").
+   * Changed by a rebase, not by the change itself.
    */
   drift?: boolean;
   /**

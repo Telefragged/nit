@@ -73,10 +73,10 @@ pub fn intraline_marks(regions: JsValue) -> Result<JsValue, JsValue> {
     to_js(&intraline::marks(&regions))
 }
 
-/// Project a `ChangeProj` to its published `ChangeDetail` (docs/api.md
-/// "Changes") — revisions, threads, reviews. The reviewer's drafts and staged
-/// decision are not log state, so they come back empty; the browser overlays
-/// its own from `GET /changes/{id}/drafts`.
+/// Project a `ChangeProj` to its published `ChangeDetail` — revisions,
+/// threads, reviews. The reviewer's drafts and staged decision are not log
+/// state, so they come back empty; the browser overlays its own from
+/// `GET /changes/{id}/drafts`.
 ///
 /// # Errors
 /// When `proj` is not a valid projection or the result fails to serialize.

@@ -1,5 +1,5 @@
-// The change-event websocket (docs/api.md "Events"): the only place the web
-// opens WS /api/stream. Components go through openStream (via useChangeStream)
+// The change-event websocket: the only place the web opens WS /api/stream.
+// Components go through openStream (via useChangeStream)
 // in snapshot mode — the server folds a ChangeProj snapshot per change, then
 // attaches its live tail. When VITE_MOCK is set the fixtures drive it instead
 // of the network, mirroring how client.ts routes HTTP.
@@ -14,7 +14,7 @@ export interface StreamHandle {
 
 /** `onMessage` receives every `StreamMsg` frame the server writes — a
  * `snapshot` (a folded ChangeProj) or an `entry` (one log entry past it); the
- * browser folds them (docs/api.md "Events"). */
+ * browser folds them. */
 export function openStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
   if (import.meta.env.VITE_MOCK) {
     return openMockStream(onMessage);

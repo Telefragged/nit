@@ -9,7 +9,7 @@ import { ErrorPanel } from "./NotFound";
 
 /** A repo's review dashboard: one spine-centered change graph over the
  * canonical branch — open changes ascending above the HEAD anchor, merged
- * history descending below it (docs/api.md "Graph"). */
+ * history descending below it. */
 export default function Dashboard() {
   const { repoId } = useParams();
   const id = Number(repoId);

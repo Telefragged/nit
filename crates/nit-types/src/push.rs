@@ -1,4 +1,4 @@
-//! The push endpoint (docs/api.md "Push").
+//! The push endpoint.
 
 use serde::{Deserialize, Serialize};
 

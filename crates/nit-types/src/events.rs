@@ -1,6 +1,6 @@
-//! Websocket messages over `WS /api/stream` (docs/api.md "Events"). The client
-//! picks one of two subscribe modes; the server answers with [`StreamMsg`]
-//! frames — a `ChangeProj` snapshot (snapshot mode) and/or live log entries.
+//! Websocket messages over `WS /api/stream`. The client picks one of two
+//! subscribe modes; the server answers with [`StreamMsg`] frames — a
+//! `ChangeProj` snapshot (snapshot mode) and/or live log entries.
 
 use std::collections::HashMap;
 
@@ -26,8 +26,7 @@ pub enum ClientMsg {
     SubscribeSnapshot(Vec<u64>),
 }
 
-/// A server → client websocket message (docs/api.md "Events"). Externally
-/// tagged, `snake_case`.
+/// A server → client websocket message. Externally tagged, `snake_case`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]

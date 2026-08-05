@@ -1,4 +1,4 @@
-//! Diff JSON rendering and line-text snapshots (docs/api.md "Diff").
+//! Diff JSON rendering and line-text snapshots.
 //!
 //! All functions take trees, not commits: a change's diff is always
 //! `parent_sha → commit tree` of the selected revision, an interdiff is
@@ -15,8 +15,8 @@ use nit_types::diff::{Diff, DiffFile, Hunk, Line};
 use nit_types::enums::{FileStatus, LineKind};
 
 /// The reserved synthetic diff path carrying the revision's commit
-/// message (docs/api.md "The commit message as a file"). Git tree paths
-/// cannot start with `/`, so it can never collide with a real file.
+/// message. Git tree paths cannot start with `/`, so it can never
+/// collide with a real file.
 pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
 
 /// The tree of the commit `sha` names, when everything resolves.
@@ -292,10 +292,10 @@ fn wire_line(kind: LineKind, old: Option<usize>, new: Option<usize>, text: &str)
 }
 
 /// The synthetic [`COMMIT_MSG_PATH`] entry injected at the front of every
-/// diff (docs/api.md "The commit message as a file"): vs parent
-/// (`old: None`) the whole message as one all-`add` hunk; interdiff a
-/// real line diff `old → new`, identical messages rendered as a single
-/// all-`context` hunk so the message stays visible and commentable.
+/// diff: vs parent (`old: None`) the whole message as one all-`add`
+/// hunk; interdiff a real line diff `old → new`, identical messages
+/// rendered as a single all-`context` hunk so the message stays visible
+/// and commentable.
 #[must_use]
 pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
     let input = InternedInput::new(old.unwrap_or_default(), new);

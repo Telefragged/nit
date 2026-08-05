@@ -15,7 +15,7 @@ fn write_wire_types() {
     let cfg = Config::from_env();
     let mut out = String::from(
         "// @generated from crates/nit-types by `nix run .#gen-types` — DO NOT EDIT.\n\
-         // Change the Rust wire types (and docs/api.md), then regenerate.\n\n",
+         // Change the Rust wire types, then regenerate.\n\n",
     );
     macro_rules! emit {
         ($($t:ty),* $(,)?) => {$({
@@ -58,8 +58,8 @@ fn write_wire_types() {
         crate::diff::Line,
         crate::decisions::BatchSubmitResult,
         crate::decisions::SubmitError,
-        // The websocket event stream (docs/api.md "Events"): the change page
-        // folds these client-side.
+        // The websocket event stream: the change page folds these
+        // client-side.
         crate::log::RevisionPayload,
         crate::log::ReviewPayload,
         crate::log::CommentInput,

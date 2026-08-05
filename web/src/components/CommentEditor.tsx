@@ -9,7 +9,7 @@ import { useAutosize } from "../lib/useAutosize";
  * draft target) should mirror `onDirtyChange` and gate that path with
  * confirmDiscard.
  *
- * Pass `initialResolved` (gerrit-style, docs/api.md "Thread resolution") to
+ * Pass `initialResolved` (gerrit-style thread resolution) to
  * show a Resolved checkbox defaulting to it; `onSave` then reports the
  * checkbox state, and the editor saves even with an empty body when the
  * checkbox alone changed (a resolve/reopen with no message). */

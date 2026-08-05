@@ -1,5 +1,5 @@
 //! View assembly: the per-change folds (`crate::review`) + chain derivation
-//! (`crate::chain`) + reviewer drafts → the wire shapes of docs/api.md. Chain
+//! (`crate::chain`) + reviewer drafts → the `nit_types` wire shapes. Chain
 //! views take a [`RepoView`] snapshot plus the repo handle (for query-time tip
 //! names); draft rows come from the database.
 
@@ -65,7 +65,7 @@ fn path_entry(change: &ChangeProj, member: &PathMember, position: u64) -> PathEn
 }
 
 // ---------------------------------------------------------------------------
-// Graph (the spine-centered DAG; docs/api.md "Graph")
+// Graph (the spine-centered DAG)
 
 /// Assemble the repo's change graph: the canonical HEAD anchor and a
 /// `merged_window` of merged history below it (a git walk), plus every active
@@ -100,9 +100,9 @@ pub fn build_graph(
             subject: h.subject.clone(),
             status: ChangeStatus::Merged,
             parents: h.parents.clone(),
-            // change_id/change_key are coupled (docs/api.md): both come from the
-            // matched change, so a bare commit (a foreign/pre-nit Change-Id
-            // trailer with no change) reports both null, not an orphan key.
+            // change_id/change_key are coupled: both come from the matched
+            // change, so a bare commit (a foreign/pre-nit Change-Id trailer
+            // with no change) reports both null, not an orphan key.
             change_id: change.map(|c| c.id),
             change_key: change.map(|c| c.change_key.clone()),
             revision: None,
@@ -246,8 +246,8 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
 /// The reviewer's private overlay — unpublished drafts and the staged decision
 /// — read straight from the database. Not log state, so the change page reads
 /// it over REST (`GET /api/changes/{id}/drafts`) while folding the published
-/// projection over the websocket (docs/api.md "Events"); the change detail
-/// folds the same overlay in.
+/// projection over the websocket; the change detail folds the same
+/// overlay in.
 ///
 /// # Errors
 /// When reading drafts fails.

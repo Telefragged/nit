@@ -20,8 +20,9 @@ identity across rewrites. Product spec: `nit.md`.
    commit, and re-format every rewritten commit after a rebase (not just
    the tip), especially after conflict resolution (docs/dev.md
    "Formatting").
-4. **Cross-component JSON shapes live in docs/api.md** — change the doc
-   first, then `crates/nit-types`, then regenerate the web's TypeScript
+4. **The HTTP/JSON contract is `crates/nit-types`** — the serde structs
+   and their doc-comments carry every cross-component shape and its
+   semantics; change them first, then regenerate the web's TypeScript
    (`nix run .#gen-types` writes `web/src/api/types.gen.ts`; never
    hand-edit that file).
 5. **To see the UI, render it**:
@@ -68,7 +69,6 @@ identity across rewrites. Product spec: `nit.md`.
 - `web/` — React/TS SPA (Vite)
 - `docs/` — read the one you need:
   - `data-model.md` — schema, change identity, scan algorithm, status machine
-  - `api.md` — HTTP/JSON contract (source of truth)
   - `dev.md` — verification, formatting, screenshot harness, testing,
     commit discipline, landing
   - `design-review-guide.md` — design anti-patterns to catch when reviewing

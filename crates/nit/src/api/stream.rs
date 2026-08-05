@@ -15,9 +15,9 @@ use crate::review::{self, ChangeProj};
 
 use super::{AppState, with_conn};
 
-/// `WS /api/stream?repo={id}` — the client-driven change stream
-/// (docs/api.md "Events"). The `repo` query is accepted for symmetry and
-/// ignored; the server keys purely on the subscribed change ids.
+/// `WS /api/stream?repo={id}` — the client-driven change stream. The
+/// `repo` query is accepted for symmetry and ignored; the server keys
+/// purely on the subscribed change ids.
 pub(super) async fn stream(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
@@ -101,8 +101,8 @@ async fn apply_client_msg(
             for (change_id, proj) in read_snapshots(state, ids).await {
                 // The snapshot's `entries_folded` is the high-water mark, so an
                 // append that lands after it rides the channel and is deduped
-                // there: the snapshot and its live tail neither gap nor double
-                // (docs/api.md "Events").
+                // there: the snapshot and its live tail neither gap nor
+                // double.
                 watermark.insert(change_id, proj.entries_folded);
                 send(socket, &StreamMsg::Snapshot(proj)).await?;
             }

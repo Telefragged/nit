@@ -62,9 +62,8 @@ pub struct RevisionProj {
     pub created_at: String,
 }
 
-/// Where a thread is anchored within a revision (docs/api.md "Comment
-/// placement"), modeled so the invalid combinations the flat wire fields
-/// allow are unrepresentable.
+/// Where a thread is anchored within a revision, modeled so the invalid
+/// combinations the flat wire fields allow are unrepresentable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -140,9 +139,9 @@ pub struct ReviewProj {
 }
 
 /// The fold of one change's log. Serializable so the server can ship it as the
-/// subscribe **snapshot** and the browser can resume folding the live tail from
-/// it (docs/api.md "Events"); the wire form is opaque to the web, which only
-/// passes it back through the shared WebAssembly fold.
+/// subscribe **snapshot** and the browser can resume folding the live tail
+/// from it; the wire form is opaque to the web, which only passes it back
+/// through the shared WebAssembly fold.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeProj {
@@ -273,7 +272,7 @@ pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
     // Idempotent across the snapshot/live overlap: an entry already folded into
     // this projection (its idx below the high-water mark) leaves it untouched,
     // so a follower that re-receives the boundary entries the snapshot already
-    // covers never double-applies them (docs/api.md "Events").
+    // covers never double-applies them.
     if entry.idx < change.entries_folded {
         return entry;
     }
@@ -388,8 +387,8 @@ pub fn replay(id: u64, repo_id: u64, change_key: String, entries: Vec<LogEntry>)
     change
 }
 
-// Projection → wire (docs/api.md "Changes"): the published view of a change,
-// shared by the server's change endpoint and the WebAssembly fold.
+// Projection → wire: the published view of a change, shared by the
+// server's change endpoint and the WebAssembly fold.
 
 #[must_use]
 pub fn revision_view(rev: &RevisionProj) -> Revision {
@@ -457,11 +456,10 @@ fn thread_comment_view(c: &ThreadComment) -> crate::comments::ThreadComment {
     }
 }
 
-/// The published projection of a change as the wire [`ChangeDetail`]
-/// (docs/api.md "Changes"), minus the reviewer's drafts and staged decision:
-/// mutable scratch outside the log that the server overlays from the database.
-/// The WebAssembly fold returns this verbatim and the browser fills its own
-/// drafts in.
+/// The published projection of a change as the wire [`ChangeDetail`], minus
+/// the reviewer's drafts and staged decision: mutable scratch outside the
+/// log that the server overlays from the database. The WebAssembly fold
+/// returns this verbatim and the browser fills its own drafts in.
 #[must_use]
 pub fn change_detail(change: &ChangeProj) -> ChangeDetail {
     ChangeDetail {

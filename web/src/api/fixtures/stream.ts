@@ -1,4 +1,4 @@
-// The mock side of WS /api/stream (docs/api.md "Events"): the single source of
+// The mock side of WS /api/stream: the single source of
 // truth for mock mode. The REST change read (./index) folds this same synth
 // log, so mock WS and mock REST agree in tests/screenshots as they do in prod.
 

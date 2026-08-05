@@ -33,7 +33,7 @@ export const del = (old: number, text: string): Line => ({
   old,
   text,
 });
-/** Mark a line as rebase drift (docs/api.md "Rebase-aware interdiffs"). */
+/** Mark a line as rebase drift. */
 export const drift = (line: Line): Line => ({ ...line, drift: true });
 
 /** New-side line the last hunk reaches, or a declared `new_total` — the

@@ -135,11 +135,11 @@ pub(super) async fn clear_decision(
 }
 
 /// `POST /api/chains/{id}/submit` — publish every chain member's staged
-/// decision (docs/api.md "Chains"). Re-derives the path, then for each member
-/// with a decision publishes it at the revision this path pins on the member,
-/// each in its own transaction (atomic per change, not across the chain). A
-/// decision illegal for the member's current lifecycle is skipped into
-/// `errors` with its row kept; a published decision's row is deleted, so a
+/// decision. Re-derives the path, then for each member with a decision
+/// publishes it at the revision this path pins on the member, each in its
+/// own transaction (atomic per change, not across the chain). A decision
+/// illegal for the member's current lifecycle is skipped into `errors`
+/// with its row kept; a published decision's row is deleted, so a
 /// re-submit finishes a torn batch without double-publishing.
 pub(super) async fn submit_chain(
     State(state): State<Arc<AppState>>,

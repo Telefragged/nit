@@ -1,8 +1,8 @@
-//! The diff endpoint (docs/api.md "Diff"): `/COMMIT_MSG` leads every
-//! response, real files carry exact add/del counts and hunk lines, binary
-//! files have empty hunks, and `?against` produces an interdiff whose
-//! `/COMMIT_MSG` is a real message diff. Revisions (0-based) are minted by
-//! `push` — amend + re-push gives revision 1.
+//! The diff endpoint: `/COMMIT_MSG` leads every response, real files
+//! carry exact add/del counts and hunk lines, binary files have empty
+//! hunks, and `?against` produces an interdiff whose `/COMMIT_MSG` is a
+//! real message diff. Revisions (0-based) are minted by `push` — amend +
+//! re-push gives revision 1.
 
 mod common;
 
@@ -83,7 +83,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
     let (st, diff) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff")));
     assert_eq!(st, 200, "{diff}");
 
-    // Contract: docs/api.md "The commit message as a file".
+    // The exact wire shape of the synthetic commit-message file.
     assert_eq!(
         diff["files"][0],
         json!({

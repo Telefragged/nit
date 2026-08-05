@@ -123,9 +123,9 @@ impl LogPayload {
     }
 }
 
-/// One log entry (docs/api.md `LogEntry`). Belongs to one change; `seq` totally
-/// orders the whole repo, `idx` orders one change. The flattened [`LogPayload`]
-/// contributes the `kind` discriminant and the `payload` body.
+/// One log entry. Belongs to one change; `seq` totally orders the whole
+/// repo, `idx` orders one change. The flattened [`LogPayload`] contributes
+/// the `kind` discriminant and the `payload` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LogEntry {

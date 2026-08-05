@@ -1,7 +1,6 @@
-//! Static UI serving (docs/api.md "Static UI"): the built SPA outside
-//! /api, index.html fallback for client-side routes, API-only without a
-//! web dist. Client routes are change-id addressed (`/chains/{change_id}`,
-//! `/changes/{id}`).
+//! Static UI serving: the built SPA outside /api, index.html fallback
+//! for client-side routes, API-only without a web dist. Client routes
+//! are change-id addressed (`/chains/{change_id}`, `/changes/{id}`).
 
 mod common;
 
@@ -55,9 +54,9 @@ fn runs_api_only_without_web_dist() {
     assert_eq!(st, 404);
 }
 
-/// api.md line 1: everything under /api is JSON in/out — including paths
-/// axum rejects before a handler runs (unknown endpoint, bad path/body
-/// types, wrong method). None of it may fall through to the SPA.
+/// Everything under /api is JSON in/out — including paths axum rejects
+/// before a handler runs (unknown endpoint, bad path/body types, wrong
+/// method). None of it may fall through to the SPA.
 #[test]
 fn api_errors_are_json_everywhere() {
     let dir = tempfile::tempdir().unwrap();

@@ -125,8 +125,8 @@
   background: var(--bg-inset);
 }
 
-/* Rebase drift: lines changed by the base moving, not the agent
-   (docs/api.md "Rebase-aware interdiffs"). Blue for an added line and purple
+/* Rebase drift: lines changed by the base moving, not the agent.
+   Blue for an added line and purple
    for a removed one, so the direction still reads while the hue keeps drift
    apart from the agent's green/red edits, and dimmed, since it does not
    count toward the diff. The triple class beats the .code.add / .code.del
@@ -178,7 +178,7 @@
   background: var(--drift-del-intraline);
 }
 
-/* Commented text ranges (docs/api.md "Range comments"). Amber = needs
+/* Commented text ranges. Amber = needs
    reviewer attention, kept translucent so syntax colors read through;
    overlapping ranges nest and the rgba stacks darker. The dotted rule
    points at the thread below the range's last line. */
@@ -336,7 +336,7 @@
 }
 
 /* Side-by-side: a row's threads sit under the column they were made on —
-   old-side left, new-side right (docs/api.md "Comment placement") — by
+   old-side left, new-side right — by
    re-exposing the diff's columns through subgrid and spanning each half. */
 .meta-row.meta-split {
   display: grid;

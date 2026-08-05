@@ -6,7 +6,7 @@
 //! A chain is addressed by its **tip change id**. `nit status`/`nit log`
 //! resolve the cwd's tip change from local HEAD; `nit comment` targets a change
 //! directly. The live followers `nit log --follow`/`--wait` watch the cwd's
-//! chain over the websocket change stream (docs/api.md "Events").
+//! chain over the websocket change stream.
 //!
 //! Modules: shared infrastructure (`client` transport, `git` discovery,
 //! `resolve` id-lookup, `format` digests) plus one module per subcommand group.

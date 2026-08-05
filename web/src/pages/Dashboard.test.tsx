@@ -1,5 +1,5 @@
-// The repo dashboard renders the spine-centered change graph (docs/api.md
-// "Graph") against the mock fixtures (VITE_MOCK is set by the vitest config).
+// The repo dashboard renders the spine-centered change graph against the
+// mock fixtures (VITE_MOCK is set by the vitest config).
 // Repo 1's open changes ascend above HEAD; the Activity column carries each
 // change's draft state, fetched per node from GET /api/changes/{id} — change
 // 12 has a seeded request_changes decision, so its row shows

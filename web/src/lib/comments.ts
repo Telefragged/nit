@@ -1,8 +1,11 @@
 // Comment placement: which column of a diff range a thread renders in, and
 // the inverse — which (revision, side) a new draft on a column stores to.
-// Plus assembling the server's published threads + reviewer drafts into the
-// UI thread model. Pure and side-effect-free (docs/api.md "Comment
-// placement"), so the rules are unit-tested without a DOM.
+// Threads are pinned to their patchset — one renders only when its
+// (revision, side) names a displayed tree, never ported onto another
+// revision; the server stores anchors verbatim and this module is the sole
+// owner of the placement rules. Plus assembling the server's published
+// threads + reviewer drafts into the UI thread model. Pure and
+// side-effect-free, so the rules are unit-tested without a DOM.
 
 import type {
   CommentRange,
@@ -154,8 +157,8 @@ export function commentCountLabel(n: number): string {
 /** A change's published activity at one revision: the comment/draft/unresolved
  * counts an aggregate row (a graph node, a chain-nav member) shows. Recomputed
  * client-side from a change's threads + drafts so those aggregate rows need not
- * denormalize it — the mirror of the server's `change_counts` / `unresolved_at`
- * (docs/api.md), pinned to `revision`. */
+ * denormalize it — the mirror of the server's `change_counts` /
+ * `unresolved_at`, pinned to `revision`. */
 export interface RevisionActivity {
   threads: number;
   drafts: number;
@@ -177,9 +180,9 @@ export function revisionActivity(
 
 /**
  * A thread's resolution as it *would* be after the reviewer's pending drafts
- * publish (docs/api.md "Thread resolution"): the newest draft on the thread
- * carries the staged decision, so it wins over the published state; with no
- * drafts, the published `resolved` stands.
+ * publish: the newest draft on the thread carries the staged decision, so it
+ * wins over the published state; with no drafts, the published `resolved`
+ * stands.
  */
 export function pendingResolved(thread: UiThread): boolean {
   const staged = thread.drafts.at(-1); // assembleThreads keeps drafts oldest-first

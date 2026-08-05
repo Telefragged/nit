@@ -610,7 +610,7 @@ export default function ReviewPage() {
   // (revision, side) is one of the displayed columns, or a file-level
   // comment (no column to filter by). Everything pinned to another
   // revision drops out — of the diff, the rail counts, and the leftover
-  // group alike (docs/api.md "Comment placement").
+  // group alike.
   const threadsByFile = useMemo(() => {
     const map = new Map<string, UiThread[]>();
     for (const t of threads) {

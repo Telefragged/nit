@@ -45,7 +45,7 @@ export interface TipRecord {
   active: boolean;
 }
 
-/** A repo registry entry (docs/api.md "Repos"). */
+/** A repo registry entry. */
 export interface RepoRecord {
   id: number;
   git_dir: string;
@@ -90,7 +90,7 @@ export interface DraftRecord {
 }
 
 /** A synthetic canonical-history node (the merged history below HEAD the mock
- * has no git to walk — docs/api.md "Graph"). */
+ * has no git to walk). */
 export interface HistNode {
   sha: string;
   subject: string;

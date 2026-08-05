@@ -7,7 +7,7 @@ export interface DraftTarget {
   side: Side;
   /** The range's end line when a range is set. */
   line: number;
-  /** Selected-text anchor (docs/api.md "Range comments"). */
+  /** Selected-text anchor. */
   range?: CommentRange;
 }
 
@@ -30,8 +30,7 @@ export const sameTarget = (a: DraftTarget, b: DraftTarget) =>
 export interface ReviewCtx {
   changeId: number;
   /** The TO revision (right select) — the diff's new column. New-column
-   * drafts anchor here, and comments place against this range
-   * (docs/api.md "Comment placement"). */
+   * drafts anchor here, and comments place against this range. */
   selected: number;
   /** The FROM side: undefined = base, else the interdiff's left revision. */
   against: number | undefined;

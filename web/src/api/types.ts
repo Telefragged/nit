@@ -6,7 +6,6 @@ export type * from "./types.gen";
 
 /**
  * Reserved synthetic diff path: the revision's commit message as a
- * reviewable file, listed first in every diff (docs/api.md "The commit
- * message as a file").
+ * reviewable file, listed first in every diff.
  */
 export const COMMIT_MSG_PATH = "/COMMIT_MSG";

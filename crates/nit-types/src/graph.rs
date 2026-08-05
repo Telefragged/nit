@@ -1,4 +1,4 @@
-//! The spine-centered change graph (docs/api.md "Graph").
+//! The spine-centered change graph.
 
 use serde::{Deserialize, Serialize};
 

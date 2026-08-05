@@ -31,7 +31,7 @@ pub(super) async fn get_change_detail(
 
 /// `GET /api/changes/{id}/drafts` — the reviewer's private overlay (drafts +
 /// staged decision). The change page reads this over REST and the folded
-/// projection over the websocket (docs/api.md "Events").
+/// projection over the websocket.
 pub(super) async fn get_change_drafts(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
@@ -127,13 +127,12 @@ fn resolve_revs(
     })
 }
 
-/// The wire diff for `revs` with rebase drift contained (docs/api.md
-/// "Rebase-aware interdiffs"): `parent → commit` of the revision, or
-/// `tree(m) → tree(n)` when it names a counterpart to diff against. Resolve
-/// the drift first so a file the base movement fully explains is never
-/// rendered, then tag what survives — the order is the point, and owning it
-/// here is what keeps `/diff` and `/lines` from having to agree on it
-/// separately.
+/// The wire diff for `revs` with rebase drift contained: `parent → commit`
+/// of the revision, or `tree(m) → tree(n)` when it names a counterpart to
+/// diff against. Resolve the drift first so a file the base movement fully
+/// explains is never rendered, then tag what survives — the order is the
+/// point, and owning it here is what keeps `/diff` and `/lines` from
+/// having to agree on it separately.
 ///
 /// A plain diff when the two revisions share a parent, and on analysis
 /// failure — the drift is then empty, which renders and tags nothing.

@@ -179,8 +179,8 @@ export function intralineMarks(lines: Line[]): Map<Line, IntralineRange[]> {
  * The char window ([start, end) into the line's text) a comment range
  * covers on line `lineNo` of its side, or null when the range misses the
  * line or the window is empty. Offsets clamp to the text (the contract
- * does not validate them against contents — docs/api.md "Range
- * comments"); interior lines are covered whole.
+ * does not validate them against contents); interior lines are covered
+ * whole.
  */
 export function rangeSliceOnLine(
   range: CommentRange,
@@ -214,8 +214,8 @@ export function skippedAfter(last: Hunk | undefined, newTotal: number): number {
 }
 
 /** The full-context lines that fall in the gap between `prev` and `hunk` —
- * the hidden run a context-expand button reveals (docs/api.md "Expanding
- * context"). `full` is the file's full-context diff; a line belongs to the
+ * the hidden run a context-expand button reveals. `full` is the file's
+ * full-context diff; a line belongs to the
  * gap by its new number (`add`/`context`) or old number (`del`), so an
  * all-drift gap's del lines come along. An undefined `hunk` is the run below
  * the last hunk, bounded only by the file's end. Order is preserved. */

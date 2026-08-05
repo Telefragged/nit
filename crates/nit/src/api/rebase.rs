@@ -1,6 +1,6 @@
 //! Rebase-aware interdiffs: detect and contain "drift" — the parts of an
 //! interdiff `m → n` caused by the change's base moving (a rebase) rather
-//! than by the change's own edits (docs/api.md "Rebase-aware interdiffs").
+//! than by the change's own edits.
 //!
 //! Gerrit's mechanism, line-level: diff the two parents
 //! (`parent(m) → parent(n)`) to find the base movement, then project those
@@ -180,11 +180,11 @@ fn is_real_change(line: &Line) -> bool {
 }
 
 /// An interdiff's rebase drift, resolved from context-0 edit spans alone —
-/// before any file is rendered (docs/api.md "Rebase-aware interdiffs"). A file
-/// the base movement fully explains never costs a blob read or a line diff,
-/// which is why the analysis runs first: a rebase over a long base moves far
-/// more files than the change itself touches, and rendering them only to
-/// discard them is the bulk of the work.
+/// before any file is rendered. A file the base movement fully explains
+/// never costs a blob read or a line diff, which is why the analysis runs
+/// first: a rebase over a long base moves far more files than the change
+/// itself touches, and rendering them only to discard them is the bulk of
+/// the work.
 ///
 /// Per analysed file: `None` — every edit is base movement, so don't render it
 /// at all; `Some(ranges)` — render it and tag these old/new lines. A file in

@@ -1,4 +1,4 @@
-//! The health probe (docs/api.md "Health").
+//! The health probe.
 
 use serde::{Deserialize, Serialize};
 

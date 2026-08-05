@@ -1,5 +1,4 @@
-//! Derived chains: the path through a tip change plus its rolled-up state
-//! (docs/api.md "Chains").
+//! Derived chains: the path through a tip change plus its rolled-up state.
 
 use serde::{Deserialize, Serialize};
 

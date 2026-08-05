@@ -543,8 +543,8 @@ pub struct DraftRow {
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub body: String,
-    /// Staged thread-resolution decision; `None` = none (docs/api.md
-    /// "Thread resolution"). Stored as the `resolved` INTEGER column.
+    /// Staged thread-resolution decision; `None` = none. Stored as the
+    /// `resolved` INTEGER column.
     pub resolved: Option<bool>,
     pub created_at: String,
     pub updated_at: String,

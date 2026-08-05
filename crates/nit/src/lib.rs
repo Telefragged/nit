@@ -13,8 +13,8 @@
 //!   canonical base, a pure function of the per-change folds.
 //! - [`gitscan`] — the git layer: the push walk, merged/abandoned detection,
 //!   and GC-safety keep refs (`docs/data-model.md`).
-//! - [`api`] — the axum HTTP layer (`docs/api.md` is the contract) plus
-//!   the `nit serve` wiring.
+//! - [`api`] — the axum HTTP layer (wire contract: the `nit_types`
+//!   crate) plus the `nit serve` wiring.
 //! - [`cli`] — `nit push`/`status`/`log`/`comment`, thin clients of the API.
 
 #![deny(clippy::unwrap_used)]

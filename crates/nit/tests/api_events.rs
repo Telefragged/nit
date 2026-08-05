@@ -1,5 +1,5 @@
-//! `WS /api/stream`: backlog replay, the idx watermark, and live streaming
-//! (docs/api.md "Events").
+//! `WS /api/stream`: backlog replay, the idx watermark, and live
+//! streaming.
 
 mod common;
 

@@ -64,7 +64,7 @@ const captures = [
   { name: "repos", path: "/" },
   // The repo dashboard: one spine-centered change graph over main — open
   // changes ascending above the HEAD anchor, merged history descending and
-  // fading below it (docs/api.md "Graph"). Repo 2 = quarry: two separate
+  // fading below it. Repo 2 = quarry: two separate
   // chains — one off HEAD, one forked two commits behind (the dashed "behind"
   // edge) — over a history window that includes a merge commit.
   { name: "dashboard", path: "/repos/2" },
@@ -114,8 +114,8 @@ const captures = [
   // Context expansion: a gap separator carries a centred unit of +N buttons
   // — the whole gap on the left, then the stepped pair, the top one
   // revealing downward from the hunk above and the bottom one upward from
-  // the hunk below (docs/api.md "Expanding context"). Clicks the stepped
-  // downward button to show the revealed lines and the dropped count.
+  // the hunk below. Clicks the stepped downward button to show the
+  // revealed lines and the dropped count.
   {
     name: "review-expand-context",
     path: "/changes/11?against=base",
@@ -128,8 +128,8 @@ const captures = [
     },
   },
   // Trailing context: the run below the last hunk gets its own separator
-  // (no `@@` header, one downward button), so a file's tail is reachable too
-  // (docs/api.md "Expanding context"). Clicks it to reveal lines toward EOF.
+  // (no `@@` header, one downward button), so a file's tail is reachable
+  // too. Clicks it to reveal lines toward EOF.
   {
     name: "review-expand-context-eof",
     path: "/changes/11?against=base",
@@ -176,7 +176,7 @@ const captures = [
       await page.waitForSelector(".resolve-check");
     },
   },
-  // Drafted thread resolution (docs/api.md "Thread resolution"): Reopen the
+  // Drafted thread resolution: Reopen the
   // resolved commit-message thread, then save the resolution-only draft. The
   // editor's Resolved checkbox, the pending OPEN badge with its "· unsaved"
   // hint, and the "Reopening this thread" draft are all visible.
@@ -191,8 +191,8 @@ const captures = [
       await page.waitForSelector(".comment-resolution-only");
     },
   },
-  // One-click Resolve (docs/api.md "Thread resolution"): Resolve on an open
-  // thread stages the empty resolution-only draft directly — no editor. The
+  // One-click Resolve: Resolve on an open thread stages the empty
+  // resolution-only draft directly — no editor. The
   // "Resolving this thread" draft and the pending RESOLVED badge appear with
   // a single click.
   {
@@ -208,7 +208,7 @@ const captures = [
     },
   },
   // Side-by-side, base → r1: new-side drafts sit under the right column,
-  // the old-side draft under the left (docs/api.md "Comment placement").
+  // the old-side draft under the left.
   {
     name: "review-split",
     path: "/changes/11?against=base",
@@ -269,8 +269,7 @@ const captures = [
   },
   // Rebase drift contained: in the r0 → r1 interdiff, src/auth/store.rs
   // carries the agent's real edit (green/red) beside grey, uncounted lines
-  // a rebase pulled in — the file count is the real edit only (docs/api.md
-  // "Rebase-aware interdiffs").
+  // a rebase pulled in — the file count is the real edit only.
   {
     name: "review-drift",
     path: "/changes/11?against=0",
@@ -431,8 +430,7 @@ const captures = [
   },
   // Published range threads: the multi-line selection on rotate.rs and the
   // partial-line one on the commit message. They are pinned to r0, so the
-  // r0 → r1 interdiff renders them tinted on the left column (docs/api.md
-  // "Range comments" / "Comment placement").
+  // r0 → r1 interdiff renders them tinted on the left column.
   {
     name: "review-range-comments",
     path: "/changes/11?against=0",

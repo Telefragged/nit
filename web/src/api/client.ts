@@ -74,8 +74,8 @@ export const getChain = (changeId: number, revision?: number) =>
       : `/chains/${changeId}?revision=${revision}`,
   );
 
-/** The repo's spine-centered change graph (docs/api.md "Graph"): the source
- * for the dashboard. The merged-history window is fixed server-side. */
+/** The repo's spine-centered change graph: the source for the dashboard.
+ * The merged-history window is fixed server-side. */
 export const getRepoGraph = (repoId: number) =>
   request<RepoGraph>("GET", `/repos/${repoId}/graph`);
 
@@ -83,8 +83,7 @@ export const getChange = (id: number) =>
   request<ChangeDetail>("GET", `/changes/${id}`);
 
 /** The reviewer's private overlay alone (drafts + staged decision); the change
- * page reads the published projection over the websocket instead (docs/api.md
- * "Events"). */
+ * page reads the published projection over the websocket instead. */
 export const getChangeDrafts = (id: number) =>
   request<ChangeDrafts>("GET", `/changes/${id}/drafts`);
 
@@ -98,7 +97,7 @@ export const getDiff = (changeId: number, revision: number, against?: number) =>
 
 /** File `path`'s full-context diff lines over the same trees as `getDiff`
  * (`against` selects the interdiff base), for revealing the unchanged runs
- * the shown hunks hide — drift and all (docs/api.md "Expanding context"). */
+ * the shown hunks hide — drift and all. */
 export const getFileLines = (
   changeId: number,
   revision: number,
@@ -125,7 +124,7 @@ export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 // Reviewer decisions (staged like comment drafts, published per chain)
 
 /** Stage (or overwrite) a change's draft decision — a verdict or an
- * abandon/reopen (docs/api.md "Reviewer decisions"). */
+ * abandon/reopen. */
 export const stageDecision = (changeId: number, req: StagedDecision) =>
   request<StagedDecision>("PUT", `/changes/${changeId}/decision`, req);
 

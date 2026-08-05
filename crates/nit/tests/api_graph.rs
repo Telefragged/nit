@@ -1,10 +1,10 @@
-//! The spine-centered change graph over HTTP (docs/api.md "Graph"). Two
-//! invariants the unit tests can't reach because they live in `build_graph`'s
-//! assembly of a live repo: (1) the row-order partition — an open change forking
-//! BEHIND the canonical HEAD orders ABOVE the HEAD anchor and keeps its real
-//! fork base (the backend never re-roots it onto HEAD); a single global topo
-//! would float the childless HEAD to the top instead. (2) `history_truncated`
-//! flips exactly at the window boundary.
+//! The spine-centered change graph over HTTP. Two invariants the unit
+//! tests can't reach because they live in `build_graph`'s assembly of a
+//! live repo: (1) the row-order partition — an open change forking BEHIND
+//! the canonical HEAD orders ABOVE the HEAD anchor and keeps its real fork
+//! base (the backend never re-roots it onto HEAD); a single global topo
+//! would float the childless HEAD to the top instead.
+//! (2) `history_truncated` flips exactly at the window boundary.
 
 mod common;
 

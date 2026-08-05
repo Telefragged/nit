@@ -1,5 +1,4 @@
-//! Change detail and the reviewer's staged decision (docs/api.md "Changes"
-//! and "Reviewer decisions").
+//! Change detail and the reviewer's staged decision.
 
 use serde::{Deserialize, Serialize};
 
@@ -15,8 +14,8 @@ pub struct ChangeDetail {
     pub change_key: String,
     /// Ascending.
     pub revisions: Vec<Revision>,
-    /// Published threads, all revisions; anchors verbatim (the client places
-    /// them by diff range, docs/api.md "Comment placement").
+    /// Published threads, all revisions; anchors verbatim (the client
+    /// places them by diff range).
     pub threads: Vec<Thread>,
     /// All revisions.
     pub drafts: Vec<Draft>,
@@ -33,9 +32,9 @@ pub struct ChangeDrafts {
     pub draft_decision: Option<StagedDecision>,
 }
 
-/// A reviewer's staged decision plus its cover note/reason (docs/api.md
-/// "Reviewer decisions"). The body of [`ChangeDetail::draft_decision`] and the
-/// `PUT /api/changes/{id}/decision` request.
+/// A reviewer's staged decision plus its cover note/reason. The body of
+/// [`ChangeDetail::draft_decision`] and the `PUT /api/changes/{id}/decision`
+/// request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct StagedDecision {

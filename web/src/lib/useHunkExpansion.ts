@@ -7,7 +7,7 @@ import type { ReviewCtx } from "../pages/reviewContext";
 /** Lines revealed per click of a context-expand button. */
 export const EXPAND_STEP = 10;
 
-/** Context expansion (docs/api.md "Expanding context"): the file's full diff
+/** Context expansion: the file's full diff
  * is fetched once on the first expand, and the unchanged run hidden in each gap
  * is sliced from it and folded back into the bordering hunks as real Lines —
  * drift and all — so highlight/comment/placement and the drift tint flow
@@ -96,8 +96,8 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
   }
 
   /** Reveal the next `count` hidden lines — capped by what the gap before
-   * hunk `sep` still hides — at one of its ends (docs/api.md "Expanding
-   * context"). `down` pulls from the gap's top, `up` from its bottom; both
+   * hunk `sep` still hides — at one of its ends. `down` pulls from the
+   * gap's top, `up` from its bottom; both
    * walk toward the middle. `sep` past the last hunk is the run to EOF,
    * expanded only from its top (`down`). */
   async function expand(end: "down" | "up", sep: number, count = EXPAND_STEP) {

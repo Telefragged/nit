@@ -208,9 +208,9 @@ pub fn detect_landings<S: std::hash::BuildHasher>(
 }
 
 /// One commit on the canonical branch, for the graph's HEAD anchor and merged
-/// history (docs/api.md "Graph"). `parents` are all parent shas (a merge keeps
-/// both); `change_key` is the commit's `Change-Id` trailer when present, used
-/// to enrich the node from the matching change.
+/// history. `parents` are all parent shas (a merge keeps both); `change_key`
+/// is the commit's `Change-Id` trailer when present, used to enrich the node
+/// from the matching change.
 #[derive(Debug, Clone)]
 pub struct HistoryCommit {
     pub sha: String,

@@ -492,7 +492,7 @@ describe("comment counts in the file headers", () => {
 // The reveal-all button on a separator folds the gap into a neighbouring
 // hunk, leaving the hunks contiguous — so the separator disappears. The top
 // gap is the case with no hunk above it: it must fold up into the hunk
-// below (docs/api.md "Expanding context").
+// below.
 describe("context expansion", () => {
   it("reveals a whole top gap in one click", async () => {
     renderReview();

@@ -5,24 +5,23 @@
 //! **Discipline: a closed set of values is an `enum`, never a `String`.**
 //! Every value that can only be one of a fixed list lives here as a serde
 //! enum whose `rename`/`rename_all` fixes its on-the-wire spelling, so the
-//! *same* type is the domain value, the JSON shape (docs/api.md), and the
-//! parsed CLI input. The payoff is concrete: an exhaustive `match` instead
-//! of a `_ =>` fallthrough, no `as_str`/`from_str` round-tripping at the
+//! *same* type is the domain value, the JSON shape, and the parsed CLI
+//! input. The payoff is concrete: an exhaustive `match` instead of a
+//! `_ =>` fallthrough, no `as_str`/`from_str` round-tripping at the
 //! domain↔wire boundary, and — because `#[serde(deny_unknown…)]`-style
 //! rejection is automatic for enums — an unknown value is a clean
 //! deserialization error (a 400 through `AppJson`), not a string that flows
 //! deeper before something notices. New enumerated fields are added here and
 //! referenced from both sides; they are never reintroduced as `String`.
 //!
-//! Serde renamings reproduce the exact wire spellings documented in
-//! docs/api.md, so swapping a `String` field for one of these enums is not a
-//! wire change.
+//! Serde renamings pin the exact wire spellings, so swapping a `String`
+//! field for one of these enums is not a wire change.
 
 use serde::{Deserialize, Serialize};
 
-/// Which tree of a revision a line comment is anchored to (docs/api.md
-/// "Comment placement"): `new` is the revision's commit tree, `old` its
-/// parent tree. Defaults to `new` where a request omits it.
+/// Which tree of a revision a line comment is anchored to: `new` is the
+/// revision's commit tree, `old` its parent tree. Defaults to `new` where
+/// a request omits it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -125,8 +124,8 @@ impl LifecycleAction {
     }
 }
 
-/// A reviewer's verdict on one change (docs/api.md "Reviews"). Folds to the
-/// matching [`ChangeStatus`] (`From<Verdict>`).
+/// A reviewer's verdict on one change. Folds to the matching
+/// [`ChangeStatus`] (`From<Verdict>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -148,12 +147,12 @@ impl Verdict {
     }
 }
 
-/// A reviewer's **staged** decision on a change (docs/api.md "Reviewer
-/// decisions"): the review modal's single set of choices, drafted in
-/// `draft_reviews` and published on batch submit. A superset of [`Verdict`]
-/// with the two lifecycle actions, so abandonment is a decision rather than a
-/// separate button; it translates back to a [`Verdict`] or a
-/// [`LifecycleAction`] at publish time ([`as_verdict`], [`as_lifecycle`]).
+/// A reviewer's **staged** decision on a change: the review modal's single
+/// set of choices, drafted in `draft_reviews` and published on batch
+/// submit. A superset of [`Verdict`] with the two lifecycle actions, so
+/// abandonment is a decision rather than a separate button; it translates
+/// back to a [`Verdict`] or a [`LifecycleAction`] at publish time
+/// ([`as_verdict`], [`as_lifecycle`]).
 ///
 /// [`as_verdict`]: Decision::as_verdict
 /// [`as_lifecycle`]: Decision::as_lifecycle
@@ -217,10 +216,10 @@ impl std::str::FromStr for Decision {
     }
 }
 
-/// A change's displayed status at a pinned revision (docs/api.md state
-/// table): the verdict-derived value (the [`Verdict`] arms) under the
-/// lifecycle overlay (`merged` at the latest patchset, `abandoned`
-/// change-wide). Per `(change, revision)`, never a change-wide scalar.
+/// A change's displayed status at a pinned revision: the verdict-derived
+/// value (the [`Verdict`] arms) under the lifecycle overlay (`merged` at
+/// the latest patchset, `abandoned` change-wide). Per `(change, revision)`,
+/// never a change-wide scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -278,11 +277,11 @@ impl From<Verdict> for ChangeStatus {
     }
 }
 
-/// A chain's derived, actionable state (docs/api.md state table). Computed
-/// at read time from the path's members ([`derive_state`](crate::chain::derive_state));
-/// it is informational on the wire, never stored. Abandonment is
-/// derivation-inert — there is no abandoned chain state (an abandoned member is
-/// excluded from the rollup; the agent reasons about its per-change status).
+/// A chain's derived, actionable state. Computed at read time from the
+/// path's members ([`derive_state`](crate::chain::derive_state)); it is
+/// informational on the wire, never stored. Abandonment is derivation-inert
+/// — there is no abandoned chain state (an abandoned member is excluded
+/// from the rollup; the agent reasons about its per-change status).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -306,11 +305,11 @@ impl ChainState {
     }
 }
 
-/// Which region of the change graph a node sits in (docs/api.md "Graph"):
-/// `open` ascends above the canonical HEAD, `head` is the HEAD anchor, and
-/// `history` descends below it (merged commits, fading with depth). The client
-/// styles a node by its `section` first (head → ring, history → grey/fade),
-/// falling back to its `ChangeStatus` for open nodes.
+/// Which region of the change graph a node sits in: `open` ascends above
+/// the canonical HEAD, `head` is the HEAD anchor, and `history` descends
+/// below it (merged commits, fading with depth). The client styles a node
+/// by its `section` first (head → ring, history → grey/fade), falling back
+/// to its `ChangeStatus` for open nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -320,8 +319,7 @@ pub enum GraphSection {
     History,
 }
 
-/// `DiffFile.status` — how a file changed between the two diffed trees
-/// (docs/api.md "Diff").
+/// `DiffFile.status` — how a file changed between the two diffed trees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -332,7 +330,7 @@ pub enum FileStatus {
     Renamed,
 }
 
-/// `Line.kind` — a diff line's role (docs/api.md "Diff").
+/// `Line.kind` — a diff line's role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]

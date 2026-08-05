@@ -313,10 +313,9 @@ pub fn push(server: &TestServer, repo: &GitRepo, tip: &str, base: &str) -> (u16,
 }
 
 /// Publish a verdict on a change through the only publish path — stage the
-/// decision, then batch-submit the change's chain (docs/api.md "Reviewer
-/// decisions"). The change is its own tip for a single-commit chain; for a
-/// multi-commit one only this change is staged, so submit publishes just it.
-/// Returns the `BatchSubmitResult`.
+/// decision, then batch-submit the change's chain. The change is its own
+/// tip for a single-commit chain; for a multi-commit one only this change
+/// is staged, so submit publishes just it. Returns the `BatchSubmitResult`.
 pub fn review(server: &TestServer, change_id: u64, verdict: &str, message: &str) -> Value {
     let (st, _) = http_put(
         &server.url(&format!("/api/changes/{change_id}/decision")),
@@ -331,10 +330,10 @@ pub fn review(server: &TestServer, change_id: u64, verdict: &str, message: &str)
     out
 }
 
-/// A change's displayed status off its derived chain path (docs/api.md "State
-/// table") — the change is its own degenerate tip once terminal. `revision`
-/// pins a patchset; `None` reads the one the chain's tip pins. `None` back
-/// means the chain did not resolve.
+/// A change's displayed status off its derived chain path — the change is
+/// its own degenerate tip once terminal. `revision` pins a patchset;
+/// `None` reads the one the chain's tip pins. `None` back means the chain
+/// did not resolve.
 pub fn status_at(server: &TestServer, change_id: u64, revision: Option<u64>) -> Option<String> {
     let query = revision.map_or(String::new(), |r| format!("?revision={r}"));
     let (st, chain) = http_get(&server.url(&format!("/api/chains/{change_id}{query}")));
@@ -406,8 +405,8 @@ fn ws_open(server: &TestServer, read_timeout: Duration) -> WsSock {
     socket
 }
 
-/// Cursor mode (docs/api.md "Events"): `change_id` → `from-idx` pairs; the
-/// server replays each `[from, head)` backlog, then streams live.
+/// Cursor mode: `change_id` → `from-idx` pairs; the server replays each
+/// `[from, head)` backlog, then streams live.
 pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Duration) -> WsSock {
     let mut socket = ws_open(server, read_timeout);
     let map: std::collections::HashMap<String, u64> =
@@ -419,8 +418,8 @@ pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Dura
     socket
 }
 
-/// Snapshot mode (docs/api.md "Events"): the server folds a `ChangeProj`
-/// snapshot per id, then attaches each change's live tail.
+/// Snapshot mode: the server folds a `ChangeProj` snapshot per id, then
+/// attaches each change's live tail.
 pub fn ws_subscribe_snapshot(server: &TestServer, ids: &[u64], read_timeout: Duration) -> WsSock {
     let mut socket = ws_open(server, read_timeout);
     let sub = json!({ "subscribe_snapshot": ids }).to_string();

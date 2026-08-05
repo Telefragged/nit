@@ -49,7 +49,7 @@ function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
   });
 
   // A reply draft carries a resolve decision; offer the checkbox when editing
-  // it. A new-thread draft has none (docs/api.md "Thread resolution").
+  // it. A new-thread draft has none.
   const editResolved = draft.thread_id !== null ? draft.resolved : undefined;
   const resolutionOnly = draft.body.trim().length === 0;
 
@@ -108,7 +108,7 @@ function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
 
 /** The draft editor a thread opens: `resolved` is the resolve-checkbox
  * default (reply keeps the thread's state, reopen flips it to open), and
- * `isReply` only picks the placeholder (docs/api.md "Thread resolution"). */
+ * `isReply` only picks the placeholder. */
 interface ThreadEditor {
   isReply: boolean;
   resolved: boolean;

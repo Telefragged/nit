@@ -1,5 +1,5 @@
-//! Rebase-aware interdiffs (docs/api.md "Rebase-aware interdiffs"): the
-//! problem reproduced and each observable property checked against real git.
+//! Rebase-aware interdiffs: the problem reproduced and each observable
+//! property checked against real git.
 //!
 //! Most tests drive the diff machinery directly — an unfiltered `render` is
 //! the plain interdiff (what leaked the base movement before), `analyze` plus

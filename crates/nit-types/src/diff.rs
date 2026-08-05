@@ -1,4 +1,4 @@
-//! File diffs and their hunks/lines (docs/api.md "Diff").
+//! File diffs and their hunks/lines.
 
 use serde::{Deserialize, Serialize};
 
@@ -11,8 +11,8 @@ pub struct Diff {
 }
 
 /// A file's full-context diff lines, for expanding the unchanged runs the
-/// shown diff hides (docs/api.md "Expanding context"). Same `Line` shape as
-/// the diff, so revealed lines carry their drift exactly as the hunks do.
+/// shown diff hides. Same `Line` shape as the diff, so revealed lines
+/// carry their drift exactly as the hunks do.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct FileLines {
@@ -33,8 +33,8 @@ pub struct DiffFile {
     pub additions: u64,
     pub deletions: u64,
     /// New-side line count: the EOF anchor that lets the client reveal the
-    /// unchanged run below the last hunk, which no hunk bounds from beneath
-    /// (docs/api.md "Expanding context"). 0 when deleted or binary.
+    /// unchanged run below the last hunk, which no hunk bounds from
+    /// beneath. 0 when deleted or binary.
     pub new_total: u64,
     /// Empty when binary.
     pub hunks: Vec<Hunk>,
@@ -63,8 +63,7 @@ pub struct Line {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub new: Option<u64>,
-    /// Changed by a rebase, not by the change itself (docs/api.md
-    /// "Rebase-aware interdiffs").
+    /// Changed by a rebase, not by the change itself.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub drift: bool,
     /// Without trailing newline.

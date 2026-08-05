@@ -1,5 +1,5 @@
-//! Comment threads, reviewer drafts, and the selected-text range anchor they
-//! share (docs/api.md "Comments").
+//! Comment threads, reviewer drafts, and the selected-text range anchor
+//! they share.
 
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +19,7 @@ pub struct CommentRange {
     pub end_char: u64,
 }
 
-/// A published comment thread (docs/api.md "Comment placement").
+/// A published comment thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Thread {

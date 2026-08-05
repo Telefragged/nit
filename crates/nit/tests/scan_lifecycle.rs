@@ -1,8 +1,7 @@
-//! Change lifecycle (docs/api.md "State table", docs/data-model.md
-//! "Lifecycle"): merged detection when a change lands on the canonical
-//! branch (the background timer's only job, prefix-merge included), plus the
-//! explicit `abandon`/`reopen` actions and the 409-then-200 push gate around an
-//! abandoned change.
+//! Change lifecycle (docs/data-model.md "Lifecycle"): merged detection
+//! when a change lands on the canonical branch (the background timer's
+//! only job, prefix-merge included), plus the explicit `abandon`/`reopen`
+//! actions and the 409-then-200 push gate around an abandoned change.
 //!
 //! `merged` is written only by the background sweep, so the merged tests drive
 //! one sweep synchronously through `sweep()` and assert. Abandonment is an
@@ -225,7 +224,7 @@ fn push_to_abandoned_change_409s_until_reopened() {
 #[test]
 fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     // The 409 guards a revision that *moves*; an idempotent re-push of the
-    // already-recorded sha must not trip it (docs/api.md "Push").
+    // already-recorded sha must not trip it.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);

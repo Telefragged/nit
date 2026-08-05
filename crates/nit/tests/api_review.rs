@@ -1,5 +1,4 @@
-//! The drafts + comments + review flow over HTTP (docs/api.md "Comments",
-//! "Reviewer decisions", "Agent endpoints"). A change owns its
+//! The drafts + comments + review flow over HTTP. A change owns its
 //! threads/drafts/reviews; comment drafts are reviewer-private until a staged
 //! decision's chain submit (`common::review`) drains them into one log entry,
 //! sets the per-(change, revision) status to the verdict, and applies each
@@ -128,8 +127,8 @@ fn reply_draft_appends_to_thread() {
     assert!(comments.iter().all(|c| !c["review_id"].is_null()));
 }
 
-/// A well-formed range round-trips verbatim; the "Range comments" 400s and the
-/// `/COMMIT_MSG` old-side 400 are all rejected.
+/// A well-formed range round-trips verbatim; the malformed-anchor 400s
+/// and the `/COMMIT_MSG` old-side 400 are all rejected.
 #[test]
 fn draft_anchor_validation() {
     let g = GitRepo::new();
@@ -157,7 +156,7 @@ fn draft_anchor_validation() {
     );
     assert_eq!(ranged["line"], 1, "line derives from range.end_line");
 
-    // The "Range comments" 400s of docs/api.md.
+    // The 400s of the server's anchor validation.
     let range_400s: &[(Value, &str)] = &[
         (
             json!({"revision": 0, "file": "x.txt", "line": 1, "body": "x",

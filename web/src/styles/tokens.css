@@ -39,7 +39,7 @@
   --drift-del-gutter: rgb(163 113 247 / 18%);
   --drift-del-intraline: rgb(163 113 247 / 26%);
 
-  /* change graph (docs/api.md "Graph"): the HEAD ring, the merged-history
+  /* change graph: the HEAD ring, the merged-history
      edge, and a per-lane branch palette (gleisbau-style — a whole branch
      carries one color). Node/status colors reuse the palette above. */
   --graph-node-bg: var(--bg-raised);

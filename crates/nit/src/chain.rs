@@ -20,8 +20,7 @@ pub struct PathMember {
 }
 
 /// One node of the graph's open region: an active change pinned at the
-/// revision its tip walked, plus the commit it parents onto (docs/api.md
-/// "Graph").
+/// revision its tip walked, plus the commit it parents onto.
 #[derive(Debug, Clone)]
 pub struct OpenNode {
     pub change_id: u64,
@@ -161,10 +160,10 @@ impl RepoView {
         self.changes.values().find(|c| c.change_key == key)
     }
 
-    /// The graph's **open region** (docs/api.md "Graph"): every active tip
-    /// walked back to its fork, unioned and **deduplicated by commit-sha** —
-    /// a change shared by two tips appears once, while the rare B-in-two-chains
-    /// case (one change live at two revisions) stays two nodes (two shas). In
+    /// The graph's **open region**: every active tip walked back to its
+    /// fork, unioned and **deduplicated by commit-sha** — a change shared
+    /// by two tips appears once, while the rare B-in-two-chains case (one
+    /// change live at two revisions) stays two nodes (two shas). In
     /// tip-walk order, which seeds the graph's row-order tie-break.
     #[must_use]
     pub fn open_nodes(&self) -> Vec<OpenNode> {
@@ -191,8 +190,8 @@ impl RepoView {
     }
 }
 
-/// Derived chain state over a path's members, each at its pinned revision
-/// (docs/api.md state table). A pure function of the members' displayed status.
+/// Derived chain state over a path's members, each at its pinned revision.
+/// A pure function of the members' displayed status.
 #[must_use]
 pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     if path.is_empty() {
@@ -226,10 +225,10 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     }
 }
 
-/// Row order for the change graph (docs/api.md "Graph"): a topological order
-/// in which every node precedes its parents — children ascend, parents
-/// descend, so the canonical HEAD sits between its open descendants and its
-/// merged ancestors. `nodes` is `(commit_sha, in-set parent shas)` in a stable
+/// Row order for the change graph: a topological order in which every node
+/// precedes its parents — children ascend, parents descend, so the
+/// canonical HEAD sits between its open descendants and its merged
+/// ancestors. `nodes` is `(commit_sha, in-set parent shas)` in a stable
 /// input order; the returned shas are top → bottom.
 ///
 /// A node's rank is `0` for a leaf, else `1 + max(child rank)`; nodes sort by

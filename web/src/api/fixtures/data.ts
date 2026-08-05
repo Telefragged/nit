@@ -5,7 +5,7 @@
 // Chains are DERIVED, never stored: a tip is a (tip_change_id, repo) pair,
 // and its path is computed by walking the tip revision's parent_sha back to
 // the repo's base through the commit-sha → (change, revision) index (a
-// gerrit relation chain — docs/api.md "Chains", docs/data-model.md "Scan
+// gerrit relation chain — docs/data-model.md "Scan
 // algorithm"). A change's displayed status is per (change, revision): the
 // verdict of the latest review at that revision, else pending (terminal
 // merged/abandoned win).
@@ -24,14 +24,14 @@
 //   repo 2 (quarry)
 //     tip change 20  agents_turn — a changes_requested change.
 //     tip change 30  approved — single approved change.
-//   repo 3 (orbit)  the B-in-two-chains example (docs/api.md): one change
+//   repo 3 (orbit)  the B-in-two-chains example: one change
 //            (B = 51) reached by two tips at two patchsets — tip C (53) walks
 //            B at rev0, tip E (55) walks B at rev1. B's rev0 member shows the
 //            newer-elsewhere badge (a newer patchset lives on E's chain);
 //            ChangeDetail.chains lists both tips.
 //
 // Every stored diff leads with the synthetic /COMMIT_MSG file, like the
-// real server (docs/api.md "The commit message as a file").
+// real server.
 
 import { COMMIT_MSG_PATH } from "../types";
 import type { Decision } from "../types";
@@ -632,8 +632,7 @@ const change11: ChangeRecord = {
         // 16) sits beside base movement (insert's signature, line 19) that
         // the rebase pulled in. The drift renders contained, in its own
         // blue/purple hues, and is excluded from the counts
-        // (additions/deletions are the real edit only) — docs/api.md
-        // "Rebase-aware interdiffs".
+        // (additions/deletions are the real edit only).
         {
           path: "src/auth/store.rs",
           status: "modified",
@@ -1024,7 +1023,7 @@ const change30: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// repo 3 — orbit: the B-in-two-chains example (docs/api.md "Chains")
+// repo 3 — orbit: the B-in-two-chains example
 //
 //   push 1:  m → A(50) → B(51) → C(53)      Change-Ids Ia, Ib, Ic
 //   push 2:  m → D(52) → B′(51) → E(55)     Change-Ids Id, Ib, Ie
@@ -1266,7 +1265,7 @@ export const tips: TipRecord[] = [
 // ---------------------------------------------------------------------------
 // Threads + drafts (published threads carry their conversation; reviewer
 // drafts reply to one or open a new thread; anchors served verbatim — the
-// client places them by diff range, docs/api.md "Comment placement")
+// client places them by diff range)
 
 export const threads: ThreadRecord[] = [
   // Published alongside the approving review.
@@ -1503,8 +1502,8 @@ export const threads: ThreadRecord[] = [
 ];
 
 // Reviewer's in-progress drafts on r1: two new-side threads plus one old-side
-// remark on the pre-change code (the old/red diff column;
-// docs/api.md "Comment placement"). All are opening threads.
+// remark on the pre-change code (the old/red diff column). All are
+// opening threads.
 export const drafts: DraftRecord[] = [
   {
     id: 100,
@@ -1555,7 +1554,7 @@ export const drafts: DraftRecord[] = [
   },
 ];
 
-// Reviewer decision drafts (docs/api.md "Reviewer decisions"): one staged
+// Reviewer decision drafts: one staged
 // decision per change, published on chain batch submit — the mock of the
 // server's draft_reviews side table. Seed one so the dashboard drawer's
 // submit button + draft-state pill and the change-page staged chip render.
@@ -1569,7 +1568,7 @@ draftReviews.set(12, {
 });
 
 // ---------------------------------------------------------------------------
-// Graph (docs/api.md "Graph"). The open region is the real chain derivation
+// Graph. The open region is the real chain derivation
 // (active tips, unioned and deduped by sha); the canonical history below HEAD
 // is synthetic — the mock has no git history to walk, like the backend reads
 // from git. Includes a merge commit and (per repo) a behind-HEAD base.

@@ -1,5 +1,5 @@
 // Maps a DOM selection inside a diff to a draft target with a comment
-// range (docs/api.md "Range comments"), gerrit-style. The DOM contract is
+// range, gerrit-style. The DOM contract is
 // rendered by DiffFileView: every file section carries `data-diff-path`,
 // every commentable code cell is a `.code` with `data-old`/`data-new`
 // line-number attributes (whichever sides exist for that cell), and the
