@@ -1,6 +1,6 @@
 // Syntax highlighting for diff lines and comment code fences. A diff's
 // language comes from the file extension; unknown extensions are skipped
-// silently (docs/frontend.md).
+// silently.
 
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";

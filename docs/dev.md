@@ -107,6 +107,8 @@ catches a skew and gives you the gallery in `result/`.
 - Keep messages **timeless** — no process narration ("rebased onto X", branch
   ordering); that goes in the `nit` reply or terminal, not git history.
 - Never mix refactors with behavior changes.
+- Keep the web dependency list short; justify any addition in the commit
+  message.
 - **Every change starts in its own worktree** on a `track/*` branch (golden
   rule 6), so `main` stays put and chains never serialize on a shared branch:
 

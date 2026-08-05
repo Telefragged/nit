@@ -66,7 +66,7 @@ const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
 
 /** Why `c` drafted nothing — each names the rule the selection broke and
- * the selection that satisfies it (docs/frontend.md). */
+ * the selection that satisfies it. */
 const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
   "mixed-sides":
     "A comment can only span one side of the diff. Select from the old or the new side, not both.",

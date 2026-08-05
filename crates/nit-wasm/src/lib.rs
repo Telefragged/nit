@@ -61,8 +61,8 @@ pub fn fold_entry(proj: JsValue, entry: JsValue) -> Result<JsValue, JsValue> {
 }
 
 /// Mark the characters that changed inside each replacement block of a diff,
-/// one list of ranges per line of the block (docs/frontend.md "Intraline
-/// emphasis").
+/// one list of ranges per line of the block (rationale and budgets in
+/// [`intraline`]).
 ///
 /// # Errors
 /// When `regions` is not a list of replacement blocks or the marks fail to

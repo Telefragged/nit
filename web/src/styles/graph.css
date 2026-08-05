@@ -1,5 +1,5 @@
 /* change graph — one spine-centered DAG over the canonical branch
-   (docs/frontend.md, docs/api.md "Graph"). A left SVG rail (lanes + nodes)
+   (docs/api.md "Graph"). A left SVG rail (lanes + nodes)
    beside per-row change cards: GRAPH | CHANGE | STATUS | REV | ACTIVITY. */
 .change-graph {
   /* Rows sit on the page background, like table.list; only the header (and the

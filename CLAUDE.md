@@ -69,7 +69,6 @@ identity across rewrites. Product spec: `nit.md`.
 - `docs/` — read the one you need:
   - `data-model.md` — schema, change identity, scan algorithm, status machine
   - `api.md` — HTTP/JSON contract (source of truth)
-  - `frontend.md` — pages, design language, mock mode
   - `dev.md` — verification, formatting, screenshot harness, testing,
     commit discipline, landing
   - `design-review-guide.md` — design anti-patterns to catch when reviewing

@@ -438,8 +438,8 @@ const captures = [
     path: "/changes/11?against=0",
     actions: expandAllFiles,
   },
-  // Markdown comment bodies (docs/frontend.md "Comments"): the RNG
-  // thread's agent reply, its fence highlighted like the diff.
+  // Markdown comment bodies: the RNG thread's agent reply, its fence
+  // highlighted like the diff.
   {
     name: "review-markdown-comment",
     path: "/changes/11?against=0",

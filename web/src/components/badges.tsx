@@ -1,6 +1,6 @@
 import type { ChangeStatus } from "../api/types";
 
-// Color discipline (docs/frontend.md): amber = needs reviewer, blue = agent
+// Color discipline: amber = needs reviewer, blue = agent
 // working, green = approved/ready, red = changes requested, gray = inert.
 
 export function NewerElsewhereBadge({
