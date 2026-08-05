@@ -5,11 +5,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::enums::Side;
 
-/// Selected-text anchor of a line comment: 1-based lines on the comment's
-/// side, 0-based chars, `end_char` exclusive, `end_line` = the comment's
-/// `line`. The JSON shape is these four fields. They are domain coordinates
-/// (always non-negative), so the shape is `u64`; the server's `SQLite`
-/// columns are signed, converted at the db boundary like every other id.
+/// Selected-text anchor of a line comment.
+///
+/// 1-based lines on the comment's side, 0-based chars, `end_char`
+/// exclusive, `end_line` = the comment's `line`. The JSON shape is these
+/// four fields. They are domain coordinates (always non-negative), so the
+/// shape is `u64`; the server's `SQLite` columns are signed, converted at
+/// the db boundary like every other id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentRange {
@@ -45,8 +47,10 @@ pub struct Thread {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ThreadComment {
     pub body: String,
-    /// The review that published it; null for an agent comment. The client
-    /// derives reviewer-vs-agent from this — there is no separate `author`.
+    /// The review that published it; null for an agent comment.
+    ///
+    /// The client derives reviewer-vs-agent from this — there is no
+    /// separate `author`.
     pub review_id: Option<u64>,
     pub created_at: String,
 }
@@ -109,8 +113,9 @@ pub struct EditDraft {
     pub resolved: Option<bool>,
 }
 
-/// `POST /api/changes/{id}/comments` request — the agent's single
-/// comment-posting path.
+/// `POST /api/changes/{id}/comments` request.
+///
+/// The agent's single comment-posting path.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewComment {
     #[serde(default)]

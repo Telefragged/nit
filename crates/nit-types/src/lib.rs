@@ -1,9 +1,11 @@
-//! Wire types for nit's HTTP/JSON API — the contract for every shape that
-//! crosses the boundary, shared by the axum server (`crates/nit`) and its
-//! CLI through one set of `serde` derives and exported to the web as
-//! `web/src/api/types.gen.ts` (`nix run .#gen-types`). The doc-comments
-//! here carry the semantics the shapes alone cannot; route-level behavior
-//! (status codes, query params) lives on the server's handlers.
+//! Wire types for nit's HTTP/JSON API.
+//!
+//! The contract for every shape that crosses the boundary, shared by the
+//! axum server (`crates/nit`) and its CLI through one set of `serde`
+//! derives and exported to the web as `web/src/api/types.gen.ts`
+//! (`nix run .#gen-types`). The doc-comments here carry the semantics the
+//! shapes alone cannot; route-level behavior (status codes, query params)
+//! lives on the server's handlers.
 //!
 //! Conventions: every non-2xx response is the [`error`] envelope; times
 //! are RFC3339 strings; shas are full 40-hex, truncated by clients to the

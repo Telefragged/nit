@@ -88,14 +88,16 @@ export type RepoGraph = {
    */
   anchor: string;
   /**
-   * The canonical branch has merged commits below the displayed window — the
-   * client shows an "earlier history hidden" marker and dangles deep forks
-   * to it.
+   * The canonical branch has merged commits below the displayed window.
+   *
+   * The client shows an "earlier history hidden" marker and dangles
+   * deep forks to it.
    */
   history_truncated: boolean;
   /**
-   * Row order, top → bottom: open (top) → head → history (bottom). A
-   * topological order in which every node precedes its parents.
+   * Row order, top → bottom: open (top) → head → history (bottom).
+   *
+   * A topological order in which every node precedes its parents.
    */
   nodes: Array<GraphNode>;
 };
@@ -108,8 +110,9 @@ export type GraphNode = {
   section: GraphSection;
   subject: string;
   /**
-   * `ChangeStatus` at the pinned revision; head/history read as merged —
-   * the client styles by `section`.
+   * `ChangeStatus` at the pinned revision; head/history read as merged.
+   *
+   * The client styles by `section`.
    */
   status: ChangeStatus;
   /**
@@ -136,8 +139,9 @@ export type ChangeDetail = {
    */
   revisions: Array<Revision>;
   /**
-   * Published threads, all revisions; anchors verbatim (the client
-   * places them by diff range).
+   * Published threads, all revisions; anchors verbatim.
+   *
+   * The client places them by diff range.
    */
   threads: Array<Thread>;
   /**
@@ -212,8 +216,10 @@ export type Thread = {
 export type ThreadComment = {
   body: string;
   /**
-   * The review that published it; null for an agent comment. The client
-   * derives reviewer-vs-agent from this — there is no separate `author`.
+   * The review that published it; null for an agent comment.
+   *
+   * The client derives reviewer-vs-agent from this — there is no
+   * separate `author`.
    */
   review_id: number | null;
   created_at: string;
@@ -273,9 +279,10 @@ export type DiffFile = {
   additions: number;
   deletions: number;
   /**
-   * New-side line count: the EOF anchor that lets the client reveal the
-   * unchanged run below the last hunk, which no hunk bounds from
-   * beneath. 0 when deleted or binary.
+   * New-side line count; 0 when deleted or binary.
+   *
+   * The EOF anchor that lets the client reveal the unchanged run below
+   * the last hunk, which no hunk bounds from beneath.
    */
   new_total: number;
   /**
@@ -334,9 +341,10 @@ export type RevisionPayload = {
   base_sha: string;
   message: string;
   /**
-   * `false` only for a pure rebase (patch-id-equal, message unchanged): the
-   * new revision then inherits the prior revision's review status rather
-   * than resetting to `pending`.
+   * `false` only for a pure rebase (patch-id-equal, message unchanged).
+   *
+   * The new revision then inherits the prior revision's review status
+   * rather than resetting to `pending`.
    */
   resets_status: boolean;
 };
@@ -346,8 +354,10 @@ export type ReviewPayload = {
   verdict: Verdict;
   message: string;
   /**
-   * The drained drafts, in draft order. Each opens a new thread or replies
-   * to an existing one (see [`CommentInput`]).
+   * The drained drafts, in draft order.
+   *
+   * Each opens a new thread or replies to an existing one (see
+   * [`CommentInput`]).
    */
   comments: Array<CommentInput>;
 };
@@ -358,9 +368,11 @@ export type CommentInput = {
    */
   thread_id: number | null;
   /**
-   * Anchor revision for a new thread (a draft's own patchset — an interdiff
-   * old side pins to an earlier revision). The API always stamps it; the
-   * fold falls back to the change's latest only for a malformed payload.
+   * Anchor revision for a new thread.
+   *
+   * A draft's own patchset — an interdiff old side pins to an earlier
+   * revision. The API always stamps it; the fold falls back to the
+   * change's latest only for a malformed payload.
    */
   revision: number | null;
   file: string | null;
@@ -373,9 +385,11 @@ export type CommentInput = {
   line_text: string | null;
   body: string;
   /**
-   * Thread-resolution decision (`Some(true/false)` = resolve/reopen, `None`
-   * = no decision). On a new thread it is the birth state; a `thread_id`
-   * reply with an empty `body` carries only this.
+   * Thread-resolution decision.
+   *
+   * `Some(true/false)` = resolve/reopen, `None` = no decision. On a new
+   * thread it is the birth state; a `thread_id` reply with an empty
+   * `body` carries only this.
    */
   resolved: boolean | null;
 };
@@ -459,8 +473,9 @@ export type ThreadProj = {
 
 export type ReviewProj = {
   /**
-   * The `idx` of the `review` entry this is the fold of — a log
-   * coordinate, reproduced by replay with nothing stored.
+   * The `idx` of the `review` entry this is the fold of.
+   *
+   * A log coordinate, reproduced by replay with nothing stored.
    */
   id: number;
   revision: number;
@@ -482,9 +497,11 @@ export type ChangeProj = {
    */
   next_thread_id: number;
   /**
-   * Count of entries folded = the next unconsumed `idx` (a high-water mark).
-   * Carried in the snapshot so the client resumes folding the live tail at
-   * the right boundary and [`fold`] stays idempotent across the overlap.
+   * Count of entries folded = the next unconsumed `idx`.
+   *
+   * A high-water mark, carried in the snapshot so the client resumes
+   * folding the live tail at the right boundary and [`fold`] stays
+   * idempotent across the overlap.
    */
   entries_folded: number;
 };

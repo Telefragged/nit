@@ -1,14 +1,17 @@
-//! The typed payloads of the append-only log: one struct per `kind`,
-//! shared by the server's fold and the wire `LogEntry`.
+//! The typed payloads of the append-only log: one struct per `kind`.
+//!
+//! Shared by the server's fold and the wire `LogEntry`.
 
 use serde::{Deserialize, Serialize};
 
 use crate::comments::CommentRange;
 use crate::enums::{LifecycleAction, LogKind, Side, Verdict};
 
-/// A `revision` entry: one new commit-sha observed for this change. The
-/// revision `number` is **not** carried — the fold mints it (0-based, by
-/// append order) so a concurrent shared-change push cannot duplicate it.
+/// A `revision` entry: one new commit-sha observed for this change.
+///
+/// The revision `number` is **not** carried — the fold mints it (0-based,
+/// by append order) so a concurrent shared-change push cannot duplicate
+/// it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RevisionPayload {
@@ -16,9 +19,10 @@ pub struct RevisionPayload {
     pub parent_sha: String,
     pub base_sha: String,
     pub message: String,
-    /// `false` only for a pure rebase (patch-id-equal, message unchanged): the
-    /// new revision then inherits the prior revision's review status rather
-    /// than resetting to `pending`.
+    /// `false` only for a pure rebase (patch-id-equal, message unchanged).
+    ///
+    /// The new revision then inherits the prior revision's review status
+    /// rather than resetting to `pending`.
     pub resets_status: bool,
 }
 
@@ -28,23 +32,29 @@ pub struct ReviewPayload {
     pub revision: u64,
     pub verdict: Verdict,
     pub message: String,
-    /// The drained drafts, in draft order. Each opens a new thread or replies
-    /// to an existing one (see [`CommentInput`]).
+    /// The drained drafts, in draft order.
+    ///
+    /// Each opens a new thread or replies to an existing one (see
+    /// [`CommentInput`]).
     pub comments: Vec<CommentInput>,
 }
 
-/// A comment inside a `review` or `comment` payload: with `thread_id` unset it
-/// **opens a new thread** anchored by the fields below; with it set it
-/// **replies** to that thread (the anchor is ignored — the thread owns it).
+/// A comment inside a `review` or `comment` payload.
+///
+/// With `thread_id` unset it **opens a new thread** anchored by the
+/// fields below; with it set it **replies** to that thread (the anchor is
+/// ignored — the thread owns it).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentInput {
     /// `None` opens a new thread; `Some` appends to that thread.
     #[serde(default)]
     pub thread_id: Option<u64>,
-    /// Anchor revision for a new thread (a draft's own patchset — an interdiff
-    /// old side pins to an earlier revision). The API always stamps it; the
-    /// fold falls back to the change's latest only for a malformed payload.
+    /// Anchor revision for a new thread.
+    ///
+    /// A draft's own patchset — an interdiff old side pins to an earlier
+    /// revision. The API always stamps it; the fold falls back to the
+    /// change's latest only for a malformed payload.
     #[serde(default)]
     pub revision: Option<u64>,
     #[serde(default)]
@@ -59,17 +69,20 @@ pub struct CommentInput {
     #[serde(default)]
     pub line_text: Option<String>,
     pub body: String,
-    /// Thread-resolution decision (`Some(true/false)` = resolve/reopen, `None`
-    /// = no decision). On a new thread it is the birth state; a `thread_id`
-    /// reply with an empty `body` carries only this.
+    /// Thread-resolution decision.
+    ///
+    /// `Some(true/false)` = resolve/reopen, `None` = no decision. On a new
+    /// thread it is the birth state; a `thread_id` reply with an empty
+    /// `body` carries only this.
     #[serde(default)]
     pub resolved: Option<bool>,
 }
 
-/// A `lifecycle` entry: the merge timer (`merged`) and the `nit abandon` /
-/// `nit reopen` actions. `commit_sha` is set only for `merged` — the landed
-/// commit on the canonical branch; `message` is an optional reason on
-/// `abandoned`.
+/// A `lifecycle` entry: a merge, an abandon, or a reopen.
+///
+/// The merge timer (`merged`) and the `nit abandon` / `nit reopen`
+/// actions. `commit_sha` is set only for `merged` — the landed commit on
+/// the canonical branch; `message` is an optional reason on `abandoned`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LifecyclePayload {
@@ -80,11 +93,12 @@ pub struct LifecyclePayload {
     pub message: Option<String>,
 }
 
-/// A log entry's payload as a closed union tagged by `kind`. The server's fold
-/// holds it typed; flattened into [`LogEntry`] the adjacent tag produces the
-/// wire's `{…, "kind": …, "payload": …}`. Storage serializes the inner struct
-/// alone (the `kind` lives in its own column), via the boundary in
-/// `crate::review`.
+/// A log entry's payload as a closed union tagged by `kind`.
+///
+/// The server's fold holds it typed; flattened into [`LogEntry`] the
+/// adjacent tag produces the wire's `{…, "kind": …, "payload": …}`.
+/// Storage serializes the inner struct alone (the `kind` lives in its own
+/// column), via the boundary in `crate::review`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", content = "payload", rename_all = "snake_case")]
@@ -123,9 +137,11 @@ impl LogPayload {
     }
 }
 
-/// One log entry. Belongs to one change; `seq` totally orders the whole
-/// repo, `idx` orders one change. The flattened [`LogPayload`] contributes
-/// the `kind` discriminant and the `payload` body.
+/// One log entry.
+///
+/// Belongs to one change; `seq` totally orders the whole repo, `idx`
+/// orders one change. The flattened [`LogPayload`] contributes the `kind`
+/// discriminant and the `payload` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LogEntry {
@@ -137,8 +153,10 @@ pub struct LogEntry {
     pub payload: LogPayload,
 }
 
-/// `GET /api/chains/{change_id}/log` response — the aggregated chain log,
-/// merged across members and sorted by global `seq`.
+/// `GET /api/chains/{change_id}/log` response.
+///
+/// The aggregated chain log, merged across members and sorted by global
+/// `seq`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainLog {
     pub entries: Vec<LogEntry>,

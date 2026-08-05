@@ -1,6 +1,8 @@
-//! The shared closed vocabularies of nit: the small sets of named values —
-//! sides, verdicts, statuses, kinds — used across the server's domain fold,
-//! the wire DTOs that live beside them in this crate, and the CLI alike.
+//! The shared closed vocabularies of nit.
+//!
+//! The small sets of named values — sides, verdicts, statuses, kinds —
+//! used across the server's domain fold, the wire DTOs that live beside
+//! them in this crate, and the CLI alike.
 //!
 //! **Discipline: a closed set of values is an `enum`, never a `String`.**
 //! Every value that can only be one of a fixed list lives here as a serde
@@ -19,9 +21,10 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Which tree of a revision a line comment is anchored to: `new` is the
-/// revision's commit tree, `old` its parent tree. Defaults to `new` where
-/// a request omits it.
+/// Which tree of a revision a line comment is anchored to.
+///
+/// `new` is the revision's commit tree, `old` its parent tree. Defaults
+/// to `new` where a request omits it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -58,10 +61,12 @@ impl std::str::FromStr for Side {
     }
 }
 
-/// The kind of one log entry. The fold dispatches on it; the db
-/// `log.kind` TEXT column stores its [`as_str`].
-/// Each entry belongs to one **change**: a `revision` records a new
-/// commit-sha for the change, a `lifecycle` records a merge/abandon/reopen.
+/// The kind of one log entry.
+///
+/// The fold dispatches on it; the db `log.kind` TEXT column stores its
+/// [`as_str`]. Each entry belongs to one **change**: a `revision` records
+/// a new commit-sha for the change, a `lifecycle` records a
+/// merge/abandon/reopen.
 ///
 /// [`as_str`]: LogKind::as_str
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,8 +105,10 @@ impl std::str::FromStr for LogKind {
     }
 }
 
-/// What a `lifecycle` log entry records about a change. The merge/abandon
-/// timer writes `merged`/`abandoned`; `nit reopen` writes `reopened`.
+/// What a `lifecycle` log entry records about a change.
+///
+/// The merge/abandon timer writes `merged`/`abandoned`; `nit reopen`
+/// writes `reopened`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -123,8 +130,9 @@ impl LifecycleAction {
     }
 }
 
-/// A reviewer's verdict on one change. Folds to the matching
-/// [`ChangeStatus`] (`From<Verdict>`).
+/// A reviewer's verdict on one change.
+///
+/// Folds to the matching [`ChangeStatus`] (`From<Verdict>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -146,12 +154,13 @@ impl Verdict {
     }
 }
 
-/// A reviewer's **staged** decision on a change: the review modal's single
-/// set of choices, drafted in `draft_reviews` and published on batch
-/// submit. A superset of [`Verdict`] with the two lifecycle actions, so
-/// abandonment is a decision rather than a separate button; it translates
-/// back to a [`Verdict`] or a [`LifecycleAction`] at publish time
-/// ([`as_verdict`], [`as_lifecycle`]).
+/// A reviewer's **staged** decision on a change.
+///
+/// The review modal's single set of choices, drafted in `draft_reviews`
+/// and published on batch submit. A superset of [`Verdict`] with the two
+/// lifecycle actions, so abandonment is a decision rather than a separate
+/// button; it translates back to a [`Verdict`] or a [`LifecycleAction`]
+/// at publish time ([`as_verdict`], [`as_lifecycle`]).
 ///
 /// [`as_verdict`]: Decision::as_verdict
 /// [`as_lifecycle`]: Decision::as_lifecycle
@@ -215,10 +224,11 @@ impl std::str::FromStr for Decision {
     }
 }
 
-/// A change's displayed status at a pinned revision: the verdict-derived
-/// value (the [`Verdict`] arms) under the lifecycle overlay (`merged` at
-/// the latest patchset, `abandoned` change-wide). Per `(change, revision)`,
-/// never a change-wide scalar.
+/// A change's displayed status at a pinned revision.
+///
+/// The verdict-derived value (the [`Verdict`] arms) under the lifecycle
+/// overlay (`merged` at the latest patchset, `abandoned` change-wide).
+/// Per `(change, revision)`, never a change-wide scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -264,8 +274,10 @@ impl std::str::FromStr for ChangeStatus {
 }
 
 impl From<Verdict> for ChangeStatus {
-    /// The review status a verdict produces, before the lifecycle overlay
-    /// (`merged`/`abandoned`) the server's fold layers on top.
+    /// The review status a verdict produces.
+    ///
+    /// It is the status before the lifecycle overlay (`merged`/`abandoned`)
+    /// the server's fold layers on top.
     fn from(verdict: Verdict) -> ChangeStatus {
         match verdict {
             Verdict::Approve => ChangeStatus::Approved,
@@ -275,11 +287,13 @@ impl From<Verdict> for ChangeStatus {
     }
 }
 
-/// A chain's derived, actionable state. Computed at read time from the
-/// path's members (the server's `chain::derive_state`); it is
-/// informational on the wire, never stored. Abandonment is derivation-inert
-/// — there is no abandoned chain state (an abandoned member is excluded
-/// from the rollup; the agent reasons about its per-change status).
+/// A chain's derived, actionable state.
+///
+/// Computed at read time from the path's members (the server's
+/// `chain::derive_state`); it is informational on the wire, never stored.
+/// Abandonment is derivation-inert — there is no abandoned chain state
+/// (an abandoned member is excluded from the rollup; the agent reasons
+/// about its per-change status).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -303,11 +317,13 @@ impl ChainState {
     }
 }
 
-/// Which region of the change graph a node sits in: `open` ascends above
-/// the canonical HEAD, `head` is the HEAD anchor, and `history` descends
-/// below it (merged commits, fading with depth). The client styles a node
-/// by its `section` first (head → ring, history → grey/fade), falling back
-/// to its `ChangeStatus` for open nodes.
+/// Which region of the change graph a node sits in.
+///
+/// `open` ascends above the canonical HEAD, `head` is the HEAD anchor,
+/// and `history` descends below it (merged commits, fading with depth).
+/// The client styles a node by its `section` first (head → ring,
+/// history → grey/fade), falling back to its `ChangeStatus` for open
+/// nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]

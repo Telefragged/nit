@@ -10,9 +10,11 @@ pub struct Diff {
     pub files: Vec<DiffFile>,
 }
 
-/// A file's full-context diff lines, for expanding the unchanged runs the
-/// shown diff hides. Same `Line` shape as the diff, so revealed lines
-/// carry their drift exactly as the hunks do.
+/// A file's full-context diff lines.
+///
+/// For expanding the unchanged runs the shown diff hides. Same `Line`
+/// shape as the diff, so revealed lines carry their drift exactly as the
+/// hunks do.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct FileLines {
@@ -32,9 +34,10 @@ pub struct DiffFile {
     pub binary: bool,
     pub additions: u64,
     pub deletions: u64,
-    /// New-side line count: the EOF anchor that lets the client reveal the
-    /// unchanged run below the last hunk, which no hunk bounds from
-    /// beneath. 0 when deleted or binary.
+    /// New-side line count; 0 when deleted or binary.
+    ///
+    /// The EOF anchor that lets the client reveal the unchanged run below
+    /// the last hunk, which no hunk bounds from beneath.
     pub new_total: u64,
     /// Empty when binary.
     pub hunks: Vec<Hunk>,

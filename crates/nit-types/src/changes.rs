@@ -14,8 +14,9 @@ pub struct ChangeDetail {
     pub change_key: String,
     /// Ascending.
     pub revisions: Vec<Revision>,
-    /// Published threads, all revisions; anchors verbatim (the client
-    /// places them by diff range).
+    /// Published threads, all revisions; anchors verbatim.
+    ///
+    /// The client places them by diff range.
     pub threads: Vec<Thread>,
     /// All revisions.
     pub drafts: Vec<Draft>,
@@ -23,8 +24,10 @@ pub struct ChangeDetail {
     pub draft_decision: Option<StagedDecision>,
 }
 
-/// `GET /api/changes/{id}/drafts` response: the reviewer's private overlay —
-/// unpublished drafts and the staged decision.
+/// `GET /api/changes/{id}/drafts` response.
+///
+/// The reviewer's private overlay — unpublished drafts and the staged
+/// decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeDrafts {
@@ -32,9 +35,10 @@ pub struct ChangeDrafts {
     pub draft_decision: Option<StagedDecision>,
 }
 
-/// A reviewer's staged decision plus its cover note/reason. The body of
-/// [`ChangeDetail::draft_decision`] and the `PUT /api/changes/{id}/decision`
-/// request.
+/// A reviewer's staged decision plus its cover note/reason.
+///
+/// The body of [`ChangeDetail::draft_decision`] and the
+/// `PUT /api/changes/{id}/decision` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct StagedDecision {
@@ -66,8 +70,10 @@ pub struct Review {
     pub created_at: String,
 }
 
-/// `POST /api/changes/{id}/abandon` request (this is `nit abandon`). The body
-/// is optional — an absent or empty `message` abandons without a reason.
+/// `POST /api/changes/{id}/abandon` request (this is `nit abandon`).
+///
+/// The body is optional — an absent or empty `message` abandons without
+/// a reason.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AbandonRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]

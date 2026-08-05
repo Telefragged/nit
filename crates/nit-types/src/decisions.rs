@@ -2,8 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// `POST /api/chains/{id}/submit` response — the outcome of publishing every
-/// chain member's staged decision.
+/// `POST /api/chains/{id}/submit` response.
+///
+/// The outcome of publishing every chain member's staged decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct BatchSubmitResult {

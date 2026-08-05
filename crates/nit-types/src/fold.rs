@@ -1,8 +1,9 @@
-//! The fold: a **change's** reviewable state is the replay of its append-only
-//! event log. [`ChangeProj`] is the in-memory state machine; [`fold`] applies
-//! one wire [`LogEntry`]; [`replay`] rebuilds a change's projection from its
-//! entries. A chain is never folded — it is composed at read time from member
-//! projections (`crate::chain`).
+//! The fold: a **change's** reviewable state is the replay of its log.
+//!
+//! The log is append-only. [`ChangeProj`] is the in-memory state machine;
+//! [`fold`] applies one wire [`LogEntry`]; [`replay`] rebuilds a change's
+//! projection from its entries. A chain is never folded — it is composed
+//! at read time from member projections (`crate::chain`).
 //!
 //! Pure over `nit_types` alone: no database, no storage serialization, no event
 //! publishing. The server's db/storage adapters (`crate::review`) feed it wire
@@ -34,9 +35,10 @@ use crate::comments::{CommentRange, Thread};
 use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
 use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
-/// A change's terminal lifecycle, folded from its `lifecycle` entries. The
-/// landed commit's sha stays on the `merged` log entry, not here — the fold
-/// answers "is it landed", the log answers "as what".
+/// A change's terminal lifecycle, folded from its `lifecycle` entries.
+///
+/// The landed commit's sha stays on the `merged` log entry, not here —
+/// the fold answers "is it landed", the log answers "as what".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -60,8 +62,10 @@ pub struct RevisionProj {
     pub created_at: String,
 }
 
-/// Where a thread is anchored within a revision, modeled so the invalid
-/// combinations the flat wire fields allow are unrepresentable.
+/// Where a thread is anchored within a revision.
+///
+/// Modeled so the invalid combinations the flat wire fields allow are
+/// unrepresentable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -97,8 +101,10 @@ impl Anchor {
     }
 }
 
-/// A located, resolvable conversation. Its anchor and birth come from its
-/// first comment; the `id` is fold-assigned by creation order, never stored.
+/// A located, resolvable conversation.
+///
+/// Its anchor and birth come from its first comment; the `id` is
+/// fold-assigned by creation order, never stored.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ThreadProj {
@@ -111,9 +117,11 @@ pub struct ThreadProj {
     pub updated_at: String,
 }
 
-/// One message in a thread. `review_id` is the review that published it, or
-/// `None` for an agent's own note — which is what distinguishes reviewer from
-/// agent (the only consumer derives the label from it).
+/// One message in a thread.
+///
+/// `review_id` is the review that published it, or `None` for an agent's
+/// own note — which is what distinguishes reviewer from agent (the only
+/// consumer derives the label from it).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 // Shares the wire `ThreadComment` name but is a distinct type — only
 // ever round-tripped through the wasm fold.
@@ -127,8 +135,9 @@ pub struct ThreadComment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReviewProj {
-    /// The `idx` of the `review` entry this is the fold of — a log
-    /// coordinate, reproduced by replay with nothing stored.
+    /// The `idx` of the `review` entry this is the fold of.
+    ///
+    /// A log coordinate, reproduced by replay with nothing stored.
     pub id: u64,
     pub revision: u64,
     pub verdict: Verdict,
@@ -136,10 +145,12 @@ pub struct ReviewProj {
     pub created_at: String,
 }
 
-/// The fold of one change's log. Serializable so the server can ship it as the
-/// subscribe **snapshot** and the browser can resume folding the live tail
-/// from it; the wire form is opaque to the web, which only passes it back
-/// through the shared WebAssembly fold.
+/// The fold of one change's log.
+///
+/// Serializable so the server can ship it as the subscribe **snapshot**
+/// and the browser can resume folding the live tail from it; the wire
+/// form is opaque to the web, which only passes it back through the
+/// shared WebAssembly fold.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeProj {
@@ -152,9 +163,11 @@ pub struct ChangeProj {
     pub lifecycle: Lifecycle,
     /// Bumped each time a thread is opened.
     pub next_thread_id: u64,
-    /// Count of entries folded = the next unconsumed `idx` (a high-water mark).
-    /// Carried in the snapshot so the client resumes folding the live tail at
-    /// the right boundary and [`fold`] stays idempotent across the overlap.
+    /// Count of entries folded = the next unconsumed `idx`.
+    ///
+    /// A high-water mark, carried in the snapshot so the client resumes
+    /// folding the live tail at the right boundary and [`fold`] stays
+    /// idempotent across the overlap.
     pub entries_folded: u64,
 }
 
@@ -195,26 +208,32 @@ impl ChangeProj {
         !matches!(self.lifecycle, Lifecycle::Active)
     }
 
-    /// Whether the change has **landed** on the canonical branch. Distinct from
-    /// `is_terminal`: an abandoned change is terminal but not merged, and stays
-    /// an enumerable member/tip of its chains (abandonment is membership-inert).
+    /// Whether the change has **landed** on the canonical branch.
+    ///
+    /// Distinct from `is_terminal`: an abandoned change is terminal but
+    /// not merged, and stays an enumerable member/tip of its chains
+    /// (abandonment is membership-inert).
     #[must_use]
     pub fn is_merged(&self) -> bool {
         matches!(self.lifecycle, Lifecycle::Merged)
     }
 
-    /// The change's current status: [`status_at`](Self::status_at) its latest
-    /// revision (pending when it has none). The denormalized `changes.status`
-    /// column (`crates/nit/src/db.rs`) caches this so a query can filter
-    /// changes without folding their logs.
+    /// The change's current status.
+    ///
+    /// [`status_at`](Self::status_at) its latest revision (pending when it
+    /// has none). The denormalized `changes.status` column
+    /// (`crates/nit/src/db.rs`) caches this so a query can filter changes
+    /// without folding their logs.
     #[must_use]
     pub fn current_status(&self) -> ChangeStatus {
         self.status_at(self.latest_revision().map_or(0, |r| r.number))
     }
 
-    /// The displayed status at a pinned revision: the lifecycle overlay
-    /// (`abandoned` change-wide, `merged` at the latest patchset) over the
-    /// verdict-derived review status (`review_status_at`).
+    /// The displayed status at a pinned revision.
+    ///
+    /// The lifecycle overlay (`abandoned` change-wide, `merged` at the
+    /// latest patchset) over the verdict-derived review status
+    /// (`review_status_at`).
     #[must_use]
     pub fn status_at(&self, revision: u64) -> ChangeStatus {
         if matches!(self.lifecycle, Lifecycle::Abandoned) {
@@ -229,9 +248,11 @@ impl ChangeProj {
         self.review_status_at(revision)
     }
 
-    /// The verdict-derived status at a revision: the latest review on it, else
-    /// the prior revision's status when this one is a pure rebase, else
-    /// pending. Never the lifecycle-overlay values (`merged`/`abandoned`).
+    /// The verdict-derived status at a revision.
+    ///
+    /// The latest review on it, else the prior revision's status when this
+    /// one is a pure rebase, else pending. Never the lifecycle-overlay
+    /// values (`merged`/`abandoned`).
     fn review_status_at(&self, revision: u64) -> ChangeStatus {
         if let Some(rv) = self
             .reviews
@@ -248,10 +269,12 @@ impl ChangeProj {
         ChangeStatus::Pending
     }
 
-    /// Resolve a comment's thread id and keep `next_thread_id` — the single
-    /// source of truth — past it. Called before each fold: a live append mints
-    /// (the stored payload then carries the id) while replay, seeing the id
-    /// already set, only advances the counter — no double count.
+    /// Resolves a comment's thread id and keeps `next_thread_id` past it.
+    ///
+    /// `next_thread_id` is the single source of truth. Called before each
+    /// fold: a live append mints (the stored payload then carries the id)
+    /// while replay, seeing the id already set, only advances the
+    /// counter — no double count.
     pub fn mint_thread_id(&mut self, comment: &mut CommentInput) {
         if comment.thread_id.is_none() && !comment.body.trim().is_empty() {
             comment.thread_id = Some(self.next_thread_id);
@@ -262,9 +285,10 @@ impl ChangeProj {
     }
 }
 
-/// Apply one wire entry to a change's projection, minting any new-thread ids
-/// into the entry's typed payload and returning the id-bearing entry (the
-/// server stores and broadcasts that one).
+/// Applies one wire entry to a change's projection.
+///
+/// Mints any new-thread ids into the entry's typed payload and returns
+/// the id-bearing entry (the server stores and broadcasts that one).
 pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
     // Idempotent across the snapshot/live overlap: an entry already folded into
     // this projection (its idx below the high-water mark) leaves it untouched,
@@ -324,10 +348,11 @@ fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
     };
 }
 
-/// Apply one comment — its `thread_id` already resolved by
-/// [`ChangeProj::mint_thread_id`] — to a change's threads (shared by `review`
-/// and `comment`). An unset id is a no-op: the mint left it alone because the
-/// body was empty.
+/// Applies one comment to a change's threads.
+///
+/// Its `thread_id` is already resolved by [`ChangeProj::mint_thread_id`];
+/// shared by `review` and `comment`. An unset id is a no-op: the mint left
+/// it alone because the body was empty.
 fn apply_comment(change: &mut ChangeProj, c: &CommentInput, review_id: Option<u64>, now: &str) {
     let Some(tid) = c.thread_id else { return };
     if let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) {
@@ -347,8 +372,10 @@ fn apply_comment(change: &mut ChangeProj, c: &CommentInput, review_id: Option<u6
     }
 }
 
-/// Open a new thread carrying `id` at the comment's anchor. `next_thread_id` is
-/// kept ahead by [`ChangeProj::mint_thread_id`], the sole owner of the counter.
+/// Opens a new thread carrying `id` at the comment's anchor.
+///
+/// `next_thread_id` is kept ahead by [`ChangeProj::mint_thread_id`], the
+/// sole owner of the counter.
 fn open_thread(
     change: &mut ChangeProj,
     c: &CommentInput,
@@ -374,7 +401,10 @@ fn open_thread(
     });
 }
 
-/// Rebuild a change's projection from `entries`; requires ascending `idx` — `fold()`'s high-water mark silently skips anything out of order.
+/// Rebuilds a change's projection from `entries`.
+///
+/// Requires ascending `idx` — `fold()`'s high-water mark silently skips
+/// anything out of order.
 #[must_use]
 pub fn replay(id: u64, repo_id: u64, change_key: String, entries: Vec<LogEntry>) -> ChangeProj {
     let mut change = ChangeProj::new(id, repo_id, change_key);
@@ -453,10 +483,12 @@ fn thread_comment_view(c: &ThreadComment) -> crate::comments::ThreadComment {
     }
 }
 
-/// The published projection of a change as the wire [`ChangeDetail`], minus
-/// the reviewer's drafts and staged decision: mutable scratch outside the
-/// log that the server overlays from the database. The WebAssembly fold
-/// returns this verbatim and the browser fills its own drafts in.
+/// The published projection of a change as the wire [`ChangeDetail`].
+///
+/// Minus the reviewer's drafts and staged decision: mutable scratch
+/// outside the log that the server overlays from the database. The
+/// WebAssembly fold returns this verbatim and the browser fills its own
+/// drafts in.
 #[must_use]
 pub fn change_detail(change: &ChangeProj) -> ChangeDetail {
     ChangeDetail {
