@@ -15,8 +15,9 @@ use crate::review::{self, ChangeProj};
 
 use super::{AppState, with_conn};
 
-/// `WS /api/stream?repo={id}` — the client-driven change stream. The
-/// `repo` query is accepted for symmetry and ignored; the server keys
+/// `WS /api/stream?repo={id}` — the client-driven change stream.
+///
+/// The `repo` query is accepted for symmetry and ignored; the server keys
 /// purely on the subscribed change ids.
 pub(super) async fn stream(
     ws: WebSocketUpgrade,
@@ -25,13 +26,15 @@ pub(super) async fn stream(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-/// Drive one follower's socket. It holds one receiver on the server's event
-/// channel for its whole life, so every subscribe is armed before it reads its
-/// backlog (a `[from, head)` replay, or a `ChangeProj` snapshot) and the
-/// arm/read overlap is deduped by an idx watermark, never gapped. `watermark`
-/// is also the subscription set: an entry is forwarded only for a change the
-/// client asked for. An overflowed receiver closes the socket — the client
-/// reconnects and re-reads the log.
+/// Drives one follower's socket.
+///
+/// It holds one receiver on the server's event channel for its whole life,
+/// so every subscribe is armed before it reads its backlog (a `[from, head)`
+/// replay, or a `ChangeProj` snapshot) and the arm/read overlap is deduped
+/// by an idx watermark, never gapped. `watermark` is also the subscription
+/// set: an entry is forwarded only for a change the client asked for. An
+/// overflowed receiver closes the socket — the client reconnects and
+/// re-reads the log.
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let mut events = state.subscribe();
     let mut watermark: HashMap<u64, u64> = HashMap::new();
@@ -77,7 +80,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     }
 }
 
-/// Apply one client message; `Err(())` means the socket should close.
+/// Applies one client message; `Err(())` means the socket should close.
 async fn apply_client_msg(
     socket: &mut WebSocket,
     state: &Arc<AppState>,
@@ -119,12 +122,13 @@ async fn send(socket: &mut WebSocket, msg: &StreamMsg) -> Result<(), ()> {
         .map_err(|_| ())
 }
 
-/// Each cursor's log slice `[from, head)` as tagged entries and the idx that
-/// slice ends at, over one borrowed
-/// connection — a subscribe carries a whole chain, so the frames it answers
-/// with are sent after the read rather than between two of them. A change left
-/// out of the result is left unsubscribed: it does not exist, or the read
-/// failed and the follower re-reads on reconnect.
+/// Each cursor's log slice `[from, head)` as tagged entries.
+///
+/// With the idx that slice ends at, read over one borrowed connection — a
+/// subscribe carries a whole chain, so the frames it answers with are sent
+/// after the read rather than between two of them. A change left out of the
+/// result is left unsubscribed: it does not exist, or the read failed and
+/// the follower re-reads on reconnect.
 async fn read_backlogs(
     state: &Arc<AppState>,
     cursors: Vec<(u64, u64)>,
@@ -151,9 +155,11 @@ async fn read_backlogs(
     .unwrap_or_default()
 }
 
-/// Each change's folded projection, cloned out from under its read lock (no
-/// guard is held across a send) — the one place a fold is resolved without a
-/// connection already in hand, so it borrows one for the whole batch.
+/// Each change's folded projection, cloned from under its read lock.
+///
+/// No guard is held across a send — the one place a fold is resolved
+/// without a connection already in hand, so it borrows one for the whole
+/// batch.
 async fn read_snapshots(state: &Arc<AppState>, ids: Vec<u64>) -> Vec<(u64, ChangeProj)> {
     let st = state.clone();
     with_conn(state.pool(), move |conn| {

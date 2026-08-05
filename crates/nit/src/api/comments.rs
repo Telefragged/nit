@@ -92,8 +92,10 @@ pub(super) async fn create_comment(
     .await
 }
 
-/// Append a guarded lifecycle entry (a no-op unless `guard` holds for the
-/// current state) then rebuild the change detail. Shared by abandon/reopen.
+/// Appends a guarded lifecycle entry, then rebuilds the change detail.
+///
+/// A no-op unless `guard` holds for the current state. Shared by
+/// abandon/reopen.
 fn set_lifecycle(
     state: &AppState,
     conn: &mut Connection,
@@ -110,8 +112,9 @@ fn set_lifecycle(
     change_detail_json(conn, entry)
 }
 
-/// `POST /api/changes/{id}/abandon` — mark a live change abandoned
-/// (`nit abandon`): a reviewer/agent judgment, never automatic. Optional
+/// `POST /api/changes/{id}/abandon` — marks a live change abandoned.
+///
+/// `nit abandon`: a reviewer/agent judgment, never automatic. Optional
 /// `message` records a reason. A no-op on an already-terminal change.
 pub(super) async fn abandon_change(
     State(state): State<Arc<AppState>>,
@@ -133,8 +136,9 @@ pub(super) async fn abandon_change(
     .await
 }
 
-/// `POST /api/changes/{id}/reopen` — clear an abandoned change back to its
-/// retained verdict status (`nit reopen`).
+/// `POST /api/changes/{id}/reopen` — reopens an abandoned change.
+///
+/// Clears it back to its retained verdict status (`nit reopen`).
 pub(super) async fn reopen_change(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,

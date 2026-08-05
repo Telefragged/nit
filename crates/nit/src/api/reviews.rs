@@ -1,5 +1,6 @@
-//! Reviews + reviewer decisions: stage/clear a draft decision and publish a
-//! chain's staged decisions.
+//! Reviews + reviewer decisions.
+//!
+//! Stage/clear a draft decision and publish a chain's staged decisions.
 
 use std::sync::Arc;
 
@@ -20,8 +21,10 @@ use super::{
 };
 use super::{ChainQuery, chain_context, change_or_404, map_busy};
 
-/// One change's reviewer comment drafts as `CommentInput`s, ready to drain into
-/// a `review` entry (a reply keeps its thread, a new thread carries its anchor).
+/// One change's reviewer comment drafts as `CommentInput`s.
+///
+/// Ready to drain into a `review` entry (a reply keeps its thread, a new
+/// thread carries its anchor).
 fn drafts_to_comments(
     conn: &rusqlite::Connection,
     change_id: u64,
@@ -42,16 +45,18 @@ fn drafts_to_comments(
         .collect())
 }
 
-/// Publish one reviewer `decision` for a change in **one** per-change
-/// transaction: a `reopen` lifecycle (so a following review lands on a
-/// now-active change), then a `review` entry draining the change's comment
-/// drafts (the decision's verdict, or `comment` to carry staged comments when
-/// the decision is purely lifecycle), then an `abandon` lifecycle — whichever
-/// the decision calls for. The drained comment drafts and the change's
-/// `draft_reviews` row are deleted in the same transaction, so a
-/// half-published batch never strands work and a re-submit is idempotent.
-/// Called per member by the chain batch submit — the only publish path;
-/// the caller validates the target revision/lifecycle first.
+/// Publishes one reviewer `decision` for a change.
+///
+/// All in **one** per-change transaction: a `reopen` lifecycle (so a
+/// following review lands on a now-active change), then a `review` entry
+/// draining the change's comment drafts (the decision's verdict, or
+/// `comment` to carry staged comments when the decision is purely
+/// lifecycle), then an `abandon` lifecycle — whichever the decision calls
+/// for. The drained comment drafts and the change's `draft_reviews` row are
+/// deleted in the same transaction, so a half-published batch never strands
+/// work and a re-submit is idempotent. Called per member by the chain batch
+/// submit — the only publish path; the caller validates the target
+/// revision/lifecycle first.
 fn publish_member(
     conn: &mut rusqlite::Connection,
     state: &Arc<AppState>,
@@ -104,9 +109,11 @@ fn publish_member(
     Ok(())
 }
 
-/// `PUT /api/changes/{id}/decision` — stage (or overwrite) the change's draft
-/// decision. Validated only as an enum; legality against the lifecycle is a
-/// submit-time concern (a draft is reviewer scratch).
+/// `PUT /api/changes/{id}/decision` — stages the draft decision.
+///
+/// Overwrites the change's staged decision when there is one. Validated
+/// only as an enum; legality against the lifecycle is a submit-time concern
+/// (a draft is reviewer scratch).
 pub(super) async fn stage_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
@@ -120,8 +127,9 @@ pub(super) async fn stage_decision(
     .await
 }
 
-/// `DELETE /api/changes/{id}/decision` — discard the staged decision (204; a
-/// no-op when nothing is staged).
+/// `DELETE /api/changes/{id}/decision` — discards the staged decision.
+///
+/// 204; a no-op when nothing is staged.
 pub(super) async fn clear_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
@@ -134,8 +142,9 @@ pub(super) async fn clear_decision(
     .await
 }
 
-/// `POST /api/chains/{id}/submit` — publish every chain member's staged
-/// decision. Re-derives the path, then for each member with a decision
+/// `POST /api/chains/{id}/submit` — publishes every staged decision.
+///
+/// Re-derives the path, then for each chain member with a decision
 /// publishes it at the revision this path pins on the member, each in its
 /// own transaction (atomic per change, not across the chain). A decision
 /// illegal for the member's current lifecycle is skipped into `errors`

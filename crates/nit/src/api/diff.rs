@@ -14,9 +14,10 @@ use imara_diff::{Algorithm, InternedInput};
 use nit_types::diff::{Diff, DiffFile, Hunk, Line};
 use nit_types::enums::{FileStatus, LineKind};
 
-/// The reserved synthetic diff path carrying the revision's commit
-/// message. Git tree paths cannot start with `/`, so it can never
-/// collide with a real file.
+/// The reserved synthetic diff path for the revision's commit message.
+///
+/// Git tree paths cannot start with `/`, so it can never collide with a
+/// real file.
 pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
 
 /// The tree of the commit `sha` names, when everything resolves.
@@ -28,11 +29,13 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
         .ok()
 }
 
-/// The raw git diff `old → new` with rename detection — the one definition of
-/// how nit pairs a delete with an add. Git supplies the deltas only; the lines
-/// inside each of them come from `line_hunks`. Built separately from
-/// [`render`] so a caller can resolve rebase drift ([`super::rebase::analyze`])
-/// against the same deltas before deciding which are worth rendering.
+/// The raw git diff `old → new`, with rename detection.
+///
+/// The one definition of how nit pairs a delete with an add. Git supplies
+/// the deltas only; the lines inside each of them come from `line_hunks`.
+/// Built separately from [`render`] so a caller can resolve rebase drift
+/// ([`super::rebase::analyze`]) against the same deltas before deciding
+/// which are worth rendering.
 ///
 /// # Errors
 /// When git can't build the diff or run rename detection.
@@ -62,10 +65,12 @@ pub(super) fn line_edits<T: AsRef<[u8]>>(input: &InternedInput<T>) -> Vec<imara_
     diff.hunks().collect()
 }
 
-/// A delta as the wire carries it — its status, the path it appears under (the
-/// new-side name, or the old-side one for a deletion) and the old-side name
-/// when a rename made the two differ. `None` for a status the wire never
-/// renders, so every walk over the same deltas agrees on which exist.
+/// A delta as the wire carries it.
+///
+/// Its status, the path it appears under (the new-side name, or the
+/// old-side one for a deletion) and the old-side name when a rename made
+/// the two differ. `None` for a status the wire never renders, so every
+/// walk over the same deltas agrees on which exist.
 pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<(FileStatus, String, Option<String>)> {
     let status = delta_status(delta.status())?;
     let path = |f: git2::DiffFile| {
@@ -82,8 +87,10 @@ pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<(FileStatus, String,
     Some((status, wire, old))
 }
 
-/// Render `diff`'s deltas as the wire shape, with `context` unchanged lines
-/// around each change ([`u32::MAX`] for the full-context `/lines` source).
+/// Renders `diff`'s deltas as the wire shape.
+///
+/// `context` unchanged lines around each change ([`u32::MAX`] for the
+/// full-context `/lines` source).
 ///
 /// `keep` decides which paths are worth rendering — the caller's chance to drop
 /// a file (the one it is viewing, or one it has already proved to be pure
@@ -134,8 +141,10 @@ pub fn render(
     Ok(Diff { files })
 }
 
-/// A blob's bytes, `None` when it is binary. The null oid — the absent side of
-/// an add or delete — is the empty text.
+/// A blob's bytes, `None` when it is binary.
+///
+/// The null oid — the absent side of an add or delete — is the empty
+/// text.
 ///
 /// `path` decides it as git does, by `.gitattributes` first: a file marked
 /// `binary` or `-diff` is binary whatever its bytes look like. Content is only
@@ -165,8 +174,10 @@ fn delta_status(delta: Delta) -> Option<FileStatus> {
     }
 }
 
-/// A file's wire counts. Drift lines are the base's work, not the change's, so
-/// they never count ([`super::rebase::Drift`] tags them after rendering).
+/// A file's wire counts.
+///
+/// Drift lines are the base's work, not the change's, so they never count
+/// ([`super::rebase::Drift`] tags them after rendering).
 pub(super) fn stats(hunks: &[Hunk]) -> (u64, u64) {
     let (mut additions, mut deletions) = (0, 0);
     for line in hunks.iter().flat_map(|h| &h.lines).filter(|l| !l.drift) {
@@ -179,9 +190,11 @@ pub(super) fn stats(hunks: &[Hunk]) -> (u64, u64) {
     (additions, deletions)
 }
 
-/// The wire hunks of `old → new`: each run of changed lines with `context`
-/// unchanged lines on either side, runs closer than twice that merged into one
-/// hunk (git's grouping, so a hunk never shows the same line twice).
+/// The wire hunks of `old → new`.
+///
+/// Each run of changed lines with `context` unchanged lines on either
+/// side, runs closer than twice that merged into one hunk (git's
+/// grouping, so a hunk never shows the same line twice).
 fn line_hunks(input: &InternedInput<&str>, context: u32) -> Vec<Hunk> {
     let edits: Vec<(Range<usize>, Range<usize>)> = line_edits(input)
         .into_iter()
@@ -291,11 +304,12 @@ fn wire_line(kind: LineKind, old: Option<usize>, new: Option<usize>, text: &str)
     }
 }
 
-/// The synthetic [`COMMIT_MSG_PATH`] entry injected at the front of every
-/// diff: vs parent (`old: None`) the whole message as one all-`add`
-/// hunk; interdiff a real line diff `old → new`, identical messages
-/// rendered as a single all-`context` hunk so the message stays visible
-/// and commentable.
+/// The synthetic [`COMMIT_MSG_PATH`] entry at the front of every diff.
+///
+/// Vs parent (`old: None`) the whole message as one all-`add` hunk;
+/// interdiff a real line diff `old → new`, identical messages rendered as
+/// a single all-`context` hunk so the message stays visible and
+/// commentable.
 #[must_use]
 pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
     let input = InternedInput::new(old.unwrap_or_default(), new);
@@ -333,9 +347,11 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
     }
 }
 
-/// Line `line` (1-based) of `text`, `None` out of range — the snapshot
-/// primitive behind `comments.line_text`, applied to commit messages
-/// ([`COMMIT_MSG_PATH`] drafts) and tree files ([`line_text`]) alike.
+/// Line `line` (1-based) of `text`, `None` out of range.
+///
+/// The snapshot primitive behind `comments.line_text`, applied to commit
+/// messages ([`COMMIT_MSG_PATH`] drafts) and tree files ([`line_text`])
+/// alike.
 #[must_use]
 pub fn nth_line(text: &str, line: u64) -> Option<String> {
     if line < 1 {
@@ -345,16 +361,18 @@ pub fn nth_line(text: &str, line: u64) -> Option<String> {
     text.lines().nth(idx).map(str::to_string)
 }
 
-/// The full text of `file` in `tree`, `None` for a missing/binary path —
-/// the shared read behind [`line_text`] and [`line_range`].
+/// The full text of `file` in `tree`, `None` for a missing/binary path.
+///
+/// The shared read behind [`line_text`] and [`line_range`].
 fn blob_text(repo: &Repository, tree: &Tree, file: &str) -> Option<String> {
     let oid = tree.get_path(Path::new(file)).ok()?.id();
     let bytes = blob_bytes(repo, file, oid).ok()??;
     Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
-/// Snapshot of line `line` (1-based) of `file` in `tree`, for
-/// `comments.line_text`. `None` when the path/line/encoding make that
+/// Snapshot of line `line` (1-based) of `file` in `tree`.
+///
+/// For `comments.line_text`; `None` when the path/line/encoding make that
 /// impossible.
 #[must_use]
 pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: u64) -> Option<String> {

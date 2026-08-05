@@ -1,7 +1,9 @@
-//! View assembly: the per-change folds (`crate::review`) + chain derivation
-//! (`crate::chain`) + reviewer drafts → the `nit_types` wire shapes. Chain
-//! views take a [`RepoView`] snapshot plus the repo handle (for query-time tip
-//! names); draft rows come from the database.
+//! View assembly: folds + chain derivation + drafts → wire shapes.
+//!
+//! The per-change folds (`crate::review`), chain derivation
+//! (`crate::chain`) and reviewer drafts become the `nit_types` wire shapes.
+//! Chain views take a [`RepoView`] snapshot plus the repo handle (for
+//! query-time tip names); draft rows come from the database.
 
 use std::collections::{HashMap, HashSet};
 
@@ -22,8 +24,10 @@ use crate::review::ChangeProj;
 
 use super::Error;
 
-/// Build the derived `Chain` for one tip commit-sha — the dashboard list
-/// entry, the chain page, and the push result all share this one shape.
+/// Builds the derived `Chain` for one tip commit-sha.
+///
+/// The dashboard list entry, the chain page, and the push result all share
+/// this one shape.
 #[must_use]
 pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &str) -> Chain {
     let path = view.path_from_tip(tip_sha);
@@ -67,10 +71,12 @@ fn path_entry(change: &ChangeProj, member: &PathMember, position: u64) -> PathEn
 // ---------------------------------------------------------------------------
 // Graph (the spine-centered DAG)
 
-/// Assemble the repo's change graph: the canonical HEAD anchor and a
-/// `merged_window` of merged history below it (a git walk), plus every active
-/// change ascending above it (the same derivation as a chain, unioned and
-/// deduplicated by commit-sha). Nodes are returned in topological row order.
+/// Assembles the repo's change graph.
+///
+/// The canonical HEAD anchor and a `merged_window` of merged history below
+/// it (a git walk), plus every active change ascending above it (the same
+/// derivation as a chain, unioned and deduplicated by commit-sha). Nodes are
+/// returned in topological row order.
 ///
 /// # Errors
 /// When the canonical branch can't be walked.
@@ -181,10 +187,12 @@ pub fn build_graph(
     })
 }
 
-/// The tip whose path walks `change` at `revision`, else the change's own
-/// revision sha (a dangling change is its own degenerate tip). Enumerates
-/// abandoned leaves too (membership-inert), so an abandoned change resolves to
-/// a real chain, not only the degenerate fallback.
+/// The tip whose path walks `change` at `revision`.
+///
+/// Else the change's own revision sha (a dangling change is its own
+/// degenerate tip). Enumerates abandoned leaves too (membership-inert), so
+/// an abandoned change resolves to a real chain, not only the degenerate
+/// fallback.
 #[must_use]
 pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<String> {
     for tip in view.enumerable_tips() {
@@ -201,9 +209,10 @@ pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<String>
         .map(|r| r.commit_sha.clone())
 }
 
-/// Resolve the `(revision, tip_sha)` a chain handler operates on: the
-/// explicitly `requested` revision, else the change's latest. The path-walking
-/// tip is found via [`tip_for`].
+/// Resolves the `(revision, tip_sha)` a chain handler operates on.
+///
+/// The explicitly `requested` revision, else the change's latest. The
+/// path-walking tip is found via [`tip_for`].
 ///
 /// # Errors
 /// 404 if the change has no revisions, or if `requested` names a revision with
@@ -243,11 +252,12 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
     }
 }
 
-/// The reviewer's private overlay — unpublished drafts and the staged decision
-/// — read straight from the database. Not log state, so the change page reads
-/// it over REST (`GET /api/changes/{id}/drafts`) while folding the published
-/// projection over the websocket; the change detail folds the same
-/// overlay in.
+/// The reviewer's private overlay, read straight from the database.
+///
+/// Unpublished drafts and the staged decision. Not log state, so the change
+/// page reads it over REST (`GET /api/changes/{id}/drafts`) while folding
+/// the published projection over the websocket; the change detail folds the
+/// same overlay in.
 ///
 /// # Errors
 /// When reading drafts fails.
@@ -264,8 +274,10 @@ pub fn change_overlay(conn: &Connection, change_id: u64) -> Result<ChangeDrafts>
     })
 }
 
-/// A pure read of the single fold — the chains a change sits on come from the
-/// chain endpoints (`GET /api/chains/{id}`), so a change read builds no view.
+/// A pure read of the single fold.
+///
+/// The chains a change sits on come from the chain endpoints
+/// (`GET /api/chains/{id}`), so a change read builds no view.
 ///
 /// # Errors
 /// When reading drafts fails.

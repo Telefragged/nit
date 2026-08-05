@@ -1,5 +1,7 @@
-//! HTTP API, axum 0.8. The wire shapes are the shared [`nit_types`] crate
-//! (the contract, golden rule 4).
+//! HTTP API, axum 0.8.
+//!
+//! The wire shapes are the shared [`nit_types`] crate (the contract,
+//! golden rule 4).
 //!
 //! - [`diff`] — diff JSON rendering and line-text snapshots.
 //! - [`views`] — the per-change folds + chain derivation → wire shapes.
@@ -156,12 +158,14 @@ pub async fn serve_on(
     res
 }
 
-/// Serve `app` from a caller-owned [`AppState`] until `shutdown` resolves.
-/// Unlike [`serve_on`] it spawns **no lifecycle timer**: the only sweeps are
-/// the ones the owner triggers through [`sweep_once`], so a test driving the
-/// state in-process never has a stray sweep land between its setup and a later
-/// assertion. Owning the state is also what lets that in-process driver act on
-/// the very projections the server reads, instead of going over the wire.
+/// Serves `app` from a caller-owned [`AppState`].
+///
+/// Runs until `shutdown` resolves. Unlike [`serve_on`] it spawns **no
+/// lifecycle timer**: the only sweeps are the ones the owner triggers
+/// through [`sweep_once`], so a test driving the state in-process never has
+/// a stray sweep land between its setup and a later assertion. Owning the
+/// state is also what lets that in-process driver act on the very
+/// projections the server reads, instead of going over the wire.
 ///
 /// # Errors
 /// When accepting connections fails.
@@ -182,8 +186,10 @@ pub async fn serve_on_state(
     Ok(())
 }
 
-/// Loads from the DB log on a miss; may replay one change off disk, so every
-/// caller must resolve inside [`with_conn`].
+/// Loads from the DB log on a miss.
+///
+/// May replay one change off disk, so every caller must resolve inside
+/// [`with_conn`].
 fn change_or_404(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
@@ -194,9 +200,11 @@ fn change_or_404(
         .ok_or_else(|| Error::not_found(format!("change {change_id} not found")))
 }
 
-/// The chain context a chain endpoint operates on: the repo's [`RepoView`], its
-/// id, and the tip sha the path through `change_id` walks at `revision`. Shared
-/// by `get_chain`, `chain_log`, and `submit_chain`.
+/// The chain context a chain endpoint operates on.
+///
+/// The repo's [`RepoView`], its id, and the tip sha the path through
+/// `change_id` walks at `revision`. Shared by `get_chain`, `chain_log`, and
+/// `submit_chain`.
 fn chain_context(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
@@ -232,9 +240,10 @@ async fn health() -> Json<Health> {
     })
 }
 
-/// The merged-history window for the change graph: a fixed depth, not a
-/// client knob. `pub` so the HTTP truncation test can build exactly this
-/// many commits.
+/// The merged-history window for the change graph.
+///
+/// A fixed depth, not a client knob. `pub` so the HTTP truncation test can
+/// build exactly this many commits.
 pub const MERGED_WINDOW: u64 = 5;
 
 #[derive(Deserialize)]
@@ -242,8 +251,10 @@ struct ChainQuery {
     revision: Option<u64>,
 }
 
-/// Build the `ChangeDetail` from one change's fold — a pure single-change read,
-/// no repo view. The shared tail of the three change-detail handlers.
+/// Builds the `ChangeDetail` from one change's fold.
+///
+/// A pure single-change read, no repo view. The shared tail of the three
+/// change-detail handlers.
 fn change_detail_json(
     conn: &rusqlite::Connection,
     entry: &ChangeEntry,
@@ -252,9 +263,11 @@ fn change_detail_json(
     Ok(Json(views::build_change_detail(conn, &change)?))
 }
 
-/// Validate a new thread's anchor: `line` and `range` are mutually
-/// exclusive anchor kinds; a ranged thread anchors under the selection's
-/// last line. Returns the resolved `(side, line, range)`.
+/// Validates a new thread's anchor.
+///
+/// `line` and `range` are mutually exclusive anchor kinds; a ranged thread
+/// anchors under the selection's last line. Returns the resolved
+/// `(side, line, range)`.
 fn validate_anchor(
     side: Option<Side>,
     file: Option<&str>,

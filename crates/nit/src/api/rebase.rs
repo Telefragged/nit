@@ -1,6 +1,7 @@
-//! Rebase-aware interdiffs: detect and contain "drift" — the parts of an
-//! interdiff `m → n` caused by the change's base moving (a rebase) rather
-//! than by the change's own edits.
+//! Rebase-aware interdiffs: detect and contain "drift".
+//!
+//! Drift is the parts of an interdiff `m → n` caused by the change's base
+//! moving (a rebase) rather than by the change's own edits.
 //!
 //! Gerrit's mechanism, line-level: diff the two parents
 //! (`parent(m) → parent(n)`) to find the base movement, then project those
@@ -47,10 +48,11 @@ use nit_types::enums::LineKind;
 
 use super::diff;
 
-/// A 0-based, half-open line range, and an edit turning one into another —
+/// A 0-based, half-open line range; `Edit` turns one into another.
+///
 /// [`imara_diff::Hunk`]'s `before`/`after`, which is already what the
-/// projection speaks. A pure insertion has an empty `before`, a pure deletion
-/// an empty `after`.
+/// projection speaks. A pure insertion has an empty `before`, a pure
+/// deletion an empty `after`.
 type Span = Range<u32>;
 type Edit = imara_diff::Hunk;
 
@@ -66,14 +68,16 @@ fn net_delta(e: &Edit) -> i64 {
     i64::from(e.after.end - e.after.start) - i64::from(e.before.end - e.before.start)
 }
 
-/// Map the parts of `pos` that the change's own edits (`mappings`) did **not**
-/// touch into the mappings' B-coordinate space, shifting each surviving
-/// sub-range by the running insert/delete delta of the mappings before it.
-/// A part of `pos` covered by a mapping's A-range is dropped — the change
-/// edited those lines, so they show as a real edit, not drift (gerrit's
-/// `OmitPositionOnConflict`, refined to line granularity: a base edit that
-/// straddles one of the change's own lines still contributes its untouched
-/// lines).
+/// Maps the parts of `pos` the mappings missed into B coordinates.
+///
+/// The parts of `pos` that the change's own edits (`mappings`) did **not**
+/// touch move into the mappings' B-coordinate space, each surviving
+/// sub-range shifted by the running insert/delete delta of the mappings
+/// before it. A part of `pos` covered by a mapping's A-range is dropped —
+/// the change edited those lines, so they show as a real edit, not drift
+/// (gerrit's `OmitPositionOnConflict`, refined to line granularity: a base
+/// edit that straddles one of the change's own lines still contributes its
+/// untouched lines).
 ///
 /// `mappings` must be ascending by `before.start` and disjoint —
 /// `buffer_edits` (one edit per ascending hunk) yields them that way.
@@ -111,13 +115,15 @@ fn project_clipped(pos: &Span, mappings: &[Edit]) -> Vec<Span> {
     out
 }
 
-/// Project every base-movement (`pvp`) edit into the interdiff's `m`/`n` line
-/// coordinates, independently per side: the A-range through the change's own
-/// delta at `m` (`ovp`, `parent(m) → m`) and the B-range through its delta at
-/// `n` (`nvp`, `parent(n) → n`). Per-side clipping keeps the lines the change
-/// didn't touch, so an edit the diff folded across one of its own lines still
-/// yields its drifted lines. Returns the drift line ranges on the old (`m`)
-/// and new (`n`) sides of the interdiff.
+/// Projects every base-movement edit into the interdiff's coordinates.
+///
+/// Every `pvp` edit lands in the interdiff's `m`/`n` line coordinates,
+/// independently per side: the A-range through the change's own delta at
+/// `m` (`ovp`, `parent(m) → m`) and the B-range through its delta at `n`
+/// (`nvp`, `parent(n) → n`). Per-side clipping keeps the lines the change
+/// didn't touch, so an edit the diff folded across one of its own lines
+/// still yields its drifted lines. Returns the drift line ranges on the old
+/// (`m`) and new (`n`) sides of the interdiff.
 fn drift_ranges(pvp: &[Edit], ovp: &[Edit], nvp: &[Edit]) -> DriftRanges {
     let mut old_ranges = Vec::new();
     let mut new_ranges = Vec::new();
@@ -133,16 +139,19 @@ fn drifted(ranges: &[Span], line: u32) -> bool {
     ranges.iter().any(|r| r.contains(&line))
 }
 
-/// The oid of `path` in `tree`, zero when it is absent — the null oid every
-/// git tree diff already uses for the missing side of an add or delete, and
-/// what [`diff::blob_bytes`] reads as the empty text.
+/// The oid of `path` in `tree`, zero when it is absent.
+///
+/// The null oid every git tree diff already uses for the missing side of an
+/// add or delete, and what [`diff::blob_bytes`] reads as the empty text.
 fn entry_oid(tree: &Tree, path: &str) -> Oid {
     tree.get_path(Path::new(path))
         .map_or(Oid::zero(), |e| e.id())
 }
 
-/// Every path a tree diff touches, as `(name in old, name in new)` — the two
-/// differ exactly when rename detection paired a delete with an add.
+/// Every path a tree diff touches, as `(name in old, name in new)`.
+///
+/// The two differ exactly when rename detection paired a delete with an
+/// add.
 fn moves(repo: &Repository, old: &Tree, new: &Tree) -> Result<Vec<(String, String)>> {
     let diff = diff::git_diff(repo, old, new)?;
     let name = |f: git2::DiffFile<'_>| f.path().map(|p| p.to_string_lossy().into_owned());
@@ -152,8 +161,7 @@ fn moves(repo: &Repository, old: &Tree, new: &Tree) -> Result<Vec<(String, Strin
         .collect())
 }
 
-/// One interdiff file's drifted line ranges, on the old (`m`) and new (`n`)
-/// sides.
+/// One interdiff file's drifted line ranges, old (`m`) and new (`n`).
 ///
 /// The blobs are the file's content in `parent(m)`, `m`, `parent(n)` and `n`,
 /// each read under its name in that tree.
@@ -168,8 +176,10 @@ fn file_drift(bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> DriftRanges {
     drift_ranges(&pvp, &ovp, &nvp)
 }
 
-/// Whether any line of `edit` escapes the drift ranges — an edit the change
-/// made itself, which the reviewer must still see.
+/// Whether any line of `edit` escapes the drift ranges.
+///
+/// One that does is an edit the change made itself, which the reviewer must
+/// still see.
 fn escapes_drift(edit: &Edit, old: &[Span], new: &[Span]) -> bool {
     let free = |span: &Span, ranges: &[Span]| span.clone().any(|l| !drifted(ranges, l));
     free(&edit.before, old) || free(&edit.after, new)
@@ -179,12 +189,13 @@ fn is_real_change(line: &Line) -> bool {
     matches!(line.kind, LineKind::Add | LineKind::Del) && !line.drift
 }
 
-/// An interdiff's rebase drift, resolved from context-0 edit spans alone —
-/// before any file is rendered. A file the base movement fully explains
-/// never costs a blob read or a line diff, which is why the analysis runs
-/// first: a rebase over a long base moves far more files than the change
-/// itself touches, and rendering them only to discard them is the bulk of
-/// the work.
+/// An interdiff's rebase drift, from context-0 edit spans alone.
+///
+/// Resolved before any file is rendered. A file the base movement fully
+/// explains never costs a blob read or a line diff, which is why the
+/// analysis runs first: a rebase over a long base moves far more files than
+/// the change itself touches, and rendering them only to discard them is
+/// the bulk of the work.
 ///
 /// Per analysed file: `None` — every edit is base movement, so don't render it
 /// at all; `Some(ranges)` — render it and tag these old/new lines. A file in
@@ -200,9 +211,11 @@ impl Drift {
         !matches!(self.0.get(path), Some(None))
     }
 
-    /// Mark each analysed file's drift lines in place, drop its fully-drift
-    /// hunks and recount its non-drift totals. Leaves every other file
-    /// byte-identical, so a same-parent interdiff is untouched.
+    /// Marks each analysed file's drift lines in place.
+    ///
+    /// Drops its fully-drift hunks and recounts its non-drift totals.
+    /// Leaves every other file byte-identical, so a same-parent interdiff
+    /// is untouched.
     pub fn tag(&self, diff: &mut Diff) {
         for file in &mut diff.files {
             let Some(Some((old_ranges, new_ranges))) = self.0.get(&file.path) else {
@@ -227,10 +240,12 @@ impl Drift {
     }
 }
 
-/// Resolve the drift of `interdiff` (`tree(m) → tree(n)`, built by the caller
-/// so its tree diff and rename detection are paid once). `only` bounds the
-/// analysis to a single file, matching the render's own bound. The caller
-/// invokes this only when `parent(m) != parent(n)`.
+/// Resolves the drift of `interdiff` (`tree(m) → tree(n)`).
+///
+/// The interdiff is built by the caller so its tree diff and rename
+/// detection are paid once. `only` bounds the analysis to a single file,
+/// matching the render's own bound. The caller invokes this only when
+/// `parent(m) != parent(n)`.
 ///
 /// Best-effort and per-file: a file that is binary, whose blobs cannot be
 /// read, or whose parent names the base movement does not connect is left
@@ -326,8 +341,10 @@ pub fn analyze(
     Ok(drift)
 }
 
-/// A revision and the parent its diff is taken against — the pair `analyze`
-/// needs at each end of an interdiff, named so the two cannot be swapped.
+/// A revision and the parent its diff is taken against.
+///
+/// The pair `analyze` needs at each end of an interdiff, named so the two
+/// cannot be swapped.
 pub struct Rev<'a> {
     pub commit: &'a str,
     pub parent: &'a str,

@@ -1,6 +1,8 @@
-//! Shared server state: the in-memory fold of every **change's** log, the
-//! repo registry cache, the per-change append primitive, the server-wide event
-//! channel, and the API error type.
+//! Shared server state.
+//!
+//! The in-memory fold of every **change's** log, the repo registry cache,
+//! the per-change append primitive, the server-wide event channel, and the
+//! API error type.
 //!
 //! Each change's [`ChangeProj`] is rebuilt by
 //! replaying its log on startup and kept current by [`append_to_change`],
@@ -28,32 +30,40 @@ use crate::chain::RepoView;
 use crate::db;
 use crate::review::{self, ChangeProj};
 
-/// Live-event buffer. The channel carries every change's entries, so this
-/// covers the server's traffic rather than one change's burst. A follower
-/// lagging more than this many entries behind is dropped from the stream and
-/// reconnects + re-reads the gap from the log (the log is the source of truth).
+/// Live-event buffer.
+///
+/// The channel carries every change's entries, so this covers the server's
+/// traffic rather than one change's burst. A follower lagging more than this
+/// many entries behind is dropped from the stream and reconnects + re-reads
+/// the gap from the log (the log is the source of truth).
 const EVENTS_BUFFER: usize = 1024;
 
 pub struct AppState {
     pool: Pool,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
     changes: StdMutex<HashMap<u64, Arc<ChangeEntry>>>,
-    /// Every appended entry, for every change. One channel keeps following
-    /// orthogonal to a change's residency and lifecycle, and is the seam for
-    /// the filters that don't exist yet (by repo, by branch, by session).
+    /// Every appended entry, for every change.
+    ///
+    /// One channel keeps following orthogonal to a change's residency and
+    /// lifecycle, and is the seam for the filters that don't exist yet (by
+    /// repo, by branch, by session).
     events: Sender<LogEntry>,
     /// A parked receiver so the channel never closes for lack of followers.
     events_keepalive: InactiveReceiver<LogEntry>,
-    /// Process-global allocator for draft ids, seeded past the `draft_comments`
-    /// rows in use. Change ids are `changes` rowids and review ids are log
-    /// coordinates — neither is allocated here.
+    /// Process-global allocator for draft ids.
+    ///
+    /// Seeded past the `draft_comments` rows in use. Change ids are
+    /// `changes` rowids and review ids are log coordinates — neither is
+    /// allocated here.
     next_id: AtomicU64,
     shutdown: watch::Sender<bool>,
 }
 
-/// Cached repo registry entry; `git_dir` is in an `RwLock` because `nit repo move`
-/// repoints it in-place. The merge timer's baseline is not cached here — it lives
-/// only in `repos.base_head` (the merge sweep's cursor, `crate::api::timer`).
+/// Cached repo registry entry.
+///
+/// `git_dir` is in an `RwLock` because `nit repo move` repoints it in-place.
+/// The merge timer's baseline is not cached here — it lives only in
+/// `repos.base_head` (the merge sweep's cursor, `crate::api::timer`).
 pub struct RepoState {
     pub base_ref: String,
     pub git_dir: StdRwLock<String>,
@@ -77,8 +87,10 @@ impl RepoState {
     }
 }
 
-/// Per-change coordination: write-locking `proj` both serializes appenders and
-/// guards the fold; held only inside `spawn_blocking`, never across `.await`.
+/// Per-change coordination.
+///
+/// Write-locking `proj` both serializes appenders and guards the fold; held
+/// only inside `spawn_blocking`, never across `.await`.
 pub struct ChangeEntry {
     proj: StdRwLock<ChangeProj>,
 }
@@ -98,8 +110,10 @@ impl ChangeEntry {
 }
 
 impl AppState {
-    /// Initialize from `db_path`, seeding the id allocator above every draft
-    /// id in use to prevent reuse after restart.
+    /// Initializes the state from `db_path`.
+    ///
+    /// Seeds the id allocator above every draft id in use to prevent reuse
+    /// after restart.
     ///
     /// # Errors
     /// When the pool can't be built, the schema migration fails, or a log fails
@@ -152,15 +166,19 @@ impl AppState {
         }))
     }
 
-    /// Publish an entry to live followers. Best-effort: with none, the channel
-    /// is inactive and the message is dropped (it is durable in the log).
+    /// Publishes an entry to live followers.
+    ///
+    /// Best-effort: with none, the channel is inactive and the message is
+    /// dropped (it is durable in the log).
     pub fn publish(&self, msg: LogEntry) {
         let _ = self.events.try_broadcast(msg);
     }
 
-    /// A subscription to the server's event stream, carrying every change. It
-    /// sees only entries published after this call, so arming it **before**
-    /// reading a backlog leaves no gap for an append to slip through.
+    /// A subscription to the server's event stream, carrying every change.
+    ///
+    /// It sees only entries published after this call, so arming it
+    /// **before** reading a backlog leaves no gap for an append to slip
+    /// through.
     pub fn subscribe(&self) -> Receiver<LogEntry> {
         self.events_keepalive.activate_cloned()
     }
@@ -169,7 +187,7 @@ impl AppState {
         self.next_id.fetch_add(1, Ordering::SeqCst)
     }
 
-    /// Signal shutdown, waking every task subscribed via [`Self::shutdown_watch`].
+    /// Signals shutdown, waking every task subscribed via [`Self::shutdown_watch`].
     pub fn begin_shutdown(&self) {
         self.shutdown.send_replace(true);
     }
@@ -238,11 +256,13 @@ impl AppState {
         state
     }
 
-    /// The change's entry: the resident fold, else replayed from its log. The
-    /// single way to reach a change — nothing reads the map directly, so a
-    /// change absent from it is a miss to serve, never a change to skip. A
-    /// brand-new change with no log entries folds to an empty projection.
-    /// Touches the DB only on a miss, so pass the caller's pooled connection.
+    /// The change's entry: the resident fold, else replayed from its log.
+    ///
+    /// The single way to reach a change — nothing reads the map directly,
+    /// so a change absent from it is a miss to serve, never a change to
+    /// skip. A brand-new change with no log entries folds to an empty
+    /// projection. Touches the DB only on a miss, so pass the caller's
+    /// pooled connection.
     ///
     /// The allocator was seeded past every fold-assigned id at startup and
     /// mints the ones written since, so a replay here seeds nothing.
@@ -276,10 +296,12 @@ impl AppState {
         Ok(Some(map.entry(change_id).or_insert(entry).clone()))
     }
 
-    /// Snapshot every change of one repo (each cloned out from under its lock)
-    /// and build a [`RepoView`] for chain derivation. The `changes` table is
-    /// the enumeration, so the view covers the repo whatever the map holds;
-    /// every member resolves through [`AppState::change`].
+    /// Snapshots one repo's changes into a [`RepoView`].
+    ///
+    /// Every change is cloned out from under its lock, and the view is what
+    /// chain derivation reads. The `changes` table is the enumeration, so
+    /// the view covers the repo whatever the map holds; every member
+    /// resolves through [`AppState::change`].
     ///
     /// # Errors
     /// When the DB read or a replay fails.
@@ -300,9 +322,11 @@ impl AppState {
     }
 }
 
-/// Append a batch of entries to one change (one transaction), folding them in
-/// lock-step, and return the applied entries (with their minted `seq`). See
-/// [`append_to_change_with`]; this is the no-extra-work case.
+/// Appends a batch of entries to one change, in one transaction.
+///
+/// Folds them in lock-step and returns the applied entries (with their
+/// minted `seq`). See [`append_to_change_with`]; this is the no-extra-work
+/// case.
 ///
 /// # Errors
 /// See [`append_to_change_with`].
@@ -316,12 +340,14 @@ pub fn append_to_change(
     append_to_change_with(state, conn, entry, change_id, news, |_| Ok(()))
 }
 
-/// Append entries to one change, running `pre_commit` inside the **same**
-/// transaction first (e.g. draining drafts atomically with a `review` append).
-/// The change's projection write lock serializes appenders, so the
-/// committed-state `idx` is consistent and applies happen in order — no
-/// reorder buffer needed. The lock spans the commit, so a reader can briefly
-/// stall behind an in-flight append; cross-change appends never contend.
+/// Appends entries to one change, with `pre_commit` in-transaction.
+///
+/// `pre_commit` runs inside the **same** transaction first (e.g. draining
+/// drafts atomically with a `review` append). The change's projection write
+/// lock serializes appenders, so the committed-state `idx` is consistent and
+/// applies happen in order — no reorder buffer needed. The lock spans the
+/// commit, so a reader can briefly stall behind an in-flight append;
+/// cross-change appends never contend.
 ///
 /// The new entries are folded into a **clone** of the projection **before** the
 /// commit; a payload that won't fold errors out with nothing written, so the
@@ -414,10 +440,12 @@ pub fn append_to_change_with(
     Ok(applied)
 }
 
-/// Acquire a pooled connection and run blocking rusqlite/git2 work on it, off
-/// the async runtime — deadpool's `interact` hands the closure a
-/// `&mut Connection` on a blocking thread. The per-request connection accessor
-/// every handler routes its work through.
+/// Runs blocking rusqlite/git2 work on a pooled connection.
+///
+/// Acquires the connection and runs the work off the async runtime —
+/// deadpool's `interact` hands the closure a `&mut Connection` on a blocking
+/// thread. The per-request connection accessor every handler routes its work
+/// through.
 ///
 /// # Errors
 /// When the pool can't hand out a connection, the blocking task is cancelled or
@@ -481,8 +509,10 @@ impl Error {
     }
 }
 
-/// Extractor wrappers that turn axum's built-in rejections (text/plain
-/// bodies) into the documented `{"error": …}` JSON shape.
+/// Extractor wrappers over axum's built-in rejections.
+///
+/// They turn its text/plain bodies into the documented `{"error": …}` JSON
+/// shape.
 pub struct AppJson<T>(pub T);
 
 impl<S, T> axum::extract::FromRequest<S> for AppJson<T>
@@ -549,8 +579,9 @@ where
     }
 }
 
-/// `SQLITE_BUSY/LOCKED` anywhere in an error chain: cross-change write
-/// contention, not a broken database.
+/// `SQLITE_BUSY/LOCKED` anywhere in an error chain.
+///
+/// Cross-change write contention, not a broken database.
 #[must_use]
 pub fn is_sqlite_busy(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| {

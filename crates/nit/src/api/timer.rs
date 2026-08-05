@@ -1,5 +1,7 @@
-//! The background lifecycle timer: detect merged changes and append
-//! `lifecycle{merged}` entries (the only writer of `merged`).
+//! The background lifecycle timer.
+//!
+//! Detects merged changes and appends `lifecycle{merged}` entries (the only
+//! writer of `merged`).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,10 +30,11 @@ fn timer_interval() -> Duration {
     )
 }
 
-/// The background sweep: detect **merged** changes (a change landed on the
-/// canonical branch) and append `lifecycle{merged}` entries. The only
-/// writer of `merged`. It never abandons — abandonment is an explicit
-/// action (`abandon_change`).
+/// The background sweep for **merged** changes.
+///
+/// Detects a change landed on the canonical branch and appends
+/// `lifecycle{merged}` entries. The only writer of `merged`. It never
+/// abandons — abandonment is an explicit action (`abandon_change`).
 pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
     let interval = timer_interval();
     let mut shutdown = state.shutdown_watch();
@@ -44,9 +47,10 @@ pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
     }
 }
 
-/// Run one lifecycle sweep to completion. The background timer calls this on
-/// its interval; tests call it directly to drive merge detection without
-/// waiting on — or coupling to — the timer.
+/// Runs one lifecycle sweep to completion.
+///
+/// The background timer calls this on its interval; tests call it directly
+/// to drive merge detection without waiting on — or coupling to — the timer.
 pub async fn sweep_once(state: &Arc<AppState>) {
     let st = state.clone();
     let _ = with_conn(state.pool(), move |conn| {
@@ -56,11 +60,13 @@ pub async fn sweep_once(state: &Arc<AppState>) {
     .await;
 }
 
-/// One sweep: for each repo whose canonical branch has moved since the last
-/// sweep, scan only the new commits for landings, append `lifecycle{merged}`,
-/// and record the new HEAD as the baseline. The baseline lives only in the DB
-/// (`repos.base_head`) — the single source of truth — so a repo whose branch is
-/// unchanged costs one ref resolution and one indexed row read.
+/// One sweep of every repo whose canonical branch has moved.
+///
+/// For each such repo — moved since the last sweep — scan only the new
+/// commits for landings, append `lifecycle{merged}`, and record the new HEAD
+/// as the baseline. The baseline lives only in the DB (`repos.base_head`) —
+/// the single source of truth — so a repo whose branch is unchanged costs
+/// one ref resolution and one indexed row read.
 fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
     for repo_id in state.repo_ids() {
         let Some(repo_state) = state.repo_state(repo_id) else {

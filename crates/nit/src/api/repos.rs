@@ -24,10 +24,11 @@ fn repo_json(state: &AppState, conn: &Connection, row: db::RepoRow) -> Result<Re
     })
 }
 
-/// Register a repo (`nit repo create`), configuring its one canonical base
-/// ref. `base` must resolve to a commit — any git ref, e.g. `origin/main`
-/// (400 otherwise); nit never guesses it. 409 if the git dir is already
-/// registered.
+/// Registers a repo (`nit repo create`) with its base ref.
+///
+/// The one canonical base ref of the repo: `base` must resolve to a commit
+/// — any git ref, e.g. `origin/main` (400 otherwise); nit never guesses it.
+/// 409 if the git dir is already registered.
 pub(super) async fn create_repo(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<CreateRepo>,
@@ -67,7 +68,7 @@ pub(super) async fn create_repo(
     .await
 }
 
-/// List every registered repo with its live-tip count (derived, never stored).
+/// Lists every registered repo with its live-tip count (derived, never stored).
 pub(super) async fn list_repos(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<RepoList>, Error> {
