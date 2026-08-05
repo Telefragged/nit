@@ -1,35 +1,5 @@
 # Development
 
-**Every command runs in the devShell**: `nix develop -c <cmd>` (or direnv
-via `.envrc`). Never use system cargo/node.
-
-## Loops
-
-```sh
-# backend
-nix develop -c cargo run -- serve              # api on :8877
-nix develop -c cargo check                     # fast compile gate
-nix develop -c cargo clippy --all-targets      # -D warnings via Cargo.toml lints
-nix develop -c cargo test
-nix develop -c cargo fmt
-
-# frontend, in web/ — vite dev server on :5173 proxies /api to :8877
-nix develop -c npm run dev                     # live UI w/ real backend
-nix develop -c bash -c 'VITE_MOCK=1 npm run dev'   # UI with canned fixtures
-nix develop -c npm run check                   # tsc
-nix develop -c npm run lint                     # eslint + stylelint
-nix develop -c npm run build
-
-# product artifact + validators
-nix build                                      # product only → result/bin/nit (no tests)
-nix flake check                                # build + clippy + test validators
-```
-
-Changing `web/package-lock.json` means refreshing `npmDepsHash` in
-`flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`
-prints it); a stale hash breaks `nix build` and every
-`nix run '…?ref=main#nit'` CLI invocation.
-
 ## Verification
 
 Checks verify a change, not a green build — `nix build` skips tests
@@ -48,7 +18,11 @@ Checks verify a change, not a green build — `nix build` skips tests
 
 The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
 change, regenerate it with `nix develop -c crate2nix generate` and commit it
-in the same change — a stale `Cargo.nix` fails the build fast.
+in the same change — a stale `Cargo.nix` fails the build fast. Likewise,
+changing `web/package-lock.json` means refreshing `npmDepsHash` in
+`flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`
+prints it); a stale hash breaks `nix build` and every
+`nix run '…?ref=main#nit'` CLI invocation.
 
 The web's wire types (`web/src/api/types.gen.ts`) are generated the same
 way — from `crates/nit-types` via `nix run .#gen-types`, a native
@@ -86,31 +60,6 @@ Two edges: don't run a bare treefmt before amending a checked-out historic
 commit mid-rebase (it folds later commits' formatting into the amend —
 stage only your files); and keep inline code spans on one line, or prettier
 drops the hanging indent of a wrapped markdown list item.
-
-## Linting
-
-`nix develop -c npm run lint` (in `web/`) runs ESLint then Stylelint, the
-frontend counterpart to backend `clippy::pedantic`; both stay green.
-Formatting is prettier's job, not theirs. Config: `web/eslint.config.js`,
-`web/stylelint.config.js`.
-
-Strictness only ratchets **up**. Suppress a lint only with a reason —
-`#[expect(..., reason = "…")]` on the backend (`#[allow]` is denied), a
-reasoned inline disable on the frontend (a bare one is flagged stale). The
-backend also denies `unwrap` (use `expect` with a reason), via the
-workspace lints in the root `Cargo.toml`. The frontend allow-list of
-not-yet-satisfied rules only shrinks: re-enable a rule by removing its line
-and fixing the code in the same commit.
-
-Relax a rule only when the fix it forces is uglier than the risk it guards
-(e.g. allowing `${n}` number interpolation over wrapping every span in
-`String()`) — and say why. "It's a lot of edits" is not a reason.
-
-## Restarting the server
-
-Rebuild, ctrl-c the running `nit serve`, restart with the same `--db`.
-Parked `nit log --wait`s ride it out (backoff retry, persisted cursor — no events
-missed); `push`/`status`/`reply` during the gap fail fast, so rerun them.
 
 ## Screenshot harness (frontend checking for AI agents)
 
@@ -180,42 +129,13 @@ catches a skew and gives you the gallery in `result/`.
 ## Landing changes — the nit review loop
 
 This repo dogfoods nit: push finished work as a chain, a human reviews it,
-the approve action lands it on `main`. Drive the loop with the
-`nit:lifecycle` skill. Run the `nit`
-CLI from the build that matches the running server (normally `main`'s: `nit`
-on PATH, else `nix run '…?ref=main#nit'`), not your branch's binary.
-
-### The approve action
-
-nit derives `approved` (every live change approved)
-but doesn't prescribe landing — each project defines that. Here it's a
-fast-forward-only merge to `main` (no merge commits — golden rule 2). The
-agent that built the chain **drives it all the way to `merged`**: reaching
-`approved` is the cue to land, never to hand off.
-
-```sh
-nix develop -c scripts/land.sh                 # rebase if main moved, flake-check
-                                               # every commit, then ff-merge to main
-git worktree remove <worktree> && git branch -d <branch>
-```
-
-`scripts/land.sh` (the `land` skill) covers the no-conflict case end to end,
-printing one line per step and stopping with a hint when it can't proceed —
-a rebase conflict, a commit that fails `nix flake check`, or `main` moving
-mid-check (re-run to retry). The lifecycle timer marks the chain `merged` once
-the commits are on `main`, identified by their `Change-Id` trailers, so the
-script needs no `nit push`. When it stops on a conflict, still run `nit push`
-after finishing that rebase (never _after_ the ff-merge — the tip is on
-`main` then, a 409): the resolution is content the reviewer hasn't seen.
-
-Landing is the agent's responsibility **all the way to `merged`; you stop
-only when it is fundamentally impossible** — an unresolvable rebase, or you
-genuinely cannot write to `main`. `--ff-only` keeps `main` linear; a non-ff
-branch is a rebase to do, not a reason to pause. `main` moving under you
-(another agent landing in parallel) is the same: rebase onto it and land —
-coordinate, never abandon the chain. A conflict-resolving rebase that resets
-a change to `pending` is still yours to land; the content was approved and
-the resolution is mechanical.
+and the approve action — `nix develop -c scripts/land.sh`, the `land`
+skill — lands it on `main` (rebase if `main` moved, `nix flake check` on
+every commit, fast-forward merge; the lifecycle timer then marks the chain
+`merged`). Drive the loop with the `nit:lifecycle` skill, all the way to
+`merged`. Run the `nit` CLI from the build that matches the running server
+(normally `main`'s: `nit` on PATH, else `nix run '…?ref=main#nit'`), not
+your branch's binary.
 
 ### Review exemptions
 

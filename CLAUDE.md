@@ -14,8 +14,8 @@ identity across rewrites. Product spec: `nit.md`.
    **hard-wrapped at 72 columns** — a one-line subject, then a body of
    72-column-wrapped prose, never a single long line (docs/dev.md "Commit &
    branch discipline"). No merge commits — an approved chain lands via the
-   approve action, rebase + fast-forward only (docs/dev.md "The approve
-   action").
+   approve action, rebase + fast-forward only (the `land` skill,
+   `scripts/land.sh`).
 3. **Every commit treefmt-clean** — `nix develop -c treefmt` before each
    commit, and re-format every rewritten commit after a rebase (not just
    the tip), especially after conflict resolution (docs/dev.md
@@ -70,6 +70,7 @@ identity across rewrites. Product spec: `nit.md`.
   - `data-model.md` — schema, change identity, scan algorithm, status machine
   - `api.md` — HTTP/JSON contract (source of truth)
   - `frontend.md` — pages, design language, mock mode
-  - `dev.md` — dev loops, screenshot harness, testing, commit discipline
+  - `dev.md` — verification, formatting, screenshot harness, testing,
+    commit discipline, landing
   - `design-review-guide.md` — design anti-patterns to catch when reviewing
     code, with bad-vs-good examples — read before a design review
