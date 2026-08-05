@@ -60,7 +60,7 @@ identity across rewrites. Product spec: `nit.md`.
     ("now / no longer / replaced" — git blame holds that), or brag. Be
     dense — the fewest words that carry a rationale the reader can't see.
     Binds review and simplification passes too
-    (docs/design-review-guide.md rule 7).
+    (docs/design-review-guide.md rule 6).
 
 ## Layout
 

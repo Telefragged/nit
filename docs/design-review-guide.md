@@ -29,7 +29,7 @@ data around — ask:
   thing?
 
 If the answer is yes, require that. Prefer the version with the smaller
-surface even when it is a larger diff (`docs/dev.md`, golden rule 8: remove,
+surface even when it is a larger diff (`CLAUDE.md`, golden rule 8: remove,
 then change, then add). Be this voice in round one, not round eight.
 
 ## 1. Typed boundaries — no serialized blobs in domain APIs
@@ -52,8 +52,8 @@ append_to_change(conn, &entry, id, vec![(LogKind::Comment, payload)]);
 ```rust
 // GOOD — the API takes a typed value and serializes internally; the kind is
 // derived from the variant, so the two cannot disagree.
-fn append_to_change(news: Vec<EntryPayload>) -> ...
-append_to_change(conn, &entry, id, vec![EntryPayload::Comment(CommentPayload { comment })]);
+fn append_to_change(news: Vec<LogPayload>) -> ...
+append_to_change(conn, &entry, id, vec![LogPayload::Comment(CommentPayload { comment })]);
 ```
 
 ## 2. A derived value consumers need — mint once, store in what you already have
@@ -155,10 +155,10 @@ wire response.
 replay**, where nothing leaves the process.
 
 ```rust
-// BAD — Entry carries a serialized payload, so the fold parses it and then
+// BAD — LogEntry carries a serialized payload, so the fold parses it and then
 // re-serializes the mutated copy back — work done on every replay too.
-struct Entry { kind: LogKind, payload: serde_json::Value, ... }
-fn fold(entry: &Entry) {
+struct LogEntry { kind: LogKind, payload: serde_json::Value, ... }
+fn fold(entry: &LogEntry) {
     let mut p: CommentPayload = entry.parse()?;   // parse in the fold
     ...
     entry.payload = serde_json::to_value(&p)?;     // re-serialize in the fold
@@ -166,24 +166,13 @@ fn fold(entry: &Entry) {
 ```
 
 ```rust
-// GOOD — Entry holds the typed payload; the fold matches it directly. JSON is
-// parsed in Entry::from_row and emitted only in db::append_log / the wire view.
-struct Entry { payload: EntryPayload, ... }   // typed
-fn fold(change, mut entry: Entry) -> Entry { match &mut entry.payload { ... } entry }
+// GOOD — LogEntry holds the typed payload; the fold matches it directly. JSON
+// is parsed once where rows are read and emitted only where rows are written.
+struct LogEntry { payload: LogPayload, ... }   // typed
+fn fold(change, mut entry: LogEntry) -> LogEntry { match &mut entry.payload { ... } entry }
 ```
 
-## 6. Trust the project gate, not a local run
-
-**Require:** correctness claims are backed by the project's real gate — here
-`nix flake check` (a clean sandbox running `clippy -D warnings` + tests +
-build). State it ran and passed.
-
-**Reject:** "clippy is clean locally" as sufficient. A local `cargo clippy`
-cache has silently skipped a `clippy::pedantic` warning here; the author
-reported green and the warning was still there. The clean-room check caught
-it.
-
-## 7. Comments: the non-obvious _why_, or nothing
+## 6. Comments: the non-obvious _why_, or nothing
 
 **Require:** a comment explains something the code cannot — usually _why_ (an
 invariant, a non-obvious constraint, a subtle ordering).
