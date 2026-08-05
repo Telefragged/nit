@@ -35,7 +35,7 @@ fi
 # 2. Replay every commit through `nix flake check`. HEAD sits on top of $base
 #    now, so only a failing check — never a conflict — can stop this, and it
 #    leaves HEAD on the offending commit.
-if ! out=$(git rebase --exec 'nix flake check' "$base" 2>&1); then
+if ! out=$(git rebase --exec 'nix flake check --keep-going' "$base" 2>&1); then
   echo "$out" >&2
   echo "you're now on commit $(git rev-parse --short HEAD) — fix it, 'git rebase --continue', then re-run this script ('git rebase --abort' to bail)" >&2
   exit 1
