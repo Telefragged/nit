@@ -50,6 +50,9 @@ export interface RepoRecord {
   id: number;
   git_dir: string;
   base_ref: string;
+  /** The repo's synthetic canonical history, HEAD-first (the merged history
+   * below HEAD the mock has no git to walk). */
+  history: HistNode[];
 }
 
 /** A published thread (its anchor, rolled-up resolution and conversation) —
@@ -90,9 +93,12 @@ export interface DraftRecord {
 }
 
 /** A synthetic canonical-history node (the merged history below HEAD the mock
- * has no git to walk). */
+ * has no git to walk). `change_key` marks a landed change's commit — the graph
+ * enriches the node from the change it names, like the backend's trailer
+ * match. */
 export interface HistNode {
   sha: string;
   subject: string;
   parents: string[];
+  change_key?: string;
 }

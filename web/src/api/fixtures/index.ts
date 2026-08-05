@@ -33,15 +33,7 @@ import { verdictStatus } from "../verdict";
 import { changeDetail as foldDetail, replayProj } from "../fold";
 import { logFor, mockAppend } from "./stream";
 import { diffKey, newSideEnd } from "./builders";
-import {
-  changes,
-  draftReviews,
-  drafts,
-  graphHistory,
-  graphScenarios,
-  repos,
-  tips,
-} from "./data";
+import { changes, draftReviews, drafts, repos, tips } from "./data";
 import type {
   AuthoredFile,
   ChangeRecord,
@@ -356,24 +348,31 @@ function graphRowOrder(nodes: GraphNode[]): GraphNode[] {
 const MERGED_WINDOW = 5;
 
 function buildGraph(repoId: number, window: number): RepoGraph {
-  if (!repos.some((r) => r.id === repoId)) notFound(`repo ${repoId}`);
-  const scenario = graphScenarios[repoId] ?? { history: graphHistory };
-  const fullHistory = scenario.history;
+  const repo = repos.find((r) => r.id === repoId) ?? notFound(`repo ${repoId}`);
+  const fullHistory = repo.history;
   const history = fullHistory.slice(0, window + 1);
   const historyTruncated = fullHistory.length > window + 1;
   const anchorSha = history[0]?.sha ?? "";
 
-  const nodes: GraphNode[] = history.map((h, depth) => ({
-    commit_sha: h.sha,
-    section: depth === 0 ? "head" : "history",
-    subject: h.subject,
-    status: "merged",
-    parents: h.parents,
-    change_id: null,
-    change_key: null,
-    revision: null,
-  }));
-  const present = new Set(nodes.map((nd) => nd.commit_sha));
+  const nodes: GraphNode[] = history.map((h, depth) => {
+    // change_id/change_key are coupled: both come from the matched change, so
+    // a foreign key with no change reports both null, not an orphan key.
+    const landed = h.change_key
+      ? changes.find(
+          (c) => c.repo_id === repoId && c.change_key === h.change_key,
+        )
+      : undefined;
+    return {
+      commit_sha: h.sha,
+      section: depth === 0 ? "head" : "history",
+      subject: h.subject,
+      status: "merged",
+      parents: h.parents,
+      change_id: landed?.id ?? null,
+      change_key: landed?.change_key ?? null,
+      revision: null,
+    };
+  });
 
   // Walk tips in tip-sha order, mirroring the backend's leaves_where sort
   // (chain.rs) so the open-node input order — and thus the lane assignment —
@@ -405,24 +404,7 @@ function buildGraph(repoId: number, window: number): RepoGraph {
         change_key: c.change_key,
         revision: rev.number,
       });
-      present.add(csha);
     }
-  }
-
-  for (const nd of nodes) {
-    if (nd.section === "open" && !nd.parents.some((p) => present.has(p))) {
-      nd.parents = [anchorSha];
-    }
-  }
-  const behind = scenario.behind;
-  if (behind) {
-    const target = nodes.find(
-      (nd) => nd.section === "open" && nd.change_id === behind.change_id,
-    );
-    // Reference the FULL history: a depth beyond the window slice is a base
-    // older than the window, which dangles into the collapsed marker.
-    const base = fullHistory[behind.depth];
-    if (target && base) target.parents = [base.sha];
   }
 
   // Row order (mirrors build_graph): the open region ascends above HEAD, so

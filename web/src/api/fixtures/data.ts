@@ -54,10 +54,84 @@ import type {
   TipRecord,
 } from "./store";
 
+// ---------------------------------------------------------------------------
+// Canonical histories (served by GET /api/history). The merged history below
+// HEAD is synthetic — the mock has no git to walk, like the backend reads
+// from git. Every chain root's parent/base below is a real history sha, so
+// the derivation resolves the fork like production: repo 1 forks below the
+// window (the collapsed marker), repo 2 has an off-HEAD chain and a 2-behind
+// chain, repo 3 fans out at HEAD. Includes a merge commit and a landed
+// change's commit (change_key).
+
+const graphHistory: HistNode[] = [
+  {
+    sha: sha(900),
+    subject: "feat: make the push base optional",
+    parents: [sha(901)],
+  },
+  {
+    sha: sha(901),
+    subject: "feat: decouple display fields",
+    parents: [sha(902)],
+  },
+  {
+    sha: sha(902),
+    subject: "merge: release-1.8 into main",
+    parents: [sha(903), sha(904)],
+  },
+  {
+    sha: sha(903),
+    subject: "fix: reject an already-merged push",
+    parents: [sha(905)],
+  },
+  {
+    sha: sha(904),
+    subject: "feat: truncate the short sha",
+    parents: [sha(905)],
+  },
+  { sha: sha(905), subject: "chore: decouple base detection", parents: [] },
+];
+
+// A deeper history (repo 1): its root sits below a 5-commit window, so the
+// window truncates and a chain can fork below it.
+const deepHistory: HistNode[] = [
+  ...graphHistory.slice(0, 5),
+  {
+    // Change 40's landed commit: a different sha than its revision (rebased
+    // at land), tied back to the change by its Change-Id — the enrichment
+    // path the backend takes for every landed change.
+    sha: sha(905),
+    subject: "build: drop unused openssl feature",
+    parents: [sha(906)],
+    change_key: "I0d9c8b7a6f5e4321",
+  },
+  {
+    sha: sha(906),
+    subject: "refactor: extract the base resolver",
+    parents: [sha(907)],
+  },
+  { sha: sha(907), subject: "chore: tidy up ref parsing", parents: [] },
+];
+
 export const repos: RepoRecord[] = [
-  { id: 1, git_dir: "/home/vetle/src/acme-runtime/.git", base_ref: "main" },
-  { id: 2, git_dir: "/home/vetle/src/quarry/.git", base_ref: "main" },
-  { id: 3, git_dir: "/home/vetle/src/orbit/.git", base_ref: "main" },
+  {
+    id: 1,
+    git_dir: "/home/vetle/src/acme-runtime/.git",
+    base_ref: "main",
+    history: deepHistory,
+  },
+  {
+    id: 2,
+    git_dir: "/home/vetle/src/quarry/.git",
+    base_ref: "main",
+    history: graphHistory,
+  },
+  {
+    id: 3,
+    git_dir: "/home/vetle/src/orbit/.git",
+    base_ref: "main",
+    history: graphHistory,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -67,7 +141,7 @@ const c10r1 = sha(101);
 const c11r1 = sha(111);
 const c11r2 = sha(112);
 const c12r1 = sha(121);
-const parent10 = sha(100); // merge-base on main (not a change)
+const parent10 = sha(906); // fork on main, below the graph's history window
 
 const msg10r1 =
   "auth: add TokenStore schema and config plumbing\n\n" +
@@ -785,8 +859,8 @@ const change40: ChangeRecord = {
     {
       number: 0,
       commit_sha: c40r1,
-      parent_sha: sha(400),
-      base_sha: sha(400),
+      parent_sha: sha(906),
+      base_sha: sha(906),
       message: msg40r1,
       created_at: ago(4 * 24 * 60),
     },
@@ -840,7 +914,7 @@ const change40: ChangeRecord = {
 // repo 2 — quarry: fix/wal-checkpoint (tip change 20, agents_turn)
 
 const c20r1 = sha(201);
-const parent20 = sha(200);
+const parent20 = sha(900); // fork on main: the canonical HEAD
 
 const msg20r1 =
   "wal: checkpoint on idle, not on every commit\n\n" +
@@ -971,8 +1045,8 @@ const change30: ChangeRecord = {
     {
       number: 0,
       commit_sha: c30r1,
-      parent_sha: sha(300),
-      base_sha: sha(300),
+      parent_sha: sha(902),
+      base_sha: sha(902),
       message: msg30r1,
       created_at: ago(50 * 60),
     },
@@ -1033,7 +1107,7 @@ const change30: ChangeRecord = {
 // to the revision it was written against. Revisions are 0-based here (the new
 // API), so this scenario exercises rev0 / rev1 display directly.
 
-const mOrbit = sha(500); // merge-base on main
+const mOrbit = sha(900); // fork on main: the canonical HEAD
 const cA = sha(501);
 const cB0 = sha(510); // B rev0 (parent A)
 const cB1 = sha(511); // B rev1 (parent D)
@@ -1565,68 +1639,3 @@ draftReviews.set(12, {
   decision: "request_changes",
   message: "Inline the sequence diagram as text — the PNG won't review.",
 });
-
-// ---------------------------------------------------------------------------
-// Graph. The open region is the real chain derivation
-// (active tips, unioned and deduped by sha); the canonical history below HEAD
-// is synthetic — the mock has no git history to walk, like the backend reads
-// from git. Includes a merge commit and (per repo) a behind-HEAD base.
-
-export const graphHistory: HistNode[] = [
-  {
-    sha: sha(900),
-    subject: "feat: make the push base optional",
-    parents: [sha(901)],
-  },
-  {
-    sha: sha(901),
-    subject: "feat: decouple display fields",
-    parents: [sha(902)],
-  },
-  {
-    sha: sha(902),
-    subject: "merge: release-1.8 into main",
-    parents: [sha(903), sha(904)],
-  },
-  {
-    sha: sha(903),
-    subject: "fix: reject an already-merged push",
-    parents: [sha(905)],
-  },
-  {
-    sha: sha(904),
-    subject: "feat: truncate the short sha",
-    parents: [sha(905)],
-  },
-  { sha: sha(905), subject: "chore: decouple base detection", parents: [] },
-];
-
-// A deeper synthetic history (the earlier-demo repo): its root sits below a
-// 5-commit window, so the window truncates and a chain can fork below it.
-const deepHistory: HistNode[] = [
-  ...graphHistory.slice(0, 5),
-  {
-    sha: sha(905),
-    subject: "chore: decouple base detection",
-    parents: [sha(906)],
-  },
-  {
-    sha: sha(906),
-    subject: "refactor: extract the base resolver",
-    parents: [sha(907)],
-  },
-  { sha: sha(907), subject: "chore: tidy up ref parsing", parents: [] },
-];
-
-// Per-repo graph scenario: which synthetic canonical history to show, plus an
-// optional open change re-rooted behind HEAD at a history depth. A depth inside
-// the window draws a behind edge to that node; a depth below it dangles into
-// the collapsed "earlier history hidden" marker.
-export const graphScenarios: Record<
-  number,
-  { history: HistNode[]; behind?: { change_id: number; depth: number } }
-> = {
-  1: { history: deepHistory, behind: { change_id: 10, depth: 6 } }, // forks below the window
-  2: { history: graphHistory, behind: { change_id: 30, depth: 2 } }, // two chains: off-HEAD + 2-behind
-  3: { history: graphHistory }, // fan-out
-};
