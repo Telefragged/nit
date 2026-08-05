@@ -106,28 +106,6 @@ Relax a rule only when the fix it forces is uglier than the risk it guards
 (e.g. allowing `${n}` number interpolation over wrapping every span in
 `String()`) — and say why. "It's a lot of edits" is not a reason.
 
-## Type discipline — let the types make illegal states unrepresentable
-
-Lean on the type system instead of runtime checks or convention. Three
-rules, binding on review and simplification passes too (a violation is a
-finding to fix, and reviewer agents are told so):
-
-- **A closed set of values is an `enum`, never a `String`** (sides,
-  verdicts, statuses, kinds…). Home: `crates/nit-types/src/enums.rs`, from
-  which the TS unions in `web/src/api/types.gen.ts` are generated.
-  `#[serde(rename_all = …)]` keeps
-  the wire spelling, so it is not a wire change. Buys exhaustive `match`es
-  and a 400 on an unknown value at deserialize time. A `String` is fine
-  only at the storage boundary, converted to the enum immediately.
-- **Absence is not a state — model it.** Encode the legal combinations of a
-  cluster of `Option`s as an enum so the illegal ones can't be built: a
-  thread's location is `review::Anchor` (`Change | File | Line { … }`), not
-  five loose `Option`s.
-- **One input names one thing.** Identify a thing two ways with two
-  type-distinct flags, not one that sniffs the value's form: `nit comment`
-  takes `--change <u64>` or `--change-id <String>`, never one flag that
-  guesses.
-
 ## Restarting the server
 
 Rebuild, ctrl-c the running `nit serve`, restart with the same `--db`.

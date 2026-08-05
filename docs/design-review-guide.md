@@ -193,3 +193,28 @@ enforce it.
 // GOOD
 // The write lock makes this id allocation race-free against a concurrent push.
 ```
+
+## 7. Let the types make illegal states unrepresentable
+
+**Require:** the type system carries the invariant, not a runtime check or
+a convention:
+
+- **A closed set of values is an `enum`, never a `String`** (sides,
+  verdicts, statuses, kinds…). Home: `crates/nit-types/src/enums.rs`, from
+  which the TS unions in `web/src/api/types.gen.ts` are generated.
+  `#[serde(rename_all = …)]` keeps the wire spelling, so it is not a wire
+  change. Buys exhaustive `match`es and a 400 on an unknown value at
+  deserialize time. A `String` is fine only at the storage boundary,
+  converted to the enum immediately.
+- **Absence is not a state — model it.** Encode the legal combinations of
+  a cluster of `Option`s as an enum so the illegal ones can't be built: a
+  thread's location is `Anchor` (`Change | File | Line { … }`,
+  `crates/nit-types/src/fold.rs`), not five loose `Option`s.
+- **One input names one thing.** Identify a thing two ways with two
+  type-distinct flags, not one that sniffs the value's form: `nit comment`
+  takes `--change <u64>` or `--change-id <String>`, never one flag that
+  guesses.
+
+**Reject:** a stringly-typed field where an enum fits, a cluster of
+`Option`s whose combinations encode the real states, an input that guesses
+what it names. A violation is a finding to fix, not a style preference.
