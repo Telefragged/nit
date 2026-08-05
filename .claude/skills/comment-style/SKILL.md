@@ -144,6 +144,12 @@ and the summary fits on one:
 
 </example>
 
+clap's derive reads that same shape differently: on an `#[arg]` or
+`#[command]` field it takes the first paragraph as the `-h` text and the
+whole comment as `--help`. Splitting one there moves its qualifiers out
+of `-h`, which is a CLI change rather than a docs change — leave those
+doc-comments as one paragraph.
+
 What a doc-comment must carry is the **contract**: invariants the
 caller may rely on, panics, error conditions, ordering guarantees.
 `crates/nit-types` doc-comments are the wire contract itself — their
