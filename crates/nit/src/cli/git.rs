@@ -1,5 +1,7 @@
-//! Local git helpers: discover the cwd's repo, resolve its `git-common-dir`,
-//! read HEAD, and resolve an explicit rev to a full commit sha.
+//! Local git helpers.
+//!
+//! Discover the cwd's repo, resolve its `git-common-dir`, read HEAD, and
+//! resolve an explicit rev to a full commit sha.
 
 use std::path::Path;
 
@@ -38,8 +40,10 @@ pub(crate) fn head_sha(repo: &Repository) -> Result<String> {
     Ok(commit.id().to_string())
 }
 
-/// The full sha of the commit to push: the given rev, or the cwd's checked-out
-/// commit (HEAD) — a detached HEAD or tag resolved the same way.
+/// The full sha of the commit to push.
+///
+/// The given rev, or the cwd's checked-out commit (HEAD) — a detached HEAD or
+/// tag resolved the same way.
 pub(crate) fn resolve_tip(repo: &Repository, commit: Option<&str>) -> Result<String> {
     match commit {
         Some(rev) => repo

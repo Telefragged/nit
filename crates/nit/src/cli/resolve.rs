@@ -1,5 +1,7 @@
-//! API id-resolution: map the cwd's repo + HEAD (or an explicit `--chain` /
-//! `Change-Id`) to the numeric ids the server's endpoints take.
+//! API id-resolution.
+//!
+//! Maps the cwd's repo + HEAD (or an explicit `--chain` / `Change-Id`) to the
+//! numeric ids the server's endpoints take.
 
 use anyhow::{Result, anyhow};
 
@@ -9,6 +11,8 @@ use nit_types::repos::RepoList;
 use super::client::{Client, Retry};
 use super::git::{discover_repo, head_sha};
 
+/// Resolves the cwd's HEAD to its chain's tip change id.
+///
 /// `retry` covers only the network GETs (here and in `repo_id_for`); repo
 /// discovery and a failed lookup (unregistered repo, or no chain matching
 /// HEAD) stay fatal — never retried.

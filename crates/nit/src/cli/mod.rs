@@ -1,7 +1,8 @@
-//! `nit push` / `status` / `log` / `comment` / `reopen` — thin CLI
-//! clients of the HTTP API, run by coding agents from inside a git repo.
-//! They print concise text for the agent to act on; all review logic
-//! lives server-side.
+//! Thin CLI clients of the HTTP API, run by coding agents.
+//!
+//! `nit push` / `status` / `log` / `comment` / `reopen`, run from inside a
+//! git repo. They print concise text for the agent to act on; all review
+//! logic lives server-side.
 //!
 //! A chain is addressed by its **tip change id**. `nit status`/`nit log`
 //! resolve the cwd's tip change from local HEAD; `nit comment` targets a change

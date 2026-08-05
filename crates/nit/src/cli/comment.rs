@@ -90,9 +90,10 @@ pub fn comment(args: CommentArgs) -> Result<()> {
     Ok(())
 }
 
-/// Read a `-F` body: a file path, or stdin for `-`. Trailing newlines are
-/// trimmed — a heredoc or editor always appends one, and it would read as
-/// a trailing hard break in the rendered markdown.
+/// Reads a `-F` body: a file path, or stdin for `-`.
+///
+/// Trailing newlines are trimmed — a heredoc or editor always appends one,
+/// and it would read as a trailing hard break in the rendered markdown.
 fn read_body(path: &str) -> Result<String> {
     let mut text = if path == "-" {
         std::io::read_to_string(std::io::stdin()).context("reading body from stdin")?
@@ -103,7 +104,7 @@ fn read_body(path: &str) -> Result<String> {
     Ok(text)
 }
 
-/// Parse a `--range` spec `START-END`, each endpoint `line:char`.
+/// Parses a `--range` spec `START-END`, each endpoint `line:char`.
 fn parse_comment_range(spec: &str) -> Result<CommentRange> {
     let (start, end) = spec
         .split_once('-')

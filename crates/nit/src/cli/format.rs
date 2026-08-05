@@ -1,6 +1,7 @@
-//! Display helpers shared by 2+ commands — one-line digests of log entries and
-//! chains — plus the `--change` / `--change-id` selector flattened into every
-//! change-scoped Args struct.
+//! Display helpers shared by 2+ commands.
+//!
+//! One-line digests of log entries and chains, plus the `--change` /
+//! `--change-id` selector flattened into every change-scoped Args struct.
 
 use std::collections::HashMap;
 
@@ -33,7 +34,7 @@ pub struct ChangeTarget {
 }
 
 impl ChangeTarget {
-    /// Resolve to a numeric change id, querying the server for a `Change-Id:`.
+    /// Resolves to a numeric change id, querying the server for a `Change-Id:`.
     pub(crate) fn resolve(&self, client: &Client) -> Result<u64> {
         match (self.change, self.change_id.as_deref()) {
             (Some(id), _) => Ok(id),
@@ -43,8 +44,9 @@ impl ChangeTarget {
     }
 }
 
-/// The opt-in terse form (`--oneline`): one whitespace-separated line per entry
-/// keyed by its global `seq`.
+/// The opt-in terse form (`--oneline`).
+///
+/// One whitespace-separated line per entry keyed by its global `seq`.
 pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
     for e in entries {
         println!(
@@ -56,8 +58,9 @@ pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
     }
 }
 
-/// One-line digest of a log entry (a CLI display concern; the server ships only
-/// the raw entry).
+/// One-line digest of a log entry.
+///
+/// A CLI display concern; the server ships only the raw entry.
 fn entry_summary(entry: &LogEntry) -> String {
     let change = entry.change_id;
     match &entry.payload {
@@ -78,11 +81,13 @@ fn entry_summary(entry: &LogEntry) -> String {
     }
 }
 
-/// Fetch each member's open-thread count, then print the chain digest: a
-/// `state=` header (prefixed with `cursor=` when following) and one aligned line
-/// per member — `position change_key status rN Nu subject`. The chain path
-/// carries only structure, so the counts come from each member's change snapshot
-/// (`GET /api/changes/{id}`); the fold is in memory, so each is a cheap read.
+/// Prints the chain digest with each member's open-thread count.
+///
+/// A `state=` header (prefixed with `cursor=` when following) and one aligned
+/// line per member — `position change_key status rN Nu subject`. The chain path
+/// carries only structure, so the counts are fetched from each member's change
+/// snapshot (`GET /api/changes/{id}`); the fold is in memory, so each is a
+/// cheap read.
 ///
 /// # Errors
 /// When a member's change snapshot can't be fetched.
@@ -151,9 +156,10 @@ pub(crate) fn column_widths<const N: usize>(rows: &[[String; N]]) -> [usize; N] 
     widths
 }
 
-/// One aligned row: each fixed cell padded to its column width and two-space
-/// separated, then the free-form `tail` field. Shared by the chain digest and
-/// the repo list.
+/// One aligned row: the fixed cells, then the free-form `tail` field.
+///
+/// Each fixed cell is padded to its column width and two-space separated.
+/// Shared by the chain digest and the repo list.
 pub(crate) fn aligned_row<const N: usize>(
     cells: &[String; N],
     widths: [usize; N],
@@ -172,8 +178,10 @@ pub(crate) fn short_key(key: &str) -> String {
     key.chars().take(8).collect()
 }
 
-/// Confirm a posted comment: `opened thread N on change M  <anchor>  <state>`
-/// for a new thread, or `replied on thread N (change M)  <state>` for a reply.
+/// Confirms a posted comment.
+///
+/// `opened thread N on change M  <anchor>  <state>` for a new thread, or
+/// `replied on thread N (change M)  <state>` for a reply.
 pub(crate) fn print_comment(thread: &Thread, replied: bool) {
     let state = if thread.resolved { "resolved" } else { "open" };
     if replied {
@@ -191,12 +199,13 @@ pub(crate) fn print_comment(thread: &Thread, replied: bool) {
     }
 }
 
-/// The multi-line rendering of one log entry (no trailing blank line), a pure
-/// function of that entry. Two facts a raw entry omits are deliberately not
-/// reconstructed, to keep rendering stateless: a `revision` entry shows no minted
-/// revision number (it returns once the number rides on the log entry itself),
-/// and a reply names only its thread — a reply's anchor lives on the thread's
-/// opening entry, not here.
+/// The multi-line rendering of one log entry (no trailing blank line).
+///
+/// A pure function of that entry. Two facts a raw entry omits are deliberately
+/// not reconstructed, to keep rendering stateless: a `revision` entry shows no
+/// minted revision number (it returns once the number rides on the log entry
+/// itself), and a reply names only its thread — a reply's anchor lives on the
+/// thread's opening entry, not here.
 pub(crate) fn render_entry(entry: &LogEntry) -> String {
     let seq = entry.seq;
     let change = entry.change_id;
@@ -238,9 +247,10 @@ pub(crate) fn render_entry(entry: &LogEntry) -> String {
     }
 }
 
-/// One comment inside a `review`: `t<id>  <anchor>  [resolved]`, then the body on
-/// its own line indented one level deeper. The anchor shows only when this entry
-/// opened the thread; a reply carries none.
+/// One comment inside a `review`: `t<id>  <anchor>  [resolved]`.
+///
+/// The body follows on its own line indented one level deeper. The anchor
+/// shows only when this entry opened the thread; a reply carries none.
 fn render_comment(c: &CommentInput) -> String {
     let resolved = if c.resolved == Some(true) {
         "  [resolved]"
@@ -255,8 +265,9 @@ fn render_comment(c: &CommentInput) -> String {
     format!("{head}\n{}", indent(&c.body, 8))
 }
 
-/// The `thread N (location)` target of an agent `comment` entry — the location
-/// only when this entry opened the thread.
+/// The `thread N (location)` target of an agent `comment` entry.
+///
+/// The location shows only when this entry opened the thread.
 fn comment_target(c: &CommentInput) -> Option<String> {
     let tid = c.thread_id?;
     Some(if c.side.is_some() {
@@ -266,8 +277,10 @@ fn comment_target(c: &CommentInput) -> Option<String> {
     })
 }
 
-/// The `  <anchor>` an opening comment carries in its own payload; empty for a
-/// reply, whose `side` is unset (its anchor lives on the opening entry).
+/// The `  <anchor>` an opening comment carries in its own payload.
+///
+/// Empty for a reply, whose `side` is unset (its anchor lives on the opening
+/// entry).
 fn opening_anchor(c: &CommentInput) -> String {
     if c.side.is_some() {
         format!("  {}", anchor(c))
@@ -281,9 +294,11 @@ fn anchor(c: &CommentInput) -> String {
     anchor_str(c.file.as_deref(), c.line, c.range.as_ref())
 }
 
-/// The anchor label from raw parts: `(change-level)`, `file:line`, or the full
-/// `file:start_line:start_char-end_line:end_char` for a range. Shared by the log
-/// renderer and the `nit comment` confirmation.
+/// The anchor label from raw parts.
+///
+/// `(change-level)`, `file:line`, or the full
+/// `file:start_line:start_char-end_line:end_char` for a range. Shared by the
+/// log renderer and the `nit comment` confirmation.
 fn anchor_str(file: Option<&str>, line: Option<u64>, range: Option<&CommentRange>) -> String {
     let Some(file) = file else {
         return "(change-level)".to_string();
@@ -309,7 +324,7 @@ fn indent(text: &str, n: usize) -> String {
         .join("\n")
 }
 
-/// Print each entry's rich rendering, a blank line between entries.
+/// Prints each entry's rich rendering, a blank line between entries.
 pub(crate) fn print_entries(entries: &[LogEntry]) {
     let blocks: Vec<String> = entries.iter().map(render_entry).collect();
     if !blocks.is_empty() {

@@ -1,5 +1,6 @@
-//! `nit push` — register the cwd's checked-out commit (or an explicit rev) for
-//! review via `POST /api/push`.
+//! `nit push` — register a commit for review via `POST /api/push`.
+//!
+//! The cwd's checked-out commit, or an explicit rev.
 
 use anyhow::Result;
 
@@ -19,8 +20,9 @@ pub struct PushArgs {
     pub server: ServerOpt,
 }
 
-/// Push the cwd's checked-out commit (or an explicit rev) for review;
-/// idempotent. The repo must already be registered (`nit repo create`). The
+/// Pushes the cwd's checked-out commit (or an explicit rev) for review.
+///
+/// Idempotent. The repo must already be registered (`nit repo create`). The
 /// canonical branch comes from the registered repo, so no base is sent. Prints
 /// the resulting chain digest — every change the push registered, not just the
 /// tip — so the agent needs no follow-up read.

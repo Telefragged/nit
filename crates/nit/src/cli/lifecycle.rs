@@ -26,7 +26,7 @@ pub struct AbandonArgs {
     pub server: ServerOpt,
 }
 
-/// Reopen an abandoned change so a new revision may be pushed.
+/// Reopens an abandoned change so a new revision may be pushed.
 ///
 /// # Errors
 /// When the server can't be reached or the arguments name no change.
@@ -43,8 +43,9 @@ pub fn reopen(args: ReopenArgs) -> Result<()> {
     Ok(())
 }
 
-/// Mark a change abandoned — a reviewer/agent judgment that it is dead
-/// (reversible by `nit reopen`).
+/// Marks a change abandoned.
+///
+/// A reviewer/agent judgment that it is dead (reversible by `nit reopen`).
 ///
 /// # Errors
 /// When the server can't be reached or the arguments name no change.

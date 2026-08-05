@@ -1,6 +1,7 @@
-//! `nit --version` — the canonical "is nit up / installed" check. Prints the
-//! client's build, then the server's (a 1-second probe of `/api/health`), and
-//! exits non-zero when the server can't be reached.
+//! `nit --version` — the canonical "is nit up / installed" check.
+//!
+//! Prints the client's build, then the server's (a 1-second probe of
+//! `/api/health`), and exits non-zero when the server can't be reached.
 
 use std::io::Write;
 

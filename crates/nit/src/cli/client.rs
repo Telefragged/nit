@@ -1,8 +1,9 @@
-//! HTTP/websocket transport for the CLI: the [`Client`] over the nit server's
-//! JSON API, the unreachable-vs-fatal [`CallError`] split, the [`Retry`] policy
-//! that rides out server restarts, and the shared `server_url` helper. Every
-//! request and response is a typed `nit-types` shape — no `serde_json::Value`
-//! crosses this boundary.
+//! HTTP/websocket transport for the CLI.
+//!
+//! The [`Client`] over the nit server's JSON API, the unreachable-vs-fatal
+//! [`CallError`] split, the [`Retry`] policy that rides out server restarts,
+//! and the shared `server_url` helper. Every request and response is a typed
+//! `nit-types` shape — no `serde_json::Value` crosses this boundary.
 
 use anyhow::{Result, anyhow};
 use nit_types::error::ApiError;
@@ -12,10 +13,11 @@ use serde::de::DeserializeOwned;
 
 pub(crate) const DEFAULT_SERVER: &str = "http://127.0.0.1:8877";
 
-/// The `--server` override, flattened into every command so the flag's name,
-/// help, and default live in one place. `global` lets it sit before or after a
-/// subcommand (it carries `nit repo`'s parent flag down to `create`/`move`);
-/// on a leaf command it is a harmless no-op.
+/// The `--server` override, flattened into every command.
+///
+/// Flattening keeps the flag's name, help, and default in one place. `global`
+/// lets it sit before or after a subcommand (it carries `nit repo`'s parent
+/// flag down to `create`/`move`); on a leaf command it is a harmless no-op.
 #[derive(clap::Args)]
 pub struct ServerOpt {
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`).
@@ -28,8 +30,9 @@ pub(crate) fn server_url(flag: Option<String>) -> String {
         .unwrap_or_else(|| DEFAULT_SERVER.to_string())
 }
 
-/// Probe the server's reported build with a hard 1-second budget — the
-/// reachability half of `nit --version`. Any timeout, transport, or parse
+/// Probes the server's reported build with a hard 1-second budget.
+///
+/// The reachability half of `nit --version`: any timeout, transport, or parse
 /// failure reads as unreachable (`None`); a healthy server returns its
 /// `/api/health` `version`.
 pub(crate) fn server_version(base: &str) -> Option<String> {
@@ -74,10 +77,11 @@ fn classify(err: ureq::Error, path: &str) -> CallError {
     }
 }
 
-/// Classify a websocket connect/read failure. A refused or reset connection is
-/// the server-restart signature and retries; `tungstenite` reports a refused
-/// connect as `Error::Io` **or** `Error::Url(UnableToConnect)` — both are
-/// transport, not a misconfiguration.
+/// Classifies a websocket connect/read failure.
+///
+/// A refused or reset connection is the server-restart signature and retries;
+/// `tungstenite` reports a refused connect as `Error::Io` **or**
+/// `Error::Url(UnableToConnect)` — both are transport, not a misconfiguration.
 fn classify_ws(err: &tungstenite::Error) -> CallError {
     match err {
         tungstenite::Error::Io(_)
@@ -89,12 +93,14 @@ fn classify_ws(err: &tungstenite::Error) -> CallError {
     }
 }
 
-/// Retry policy while the server is unreachable. `Fatal` errors always fail
-/// immediately.
+/// Retry policy while the server is unreachable.
+///
+/// `Fatal` errors always fail immediately.
 #[derive(Clone, Copy)]
 pub(crate) enum Retry {
-    /// Fail fast (push/status/comment) — an immediate "is 'nit serve' running?"
-    /// beats hanging.
+    /// Fail fast (push/status/comment).
+    ///
+    /// An immediate "is 'nit serve' running?" beats hanging.
     No,
     /// Keep retrying with backoff (`nit wait`/`--follow` riding out a restart).
     UntilUp,
@@ -127,9 +133,10 @@ impl Client {
         self.get_raw(path).map_err(|e| e.into_error(&self.base))
     }
 
-    /// Run `op`, retrying with backoff while the server is unreachable (one
-    /// stderr notice per outage). `Fatal` always fails immediately; `Retry::No`
-    /// fails on the first unreachable error.
+    /// Runs `op`, retrying with backoff while the server is unreachable.
+    ///
+    /// One stderr notice per outage. `Fatal` always fails immediately;
+    /// `Retry::No` fails on the first unreachable error.
     fn retry_loop<T>(
         &self,
         retry: Retry,
@@ -220,8 +227,9 @@ impl Client {
         Self::send_raw(self.agent.patch(&url), path, body)
     }
 
-    /// Send a JSON body on a built request (the verb-agnostic half of
-    /// [`post_raw`]/[`patch_raw`]).
+    /// Sends a JSON body on a built request.
+    ///
+    /// The verb-agnostic half of [`post_raw`]/[`patch_raw`].
     fn send_raw<B: Serialize, T: DeserializeOwned>(
         req: ureq::RequestBuilder<ureq::typestate::WithBody>,
         path: &str,
@@ -253,9 +261,10 @@ impl Client {
     }
 }
 
-/// Pump the change-stream socket to its next text frame, answering pings
-/// transparently. Returns the frame text, or `None` on a close/error so the
-/// caller reconnects.
+/// Pumps the change-stream socket to its next text frame.
+///
+/// Answers pings transparently. Returns the frame text, or `None` on a
+/// close/error so the caller reconnects.
 pub(crate) fn next_text(socket: &mut WsConn) -> Option<String> {
     loop {
         match socket.read() {

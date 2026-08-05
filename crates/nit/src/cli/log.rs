@@ -1,6 +1,8 @@
-//! `nit log` — print entries of the aggregated chain log by global `seq`,
-//! `--follow` it as a parked monitor over the websocket change stream, or
-//! `--wait` for the next entries past a cursor and exit.
+//! `nit log` — read the aggregated chain log.
+//!
+//! Prints entries by global `seq`, `--follow`s the log as a parked monitor
+//! over the websocket change stream, or `--wait`s for the next entries past a
+//! cursor and exits.
 
 use anyhow::{Context, Result, anyhow, bail};
 
@@ -49,8 +51,9 @@ pub struct LogArgs {
     pub server: ServerOpt,
 }
 
-/// Print entries of the aggregated chain log by global `seq`, or stream/drain
-/// past a cursor with `--follow`/`--wait`.
+/// Prints entries of the aggregated chain log by global `seq`.
+///
+/// With `--follow`/`--wait`, streams or drains past a cursor instead.
 ///
 /// # Errors
 /// When a range is malformed or the server can't be reached.
@@ -89,13 +92,14 @@ pub fn log(args: LogArgs) -> Result<()> {
     Ok(())
 }
 
-/// Block until the chain's aggregated log holds entries past the `seq` cursor,
-/// then print the chain digest and those entries, and exit. Each pass drains
-/// `(cursor, head]` from the log (the source of truth); otherwise it parks the
-/// websocket as a doorbell until any new entry lands. Rides out restarts.
-/// `reviewer_only` drops the agent's own entries, so the wait blocks until
-/// reviewer activity lands (its own echoes advance the cursor but don't wake
-/// it).
+/// Blocks until the chain's aggregated log passes the `seq` cursor.
+///
+/// Prints the chain digest and the entries past the cursor, then exits. Each
+/// pass drains `(cursor, head]` from the log (the source of truth); otherwise
+/// it parks the websocket as a doorbell until any new entry lands. Rides out
+/// restarts. `reviewer_only` drops the agent's own entries, so the wait blocks
+/// until reviewer activity lands (its own echoes advance the cursor but don't
+/// wake it).
 ///
 /// # Errors
 /// When the server returns a malformed response or a fatal client error.
@@ -132,9 +136,11 @@ fn wait(
     }
 }
 
-/// Park the websocket as a doorbell: subscribe the chain's changes at their
-/// current heads (no backlog replay) and block until the first live frame, then
-/// return so the caller re-drains the log. Rides out restarts.
+/// Parks the websocket as a doorbell.
+///
+/// Subscribes the chain's changes at their current heads (no backlog replay)
+/// and blocks until the first live frame, then returns so the caller re-drains
+/// the log. Rides out restarts.
 fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result<()> {
     let subs = heads(entries);
     loop {
@@ -146,10 +152,11 @@ fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result
     }
 }
 
-/// Follow the aggregated chain log as a parked monitor: replay `(cursor, head]`,
-/// then relay each new entry as it lands, until stopped. Rides out restarts
-/// (reconnect re-reads the gap from the log). `reviewer_only` drops the agent's
-/// own entries (`revision`/`comment`).
+/// Follows the aggregated chain log as a parked monitor.
+///
+/// Replays `(cursor, head]`, then relays each new entry as it lands, until
+/// stopped. Rides out restarts (reconnect re-reads the gap from the log).
+/// `reviewer_only` drops the agent's own entries (`revision`/`comment`).
 ///
 /// # Errors
 /// When a connect fails fatally or stdout can't be written.
@@ -196,8 +203,10 @@ fn relay(entry: &LogEntry, oneline: bool, reviewer_only: bool) {
     }
 }
 
-/// Each change's head idx (max idx + 1) from the aggregated log — the
-/// from-idx to subscribe at so the backlog replay is empty (doorbell mode).
+/// Each change's head idx (max idx + 1) from the aggregated log.
+///
+/// The from-idx to subscribe at so the backlog replay is empty (doorbell
+/// mode).
 fn heads(entries: &[LogEntry]) -> std::collections::HashMap<u64, u64> {
     let mut heads: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
     for e in entries {
@@ -213,8 +222,9 @@ fn max_seq(entries: &[LogEntry]) -> u64 {
     entries.iter().map(|e| e.seq).max().unwrap_or(0)
 }
 
-/// Parse the single `--follow` positional into a starting `seq` cursor: a bare
-/// `N` follows from `N`, `..` from `0`.
+/// Parses the single `--follow` positional into a starting `seq` cursor.
+///
+/// A bare `N` follows from `N`, `..` from `0`.
 fn follow_cursor(spec: &str) -> Result<u64> {
     let spec = spec.trim();
     if spec == ".." || spec.is_empty() {
@@ -225,10 +235,12 @@ fn follow_cursor(spec: &str) -> Result<u64> {
         .with_context(|| format!("bad seq cursor {spec:?}"))
 }
 
-/// A log entry `--reviewer-only` suppresses: the agent's own echoes
-/// (`revision`/`comment`) and the automatic `merged` lifecycle (written by the
-/// merge timer, not the reviewer). Reviewer verdicts and the reviewer-driven
-/// `abandoned`/`reopened` lifecycle always reach the monitor.
+/// Whether `--reviewer-only` suppresses this log entry.
+///
+/// It suppresses the agent's own echoes (`revision`/`comment`) and the
+/// automatic `merged` lifecycle (written by the merge timer, not the
+/// reviewer). Reviewer verdicts and the reviewer-driven `abandoned`/`reopened`
+/// lifecycle always reach the monitor.
 fn muted_by_reviewer_only(entry: &LogEntry) -> bool {
     match &entry.payload {
         LogPayload::Revision(_) | LogPayload::Comment(_) => true,
@@ -237,8 +249,9 @@ fn muted_by_reviewer_only(entry: &LogEntry) -> bool {
     }
 }
 
-/// A parsed `nit log` selector over global `seq`, half-open. `contains(seq)`
-/// tests membership; a bare `N` is the singleton `[N, N+1)`.
+/// A parsed `nit log` selector over global `seq`, half-open.
+///
+/// `contains(seq)` tests membership; a bare `N` is the singleton `[N, N+1)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LogRange {
     Open { from: u64 },
