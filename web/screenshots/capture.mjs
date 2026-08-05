@@ -648,9 +648,12 @@ async function main() {
       reducedMotion: "reduce",
     });
     // Under a loaded CI box the defaults (30s) brush against first paint +
-    // wasm instantiation; give every action and navigation room to spare.
-    context.setDefaultTimeout(60_000);
-    context.setDefaultNavigationTimeout(60_000);
+    // wasm instantiation — and a `nix flake check` runs this beside every
+    // crate's build and test, so the renderer can be CPU-starved for minutes.
+    // A condition wait resolves the instant it holds; the ceiling only has to
+    // clear the worst-case starved run, never the happy path.
+    context.setDefaultTimeout(240_000);
+    context.setDefaultNavigationTimeout(240_000);
     // Keep captures order-independent (e.g. the persisted diff layout).
     await context.addInitScript(() => localStorage.clear());
 
@@ -667,9 +670,14 @@ async function main() {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (err) => errors.push(String(err)));
-      await page.goto(baseUrl + cap.path, { waitUntil: "load" });
-      await waitForReady(page);
-      if (cap.actions) await cap.actions(page);
+      try {
+        await page.goto(baseUrl + cap.path, { waitUntil: "load" });
+        await waitForReady(page);
+        if (cap.actions) await cap.actions(page);
+      } catch (err) {
+        err.message = `capture ${cap.name}: ${err.message}`;
+        throw err;
+      }
       // Fixed elements repeat confusingly in full-page captures; pin the
       // review bar to the end of the document instead. Viewport captures
       // keep it fixed so bar + modal render as they really stack.
@@ -696,6 +704,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
-  process.exit(1);
+  // process.exit() drops buffered stderr on a pipe — the very error text a CI
+  // log needs; exit only once the write has flushed.
+  process.stderr.write(`${err?.stack ?? err}\n`, () => process.exit(1));
 });
