@@ -4,6 +4,18 @@
 use std::collections::HashMap;
 
 /// Commit subject, matching git's `find_commit_subject` + `format_subject`.
+///
+/// # Examples
+///
+/// ```rust
+/// use nit::gitscan::identity::subject_of;
+///
+/// assert_eq!(subject_of("one line\n\nbody"), "one line");
+/// assert_eq!(subject_of("wrapped\nsubject\n\nbody"), "wrapped subject");
+/// assert_eq!(subject_of("\n\nleading blank"), "leading blank");
+/// assert_eq!(subject_of("trailing newline\n"), "trailing newline");
+/// assert_eq!(subject_of(""), "");
+/// ```
 #[must_use]
 pub fn subject_of(message: &str) -> String {
     let body = message.trim_start_matches(['\n', '\r']);
@@ -86,15 +98,6 @@ pub fn require_keys(messages: &[String], short_shas: &[String]) -> Result<Vec<St
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn subject_extraction() {
-        assert_eq!(subject_of("one line\n\nbody"), "one line");
-        assert_eq!(subject_of("wrapped\nsubject\n\nbody"), "wrapped subject");
-        assert_eq!(subject_of("\n\nleading blank"), "leading blank");
-        assert_eq!(subject_of("trailing newline\n"), "trailing newline");
-        assert_eq!(subject_of(""), "");
-    }
 
     #[test]
     fn trailer_basic() {
