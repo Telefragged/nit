@@ -14,11 +14,10 @@ description: >
 
 <one_home_per_fact>
 
-Every fact has exactly one home. A fact written twice drifts: one copy
-gets updated, the other keeps asserting something false with full
-confidence. A fact written in the wrong home ages into noise — review
-chatter fossilized in a source file, code narration padding a commit
-message. The four homes:
+Every fact has exactly one home. Written twice it drifts — one copy gets
+updated, the other keeps asserting something false. Written in the wrong
+home it ages into noise: review chatter fossilized in a source file,
+code narration padding a commit message.
 
 | Home           | Carries                                        | Reader                                    |
 | -------------- | ---------------------------------------------- | ----------------------------------------- |
@@ -27,34 +26,32 @@ message. The four homes:
 | Commit message | the _why_ of this change                       | someone asking "why is the code this way" |
 | nit thread     | the review history: questions, verdicts, fixes | reviewer and author, during review        |
 
-The failure mode is leakage downward: review history leaking into commit
-messages, change rationale leaking into code comments, code narration
-leaking everywhere. What a fact _is_ picks its home, not where you
-happen to be typing when you think of it.
+The failure mode is leakage downward: review history into commit
+messages, change rationale into code comments, code narration
+everywhere. What a fact _is_ picks its home, not where you happen to be
+typing.
 
 </one_home_per_fact>
 
 <code_comments>
 
-Code reads as if this were its first, best version. Apply three tests to
-every comment you are about to write (or are reviewing):
+Code reads as if this were its first, best version. Test every comment
+you write or review:
 
-1. **Narration test — delete it and reread.** If the code alone tells the
-   reader the same thing, the comment is narration. Narration costs on
-   every read and drifts: the code changes, the comment above it does
-   not, and now the file lies.
-2. **History test — does it read cleanly to someone who has only ever
-   seen this version?** A comment that references an earlier version, an
-   alternative not taken, or a review exchange — "no longer", "instead
-   of", "we don't X here because…", or a defensive justification of a
-   choice someone once questioned — is history. Delete it. Brags ("no
-   JSON, so it never serializes!") are history too: they answer a
-   critique the reader never saw.
-3. **Keeper test — does it state something the code cannot?** An
-   invariant, a constraint, a subtle ordering, a reason the obvious
-   alternative is wrong _in the world_, not in the change's history.
-   These comments are the only ones that earn their place. Be dense: the
-   fewest words that carry the rationale.
+1. **Narration — delete it and reread.** If the code alone tells the
+   reader the same thing, the comment is narration: it costs on every
+   read, and when the code changes and the comment does not, the file
+   lies.
+2. **History — does it read cleanly to someone who has only ever seen
+   this version?** References to an earlier version, an alternative not
+   taken, or a review exchange ("no longer", "instead of", a defensive
+   justification of a questioned choice) are history. Delete them. Brags
+   ("no JSON, so it never serializes!") count — they answer a critique
+   the reader never saw.
+3. **Keeper — does it state something the code cannot?** An invariant, a
+   constraint, a subtle ordering, a reason the obvious alternative is
+   wrong _in the world_, not in the change's history. Only these earn
+   their place. Be dense: the fewest words that carry the rationale.
 
 <examples>
 
@@ -64,9 +61,6 @@ every comment you are about to write (or are reviewing):
 // Collect the approved changes from the chain.
 let approved: Vec<_> = chain.changes.iter().filter(|c| c.approved).collect();
 ```
-
-The code states this verbatim; the comment is a second copy that can
-drift.
 
 </example>
 
@@ -87,9 +81,6 @@ let conn = pool.get().await?;
 // Operates entirely on typed data — no JSON, so it never serializes!
 ```
 
-A defense against a critique from a review round. The reader never saw
-the critique.
-
 </example>
 
 <example type="keeper — invariant the code cannot state">
@@ -100,8 +91,8 @@ the critique.
 let id = state.next_id;
 ```
 
-Nothing in these lines shows the locking discipline; without the
-comment a reader must reconstruct it from the whole call graph.
+The locking discipline is invisible in these lines; without the comment
+a reader reconstructs it from the whole call graph.
 
 </example>
 
@@ -116,14 +107,13 @@ rustdoc, an IDE hover, a generated types file. So restating the _what_
 is welcome: `/// Pushes an element to the back of the vector.` is a fine
 doc for `Vec::push`.
 
-The first paragraph — everything up to the first blank line — is also
-the item's **summary**: rustdoc lifts it into module item tables and
-search results, and IDE hovers lead with it. Keep it to a single line
-in the third person present indicative (`Returns the tip`, not `Return
-the tip`). Those tables render at a fixed width, so a long summary
-wraps into a multi-line cell and the list stops being skimmable — 15
-words is about the ceiling. Everything past that first sentence goes
-below the blank line, where it costs a skimming reader nothing.
+The first paragraph is also the item's **summary** — rustdoc lifts it
+into module item tables and search results, and IDE hovers lead with it.
+Keep it to one line in the third person present indicative (`Returns the
+tip`, not `Return the tip`); those tables are fixed-width, so past about
+15 words it wraps and the list stops being skimmable. Everything after
+that first sentence goes below the blank line, where it costs a skimmer
+nothing.
 
 <example type="summary line — split the detail out">
 
@@ -133,8 +123,7 @@ below the blank line, where it costs a skimming reader nothing.
 /// approved change otherwise.
 ```
 
-Three lines of item table for one entry. Split at the first sentence
-and the summary fits on one:
+Three lines of item table for one entry. Split at the first sentence:
 
 ```rust
 /// Returns the change the reviewer is looking at.
@@ -145,24 +134,22 @@ and the summary fits on one:
 
 </example>
 
-clap's derive reads that same shape differently: on an `#[arg]` or
-`#[command]` field it takes the first paragraph as the `-h` text and the
-whole comment as `--help`. Splitting one there moves its qualifiers out
-of `-h`, which is a CLI change rather than a docs change — leave those
-doc-comments as one paragraph.
+clap's derive reads that shape differently: on an `#[arg]` or
+`#[command]` field the first paragraph is the `-h` text and the whole
+comment is `--help`. Splitting one moves its qualifiers out of `-h` — a
+CLI change, not a docs change. Leave those as one paragraph.
 
-What a doc-comment must carry is the **contract**: invariants the
-caller may rely on, panics, error conditions, ordering guarantees.
-`crates/nit-types` doc-comments are the wire contract itself — their
+What a doc-comment must carry is the **contract**: invariants the caller
+may rely on, panics, error conditions, ordering guarantees.
+`crates/nit-types` doc-comments _are_ the wire contract — their
 semantics bind both the server and the generated TypeScript.
 
-In Rust, prefer showing the contract as an **example** under an
-`# Examples` heading (the rustdoc convention): a doctest documents and
-verifies in one artifact, so it cannot drift. Where a doctest naturally
-covers what a unit test would assert, write the doctest _instead of_
-the unit test — it replaces the tests it covers, never the test module
-wholesale. Keep unit tests for what would bloat docs: edge-case
-matrices, failure paths, concurrency.
+In Rust, show the contract as an example under an `# Examples` heading
+(the rustdoc convention): a doctest documents and verifies in one
+artifact, so it cannot drift. Where it covers what a unit test would
+assert, write it _instead of_ that test — it replaces the tests it
+covers, never the test module wholesale. Keep unit tests for what would
+bloat docs: edge-case matrices, failure paths, concurrency.
 
 <example type="doctest carrying the contract">
 
@@ -183,9 +170,9 @@ pub fn split_trailer(line: &str) -> Option<(&str, &str)> { … }
 
 </example>
 
-TypeScript has no doctest runner: an example in TSDoc never executes
-and rots silently. For exported TS API, state the contract in prose and
-skip examples unless they are short enough to be obviously true.
+TypeScript has no doctest runner: a TSDoc example never executes and
+rots silently. For exported TS API, state the contract in prose and skip
+examples unless they are short enough to be obviously true.
 
 </doc_comments>
 
@@ -207,35 +194,33 @@ quick glance. No other badge uses yellow, so it reads unambiguously.
 
 </example>
 
-Never invent a rationale. If you were asked to make a change and the
-why is not obvious, do not guess at one for the body — ask the reviewer
-for the reasoning (the `nit:comment` skill) and let the answer land in
-the message on the next amend.
+Never invent a rationale. If the why is not obvious, do not guess at one
+— ask the reviewer for the reasoning (the `nit:comment` skill) and let
+the answer land in the message on the next amend.
 
-The commit message never carries review history: what round three asked
-for and how revision four answered it has no place in it. `a = a + 1`
-becoming `a += 1` after review needs no trace in the message — the
-message describes the change as if it had always been written that way.
+The message carries no review history: what round three asked for and
+how revision four answered it has no place in it. `a = a + 1` becoming
+`a += 1` after review needs no trace — the message describes the change
+as if it had always been written that way.
 
 </commit_messages>
 
 <comment_audit>
 
 Every review pass applies the three tests in `<code_comments>`. A
-`/simplify` or `/code-review` run on this repo additionally spawns **one
-extra read-only agent** dedicated to this audit: point it at this file
-and the diff under review; it proposes, the orchestrator applies.
+`/simplify` or `/code-review` run here additionally spawns **one extra
+read-only agent** for this audit: point it at this file and the diff
+under review; it proposes, the orchestrator applies.
 
-The audit's burden of proof is on removal — presume nothing, prove
-each flag:
+The burden of proof is on removal — presume nothing, prove each flag:
 
 - **Narration**: quote the adjacent code stating the same fact.
-- **History / brag**: name what it references outside this version —
-  the earlier code (git blame), the review exchange (nit thread), or
-  show the sentence is incoherent in a first-version reading.
-- A doc-comment restating the _what_ is **not** a finding — that is its
+- **History / brag**: name what it references outside this version — the
+  earlier code (git blame), the review exchange (nit thread) — or show
+  the sentence is incoherent in a first-version reading.
+- A doc-comment restating the _what_ is **not** a finding; that is its
   job.
-- Unproven flags are dropped: the comment stays. Length or phrasing
+- Unproven flags are dropped, the comment stays. Length or phrasing
   taste is never grounds.
 
 Report findings in this shape, one per flagged comment:
