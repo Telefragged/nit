@@ -58,11 +58,16 @@ pub(super) async fn create_repo(
                     e.message()
                 ))
             })?;
-        let row = db::create_repo(conn, &canonical, &req.canonical_ref)?;
-        // Seed the merge timer's baseline at the canonical ref's current HEAD, so the
-        // first merge after registration shows up in a delta scan rather than
-        // being swallowed as pre-tracking history.
-        db::update_repo_canonical_head(conn, row.id, &gitscan::sha_of(base_commit.id()))?;
+        // The row and its baseline are one registration. The baseline seeds
+        // the merge timer at the canonical ref's current HEAD, so the first
+        // merge after registration shows up in a delta scan rather than
+        // falling into pre-tracking history. Two commits would lose exactly
+        // that on a crash between them.
+        let row = db::write(conn, |tx| {
+            let row = db::create_repo(tx, &canonical, &req.canonical_ref)?;
+            db::update_repo_canonical_head(tx, row.id, &gitscan::sha_of(base_commit.id()))?;
+            Ok(row)
+        })?;
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, conn, row)?))
     })
@@ -120,7 +125,7 @@ pub(super) async fn relocate_repo(
                 other.id
             )));
         }
-        db::update_repo_git_dir(conn, repo_id, &canonical)?;
+        db::write(conn, |tx| db::update_repo_git_dir(tx, repo_id, &canonical))?;
         let row = db::RepoRow {
             id: repo_id,
             git_dir: canonical,

@@ -10,9 +10,11 @@
 //!
 //! [`pool`] hands out connections with the pragmas applied (WAL,
 //! `busy_timeout`, foreign keys ON); `PRAGMA user_version` migrations run
-//! once at startup. Row structs and focused query helpers
-//! live here; multi-statement write flows append under a caller-held
-//! transaction.
+//! once at startup. Row structs and focused query helpers live here.
+//!
+//! A read takes a `&Connection` and a write takes a `&Transaction`. The
+//! signature is the contract, so no caller reaches a mutating helper here
+//! outside a transaction, and [`write()`] is the only place one opens.
 
 use std::path::{Path, PathBuf};
 
@@ -22,7 +24,7 @@ use nit_types::domain::ChangeNumber;
 use nit_types::domain::{Anchor, CommentRange, LineAnchor};
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
 use nit_types::domain::{Tag, Tags};
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
 /// RFC3339 timestamp for "now" (UTC).
 ///
@@ -97,6 +99,24 @@ fn prepare(conn: &mut Connection) -> rusqlite::Result<()> {
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     Ok(())
+}
+
+/// Runs `f` inside a transaction, committing when it succeeds.
+///
+/// An error rolls the whole thing back, so a write can never land
+/// half-applied. The transaction is `IMMEDIATE`: it takes the write lock
+/// up front, which `busy_timeout` waits out, where a deferred one that
+/// read before writing would fail the upgrade with `SQLITE_BUSY_SNAPSHOT`
+/// — an error no timeout retries.
+///
+/// # Errors
+///
+/// When the transaction cannot be opened, `f` fails, or the commit fails.
+pub fn write<T>(conn: &mut Connection, f: impl FnOnce(&Transaction) -> Result<T>) -> Result<T> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let out = f(&tx)?;
+    tx.commit()?;
+    Ok(out)
 }
 
 const MIGRATIONS: &[&str] = &[
@@ -222,14 +242,23 @@ const MIGRATIONS: &[&str] = &[
     ",
 ];
 
-pub(crate) fn migrate(conn: &Connection) -> Result<()> {
+pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
+    migrate_to(conn, MIGRATIONS.len())
+}
+
+/// Applies migrations up to `upto`, the `PRAGMA user_version` to reach.
+///
+/// A test stops short to write rows the way an older schema spelled
+/// them, and then migrates over them.
+fn migrate_to(conn: &mut Connection, upto: usize) -> Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     let version = usize::try_from(version).context("PRAGMA user_version is negative")?;
-    for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
-        conn.execute_batch(&format!(
-            "BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;",
-            i + 1
-        ))
+    for (i, sql) in MIGRATIONS.iter().enumerate().take(upto).skip(version) {
+        write(conn, |tx| {
+            tx.execute_batch(sql)?;
+            tx.pragma_update(None, "user_version", i64::try_from(i + 1)?)?;
+            Ok(())
+        })
         .with_context(|| format!("applying migration {}", i + 1))?;
     }
     Ok(())
@@ -327,13 +356,13 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
 /// # Errors
 ///
 /// On a database failure, including the `UNIQUE(git_dir)` clash.
-pub fn create_repo(conn: &Connection, git_dir: &str, canonical_ref: &str) -> Result<RepoRow> {
-    conn.execute(
+pub fn create_repo(tx: &Transaction, git_dir: &str, canonical_ref: &str) -> Result<RepoRow> {
+    tx.execute(
         "INSERT INTO repos (git_dir, canonical_ref) VALUES (?1, ?2)",
         params![git_dir, canonical_ref],
     )?;
     Ok(RepoRow {
-        id: col_u64(conn.last_insert_rowid())?,
+        id: col_u64(tx.last_insert_rowid())?,
         git_dir: git_dir.to_string(),
         canonical_ref: canonical_ref.to_string(),
         canonical_head: None,
@@ -388,8 +417,8 @@ pub fn get_repo(conn: &Connection, id: u64) -> Result<Option<RepoRow>> {
 /// # Errors
 ///
 /// On a database failure, including the `UNIQUE(git_dir)` clash.
-pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<()> {
-    conn.execute(
+pub fn update_repo_git_dir(tx: &Transaction, id: u64, git_dir: &str) -> Result<()> {
+    tx.execute(
         "UPDATE repos SET git_dir = ?1 WHERE id = ?2",
         params![git_dir, i64::try_from(id)?],
     )?;
@@ -403,8 +432,8 @@ pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<
 /// # Errors
 ///
 /// On a database failure.
-pub fn update_repo_canonical_head(conn: &Connection, id: u64, canonical_head: &Sha) -> Result<()> {
-    conn.execute(
+pub fn update_repo_canonical_head(tx: &Transaction, id: u64, canonical_head: &Sha) -> Result<()> {
+    tx.execute(
         "UPDATE repos SET canonical_head = ?1 WHERE id = ?2",
         params![canonical_head.as_str(), i64::try_from(id)?],
     )?;
@@ -452,17 +481,13 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn upsert_change(
-    conn: &Connection,
-    repo_id: u64,
-    change_id: &ChangeId,
-) -> Result<ChangeNumber> {
-    conn.execute(
+pub fn upsert_change(tx: &Transaction, repo_id: u64, change_id: &ChangeId) -> Result<ChangeNumber> {
+    tx.execute(
         "INSERT INTO changes (repo_id, change_id, created_at) VALUES (?1, ?2, ?3)
          ON CONFLICT (repo_id, change_id) DO NOTHING",
         params![i64::try_from(repo_id)?, change_id.as_str(), now_rfc3339()],
     )?;
-    let id: i64 = conn.query_row(
+    let id: i64 = tx.query_row(
         "SELECT id FROM changes WHERE repo_id = ?1 AND change_id = ?2",
         params![i64::try_from(repo_id)?, change_id.as_str()],
         |r| r.get(0),
@@ -503,11 +528,11 @@ pub fn change_number_by_id(
 ///
 /// On a database failure.
 pub fn update_change_status(
-    conn: &Connection,
+    tx: &Transaction,
     id: ChangeNumber,
     status: ChangeStatus,
 ) -> Result<()> {
-    conn.execute(
+    tx.execute(
         "UPDATE changes SET status = ?1 WHERE id = ?2",
         params![status.as_str(), i64::try_from(id.get())?],
     )?;
@@ -603,9 +628,8 @@ pub fn all_changes(conn: &Connection) -> Result<Vec<ChangeRow>> {
 
 /// Replaces one change's tag rows with `tags`.
 ///
-/// Takes the transaction, not a connection: this is a delete plus an
-/// insert per tag, and a reader that caught it midway would see a change
-/// holding a fragment of its set.
+/// This costs a delete plus an insert per tag. A reader that caught it
+/// midway would otherwise see a change holding a fragment of its set.
 ///
 /// # Errors
 ///
@@ -687,14 +711,14 @@ pub fn log_head(conn: &Connection, change_number: ChangeNumber) -> Result<u64> {
 ///
 /// On a database failure (including a `UNIQUE(change_number, position)` clash).
 pub fn append_log(
-    conn: &Connection,
+    tx: &Transaction,
     change_number: ChangeNumber,
     position: u64,
     kind: &str,
     payload: &str,
     created_at: &str,
 ) -> Result<u64> {
-    conn.execute(
+    tx.execute(
         "INSERT INTO log (change_number, position, kind, payload, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
@@ -705,7 +729,7 @@ pub fn append_log(
             created_at
         ],
     )?;
-    Ok(col_u64(conn.last_insert_rowid())?)
+    Ok(col_u64(tx.last_insert_rowid())?)
 }
 
 fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
@@ -844,7 +868,7 @@ pub struct NewDraft<'a> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
+pub fn insert_draft(tx: &Transaction, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
     let thread_id = d.thread_id.map(i64::try_from).transpose()?;
     let at = match d.anchor {
         Anchor::Line { at, .. } => Some(*at),
@@ -863,7 +887,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
         ),
         _ => (None, None, None, None),
     };
-    conn.execute(
+    tx.execute(
         "INSERT INTO draft_comments (id, change_number, revision, thread_id, file, line, side,
             range_start_line, range_start_char, range_end_line, range_end_char,
             line_text, body, resolved, created_at, updated_at)
@@ -886,7 +910,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
             d.resolved.map(i64::from),
         ],
     )?;
-    get_draft(conn, id)?.ok_or_else(|| anyhow!("draft {id} vanished"))
+    get_draft(tx, id)?.ok_or_else(|| anyhow!("draft {id} vanished"))
 }
 
 /// The maximum draft id, for seeding the global id counter on startup.
@@ -920,28 +944,30 @@ pub fn get_draft(conn: &Connection, id: u64) -> Result<Option<DraftRow>> {
 ///
 /// On a database failure.
 pub fn update_draft(
-    conn: &Connection,
+    tx: &Transaction,
     id: u64,
     body: &str,
     resolved: Option<bool>,
     now: &str,
 ) -> Result<()> {
-    conn.execute(
+    tx.execute(
         "UPDATE draft_comments SET body = ?1, resolved = ?4, updated_at = ?2 WHERE id = ?3",
         params![body, now, i64::try_from(id)?, resolved.map(i64::from)],
     )?;
     Ok(())
 }
 
+/// Whether a draft was there to delete.
+///
 /// # Errors
 ///
 /// On a database failure.
-pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
-    conn.execute(
+pub fn delete_draft(tx: &Transaction, id: u64) -> Result<bool> {
+    let deleted = tx.execute(
         "DELETE FROM draft_comments WHERE id = ?1",
         params![i64::try_from(id)?],
     )?;
-    Ok(())
+    Ok(deleted > 0)
 }
 
 /// Id-ascending (creation order).
@@ -963,8 +989,8 @@ pub fn drafts_for_change(conn: &Connection, change_number: ChangeNumber) -> Resu
 /// # Errors
 ///
 /// On a database failure.
-pub fn delete_drafts_for_change(conn: &Connection, change_number: ChangeNumber) -> Result<()> {
-    conn.execute(
+pub fn delete_drafts_for_change(tx: &Transaction, change_number: ChangeNumber) -> Result<()> {
+    tx.execute(
         "DELETE FROM draft_comments WHERE change_number = ?1",
         params![i64::try_from(change_number.get())?],
     )?;
@@ -1001,12 +1027,12 @@ fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
 ///
 /// On a database failure.
 pub fn upsert_draft_review(
-    conn: &Connection,
+    tx: &Transaction,
     change_number: ChangeNumber,
     decision: Decision,
     message: &str,
 ) -> Result<()> {
-    conn.execute(
+    tx.execute(
         "INSERT INTO draft_reviews (change_number, decision, message) VALUES (?1, ?2, ?3)
          ON CONFLICT (change_number) DO UPDATE SET decision = ?2, message = ?3",
         params![
@@ -1044,8 +1070,8 @@ pub fn get_draft_review(
 /// # Errors
 ///
 /// On a database failure.
-pub fn delete_draft_review(conn: &Connection, change_number: ChangeNumber) -> Result<()> {
-    conn.execute(
+pub fn delete_draft_review(tx: &Transaction, change_number: ChangeNumber) -> Result<()> {
+    tx.execute(
         "DELETE FROM draft_reviews WHERE change_number = ?1",
         params![i64::try_from(change_number.get())?],
     )?;
@@ -1059,15 +1085,23 @@ mod tests {
     use nit_types::testing::{change_id, sha, tag, tags};
 
     fn mem() -> Connection {
-        let conn = Connection::open_in_memory().expect("in-memory db");
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
         conn.pragma_update(None, "foreign_keys", "ON").expect("fk");
-        migrate(&conn).expect("migrate");
+        migrate(&mut conn).expect("migrate");
         conn
     }
 
-    fn change(conn: &Connection) -> ChangeNumber {
-        let repo = create_repo(conn, "/r/.git", "main").expect("repo");
-        upsert_change(conn, repo.id, &change_id("I1")).expect("change")
+    fn repo(conn: &mut Connection, git_dir: &str) -> RepoRow {
+        write(conn, |tx| create_repo(tx, git_dir, "main")).expect("repo")
+    }
+
+    fn change(conn: &mut Connection) -> ChangeNumber {
+        let repo = repo(conn, "/r/.git");
+        change_in(conn, repo.id, "I1")
+    }
+
+    fn change_in(conn: &mut Connection, repo_id: u64, label: &str) -> ChangeNumber {
+        write(conn, |tx| upsert_change(tx, repo_id, &change_id(label))).expect("change")
     }
 
     fn matching_tags(conn: &Connection, repo_id: u64, tags: Vec<Tag>) -> Vec<ChangeNumber> {
@@ -1083,16 +1117,14 @@ mod tests {
     }
 
     fn set_tags(conn: &mut Connection, number: ChangeNumber, pairs: &[(&str, &str)]) {
-        let tx = conn.transaction().expect("tx");
-        set_change_tags(&tx, number, &tags(pairs)).expect("set");
-        tx.commit().expect("commit");
+        write(conn, |tx| set_change_tags(tx, number, &tags(pairs))).expect("set");
     }
 
     #[test]
     fn change_tags_replace_wholesale() {
         let mut conn = mem();
-        let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
-        let id = upsert_change(&conn, repo.id, &change_id("I1")).expect("change");
+        let repo = repo(&mut conn, "/r/.git");
+        let id = change_in(&mut conn, repo.id, "I1");
         set_tags(&mut conn, id, &[("branch", "track/a"), ("feature", "epic")]);
         set_tags(&mut conn, id, &[("branch", "track/b")]);
 
@@ -1114,9 +1146,9 @@ mod tests {
     #[test]
     fn repo_change_numbers_ands_every_requested_tag() {
         let mut conn = mem();
-        let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
-        let both = upsert_change(&conn, repo.id, &change_id("I1")).expect("change");
-        let one = upsert_change(&conn, repo.id, &change_id("I2")).expect("change");
+        let repo = repo(&mut conn, "/r/.git");
+        let both = change_in(&mut conn, repo.id, "I1");
+        let one = change_in(&mut conn, repo.id, "I2");
         set_tags(
             &mut conn,
             both,
@@ -1136,22 +1168,25 @@ mod tests {
 
     #[test]
     fn create_repo_registers_and_find_locates() {
-        let conn = mem();
-        let a = create_repo(&conn, "/r/.git", "main").expect("create");
+        let mut conn = mem();
+        let a = repo(&mut conn, "/r/.git");
         assert_eq!(a.canonical_ref, "main");
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
         assert_eq!(found.id, a.id);
         assert_eq!(found.canonical_ref, "main");
-        let b = create_repo(&conn, "/other/.git", "main").expect("create");
+        let b = repo(&mut conn, "/other/.git");
         assert_ne!(a.id, b.id);
     }
 
     #[test]
     fn canonical_head_starts_null_and_round_trips() {
-        let conn = mem();
-        let a = create_repo(&conn, "/r/.git", "main").expect("create");
+        let mut conn = mem();
+        let a = repo(&mut conn, "/r/.git");
         assert_eq!(a.canonical_head, None, "no baseline until first observed");
-        update_repo_canonical_head(&conn, a.id, &sha("deadbeef")).expect("record");
+        write(&mut conn, |tx| {
+            update_repo_canonical_head(tx, a.id, &sha("deadbeef"))
+        })
+        .expect("record");
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
         assert_eq!(found.canonical_head, Some(sha("deadbeef")));
     }
@@ -1160,8 +1195,8 @@ mod tests {
     /// come back as the anchor it spells.
     #[test]
     fn draft_rows_read_back_as_their_anchors() {
-        let conn = mem();
-        let c = change(&conn);
+        let mut conn = mem();
+        let c = change(&mut conn);
         let anchors = [
             Anchor::Line {
                 file: "a.rs".to_string(),
@@ -1183,19 +1218,21 @@ mod tests {
             Anchor::Change,
         ];
         for (id, anchor) in anchors.iter().enumerate() {
-            insert_draft(
-                &conn,
-                id as u64,
-                &NewDraft {
-                    change_number: c,
-                    revision: RevisionNumber::new(0),
-                    thread_id: None,
-                    anchor,
-                    body: "note",
-                    resolved: None,
-                },
-                "t0",
-            )
+            write(&mut conn, |tx| {
+                insert_draft(
+                    tx,
+                    id as u64,
+                    &NewDraft {
+                        change_number: c,
+                        revision: RevisionNumber::new(0),
+                        thread_id: None,
+                        anchor,
+                        body: "note",
+                        resolved: None,
+                    },
+                    "t0",
+                )
+            })
             .expect("insert");
         }
 
@@ -1211,15 +1248,9 @@ mod tests {
     /// the old names have to come back under the new ones.
     #[test]
     fn v9_renames_the_change_columns_over_existing_rows() {
-        let conn = Connection::open_in_memory().expect("in-memory db");
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
         // Stop at v8 and write rows the way that schema spells them.
-        for (i, sql) in MIGRATIONS.iter().enumerate().take(8) {
-            conn.execute_batch(&format!(
-                "BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;",
-                i + 1
-            ))
-            .expect("migrate to v8");
-        }
+        migrate_to(&mut conn, 8).expect("migrate to v8");
         let key = change_id("Iabc");
         conn.execute_batch(&format!(
             "INSERT INTO repos (id, git_dir, canonical_ref) VALUES (1, '/r/.git', 'main');
@@ -1234,7 +1265,7 @@ mod tests {
         ))
         .expect("v8-shaped rows");
 
-        migrate(&conn).expect("migrate the rest");
+        migrate(&mut conn).expect("migrate the rest");
 
         let change = get_change(&conn, ChangeNumber::new(7))
             .expect("get")
@@ -1256,12 +1287,12 @@ mod tests {
 
     #[test]
     fn change_upsert_is_idempotent() {
-        let conn = mem();
-        let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
-        let a = upsert_change(&conn, repo.id, &change_id("Iabc")).expect("create");
-        let again = upsert_change(&conn, repo.id, &change_id("Iabc")).expect("re-upsert");
+        let mut conn = mem();
+        let repo = repo(&mut conn, "/r/.git");
+        let a = change_in(&mut conn, repo.id, "Iabc");
+        let again = change_in(&mut conn, repo.id, "Iabc");
         assert_eq!(a, again);
-        let b = upsert_change(&conn, repo.id, &change_id("Idef")).expect("create");
+        let b = change_in(&mut conn, repo.id, "Idef");
         assert_ne!(a, b);
         assert_eq!(
             get_change(&conn, a).expect("get").expect("some").change_id,
@@ -1271,8 +1302,8 @@ mod tests {
 
     #[test]
     fn change_status_round_trips() {
-        let conn = mem();
-        let c = change(&conn);
+        let mut conn = mem();
+        let c = change(&mut conn);
         let status = |conn: &Connection| -> Option<String> {
             conn.query_row(
                 "SELECT status FROM changes WHERE id = ?1",
@@ -1288,9 +1319,15 @@ mod tests {
             get_change(&conn, c).expect("get").expect("row").status,
             None
         );
-        update_change_status(&conn, c, ChangeStatus::Approved).expect("stamp");
+        write(&mut conn, |tx| {
+            update_change_status(tx, c, ChangeStatus::Approved)
+        })
+        .expect("stamp");
         assert_eq!(status(&conn).as_deref(), Some("approved"));
-        update_change_status(&conn, c, ChangeStatus::ChangesRequested).expect("restamp");
+        write(&mut conn, |tx| {
+            update_change_status(tx, c, ChangeStatus::ChangesRequested)
+        })
+        .expect("restamp");
         assert_eq!(status(&conn).as_deref(), Some("changes_requested"));
         assert_eq!(
             get_change(&conn, c).expect("get").expect("row").status,
@@ -1300,12 +1337,17 @@ mod tests {
 
     #[test]
     fn log_append_mints_sequence_and_position() {
-        let conn = mem();
-        let c = change(&conn);
+        let mut conn = mem();
+        let c = change(&mut conn);
         assert_eq!(log_head(&conn, c).expect("head"), 0);
-        let s0 =
-            append_log(&conn, c, 0, "revision", r#"{"commit_sha":"a"}"#, "t0").expect("append");
-        let s1 = append_log(&conn, c, 1, "comment", r#"{"body":"note"}"#, "t1").expect("append");
+        let s0 = write(&mut conn, |tx| {
+            append_log(tx, c, 0, "revision", r#"{"commit_sha":"a"}"#, "t0")
+        })
+        .expect("append");
+        let s1 = write(&mut conn, |tx| {
+            append_log(tx, c, 1, "comment", r#"{"body":"note"}"#, "t1")
+        })
+        .expect("append");
         assert!(s1 > s0, "sequence is monotone");
         assert_eq!(log_head(&conn, c).expect("head"), 2);
         let entries = log_entries(&conn, c, 0, None).expect("entries");
@@ -1319,67 +1361,78 @@ mod tests {
 
     #[test]
     fn sequence_is_global_across_changes() {
-        let conn = mem();
-        let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
-        let a = upsert_change(&conn, repo.id, &change_id("Ia")).expect("a");
-        let b = upsert_change(&conn, repo.id, &change_id("Ib")).expect("b");
-        let sa = append_log(&conn, a, 0, "comment", "{}", "t0").expect("a0");
-        let sb = append_log(&conn, b, 0, "comment", "{}", "t1").expect("b0");
-        let sa1 = append_log(&conn, a, 1, "comment", "{}", "t2").expect("a1");
+        let mut conn = mem();
+        let repo = repo(&mut conn, "/r/.git");
+        let a = change_in(&mut conn, repo.id, "Ia");
+        let b = change_in(&mut conn, repo.id, "Ib");
+        let sa = write(&mut conn, |tx| append_log(tx, a, 0, "comment", "{}", "t0")).expect("a0");
+        let sb = write(&mut conn, |tx| append_log(tx, b, 0, "comment", "{}", "t1")).expect("b0");
+        let sa1 = write(&mut conn, |tx| append_log(tx, a, 1, "comment", "{}", "t2")).expect("a1");
         // Both changes' position restart at 0, but sequence totally orders the interleave.
         assert!(sa < sb && sb < sa1);
     }
 
     #[test]
     fn draft_lifecycle() {
-        let conn = mem();
-        let c = change(&conn);
-        let d = insert_draft(
-            &conn,
-            7,
-            &NewDraft {
-                change_number: c,
-                revision: RevisionNumber::new(1),
-                thread_id: None,
-                anchor: &Anchor::Line {
-                    file: "src/main.rs".to_string(),
-                    side: Side::New,
-                    line_text: Some("fn main".to_string()),
-                    at: LineAnchor::Whole(3),
+        let mut conn = mem();
+        let c = change(&mut conn);
+        let d = write(&mut conn, |tx| {
+            insert_draft(
+                tx,
+                7,
+                &NewDraft {
+                    change_number: c,
+                    revision: RevisionNumber::new(1),
+                    thread_id: None,
+                    anchor: &Anchor::Line {
+                        file: "src/main.rs".to_string(),
+                        side: Side::New,
+                        line_text: Some("fn main".to_string()),
+                        at: LineAnchor::Whole(3),
+                    },
+                    body: "look",
+                    resolved: None,
                 },
-                body: "look",
-                resolved: None,
-            },
-            "t0",
-        )
+                "t0",
+            )
+        })
         .expect("insert");
         assert_eq!(drafts_for_change(&conn, c).expect("list").len(), 1);
-        update_draft(&conn, d.id, "look again", Some(true), "t1").expect("edit");
+        write(&mut conn, |tx| {
+            update_draft(tx, d.id, "look again", Some(true), "t1")
+        })
+        .expect("edit");
         let edited = get_draft(&conn, d.id).expect("get").expect("some");
         assert_eq!(edited.body, "look again");
         assert_eq!(edited.resolved, Some(true));
-        delete_drafts_for_change(&conn, c).expect("drain");
+        write(&mut conn, |tx| delete_drafts_for_change(tx, c)).expect("drain");
         assert!(drafts_for_change(&conn, c).expect("list").is_empty());
     }
 
     #[test]
     fn draft_review_upsert_get_delete() {
-        let conn = mem();
-        let c = change(&conn);
+        let mut conn = mem();
+        let c = change(&mut conn);
         assert!(get_draft_review(&conn, c).expect("get").is_none());
 
-        upsert_draft_review(&conn, c, Decision::RequestChanges, "fix this").expect("draft");
+        write(&mut conn, |tx| {
+            upsert_draft_review(tx, c, Decision::RequestChanges, "fix this")
+        })
+        .expect("draft");
         let draft = get_draft_review(&conn, c).expect("get").expect("some");
         assert_eq!(draft.decision, Decision::RequestChanges);
         assert_eq!(draft.message, "fix this");
 
-        upsert_draft_review(&conn, c, Decision::Approve, "lgtm").expect("redraft");
+        write(&mut conn, |tx| {
+            upsert_draft_review(tx, c, Decision::Approve, "lgtm")
+        })
+        .expect("redraft");
         let draft = get_draft_review(&conn, c).expect("get").expect("some");
         assert_eq!(draft.decision, Decision::Approve);
         assert_eq!(draft.message, "lgtm");
 
-        delete_draft_review(&conn, c).expect("clear");
+        write(&mut conn, |tx| delete_draft_review(tx, c)).expect("clear");
         assert!(get_draft_review(&conn, c).expect("get").is_none());
-        delete_draft_review(&conn, c).expect("clear again");
+        write(&mut conn, |tx| delete_draft_review(tx, c)).expect("clear again");
     }
 }

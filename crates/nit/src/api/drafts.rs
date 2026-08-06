@@ -47,19 +47,17 @@ pub(super) async fn create_draft(
         anchor.snapshot_line_text(snapshot_line_text(&git_dir, revision, &anchor));
         drop(proj);
         let draft_id = state.alloc_id();
-        let row = db::insert_draft(
-            conn,
-            draft_id,
-            &db::NewDraft {
-                change_number: id,
-                revision: req.revision,
-                thread_id,
-                anchor: &anchor,
-                body: &req.body,
-                resolved: req.resolved,
-            },
-            &db::now_rfc3339(),
-        )?;
+        let new = db::NewDraft {
+            change_number: id,
+            revision: req.revision,
+            thread_id,
+            anchor: &anchor,
+            body: &req.body,
+            resolved: req.resolved,
+        };
+        let row = db::write(conn, |tx| {
+            db::insert_draft(tx, draft_id, &new, &db::now_rfc3339())
+        })?;
         Ok(Json(views::draft_view(&row)))
     })
     .await
@@ -71,9 +69,11 @@ pub(super) async fn edit_draft(
     AppJson(req): AppJson<EditDraft>,
 ) -> Result<Json<Draft>, Error> {
     with_conn(state.pool(), move |conn| {
-        db::update_draft(conn, id, &req.body, req.resolved, &db::now_rfc3339())?;
-        let updated = db::get_draft(conn, id)?
-            .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
+        let updated = db::write(conn, |tx| {
+            db::update_draft(tx, id, &req.body, req.resolved, &db::now_rfc3339())?;
+            db::get_draft(tx, id)
+        })?
+        .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
         Ok(Json(views::draft_view(&updated)))
     })
     .await
@@ -84,10 +84,9 @@ pub(super) async fn delete_draft(
     AppPath(id): AppPath<u64>,
 ) -> Result<StatusCode, Error> {
     with_conn(state.pool(), move |conn| {
-        if db::get_draft(conn, id)?.is_none() {
+        if !db::write(conn, |tx| db::delete_draft(tx, id))? {
             return Err(Error::not_found(format!("draft {id} not found")));
         }
-        db::delete_draft(conn, id)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

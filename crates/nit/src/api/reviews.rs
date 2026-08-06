@@ -120,7 +120,9 @@ pub(super) async fn set_draft_decision(
 ) -> Result<Json<DraftDecision>, Error> {
     with_conn(state.pool(), move |conn| {
         change_or_404(&state, conn, id)?;
-        db::upsert_draft_review(conn, id, req.decision, &req.message)?;
+        db::write(conn, |tx| {
+            db::upsert_draft_review(tx, id, req.decision, &req.message)
+        })?;
         Ok(Json(req))
     })
     .await
@@ -135,7 +137,7 @@ pub(super) async fn clear_decision(
 ) -> Result<StatusCode, Error> {
     with_conn(state.pool(), move |conn| {
         change_or_404(&state, conn, id)?;
-        db::delete_draft_review(conn, id)?;
+        db::write(conn, |tx| db::delete_draft_review(tx, id))?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

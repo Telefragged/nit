@@ -102,7 +102,9 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         // Record the baseline last: a crash before this re-scans the same delta
         // next time, which is harmless — a change merged above is terminal, so
         // it has already dropped out of the open set.
-        if let Err(e) = db::update_repo_canonical_head(conn, repo_id, &head) {
+        if let Err(e) = db::write(conn, |tx| {
+            db::update_repo_canonical_head(tx, repo_id, &head)
+        }) {
             tracing::warn!(repo_id, "recording base head failed: {e:#}");
         }
     }

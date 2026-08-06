@@ -22,6 +22,52 @@ struct Target {
     change_number: ChangeNumber,
 }
 
+/// Resolves each walked commit to the change it revises.
+///
+/// This rejects a push onto a terminal change before the append phase. So
+/// a stack that carries one records no revision, rather than half of them.
+///
+/// # Errors
+///
+/// 409 when a commit whose sha moved names an abandoned or merged change.
+fn resolve_targets(
+    state: &AppState,
+    conn: &rusqlite::Connection,
+    commits: &[gitscan::WalkedCommit],
+    change_numbers: Vec<ChangeNumber>,
+) -> Result<Vec<Target>, Error> {
+    let mut targets = Vec::with_capacity(commits.len());
+    for (wc, change_number) in commits.iter().zip(change_numbers) {
+        let entry = state
+            .change(conn, change_number)?
+            .ok_or_else(|| Error::internal("change vanished after upsert"))?;
+        let proj = entry.read();
+        let moves = proj
+            .latest_revision()
+            .is_none_or(|r| r.commit_sha != wc.commit_sha);
+        if moves && matches!(proj.lifecycle, Lifecycle::Abandoned) {
+            return Err(Error::conflict(format!(
+                "change {} is abandoned — run `nit reopen` before pushing a new revision",
+                wc.change_id
+            )));
+        }
+        // A Change-Id is never reused: without this gate a new revision
+        // would paint the merged overlay onto unreviewed content.
+        if moves && proj.is_merged() {
+            return Err(Error::conflict(format!(
+                "change {} is merged — new work needs its own Change-Id",
+                wc.change_id
+            )));
+        }
+        drop(proj);
+        targets.push(Target {
+            entry,
+            change_number,
+        });
+    }
+    Ok(targets)
+}
+
 /// The revision one walked commit records, if its sha moved.
 ///
 /// A commit whose sha held still records nothing, so a re-push of an
@@ -85,37 +131,18 @@ pub(super) async fn push(
             )));
         }
 
-        // Pre-flight: reject abandoned-change pushes before writing any revisions.
-        let mut targets = Vec::with_capacity(walk.commits.len());
-        for wc in &walk.commits {
-            let change_number = db::upsert_change(conn, repo_row.id, &wc.change_id)?;
-            let entry = state
-                .change(conn, change_number)?
-                .ok_or_else(|| Error::internal("change vanished after upsert"))?;
-            let proj = entry.read();
-            let moves = proj
-                .latest_revision()
-                .is_none_or(|r| r.commit_sha != wc.commit_sha);
-            if moves && matches!(proj.lifecycle, Lifecycle::Abandoned) {
-                return Err(Error::conflict(format!(
-                    "change {} is abandoned — run `nit reopen` before pushing a new revision",
-                    wc.change_id
-                )));
-            }
-            // A Change-Id is never reused: without this gate a new revision
-            // would paint the merged overlay onto unreviewed content.
-            if moves && proj.is_merged() {
-                return Err(Error::conflict(format!(
-                    "change {} is merged — new work needs its own Change-Id",
-                    wc.change_id
-                )));
-            }
-            drop(proj);
-            targets.push(Target {
-                entry,
-                change_number,
-            });
-        }
+        // Mint every change row in one transaction, and before anything is
+        // cached: the gate pass below resolves projections into the in-memory
+        // map, so a rollback under it would leave the map holding rows the
+        // database never got.
+        let change_numbers = db::write(conn, |tx| {
+            walk.commits
+                .iter()
+                .map(|wc| db::upsert_change(tx, repo_row.id, &wc.change_id))
+                .collect::<anyhow::Result<Vec<_>>>()
+        })?;
+
+        let targets = resolve_targets(&state, conn, &walk.commits, change_numbers)?;
 
         for (wc, t) in walk.commits.iter().zip(&targets) {
             let Some(new) = revision_for(&repo, &walk, wc, &t.entry.read()) else {

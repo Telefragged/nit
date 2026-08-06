@@ -20,7 +20,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use deadpool_sqlite::Pool;
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::Connection;
 use tokio::sync::watch;
 
 use nit_types::domain::ChangeNumber;
@@ -134,7 +134,13 @@ impl AppState {
             .interact(|conn| -> anyhow::Result<_> {
                 db::migrate(conn)?;
                 let max_id = db::max_draft_id(conn)?;
+                // The replay takes no transaction: it is the most expensive
+                // thing startup does, and a write transaction spanning it would
+                // hold the database's one write lock against every other
+                // process for its whole duration — to conclude, on the usual
+                // restart, that nothing has drifted.
                 let mut changes = HashMap::new();
+                let mut restamp = Vec::new();
                 for row in db::all_changes(conn)? {
                     let rows = db::log_entries(conn, row.id, 0, None)?;
                     let proj = review::replay_rows(&row, &rows)?;
@@ -143,9 +149,17 @@ impl AppState {
                     // rows.
                     let status = proj.current_status();
                     if row.status != Some(status) {
-                        db::update_change_status(conn, row.id, status)?;
+                        restamp.push((row.id, status));
                     }
                     changes.insert(row.id, Arc::new(ChangeEntry::new(proj)));
+                }
+                if !restamp.is_empty() {
+                    db::write(conn, |tx| {
+                        for &(id, status) in &restamp {
+                            db::update_change_status(tx, id, status)?;
+                        }
+                        Ok(())
+                    })?;
                 }
                 let repos: HashMap<u64, Arc<RepoState>> = db::all_repos(conn)?
                     .into_iter()
@@ -437,52 +451,54 @@ pub fn append_to_change_with(
     // installed object is provably the one that validated (the fold ignores the
     // global `sequence`, so the clone equals what re-folding the committed rows
     // gives).
-    let start = db::log_head(conn, change_number)?;
     let mut next = proj.clone();
     // The fold mints new-thread ids; the write lock makes that allocation
     // race-free against a concurrent shared-change push.
-    let prepared: Vec<LogEntry> = news
-        .into_iter()
-        .enumerate()
-        .map(|(k, payload)| {
-            review::fold(
-                &mut next,
-                LogEntry {
-                    change_number,
-                    sequence: 0,
-                    position: start + u64::try_from(k).expect("batch fits u64"),
-                    created_at: now.clone(),
-                    payload,
-                },
-            )
-        })
-        .collect();
-
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    pre_commit(&tx)?;
-    let mut applied = Vec::with_capacity(prepared.len());
-    for e in prepared {
-        let payload = review::payload_to_json(&e.payload)?;
-        let sequence = db::append_log(
-            &tx,
-            change_number,
-            e.position,
-            e.payload.kind().as_str(),
-            &payload,
-            &now,
-        )?;
-        applied.push(LogEntry { sequence, ..e });
-    }
-    // Re-stamp the denormalized status from the validated projection, in the
-    // same transaction as the appends.
-    db::update_change_status(&tx, change_number, next.current_status())?;
-    // Only a `tags` entry moves the set, so every other append leaves the rows
-    // alone — a rewrite is a delete plus an insert per tag, not the single
-    // UPDATE the status re-stamp costs.
-    if next.tags != proj.tags {
-        db::set_change_tags(&tx, change_number, &next.tags)?;
-    }
-    tx.commit()?;
+    let applied = db::write(conn, |tx| {
+        pre_commit(tx)?;
+        // Read the head inside the transaction that appends at it: split
+        // across two, a second appender can take the position between them.
+        let start = db::log_head(tx, change_number)?;
+        let prepared: Vec<LogEntry> = news
+            .into_iter()
+            .enumerate()
+            .map(|(k, payload)| {
+                review::fold(
+                    &mut next,
+                    LogEntry {
+                        change_number,
+                        sequence: 0,
+                        position: start + u64::try_from(k).expect("batch fits u64"),
+                        created_at: now.clone(),
+                        payload,
+                    },
+                )
+            })
+            .collect();
+        let mut applied = Vec::with_capacity(prepared.len());
+        for e in prepared {
+            let payload = review::payload_to_json(&e.payload)?;
+            let sequence = db::append_log(
+                tx,
+                change_number,
+                e.position,
+                e.payload.kind().as_str(),
+                &payload,
+                &now,
+            )?;
+            applied.push(LogEntry { sequence, ..e });
+        }
+        // Re-stamp the denormalized status from the validated projection, in
+        // the same transaction as the appends.
+        db::update_change_status(tx, change_number, next.current_status())?;
+        // Only a `tags` entry moves the set, so every other append leaves the
+        // rows alone. A rewrite costs a delete plus an insert per tag, not the
+        // single UPDATE the status re-stamp costs.
+        if next.tags != proj.tags {
+            db::set_change_tags(tx, change_number, &next.tags)?;
+        }
+        Ok(applied)
+    })?;
 
     // Install the validated projection after the durable commit, and publish to
     // live followers while the write lock is still held. Only that lock orders
