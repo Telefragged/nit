@@ -22,9 +22,9 @@ code narration padding a commit message.
 
 | Home           | Carries                                        | Reader                                    |
 | -------------- | ---------------------------------------------- | ----------------------------------------- |
-| Code comment   | the non-obvious _why_ of the code as it is     | someone already reading this code         |
+| Code comment   | the non-obvious _why_ of the code as it is     | someone asking "why is the code this way" |
 | Doc-comment    | the contract: what a caller may rely on        | someone who has NOT read the body         |
-| Commit message | the _why_ of this change                       | someone asking "why is the code this way" |
+| Commit message | the _why_ of this change                       | someone asking "why was this introduced"  |
 | nit thread     | the review history: questions, verdicts, fixes | reviewer and author, during review        |
 
 The failure mode is leakage downward: review history into commit
@@ -180,8 +180,8 @@ examples unless they are short enough to be obviously true.
 <commit_messages>
 
 The subject states the _what_ (component-prefixed); the body states the
-_why_ — the reasoning a future reader needs when they ask "why is the
-code like this" and the code itself cannot answer. 72-column wrap, per
+_why_ — the reasoning someone needs when they arrive at this commit
+asking why the change was introduced at all. 72-column wrap, per
 CLAUDE.md rule 2.
 
 <example type="subject = what, body = why">
