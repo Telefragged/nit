@@ -22,6 +22,38 @@ struct Target {
     change_number: ChangeNumber,
 }
 
+/// The revision one walked commit records, if its sha moved.
+///
+/// A commit whose sha held still records nothing, so a re-push of an
+/// unchanged stack leaves the log alone.
+fn revision_for(
+    repo: &Repository,
+    walk: &gitscan::PushWalk,
+    wc: &gitscan::WalkedCommit,
+    proj: &nit_types::domain::ChangeProjection,
+) -> Option<LogPayload> {
+    let prior = proj.latest_revision();
+    if prior.is_some_and(|r| r.commit_sha == wc.commit_sha) {
+        return None;
+    }
+    let resets_status = prior.is_none_or(|old| {
+        !gitscan::pure_rebase(
+            repo,
+            &old.commit_sha,
+            &old.message,
+            &wc.commit_sha,
+            &wc.message,
+        )
+    });
+    Some(LogPayload::Revision(RevisionPayload {
+        commit_sha: wc.commit_sha.clone(),
+        parent_sha: wc.parent_sha.clone(),
+        fork_sha: walk.fork_sha.clone(),
+        message: wc.message.clone(),
+        resets_status,
+    }))
+}
+
 pub(super) async fn push(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<PushRequest>,
@@ -86,30 +118,9 @@ pub(super) async fn push(
         }
 
         for (wc, t) in walk.commits.iter().zip(&targets) {
-            let prior = t.entry.read().latest_revision().cloned();
-            if prior
-                .as_ref()
-                .is_some_and(|r| r.commit_sha == wc.commit_sha)
-            {
+            let Some(new) = revision_for(&repo, &walk, wc, &t.entry.read()) else {
                 continue;
-            }
-            let resets_status = match &prior {
-                Some(old) => !gitscan::pure_rebase(
-                    &repo,
-                    &old.commit_sha,
-                    &old.message,
-                    &wc.commit_sha,
-                    &wc.message,
-                ),
-                None => true,
             };
-            let new = LogPayload::Revision(RevisionPayload {
-                commit_sha: wc.commit_sha.clone(),
-                parent_sha: wc.parent_sha.clone(),
-                fork_sha: walk.fork_sha.clone(),
-                message: wc.message.clone(),
-                resets_status,
-            });
             append_to_change(&state, conn, &t.entry, t.change_number, vec![new])
                 .map_err(map_busy)?;
             gitscan::maintain_keep_refs(&repo, &t.entry.read());

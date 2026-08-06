@@ -283,6 +283,13 @@ export type RepoHistory = {
  * (`?status={s}&status={s}`) and matches each change's status at its
  * **latest revision** (terminal states win). **No `status` param means
  * every change** — the API bakes in no default subset.
+ *
+ * `tag` is repeatable too (`?tag=key=value&tag=key=value`). Each one
+ * matches the change's tags, verbatim key and value, and every one
+ * given must match. There is no prefix, wildcard,
+ * or key-only form. Filters compose, so a tag match admits merged and
+ * abandoned changes like any other. Narrow with `status` to exclude
+ * them.
  */
 export type ChangeList = { changes: Array<ChangeProjection> };
 
@@ -298,7 +305,7 @@ export type ChangeDetail = {
    */
   revisions: Array<Revision>;
   /**
-   * Every tag the change's `tags` entries have declared.
+   * Every tag the change's `tags` entries have set.
    */
   tags?: Tags;
   /**
@@ -496,6 +503,20 @@ export type BatchSubmitResult = {
 };
 
 export type SubmitError = { change_number: ChangeNumber; message: string };
+
+/**
+ * `GET /api/tags` response: every tag in use across one repo's changes.
+ *
+ * Each change contributes the tags it carries now, so a value a later
+ * `tags` entry replaced does not appear. Terminal changes contribute
+ * too. To exclude them, narrow with `?status=` on the change read.
+ */
+export type TagList = {
+  /**
+   * Each key in use, with its distinct values. Keys and values sorted.
+   */
+  tags: { [key in string]: Array<string> };
+};
 
 /**
  * A `revision` entry: one new commit-sha observed for this change.

@@ -624,6 +624,28 @@ pub fn set_change_tags(tx: &Transaction, number: ChangeNumber, tags: &Tags) -> R
     Ok(())
 }
 
+/// The distinct `key`, `value` pairs in use across one repo's changes.
+///
+/// The stored rows alone answer this, so nothing resolves or replays a
+/// change. The pairs come back ascending, key first.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn repo_tags(conn: &Connection, repo_id: u64) -> Result<Vec<(String, String)>> {
+    // An `EXISTS` semi-join reads `change_tags_by_value` in its own
+    // `(key, value)` order, so the distinct pairs need no sort. A plain
+    // join instead probes once per change and sorts what it collects.
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT t.key, t.value FROM change_tags t
+         WHERE EXISTS (SELECT 1 FROM changes c WHERE c.id = t.change_number AND c.repo_id = ?1)
+         ORDER BY t.key, t.value",
+    )?;
+    let rows = stmt.query_map(params![i64::try_from(repo_id)?], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+    })?;
+    rows.map(|row| Ok(row?)).collect()
+}
 // ---------------------------------------------------------------------------
 // Log (the append-only event log, keyed on the change, globally ordered by sequence)
 

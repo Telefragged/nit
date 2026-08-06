@@ -71,6 +71,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/api/push", post(push::push))
         .route("/api/changes", get(changes::list_changes))
+        .route("/api/tags", get(changes::list_tags))
         .route("/api/history", get(chains::repo_history))
         .route("/api/chains", get(chains::list_chains))
         .route("/api/chains/{id}", get(chains::get_chain))
@@ -94,6 +95,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/changes/{id}/decision",
             put(reviews::set_draft_decision).delete(reviews::clear_decision),
         )
+        .route("/api/changes/{id}/tags", post(changes::tag_change))
         .route("/api/changes/{id}/abandon", post(comments::abandon_change))
         .route("/api/changes/{id}/reopen", post(comments::reopen_change))
         .route(

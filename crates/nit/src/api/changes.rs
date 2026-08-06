@@ -1,5 +1,6 @@
 //! Change endpoints: the change detail and the revision diff (incl. interdiff).
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axum::Json;
@@ -8,6 +9,7 @@ use git2::{Repository, Tree};
 use serde::Deserialize;
 
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList};
+use nit_types::changes::{TagList, TagsRequest};
 use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
@@ -15,14 +17,16 @@ use nit_types::domain::DiffMode;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
+use nit_types::domain::Tag;
+use nit_types::domain::{LogPayload, TagsPayload};
 
 use crate::db;
 
 use super::diff;
 use super::rebase;
 use super::views;
-use super::{AppPath, AppQuery, AppState, ChangeEntry, Error, with_conn};
-use super::{change_detail_json, change_or_404};
+use super::{AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, with_conn};
+use super::{append_to_change, change_detail_json, change_or_404, map_busy};
 
 #[derive(Deserialize)]
 pub(super) struct ListChangesQuery {
@@ -31,6 +35,10 @@ pub(super) struct ListChangesQuery {
     /// change — no default subset.
     #[serde(default)]
     status: Vec<ChangeStatus>,
+    /// Repeated (`?tag=key=value`), and every one given must match. A
+    /// malformed pair fails the query deserialization, so it is a 400.
+    #[serde(default)]
+    tag: Vec<Tag>,
 }
 
 /// Serves `GET /api/changes`: matching changes as folded projections.
@@ -43,13 +51,63 @@ pub(super) async fn list_changes(
     with_conn(state.pool(), move |conn| {
         let filter = db::ChangeFilter {
             statuses: q.status,
-            tags: Vec::new(),
+            tags: q.tag,
         };
         let mut changes = Vec::new();
         for repo_id in state.repo_ids_matching(q.repo) {
             changes.extend(state.repo_changes(conn, repo_id, &filter)?);
         }
         Ok(Json(ChangeList { changes }))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(super) struct ListTagsQuery {
+    repo: u64,
+}
+
+/// Serves `GET /api/tags`: the repo's tags in use, grouped by key.
+///
+/// `nit_types::changes::TagList` carries the semantics. `repo` is required,
+/// because tag keys collide across repos and no union of them means
+/// anything. The read goes straight to the denormalized rows, so an
+/// unknown repo yields an empty list rather than a 404.
+pub(super) async fn list_tags(
+    State(state): State<Arc<AppState>>,
+    AppQuery(q): AppQuery<ListTagsQuery>,
+) -> Result<Json<TagList>, Error> {
+    with_conn(state.pool(), move |conn| {
+        let mut tags: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (key, value) in db::repo_tags(conn, q.repo)? {
+            tags.entry(key).or_default().push(value);
+        }
+        Ok(Json(TagList { tags }))
+    })
+    .await
+}
+
+/// `POST /api/changes/{id}/tags` — puts tags on one change.
+///
+/// The new tags lay over the ones the change carries, so a key they omit
+/// keeps its value. Tags that move no key append nothing, and none of
+/// this touches the change's revisions or its review status.
+pub(super) async fn tag_change(
+    State(state): State<Arc<AppState>>,
+    AppPath(id): AppPath<ChangeNumber>,
+    AppJson(req): AppJson<TagsRequest>,
+) -> Result<Json<ChangeDetail>, Error> {
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
+        let moves = {
+            let proj = entry.read();
+            req.tags.iter().any(|(k, v)| proj.tags.get(k) != Some(v))
+        };
+        if moves {
+            let new = LogPayload::Tags(TagsPayload { tags: req.tags });
+            append_to_change(&state, conn, &entry, id, vec![new]).map_err(map_busy)?;
+        }
+        change_detail_json(conn, &entry)
     })
     .await
 }

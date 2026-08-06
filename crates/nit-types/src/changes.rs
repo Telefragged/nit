@@ -1,5 +1,7 @@
 //! Change detail and the reviewer's draft decision.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
@@ -20,6 +22,13 @@ use crate::domain::Verdict;
 /// (`?status={s}&status={s}`) and matches each change's status at its
 /// **latest revision** (terminal states win). **No `status` param means
 /// every change** — the API bakes in no default subset.
+///
+/// `tag` is repeatable too (`?tag=key=value&tag=key=value`). Each one
+/// matches the change's tags, verbatim key and value, and every one
+/// given must match. There is no prefix, wildcard,
+/// or key-only form. Filters compose, so a tag match admits merged and
+/// abandoned changes like any other. Narrow with `status` to exclude
+/// them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeList {
@@ -35,7 +44,7 @@ pub struct ChangeDetail {
     pub change_id: ChangeId,
     /// Ascending.
     pub revisions: Vec<Revision>,
-    /// Every tag the change's `tags` entries have declared.
+    /// Every tag the change's `tags` entries have set.
     #[serde(default, skip_serializing_if = "Tags::is_empty")]
     pub tags: Tags,
     /// Published threads, all revisions; anchors verbatim.
@@ -82,6 +91,16 @@ pub struct Review {
     pub created_at: String,
 }
 
+/// `POST /api/changes/{id}/tags` request: the tags to put on a change.
+///
+/// Labelling is its own action, so it needs no push and no new revision.
+/// The tags land as a [`crate::domain::TagsPayload`], which says how they
+/// meet the tags the change already carries.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TagsRequest {
+    pub tags: Tags,
+}
+
 /// `POST /api/changes/{id}/abandon` request (this is `nit abandon`).
 ///
 /// The body is optional — an absent or empty `message` abandons without
@@ -90,4 +109,16 @@ pub struct Review {
 pub struct AbandonRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+}
+
+/// `GET /api/tags` response: every tag in use across one repo's changes.
+///
+/// Each change contributes the tags it carries now, so a value a later
+/// `tags` entry replaced does not appear. Terminal changes contribute
+/// too. To exclude them, narrow with `?status=` on the change read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TagList {
+    /// Each key in use, with its distinct values. Keys and values sorted.
+    pub tags: BTreeMap<String, Vec<String>>,
 }

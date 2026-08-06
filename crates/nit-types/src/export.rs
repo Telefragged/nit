@@ -70,6 +70,7 @@ fn write_wire_types() {
         crate::diff::Line,
         crate::decisions::BatchSubmitResult,
         crate::decisions::SubmitError,
+        crate::changes::TagList,
         // The websocket event stream: the change page folds these
         // client-side.
         crate::domain::RevisionPayload,

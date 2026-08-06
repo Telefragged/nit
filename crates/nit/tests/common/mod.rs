@@ -304,12 +304,78 @@ pub fn create_repo(server: &TestServer, repo: &GitRepo, canonical_ref: &str) -> 
 /// failing registration other than "already registered" (409) is returned
 /// as-is. Returns `(status, PushResult)`.
 pub fn push(server: &TestServer, repo: &GitRepo, tip: &str, base: &str) -> (u16, Value) {
-    let (st, body) = create_repo(server, repo, base);
+    push_body(
+        server,
+        repo,
+        base,
+        &json!({"git_dir": repo.git_dir(), "tip": tip}),
+    )
+}
+
+/// `POST /api/changes/{number}/tags` (≡ `nit push --tag key=value`).
+///
+/// `tags` is the request's `key: value` object.
+pub fn tag_change(server: &TestServer, change_number: u64, tags: &Value) -> (u16, Value) {
+    http_post(
+        &server.url(&format!("/api/changes/{change_number}/tags")),
+        &json!({ "tags": tags }),
+    )
+}
+
+/// The change `tip` registers, as a fixture for a test about something
+/// other than pushing.
+///
+/// A change only comes into being through a push, so a test that needs
+/// one starts here.
+pub fn a_change(server: &TestServer, repo: &GitRepo, tip: &str) -> u64 {
+    let (st, res) = push(server, repo, tip, "main");
+    assert_eq!(st, 200, "{res}");
+    res["tip_change"]["change_number"]
+        .as_u64()
+        .expect("tip change number")
+}
+
+/// Registers the repo, then posts `body` to `/api/push`.
+fn push_body(server: &TestServer, repo: &GitRepo, base: &str, body: &Value) -> (u16, Value) {
+    let (st, created) = create_repo(server, repo, base);
     if st != 200 && st != 409 {
-        return (st, body);
+        return (st, created);
     }
-    let body = json!({"git_dir": repo.git_dir(), "tip": tip});
-    http_post(&server.url("/api/push"), &body)
+    http_post(&server.url("/api/push"), body)
+}
+
+/// The changes `GET /api/changes{query}` returns.
+pub fn get_changes(server: &TestServer, query: &str) -> Vec<Value> {
+    let (st, body) = http_get(&server.url(&format!("/api/changes{query}")));
+    assert_eq!(st, 200, "{body}");
+    body["changes"].as_array().expect("changes array").clone()
+}
+
+/// The `Change-Id`s of `changes`, sorted.
+pub fn change_ids(changes: &[Value]) -> Vec<String> {
+    let mut ids: Vec<String> = changes
+        .iter()
+        .map(|c| c["change_id"].as_str().expect("change_id").to_string())
+        .collect();
+    ids.sort();
+    ids
+}
+
+/// One repo's change, by the label its `Change-Id` expands from.
+pub fn change_by_label(server: &TestServer, repo_id: u64, label: &str) -> Value {
+    let key = change_id(label);
+    get_changes(server, &format!("?repo={repo_id}"))
+        .into_iter()
+        .find(|c| c["change_id"] == key)
+        .unwrap_or_else(|| panic!("no change {label} in repo {repo_id}"))
+}
+
+/// One change's tags, by label.
+///
+/// Absent when the change carries none, because `skip_serializing_if`
+/// omits an empty set rather than shipping `{}`.
+pub fn change_tags(server: &TestServer, repo_id: u64, label: &str) -> Value {
+    change_by_label(server, repo_id, label)["tags"].clone()
 }
 
 /// Publish a verdict on a change through the only publish path — draft the
