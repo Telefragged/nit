@@ -24,7 +24,6 @@ use rusqlite::{Connection, TransactionBehavior};
 use tokio::sync::watch;
 
 use nit_types::domain::ChangeNumber;
-use nit_types::domain::ChangeStatus;
 use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::error::ApiError;
 
@@ -320,15 +319,21 @@ impl AppState {
     ///
     /// When the DB read or a replay fails.
     pub fn repo_view(&self, conn: &Connection, repo_id: u64) -> anyhow::Result<RepoView> {
-        Ok(RepoView::new(self.repo_changes(conn, repo_id, &[])?))
+        // Unfiltered by construction. Chain derivation walks each tip's
+        // `parent_sha` back to the base, and a partial set breaks that walk.
+        Ok(RepoView::new(self.repo_changes(
+            conn,
+            repo_id,
+            &db::ChangeFilter::default(),
+        )?))
     }
 
     /// Returns one repo's change folds as owned projections.
     ///
     /// The gather behind [`repo_view`](Self::repo_view) and the bulk
-    /// `GET /api/changes` read. `statuses` filters in the database (the
-    /// denormalized `changes.status` column), so a change outside the set is
-    /// never resolved, replayed, or cloned; empty means every change.
+    /// `GET /api/changes` read. `filter` narrows in the database (the
+    /// denormalized `changes.status` column and `change_tags`), so nothing
+    /// resolves, replays or clones a change outside it.
     ///
     /// # Errors
     ///
@@ -337,10 +342,10 @@ impl AppState {
         &self,
         conn: &Connection,
         repo_id: u64,
-        statuses: &[ChangeStatus],
+        filter: &db::ChangeFilter,
     ) -> anyhow::Result<Vec<ChangeProjection>> {
         let mut changes: Vec<ChangeProjection> = Vec::new();
-        for id in db::repo_change_numbers(conn, repo_id, statuses)? {
+        for id in db::repo_change_numbers(conn, repo_id, filter)? {
             if let Some(entry) = self.change(conn, id)? {
                 changes.push(entry.read().clone());
             }
@@ -471,6 +476,12 @@ pub fn append_to_change_with(
     // Re-stamp the denormalized status from the validated projection, in the
     // same transaction as the appends.
     db::update_change_status(&tx, change_number, next.current_status())?;
+    // Only a `tags` entry moves the set, so every other append leaves the rows
+    // alone — a rewrite is a delete plus an insert per tag, not the single
+    // UPDATE the status re-stamp costs.
+    if next.tags != proj.tags {
+        db::set_change_tags(&tx, change_number, &next.tags)?;
+    }
     tx.commit()?;
 
     // Install the validated projection after the durable commit, and publish to

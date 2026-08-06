@@ -16,6 +16,8 @@ use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
 
+use crate::db;
+
 use super::diff;
 use super::rebase;
 use super::views;
@@ -39,9 +41,13 @@ pub(super) async fn list_changes(
     AppQuery(q): AppQuery<ListChangesQuery>,
 ) -> Result<Json<ChangeList>, Error> {
     with_conn(state.pool(), move |conn| {
+        let filter = db::ChangeFilter {
+            statuses: q.status,
+            tags: Vec::new(),
+        };
         let mut changes = Vec::new();
         for repo_id in state.repo_ids_matching(q.repo) {
-            changes.extend(state.repo_changes(conn, repo_id, &q.status)?);
+            changes.extend(state.repo_changes(conn, repo_id, &filter)?);
         }
         Ok(Json(ChangeList { changes }))
     })

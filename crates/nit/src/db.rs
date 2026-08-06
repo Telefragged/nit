@@ -1,11 +1,12 @@
 //! `SQLite` persistence layer.
 //!
-//! This module's docs are the schema contract. Five tables: the `repos`
-//! registry, the `changes` identity registry, the append-only event `log`
-//! (keyed on the change, with a global `sequence`), and the reviewer's
-//! `draft_comments` and `draft_reviews`. All reviewable state is the
-//! fold of the per-change logs (`crate::review`), held in memory and rebuilt
-//! by replay. Nothing in the log is ever mutated or deleted.
+//! This module's docs are the schema contract. Six tables: the `repos`
+//! registry, the `changes` identity registry and its denormalized
+//! `change_tags`, the append-only event `log` (keyed on the change, with a
+//! global `sequence`), and the reviewer's `draft_comments` and
+//! `draft_reviews`. All reviewable state is the fold of the per-change logs
+//! (`crate::review`), held in memory and rebuilt by replay. Nothing in the
+//! log is ever mutated or deleted.
 //!
 //! [`pool`] hands out connections with the pragmas applied (WAL,
 //! `busy_timeout`, foreign keys ON); `PRAGMA user_version` migrations run
@@ -20,7 +21,8 @@ use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::{Anchor, CommentRange, LineAnchor};
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
-use rusqlite::{Connection, OptionalExtension, params};
+use nit_types::domain::{Tag, Tags};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 /// RFC3339 timestamp for "now" (UTC).
 ///
@@ -200,6 +202,24 @@ const MIGRATIONS: &[&str] = &[
      ALTER TABLE log RENAME COLUMN change_id TO change_number;
      ALTER TABLE draft_comments RENAME COLUMN change_id TO change_number;
      ALTER TABLE draft_reviews RENAME COLUMN change_id TO change_number;",
+    // v10: a denormalized cache of each change's tags, the effective set
+    // at its latest revision (`ChangeProjection::tags`). The fold of the
+    // change's log stays authoritative. These rows exist so a query can
+    // select changes by tag cold, without resolving or replaying one. One
+    // value per key matches the fold's overwrite semantics. Any append that
+    // moves the set rewrites them in its own transaction, and nothing
+    // reconciles them at run time.
+    "
+    CREATE TABLE change_tags (
+      change_number INTEGER NOT NULL REFERENCES changes(id),
+      key           TEXT NOT NULL,
+      value         TEXT NOT NULL,
+      PRIMARY KEY (change_number, key)
+    ) WITHOUT ROWID;
+    -- The lookup a `?tag=key=value` filter drives; WITHOUT ROWID appends the
+    -- primary key, so this index carries change_number and covers the select.
+    CREATE INDEX change_tags_by_value ON change_tags (key, value);
+    ",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -507,9 +527,23 @@ pub fn get_change(conn: &Connection, id: ChangeNumber) -> Result<Option<ChangeRo
     .map_err(Into::into)
 }
 
+/// Which of a repo's changes a list read admits.
+///
+/// Every field narrows and an empty field does not, so the default
+/// admits the whole repo.
+#[derive(Debug, Default, Clone)]
+pub struct ChangeFilter {
+    /// Matched against the change's status at its latest revision.
+    pub statuses: Vec<ChangeStatus>,
+    /// Each must be present, verbatim key and value.
+    pub tags: Vec<Tag>,
+}
+
 /// One repo's change numbers, ascending (creation order).
 ///
-/// The enumeration a repo view derives its chains over.
+/// A repo view derives its chains over this enumeration. The
+/// denormalized `status` column and `change_tags` answer it, so nothing
+/// resolves or replays a change that the filter excludes.
 ///
 /// # Errors
 ///
@@ -517,19 +551,31 @@ pub fn get_change(conn: &Connection, id: ChangeNumber) -> Result<Option<ChangeRo
 pub fn repo_change_numbers(
     conn: &Connection,
     repo_id: u64,
-    statuses: &[ChangeStatus],
+    filter: &ChangeFilter,
 ) -> Result<Vec<ChangeNumber>> {
-    // The denormalized `status` column exists for exactly this: selecting by
-    // status without folding a single log. Empty means every change.
     let mut sql = String::from("SELECT id FROM changes WHERE repo_id = ?1");
-    if !statuses.is_empty() {
+    if !filter.statuses.is_empty() {
         sql.push_str(" AND status IN (");
-        sql.push_str(&vec!["?"; statuses.len()].join(", "));
+        sql.push_str(&vec!["?"; filter.statuses.len()].join(", "));
         sql.push(')');
+    }
+    for _ in &filter.tags {
+        sql.push_str(
+            " AND id IN (SELECT change_number FROM change_tags WHERE key = ? AND value = ?)",
+        );
     }
     sql.push_str(" ORDER BY id");
     let mut values: Vec<rusqlite::types::Value> = vec![i64::try_from(repo_id)?.into()];
-    values.extend(statuses.iter().map(|s| s.as_str().to_string().into()));
+    values.extend(
+        filter
+            .statuses
+            .iter()
+            .map(|s| s.as_str().to_string().into()),
+    );
+    for tag in &filter.tags {
+        values.push(tag.key().to_string().into());
+        values.push(tag.value().to_string().into());
+    }
     let mut stmt = conn.prepare(&sql)?;
     let ids = stmt
         .query_map(rusqlite::params_from_iter(values), |r| {
@@ -550,6 +596,32 @@ pub fn all_changes(conn: &Connection) -> Result<Vec<ChangeRow>> {
         .query_map([], map_change)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Change tags (the denormalized cache of each change's effective tag set)
+
+/// Replaces one change's tag rows with `tags`.
+///
+/// Takes the transaction, not a connection: this is a delete plus an
+/// insert per tag, and a reader that caught it midway would see a change
+/// holding a fragment of its set.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn set_change_tags(tx: &Transaction, number: ChangeNumber, tags: &Tags) -> Result<()> {
+    let id = i64::try_from(number.get())?;
+    tx.execute(
+        "DELETE FROM change_tags WHERE change_number = ?1",
+        params![id],
+    )?;
+    let mut stmt =
+        tx.prepare("INSERT INTO change_tags (change_number, key, value) VALUES (?1, ?2, ?3)")?;
+    for (key, value) in tags.iter() {
+        stmt.execute(params![id, key, value])?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -962,7 +1034,7 @@ pub fn delete_draft_review(conn: &Connection, change_number: ChangeNumber) -> Re
 mod tests {
     use super::*;
     use nit_types::domain::{CommentRange, LineAnchor, Side};
-    use nit_types::testing::{change_id, sha};
+    use nit_types::testing::{change_id, sha, tag, tags};
 
     fn mem() -> Connection {
         let conn = Connection::open_in_memory().expect("in-memory db");
@@ -974,6 +1046,70 @@ mod tests {
     fn change(conn: &Connection) -> ChangeNumber {
         let repo = create_repo(conn, "/r/.git", "main").expect("repo");
         upsert_change(conn, repo.id, &change_id("I1")).expect("change")
+    }
+
+    fn matching_tags(conn: &Connection, repo_id: u64, tags: Vec<Tag>) -> Vec<ChangeNumber> {
+        repo_change_numbers(
+            conn,
+            repo_id,
+            &ChangeFilter {
+                tags,
+                ..ChangeFilter::default()
+            },
+        )
+        .expect("query")
+    }
+
+    fn set_tags(conn: &mut Connection, number: ChangeNumber, pairs: &[(&str, &str)]) {
+        let tx = conn.transaction().expect("tx");
+        set_change_tags(&tx, number, &tags(pairs)).expect("set");
+        tx.commit().expect("commit");
+    }
+
+    #[test]
+    fn change_tags_replace_wholesale() {
+        let mut conn = mem();
+        let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
+        let id = upsert_change(&conn, repo.id, &change_id("I1")).expect("change");
+        set_tags(&mut conn, id, &[("branch", "track/a"), ("feature", "epic")]);
+        set_tags(&mut conn, id, &[("branch", "track/b")]);
+
+        let matching = |t: Tag| matching_tags(&conn, repo.id, vec![t]);
+        assert_eq!(matching(tag("branch", "track/b")), vec![id]);
+        assert!(matching(tag("branch", "track/a")).is_empty());
+        assert!(
+            matching(tag("feature", "epic")).is_empty(),
+            "a key the second write left out is gone, not carried"
+        );
+
+        set_tags(&mut conn, id, &[]);
+        assert!(
+            matching_tags(&conn, repo.id, vec![tag("branch", "track/b")]).is_empty(),
+            "clearing the set leaves the change matching nothing"
+        );
+    }
+
+    #[test]
+    fn repo_change_numbers_ands_every_requested_tag() {
+        let mut conn = mem();
+        let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
+        let both = upsert_change(&conn, repo.id, &change_id("I1")).expect("change");
+        let one = upsert_change(&conn, repo.id, &change_id("I2")).expect("change");
+        set_tags(
+            &mut conn,
+            both,
+            &[("branch", "track/a"), ("feature", "epic")],
+        );
+        set_tags(&mut conn, one, &[("branch", "track/a")]);
+
+        let matching = |tags| matching_tags(&conn, repo.id, tags);
+        assert_eq!(matching(vec![]), vec![both, one]);
+        assert_eq!(matching(vec![tag("branch", "track/a")]), vec![both, one]);
+        assert_eq!(
+            matching(vec![tag("branch", "track/a"), tag("feature", "epic")]),
+            vec![both]
+        );
+        assert!(matching(vec![tag("feature", "other")]).is_empty());
     }
 
     #[test]
