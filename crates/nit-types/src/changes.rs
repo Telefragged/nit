@@ -9,6 +9,7 @@ use crate::domain::Draft;
 use crate::domain::DraftDecision;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
+use crate::domain::Tags;
 use crate::domain::ThreadProjection;
 use crate::domain::Verdict;
 
@@ -34,6 +35,9 @@ pub struct ChangeDetail {
     pub change_id: ChangeId,
     /// Ascending.
     pub revisions: Vec<Revision>,
+    /// Every tag the change's `tags` entries have declared.
+    #[serde(default, skip_serializing_if = "Tags::is_empty")]
+    pub tags: Tags,
     /// Published threads, all revisions; anchors verbatim.
     ///
     /// The client places them by diff range.

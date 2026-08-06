@@ -44,6 +44,7 @@ fn write_wire_types() {
         crate::domain::LineKind,
         crate::domain::DiffMode,
         crate::domain::LifecycleAction,
+        crate::domain::Tags,
         crate::repos::Repo,
         crate::repos::RepoList,
         crate::domain::Chain,
@@ -72,6 +73,7 @@ fn write_wire_types() {
         // The websocket event stream: the change page folds these
         // client-side.
         crate::domain::RevisionPayload,
+        crate::domain::TagsPayload,
         crate::domain::ReviewPayload,
         crate::domain::CommentInput,
         crate::domain::LifecyclePayload,

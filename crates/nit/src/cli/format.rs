@@ -82,6 +82,7 @@ fn entry_summary(entry: &LogEntry) -> String {
             None => format!("author opened a thread on change {change}"),
         },
         LogPayload::Lifecycle(p) => format!("change {change} {}", p.action.as_str()),
+        LogPayload::Tags(p) => format!("change {change} tagged ({})", p.tags.len()),
     }
 }
 
@@ -227,6 +228,14 @@ pub(crate) fn render_entry(entry: &LogEntry) -> String {
             short_sha(&p.commit_sha),
             subject_of(&p.message),
         ),
+        LogPayload::Tags(p) => {
+            let mut out = format!("sequence {sequence}  change {change}  tags");
+            for (key, value) in p.tags.iter() {
+                out.push('\n');
+                out.push_str(&indent(&format!("{key}: {value}"), 4));
+            }
+            out
+        }
         LogPayload::Review(p) => {
             let mut out = format!(
                 "sequence {sequence}  change {change} r{}  reviewer: {}",

@@ -3,39 +3,11 @@
 //! feature (clap, ts) would otherwise mask.
 
 use crate::domain::ChangeNumber;
+use crate::domain::TagsPayload;
 use crate::domain::{Anchor, CommentInput, CommentRange, LineAnchor};
-use crate::domain::{ChangeId, Sha};
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
-
-/// A distinct, well-formed object name for `label`.
-///
-/// Fixtures name commits `A1`, `base`, or a hex prefix they assert on;
-/// git names them in 40 hex characters, and [`Sha`] holds them to it.
-pub(crate) fn sha(label: &str) -> Sha {
-    Sha::new(hex_expansion(label)).expect("a hex expansion of the label")
-}
-
-/// A distinct, well-formed change identity for `label`.
-pub(crate) fn change_id(label: &str) -> ChangeId {
-    let body = hex_expansion(label.strip_prefix('I').unwrap_or(label));
-    ChangeId::new(format!("I{body}")).expect("a hex expansion of the label")
-}
-
-/// `label` as 40 hex characters: itself when it is already hex, its bytes
-/// otherwise, zero-padded either way.
-fn hex_expansion(label: &str) -> String {
-    let hex: String = if label.chars().all(|c| c.is_ascii_hexdigit()) {
-        label.to_string()
-    } else {
-        label.bytes().fold(String::new(), |mut hex, b| {
-            use std::fmt::Write;
-            let _ = write!(hex, "{b:02x}");
-            hex
-        })
-    };
-    format!("{hex:0<40}")[..40].to_string()
-}
+use crate::testing::{sha, tags};
 
 fn revision_entry() -> LogEntry {
     LogEntry {
@@ -99,6 +71,22 @@ fn payload_serializes_as_the_bare_inner_struct() {
             sha("c")
         )
     );
+}
+
+#[test]
+fn a_tags_payload_round_trips() {
+    let p = TagsPayload {
+        tags: tags(&[("branch", "track/tags")]),
+    };
+    let json = serde_json::to_string(&p).expect("serialize");
+    assert_eq!(json, r#"{"tags":{"branch":"track/tags"}}"#);
+    let back: TagsPayload = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(back.tags, p.tags);
+}
+
+#[test]
+fn a_tag_outside_the_vocabulary_fails_to_deserialize() {
+    assert!(serde_json::from_str::<TagsPayload>(r#"{"tags":{"-bad":"v"}}"#).is_err());
 }
 
 #[test]

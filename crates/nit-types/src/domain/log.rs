@@ -9,6 +9,7 @@ use super::LineAnchor;
 use super::RevisionNumber;
 use super::Sha;
 use super::Side;
+use super::Tags;
 use super::Verdict;
 
 /// The kind of one log entry.
@@ -19,6 +20,7 @@ pub enum LogKind {
     Review,
     Comment,
     Lifecycle,
+    Tags,
 }
 
 impl LogKind {
@@ -30,6 +32,7 @@ impl LogKind {
             LogKind::Review => "review",
             LogKind::Comment => "comment",
             LogKind::Lifecycle => "lifecycle",
+            LogKind::Tags => "tags",
         }
     }
 }
@@ -43,6 +46,7 @@ impl std::str::FromStr for LogKind {
             "review" => Ok(LogKind::Review),
             "comment" => Ok(LogKind::Comment),
             "lifecycle" => Ok(LogKind::Lifecycle),
+            "tags" => Ok(LogKind::Tags),
             other => Err(format!("unknown log entry kind {other:?}")),
         }
     }
@@ -86,6 +90,18 @@ pub struct RevisionPayload {
     /// The new revision then inherits the prior revision's review status
     /// rather than resetting to `pending`.
     pub resets_status: bool,
+}
+
+/// A `tags` entry: the labels it puts on a change.
+///
+/// The fold lays it over the change's current set, so a key this entry
+/// omits keeps the value it had and a key it names takes a new one. The
+/// entry stands on its own, so labelling a change costs no revision and
+/// disturbs no review status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TagsPayload {
+    pub tags: Tags,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -216,6 +232,7 @@ pub enum LogPayload {
     /// One author comment (the `comment` kind), opening a thread or replying.
     Comment(CommentInput),
     Lifecycle(LifecyclePayload),
+    Tags(TagsPayload),
 }
 
 impl LogPayload {
@@ -227,6 +244,7 @@ impl LogPayload {
             LogPayload::Review(_) => LogKind::Review,
             LogPayload::Comment(_) => LogKind::Comment,
             LogPayload::Lifecycle(_) => LogKind::Lifecycle,
+            LogPayload::Tags(_) => LogKind::Tags,
         }
     }
 

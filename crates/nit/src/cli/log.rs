@@ -255,13 +255,13 @@ fn follow_cursor(spec: &str) -> Result<u64> {
 
 /// Whether `--reviewer-only` suppresses this log entry.
 ///
-/// It suppresses the author's own echoes (`revision`/`comment`) and the
-/// automatic `merged` lifecycle (written by the merge timer, not the
+/// It suppresses the author's own echoes (`revision`/`comment`/`tags`) and
+/// the automatic `merged` lifecycle (written by the merge timer, not the
 /// reviewer). Reviewer verdicts and the reviewer-driven `abandoned`/`reopened`
 /// lifecycle always reach the monitor.
 fn muted_by_reviewer_only(entry: &LogEntry) -> bool {
     match &entry.payload {
-        LogPayload::Revision(_) | LogPayload::Comment(_) => true,
+        LogPayload::Revision(_) | LogPayload::Comment(_) | LogPayload::Tags(_) => true,
         LogPayload::Lifecycle(p) => p.action == LifecycleAction::Merged,
         LogPayload::Review(_) => false,
     }

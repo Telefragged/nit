@@ -77,6 +77,7 @@ pub fn fold(change: &mut ChangeProjection, mut entry: LogEntry) -> LogEntry {
             apply_comment(change, c, None, &now);
         }
         LogPayload::Lifecycle(p) => fold_lifecycle(change, p),
+        LogPayload::Tags(p) => change.tags.overlay(&p.tags),
     }
     entry
 }
@@ -221,6 +222,7 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
         repo_id: change.repo_id,
         change_id: change.change_id.clone(),
         revisions: change.revisions.iter().map(revision_view).collect(),
+        tags: change.tags.clone(),
         threads: change.threads.clone(),
         drafts: Vec::new(),
         reviews: change.reviews.iter().map(review_view).collect(),
@@ -234,7 +236,8 @@ mod tests {
     use crate::domain::{ChangeStatus, LifecycleAction, LineAnchor, Side, Verdict};
 
     use super::*;
-    use crate::tests::{change_id, sha};
+    use crate::domain::TagsPayload;
+    use crate::testing::{change_id, sha, tags};
 
     fn empty() -> ChangeProjection {
         ChangeProjection::new(ChangeNumber::new(1), 1, change_id("Iabc"))
@@ -259,6 +262,10 @@ mod tests {
             message: format!("subject {name}\n\nChange-Id: {}\n", change_id("Iabc")),
             resets_status: resets,
         })
+    }
+
+    fn tags_entry(pairs: &[(&str, &str)]) -> LogPayload {
+        LogPayload::Tags(TagsPayload { tags: tags(pairs) })
     }
 
     fn review(revision: u64, verdict: Verdict) -> LogPayload {
@@ -320,6 +327,37 @@ mod tests {
             c.latest_revision().expect("a revision").commit_sha,
             sha("B")
         );
+    }
+
+    #[test]
+    fn a_tags_entry_overlays_the_set_it_finds() {
+        let c = folded(vec![
+            tags_entry(&[("feature", "epic-saga"), ("session-id", "s1")]),
+            tags_entry(&[("session-id", "s2")]),
+        ]);
+        assert_eq!(
+            c.tags,
+            tags(&[("feature", "epic-saga"), ("session-id", "s2")])
+        );
+    }
+
+    // A `tags` entry stands on its own, so it neither mints a revision nor
+    // moves the status a review left behind.
+    #[test]
+    fn a_tags_entry_leaves_the_revisions_and_the_status_alone() {
+        let c = folded(vec![
+            revision("A", "base", "base", true),
+            review(0, Verdict::Approve),
+            tags_entry(&[("feature", "epic-saga")]),
+        ]);
+        assert_eq!(c.revisions.len(), 1);
+        assert_eq!(c.current_status(), ChangeStatus::Approved);
+        assert_eq!(c.tags, tags(&[("feature", "epic-saga")]));
+    }
+
+    #[test]
+    fn tags_are_empty_before_any_tags_entry() {
+        assert!(empty().tags.is_empty());
     }
 
     #[test]

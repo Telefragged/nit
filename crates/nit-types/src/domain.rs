@@ -34,6 +34,11 @@
 //! **Chain** — a change and the changes stacked on it, walked from the
 //! tip back to the canonical ref.
 //!
+//! **Tag** — a `key: value` label set on a change. A `tags` entry
+//! stands on its own, so a key keeps its value until a later entry names
+//! it again and labelling costs no revision. Tags correlate changes that
+//! share no chain.
+//!
 //! # The conversation
 //!
 //! **Thread** — a located, resolvable conversation, anchored to a change,
@@ -101,6 +106,7 @@ mod conversation;
 mod identity;
 mod log;
 mod rendering;
+mod tag;
 mod verdict;
 
 pub use chain::*;
@@ -109,4 +115,5 @@ pub use conversation::*;
 pub use identity::*;
 pub use log::*;
 pub use rendering::*;
+pub use tag::*;
 pub use verdict::*;

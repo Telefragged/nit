@@ -8,6 +8,7 @@ use super::ChangeStatus;
 use super::CommentInput;
 use super::RevisionNumber;
 use super::Sha;
+use super::Tags;
 use super::ThreadProjection;
 use super::Verdict;
 
@@ -63,6 +64,9 @@ pub struct ChangeProjection {
     pub repo_id: u64,
     pub change_id: ChangeId,
     pub revisions: Vec<RevisionProjection>,
+    /// What the change's `tags` entries have set so far.
+    #[serde(default, skip_serializing_if = "Tags::is_empty")]
+    pub tags: Tags,
     pub threads: Vec<ThreadProjection>,
     pub reviews: Vec<ReviewProjection>,
     pub lifecycle: Lifecycle,
@@ -105,6 +109,7 @@ impl ChangeProjection {
             repo_id,
             change_id,
             revisions: Vec::new(),
+            tags: Tags::new(),
             threads: Vec::new(),
             reviews: Vec::new(),
             lifecycle: Lifecycle::Active,

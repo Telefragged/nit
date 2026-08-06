@@ -4,7 +4,7 @@
 //! `Change-Id` trailer are spelled in 40 hex characters, so a fixture
 //! expands its label to reach them.
 
-use crate::domain::{ChangeId, Sha};
+use crate::domain::{ChangeId, Sha, Tag, Tags};
 
 /// A distinct, well-formed object name for `label`.
 ///
@@ -40,4 +40,24 @@ fn hex_expansion(label: &str) -> String {
         })
     };
     format!("{hex:0<40}")[..40].to_string()
+}
+
+/// One `key=value` tag.
+///
+/// # Panics
+///
+/// When `key` or `value` falls outside the tag vocabulary.
+#[must_use]
+pub fn tag(key: &str, value: &str) -> Tag {
+    Tag::new(key, value).expect("a tag within the vocabulary")
+}
+
+/// A tag set built from `pairs`.
+///
+/// # Panics
+///
+/// When any pair falls outside the tag vocabulary.
+#[must_use]
+pub fn tags(pairs: &[(&str, &str)]) -> Tags {
+    pairs.iter().map(|(k, v)| tag(k, v)).collect()
 }

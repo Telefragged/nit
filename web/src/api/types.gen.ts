@@ -114,6 +114,15 @@ export type DiffMode = "full" | "outline";
  */
 export type LifecycleAction = "merged" | "abandoned" | "reopened";
 
+/**
+ * A tag set: one value per key.
+ *
+ * The map orders by key, so a set serializes stably and two sets
+ * compare verbatim. Only a [`Tag`] enters a set, and that holds for a
+ * set arriving over the wire, so every pair in one meets the vocabulary.
+ */
+export type Tags = { [key in string]: string };
+
 export type Repo = {
   id: number;
   /**
@@ -288,6 +297,10 @@ export type ChangeDetail = {
    * Ascending.
    */
   revisions: Array<Revision>;
+  /**
+   * Every tag the change's `tags` entries have declared.
+   */
+  tags?: Tags;
   /**
    * Published threads, all revisions; anchors verbatim.
    *
@@ -504,6 +517,16 @@ export type RevisionPayload = {
   resets_status: boolean;
 };
 
+/**
+ * A `tags` entry: the labels it puts on a change.
+ *
+ * The fold lays it over the change's current set, so a key this entry
+ * omits keeps the value it had and a key it names takes a new one. The
+ * entry stands on its own, so labelling a change costs no revision and
+ * disturbs no review status.
+ */
+export type TagsPayload = { tags: Tags };
+
 export type ReviewPayload = {
   revision: RevisionNumber;
   verdict: Verdict;
@@ -574,7 +597,8 @@ export type LogPayload =
   | { kind: "revision"; payload: RevisionPayload }
   | { kind: "review"; payload: ReviewPayload }
   | { kind: "comment"; payload: CommentInput }
-  | { kind: "lifecycle"; payload: LifecyclePayload };
+  | { kind: "lifecycle"; payload: LifecyclePayload }
+  | { kind: "tags"; payload: TagsPayload };
 
 /**
  * One log entry.
@@ -593,6 +617,7 @@ export type LogEntry = {
   | { kind: "review"; payload: ReviewPayload }
   | { kind: "comment"; payload: CommentInput }
   | { kind: "lifecycle"; payload: LifecyclePayload }
+  | { kind: "tags"; payload: TagsPayload }
 );
 
 /**
@@ -712,6 +737,10 @@ export type ChangeProjection = {
   repo_id: number;
   change_id: ChangeId;
   revisions: Array<RevisionProjection>;
+  /**
+   * What the change's `tags` entries have set so far.
+   */
+  tags?: Tags;
   threads: Array<ThreadProjection>;
   reviews: Array<ReviewProjection>;
   lifecycle: Lifecycle;

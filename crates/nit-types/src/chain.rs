@@ -315,9 +315,8 @@ pub fn graph_row_order(nodes: &[(Sha, Vec<Sha>)]) -> Vec<Sha> {
 mod tests {
     use super::*;
     use crate::domain::Verdict;
-    use crate::tests::{change_id, sha};
-
     use crate::domain::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
+    use crate::testing::{change_id, sha};
 
     fn revision(number: u64, name: &str, parent: &str, base: &str) -> RevisionProjection {
         let number = RevisionNumber::new(number);
