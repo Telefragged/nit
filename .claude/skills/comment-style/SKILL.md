@@ -12,6 +12,8 @@ description: >
 
 # One home per fact
 
+<one_home_per_fact>
+
 Every fact has exactly one home. A fact written twice drifts: one copy
 gets updated, the other keeps asserting something false with full
 confidence. A fact written in the wrong home ages into noise — review
@@ -27,11 +29,12 @@ message. The four homes:
 
 The failure mode is leakage downward: review history leaking into commit
 messages, change rationale leaking into code comments, code narration
-leaking everywhere. Each section below is one home's rules.
+leaking everywhere. What a fact _is_ picks its home, not where you
+happen to be typing when you think of it.
 
-<instructions>
+</one_home_per_fact>
 
-## Code comments
+<code_comments>
 
 Code reads as if this were its first, best version. Apply three tests to
 every comment you are about to write (or are reviewing):
@@ -44,10 +47,9 @@ every comment you are about to write (or are reviewing):
    seen this version?** A comment that references an earlier version, an
    alternative not taken, or a review exchange — "no longer", "instead
    of", "we don't X here because…", or a defensive justification of a
-   choice someone once questioned — is history. The why of the change
-   belongs in the commit message; the review exchange already lives in
-   its nit thread. Brags ("no JSON, so it never serializes!") are
-   history too: they answer a critique the reader never saw.
+   choice someone once questioned — is history. Delete it. Brags ("no
+   JSON, so it never serializes!") are history too: they answer a
+   critique the reader never saw.
 3. **Keeper test — does it state something the code cannot?** An
    invariant, a constraint, a subtle ordering, a reason the obvious
    alternative is wrong _in the world_, not in the change's history.
@@ -68,7 +70,7 @@ drift.
 
 </example>
 
-<example type="history — move the why to the commit message">
+<example type="history — delete">
 
 ```rust
 // Uses the pooled connection now instead of opening one per request.
@@ -76,8 +78,6 @@ let conn = pool.get().await?;
 ```
 
 "now / instead of" compares against a version the reader cannot see.
-Git blame holds the old version; the commit message holds why it
-changed.
 
 </example>
 
@@ -88,7 +88,7 @@ changed.
 ```
 
 A defense against a critique from a review round. The reader never saw
-the critique; the thread that raised it already records the answer.
+the critique.
 
 </example>
 
@@ -107,13 +107,14 @@ comment a reader must reconstruct it from the whole call graph.
 
 </examples>
 
-## Doc-comments
+</code_comments>
+
+<doc_comments>
 
 A doc-comment's reader has **not** read the body — they see it in
-rustdoc, an IDE hover, a generated types file. So the rules differ from
-code comments in one way: restating the _what_ is welcome. `/// Pushes
-an element to the back of the vector.` is a fine doc for `Vec::push`,
-where the same sentence inside the body would be narration.
+rustdoc, an IDE hover, a generated types file. So restating the _what_
+is welcome: `/// Pushes an element to the back of the vector.` is a fine
+doc for `Vec::push`.
 
 The first paragraph — everything up to the first blank line — is also
 the item's **summary**: rustdoc lifts it into module item tables and
@@ -186,7 +187,9 @@ TypeScript has no doctest runner: an example in TSDoc never executes
 and rots silently. For exported TS API, state the contract in prose and
 skip examples unless they are short enough to be obviously true.
 
-## Commit messages
+</doc_comments>
+
+<commit_messages>
 
 The subject states the _what_ (component-prefixed); the body states the
 _why_ — the reasoning a future reader needs when they ask "why is the
@@ -205,23 +208,23 @@ quick glance. No other badge uses yellow, so it reads unambiguously.
 </example>
 
 Never invent a rationale. If you were asked to make a change and the
-why is not obvious, do not guess at one for the body — open a thread on
-the commit message itself (the `nit:comment` skill) asking the reviewer
-for the reasoning, and let the answer land in the message on the next
-amend.
+why is not obvious, do not guess at one for the body — ask the reviewer
+for the reasoning (the `nit:comment` skill) and let the answer land in
+the message on the next amend.
 
-The commit message also never carries review history: what round three
-asked for and how revision four answered it lives in the nit threads,
-nowhere else. `a = a + 1` becoming `a += 1` after review needs no
-trace in the message — the message describes the change as if it had
-always been written that way.
+The commit message never carries review history: what round three asked
+for and how revision four answered it has no place in it. `a = a + 1`
+becoming `a += 1` after review needs no trace in the message — the
+message describes the change as if it had always been written that way.
 
-## The comment audit (review passes)
+</commit_messages>
 
-Every review pass applies the three tests above. A `/simplify` or
-`/code-review` run on this repo additionally spawns **one extra
-read-only agent** dedicated to this audit: point it at this file and
-the diff under review; it proposes, the orchestrator applies.
+<comment_audit>
+
+Every review pass applies the three tests in `<code_comments>`. A
+`/simplify` or `/code-review` run on this repo additionally spawns **one
+extra read-only agent** dedicated to this audit: point it at this file
+and the diff under review; it proposes, the orchestrator applies.
 
 The audit's burden of proof is on removal — presume nothing, prove
 each flag:
@@ -245,8 +248,7 @@ proof: line 43 reads `.filter(|c| c.approved).collect()` — the same fact.
 action: delete
 </finding>
 
-`action` is one of `delete`, `move to commit message` (the fact is the
-why of this change), or `answer in nit thread` (the fact is review
-history).
+`action` is one of `delete`, `move to commit message`, or `answer in nit
+thread` — pick between them with `<one_home_per_fact>`.
 
-</instructions>
+</comment_audit>
