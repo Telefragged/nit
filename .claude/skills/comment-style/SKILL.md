@@ -6,8 +6,9 @@ description: >
   the change, nit threads the review history — each fact in exactly one
   home. Load this BEFORE writing or amending any code, comment,
   doc-comment, or commit message in this repo, and at the start of every
-  review pass — not after a draft exists. A /simplify or /code-review run
-  here must also spawn the comment-audit agent this skill defines.
+  review pass — not after a draft exists. It also sets the tone the code
+  itself is written in: reasonably concise. A /simplify or /code-review
+  run here must also spawn the comment-audit agent this skill defines.
 ---
 
 # One home per fact
@@ -237,3 +238,26 @@ action: delete
 thread` — pick between them with `<one_home_per_fact>`.
 
 </comment_audit>
+
+<tone_preference>
+
+Write the code itself reasonably concise. A reader's budget is
+attention, and every line, binding, parameter and layer of indirection
+spends some of it whether or not it earns it.
+
+- **Prefer the shorter form when it reads at least as clearly.** A
+  binding used once, a wrapper that only forwards, a `match` with one
+  real arm — each is a hop the reader takes for nothing.
+- **Do not pad for cases that cannot happen**: an option no caller
+  passes, a trait with one implementor, a fallback for an error the
+  types already rule out. Remove before you rewrite, rewrite before you
+  add (CLAUDE.md rule 8).
+- **Say it once.** Two sites computing the same fact drift apart the
+  moment one is updated — hoist it, or give it one owner.
+- **Concise is not terse.** Compression the reader has to undo — a
+  clever one-liner, a chain five combinators deep, single-letter names
+  in a wide scope — costs more than the lines it saves. Name things for
+  the distance they travel: short in a tight scope, spelled out where
+  the scope is wide.
+
+</tone_preference>
