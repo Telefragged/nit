@@ -5,7 +5,7 @@ import { changes, threads } from "./data";
 import { synthLog } from "./synth";
 
 // The synth log is the mock's single source of truth: folding it (via the real
-// wasm, as both the snapshot and the REST read do) must reproduce the change
+// wasm, as both the projection and the REST read do) must reproduce the change
 // records it was synthesized from — otherwise the two would disagree.
 describe("synthLog fidelity", () => {
   const sortById = <T extends { id: number }>(xs: T[]) =>

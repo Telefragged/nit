@@ -2,7 +2,7 @@
 //!
 //! The per-change folds (`crate::review`), chain derivation
 //! (`nit_types::chain`) and reviewer drafts become the `nit_types` wire
-//! shapes. Chain views take a [`RepoView`] snapshot plus the repo handle
+//! shapes. Chain views take a [`RepoView`] projection plus the repo handle
 //! (for query-time tip names); draft rows come from the database.
 
 use anyhow::Result;

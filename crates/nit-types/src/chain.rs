@@ -4,7 +4,7 @@
 //! `(change, revision)`, walks a tip back to the canonical ref through
 //! each revision's recorded `parent_sha` (gerrit relation chains), and
 //! derives the live tip set and a chain's actionable state. Everything
-//! here is a **pure function** of an owned snapshot of the changes.
+//! here is a **pure function** of an owned projection of the changes.
 
 use std::collections::{HashMap, HashSet};
 
@@ -34,7 +34,7 @@ pub struct OpenNode {
 
 /// A read-time view over one repo's changes.
 ///
-/// Owned snapshots plus the commit-sha → `(change_id, revision number)`
+/// Owned projections plus the commit-sha → `(change_id, revision number)`
 /// index built from them. All chain derivation is a pure function of
 /// this view, so it holds no locks and touches no git.
 pub struct RepoView {
@@ -43,7 +43,7 @@ pub struct RepoView {
 }
 
 impl RepoView {
-    /// Builds the view from owned change snapshots.
+    /// Builds the view from owned change projections.
     ///
     /// Each is cloned out from under its lock by the caller, so the view
     /// holds nothing live.

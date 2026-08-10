@@ -40,9 +40,9 @@ function member(
   };
 }
 
-/** Change snapshot: ChainNav reads revision count and unresolved-thread
+/** Change projection: ChainNav reads revision count and unresolved-thread
  * count from here, not the path entry — path entries above carry neither,
- * so these assertions hold only because ChainNav sources from the snapshot. */
+ * so these assertions hold only because ChainNav sources from the projection. */
 function detail(
   changeId: number,
   latest: number,

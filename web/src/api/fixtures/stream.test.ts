@@ -4,16 +4,16 @@ import type { StreamMsg } from "../types";
 import { mockAppend, mockOpenStream } from "./stream";
 
 describe("mock stream", () => {
-  it("snapshots a change on subscribe, then delivers live appends", () => {
+  it("projects a change on subscribe, then delivers live appends", () => {
     const got: StreamMsg[] = [];
     const handle = mockOpenStream((m) => got.push(m));
 
     handle.add([11]); // change 11: revisions + a review + threads
     expect(got).toHaveLength(1);
     const snap = got[0];
-    expect(snap && "snapshot" in snap && snap.snapshot.id).toBe(11);
+    expect(snap && "projection" in snap && snap.projection.id).toBe(11);
     expect(
-      snap && "snapshot" in snap && snap.snapshot.revisions.length,
+      snap && "projection" in snap && snap.projection.revisions.length,
     ).toBeGreaterThan(0);
 
     mockAppend(11, "t-live", {
@@ -33,12 +33,12 @@ describe("mock stream", () => {
     expect(got).toHaveLength(2);
   });
 
-  it("only snapshots subscribed changes", () => {
+  it("only projects subscribed changes", () => {
     const got: StreamMsg[] = [];
     const handle = mockOpenStream((m) => got.push(m));
     handle.add([20]);
     expect(got).toHaveLength(1);
-    expect(got[0] && "snapshot" in got[0] && got[0].snapshot.id).toBe(20);
+    expect(got[0] && "projection" in got[0] && got[0].projection.id).toBe(20);
     handle.close();
   });
 });

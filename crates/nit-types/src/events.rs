@@ -1,7 +1,7 @@
 //! Websocket messages over `WS /api/stream`.
 //!
 //! The client picks one of two subscribe modes; the server answers with
-//! [`StreamMsg`] frames — a `ChangeProj` snapshot (snapshot mode) and/or
+//! [`StreamMsg`] frames — a `ChangeProj` projection (projection mode) and/or
 //! live log entries.
 
 use std::collections::HashMap;
@@ -22,13 +22,13 @@ pub enum ClientMsg {
     /// streams live. Integer map keys can't survive serde's tagged-enum
     /// content buffering, so the ids are `String`.
     Subscribe(HashMap<String, u64>),
-    /// Snapshot mode (the web change page).
+    /// Projection mode (the web change page).
     ///
-    /// For each change id the server folds a [`ChangeProj`] snapshot and
-    /// ships it, then attaches the live tail past the snapshot's
+    /// For each change id the server folds a [`ChangeProj`] projection and
+    /// ships it, then attaches the live tail past the projection's
     /// high-water mark. A `Vec` has no map keys, so the ids stay `u64`
     /// (unlike `Subscribe`).
-    SubscribeSnapshot(Vec<u64>),
+    SubscribeProjection(Vec<u64>),
 }
 
 /// A server → client websocket message. Externally tagged, `snake_case`.
@@ -38,11 +38,11 @@ pub enum ClientMsg {
 pub enum StreamMsg {
     /// The change's folded projection at subscribe time.
     ///
-    /// The snapshot a snapshot-mode follower resumes from. Sent once per
+    /// The projection a projection-mode follower resumes from. Sent once per
     /// change, before its live tail.
-    Snapshot(ChangeProj),
+    Projection(ChangeProj),
     /// One live (or replayed-backlog) log entry.
     ///
-    /// Past the snapshot's `entries_folded` for a snapshot-mode follower.
+    /// Past the projection's `entries_folded` for a projection-mode follower.
     Entry(LogEntry),
 }

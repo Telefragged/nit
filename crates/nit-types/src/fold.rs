@@ -24,9 +24,9 @@
 //! advances it. The fold therefore requires entries in ascending `idx` order.
 //!
 //! [`ChangeProj::entries_folded`] is the count of entries consumed (the next
-//! `idx`): the server stamps it into a snapshot so a follower resumes folding
+//! `idx`): the server stamps it into a projection so a follower resumes folding
 //! the live tail at the boundary, and [`fold`] skips any entry below it, so the
-//! arm/snapshot overlap is idempotent, never doubled.
+//! arm/projection overlap is idempotent, never doubled.
 
 use serde::{Deserialize, Serialize};
 
@@ -147,7 +147,7 @@ pub struct ReviewProj {
 
 /// The fold of one change's log.
 ///
-/// Serializable so the server can ship it as the subscribe **snapshot**
+/// Serializable so the server can ship it as the subscribe **projection**
 /// and the browser can resume folding the live tail from it; the wire
 /// form is opaque to the web, which only passes it back through the
 /// shared WebAssembly fold.
@@ -165,7 +165,7 @@ pub struct ChangeProj {
     pub next_thread_id: u64,
     /// Count of entries folded = the next unconsumed `idx`.
     ///
-    /// A high-water mark, carried in the snapshot so the client resumes
+    /// A high-water mark, carried in the projection so the client resumes
     /// folding the live tail at the right boundary and [`fold`] stays
     /// idempotent across the overlap.
     pub entries_folded: u64,
@@ -320,9 +320,9 @@ impl ChangeProj {
 /// Mints any new-thread ids into the entry's typed payload and returns
 /// the id-bearing entry (the server stores and broadcasts that one).
 pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
-    // Idempotent across the snapshot/live overlap: an entry already folded into
+    // Idempotent across the projection/live overlap: an entry already folded into
     // this projection (its idx below the high-water mark) leaves it untouched,
-    // so a follower that re-receives the boundary entries the snapshot already
+    // so a follower that re-receives the boundary entries the projection already
     // covers never double-applies them.
     if entry.idx < change.entries_folded {
         return entry;
@@ -825,7 +825,7 @@ mod tests {
         fold(&mut c, entry(0, revision("A", "base", "base", true)));
         fold(&mut c, entry(1, review(0, Verdict::Approve)));
         assert_eq!(c.entries_folded, 2);
-        // Re-delivering the snapshot/live boundary (idx 1) is a no-op.
+        // Re-delivering the projection/live boundary (idx 1) is a no-op.
         fold(&mut c, entry(1, review(0, Verdict::RequestChanges)));
         assert_eq!(c.reviews.len(), 1);
         assert_eq!(c.entries_folded, 2);

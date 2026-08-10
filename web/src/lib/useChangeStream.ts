@@ -5,7 +5,7 @@ import { changeDetail, foldEntry } from "../api/fold";
 import { openStream, type StreamHandle } from "../api/stream";
 import type { ChangeDetail, ChangeProj, StreamMsg } from "../api/types";
 
-/** Keep a set of changes live over the websocket: subscribe in snapshot mode,
+/** Keep a set of changes live over the websocket: subscribe in projection mode,
  * hold each change's ChangeProj, fold its live tail with the shared wasm fold,
  * and write the published projection (revisions/threads/reviews) into the
  * ["change", id] react-query cache. The reviewer's drafts + draft decision are
@@ -32,14 +32,14 @@ export function useChangeStream(ids: number[]): void {
 
   useEffect(() => {
     const stream = openStream((msg: StreamMsg) => {
-      if ("snapshot" in msg) {
-        projs.current.set(msg.snapshot.id, msg.snapshot);
-        publish(msg.snapshot.id);
+      if ("projection" in msg) {
+        projs.current.set(msg.projection.id, msg.projection);
+        publish(msg.projection.id);
         return;
       }
       const { change_id } = msg.entry;
       const proj = projs.current.get(change_id);
-      // A live entry only ever follows its change's snapshot.
+      // A live entry only ever follows its change's projection.
       if (!proj) return;
       projs.current.set(change_id, foldEntry(proj, msg.entry));
       publish(change_id);

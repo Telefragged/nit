@@ -55,7 +55,7 @@ export default function ChainNav({
           {chain.path.map((c) => {
             const pos = c.position + 1;
             const title = `${pos}. ${c.subject} — ${c.status}`;
-            // Per-change state from the member's own snapshot (revisions are
+            // Per-change state from the member's own projection (revisions are
             // ascending, so the last is the latest revision); absent until the
             // fan-out resolves, in which case nothing extra renders.
             const detail = memberDetails.get(c.change_id);

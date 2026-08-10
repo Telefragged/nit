@@ -184,7 +184,7 @@ fn follow(
         let mut socket = client.ws_connect(&heads(&log.entries), retry)?;
         // None (close/error) falls through to the outer loop, which reconnects.
         while let Some(text) = next_text(&mut socket) {
-            // Cursor mode never asks for a snapshot, so only `entry` frames
+            // Cursor mode never asks for a projection, so only `entry` frames
             // arrive; ignore anything else.
             let Ok(StreamMsg::Entry(entry)) = serde_json::from_str::<StreamMsg>(&text) else {
                 continue;

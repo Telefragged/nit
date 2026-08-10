@@ -1,19 +1,19 @@
 // The change-event websocket: the only place the web opens WS /api/stream.
 // Components go through openStream (via useChangeStream)
-// in snapshot mode — the server folds a ChangeProj snapshot per change, then
+// in projection mode — the server folds a ChangeProj projection per change, then
 // attaches its live tail. When VITE_MOCK is set the fixtures drive it instead
 // of the network, mirroring how client.ts routes HTTP.
 
 import type { ClientMsg, StreamMsg } from "./types";
 
 export interface StreamHandle {
-  /** Subscribe to more changes; each yields a snapshot, then its live tail. */
+  /** Subscribe to more changes; each yields a projection, then its live tail. */
   add(changeIds: number[]): void;
   close(): void;
 }
 
 /** `onMessage` receives every `StreamMsg` frame the server writes — a
- * `snapshot` (a folded ChangeProj) or an `entry` (one log entry past it); the
+ * `projection` (a folded ChangeProj) or an `entry` (one log entry past it); the
  * browser folds them. */
 export function openStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
   if (import.meta.env.VITE_MOCK) {
@@ -22,9 +22,9 @@ export function openStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
   return openSocketStream(onMessage);
 }
 
-/** The real socket. Subscribes in snapshot mode; a reconnect (the server closes
+/** The real socket. Subscribes in projection mode; a reconnect (the server closes
  * the socket when a follower overflows) re-subscribes the wanted set, which
- * re-snapshots — the snapshot subsumes a cursor, so none is tracked. */
+ * re-reads the projection, which subsumes a cursor, so none is tracked. */
 function openSocketStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
   const wanted = new Set<number>();
   let ws: WebSocket | null = null;
@@ -38,9 +38,9 @@ function openSocketStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
 
   const subscribe = (ids: Iterable<number>) => {
     if (ws?.readyState !== WebSocket.OPEN) return;
-    const subscribe_snapshot = [...ids];
-    if (subscribe_snapshot.length) {
-      ws.send(JSON.stringify({ subscribe_snapshot } satisfies ClientMsg));
+    const subscribe_projection = [...ids];
+    if (subscribe_projection.length) {
+      ws.send(JSON.stringify({ subscribe_projection } satisfies ClientMsg));
     }
   };
 

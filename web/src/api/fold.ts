@@ -1,6 +1,6 @@
 // The shared change fold, compiled to WebAssembly (crates/nit-wasm). The change
 // page folds the websocket stream client-side with the same Rust code the
-// server runs: the server ships a ChangeProj snapshot, the browser resumes
+// server runs: the server ships a ChangeProj, the browser resumes
 // folding the live tail onto it and projects the published ChangeDetail — never
 // reimplementing the projection.
 //
@@ -32,14 +32,14 @@ export interface ReplayInput {
   entries: LogEntry[];
 }
 
-/** Fold a change's whole log into its `ChangeProj` snapshot — what the mock
+/** Fold a change's whole log into its `ChangeProj` — what the mock
  * ships to mirror the server, which folds natively. */
 export function replayProj(input: ReplayInput): ChangeProj {
   return replay_proj(input) as ChangeProj;
 }
 
-/** Idempotent across the snapshot/live overlap (an entry below the
- * snapshot's high-water mark is a no-op). */
+/** Idempotent across the projection/live overlap (an entry below the
+ * projection's high-water mark is a no-op). */
 export function foldEntry(proj: ChangeProj, entry: LogEntry): ChangeProj {
   return fold_entry(proj, entry) as ChangeProj;
 }

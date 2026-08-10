@@ -248,7 +248,7 @@ export type RepoHistory = {
 /**
  * The `GET /api/changes` response: matching changes as folded projections.
  *
- * The same shape the websocket ships in snapshot mode. `repo` narrows to
+ * The same shape the websocket ships in projection mode. `repo` narrows to
  * one repo (an unknown id matches nothing); `status` is repeatable
  * (`?status={s}&status={s}`) and matches each change's status at its
  * **latest revision** (terminal states win). **No `status` param means
@@ -636,12 +636,12 @@ export type LogEntry = {
  */
 export type ClientMsg =
   | { subscribe: { [key in string]: number } }
-  | { subscribe_snapshot: Array<number> };
+  | { subscribe_projection: Array<number> };
 
 /**
  * A server → client websocket message. Externally tagged, `snake_case`.
  */
-export type StreamMsg = { snapshot: ChangeProj } | { entry: LogEntry };
+export type StreamMsg = { projection: ChangeProj } | { entry: LogEntry };
 
 /**
  * A change's terminal lifecycle, folded from its `lifecycle` entries.
@@ -731,7 +731,7 @@ export type ReviewProj = {
 /**
  * The fold of one change's log.
  *
- * Serializable so the server can ship it as the subscribe **snapshot**
+ * Serializable so the server can ship it as the subscribe **projection**
  * and the browser can resume folding the live tail from it; the wire
  * form is opaque to the web, which only passes it back through the
  * shared WebAssembly fold.
@@ -751,7 +751,7 @@ export type ChangeProj = {
   /**
    * Count of entries folded = the next unconsumed `idx`.
    *
-   * A high-water mark, carried in the snapshot so the client resumes
+   * A high-water mark, carried in the projection so the client resumes
    * folding the live tail at the right boundary and [`fold`] stays
    * idempotent across the overlap.
    */

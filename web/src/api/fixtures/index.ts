@@ -29,7 +29,7 @@ import type {
 } from "../types";
 import { verdictStatus } from "../verdict";
 import { changeDetail as foldDetail } from "../fold";
-import { mockAppend, snapshot } from "./stream";
+import { mockAppend, projection } from "./stream";
 import { diffKey, newSideEnd } from "./builders";
 import { changes, draftReviews, drafts, repos, tips } from "./data";
 import type {
@@ -314,7 +314,7 @@ const MERGED_WINDOW = 5;
 
 /** `GET /api/changes`: folded projections of the repo's changes matching the
  * explicit `status` filters (none means all), each folded from its synth log
- * through the shared wasm fold — the same source the websocket snapshots. */
+ * through the shared wasm fold — the same source the websocket projections. */
 function listChanges(repoId: number | null, statuses: ChangeStatus[]) {
   return {
     changes: changes
@@ -324,7 +324,7 @@ function listChanges(repoId: number | null, statuses: ChangeStatus[]) {
           (statuses.length === 0 ||
             statuses.includes(statusAt(c, latestRevision(c).number))),
       )
-      .map((c) => snapshot(c.id)),
+      .map((c) => projection(c.id)),
   };
 }
 
@@ -356,11 +356,11 @@ function renderDraft(d: DraftRecord): Draft {
 }
 
 // The published view (revisions/threads/reviews) folds the change's single
-// synth log — the same source the websocket snapshot folds — so a mutation that
+// synth log — the same source the websocket projection folds — so a mutation that
 // appends to the log shows up identically over REST and the stream. The
 // reviewer's drafts and draft decision are not log state, so overlay them.
 function changeDetail(c: ChangeRecord): ChangeDetail {
-  return { ...foldDetail(snapshot(c.id)), ...changeDrafts(c) };
+  return { ...foldDetail(projection(c.id)), ...changeDrafts(c) };
 }
 
 /** The reviewer's overlay alone (`GET /changes/{id}/drafts`). */
@@ -371,7 +371,7 @@ function changeDrafts(c: ChangeRecord) {
   };
 }
 
-/** Find the text of a diff line so new drafts get a line_text snapshot. */
+/** Find the text of a diff line so new drafts get a line_text projection. */
 function snapshotLineText(
   c: ChangeRecord,
   revision: number,

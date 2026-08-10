@@ -27,9 +27,9 @@ export function logFor(changeId: number): LogEntry[] {
   return logs.get(changeId) ?? [];
 }
 
-/** A change's snapshot: its synth log folded to a ChangeProj, the same shape the
+/** A change's projection: its synth log folded to a ChangeProj, the same shape the
  * server ships. */
-export function snapshot(changeId: number): ChangeProj {
+export function projection(changeId: number): ChangeProj {
   const c = changes.find((x) => x.id === changeId);
   return replayProj({
     id: changeId,
@@ -47,12 +47,12 @@ interface Sub {
 const subs = new Set<Sub>();
 
 export interface MockStream {
-  /** Subscribe to more changes; each yields its snapshot, then its live tail. */
+  /** Subscribe to more changes; each yields its projection, then its live tail. */
   add(changeIds: number[]): void;
   close(): void;
 }
 
-/** Open a mock stream. A new subscription ships the change's ChangeProj snapshot
+/** Open a mock stream. A new subscription ships the change's ChangeProj projection
  * (folded from its synth log), then live appends arrive as `entry` frames. */
 export function mockOpenStream(listener: Listener): MockStream {
   const sub: Sub = { ids: new Set(), listener };
@@ -62,7 +62,7 @@ export function mockOpenStream(listener: Listener): MockStream {
       for (const id of changeIds) {
         if (sub.ids.has(id)) continue;
         sub.ids.add(id);
-        listener({ snapshot: snapshot(id) });
+        listener({ projection: projection(id) });
       }
     },
     close() {

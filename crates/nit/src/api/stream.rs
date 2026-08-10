@@ -30,7 +30,7 @@ pub(super) async fn stream(
 ///
 /// It holds one receiver on the server's event channel for its whole life,
 /// so every subscribe is armed before it reads its backlog (a `[from, head)`
-/// replay, or a `ChangeProj` snapshot) and the arm/read overlap is deduped
+/// replay, or a `ChangeProj` projection) and the arm/read overlap is deduped
 /// by an idx watermark, never gapped. `watermark` is also the subscription
 /// set: an entry is forwarded only for a change the client asked for. An
 /// overflowed receiver closes the socket — the client reconnects and
@@ -100,14 +100,14 @@ async fn apply_client_msg(
                 }
             }
         }
-        ClientMsg::SubscribeSnapshot(ids) => {
-            for (change_id, proj) in read_snapshots(state, ids).await {
-                // The snapshot's `entries_folded` is the high-water mark, so an
+        ClientMsg::SubscribeProjection(ids) => {
+            for (change_id, proj) in read_projections(state, ids).await {
+                // The projection's `entries_folded` is the high-water mark, so an
                 // append that lands after it rides the channel and is deduped
-                // there: the snapshot and its live tail neither gap nor
+                // there: the projection and its live tail neither gap nor
                 // double.
                 watermark.insert(change_id, proj.entries_folded);
-                send(socket, &StreamMsg::Snapshot(proj)).await?;
+                send(socket, &StreamMsg::Projection(proj)).await?;
             }
         }
     }
@@ -160,7 +160,7 @@ async fn read_backlogs(
 /// No guard is held across a send — the one place a fold is resolved
 /// without a connection already in hand, so it borrows one for the whole
 /// batch.
-async fn read_snapshots(state: &Arc<AppState>, ids: Vec<u64>) -> Vec<(u64, ChangeProj)> {
+async fn read_projections(state: &Arc<AppState>, ids: Vec<u64>) -> Vec<(u64, ChangeProj)> {
     let st = state.clone();
     with_conn(state.pool(), move |conn| {
         let mut out = Vec::with_capacity(ids.len());

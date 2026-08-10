@@ -6,7 +6,7 @@ import { openStream } from "./stream";
 import type { StreamMsg } from "./types";
 
 describe("openStream (mock mode)", () => {
-  it("queues subscriptions until the mock loads, then snapshots and goes live", async () => {
+  it("queues subscriptions until the mock loads, then projects and goes live", async () => {
     const got: StreamMsg[] = [];
     const handle = openStream((m) => {
       got.push(m);
@@ -18,9 +18,9 @@ describe("openStream (mock mode)", () => {
     // doesn't reach it, so size it for load the same way (src/test-setup).
     await vi.waitFor(
       () => {
-        expect(got.some((m) => "snapshot" in m && m.snapshot.id === 30)).toBe(
-          true,
-        );
+        expect(
+          got.some((m) => "projection" in m && m.projection.id === 30),
+        ).toBe(true);
       },
       { timeout: ASYNC_TIMEOUT_MS },
     );

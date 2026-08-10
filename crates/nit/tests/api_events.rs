@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use common::{
     GitRepo, TestServer, member_id, msg, push, review, ws_entry, ws_read, ws_subscribe,
-    ws_subscribe_snapshot,
+    ws_subscribe_projection,
 };
 
 const READ: Duration = Duration::from_secs(3);
@@ -41,10 +41,10 @@ fn subscribe_replays_backlog_then_streams_live() {
     );
 }
 
-/// Snapshot mode ships the folded `ChangeProj` (its `entries_folded` the
+/// Projection mode ships the folded `ChangeProj` (its `entries_folded` the
 /// high-water mark), then attaches the live tail past it.
 #[test]
-fn subscribe_snapshot_ships_projection_then_streams_live() {
+fn subscribe_projection_ships_it_then_streams_live() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -53,15 +53,15 @@ fn subscribe_snapshot_ships_projection_then_streams_live() {
     assert_eq!(st, 200, "{res}");
     let change_id = member_id(&server, &res, "I001");
 
-    let mut socket = ws_subscribe_snapshot(&server, &[change_id], READ);
-    let snap = ws_read(&mut socket).expect("snapshot frame")["snapshot"].clone();
+    let mut socket = ws_subscribe_projection(&server, &[change_id], READ);
+    let snap = ws_read(&mut socket).expect("projection frame")["projection"].clone();
     assert_eq!(snap["id"], change_id);
     assert_eq!(snap["revisions"].as_array().expect("revisions").len(), 1);
     // One entry (the revision) is folded, so the live tail resumes at idx 1.
     assert_eq!(snap["entries_folded"], 1);
 
     review(&server, change_id, "approve", "lgtm");
-    let live = ws_entry(&mut socket).expect("live review entry past the snapshot");
+    let live = ws_entry(&mut socket).expect("live review entry past the projection");
     assert_eq!(live["kind"], "review");
     assert_eq!(live["idx"], 1);
 }

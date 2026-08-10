@@ -296,7 +296,7 @@ export default function ReviewPage() {
   });
   const memberIds = (chainQ.data?.path ?? []).map((m) => m.change_id);
 
-  // Subscribe to the change and every chain member: each snapshot + live fold is
+  // Subscribe to the change and every chain member: each projection + live fold is
   // written into the ["change", id] cache the queries above read. The drafts
   // overlay rides a separate ["drafts", id] read; `change` composes the two.
   useChangeStream([changeId, ...memberIds]);

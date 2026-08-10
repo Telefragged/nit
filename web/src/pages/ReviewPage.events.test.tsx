@@ -1,4 +1,4 @@
-// The change page is event-driven: it subscribes for a ChangeProj snapshot,
+// The change page is event-driven: it subscribes for a ChangeProj projection,
 // then folds the live tail (crates/nit-wasm) into the published state. These
 // tests drive the mock stream directly — append an entry, then wait (bounded by
 // a timeout, never polling) for the page to fold and re-render.
@@ -34,7 +34,7 @@ const revOptions = () => Array.from(revSelect().options).map((o) => o.value);
 describe("event-driven change page", () => {
   it("makes a pushed revision selectable without jumping to it", async () => {
     renderReview("/changes/11");
-    // Snapshot on subscribe gives r0 and r1 before any live event.
+    // The projection on subscribe gives r0 and r1 before any live event.
     await waitFor(() => {
       expect(revOptions()).toEqual(["0", "1"]);
     });

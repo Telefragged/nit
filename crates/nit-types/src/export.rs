@@ -76,7 +76,7 @@ fn write_wire_types() {
         crate::log::LogEntry,
         crate::events::ClientMsg,
         crate::events::StreamMsg,
-        // The folded projection the server snapshots over the stream; the web
+        // The folded projection the server ships over the stream; the web
         // holds it opaque and only round-trips it through the wasm fold.
         crate::fold::Lifecycle,
         crate::fold::Anchor,

@@ -2,7 +2,7 @@
 //!
 //! The fold is the shared one (`nit_types::fold`), so the websocket stream
 //! folds client-side with the very same code the server runs — the server
-//! ships a `ChangeProj` snapshot, the browser resumes folding the live tail
+//! ships a `ChangeProj` projection, the browser resumes folding the live tail
 //! onto it and projects the published `ChangeDetail`, never reimplementing
 //! the fold. The intraline diff's per-character Myers wants a compiled
 //! language.
@@ -44,9 +44,9 @@ struct ReplayInput {
     entries: Vec<LogEntry>,
 }
 
-/// Folds a change's whole log into its `ChangeProj` snapshot.
+/// Folds a change's whole log into its `ChangeProj` projection.
 ///
-/// The mock builds snapshots this way to mirror the server, which folds
+/// The mock builds projections this way to mirror the server, which folds
 /// natively.
 ///
 /// # Errors
@@ -61,8 +61,8 @@ pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
 
 /// Applies one live log entry to a `ChangeProj`.
 ///
-/// Returns the advanced projection. Idempotent across the snapshot/live
-/// overlap: an entry below the snapshot's high-water mark is a no-op.
+/// Returns the advanced projection. Idempotent across the projection/live
+/// overlap: an entry below the projection's high-water mark is a no-op.
 ///
 /// # Errors
 ///

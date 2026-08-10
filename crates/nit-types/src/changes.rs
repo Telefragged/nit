@@ -8,7 +8,7 @@ use crate::fold::ChangeProj;
 
 /// The `GET /api/changes` response: matching changes as folded projections.
 ///
-/// The same shape the websocket ships in snapshot mode. `repo` narrows to
+/// The same shape the websocket ships in projection mode. `repo` narrows to
 /// one repo (an unknown id matches nothing); `status` is repeatable
 /// (`?status={s}&status={s}`) and matches each change's status at its
 /// **latest revision** (terminal states win). **No `status` param means

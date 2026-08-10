@@ -306,7 +306,7 @@ impl AppState {
         Ok(Some(map.entry(change_id).or_insert(entry).clone()))
     }
 
-    /// Snapshots one repo's changes into a [`RepoView`].
+    /// Projects one repo's changes into a [`RepoView`].
     ///
     /// Every change is cloned out from under its lock, and the view is what
     /// chain derivation reads. The `changes` table is the enumeration, so
@@ -320,7 +320,7 @@ impl AppState {
         Ok(RepoView::new(self.repo_changes(conn, repo_id, &[])?))
     }
 
-    /// Returns one repo's change folds as owned snapshots.
+    /// Returns one repo's change folds as owned projections.
     ///
     /// The gather behind [`repo_view`](Self::repo_view) and the bulk
     /// `GET /api/changes` read. `statuses` filters in the database (the

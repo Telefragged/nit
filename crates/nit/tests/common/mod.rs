@@ -418,14 +418,14 @@ pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Dura
     socket
 }
 
-/// Snapshot mode: the server folds a `ChangeProj` snapshot per id, then
+/// Projection mode: the server folds a `ChangeProj` projection per id, then
 /// attaches each change's live tail.
-pub fn ws_subscribe_snapshot(server: &TestServer, ids: &[u64], read_timeout: Duration) -> WsSock {
+pub fn ws_subscribe_projection(server: &TestServer, ids: &[u64], read_timeout: Duration) -> WsSock {
     let mut socket = ws_open(server, read_timeout);
-    let sub = json!({ "subscribe_snapshot": ids }).to_string();
+    let sub = json!({ "subscribe_projection": ids }).to_string();
     socket
         .send(tungstenite::Message::Text(sub.into()))
-        .expect("subscribe_snapshot");
+        .expect("subscribe_projection");
     socket
 }
 

@@ -1,6 +1,6 @@
 // Synthesize a change's append-only event log from its mock records — the
 // fixtures' single source of truth for a change's review state. The websocket
-// snapshots it and the REST change read folds it (./index), both through the
+// projects it and the REST change read folds it (./index), both through the
 // shared crates/nit-wasm fold, so the two never disagree. Thread ids are
 // emitted explicitly so the fold reproduces the record ids the reviewer's
 // drafts reference; a review's id is its entry's `idx`, so the records number

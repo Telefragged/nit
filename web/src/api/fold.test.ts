@@ -32,7 +32,7 @@ const review: LogEntry = {
 };
 
 describe("the shared wasm fold", () => {
-  it("folds a log into a ChangeProj snapshot, then projects ChangeDetail", () => {
+  it("folds a log into a ChangeProj projection, then projects ChangeDetail", () => {
     const proj = replayProj({
       id: 1,
       repo_id: 1,
@@ -53,20 +53,20 @@ describe("the shared wasm fold", () => {
     expect(detail.draft_decision).toBeNull();
   });
 
-  it("folds the live tail onto the snapshot, idempotent across the overlap", () => {
-    const snapshot = replayProj({
+  it("folds the live tail onto the projection, idempotent across the overlap", () => {
+    const projection = replayProj({
       id: 1,
       repo_id: 1,
       change_key: "I1",
       entries: [revision],
     });
 
-    const advanced = foldEntry(snapshot, review);
+    const advanced = foldEntry(projection, review);
     expect(advanced.entries_folded).toBe(2);
     expect(changeDetail(advanced).reviews).toHaveLength(1);
     expect(changeDetail(advanced).reviews[0]?.verdict).toBe("approve");
 
-    // Re-delivering an entry the snapshot already covered is a no-op.
+    // Re-delivering an entry the projection already covered is a no-op.
     const replayed = foldEntry(advanced, review);
     expect(replayed.entries_folded).toBe(2);
     expect(changeDetail(replayed).reviews).toHaveLength(1);

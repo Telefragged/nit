@@ -86,12 +86,12 @@ fn entry_summary(entry: &LogEntry) -> String {
 /// A `state=` header (prefixed with `cursor=` when following) and one aligned
 /// line per member — `position change_key status rN Nu subject`. The chain path
 /// carries only structure, so the counts are fetched from each member's change
-/// snapshot (`GET /api/changes/{id}`); the fold is in memory, so each is a
+/// projection (`GET /api/changes/{id}`); the fold is in memory, so each is a
 /// cheap read.
 ///
 /// # Errors
 ///
-/// When a member's change snapshot can't be fetched.
+/// When a member's change projection can't be fetched.
 pub(crate) fn print_chain_digest(
     client: &Client,
     chain: &Chain,
