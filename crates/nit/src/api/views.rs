@@ -9,7 +9,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use nit_types::chains::{Chain, PathEntry};
-use nit_types::changes::{ChangeDetail, ChangeDrafts, StagedDecision};
+use nit_types::changes::{ChangeDetail, ChangeDrafts, DraftDecision};
 use nit_types::comments::Draft;
 
 use crate::db;
@@ -126,7 +126,7 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
 
 /// The reviewer's private overlay, read straight from the database.
 ///
-/// Unpublished drafts and the staged decision. Not log state, so the change
+/// Unpublished drafts and the draft decision. Not log state, so the change
 /// page reads it over REST (`GET /api/changes/{id}/drafts`) while folding
 /// the published projection over the websocket; the change detail folds the
 /// same overlay in.
@@ -140,7 +140,7 @@ pub fn change_overlay(conn: &Connection, change_id: u64) -> Result<ChangeDrafts>
             .iter()
             .map(|d| draft_view(d, change_id))
             .collect(),
-        draft_decision: db::get_draft_review(conn, change_id)?.map(|r| StagedDecision {
+        draft_decision: db::get_draft_review(conn, change_id)?.map(|r| DraftDecision {
             decision: r.decision,
             message: r.message,
         }),
@@ -157,7 +157,7 @@ pub fn change_overlay(conn: &Connection, change_id: u64) -> Result<ChangeDrafts>
 /// When reading drafts fails.
 pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<ChangeDetail> {
     // The published view (revisions/threads/reviews) is the shared fold; the
-    // reviewer's drafts and staged decision live outside the log, so overlay
+    // reviewer's drafts and draft decision live outside the log, so overlay
     // them from the database here.
     let mut detail = nit_types::fold::change_detail(change);
     let overlay = change_overlay(conn, change.id)?;

@@ -67,9 +67,9 @@ fn wait_blocks_then_wakes_on_a_review() {
         .max()
         .unwrap();
 
-    // A reviewer stages request_changes and submits the chain shortly after the
+    // A reviewer drafts request_changes and submits the chain shortly after the
     // wait parks (owned URLs so the thread needs no borrow of `server`). The
-    // stage is a side-table write (no log entry); the submit appends the
+    // the draft is a side-table write (no log entry); the submit appends the
     // `review` that wakes the parked wait.
     let decision_url = server.url(&format!("/api/changes/{change_id}/decision"));
     let submit_url = server.url(&format!("/api/chains/{change_id}/submit"));

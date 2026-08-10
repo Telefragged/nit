@@ -17,7 +17,7 @@ export type Side = "old" | "new";
 export type Verdict = "approve" | "request_changes" | "comment";
 
 /**
- * A reviewer's **staged** decision on a change.
+ * A reviewer's **draft** decision on a change.
  *
  * The review modal's single set of choices, drafted in `draft_reviews`
  * and published on batch submit. A superset of [`Verdict`] with the two
@@ -125,7 +125,7 @@ export type Chain = {
  * One member of a derived path: structure only.
  *
  * Read at the revision the path pins. Per-change review state (counts,
- * staged decision, the newest revision) is not here — a client reads it
+ * draft decision, the newest revision) is not here — a client reads it
  * from `GET /api/changes/{id}` per member.
  */
 export type PathEntry = {
@@ -278,18 +278,18 @@ export type ChangeDetail = {
    */
   drafts: Array<Draft>;
   reviews: Array<Review>;
-  draft_decision: StagedDecision | null;
+  draft_decision: DraftDecision | null;
 };
 
 /**
  * `GET /api/changes/{id}/drafts` response.
  *
- * The reviewer's private overlay — unpublished drafts and the staged
+ * The reviewer's private overlay — unpublished drafts and the draft
  * decision.
  */
 export type ChangeDrafts = {
   drafts: Array<Draft>;
-  draft_decision: StagedDecision | null;
+  draft_decision: DraftDecision | null;
 };
 
 export type Revision = {
@@ -316,12 +316,12 @@ export type Review = {
 };
 
 /**
- * A reviewer's staged decision plus its cover note/reason.
+ * A reviewer's draft decision plus its cover note/reason.
  *
  * The body of [`ChangeDetail::draft_decision`] and the
  * `PUT /api/changes/{id}/decision` request.
  */
-export type StagedDecision = { decision: Decision; message: string };
+export type DraftDecision = { decision: Decision; message: string };
 
 /**
  * Selected-text anchor of a line comment.
@@ -402,7 +402,7 @@ export type Draft = {
    */
   body: string;
   /**
-   * The staged thread-resolution decision (false when unset).
+   * The draft's thread-resolution decision (false when unset).
    */
   resolved: boolean;
   created_at: string;
@@ -497,15 +497,15 @@ export type Line = {
 /**
  * `POST /api/chains/{id}/submit` response.
  *
- * The outcome of publishing every chain member's staged decision.
+ * The outcome of publishing every chain member's draft decision.
  */
 export type BatchSubmitResult = {
   /**
-   * Members whose staged decision published.
+   * Members whose draft decision published.
    */
   submitted: number;
   /**
-   * Members skipped (stale/terminal); their staged decision is kept.
+   * Members skipped (stale/terminal); their draft decision is kept.
    */
   errors: Array<SubmitError>;
 };

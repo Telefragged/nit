@@ -1,12 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { clearDecision, stageDecision, submitChain } from "../api/client";
+import { clearDecision, setDraftDecision, submitChain } from "../api/client";
 import type { Chain, ChangeDetail, Decision } from "../api/types";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { isShortcutKey } from "../lib/shortcutKey";
 
-/** Human label for a staged decision (the bar chip + the modal's current state). */
+/** Human label for a draft decision (the bar chip + the modal's current state). */
 const DECISION_LABEL: Record<Decision, string> = {
   approve: "Approve",
   request_changes: "Request changes",
@@ -28,10 +28,10 @@ function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
 
 /**
  * Slim sticky bottom bar and the review modal it opens (`a`). A decision is
- * drafted, not published: the modal stages a verdict — or an abandon/reopen —
+ * drafted, not published: the modal drafts a verdict — or an abandon/reopen —
  * into the change's `draft_decision`, and the bar's **Submit chain**
- * publishes every member's staged decision at once.
- * The bar shows the draft/unresolved counts plus the staged decision so the
+ * publishes every member's draft decision at once.
+ * The bar shows the draft/unresolved counts plus the draft decision so the
  * reviewer can see and submit pending work without leaving the diff.
  */
 export default function ReviewBar({
@@ -46,11 +46,11 @@ export default function ReviewBar({
   change: ChangeDetail;
   /** The selected revision's chain context, for the chain-wide submit. */
   chain: Chain | undefined;
-  /** Each chain member's staged decision (or null), keyed by change id —
+  /** Each chain member's draft decision (or null), keyed by change id —
    * the source for the chain-wide submit count. */
   memberDecisions: Map<number, Decision | null>;
   selectedRevision: number;
-  /** Threads that would stay open once the staged drafts publish. */
+  /** Threads that would stay open once the drafts publish. */
   unresolved: number;
   replyOpen: boolean;
   onReplyOpenChange: (open: boolean) => void;
@@ -64,29 +64,29 @@ export default function ReviewBar({
   useAutosize(textareaRef, message);
 
   const drafts = change.drafts.length;
-  const staged = change.draft_decision;
+  const draftDecision = change.draft_decision;
   // This change's path member carries its displayed status (per (change, rev)).
   const here = chain?.path.find((c) => c.change_id === change.id);
   const abandoned = here?.status === "abandoned";
-  // Chain members with a staged decision — what Submit publishes.
-  const stagedInChain =
+  // Chain members with a draft decision — what Submit publishes.
+  const draftedInChain =
     chain?.path.filter(
       (c) => (memberDecisions.get(c.change_id) ?? null) !== null,
     ).length ?? 0;
 
   const invalidate = () => {
-    // The chain-wide count reads every member's staged decision, so refresh all
+    // The chain-wide count reads every member's draft decision, so refresh all
     // loaded drafts overlays, not only this one (each is keyed ["drafts", id]).
     // The published projection updates itself off the websocket.
     void queryClient.invalidateQueries({ queryKey: ["drafts"] });
     void queryClient.invalidateQueries({ queryKey: ["chain"] });
   };
 
-  // Stage a decision (does not publish); the reviewer sweeps the chain and
+  // Draft a decision (does not publish); the reviewer sweeps the chain and
   // submits when every member is decided.
-  const stage = useMutation({
+  const saveDraft = useMutation({
     mutationFn: (decision: Decision) =>
-      stageDecision(change.id, { decision, message: message.trim() }),
+      setDraftDecision(change.id, { decision, message: message.trim() }),
     onSuccess: () => {
       setError(null);
       onReplyOpenChange(false);
@@ -106,7 +106,7 @@ export default function ReviewBar({
     },
   });
 
-  // Publish every staged decision in this chain. Best-effort per change: a
+  // Publish every draft decision in this chain. Best-effort per change: a
   // member skipped for a stale/terminal lifecycle comes back in `errors` and
   // keeps the modal-equivalent banner.
   const submit = useMutation({
@@ -129,16 +129,16 @@ export default function ReviewBar({
   });
 
   // What gates the Submit button and its `s` shortcut alike.
-  const canSubmit = stagedInChain > 0 && !submit.isPending;
+  const canSubmit = draftedInChain > 0 && !submit.isPending;
 
-  // Seed the cover message from the staged decision when the modal opens —
-  // adjust-during-render on the false→true edge (not an effect), so the staged
+  // Seed the cover message from the draft decision when the modal opens —
+  // adjust-during-render on the false→true edge (not an effect), so the draft
   // text is in the textarea the frame it mounts and no cascading render fires.
   const [wasOpen, setWasOpen] = useState(false);
   if (replyOpen !== wasOpen) {
     setWasOpen(replyOpen);
     if (replyOpen) {
-      setMessage(staged?.message ?? "");
+      setMessage(draftDecision?.message ?? "");
       setError(null);
     }
   }
@@ -168,10 +168,10 @@ export default function ReviewBar({
   }, [replyOpen, canSubmit, submit]);
 
   // Closing discards only the typed cover message (after confirmation when it
-  // diverges from what is staged) — the staged decision lives server-side.
+  // diverges from the draft) — the draft decision lives server-side.
   const requestClose = () => {
-    if (stage.isPending || clear.isPending) return;
-    const dirty = message.trim() !== (staged?.message ?? "");
+    if (saveDraft.isPending || clear.isPending) return;
+    const dirty = message.trim() !== (draftDecision?.message ?? "");
     if (!confirmDiscard(dirty, "cover message")) return;
     setError(null);
     onReplyOpenChange(false);
@@ -185,12 +185,12 @@ export default function ReviewBar({
       <span className={unresolved > 0 ? "unresolved-count" : "dim"}>
         {unresolved} unresolved
       </span>
-      {staged ? (
+      {draftDecision ? (
         <span
           className="draft-count"
-          title="Your staged decision (not yet submitted)"
+          title="Your draft decision (not yet submitted)"
         >
-          ✎ {DECISION_LABEL[staged.decision]}
+          ✎ {DECISION_LABEL[draftDecision.decision]}
         </span>
       ) : null}
       <span className="dim mono">r{selectedRevision}</span>
@@ -206,15 +206,15 @@ export default function ReviewBar({
             className="btn-primary"
             disabled={!canSubmit}
             title={
-              stagedInChain === 0
-                ? "Stage a decision first (Review)"
-                : "Publish every staged decision in this chain"
+              draftedInChain === 0
+                ? "Draft a decision first (Review)"
+                : "Publish every draft decision in this chain"
             }
             onClick={() => {
               submit.mutate();
             }}
           >
-            Submit chain (s){stagedInChain > 0 ? ` · ${stagedInChain}` : ""}
+            Submit chain (s){draftedInChain > 0 ? ` · ${draftedInChain}` : ""}
           </button>
           <button
             className="btn-primary"
@@ -252,7 +252,7 @@ export default function ReviewBar({
               {stats}
             </div>
             <div className="dim reply-modal-hint">
-              Your decision is staged, not published — submit the chain to
+              Your decision is a draft, not published — submit the chain to
               publish every member&apos;s decision at once.
             </div>
             {error ? (
@@ -272,19 +272,19 @@ export default function ReviewBar({
             <div className="reply-modal-actions">
               <button
                 onClick={requestClose}
-                disabled={stage.isPending || clear.isPending}
+                disabled={saveDraft.isPending || clear.isPending}
               >
                 Cancel
               </button>
-              {staged ? (
+              {draftDecision ? (
                 <button
                   className="linkish"
-                  disabled={stage.isPending || clear.isPending}
+                  disabled={saveDraft.isPending || clear.isPending}
                   onClick={() => {
                     clear.mutate();
                   }}
                 >
-                  Clear staged
+                  Clear draft
                 </button>
               ) : null}
               <span className="spacer" />
@@ -292,17 +292,17 @@ export default function ReviewBar({
                 <button
                   key={decision}
                   className={cls}
-                  disabled={stage.isPending}
+                  disabled={saveDraft.isPending}
                   title={
-                    staged?.decision === decision
-                      ? "Currently staged"
+                    draftDecision?.decision === decision
+                      ? "Currently drafted"
                       : undefined
                   }
                   onClick={() => {
-                    stage.mutate(decision);
+                    saveDraft.mutate(decision);
                   }}
                 >
-                  {staged?.decision === decision ? "✎ " : ""}
+                  {draftDecision?.decision === decision ? "✎ " : ""}
                   {DECISION_LABEL[decision]}
                 </button>
               ))}

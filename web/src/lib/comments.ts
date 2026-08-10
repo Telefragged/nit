@@ -180,13 +180,13 @@ export function revisionActivity(
 
 /**
  * A thread's resolution as it *would* be after the reviewer's pending drafts
- * publish: the newest draft on the thread carries the staged decision, so it
+ * publish: the newest draft on the thread carries the draft decision, so it
  * wins over the published state; with no drafts, the published `resolved`
  * stands.
  */
 export function pendingResolved(thread: UiThread): boolean {
-  const staged = thread.drafts.at(-1); // assembleThreads keeps drafts oldest-first
-  return staged ? staged.resolved : thread.resolved;
+  const latest = thread.drafts.at(-1); // assembleThreads keeps drafts oldest-first
+  return latest ? latest.resolved : thread.resolved;
 }
 
 /**

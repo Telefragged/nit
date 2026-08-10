@@ -28,7 +28,7 @@ impl Verdict {
     }
 }
 
-/// A reviewer's **staged** decision on a change.
+/// A reviewer's **draft** decision on a change.
 ///
 /// The review modal's single set of choices, drafted in `draft_reviews`
 /// and published on batch submit. A superset of [`Verdict`] with the two

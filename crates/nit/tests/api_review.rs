@@ -1,8 +1,8 @@
 //! The drafts + comments + review flow over HTTP. A change owns its
-//! threads/drafts/reviews; comment drafts are reviewer-private until a staged
+//! threads/drafts/reviews; comment drafts are reviewer-private until a draft
 //! decision's chain submit (`common::review`) drains them into one log entry,
 //! sets the per-(change, revision) status to the verdict, and applies each
-//! thread's staged resolution in draft order. Revisions are 0-based: the first
+//! thread's draft resolution in draft order. Revisions are 0-based: the first
 //! push is rev 0, an amend is rev 1.
 
 mod common;
@@ -193,7 +193,7 @@ fn draft_anchor_validation() {
     assert_eq!(st, 400, "unknown revision");
     let (st, _) = http_post(&url, &json!({"revision": 0, "line": 3, "body": "x"}));
     assert_eq!(st, 400, "line without file");
-    // An empty body is rejected unless a thread_id stages a resolution.
+    // An empty body is rejected unless a thread_id drafts a resolution.
     let (st, _) = http_post(&url, &json!({"revision": 0, "body": ""}));
     assert_eq!(st, 400, "empty body, no resolution");
 
@@ -281,7 +281,7 @@ fn patch_and_delete_draft() {
     assert_eq!(st, 404);
 }
 
-/// Resolution is staged on a draft and applied on publish; an empty-body
+/// Resolution is drafted on a reply and applied on publish; an empty-body
 /// resolution-only draft moves the thread without adding a comment.
 #[test]
 fn drafted_thread_resolution() {

@@ -3,7 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { getChangeDrafts } from "../api/client";
 import type { ChangeDrafts } from "../api/types";
 
-/** The reviewer's overlay (drafts + staged decision) per change, REST-read from
+/** The reviewer's overlay (drafts + draft decision) per change, REST-read from
  * GET /changes/{id}/drafts — separate from the websocket-folded ["change", id]
  * published projection, and refetched on the reviewer's own mutations. */
 export function useDrafts(ids: number[]): Map<number, ChangeDrafts> {

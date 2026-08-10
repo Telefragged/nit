@@ -29,7 +29,7 @@ fn subscribe_replays_backlog_then_streams_live() {
     assert_eq!(backlog["idx"], 0);
     assert_eq!(backlog["kind"], "revision");
 
-    // review() stages via a side-table write (no log entry), then submits —
+    // review() drafts via a side-table write (no log entry), then submits —
     // that's why the `review` lands at idx 1.
     review(&server, change_id, "request_changes", "fix");
     let live = ws_entry(&mut socket).expect("live review entry");

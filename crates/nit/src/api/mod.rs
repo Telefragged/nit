@@ -89,7 +89,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/changes/{id}/comments", post(comments::create_comment))
         .route(
             "/api/changes/{id}/decision",
-            put(reviews::stage_decision).delete(reviews::clear_decision),
+            put(reviews::set_draft_decision).delete(reviews::clear_decision),
         )
         .route("/api/changes/{id}/abandon", post(comments::abandon_change))
         .route("/api/changes/{id}/reopen", post(comments::reopen_change))

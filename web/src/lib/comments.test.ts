@@ -221,7 +221,7 @@ describe("pendingResolved", () => {
     expect(pendingResolved(t)).toBe(true);
   });
 
-  it("takes the newest draft when several stage decisions", () => {
+  it("takes the newest draft when several draft decisions", () => {
     // assembleThreads keeps drafts oldest-first, so the last one wins.
     const t = ui({
       id: 1,
@@ -234,7 +234,7 @@ describe("pendingResolved", () => {
     expect(pendingResolved(t)).toBe(false);
   });
 
-  it("reads a draft-only thread's own staged decision", () => {
+  it("reads a draft-only thread's own draft decision", () => {
     const t = ui({
       id: null,
       drafts: [draft({ id: 2, thread_id: null, resolved: true })],

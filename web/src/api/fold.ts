@@ -44,7 +44,7 @@ export function foldEntry(proj: ChangeProj, entry: LogEntry): ChangeProj {
   return fold_entry(proj, entry) as ChangeProj;
 }
 
-/** Published projection only — drafts and the staged decision are not log
+/** Published projection only — drafts and the draft decision are not log
  * state, so they come back empty; the caller overlays its own
  * (`GET /changes/{id}/drafts`). */
 export function changeDetail(proj: ChangeProj): ChangeDetail {

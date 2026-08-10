@@ -433,7 +433,7 @@ pub fn append_to_change_with(
     let mut next = proj.clone();
     // The fold mints new-thread ids; the write lock makes that allocation
     // race-free against a concurrent shared-change push.
-    let staged: Vec<LogEntry> = news
+    let prepared: Vec<LogEntry> = news
         .into_iter()
         .enumerate()
         .map(|(k, payload)| {
@@ -452,8 +452,8 @@ pub fn append_to_change_with(
 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     pre_commit(&tx)?;
-    let mut applied = Vec::with_capacity(staged.len());
-    for e in staged {
+    let mut applied = Vec::with_capacity(prepared.len());
+    for e in prepared {
         let payload = review::payload_to_json(&e.payload)?;
         let seq = db::append_log(
             &tx,

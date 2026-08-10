@@ -15,7 +15,7 @@ import type {
   Repo,
   RepoHistory,
   RepoList,
-  StagedDecision,
+  DraftDecision,
   EditDraft,
 } from "./types";
 
@@ -88,7 +88,7 @@ export const getChanges = (repoId: number, statuses: ChangeStatus[]) =>
 export const getHistory = (repoId: number) =>
   request<RepoHistory>("GET", `/history?repo=${repoId}`);
 
-/** The reviewer's private overlay alone (drafts + staged decision); the change
+/** The reviewer's private overlay alone (drafts + draft decision); the change
  * page reads the published projection over the websocket instead. */
 export const getChangeDrafts = (id: number) =>
   request<ChangeDrafts>("GET", `/changes/${id}/drafts`);
@@ -127,17 +127,17 @@ export const updateDraft = (id: number, req: EditDraft) =>
 
 export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 
-// Reviewer decisions (staged like comment drafts, published per chain)
+// Reviewer decisions (drafted like comments, published per chain)
 
-/** Stage (or overwrite) a change's draft decision — a verdict or an
+/** Set (or overwrite) a change's draft decision — a verdict or an
  * abandon/reopen. */
-export const stageDecision = (changeId: number, req: StagedDecision) =>
-  request<StagedDecision>("PUT", `/changes/${changeId}/decision`, req);
+export const setDraftDecision = (changeId: number, req: DraftDecision) =>
+  request<DraftDecision>("PUT", `/changes/${changeId}/decision`, req);
 
 export const clearDecision = (changeId: number) =>
   request("DELETE", `/changes/${changeId}/decision`);
 
-/** Publish every member's staged decision for the chain rooted at `tipChangeId`.
+/** Publish every member's draft decision for the chain rooted at `tipChangeId`.
  * `revision` picks the chain context (the tip's own), like getChain. */
 export const submitChain = (tipChangeId: number, revision?: number) =>
   request<BatchSubmitResult>(

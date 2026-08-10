@@ -71,7 +71,7 @@ pub struct Draft {
     pub line_text: Option<String>,
     /// May be empty for a resolution-only reply draft.
     pub body: String,
-    /// The staged thread-resolution decision (false when unset).
+    /// The draft's thread-resolution decision (false when unset).
     pub resolved: bool,
     pub created_at: String,
     pub updated_at: String,

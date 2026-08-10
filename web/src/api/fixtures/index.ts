@@ -24,7 +24,7 @@ import type {
   Repo,
   Review,
   Revision,
-  StagedDecision,
+  DraftDecision,
   Verdict,
 } from "../types";
 import { verdictStatus } from "../verdict";
@@ -84,23 +84,23 @@ function drainComments(c: ChangeRecord): CommentInput[] {
   return comments;
 }
 
-/** Why a staged decision can't publish against the change's lifecycle, or null
+/** Why a draft decision can't publish against the change's lifecycle, or null
  * (mirrors the server's decision_block). */
 function decisionBlock(c: ChangeRecord, decision: Decision): string | null {
   if (c.terminal === "merged") return "change is merged — nothing to submit";
   if (c.terminal === "abandoned") {
     return decision === "reopen"
       ? null
-      : "change is abandoned — stage Reopen first";
+      : "change is abandoned — draft Reopen first";
   }
   return decision === "reopen"
     ? "change is live — Reopen does not apply"
     : null;
 }
 
-/** Publish one staged decision (mirrors the server's publish_member): an
+/** Publish one draft decision (mirrors the server's publish_member): an
  * optional reopen, a review draining comment drafts (the decision's verdict, or
- * `comment` to carry staged comments under a lifecycle decision), then an
+ * `comment` to carry draft comments under a lifecycle decision), then an
  * optional abandon. */
 function publishMember(
   c: ChangeRecord,
@@ -358,7 +358,7 @@ function renderDraft(d: DraftRecord): Draft {
 // The published view (revisions/threads/reviews) folds the change's single
 // synth log — the same source the websocket snapshot folds — so a mutation that
 // appends to the log shows up identically over REST and the stream. The
-// reviewer's drafts and staged decision are not log state, so overlay them.
+// reviewer's drafts and draft decision are not log state, so overlay them.
 function changeDetail(c: ChangeRecord): ChangeDetail {
   return { ...foldDetail(snapshot(c.id)), ...changeDrafts(c) };
 }
@@ -504,16 +504,16 @@ export async function mockRequest(
     let submitted = 0;
     const errors: { change_id: number; message: string }[] = [];
     for (const member of derivePath(tip)) {
-      const staged = draftReviews.get(member.change_id);
-      if (!staged) continue; // no decision — leave the member's comment drafts
+      const draft = draftReviews.get(member.change_id);
+      if (!draft) continue; // no decision — leave the member's comment drafts
       const c = changes.find((x) => x.id === member.change_id);
       if (!c) continue;
-      const block = decisionBlock(c, staged.decision);
+      const block = decisionBlock(c, draft.decision);
       if (block) {
         errors.push({ change_id: c.id, message: block });
         continue;
       }
-      publishMember(c, staged.decision, staged.message, member.revision, now);
+      publishMember(c, draft.decision, draft.message, member.revision, now);
       draftReviews.delete(c.id);
       submitted++;
     }
@@ -615,14 +615,14 @@ export async function mockRequest(
     return undefined;
   }
 
-  // Stage / clear a reviewer decision (drafted like a comment; published by
+  // Draft / clear a reviewer decision (drafted like a comment; published by
   // the chain batch submit above).
   if ((m = /^\/changes\/(\d+)\/decision$/.exec(p)) && method === "PUT") {
     const c = getChange(Number(m[1]));
-    const req = body as StagedDecision;
-    const staged = { decision: req.decision, message: req.message };
-    draftReviews.set(c.id, staged);
-    return staged;
+    const req = body as DraftDecision;
+    const draft = { decision: req.decision, message: req.message };
+    draftReviews.set(c.id, draft);
+    return draft;
   }
 
   if ((m = /^\/changes\/(\d+)\/decision$/.exec(p)) && method === "DELETE") {

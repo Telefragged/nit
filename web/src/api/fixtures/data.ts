@@ -1627,10 +1627,10 @@ export const drafts: DraftRecord[] = [
   },
 ];
 
-// Reviewer decision drafts: one staged decision per change, published on
+// Reviewer decision drafts: one draft decision per change, published on
 // chain batch submit — the mock of the server's draft_reviews side table.
 // Seed one so the dashboard drawer's submit button + draft-state pill and
-// the change-page staged chip render.
+// the change-page draft chip render.
 export const draftReviews = new Map<
   number,
   { decision: Decision; message: string }

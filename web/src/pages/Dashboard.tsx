@@ -51,7 +51,7 @@ export default function Dashboard() {
   );
 
   // Each open node's activity badges read straight off the fold the bulk
-  // read already delivered. Only the reviewer's drafts and staged decision
+  // read already delivered. Only the reviewer's drafts and draft decision
   // are outside the log, so that overlay is the one per-change read
   // (GET /changes/{id}/drafts).
   const activityIds = useMemo(

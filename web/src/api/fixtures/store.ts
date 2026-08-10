@@ -86,7 +86,7 @@ export interface DraftRecord {
   range?: CommentRange | null;
   line_text: string | null;
   body: string;
-  /** The staged thread-resolution decision. */
+  /** The draft's thread-resolution decision. */
   resolved: boolean;
   created_at: string;
   updated_at: string;

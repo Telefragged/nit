@@ -50,7 +50,7 @@ export interface NodeActivity {
 }
 
 // Comment/draft/unresolved counts at the node's pinned revision plus the
-// reviewer's staged decision. `act` is undefined until the overlay resolves.
+// reviewer's draft decision. `act` is undefined until the overlay resolves.
 function Activity({
   node,
   act,
@@ -88,7 +88,7 @@ function Activity({
       {decision && (
         <span
           className="draft-count"
-          title="your staged decision (not yet submitted)"
+          title="your draft decision (not yet submitted)"
         >
           ✎ {decision}
         </span>

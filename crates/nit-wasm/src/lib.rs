@@ -108,7 +108,7 @@ pub fn intraline_marks(regions: JsValue) -> Result<JsValue, JsValue> {
 /// Projects a `ChangeProj` to its published `ChangeDetail`.
 ///
 /// The detail carries revisions, threads and reviews. The reviewer's drafts
-/// and staged decision are not log state, so they come back empty; the
+/// and draft decision are not log state, so they come back empty; the
 /// browser overlays its own from `GET /changes/{id}/drafts`.
 ///
 /// # Errors

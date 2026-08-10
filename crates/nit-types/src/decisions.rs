@@ -1,16 +1,16 @@
-//! The outcome of batch-submitting a chain's staged decisions.
+//! The outcome of batch-submitting a chain's draft decisions.
 
 use serde::{Deserialize, Serialize};
 
 /// `POST /api/chains/{id}/submit` response.
 ///
-/// The outcome of publishing every chain member's staged decision.
+/// The outcome of publishing every chain member's draft decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct BatchSubmitResult {
-    /// Members whose staged decision published.
+    /// Members whose draft decision published.
     pub submitted: u64,
-    /// Members skipped (stale/terminal); their staged decision is kept.
+    /// Members skipped (stale/terminal); their draft decision is kept.
     pub errors: Vec<SubmitError>,
 }
 

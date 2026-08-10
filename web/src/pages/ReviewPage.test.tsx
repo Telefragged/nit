@@ -408,10 +408,10 @@ describe("comment counts in the diff-range dropdowns", () => {
 });
 
 // `s` is the keyboard twin of the Submit button: inert until something is
-// staged, then publishes the chain.
-describe("the s key submits the chain's staged decisions", () => {
+// drafted, then publishes the chain.
+describe("the s key submits the chain's draft decisions", () => {
   // jsdom has no top-layer, so the review modal's showModal() is absent — stub
-  // it so opening the modal to stage a decision doesn't throw.
+  // it so opening the modal to draft a decision doesn't throw.
   beforeEach(() => {
     HTMLDialogElement.prototype.showModal = function () {
       this.open = true;
@@ -440,7 +440,7 @@ describe("the s key submits the chain's staged decisions", () => {
     );
   }
 
-  it("is inert with nothing staged, and publishes once a decision is staged", async () => {
+  it("is inert with nothing drafted, and publishes once a decision is drafted", async () => {
     renderChange20();
     await diffLoaded("src/wal.rs");
 
@@ -452,7 +452,7 @@ describe("the s key submits the chain's staged decisions", () => {
     await screen.findByRole("button", { name: /Submit chain \(s\) · 1/ });
 
     fireEvent.keyDown(window, { key: "s" });
-    // The staged count drains once the invalidated drafts overlay refetches.
+    // The drafted count drains once the invalidated drafts overlay refetches.
     await screen.findByRole("button", { name: "Submit chain (s)" });
     expect(path).toBe("/changes/20");
   });

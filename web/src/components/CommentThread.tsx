@@ -28,7 +28,7 @@ function PublishedComment({ comment }: { comment: ThreadComment }) {
 }
 
 /** A pending draft: editable (Edit/Delete), with the DRAFT badge. An
- * empty-body reply draft stages a resolution only — render the intent. */
+ * empty-body reply draft carries a resolution only — render the intent. */
 function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -116,9 +116,9 @@ interface ThreadEditor {
 
 /**
  * A comment thread: published comments + pending drafts, with reply / resolve
- * / reopen actions. Resolve is one click — it stages an empty resolution-only
+ * / reopen actions. Resolve is one click — it drafts an empty resolution-only
  * draft directly; reply and reopen open the editor with the resolve checkbox
- * pre-set. The decision is staged on a draft reply and applied when the review
+ * pre-set. The decision is drafted on a reply and applied when the review
  * publishes; the badge shows the pending state. Drafts get dashed chrome via
  * .comment-draft. A draft-only thread (`id === null`) is just its editable
  * draft — no published comments and no actions yet.
@@ -138,12 +138,12 @@ export default function CommentThread({
   const resolved = pendingResolved(thread);
   const pending = resolved !== thread.resolved;
 
-  // Reply / resolve / reopen all stage a draft reply that copies the thread's
+  // Reply / resolve / reopen all draft a reply that copies the thread's
   // whole anchor — including its revision, so the copied file/line/range stay
   // the coordinates they were written in (the server's agent replies match).
   // A stored range thread carries both, but line and range are mutually
   // exclusive request anchors: send whichever one anchored the thread.
-  const stage = useMutation({
+  const saveDraft = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
       createDraft(changeId, {
         revision: thread.revision,
@@ -182,9 +182,9 @@ export default function CommentThread({
           placeholder={editor.isReply ? "Reply…" : "Comment (optional)…"}
           initialResolved={editor.resolved}
           resolvedFrom={resolved}
-          saving={stage.isPending}
+          saving={saveDraft.isPending}
           onSave={(body, res) => {
-            stage.mutate({ body, resolved: res });
+            saveDraft.mutate({ body, resolved: res });
           }}
           onCancel={() => {
             setEditor(null);
@@ -221,10 +221,10 @@ export default function CommentThread({
                   if (resolved) {
                     setEditor({ isReply: false, resolved: false });
                   } else {
-                    stage.mutate({ body: "", resolved: true });
+                    saveDraft.mutate({ body: "", resolved: true });
                   }
                 }}
-                disabled={stage.isPending}
+                disabled={saveDraft.isPending}
               >
                 {resolved ? "Reopen" : "Resolve"}
               </button>

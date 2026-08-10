@@ -217,7 +217,7 @@
   cursor: pointer;
 }
 
-/* an empty-body draft that only stages a resolve/reopen */
+/* an empty-body draft that only drafts a resolve/reopen */
 .comment-resolution-only {
   font-size: 12px;
   font-style: italic;

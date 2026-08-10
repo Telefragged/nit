@@ -229,7 +229,7 @@ export default function ReviewPage() {
   // threads, reviews) is folded from the change-event websocket into the
   // ["change", id] cache by `useChangeStream` (below). This query only reads
   // that cache (skipToken — never fetches). The chain structure, the diff, the
-  // repo, and the reviewer's drafts/staged decision are not in the log, so they
+  // repo, and the reviewer's drafts/draft decision are not in the log, so they
   // stay REST; `change` composes the published projection with the drafts
   // overlay (`useDrafts`).
   const queryClient = useQueryClient();
@@ -334,7 +334,7 @@ export default function ReviewPage() {
 
   // Each chain member's published projection comes from the ["change", id]
   // cache the stream keeps live (ChainNav reads each member's
-  // unresolved/latest-revision); its staged decision comes from the member's
+  // unresolved/latest-revision); its draft decision comes from the member's
   // drafts overlay, for the review bar's chain-wide "Submit (k)" count + nav.
   const memberQueries = useQueries({
     queries: memberIds.map((id) => ({

@@ -312,16 +312,16 @@ pub fn push(server: &TestServer, repo: &GitRepo, tip: &str, base: &str) -> (u16,
     http_post(&server.url("/api/push"), &body)
 }
 
-/// Publish a verdict on a change through the only publish path — stage the
+/// Publish a verdict on a change through the only publish path — draft the
 /// decision, then batch-submit the change's chain. The change is its own
 /// tip for a single-commit chain; for a multi-commit one only this change
-/// is staged, so submit publishes just it. Returns the `BatchSubmitResult`.
+/// is drafted, so submit publishes just it. Returns the `BatchSubmitResult`.
 pub fn review(server: &TestServer, change_id: u64, verdict: &str, message: &str) -> Value {
     let (st, _) = http_put(
         &server.url(&format!("/api/changes/{change_id}/decision")),
         &json!({"decision": verdict, "message": message}),
     );
-    assert_eq!(st, 200, "stage decision on change {change_id}");
+    assert_eq!(st, 200, "draft decision on change {change_id}");
     let (st, out) = http_post(
         &server.url(&format!("/api/chains/{change_id}/submit")),
         &json!({}),

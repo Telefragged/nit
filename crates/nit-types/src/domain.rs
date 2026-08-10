@@ -59,7 +59,7 @@
 //! Four terms a reader will otherwise conflate:
 //!
 //! - [`Verdict`] — what a reviewer concluded about a change.
-//! - [`Decision`] — a conclusion the reviewer has staged privately and
+//! - [`Decision`] — a conclusion the reviewer has drafted privately and
 //!   not yet published. A superset of the verdicts, because abandoning
 //!   is chosen in the same breath as approving.
 //! - [`ChangeStatus`] — where one change stands, at one revision.

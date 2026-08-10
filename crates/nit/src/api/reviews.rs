@@ -1,6 +1,6 @@
 //! Reviews + reviewer decisions.
 //!
-//! Stage/clear a draft decision and publish a chain's staged decisions.
+//! Set or clear a draft decision and publish a chain's draft decisions.
 
 use std::sync::Arc;
 
@@ -8,7 +8,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 
-use nit_types::changes::StagedDecision;
+use nit_types::changes::DraftDecision;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
 use nit_types::domain::{Decision, LifecycleAction, Verdict};
 use nit_types::log::{CommentInput, LogPayload, ReviewPayload};
@@ -50,7 +50,7 @@ fn drafts_to_comments(
 /// All in **one** per-change transaction: a `reopen` lifecycle (so a
 /// following review lands on a now-active change), then a `review` entry
 /// draining the change's comment drafts (the decision's verdict, or
-/// `comment` to carry staged comments when the decision is purely
+/// `comment` to carry draft comments when the decision is purely
 /// lifecycle), then an `abandon` lifecycle — whichever the decision calls
 /// for. The drained comment drafts and the change's `draft_reviews` row are
 /// deleted in the same transaction, so a half-published batch never strands
@@ -109,16 +109,16 @@ fn publish_member(
     Ok(())
 }
 
-/// `PUT /api/changes/{id}/decision` — stages the draft decision.
+/// `PUT /api/changes/{id}/decision` — sets the draft decision.
 ///
-/// Overwrites the change's staged decision when there is one. Validated
+/// Overwrites the change's draft decision when there is one. Validated
 /// only as an enum; legality against the lifecycle is a submit-time concern
 /// (a draft is reviewer scratch).
-pub(super) async fn stage_decision(
+pub(super) async fn set_draft_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
-    AppJson(req): AppJson<StagedDecision>,
-) -> Result<Json<StagedDecision>, Error> {
+    AppJson(req): AppJson<DraftDecision>,
+) -> Result<Json<DraftDecision>, Error> {
     with_conn(state.pool(), move |conn| {
         change_or_404(&state, conn, id)?;
         db::upsert_draft_review(conn, id, req.decision, &req.message)?;
@@ -127,9 +127,9 @@ pub(super) async fn stage_decision(
     .await
 }
 
-/// `DELETE /api/changes/{id}/decision` — discards the staged decision.
+/// `DELETE /api/changes/{id}/decision` — discards the draft decision.
 ///
-/// 204; a no-op when nothing is staged.
+/// 204; a no-op when nothing is drafted.
 pub(super) async fn clear_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
@@ -142,7 +142,7 @@ pub(super) async fn clear_decision(
     .await
 }
 
-/// `POST /api/chains/{id}/submit` — publishes every staged decision.
+/// `POST /api/chains/{id}/submit` — publishes every draft decision.
 ///
 /// Re-derives the path, then for each chain member with a decision
 /// publishes it at the revision this path pins on the member, each in its
@@ -161,14 +161,14 @@ pub(super) async fn submit_chain(
         let mut submitted = 0u64;
         let mut errors = Vec::new();
         for member in view.path_from_tip(&tip_sha) {
-            let Some(staged) = db::get_draft_review(conn, member.change_id)? else {
+            let Some(draft) = db::get_draft_review(conn, member.change_id)? else {
                 continue; // leave its comment drafts
             };
             let Some(member_entry) = state.change(conn, member.change_id)? else {
                 continue;
             };
             let lifecycle = member_entry.read().lifecycle;
-            if let Some(reason) = decision_block(lifecycle, staged.decision) {
+            if let Some(reason) = decision_block(lifecycle, draft.decision) {
                 errors.push(SubmitError {
                     change_id: member.change_id,
                     message: reason.to_string(),
@@ -180,8 +180,8 @@ pub(super) async fn submit_chain(
                 &state,
                 &member_entry,
                 member.change_id,
-                staged.decision,
-                &staged.message,
+                draft.decision,
+                &draft.message,
                 member.revision,
             ) {
                 Ok(()) => submitted += 1,
@@ -200,7 +200,7 @@ fn decision_block(lifecycle: Lifecycle, decision: Decision) -> Option<&'static s
     match (lifecycle, decision.as_lifecycle()) {
         (Lifecycle::Merged, _) => Some("change is merged — nothing to submit"),
         (Lifecycle::Abandoned, Some(LifecycleAction::Reopened)) => None,
-        (Lifecycle::Abandoned, _) => Some("change is abandoned — stage Reopen first"),
+        (Lifecycle::Abandoned, _) => Some("change is abandoned — draft Reopen first"),
         (Lifecycle::Active, Some(LifecycleAction::Reopened)) => {
             Some("change is live — Reopen does not apply")
         }

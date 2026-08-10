@@ -191,7 +191,7 @@ const captures = [
       await page.waitForSelector(".comment-resolution-only");
     },
   },
-  // One-click Resolve: Resolve on an open thread stages the empty
+  // One-click Resolve: Resolve on an open thread drafts the empty
   // resolution-only draft directly — no editor. The
   // "Resolving this thread" draft and the pending RESOLVED badge appear with
   // a single click.
@@ -517,7 +517,7 @@ const captures = [
         );
     },
   },
-  // Review modal opened via `a`: it STAGES a decision rather than publishing —
+  // Review modal opened via `a`: it DRAFTS a decision rather than publishing —
   // the three verdicts plus Abandon (abandonment is a decision under the modal,
   // not a separate button), with the cover message typed key by key (not fill,
   // which replaces content) so a leaked shortcut keystroke would show up.
@@ -532,11 +532,11 @@ const captures = [
         .pressSequentially("Nice cleanup — two nits inline, otherwise ready.");
     },
   },
-  // A change with a staged decision (change 12, seeded request_changes): the
-  // bottom bar shows the staged chip and an enabled "Submit chain", and the
-  // modal pre-fills the staged decision (✎ on Request changes) + its message.
+  // A change with a draft decision (change 12, seeded request_changes): the
+  // bottom bar shows the draft chip and an enabled "Submit chain", and the
+  // modal pre-fills the draft decision (✎ on Request changes) + its message.
   {
-    name: "review-staged",
+    name: "review-draft-decision",
     path: "/changes/12",
     fullPage: false,
     actions: async (page) => {

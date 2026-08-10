@@ -58,7 +58,7 @@ pub(super) async fn get_change_detail(
 
 /// `GET /api/changes/{id}/drafts` — the reviewer's private overlay.
 ///
-/// Drafts plus the staged decision. The change page reads this over REST
+/// Drafts plus the draft decision. The change page reads this over REST
 /// and the folded projection over the websocket.
 pub(super) async fn get_change_drafts(
     State(state): State<Arc<AppState>>,

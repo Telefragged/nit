@@ -26,7 +26,7 @@ pub struct Chain {
 /// One member of a derived path: structure only.
 ///
 /// Read at the revision the path pins. Per-change review state (counts,
-/// staged decision, the newest revision) is not here — a client reads it
+/// draft decision, the newest revision) is not here — a client reads it
 /// from `GET /api/changes/{id}` per member.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

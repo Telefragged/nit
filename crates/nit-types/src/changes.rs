@@ -1,4 +1,4 @@
-//! Change detail and the reviewer's staged decision.
+//! Change detail and the reviewer's draft decision.
 
 use serde::{Deserialize, Serialize};
 
@@ -35,27 +35,27 @@ pub struct ChangeDetail {
     /// All revisions.
     pub drafts: Vec<Draft>,
     pub reviews: Vec<Review>,
-    pub draft_decision: Option<StagedDecision>,
+    pub draft_decision: Option<DraftDecision>,
 }
 
 /// `GET /api/changes/{id}/drafts` response.
 ///
-/// The reviewer's private overlay — unpublished drafts and the staged
+/// The reviewer's private overlay — unpublished drafts and the draft
 /// decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeDrafts {
     pub drafts: Vec<Draft>,
-    pub draft_decision: Option<StagedDecision>,
+    pub draft_decision: Option<DraftDecision>,
 }
 
-/// A reviewer's staged decision plus its cover note/reason.
+/// A reviewer's draft decision plus its cover note/reason.
 ///
 /// The body of [`ChangeDetail::draft_decision`] and the
 /// `PUT /api/changes/{id}/decision` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct StagedDecision {
+pub struct DraftDecision {
     pub decision: Decision,
     #[serde(default)]
     pub message: String,

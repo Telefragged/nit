@@ -3,7 +3,7 @@
 //! This module's docs are the schema contract. Five tables: the `repos`
 //! registry, the `changes` identity registry, the append-only event `log`
 //! (keyed on the change, with a global `seq`), and the reviewer's
-//! `draft_comments` and staged `draft_reviews`. All reviewable state is the
+//! `draft_comments` and `draft_reviews`. All reviewable state is the
 //! fold of the per-change logs (`crate::review`), held in memory and rebuilt
 //! by replay. Nothing in the log is ever mutated or deleted.
 //!
@@ -140,7 +140,7 @@ const MIGRATIONS: &[&str] = &[
       updated_at       TEXT NOT NULL
     );
     CREATE TABLE draft_reviews (
-      change_id INTEGER PRIMARY KEY REFERENCES changes(id),  -- one staged decision per change
+      change_id INTEGER PRIMARY KEY REFERENCES changes(id),  -- one draft decision per change
       decision  TEXT NOT NULL,   -- a Decision: approve | request_changes | comment | abandon | reopen
       message   TEXT NOT NULL    -- cover note (verdict) or reason (abandon)
     );
@@ -615,7 +615,7 @@ pub struct DraftRow {
     pub range: Option<CommentRange>,
     pub line_text: Option<String>,
     pub body: String,
-    /// Staged thread-resolution decision; `None` = none.
+    /// Draft thread-resolution decision; `None` = none.
     ///
     /// Stored as the `resolved` INTEGER column.
     pub resolved: Option<bool>,
@@ -799,10 +799,10 @@ pub fn delete_drafts_for_change(conn: &Connection, change_id: u64) -> Result<()>
 }
 
 // ---------------------------------------------------------------------------
-// Draft reviews: staged, never written to the log until published
+// Draft reviews: never written to the log until published
 // (`crate::api::reviews`).
 
-/// A reviewer's staged decision on a change.
+/// A reviewer's draft decision on a change.
 #[derive(Debug, Clone)]
 pub struct DraftReviewRow {
     pub change_id: u64,
@@ -819,9 +819,9 @@ fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
     })
 }
 
-/// Stages (or overwrites) a change's draft decision.
+/// Sets (or overwrites) a change's draft decision.
 ///
-/// One row per change: a later stage replaces the prior decision and
+/// One row per change: a later write replaces the prior decision and
 /// message.
 ///
 /// # Errors
@@ -841,7 +841,7 @@ pub fn upsert_draft_review(
     Ok(())
 }
 
-/// The change's staged decision, if any.
+/// The change's draft decision, if any.
 ///
 /// # Errors
 ///
@@ -856,10 +856,10 @@ pub fn get_draft_review(conn: &Connection, change_id: u64) -> Result<Option<Draf
     .map_err(Into::into)
 }
 
-/// Discards a change's staged decision.
+/// Discards a change's draft decision.
 ///
 /// Called when it publishes, or on an explicit clear. A no-op when
-/// nothing is staged.
+/// nothing is drafted.
 ///
 /// # Errors
 ///
@@ -1023,15 +1023,15 @@ mod tests {
         let c = change(&conn);
         assert!(get_draft_review(&conn, c).expect("get").is_none());
 
-        upsert_draft_review(&conn, c, Decision::RequestChanges, "fix this").expect("stage");
-        let staged = get_draft_review(&conn, c).expect("get").expect("some");
-        assert_eq!(staged.decision, Decision::RequestChanges);
-        assert_eq!(staged.message, "fix this");
+        upsert_draft_review(&conn, c, Decision::RequestChanges, "fix this").expect("draft");
+        let draft = get_draft_review(&conn, c).expect("get").expect("some");
+        assert_eq!(draft.decision, Decision::RequestChanges);
+        assert_eq!(draft.message, "fix this");
 
-        upsert_draft_review(&conn, c, Decision::Approve, "lgtm").expect("restage");
-        let staged = get_draft_review(&conn, c).expect("get").expect("some");
-        assert_eq!(staged.decision, Decision::Approve);
-        assert_eq!(staged.message, "lgtm");
+        upsert_draft_review(&conn, c, Decision::Approve, "lgtm").expect("redraft");
+        let draft = get_draft_review(&conn, c).expect("get").expect("some");
+        assert_eq!(draft.decision, Decision::Approve);
+        assert_eq!(draft.message, "lgtm");
 
         delete_draft_review(&conn, c).expect("clear");
         assert!(get_draft_review(&conn, c).expect("get").is_none());

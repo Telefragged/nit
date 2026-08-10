@@ -515,7 +515,7 @@ fn thread_comment_view(c: &ThreadComment) -> crate::comments::ThreadComment {
 
 /// The published projection of a change as the wire [`ChangeDetail`].
 ///
-/// Minus the reviewer's drafts and staged decision: mutable scratch
+/// Minus the reviewer's drafts and draft decision: mutable scratch
 /// outside the log that the server overlays from the database. The
 /// WebAssembly fold returns this verbatim and the browser fills its own
 /// drafts in.

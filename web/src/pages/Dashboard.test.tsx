@@ -44,7 +44,7 @@ describe("repo dashboard change graph", () => {
     );
 
     expect(screen.getByText("Activity")).toBeTruthy();
-    // Change 12's seeded staged decision shows in its activity cell — it
+    // Change 12's seeded draft decision shows in its activity cell — it
     // arrives from the per-change fetch, so await it rather than reading sync.
     const row = subject.closest(".graph-row");
     if (!(row instanceof HTMLElement)) throw new Error("no row for change 12");

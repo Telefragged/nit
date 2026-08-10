@@ -1,7 +1,7 @@
-//! Staged reviewer decisions + the per-chain batch submit. A decision is
+//! Draft reviewer decisions + the per-chain batch submit. A decision is
 //! reviewer scratch like a comment draft
 //! (`PUT`/`DELETE /api/changes/{id}/decision`), published only by
-//! `POST /api/chains/{id}/submit`, which publishes each member's staged
+//! `POST /api/chains/{id}/submit`, which publishes each member's draft
 //! decision at the revision the chain path pins. Abandonment is a
 //! decision, not a separate button; submit is idempotent (a published
 //! decision's row is gone).
@@ -23,7 +23,7 @@ fn detail(server: &TestServer, change_id: u64) -> Value {
     d
 }
 
-fn stage(server: &TestServer, change_id: u64, decision: &str, message: &str) {
+fn draft(server: &TestServer, change_id: u64, decision: &str, message: &str) {
     let (st, d) = http_put(
         &server.url(&format!("/api/changes/{change_id}/decision")),
         &json!({"decision": decision, "message": message}),
@@ -55,7 +55,7 @@ fn draft_comment(server: &TestServer, change_id: u64, file: &str, line: u64, bod
 }
 
 #[test]
-fn stage_surfaces_then_clears() {
+fn draft_surfaces_then_clears() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -64,12 +64,12 @@ fn stage_surfaces_then_clears() {
 
     assert_eq!(detail(&server, id)["draft_decision"], Value::Null);
 
-    stage(&server, id, "approve", "lgtm");
+    draft(&server, id, "approve", "lgtm");
     let d = detail(&server, id);
     assert_eq!(d["draft_decision"]["decision"], "approve");
     assert_eq!(d["draft_decision"]["message"], "lgtm");
 
-    stage(&server, id, "request_changes", "actually, no");
+    draft(&server, id, "request_changes", "actually, no");
     assert_eq!(
         detail(&server, id)["draft_decision"]["decision"],
         "request_changes"
@@ -93,7 +93,7 @@ fn stage_surfaces_then_clears() {
 }
 
 /// `GET /changes/{id}/drafts` returns the reviewer's private overlay alone —
-/// drafts + staged decision, no published projection — for the change page that
+/// drafts + draft decision, no published projection — for the change page that
 /// folds revisions/threads/reviews over the websocket instead.
 #[test]
 fn drafts_endpoint_returns_the_overlay() {
@@ -114,7 +114,7 @@ fn drafts_endpoint_returns_the_overlay() {
     assert_eq!(d["draft_decision"], Value::Null);
 
     draft_comment(&server, id, "a.txt", 1, "nit");
-    stage(&server, id, "approve", "lgtm");
+    draft(&server, id, "approve", "lgtm");
 
     let d = drafts(&server);
     assert_eq!(d["drafts"].as_array().unwrap().len(), 1);
@@ -134,7 +134,7 @@ fn batch_submit_publishes_verdict_and_drains_comments() {
     let id = push_one(&server, &g, "feat", "Ia");
 
     draft_comment(&server, id, "a.txt", 2, "why a2?");
-    stage(&server, id, "request_changes", "a nit");
+    draft(&server, id, "request_changes", "a nit");
 
     let out = submit_chain(&server, id);
     assert_eq!(out["submitted"], 1);
@@ -157,7 +157,7 @@ fn batch_submit_publishes_verdict_and_drains_comments() {
     assert_eq!(status_at(&server, id), "changes_requested");
 }
 
-/// A change with comment drafts but NO staged decision is left untouched by
+/// A change with comment drafts but NO draft decision is left untouched by
 /// batch submit — comments never auto-publish (they would flip an approved
 /// change to commented). They stay drafts until the reviewer decides.
 #[test]
@@ -171,7 +171,7 @@ fn batch_submit_leaves_undecided_comment_only_change() {
     draft_comment(&server, id, "a.txt", 1, "a note, no verdict");
 
     let out = submit_chain(&server, id);
-    assert_eq!(out["submitted"], 0, "nothing staged → nothing published");
+    assert_eq!(out["submitted"], 0, "nothing drafted → nothing published");
     let d = detail(&server, id);
     assert_eq!(
         d["drafts"].as_array().unwrap().len(),
@@ -182,9 +182,9 @@ fn batch_submit_leaves_undecided_comment_only_change() {
     assert_eq!(status_at(&server, id), "pending");
 }
 
-/// Abandonment is a decision: a staged `abandon` publishes a `lifecycle`
+/// Abandonment is a decision: a draft `abandon` publishes a `lifecycle`
 /// abandoned (with its message as the reason) on batch submit, and still drains
-/// any comment drafts so staged work is never stranded.
+/// any comment drafts so draft work is never stranded.
 #[test]
 fn batch_submit_abandon_decision_drains_and_records_reason() {
     let g = GitRepo::new();
@@ -194,7 +194,7 @@ fn batch_submit_abandon_decision_drains_and_records_reason() {
     let id = push_one(&server, &g, "feat", "Ia");
 
     draft_comment(&server, id, "a.txt", 1, "this is why it is wrong");
-    stage(&server, id, "abandon", "superseded by another approach");
+    draft(&server, id, "abandon", "superseded by another approach");
 
     let out = submit_chain(&server, id);
     assert_eq!(out["submitted"], 1);
@@ -225,7 +225,7 @@ fn batch_submit_abandon_decision_drains_and_records_reason() {
     );
 }
 
-/// A staged `reopen` on an abandoned change clears it back to live on submit.
+/// A draft `reopen` on an abandoned change clears it back to live on submit.
 #[test]
 fn batch_submit_reopen_decision() {
     let g = GitRepo::new();
@@ -243,7 +243,7 @@ fn batch_submit_reopen_decision() {
     assert_eq!(st, 200);
     assert_eq!(status_at(&server, id), "abandoned");
 
-    stage(&server, id, "reopen", "");
+    draft(&server, id, "reopen", "");
     let out = submit_chain(&server, id);
     assert_eq!(out["submitted"], 1);
     assert_eq!(status_at(&server, id), "pending", "reopened back to live");
@@ -265,7 +265,7 @@ fn batch_submit_skips_illegal_decision_keeps_row() {
         &json!({}),
     );
     assert_eq!(st, 200);
-    stage(&server, id, "approve", "lgtm");
+    draft(&server, id, "approve", "lgtm");
 
     let out = submit_chain(&server, id);
     assert_eq!(out["submitted"], 0);
@@ -273,7 +273,7 @@ fn batch_submit_skips_illegal_decision_keeps_row() {
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0]["change_id"], id);
     assert!(errors[0]["message"].as_str().unwrap().contains("abandoned"));
-    // The staged decision is kept so the reviewer can fix it.
+    // The draft decision is kept so the reviewer can fix it.
     assert_eq!(detail(&server, id)["draft_decision"]["decision"], "approve");
 }
 
@@ -287,7 +287,7 @@ fn batch_submit_is_idempotent() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let id = push_one(&server, &g, "feat", "Ia");
 
-    stage(&server, id, "approve", "lgtm");
+    draft(&server, id, "approve", "lgtm");
     assert_eq!(submit_chain(&server, id)["submitted"], 1);
     assert_eq!(submit_chain(&server, id)["submitted"], 0);
     assert_eq!(
@@ -298,7 +298,7 @@ fn batch_submit_is_idempotent() {
     assert_eq!(status_at(&server, id), "approved");
 }
 
-/// One submit publishes every member's staged decision, each at the revision
+/// One submit publishes every member's draft decision, each at the revision
 /// the chain path pins on it.
 #[test]
 fn batch_submit_publishes_every_member() {
@@ -312,8 +312,8 @@ fn batch_submit_publishes_every_member() {
     let id_a = member_id(&server, &res, "Ia");
     let id_b = member_id(&server, &res, "Ib");
 
-    stage(&server, id_a, "approve", "a lgtm");
-    stage(&server, id_b, "request_changes", "b needs work");
+    draft(&server, id_a, "approve", "a lgtm");
+    draft(&server, id_b, "request_changes", "b needs work");
 
     let out = submit_chain(&server, id_b);
     assert_eq!(out["submitted"], 2);
@@ -338,7 +338,7 @@ fn batch_submit_publishes_at_pinned_revision() {
     let id2 = push_one(&server, &g, "feat", "Ia");
     assert_eq!(id2, id);
 
-    stage(&server, id, "approve", "lgtm");
+    draft(&server, id, "approve", "lgtm");
     assert_eq!(submit_chain(&server, id)["submitted"], 1);
 
     let d = detail(&server, id);
@@ -356,7 +356,7 @@ fn batch_submit_publishes_at_pinned_revision() {
 /// An unknown decision value is a 400 (enum deserialize); an unknown change is
 /// a 404.
 #[test]
-fn stage_validation() {
+fn draft_validation() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
