@@ -296,6 +296,7 @@ pub fn maintain_keep_refs(repo: &Repository, change: &ChangeProjection) {
 
 #[cfg(test)]
 mod tests {
+    use nit_types::domain::RevisionNumber;
     use std::collections::HashMap;
 
     use git2::{Oid, Repository, Signature};
@@ -337,7 +338,7 @@ mod tests {
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProjection {
         let mut proj = ChangeProjection::new(id, 1, key.into());
         proj.revisions.push(RevisionProjection {
-            number: 0,
+            number: RevisionNumber(0),
             commit_sha: commit.to_string().into(),
             parent_sha: base.to_string().into(),
             fork_sha: base.to_string().into(),

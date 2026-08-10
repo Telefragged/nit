@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::RevisionNumber;
 use crate::domain::Side;
 
 /// Selected-text anchor of a line comment.
@@ -29,7 +30,7 @@ pub struct Thread {
     pub id: u64,
     pub change_id: u64,
     /// The revision the thread is pinned to.
-    pub revision: u64,
+    pub revision: RevisionNumber,
     pub file: Option<String>,
     pub line: Option<u64>,
     pub side: Side,
@@ -63,7 +64,7 @@ pub struct Draft {
     pub change_id: u64,
     pub thread_id: Option<u64>,
     /// The request's anchor revision; only a new thread uses it.
-    pub revision: u64,
+    pub revision: RevisionNumber,
     pub file: Option<String>,
     pub line: Option<u64>,
     pub side: Side,
@@ -81,7 +82,7 @@ pub struct Draft {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct NewDraft {
-    pub revision: u64,
+    pub revision: RevisionNumber,
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub file: Option<String>,
@@ -121,7 +122,7 @@ pub struct NewComment {
     #[serde(default)]
     pub thread_id: Option<u64>,
     #[serde(default)]
-    pub revision: Option<u64>,
+    pub revision: Option<RevisionNumber>,
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]

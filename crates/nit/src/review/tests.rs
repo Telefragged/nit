@@ -1,3 +1,4 @@
+use nit_types::domain::RevisionNumber;
 use nit_types::domain::{ChangeStatus, Verdict};
 use nit_types::log::{LogPayload, ReviewPayload, RevisionPayload};
 
@@ -23,7 +24,7 @@ fn revision(sha: &str) -> LogPayload {
     })
 }
 
-fn review(revision: u64, verdict: Verdict) -> LogPayload {
+fn review(revision: RevisionNumber, verdict: Verdict) -> LogPayload {
     LogPayload::Review(ReviewPayload {
         revision,
         verdict,
@@ -37,7 +38,7 @@ fn review(revision: u64, verdict: Verdict) -> LogPayload {
 /// `position` of the row it came from and so needs nothing stored to survive.
 #[test]
 fn replay_rows_round_trips_stored_log() {
-    let rows: Vec<db::LogRow> = [revision("A"), review(0, Verdict::Approve)]
+    let rows: Vec<db::LogRow> = [revision("A"), review(RevisionNumber(0), Verdict::Approve)]
         .into_iter()
         .enumerate()
         .map(|(i, payload)| db::LogRow {
@@ -50,6 +51,6 @@ fn replay_rows_round_trips_stored_log() {
         .collect();
     let c = replay_rows(&change_row(), &rows).expect("replay");
     assert_eq!(c.revisions.len(), 1);
-    assert_eq!(c.status_at(0), ChangeStatus::Approved);
+    assert_eq!(c.status_at(RevisionNumber(0)), ChangeStatus::Approved);
     assert_eq!(c.reviews[0].id, 1, "the review entry sits at position 1");
 }

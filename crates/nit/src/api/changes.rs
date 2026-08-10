@@ -10,6 +10,7 @@ use serde::Deserialize;
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList};
 use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeStatus;
+use nit_types::domain::RevisionNumber;
 use nit_types::domain::Sha;
 
 use crate::review;
@@ -149,7 +150,7 @@ fn resolve_revs(
 ) -> Result<Revs, Error> {
     let proj = entry.read();
     let find = |k: u64| {
-        proj.revision(k)
+        proj.revision(RevisionNumber(k))
             .cloned()
             .ok_or_else(|| Error::not_found(format!("revision {k} not found")))
     };

@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::comments::CommentRange;
+use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{LifecycleAction, LogKind, Side, Verdict};
 
@@ -30,7 +31,7 @@ pub struct RevisionPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReviewPayload {
-    pub revision: u64,
+    pub revision: RevisionNumber,
     pub verdict: Verdict,
     pub message: String,
     /// The drained drafts, in draft order.
@@ -57,7 +58,7 @@ pub struct CommentInput {
     /// revision. The API always stamps it; the fold falls back to the
     /// change's latest only for a malformed payload.
     #[serde(default)]
-    pub revision: Option<u64>,
+    pub revision: Option<RevisionNumber>,
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]

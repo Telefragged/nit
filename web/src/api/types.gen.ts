@@ -19,6 +19,12 @@ export type ChangeId = string;
 export type Sha = string;
 
 /**
+ * Which version of a change: 0-based, in the order the revisions were
+ * observed.
+ */
+export type RevisionNumber = number;
+
+/**
  * Which tree of a revision a line comment is anchored to.
  *
  * `new` is the revision's commit tree, `old` its parent tree. Defaults
@@ -155,7 +161,7 @@ export type PathEntry = {
   /**
    * The revision this path walks.
    */
-  revision: number;
+  revision: RevisionNumber;
   /**
    * Per `(change, this revision)`.
    */
@@ -217,7 +223,7 @@ export type GraphNode = {
   /**
    * The pinned revision (open nodes); `None` off the open region.
    */
-  revision: number | null;
+  revision: RevisionNumber | null;
 };
 
 /**
@@ -310,7 +316,7 @@ export type ChangeDrafts = {
 };
 
 export type Revision = {
-  number: number;
+  number: RevisionNumber;
   commit_sha: Sha;
   parent_sha: Sha;
   fork_sha: Sha;
@@ -323,7 +329,7 @@ export type Revision = {
 
 export type Review = {
   id: number;
-  revision: number;
+  revision: RevisionNumber;
   verdict: Verdict;
   /**
    * Cover message.
@@ -368,7 +374,7 @@ export type Thread = {
   /**
    * The revision the thread is pinned to.
    */
-  revision: number;
+  revision: RevisionNumber;
   file: string | null;
   line: number | null;
   side: Side;
@@ -408,7 +414,7 @@ export type Draft = {
   /**
    * The request's anchor revision; only a new thread uses it.
    */
-  revision: number;
+  revision: RevisionNumber;
   file: string | null;
   line: number | null;
   side: Side;
@@ -430,7 +436,7 @@ export type Draft = {
  * `POST /api/changes/{id}/drafts` request.
  */
 export type NewDraft = {
-  revision: number;
+  revision: RevisionNumber;
   file?: string;
   line?: number;
   side?: Side;
@@ -551,7 +557,7 @@ export type RevisionPayload = {
 };
 
 export type ReviewPayload = {
-  revision: number;
+  revision: RevisionNumber;
   verdict: Verdict;
   message: string;
   /**
@@ -582,7 +588,7 @@ export type CommentInput = {
    * revision. The API always stamps it; the fold falls back to the
    * change's latest only for a malformed payload.
    */
-  revision: number | null;
+  revision: RevisionNumber | null;
   file: string | null;
   line: number | null;
   /**
@@ -693,7 +699,7 @@ export type RevisionProjection = {
   /**
    * 0-based, minted in the fold.
    */
-  number: number;
+  number: RevisionNumber;
   commit_sha: Sha;
   parent_sha: Sha;
   fork_sha: Sha;
@@ -726,7 +732,7 @@ export type ThreadCommentProjection = {
  */
 export type ThreadProjection = {
   id: number;
-  revision: number;
+  revision: RevisionNumber;
   anchor: Anchor;
   resolved: boolean;
   comments: Array<ThreadCommentProjection>;
@@ -741,7 +747,7 @@ export type ReviewProjection = {
    * A log coordinate, reproduced by replay with nothing stored.
    */
   id: number;
-  revision: number;
+  revision: RevisionNumber;
   verdict: Verdict;
   message: string;
   created_at: string;

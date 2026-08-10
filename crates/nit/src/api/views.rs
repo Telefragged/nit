@@ -11,6 +11,7 @@ use rusqlite::Connection;
 use nit_types::chains::{Chain, PathEntry};
 use nit_types::changes::{ChangeDetail, ChangeDrafts, DraftDecision};
 use nit_types::comments::Draft;
+use nit_types::domain::RevisionNumber;
 use nit_types::domain::Sha;
 
 use crate::db;
@@ -66,7 +67,7 @@ fn path_entry(change: &ChangeProjection, member: &PathMember, position: u64) -> 
 /// an abandoned change resolves to a real chain, not only the degenerate
 /// fallback.
 #[must_use]
-pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<Sha> {
+pub fn tip_for(view: &RepoView, change_id: u64, revision: RevisionNumber) -> Option<Sha> {
     for tip in view.enumerable_tips() {
         let path = view.path_from_tip(&tip);
         if path
@@ -93,8 +94,8 @@ pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<Sha> {
 pub fn resolve_revision_tip(
     view: &RepoView,
     change_id: u64,
-    requested: Option<u64>,
-) -> Result<(u64, Sha), Error> {
+    requested: Option<RevisionNumber>,
+) -> Result<(RevisionNumber, Sha), Error> {
     let revision = requested
         .or_else(|| {
             view.change(change_id)

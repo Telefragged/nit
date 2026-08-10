@@ -42,6 +42,7 @@ use serde::Deserialize;
 
 use nit_types::changes::ChangeDetail;
 use nit_types::comments::CommentRange;
+use nit_types::domain::RevisionNumber;
 use nit_types::domain::{Sha, Side};
 use nit_types::health::Health;
 
@@ -212,7 +213,7 @@ fn chain_context(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
     change_id: u64,
-    revision: Option<u64>,
+    revision: Option<RevisionNumber>,
 ) -> Result<(RepoView, u64, Sha), Error> {
     let repo_id = change_or_404(state, conn, change_id)?.read().repo_id;
     let view = state.repo_view(conn, repo_id)?;
@@ -251,7 +252,7 @@ pub const MERGED_WINDOW: u64 = 5;
 
 #[derive(Deserialize)]
 struct ChainQuery {
-    revision: Option<u64>,
+    revision: Option<RevisionNumber>,
 }
 
 /// Builds the `ChangeDetail` from one change's fold.

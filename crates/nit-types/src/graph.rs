@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
+use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChangeStatus, GraphSection};
 
@@ -77,5 +78,5 @@ pub struct GraphNode {
     pub change_id: Option<u64>,
     pub change_key: Option<ChangeId>,
     /// The pinned revision (open nodes); `None` off the open region.
-    pub revision: Option<u64>,
+    pub revision: Option<RevisionNumber>,
 }

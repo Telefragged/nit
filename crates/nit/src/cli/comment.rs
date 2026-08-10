@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, anyhow};
 
 use nit_types::comments::{CommentRange, NewComment, Thread};
+use nit_types::domain::RevisionNumber;
 use nit_types::domain::Side;
 
 use super::client::{Client, ServerOpt, server_url};
@@ -33,7 +34,7 @@ pub struct CommentArgs {
     pub range: Option<String>,
     /// New thread: revision to anchor to (defaults to the change's latest).
     #[arg(long, conflicts_with = "thread")]
-    pub revision: Option<u64>,
+    pub revision: Option<RevisionNumber>,
     /// Comment body, markdown (optional only for a `--thread` reply that
     /// just resolves/reopens).
     #[arg(short = 'm', long = "message")]

@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use nit_types::comments::CommentRange;
-use nit_types::domain::{ChangeId, ChangeStatus, Decision, Sha, Side};
+use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha, Side};
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// RFC3339 timestamp for "now" (UTC).
@@ -633,7 +633,7 @@ pub fn log_entries(
 pub struct DraftRow {
     pub id: u64,
     pub change_id: u64,
-    pub revision: u64,
+    pub revision: RevisionNumber,
     /// The thread this draft replies to; `None` opens a new thread.
     pub thread_id: Option<u64>,
     pub file: Option<String>,
@@ -670,7 +670,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
     Ok(DraftRow {
         id: col_u64(row.get("id")?)?,
         change_id: col_u64(row.get("change_id")?)?,
-        revision: col_u64(row.get("revision")?)?,
+        revision: RevisionNumber(col_u64(row.get("revision")?)?),
         thread_id: col_u64_opt(row.get("thread_id")?)?,
         file: row.get("file")?,
         line: col_u64_opt(row.get("line")?)?,
@@ -686,7 +686,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
 
 pub struct NewDraft<'a> {
     pub change_id: u64,
-    pub revision: u64,
+    pub revision: RevisionNumber,
     pub thread_id: Option<u64>,
     pub file: Option<&'a str>,
     pub line: Option<u64>,
@@ -725,7 +725,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
          VALUES (?14, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?15, ?13, ?13)",
         params![
             i64::try_from(d.change_id)?,
-            i64::try_from(d.revision)?,
+            i64::try_from(d.revision.get())?,
             thread_id,
             d.file,
             line,
@@ -1022,7 +1022,7 @@ mod tests {
             7,
             &NewDraft {
                 change_id: c,
-                revision: 1,
+                revision: RevisionNumber(1),
                 thread_id: None,
                 file: Some("src/main.rs"),
                 line: Some(3),

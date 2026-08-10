@@ -345,6 +345,7 @@ pub(crate) fn print_entries(entries: &[LogEntry]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nit_types::domain::RevisionNumber;
 
     #[test]
     fn entry_summary_digests_each_kind() {
@@ -380,7 +381,7 @@ mod tests {
             "change 7 new revision abcdef012345"
         );
         let review = entry(LogPayload::Review(ReviewPayload {
-            revision: 2,
+            revision: RevisionNumber(2),
             verdict: Verdict::RequestChanges,
             message: String::new(),
             comments: vec![comment(), comment()],
@@ -409,7 +410,7 @@ mod tests {
         };
         let opening = |tid, file: Option<&str>, line, range, resolved, body: &str| CommentInput {
             thread_id: Some(tid),
-            revision: Some(2),
+            revision: Some(RevisionNumber(2)),
             file: file.map(String::from),
             line,
             side: Some(Side::New),
@@ -423,7 +424,7 @@ mod tests {
             5,
             12,
             LogPayload::Review(ReviewPayload {
-                revision: 2,
+                revision: RevisionNumber(2),
                 verdict: Verdict::RequestChanges,
                 message: "Cover one.\nCover two.".to_string(),
                 comments: vec![
@@ -497,15 +498,16 @@ mod tests {
     fn chain_digest_aligns_columns_and_headers() {
         use nit_types::chains::PathEntry;
         use nit_types::domain::{ChainState, ChangeStatus};
-        let member = |change_id, position, key: &str, status, revision, subject: &str| PathEntry {
-            change_id,
-            position,
-            change_key: key.into(),
-            status,
-            revision,
-            subject: subject.to_string(),
-            commit_sha: "".into(),
-        };
+        let member =
+            |change_id, position, key: &str, status, revision: u64, subject: &str| PathEntry {
+                change_id,
+                position,
+                change_key: key.into(),
+                status,
+                revision: RevisionNumber(revision),
+                subject: subject.to_string(),
+                commit_sha: "".into(),
+            };
         let chain = Chain {
             tip_change_id: 2,
             repo_id: 1,

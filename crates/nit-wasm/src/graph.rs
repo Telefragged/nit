@@ -96,13 +96,13 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::domain::ChangeId;
+    use nit_types::domain::{ChangeId, RevisionNumber};
     use nit_types::fold::{ChangeProjection, RevisionProjection};
     use nit_types::graph::HistoryCommit;
 
     fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
         RevisionProjection {
-            number,
+            number: RevisionNumber(number),
             commit_sha: sha.into(),
             parent_sha: parent.into(),
             fork_sha: base.into(),

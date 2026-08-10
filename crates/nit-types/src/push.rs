@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
 use crate::domain::ChangeStatus;
+use crate::domain::RevisionNumber;
 
 /// `POST /api/push` request (this is `nit push`).
 ///
@@ -30,6 +31,6 @@ pub struct PushResult {
 pub struct TipChange {
     pub change_id: u64,
     pub change_key: ChangeId,
-    pub revision: u64,
+    pub revision: RevisionNumber,
     pub status: ChangeStatus,
 }

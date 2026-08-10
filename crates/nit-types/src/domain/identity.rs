@@ -82,3 +82,43 @@ impl std::fmt::Display for Sha {
         f.write_str(&self.0)
     }
 }
+
+/// Which version of a change: 0-based, in the order the revisions were
+/// observed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct RevisionNumber(pub u64);
+
+impl RevisionNumber {
+    #[must_use]
+    pub fn get(self) -> u64 {
+        self.0
+    }
+
+    /// The revision before this one, or `None` at a change's first.
+    #[must_use]
+    pub fn previous(self) -> Option<RevisionNumber> {
+        self.0.checked_sub(1).map(RevisionNumber)
+    }
+}
+
+impl From<u64> for RevisionNumber {
+    fn from(n: u64) -> RevisionNumber {
+        RevisionNumber(n)
+    }
+}
+
+impl std::fmt::Display for RevisionNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::str::FromStr for RevisionNumber {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<RevisionNumber, std::num::ParseIntError> {
+        s.parse().map(RevisionNumber)
+    }
+}

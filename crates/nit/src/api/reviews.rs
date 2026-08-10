@@ -10,6 +10,7 @@ use axum::http::StatusCode;
 
 use nit_types::changes::DraftDecision;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
+use nit_types::domain::RevisionNumber;
 use nit_types::domain::{Decision, LifecycleAction, Verdict};
 use nit_types::log::{CommentInput, LogPayload, ReviewPayload};
 
@@ -64,7 +65,7 @@ fn publish_member(
     change_id: u64,
     decision: Decision,
     message: &str,
-    revision: u64,
+    revision: RevisionNumber,
 ) -> Result<(), Error> {
     let comments = drafts_to_comments(conn, change_id)?;
     let drained = !comments.is_empty();

@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
+use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChainState, ChangeStatus};
 
@@ -38,7 +39,7 @@ pub struct PathEntry {
     pub position: u64,
     pub change_key: ChangeId,
     /// The revision this path walks.
-    pub revision: u64,
+    pub revision: RevisionNumber,
     /// Per `(change, this revision)`.
     pub status: ChangeStatus,
     pub subject: String,

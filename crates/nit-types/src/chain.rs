@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChainState, ChangeStatus};
 
@@ -17,7 +18,7 @@ use crate::fold::ChangeProjection;
 #[derive(Debug, Clone)]
 pub struct PathMember {
     pub change_id: u64,
-    pub revision: u64,
+    pub revision: RevisionNumber,
     pub commit_sha: Sha,
 }
 
@@ -28,7 +29,7 @@ pub struct PathMember {
 #[derive(Debug, Clone)]
 pub struct OpenNode {
     pub change_id: u64,
-    pub revision: u64,
+    pub revision: RevisionNumber,
     pub commit_sha: Sha,
     pub parent_sha: Sha,
 }
@@ -40,7 +41,7 @@ pub struct OpenNode {
 /// this view, so it holds no locks and touches no git.
 pub struct RepoView {
     changes: HashMap<u64, ChangeProjection>,
-    index: HashMap<Sha, (u64, u64)>,
+    index: HashMap<Sha, (u64, RevisionNumber)>,
 }
 
 impl RepoView {
@@ -314,6 +315,7 @@ mod tests {
     use crate::fold::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
 
     fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
+        let number = RevisionNumber(number);
         RevisionProjection {
             number,
             commit_sha: sha.into(),
@@ -352,7 +354,7 @@ mod tests {
         assert_eq!(
             c_path
                 .iter()
-                .map(|m| (m.change_id, m.revision))
+                .map(|m| (m.change_id, m.revision.get()))
                 .collect::<Vec<_>>(),
             vec![(10, 0), (11, 0), (12, 0)]
         );
@@ -360,7 +362,7 @@ mod tests {
         assert_eq!(
             e_path
                 .iter()
-                .map(|m| (m.change_id, m.revision))
+                .map(|m| (m.change_id, m.revision.get()))
                 .collect::<Vec<_>>(),
             vec![(13, 0), (11, 1), (14, 0)]
         );
@@ -427,7 +429,7 @@ mod tests {
             .open_nodes()
             .iter()
             .filter(|n| n.change_id == 11)
-            .map(|n| n.revision)
+            .map(|n| n.revision.get())
             .collect();
         assert_eq!(b_nodes.len(), 2);
         assert!(b_nodes.contains(&0) && b_nodes.contains(&1));
@@ -468,7 +470,7 @@ mod tests {
         let mut a = change(1, "Ia", vec![revision(0, "A", "m", "m")]);
         a.reviews.push(ReviewProjection {
             id: 100,
-            revision: 0,
+            revision: RevisionNumber(0),
             verdict: Verdict::Approve,
             message: String::new(),
             created_at: "t1".to_string(),

@@ -298,6 +298,7 @@ impl LogRange {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nit_types::domain::RevisionNumber;
 
     #[test]
     fn log_range_forms_and_rejections() {
@@ -365,7 +366,7 @@ mod tests {
         };
         let review = || {
             LogPayload::Review(ReviewPayload {
-                revision: 0,
+                revision: RevisionNumber(0),
                 verdict: Verdict::Comment,
                 message: String::new(),
                 comments: vec![],
