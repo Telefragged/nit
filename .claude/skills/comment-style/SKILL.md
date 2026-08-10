@@ -1,10 +1,11 @@
 ---
 name: comment-style
 description: >
-  Where a fact belongs when working on nit: code comments carry the
-  non-obvious why, doc-comments the contract, commit messages the why of
-  the change, nit threads the review history — each fact in exactly one
-  home. Load this BEFORE writing or amending any code, comment,
+  Where a fact belongs when working on nit: the domain model carries
+  what a term is, code comments the non-obvious why, doc-comments the
+  contract, commit messages the why of the change, nit threads the
+  review history — each fact in exactly one home. Load this BEFORE
+  writing or amending any code, comment,
   doc-comment, or commit message in this repo, and at the start of every
   review pass — not after a draft exists. It also sets the tone the code
   itself is written in: reasonably concise. A /simplify or /code-review
@@ -20,12 +21,19 @@ updated, the other keeps asserting something false. Written in the wrong
 home it ages into noise: review chatter fossilized in a source file,
 code narration padding a commit message.
 
-| Home           | Carries                                        | Reader                                    |
-| -------------- | ---------------------------------------------- | ----------------------------------------- |
-| Code comment   | the non-obvious _why_ of the code as it is     | someone asking "why is the code this way" |
-| Doc-comment    | the contract: what a caller may rely on        | someone who has NOT read the body         |
-| Commit message | the _why_ of this change                       | someone asking "why was this introduced"  |
-| nit thread     | the review history: questions, verdicts, fixes | reviewer and author, during review        |
+| Home           | Carries                                        | Reader                                     |
+| -------------- | ---------------------------------------------- | ------------------------------------------ |
+| Domain model   | what a term _is_                               | anyone meeting the term for the first time |
+| Code comment   | the non-obvious _why_ of the code as it is     | someone asking "why is the code this way"  |
+| Doc-comment    | the contract: what a caller may rely on        | someone who has NOT read the body          |
+| Commit message | the _why_ of this change                       | someone asking "why was this introduced"   |
+| nit thread     | the review history: questions, verdicts, fixes | reviewer and author, during review         |
+
+The domain model is `crates/nit-types/src/domain.rs`: a term is defined
+once, on the thing it names, and a doc-comment elsewhere may rely on
+that meaning instead of restating it. A definition holds only what a
+code change cannot falsify — never a count, a route, a column, a status
+code or a behavior, all of which belong to the code they describe.
 
 The failure mode is leakage downward: review history into commit
 messages, change rationale into code comments, code narration

@@ -57,12 +57,17 @@ identity across rewrites. Product spec: `nit.md`.
    skips tests (docs/dev.md "Verification").
 10. **One home per fact — load the `comment-style` skill before
     writing.** Code comments, doc-comments, commit messages, and nit
-    threads each carry a distinct kind of information; the rules, litmus
-    tests, and examples live in `.claude/skills/comment-style/SKILL.md`.
-    Read it before writing or amending code, comments, or commit
-    messages, and at the start of every review pass. A `/simplify` or
-    `/code-review` run additionally spawns the comment-audit agent that
-    skill defines.
+    threads, and the domain model each carry a distinct kind of
+    information; the rules, litmus tests, and examples live in
+    `.claude/skills/comment-style/SKILL.md`. Read it before writing or
+    amending code, comments, or commit messages, and at the start of
+    every review pass. A `/simplify` or `/code-review` run additionally
+    spawns the comment-audit agent that skill defines.
+11. **The domain model is `crates/nit-types/src/domain.rs`** — what a
+    term means is defined there once, on the thing it names, and every
+    component speaks that vocabulary. Read it before naming anything;
+    an identifier spells its term in full, and the exemptions are a
+    closed set.
 
 ## Layout
 
