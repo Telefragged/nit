@@ -132,7 +132,7 @@ function DiffRangeSelect({
   return (
     <>
       <select
-        className="rev-select"
+        className="revision-select"
         aria-label="Diff base"
         title="Base = parent commit; rM = interdiff against revision M"
         value={against === undefined ? "base" : String(against)}
@@ -153,7 +153,7 @@ function DiffRangeSelect({
       </select>
       <span className="dim mono">→</span>
       <select
-        className="rev-select"
+        className="revision-select"
         aria-label="Revision"
         title="Revision under review"
         value={String(selected)}
@@ -275,13 +275,13 @@ export default function ReviewPage() {
   // below.
   const [pinnedRev, setPinnedRev] = useState<{
     changeId: number;
-    rev: number;
+    revision: number;
   }>();
   if (latest !== undefined && pinnedRev?.changeId !== changeId) {
-    setPinnedRev({ changeId, rev: latest.number });
+    setPinnedRev({ changeId, revision: latest.number });
   }
   const defaultRev =
-    pinnedRev?.changeId === changeId ? pinnedRev.rev : undefined;
+    pinnedRev?.changeId === changeId ? pinnedRev.revision : undefined;
 
   const selectedRev =
     revisions.find((r) => r.number === (revisionParam ?? defaultRev)) ?? latest;

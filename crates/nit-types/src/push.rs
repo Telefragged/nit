@@ -11,7 +11,7 @@ use crate::domain::ChangeStatus;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushRequest {
     pub git_dir: String,
-    /// Any ref or rev, resolved to a commit at push time.
+    /// Any ref or revision, resolved to a commit at push time.
     pub tip: String,
 }
 

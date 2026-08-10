@@ -549,7 +549,7 @@ const change11: ChangeRecord = {
         },
       ],
     },
-    // Interdiff: effective tree of rev 1 -> effective tree of rev 2,
+    // Interdiff: effective tree of revision 1 -> effective tree of revision 2,
     // message(1) -> message(2) for /COMMIT_MSG.
     [diffKey(1, 0)]: {
       files: [

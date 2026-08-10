@@ -20,7 +20,7 @@ fn main() {
 
 /// `+<short-sha>[.dirty]`, or `None` outside a git tree (a tarball build).
 fn git_suffix() -> Option<String> {
-    let sha = git(&["rev-parse", "--short=12", "HEAD"])?;
+    let sha = git(&["revision-parse", "--short=12", "HEAD"])?;
     let dirty = if git(&["status", "--porcelain"])?.is_empty() {
         ""
     } else {

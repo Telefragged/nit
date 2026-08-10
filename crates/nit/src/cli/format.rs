@@ -367,14 +367,17 @@ mod tests {
             body: String::new(),
             resolved: None,
         };
-        let rev = entry(LogPayload::Revision(RevisionPayload {
+        let revision = entry(LogPayload::Revision(RevisionPayload {
             commit_sha: "abcdef0123456789".to_string(),
             parent_sha: String::new(),
             fork_sha: String::new(),
             message: String::new(),
             resets_status: true,
         }));
-        assert_eq!(entry_summary(&rev), "change 7 new revision abcdef012345");
+        assert_eq!(
+            entry_summary(&revision),
+            "change 7 new revision abcdef012345"
+        );
         let review = entry(LogPayload::Review(ReviewPayload {
             revision: 2,
             verdict: Verdict::RequestChanges,
@@ -465,7 +468,7 @@ mod tests {
         );
 
         // A revision entry shows its short sha and subject — no minted number.
-        let rev = |position, sequence, sha: &str, msg: &str| {
+        let revision = |position, sequence, sha: &str, msg: &str| {
             entry(
                 42,
                 position,
@@ -480,11 +483,11 @@ mod tests {
             )
         };
         assert_eq!(
-            render_entry(&rev(0, 3, "abcdef0123456789", "queue: first\n\nbody")),
+            render_entry(&revision(0, 3, "abcdef0123456789", "queue: first\n\nbody")),
             "sequence 3  change 42  revision abcdef012345  queue: first"
         );
         assert_eq!(
-            render_entry(&rev(6, 20, "1234567890abcdef", "queue: second")),
+            render_entry(&revision(6, 20, "1234567890abcdef", "queue: second")),
             "sequence 20  change 42  revision 1234567890ab  queue: second"
         );
     }

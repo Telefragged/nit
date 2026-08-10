@@ -117,7 +117,7 @@ a.graph-subject:hover {
   color: var(--text-faint);
 }
 
-.graph-cell-rev {
+.graph-cell-revision {
   font-size: 12px;
   color: var(--text-faint);
 }

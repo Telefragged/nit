@@ -3,7 +3,7 @@
 //! decision's chain submit (`common::review`) drains them into one log entry,
 //! sets the per-(change, revision) status to the verdict, and applies each
 //! thread's draft resolution in draft order. Revisions are 0-based: the first
-//! push is rev 0, an amend is rev 1.
+//! push is revision 0, an amend is revision 1.
 
 mod common;
 
@@ -394,7 +394,7 @@ fn pure_rebase_carries_status_forward() {
         2,
         "a rebase appends a revision"
     );
-    // The pure rebase keeps the approve at rev 1 (status carried forward).
+    // The pure rebase keeps the approve at revision 1 (status carried forward).
     let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
     let member = chain["path"]
         .as_array()

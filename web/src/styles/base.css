@@ -44,7 +44,7 @@ button {
 }
 
 button:hover:not(:disabled),
-.rev-select:hover {
+.revision-select:hover {
   background: var(--bg-hover);
   border-color: var(--text-faint);
 }

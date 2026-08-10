@@ -90,7 +90,7 @@ pub(super) async fn revision_diff(
             0,
             diff::commit_msg_file(
                 revs.against.as_ref().map(|a| a.message.as_str()),
-                &revs.rev.message,
+                &revs.revision.message,
             ),
         );
         Ok(Json(wire))
@@ -136,7 +136,7 @@ pub(super) async fn revision_lines(
 /// nothing live.
 struct Revs {
     git_dir: String,
-    rev: review::RevisionProjection,
+    revision: review::RevisionProjection,
     against: Option<review::RevisionProjection>,
 }
 
@@ -154,7 +154,7 @@ fn resolve_revs(
     };
     Ok(Revs {
         git_dir: state.git_dir(proj.repo_id)?,
-        rev: find(n)?,
+        revision: find(n)?,
         against: against.map(find).transpose()?,
     })
 }
@@ -171,23 +171,23 @@ fn resolve_revs(
 /// failure — the drift is then empty, which renders and tags nothing.
 fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff, Error> {
     let repo = open_repo(&revs.git_dir)?;
-    let rev = &revs.rev;
-    let new_tree = commit_tree(&repo, &rev.commit_sha)?;
+    let revision = &revs.revision;
+    let new_tree = commit_tree(&repo, &revision.commit_sha)?;
     let old_tree = commit_tree(
         &repo,
         revs.against
             .as_ref()
-            .map_or(&rev.parent_sha, |a| &a.commit_sha),
+            .map_or(&revision.parent_sha, |a| &a.commit_sha),
     )?;
     let git = diff::git_diff(&repo, &old_tree, &new_tree)?;
 
     let drift = match revs
         .against
         .as_ref()
-        .filter(|a| a.parent_sha != rev.parent_sha)
+        .filter(|a| a.parent_sha != revision.parent_sha)
     {
         None => rebase::Drift::default(),
-        Some(m) => rebase::analyze(&repo, &git, &at(m), &at(rev), only).unwrap_or_else(|e| {
+        Some(m) => rebase::analyze(&repo, &git, &at(m), &at(revision), only).unwrap_or_else(|e| {
             tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
             rebase::Drift::default()
         }),

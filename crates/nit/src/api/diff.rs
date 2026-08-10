@@ -388,18 +388,21 @@ mod tests {
     use git2::RepositoryInitOptions;
 
     struct Repo {
-        _dir: tempfile::TempDir,
+        _directory: tempfile::TempDir,
         repo: Repository,
     }
 
     impl Repo {
         fn new() -> Self {
-            let dir = tempfile::tempdir().expect("tempdir should create");
+            let directory = tempfile::tempdir().expect("tempdir should create");
             let mut opts = RepositoryInitOptions::new();
             opts.initial_head("refs/heads/main");
-            let repo =
-                Repository::init_opts(dir.path().join("r"), &opts).expect("test repo should init");
-            Repo { _dir: dir, repo }
+            let repo = Repository::init_opts(directory.path().join("r"), &opts)
+                .expect("test repo should init");
+            Repo {
+                _directory: directory,
+                repo,
+            }
         }
 
         fn tree(&self, files: &[(&str, &[u8])]) -> git2::Oid {

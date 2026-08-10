@@ -1,7 +1,7 @@
 //! Pure-rebase vs reword semantics through `POST /api/push`: a patch-id-equal,
 //! same-message commit on a new parent appends a revision but carries the
 //! reviewed status forward; changing the message resets the change to pending.
-//! Revisions are 0-based (rev 0 is the first). Asserted through
+//! Revisions are 0-based (revision 0 is the first). Asserted through
 //! `GET /api/changes/{id}` and the derived chain path.
 
 mod common;
@@ -50,7 +50,10 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     let tip_id = member_id(&server, &pr, "Ib");
-    assert_eq!(pr["tip_change"]["revision"], 0, "first revision is rev 0");
+    assert_eq!(
+        pr["tip_change"]["revision"], 0,
+        "first revision is revision 0"
+    );
 
     approve(&server, tip_id);
     assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
@@ -65,7 +68,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     assert_eq!(st, 200, "{pr}");
     assert_eq!(
         pr["tip_change"]["revision"], 1,
-        "a pure rebase appends rev 1"
+        "a pure rebase appends revision 1"
     );
     assert_eq!(
         pr["tip_change"]["status"], "approved",
@@ -79,13 +82,13 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
 
     let detail = change_detail(&server, tip_id);
     let revs = detail["revisions"].as_array().unwrap();
-    assert_eq!(revs.len(), 2, "rev 0 and rev 1");
+    assert_eq!(revs.len(), 2, "revision 0 and revision 1");
     assert_eq!(revs[1]["number"], 1);
     assert_eq!(revs[1]["commit_sha"], c2r.to_string());
     assert_eq!(revs[1]["parent_sha"], c1r.to_string());
     assert_eq!(
         detail["reviews"][0]["revision"], 0,
-        "the verdict stays anchored to rev 0"
+        "the verdict stays anchored to revision 0"
     );
     assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
 
@@ -95,7 +98,10 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     g.branch("feat", c2w);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    assert_eq!(pr["tip_change"]["revision"], 2, "the reword appends rev 2");
+    assert_eq!(
+        pr["tip_change"]["revision"], 2,
+        "the reword appends revision 2"
+    );
     assert_eq!(
         pr["tip_change"]["status"], "pending",
         "a reword resets the displayed status"

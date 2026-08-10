@@ -290,7 +290,7 @@ describe("revisionActivity", () => {
       [draft({ id: 11, revision: 2 }), draft({ id: 12, revision: 1 })],
       2,
     );
-    // unresolved excludes the resolved thread; the rev-1 thread/draft are out.
+    // unresolved excludes the resolved thread; the revision-1 thread/draft are out.
     expect(a).toEqual({ threads: 2, drafts: 1, unresolved: 1 });
   });
 

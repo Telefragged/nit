@@ -22,7 +22,7 @@ pub(super) async fn create_draft(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let proj = entry.read();
-        let rev = proj
+        let revision = proj
             .revision(req.revision)
             .ok_or_else(|| Error::bad_request(format!("revision {} not found", req.revision)))?;
         let (side, line, range) =
@@ -43,7 +43,7 @@ pub(super) async fn create_draft(
             None => None,
         };
         let git_dir = state.git_dir(proj.repo_id)?;
-        let line_text = snapshot_line_text(&git_dir, rev, req.file.as_deref(), line, side);
+        let line_text = snapshot_line_text(&git_dir, revision, req.file.as_deref(), line, side);
         drop(proj);
         let draft_id = state.alloc_id();
         let row = db::insert_draft(

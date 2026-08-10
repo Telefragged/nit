@@ -462,14 +462,14 @@ pub fn replay(
 // server's change endpoint and the WebAssembly fold.
 
 #[must_use]
-pub fn revision_view(rev: &RevisionProjection) -> Revision {
+pub fn revision_view(revision: &RevisionProjection) -> Revision {
     Revision {
-        number: rev.number,
-        commit_sha: rev.commit_sha.clone(),
-        parent_sha: rev.parent_sha.clone(),
-        fork_sha: rev.fork_sha.clone(),
-        message: rev.message.clone(),
-        created_at: rev.created_at.clone(),
+        number: revision.number,
+        commit_sha: revision.commit_sha.clone(),
+        parent_sha: revision.parent_sha.clone(),
+        fork_sha: revision.fork_sha.clone(),
+        message: revision.message.clone(),
+        created_at: revision.created_at.clone(),
     }
 }
 

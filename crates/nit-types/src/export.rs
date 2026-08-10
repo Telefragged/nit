@@ -14,7 +14,7 @@ fn write_wire_types() {
     let Some(path) = std::env::var_os("TYPES_GEN_OUT") else {
         return;
     };
-    let cfg = Config::from_env();
+    let config = Config::from_env();
     let mut out = String::from(
         "// @generated from crates/nit-types by `nix run .#gen-types` — DO NOT EDIT.\n\
          // Change the Rust wire types, then regenerate.\n\n",
@@ -25,7 +25,7 @@ fn write_wire_types() {
                 out.push_str(&docs);
             }
             out.push_str("export ");
-            out.push_str(&<$t as TS>::decl(&cfg));
+            out.push_str(&<$t as TS>::decl(&config));
             out.push_str("\n\n");
         })*};
     }

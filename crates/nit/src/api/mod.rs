@@ -304,18 +304,18 @@ fn validate_anchor(
 
 fn snapshot_line_text(
     git_dir: &str,
-    rev: &review::RevisionProjection,
+    revision: &review::RevisionProjection,
     file: Option<&str>,
     line: Option<u64>,
     side: Side,
 ) -> Option<String> {
     match (file, line) {
-        (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&rev.message, line),
+        (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&revision.message, line),
         (Some(file), Some(line)) => {
             let sha = if side == Side::Old {
-                &rev.parent_sha
+                &revision.parent_sha
             } else {
-                &rev.commit_sha
+                &revision.commit_sha
             };
             Repository::open(git_dir).ok().and_then(|repo| {
                 diff::commit_tree(&repo, sha).and_then(|t| diff::line_text(&repo, &t, file, line))

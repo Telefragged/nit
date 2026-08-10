@@ -52,8 +52,8 @@ impl RepoView {
         let mut index = HashMap::new();
         let mut map = HashMap::new();
         for c in changes {
-            for rev in &c.revisions {
-                index.insert(rev.commit_sha.clone(), (c.id, rev.number));
+            for revision in &c.revisions {
+                index.insert(revision.commit_sha.clone(), (c.id, revision.number));
             }
             map.insert(c.id, c);
         }
@@ -148,13 +148,13 @@ impl RepoView {
                 revision: number,
                 commit_sha: sha.clone(),
             });
-            let Some(rev) = self.change(change_id).and_then(|c| c.revision(number)) else {
+            let Some(revision) = self.change(change_id).and_then(|c| c.revision(number)) else {
                 break;
             };
-            if rev.parent_sha == rev.fork_sha || self.is_merged(&rev.parent_sha) {
+            if revision.parent_sha == revision.fork_sha || self.is_merged(&revision.parent_sha) {
                 break;
             }
-            sha.clone_from(&rev.parent_sha);
+            sha.clone_from(&revision.parent_sha);
         }
         path.reverse();
         path
@@ -312,7 +312,7 @@ mod tests {
 
     use crate::fold::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
 
-    fn rev(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
+    fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
         RevisionProjection {
             number,
             commit_sha: sha.to_string(),
@@ -334,15 +334,15 @@ mod tests {
     /// revisions, surfaced as two tips/chains.
     #[test]
     fn b_in_two_chains() {
-        let ca = change(10, "Ia", vec![rev(0, "A", "m", "m")]);
+        let ca = change(10, "Ia", vec![revision(0, "A", "m", "m")]);
         let cb = change(
             11,
             "Ib",
-            vec![rev(0, "B", "A", "m"), rev(1, "Bp", "D", "m")],
+            vec![revision(0, "B", "A", "m"), revision(1, "Bp", "D", "m")],
         );
-        let cc = change(12, "Ic", vec![rev(0, "C", "B", "m")]);
-        let cd = change(13, "Id", vec![rev(0, "D", "m", "m")]);
-        let ce = change(14, "Ie", vec![rev(0, "E", "Bp", "m")]);
+        let cc = change(12, "Ic", vec![revision(0, "C", "B", "m")]);
+        let cd = change(13, "Id", vec![revision(0, "D", "m", "m")]);
+        let ce = change(14, "Ie", vec![revision(0, "E", "Bp", "m")]);
         let view = RepoView::new(vec![ca, cb, cc, cd, ce]);
 
         assert_eq!(view.tips(), vec!["C".to_string(), "E".to_string()]);
@@ -370,9 +370,9 @@ mod tests {
         // A → B forked from "m"; A has since merged. The walk stops at
         // the canonical ref, so B's path is the open member alone — the
         // merged ancestor sits below the branch now, not in the chain.
-        let mut a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);
+        let mut a = change(1, "Ia", vec![revision(0, "A", "m", "m")]);
         a.lifecycle = Lifecycle::Merged;
-        let b = change(2, "Ib", vec![rev(0, "B", "A", "m")]);
+        let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
         let view = RepoView::new(vec![a, b]);
 
         let path: Vec<u64> = view
@@ -392,9 +392,9 @@ mod tests {
 
     #[test]
     fn prefix_branch_is_subsumed() {
-        let a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);
-        let b = change(2, "Ib", vec![rev(0, "B", "A", "m")]);
-        let c = change(3, "Ic", vec![rev(0, "C", "B", "m")]);
+        let a = change(1, "Ia", vec![revision(0, "A", "m", "m")]);
+        let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
+        let c = change(3, "Ic", vec![revision(0, "C", "B", "m")]);
         let view = RepoView::new(vec![a, b, c]);
         assert_eq!(view.tips(), vec!["C".to_string()]);
     }
@@ -404,15 +404,15 @@ mod tests {
         // The b_in_two_chains topology: B is one change at two revisions under
         // two live tips. Open nodes dedupe by sha, so B@rev0 (sha "B") and
         // B@rev1 (sha "Bp") are two nodes — different commits, different parents.
-        let ca = change(10, "Ia", vec![rev(0, "A", "m", "m")]);
+        let ca = change(10, "Ia", vec![revision(0, "A", "m", "m")]);
         let cb = change(
             11,
             "Ib",
-            vec![rev(0, "B", "A", "m"), rev(1, "Bp", "D", "m")],
+            vec![revision(0, "B", "A", "m"), revision(1, "Bp", "D", "m")],
         );
-        let cc = change(12, "Ic", vec![rev(0, "C", "B", "m")]);
-        let cd = change(13, "Id", vec![rev(0, "D", "m", "m")]);
-        let ce = change(14, "Ie", vec![rev(0, "E", "Bp", "m")]);
+        let cc = change(12, "Ic", vec![revision(0, "C", "B", "m")]);
+        let cd = change(13, "Id", vec![revision(0, "D", "m", "m")]);
+        let ce = change(14, "Ie", vec![revision(0, "E", "Bp", "m")]);
         let view = RepoView::new(vec![ca, cb, cc, cd, ce]);
 
         let mut shas: Vec<String> = view
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn state_is_derived_from_members() {
-        let mut a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);
+        let mut a = change(1, "Ia", vec![revision(0, "A", "m", "m")]);
         a.reviews.push(ReviewProjection {
             id: 100,
             revision: 0,
@@ -472,7 +472,7 @@ mod tests {
             message: String::new(),
             created_at: "t1".to_string(),
         });
-        let b = change(2, "Ib", vec![rev(0, "B", "A", "m")]);
+        let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
         let view = RepoView::new(vec![a, b]);
         let path = view.path_from_tip("B");
         assert_eq!(derive_state(&view, &path), ChainState::WaitingForReview);

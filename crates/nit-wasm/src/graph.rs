@@ -98,7 +98,7 @@ mod tests {
     use nit_types::fold::{ChangeProjection, RevisionProjection};
     use nit_types::graph::HistoryCommit;
 
-    fn rev(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
+    fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
         RevisionProjection {
             number,
             commit_sha: sha.to_string(),
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn open_fork_behind_head_orders_above_anchor_and_keeps_its_base() {
-        let topic = change(1, "It", vec![rev(0, "T", "c1", "c1")]);
+        let topic = change(1, "It", vec![revision(0, "T", "c1", "c1")]);
         let view = RepoView::new(vec![topic]);
         let history = RepoHistory {
             commits: vec![
@@ -164,8 +164,8 @@ mod tests {
     // dedupes away, and truncation is the history's flag.
     #[test]
     fn history_enrichment_and_truncation_ride_through() {
-        let a = change(1, "Ia", vec![rev(0, "A", "h", "h")]);
-        let b = change(2, "Ib", vec![rev(0, "B", "A", "h")]);
+        let a = change(1, "Ia", vec![revision(0, "A", "h", "h")]);
+        let b = change(2, "Ib", vec![revision(0, "B", "A", "h")]);
         let view = RepoView::new(vec![a, b]);
         let merged = HistoryCommit {
             change_id: Some(9),

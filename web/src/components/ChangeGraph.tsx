@@ -143,7 +143,7 @@ function GraphRow({
           <span className="graph-plain-status">merged</span>
         )}
       </div>
-      <div className="graph-cell-rev mono">
+      <div className="graph-cell-revision mono">
         {isOpen && node.revision !== null ? `r${node.revision}` : ""}
       </div>
       <div className="graph-cell-activity">

@@ -225,15 +225,15 @@ function pathEntry(
   member: { change: ChangeRecord; revision: Revision },
   position: number,
 ): PathEntry {
-  const { change: c, revision: rev } = member;
+  const { change: c, revision } = member;
   return {
     change_id: c.id,
     position,
     change_key: c.change_key,
-    revision: rev.number,
-    status: statusAt(c, rev.number),
+    revision: revision.number,
+    status: statusAt(c, revision.number),
     subject: c.subject,
-    commit_sha: rev.commit_sha,
+    commit_sha: revision.commit_sha,
   };
 }
 
@@ -276,19 +276,19 @@ function chainView(tip: TipRecord): Chain {
  * that extends through it (the full chain), not a 404. */
 function resolveTip(
   changeId: number,
-  revision?: number,
+  requested?: number,
 ): TipRecord | undefined {
   const c = changes.find((x) => x.id === changeId);
   if (!c) return undefined;
-  const rev = revision ?? latestRevision(c).number;
+  const revision = requested ?? latestRevision(c).number;
   for (const tip of tips) {
     const member = derivePath(tip).find((e) => e.change_id === changeId);
-    if (member?.revision === rev) return tip;
+    if (member?.revision === revision) return tip;
   }
   return {
     tip_change_id: changeId,
     repo_id: c.repo_id,
-    revision: rev,
+    revision,
     active: !c.terminal,
   };
 }
@@ -533,12 +533,12 @@ export async function mockRequest(
     method === "GET"
   ) {
     const c = getChange(Number(m[1]));
-    const revision = Number(m[2]);
+    const number = Number(m[2]);
     const against = q.has("against") ? Number(q.get("against")) : undefined;
-    const rev = c.revisions.find((r) => r.number === revision);
-    if (!rev) notFound(`revision ${revision}`);
-    const diff = c.diffs[diffKey(revision, against)];
-    if (!diff) return notFound(`diff for revision ${revision}`);
+    const revision = c.revisions.find((r) => r.number === number);
+    if (!revision) notFound(`revision ${number}`);
+    const diff = c.diffs[diffKey(number, against)];
+    if (!diff) return notFound(`diff for revision ${number}`);
     // Fill the EOF anchor the wire shape carries but ./data omits.
     const files = diff.files.map((f) => ({ ...f, new_total: newSideEnd(f) }));
     return structuredClone({ files });

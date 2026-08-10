@@ -54,7 +54,7 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
     );
 }
 
-/// An amend (same Change-Id, new sha) appends a second revision (rev 1); a
+/// An amend (same Change-Id, new sha) appends a second revision (revision 1); a
 /// re-push with nothing moved is idempotent and adds no entry.
 #[test]
 fn amend_appends_a_revision_idempotent_repush_does_not() {
@@ -73,7 +73,7 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
     assert!(ok, "{stderr}");
     assert!(
         push.as_str().is_some_and(|d| d.contains("r1")),
-        "amend is rev 1: {push}"
+        "amend is revision 1: {push}"
     );
 
     let (ok, log, stderr) = nit(&server, &g, &["log"]);

@@ -1,6 +1,6 @@
 //! `nit push` — register a commit for review via `POST /api/push`.
 //!
-//! The cwd's checked-out commit, or an explicit rev.
+//! The cwd's checked-out commit, or an explicit revision.
 
 use anyhow::Result;
 
@@ -13,14 +13,14 @@ use super::git::{discover_repo, resolve_tip};
 
 #[derive(clap::Args)]
 pub struct PushArgs {
-    /// The commit to push: any rev (sha, tag, branch). Defaults to the
+    /// The commit to push: any revision (sha, tag, branch). Defaults to the
     /// checked-out commit (HEAD) of the cwd — a detached HEAD or tag included.
     pub commit: Option<String>,
     #[command(flatten)]
     pub server: ServerOpt,
 }
 
-/// Pushes the cwd's checked-out commit (or an explicit rev) for review.
+/// Pushes the cwd's checked-out commit (or an explicit revision) for review.
 ///
 /// Idempotent. The repo must already be registered (`nit repo create`). The
 /// canonical ref comes from the registered repo, so no base is sent. Prints
@@ -29,7 +29,7 @@ pub struct PushArgs {
 ///
 /// # Errors
 ///
-/// When the cwd is not a git repo, the rev can't be resolved, the server is
+/// When the cwd is not a git repo, the revision can't be resolved, the server is
 /// unreachable, or the push is rejected (including an unregistered repo).
 pub fn push(args: PushArgs) -> Result<()> {
     let (git_dir, repo) = discover_repo()?;

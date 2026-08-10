@@ -280,8 +280,8 @@ pub fn canonical_history(
 
 /// The keep-ref maintenance for one change's revisions — idempotent.
 pub fn maintain_keep_refs(repo: &Repository, change: &ChangeProjection) {
-    for rev in &change.revisions {
-        objects::ensure_keep_ref(repo, change.id, rev.number, &rev.commit_sha);
+    for revision in &change.revisions {
+        objects::ensure_keep_ref(repo, change.id, revision.number, &revision.commit_sha);
     }
 }
 
