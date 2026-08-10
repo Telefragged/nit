@@ -99,10 +99,10 @@ Drive the loop with the `lifecycle` skill. When feedback arrives, refine by
 amending the plan commit and pushing again; reply on each thread and resolve it.
 
 When the chain reaches **`approved`** and your questions are resolved, the plan
-is signed off — and here "signed off" means **implement it**, not land it. This
-is the one place the usual "approved → land" reflex (the `lifecycle`/`land`
+is signed off — and here "signed off" means **implement it**, not merge it. This
+is the one place the usual "approved → merge" reflex (the `lifecycle`/`merge`
 default) is **wrong**: a plan is a design artifact, not a shippable change.
-**Never run the approve action / `land.sh` on a plan chain.** Landing the plan
+**Never run the approve action / `merge.sh` on a plan chain.** Landing the plan
 by itself drops a half-finished unit onto `main` and marks the plan change
 `merged` in nit — which has no unmerge, so you're left hand-resetting `main` to
 dig back out.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The approve action: land an approved nit chain onto main. Run from the
+# The approve action: merge an approved nit chain onto main. Run from the
 # chain's worktree once `nit status` reports the chain `approved`.
 #
 # Rebases onto main if main moved, runs `nix flake check` on every commit,
@@ -7,11 +7,11 @@
 # The happy path prints one line per step; any failure prints git's own output
 # plus what to do next, then exits non-zero.
 #
-# Usage: nix develop -c scripts/land.sh     (from inside .worktrees/<slug>)
+# Usage: nix develop -c scripts/merge.sh     (from inside .worktrees/<slug>)
 #
 # Covers the no-conflict case. A rebase that stops on a merge conflict, or a
 # commit that fails the checks, hands you the repo mid-rebase to fix and
-# continue — see the `land` skill.
+# continue — see the `merge` skill.
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ base=main
 cd "$(git rev-parse --show-toplevel)"
 
 if git merge-base --is-ancestor HEAD "$base"; then
-  echo "HEAD is already on $base — nothing to land" >&2
+  echo "HEAD is already on $base — nothing to merge" >&2
   exit 1
 fi
 

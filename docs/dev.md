@@ -55,7 +55,7 @@ rewritten commit after a rebase:
 
 ```sh
 git rebase -x 'nix develop -c treefmt && if ! git diff --quiet; then git commit -a --amend --no-edit; fi' \
-  "$(git merge-base main HEAD)"    # when landing: onto main instead
+  "$(git merge-base main HEAD)"    # when merging: onto main instead
 ```
 
 Two edges: don't run a bare treefmt before amending a checked-out historic
@@ -118,20 +118,20 @@ catches a skew and gives you the gallery in `result/`.
   Address the worktree explicitly — absolute paths,
   `cargo --manifest-path <worktree>/crates/nit/Cargo.toml`,
   `git -C <worktree>` — never an ambient cwd, which may have drifted back
-  to the primary checkout. Commit there, drive the review loop, land via
+  to the primary checkout. Commit there, drive the review loop, merge via
   the approve action, then `git worktree remove .worktrees/<slug>` and
   `git branch -d track/<slug>`.
 
 - **Parallel chains stay independent**: never pre-merge in-flight branches
   into a shared integration branch — each is built and reviewed on its own,
-  conflicts resolved only as each lands. (Rebasing one in-flight branch
+  conflicts resolved only as each merges. (Rebasing one in-flight branch
   onto a moved `main` is fine.)
 
-## Landing changes — the nit review loop
+## Merging changes — the nit review loop
 
 This repo dogfoods nit: push finished work as a chain, a human reviews it,
-and the approve action — `nix develop -c scripts/land.sh`, the `land`
-skill — lands it on `main` (rebase if `main` moved, `nix flake check` on
+and the approve action — `nix develop -c scripts/merge.sh`, the `merge`
+skill — merges it onto `main` (rebase if `main` moved, `nix flake check` on
 every commit, fast-forward merge; the lifecycle timer then marks the chain
 `merged`). Drive the loop with the `nit:lifecycle` skill, all the way to
 `merged`. Run the `nit` CLI from the build that matches the running server
@@ -142,7 +142,7 @@ your branch's binary.
 
 Golden rule 6 is the default: every change runs through nit, in a worktree,
 regardless of size. The only exits are an explicit, up-front "skip nit" /
-"land directly" from the user for that change, or a standing entry below.
+"merge directly" from the user for that change, or a standing entry below.
 
 Standing exemptions (same discipline, still green):
 

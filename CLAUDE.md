@@ -13,9 +13,9 @@ identity across rewrites. Product spec: `nit.md`.
 2. **Small, single-purpose commits**, one concern each, with the message
    **hard-wrapped at 72 columns** — a one-line subject, then a body of
    72-column-wrapped prose, never a single long line (docs/dev.md "Commit &
-   branch discipline"). No merge commits — an approved chain lands via the
-   approve action, rebase + fast-forward only (the `land` skill,
-   `scripts/land.sh`).
+   branch discipline"). No merge commits — an approved chain merges via the
+   approve action, rebase + fast-forward only (the `merge` skill,
+   `scripts/merge.sh`).
 3. **Every commit treefmt-clean** — `nix develop -c treefmt` before each
    commit, and re-format every rewritten commit after a rebase (not just
    the tip), especially after conflict resolution (docs/dev.md
@@ -28,12 +28,12 @@ identity across rewrites. Product spec: `nit.md`.
 5. **To see the UI, render it**:
    `cd web && nix develop -c npm run screenshots`, then Read
    `screenshots/*.png`.
-6. **Changes land through nit itself — the default for _every_ change
+6. **Changes merge through nit itself — the default for _every_ change
    unless the user says otherwise.** Start in a worktree (`.worktrees/<slug>`
    on a `track/<slug>` branch), then drive the review loop with the
    `nit:lifecycle` skill. Size, triviality, or "it's self-contained" never
    lower the bar — a one-line docs fix takes the same path as a feature.
-   Direct-to-main requires an explicit, up-front "skip nit" / "land
+   Direct-to-main requires an explicit, up-front "skip nit" / "merge
    directly" from the user (or a docs/dev.md exemption); it is never a call
    you make yourself, and never a label you apply after the fact to work
    already started on `main`. When in doubt, worktree.
@@ -75,6 +75,6 @@ identity across rewrites. Product spec: `nit.md`.
 - `web/` — React/TS SPA (Vite)
 - `docs/` — read the one you need:
   - `dev.md` — verification, formatting, screenshot harness, testing,
-    commit discipline, landing
+    commit discipline, merging
   - `design-review-guide.md` — design anti-patterns to catch when reviewing
     code, with bad-vs-good examples — read before a design review
