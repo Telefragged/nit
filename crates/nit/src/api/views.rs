@@ -8,9 +8,10 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-use nit_types::changes::{ChangeDetail, ChangeDrafts, DraftDecision};
-use nit_types::comments::Draft;
+use nit_types::changes::{ChangeDetail, ChangeDrafts};
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::Draft;
+use nit_types::domain::DraftDecision;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Sha;
 use nit_types::domain::{Chain, PathEntry};

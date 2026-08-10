@@ -6,8 +6,9 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 
-use nit_types::comments::{Draft, EditDraft, NewDraft};
+use nit_types::comments::{EditDraft, NewDraft};
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::Draft;
 
 use crate::db;
 

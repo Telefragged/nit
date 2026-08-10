@@ -2,13 +2,15 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::comments::{Draft, Thread};
+use crate::comments::Thread;
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
 use crate::domain::ChangeProjection;
+use crate::domain::Draft;
+use crate::domain::DraftDecision;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
-use crate::domain::{Decision, Verdict};
+use crate::domain::Verdict;
 
 /// The `GET /api/changes` response: matching changes as folded projections.
 ///
@@ -51,18 +53,6 @@ pub struct ChangeDetail {
 pub struct ChangeDrafts {
     pub drafts: Vec<Draft>,
     pub draft_decision: Option<DraftDecision>,
-}
-
-/// A reviewer's draft decision plus its cover note/reason.
-///
-/// The body of [`ChangeDetail::draft_decision`] and the
-/// `PUT /api/changes/{id}/decision` request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct DraftDecision {
-    pub decision: Decision,
-    #[serde(default)]
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

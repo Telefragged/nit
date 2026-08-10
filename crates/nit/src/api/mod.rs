@@ -41,8 +41,8 @@ use git2::Repository;
 use serde::Deserialize;
 
 use nit_types::changes::ChangeDetail;
-use nit_types::comments::CommentRange;
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::CommentRange;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::{Sha, Side};

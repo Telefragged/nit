@@ -341,7 +341,7 @@ export type Review = {
 /**
  * A reviewer's draft decision plus its cover note/reason.
  *
- * The body of [`ChangeDetail::draft_decision`] and the
+ * The body of a change detail's `draft_decision` and of the
  * `PUT /api/changes/{id}/decision` request.
  */
 export type DraftDecision = { decision: Decision; message: string };

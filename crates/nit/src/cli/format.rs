@@ -8,10 +8,11 @@ use std::collections::HashMap;
 use anyhow::{Result, bail};
 
 use nit_types::changes::ChangeDetail;
-use nit_types::comments::{CommentRange, Thread};
+use nit_types::comments::Thread;
 use nit_types::domain::Chain;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::CommentRange;
 use nit_types::domain::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
@@ -401,7 +402,7 @@ mod tests {
 
     #[test]
     fn log_render_review_and_revision() {
-        use nit_types::comments::CommentRange;
+        use nit_types::domain::CommentRange;
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         use nit_types::domain::{Side, Verdict};
         let entry = |change_id, position, sequence, payload| LogEntry {

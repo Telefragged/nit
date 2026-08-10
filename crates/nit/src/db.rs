@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
-use nit_types::comments::CommentRange;
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::CommentRange;
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha, Side};
 use rusqlite::{Connection, OptionalExtension, params};
 

@@ -8,9 +8,9 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 
-use nit_types::changes::DraftDecision;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::DraftDecision;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::{CommentInput, LogPayload, ReviewPayload};
 use nit_types::domain::{Decision, LifecycleAction, Verdict};

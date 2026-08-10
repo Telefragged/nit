@@ -2,7 +2,8 @@
 
 use anyhow::{Context, Result, anyhow};
 
-use nit_types::comments::{CommentRange, NewComment, Thread};
+use nit_types::comments::{NewComment, Thread};
+use nit_types::domain::CommentRange;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Side;
 

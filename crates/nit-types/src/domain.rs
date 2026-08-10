@@ -38,6 +38,9 @@
 //! **Comment** — one message in a thread. A reviewer's is published by a
 //! review; an author's stands on its own.
 //!
+//! **Draft** — a comment or a decision the reviewer has written but not
+//! published; private to them until a review publishes it.
+//!
 //! # What happens
 //!
 //! **Push** — an author offering the current tip for review. Nothing is

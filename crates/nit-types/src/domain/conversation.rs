@@ -3,9 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::ChangeNumber;
 use super::CommentInput;
+use super::Decision;
 use super::RevisionNumber;
-use crate::comments::CommentRange;
 
 /// Which tree of a revision a line comment is anchored to.
 ///
@@ -120,4 +121,54 @@ pub struct ThreadComment {
     pub body: String,
     pub review_id: Option<u64>,
     pub created_at: String,
+}
+
+/// Selected-text anchor of a line comment.
+///
+/// 1-based lines on the comment's side, 0-based chars, `end_char`
+/// exclusive, `end_line` = the comment's `line`. The JSON shape is these
+/// four fields. They are domain coordinates (always non-negative), so the
+/// shape is `u64`; the server's `SQLite` columns are signed, converted at
+/// the db boundary like every other id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommentRange {
+    pub start_line: u64,
+    pub start_char: u64,
+    pub end_line: u64,
+    pub end_char: u64,
+}
+
+/// A reviewer's unpublished comment.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Draft {
+    pub id: u64,
+    pub change_id: ChangeNumber,
+    pub thread_id: Option<u64>,
+    /// The request's anchor revision; only a new thread uses it.
+    pub revision: RevisionNumber,
+    pub file: Option<String>,
+    pub line: Option<u64>,
+    pub side: Side,
+    pub range: Option<CommentRange>,
+    pub line_text: Option<String>,
+    /// May be empty for a resolution-only reply draft.
+    pub body: String,
+    /// The draft's thread-resolution decision (false when unset).
+    pub resolved: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A reviewer's draft decision plus its cover note/reason.
+///
+/// The body of a change detail's `draft_decision` and of the
+/// `PUT /api/changes/{id}/decision` request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DraftDecision {
+    pub decision: Decision,
+    #[serde(default)]
+    pub message: String,
 }

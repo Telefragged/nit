@@ -3,11 +3,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::ChangeNumber;
+use super::CommentRange;
 use super::RevisionNumber;
 use super::Sha;
 use super::Side;
 use super::Verdict;
-use crate::comments::CommentRange;
 
 /// The kind of one log entry.
 ///

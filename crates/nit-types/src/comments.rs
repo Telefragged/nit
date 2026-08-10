@@ -1,27 +1,12 @@
-//! Comment threads, reviewer drafts, and the selected-text range anchor
-//! they share.
+//! The comment endpoints' shapes: a published thread and the requests
+//! that write one.
 
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeNumber;
+use crate::domain::CommentRange;
 use crate::domain::RevisionNumber;
 use crate::domain::Side;
-
-/// Selected-text anchor of a line comment.
-///
-/// 1-based lines on the comment's side, 0-based chars, `end_char`
-/// exclusive, `end_line` = the comment's `line`. The JSON shape is these
-/// four fields. They are domain coordinates (always non-negative), so the
-/// shape is `u64`; the server's `SQLite` columns are signed, converted at
-/// the db boundary like every other id.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct CommentRange {
-    pub start_line: u64,
-    pub start_char: u64,
-    pub end_line: u64,
-    pub end_char: u64,
-}
 
 /// A published comment thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,28 +40,6 @@ pub struct ThreadComment {
     /// separate `author`.
     pub review_id: Option<u64>,
     pub created_at: String,
-}
-
-/// A reviewer's unpublished comment.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct Draft {
-    pub id: u64,
-    pub change_id: ChangeNumber,
-    pub thread_id: Option<u64>,
-    /// The request's anchor revision; only a new thread uses it.
-    pub revision: RevisionNumber,
-    pub file: Option<String>,
-    pub line: Option<u64>,
-    pub side: Side,
-    pub range: Option<CommentRange>,
-    pub line_text: Option<String>,
-    /// May be empty for a resolution-only reply draft.
-    pub body: String,
-    /// The draft's thread-resolution decision (false when unset).
-    pub resolved: bool,
-    pub created_at: String,
-    pub updated_at: String,
 }
 
 /// `POST /api/changes/{id}/drafts` request.
