@@ -2,11 +2,11 @@
 
 Commit-level code review for AI coding agents.
 
-Agents register a branch; you review each commit gerrit-style — draft line
+Agents register a chain; you review each commit gerrit-style — draft line
 comments, approve or request changes; agents resume on your feedback,
 amend the reviewed commit in place and push again — the `Change-Id:`
 trailer keeps its identity, the rewrite becomes a new revision. Merged or
-abandoned branches drop off the dashboard on their own.
+abandoned chains drop off the dashboard on their own.
 
 ## Run
 
@@ -23,7 +23,7 @@ nit --version        # client + server build; non-zero exit if the server is dow
 Agent loop (any tool that can run shell commands):
 
 ```sh
-nit push             # register current branch for review
+nit push             # register the current chain for review
 nit wait             # block until the reviewer acts; prints feedback JSON
 # fix → amend the commit (keep its Change-Id) → nit push → nit wait → …
 # all approved → merge; chain disappears
