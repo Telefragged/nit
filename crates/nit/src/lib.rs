@@ -2,7 +2,7 @@
 //!
 //! Library surface for the `nit` binary and its tests:
 //!
-//! - [`nit_types::enums`] — the shared closed vocabularies (sides, verdicts,
+//! - [`nit_types::domain`] — the shared closed vocabularies (sides, verdicts,
 //!   statuses, kinds): one serde enum per fixed value set, used by the domain,
 //!   the wire, and the CLI alike (never a `String`).
 //! - [`db`] — `SQLite` persistence: open/migrate, typed rows, query helpers;

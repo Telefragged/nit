@@ -10,7 +10,7 @@ use std::time::Duration;
 use git2::Repository;
 use rusqlite::Connection;
 
-use nit_types::enums::LifecycleAction;
+use nit_types::domain::LifecycleAction;
 use nit_types::log::LogPayload;
 
 use crate::db;

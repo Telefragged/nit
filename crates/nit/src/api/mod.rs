@@ -42,7 +42,7 @@ use serde::Deserialize;
 
 use nit_types::changes::ChangeDetail;
 use nit_types::comments::CommentRange;
-use nit_types::enums::Side;
+use nit_types::domain::Side;
 use nit_types::health::Health;
 
 use crate::review;

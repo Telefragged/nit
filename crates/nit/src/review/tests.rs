@@ -1,4 +1,4 @@
-use nit_types::enums::{ChangeStatus, Verdict};
+use nit_types::domain::{ChangeStatus, Verdict};
 use nit_types::log::{LogPayload, ReviewPayload, RevisionPayload};
 
 use super::*;

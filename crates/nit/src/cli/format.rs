@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn entry_summary_digests_each_kind() {
-        use nit_types::enums::{LifecycleAction, Verdict};
+        use nit_types::domain::{LifecycleAction, Verdict};
         use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let entry = |payload| LogEntry {
             change_id: 7,
@@ -386,7 +386,7 @@ mod tests {
     #[test]
     fn log_render_review_and_revision() {
         use nit_types::comments::CommentRange;
-        use nit_types::enums::{Side, Verdict};
+        use nit_types::domain::{Side, Verdict};
         use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let entry = |change_id, idx, seq, payload| LogEntry {
             change_id,
@@ -484,7 +484,7 @@ mod tests {
     #[test]
     fn chain_digest_aligns_columns_and_headers() {
         use nit_types::chains::PathEntry;
-        use nit_types::enums::{ChainState, ChangeStatus};
+        use nit_types::domain::{ChainState, ChangeStatus};
         let member = |change_id, position, key: &str, status, revision, subject: &str| PathEntry {
             change_id,
             position,

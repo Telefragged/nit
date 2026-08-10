@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::Side;
+use crate::domain::Side;
 
 /// Selected-text anchor of a line comment.
 ///

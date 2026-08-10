@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::{ChangeStatus, GraphSection};
+use crate::domain::{ChangeStatus, GraphSection};
 
 /// One commit of the canonical branch's merged history.
 ///

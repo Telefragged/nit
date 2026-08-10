@@ -44,7 +44,7 @@ use git2::{Oid, Repository, Tree};
 use imara_diff::InternedInput;
 
 use nit_types::diff::{Diff, Line};
-use nit_types::enums::LineKind;
+use nit_types::domain::LineKind;
 
 use super::diff;
 

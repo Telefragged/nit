@@ -8,7 +8,7 @@ use rusqlite::Connection;
 
 use nit_types::changes::{AbandonRequest, ChangeDetail};
 use nit_types::comments::{NewComment, Thread};
-use nit_types::enums::LifecycleAction;
+use nit_types::domain::LifecycleAction;
 use nit_types::log::{CommentInput, LogPayload};
 
 use crate::review::{self, Lifecycle};

@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::enums::{ChainState, ChangeStatus};
+use crate::domain::{ChainState, ChangeStatus};
 
 use crate::fold::ChangeProj;
 
@@ -308,7 +308,7 @@ pub fn graph_row_order(nodes: &[(String, Vec<String>)]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enums::Verdict;
+    use crate::domain::Verdict;
 
     use crate::fold::{ChangeProj, Lifecycle, ReviewProj, RevisionProj};
 

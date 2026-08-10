@@ -12,7 +12,7 @@ use git2::{Delta, Repository, Tree};
 use imara_diff::{Algorithm, InternedInput};
 
 use nit_types::diff::{Diff, DiffFile, Hunk, Line};
-use nit_types::enums::{FileStatus, LineKind};
+use nit_types::domain::{FileStatus, LineKind};
 
 /// The reserved synthetic diff path for the revision's commit message.
 ///

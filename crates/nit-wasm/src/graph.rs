@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use nit_types::chain::{self, RepoView};
-use nit_types::enums::{ChangeStatus, GraphSection};
+use nit_types::domain::{ChangeStatus, GraphSection};
 use nit_types::graph::{GraphNode, RepoGraph, RepoHistory};
 
 /// Assembles the spine-centered DAG from a repo view and its merged history.

@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::changes::{ChangeDetail, Review, Revision};
 use crate::comments::{CommentRange, Thread};
-use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
+use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
 use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
 /// A change's terminal lifecycle, folded from its `lifecycle` entries.
@@ -539,7 +539,7 @@ pub fn change_detail(change: &ChangeProj) -> ChangeDetail {
 
 #[cfg(test)]
 mod tests {
-    use crate::enums::{ChangeStatus, LifecycleAction, Side, Verdict};
+    use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
     use crate::log::ReviewPayload;
 
     use super::*;

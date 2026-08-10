@@ -11,7 +11,7 @@
 
 use anyhow::{Result, anyhow};
 
-use nit_types::enums::LogKind;
+use nit_types::domain::LogKind;
 use nit_types::log::{LogEntry, LogPayload};
 
 use crate::db;

@@ -10,7 +10,7 @@ use axum::http::StatusCode;
 
 use nit_types::changes::StagedDecision;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
-use nit_types::enums::{Decision, LifecycleAction, Verdict};
+use nit_types::domain::{Decision, LifecycleAction, Verdict};
 use nit_types::log::{CommentInput, LogPayload, ReviewPayload};
 
 use crate::db;

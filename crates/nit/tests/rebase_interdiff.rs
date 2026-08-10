@@ -18,7 +18,7 @@ use git2::Oid;
 use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, git_diff, render};
 use nit::api::rebase::{Rev, analyze};
 use nit_types::diff::{Diff, DiffFile};
-use nit_types::enums::{FileStatus, LineKind};
+use nit_types::domain::{FileStatus, LineKind};
 
 fn body<S: std::borrow::Borrow<str>>(lines: &[S]) -> Vec<u8> {
     let mut s = lines.join("\n");

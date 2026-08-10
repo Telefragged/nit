@@ -22,7 +22,7 @@ pub mod changes;
 pub mod comments;
 pub mod decisions;
 pub mod diff;
-pub mod enums;
+pub mod domain;
 pub mod error;
 pub mod events;
 pub mod fold;

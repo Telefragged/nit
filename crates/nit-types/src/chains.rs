@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::{ChainState, ChangeStatus};
+use crate::domain::{ChainState, ChangeStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainList {

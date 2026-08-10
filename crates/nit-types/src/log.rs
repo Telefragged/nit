@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::comments::CommentRange;
-use crate::enums::{LifecycleAction, LogKind, Side, Verdict};
+use crate::domain::{LifecycleAction, LogKind, Side, Verdict};
 
 /// A `revision` entry: one new commit-sha observed for this change.
 ///

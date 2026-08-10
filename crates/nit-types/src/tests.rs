@@ -2,7 +2,7 @@
 //! optional features — exercising the serde-only baseline that an optional
 //! feature (clap, ts) would otherwise mask.
 
-use crate::enums::{LifecycleAction, Side};
+use crate::domain::{LifecycleAction, Side};
 use crate::log::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
 fn revision_entry() -> LogEntry {

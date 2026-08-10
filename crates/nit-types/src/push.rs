@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::ChangeStatus;
+use crate::domain::ChangeStatus;
 
 /// `POST /api/push` request (this is `nit push`).
 ///

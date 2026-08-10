@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, anyhow};
 
 use nit_types::comments::{CommentRange, NewComment, Thread};
-use nit_types::enums::Side;
+use nit_types::domain::Side;
 
 use super::client::{Client, ServerOpt, server_url};
 use super::format::{ChangeTarget, print_comment};

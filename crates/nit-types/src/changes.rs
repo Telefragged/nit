@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::comments::{Draft, Thread};
-use crate::enums::{Decision, Verdict};
+use crate::domain::{Decision, Verdict};
 use crate::fold::ChangeProj;
 
 /// The `GET /api/changes` response: matching changes as folded projections.

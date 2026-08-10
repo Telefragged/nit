@@ -7,7 +7,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 
 use nit_types::chains::Chain;
-use nit_types::enums::LifecycleAction;
+use nit_types::domain::LifecycleAction;
 use nit_types::events::StreamMsg;
 use nit_types::log::{ChainLog, LogEntry, LogPayload};
 
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn reviewer_only_mutes_agent_echoes_and_auto_merge() {
-        use nit_types::enums::Verdict;
+        use nit_types::domain::Verdict;
         use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let muted = |payload| {
             muted_by_reviewer_only(&LogEntry {

@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList};
 use nit_types::diff::{Diff, FileLines};
-use nit_types::enums::ChangeStatus;
+use nit_types::domain::ChangeStatus;
 
 use crate::review;
 

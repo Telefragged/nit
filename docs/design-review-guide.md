@@ -178,7 +178,7 @@ fn fold(change, mut entry: LogEntry) -> LogEntry { match &mut entry.payload { ..
 a convention:
 
 - **A closed set of values is an `enum`, never a `String`** (sides,
-  verdicts, statuses, kinds…). Home: `crates/nit-types/src/enums.rs`, from
+  verdicts, statuses, kinds…). Home: `crates/nit-types/src/domain.rs`, from
   which the TS unions in `web/src/api/types.gen.ts` are generated.
   `#[serde(rename_all = …)]` keeps the wire spelling, so it is not a wire
   change. Buys exhaustive `match`es and a 400 on an unknown value at

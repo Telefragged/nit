@@ -23,7 +23,7 @@ use deadpool_sqlite::Pool;
 use rusqlite::{Connection, TransactionBehavior};
 use tokio::sync::watch;
 
-use nit_types::enums::ChangeStatus;
+use nit_types::domain::ChangeStatus;
 use nit_types::error::ApiError;
 use nit_types::log::{LogEntry, LogPayload};
 

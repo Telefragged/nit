@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::{FileStatus, LineKind};
+use crate::domain::{FileStatus, LineKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
