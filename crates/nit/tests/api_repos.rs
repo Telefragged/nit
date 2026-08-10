@@ -43,7 +43,7 @@ fn active_chains(server: &TestServer, id: u64) -> u64 {
 fn repos_list_shape_base_ref_and_scoped_chains() {
     // Two distinct repos (distinct git dirs); the second carries two chains —
     // `feat` and `topic` both fork straight off `main`, so each is its own
-    // live tip (a leaf in the parent DAG), not one stacked on the other.
+    // live tip in the parent DAG, not one stacked on the other.
     let a = GitRepo::new();
     let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
     a.branch("feat", a1);

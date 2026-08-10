@@ -73,12 +73,12 @@ impl RepoView {
         self.changes.keys().copied().collect()
     }
 
-    /// Leaf commit-shas over the changes `keep` admits, sorted.
+    /// Tip commit-shas over the changes `keep` admits, sorted.
     ///
-    /// A leaf is a change's latest-revision sha that no revision records
-    /// as a `parent_sha`. A superseded revision is never a leaf — only
+    /// A tip is a change's latest-revision sha that no revision records
+    /// as a `parent_sha`. A superseded revision is never a tip — only
     /// the latest revision is a candidate.
-    fn leaves_where(&self, keep: impl Fn(&ChangeProj) -> bool) -> Vec<String> {
+    fn tips_where(&self, keep: impl Fn(&ChangeProj) -> bool) -> Vec<String> {
         let parents: HashSet<&str> = self
             .changes
             .values()
@@ -96,15 +96,15 @@ impl RepoView {
         tips
     }
 
-    /// Every leaf — the `status=all` view.
+    /// Every tip — the `status=all` view.
     ///
     /// It still surfaces recently merged/abandoned chains.
     #[must_use]
     pub fn all_tips(&self) -> Vec<String> {
-        self.leaves_where(|_| true)
+        self.tips_where(|_| true)
     }
 
-    /// The **active frontier**: leaves of non-terminal changes.
+    /// The **active frontier**: tips of non-terminal changes.
     ///
     /// The dashboard's `status=active`. A merged change has landed and an
     /// abandoned change is dead, so neither is an active tip — but an
@@ -112,18 +112,18 @@ impl RepoView {
     /// ([`enumerable_tips`](Self::enumerable_tips)).
     #[must_use]
     pub fn tips(&self) -> Vec<String> {
-        self.leaves_where(|c| !c.is_terminal())
+        self.tips_where(|c| !c.is_terminal())
     }
 
-    /// Leaves for **chain enumeration**: drops only merged changes.
+    /// Tips for **chain enumeration**: drops only merged changes.
     ///
-    /// An abandoned leaf therefore still resolves to its own chain
+    /// An abandoned tip therefore still resolves to its own chain
     /// (abandonment is membership-inert). The dashboard hides these via
     /// [`tips`](Self::tips); resolving the chain a change sits on
     /// enumerates them.
     #[must_use]
     pub fn enumerable_tips(&self) -> Vec<String> {
-        self.leaves_where(|c| !c.is_merged())
+        self.tips_where(|c| !c.is_merged())
     }
 
     /// Walks a tip commit-sha back to the canonical branch.
@@ -252,7 +252,7 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
 /// ancestors. `nodes` is `(commit_sha, in-set parent shas)` in a stable
 /// input order; the returned shas are top → bottom.
 ///
-/// A node's rank is `0` for a leaf, else `1 + max(child rank)`; nodes sort by
+/// A node's rank is `0` for a tip, else `1 + max(child rank)`; nodes sort by
 /// `(rank, input order)`. Rank places every parent strictly below its
 /// children and groups a fan-out's branches adjacently; the input-order
 /// tie-break keeps it deterministic.

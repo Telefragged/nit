@@ -20,7 +20,7 @@ use nit_types::graph::{GraphNode, RepoGraph, RepoHistory};
 /// deduplicated by commit-sha). Nodes are returned in topological row order
 /// — the open region ordered among itself (children before parents), the
 /// HEAD anchor and its history keeping the canonical-walk order below it. A
-/// single global topo would let HEAD — a leaf when nothing is built on it —
+/// single global topo would let HEAD — a tip when nothing is built on it —
 /// float to the top, which is wrong whenever the whole chain forks behind
 /// HEAD.
 #[must_use]

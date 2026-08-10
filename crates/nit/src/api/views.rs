@@ -61,7 +61,7 @@ fn path_entry(change: &ChangeProj, member: &PathMember, position: u64) -> PathEn
 /// The tip whose path walks `change` at `revision`.
 ///
 /// Else the change's own revision sha (a dangling change is its own
-/// degenerate tip). Enumerates abandoned leaves too (membership-inert), so
+/// degenerate tip). Enumerates abandoned tips too (membership-inert), so
 /// an abandoned change resolves to a real chain, not only the degenerate
 /// fallback.
 #[must_use]
