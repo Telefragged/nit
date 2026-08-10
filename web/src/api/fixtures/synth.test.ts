@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changeDetail, replayProj } from "../fold";
+import { changeDetail, replayProjection } from "../fold";
 import { changes, threads } from "./data";
 import { synthLog } from "./synth";
 
@@ -15,7 +15,7 @@ describe("synthLog fidelity", () => {
     it(`folds back to change ${change.id}'s published state`, () => {
       const recThreads = threads.filter((t) => t.change_id === change.id);
       const folded = changeDetail(
-        replayProj({
+        replayProjection({
           id: change.id,
           repo_id: change.repo_id,
           change_key: change.change_key,

@@ -5,7 +5,7 @@ import type {
   Draft,
   GraphNode,
   RepoGraph,
-  ThreadProj,
+  ThreadProjection,
 } from "../api/types";
 import { revisionActivity } from "../lib/comments";
 import type { LaidEdge, LaidNode } from "../lib/graphLayout";
@@ -44,7 +44,7 @@ function nodeColor(ln: LaidNode): string {
  * the reviewer's drafts overlay rather than denormalized onto the graph
  * node. */
 export interface NodeActivity {
-  threads: readonly ThreadProj[];
+  threads: readonly ThreadProjection[];
   drafts: readonly Draft[];
   decision: Decision | null;
 }

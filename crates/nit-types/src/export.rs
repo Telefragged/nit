@@ -80,11 +80,11 @@ fn write_wire_types() {
         // holds it opaque and only round-trips it through the wasm fold.
         crate::fold::Lifecycle,
         crate::fold::Anchor,
-        crate::fold::RevisionProj,
+        crate::fold::RevisionProjection,
         crate::fold::ThreadComment,
-        crate::fold::ThreadProj,
-        crate::fold::ReviewProj,
-        crate::fold::ChangeProj,
+        crate::fold::ThreadProjection,
+        crate::fold::ReviewProjection,
+        crate::fold::ChangeProjection,
     );
     std::fs::write(path, out).expect("write types.gen.ts");
 }

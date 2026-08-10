@@ -19,7 +19,7 @@ use git2::{Commit, Oid, Repository, Sort};
 
 use nit_types::fold::subject_of;
 
-use crate::review::ChangeProj;
+use crate::review::ChangeProjection;
 
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
@@ -183,7 +183,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
     repo: &Repository,
     since: &str,
     head: &str,
-    open: &HashMap<String, &ChangeProj, S>,
+    open: &HashMap<String, &ChangeProjection, S>,
 ) -> Vec<(u64, String)> {
     let (Ok(since), Ok(head)) = (Oid::from_str(since), Oid::from_str(head)) else {
         return Vec::new();
@@ -279,7 +279,7 @@ pub fn canonical_history(
 }
 
 /// The keep-ref maintenance for one change's revisions — idempotent.
-pub fn maintain_keep_refs(repo: &Repository, change: &ChangeProj) {
+pub fn maintain_keep_refs(repo: &Repository, change: &ChangeProjection) {
     for rev in &change.revisions {
         objects::ensure_keep_ref(repo, change.id, rev.number, &rev.commit_sha);
     }
@@ -292,7 +292,7 @@ mod tests {
     use git2::{Oid, Repository, Signature};
 
     use super::detect_merges;
-    use crate::review::{ChangeProj, RevisionProj};
+    use crate::review::{ChangeProjection, RevisionProjection};
 
     /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
     /// tests need.
@@ -324,9 +324,9 @@ mod tests {
         format!("{subject}\n\nChange-Id: {key}\n")
     }
 
-    fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProj {
-        let mut proj = ChangeProj::new(id, 1, key.to_string());
-        proj.revisions.push(RevisionProj {
+    fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProjection {
+        let mut proj = ChangeProjection::new(id, 1, key.to_string());
+        proj.revisions.push(RevisionProjection {
             number: 0,
             commit_sha: commit.to_string(),
             parent_sha: base.to_string(),
@@ -345,7 +345,7 @@ mod tests {
         (dir, repo, root)
     }
 
-    fn open<'a>(changes: &[&'a ChangeProj]) -> HashMap<String, &'a ChangeProj> {
+    fn open<'a>(changes: &[&'a ChangeProjection]) -> HashMap<String, &'a ChangeProjection> {
         changes.iter().map(|c| (c.change_key.clone(), *c)).collect()
     }
 

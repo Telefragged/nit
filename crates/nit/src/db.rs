@@ -151,7 +151,7 @@ const MIGRATIONS: &[&str] = &[
     // `nit repo create` to the branch's then-HEAD.
     "ALTER TABLE repos ADD COLUMN base_head TEXT;",
     // v3: a denormalized cache of each change's current status — the displayed
-    // status at its latest revision (`review::ChangeProj::current_status`). The
+    // status at its latest revision (`review::ChangeProjection::current_status`). The
     // fold of the change's log stays authoritative; this column exists so a
     // query can filter/scan changes by status without replaying every log.
     // Re-stamped inside every append's transaction and reconciled against

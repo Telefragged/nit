@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changeDetail, foldEntry, replayProj } from "./fold";
+import { changeDetail, foldEntry, replayProjection } from "./fold";
 import type { LogEntry } from "./types";
 
 const revision: LogEntry = {
@@ -32,8 +32,8 @@ const review: LogEntry = {
 };
 
 describe("the shared wasm fold", () => {
-  it("folds a log into a ChangeProj projection, then projects ChangeDetail", () => {
-    const proj = replayProj({
+  it("folds a log into a ChangeProjection, then projects ChangeDetail", () => {
+    const proj = replayProjection({
       id: 1,
       repo_id: 1,
       change_key: "I1",
@@ -54,7 +54,7 @@ describe("the shared wasm fold", () => {
   });
 
   it("folds the live tail onto the projection, idempotent across the overlap", () => {
-    const projection = replayProj({
+    const projection = replayProjection({
       id: 1,
       repo_id: 1,
       change_key: "I1",

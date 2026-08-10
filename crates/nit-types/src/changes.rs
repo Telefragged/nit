@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::comments::{Draft, Thread};
 use crate::domain::{Decision, Verdict};
-use crate::fold::ChangeProj;
+use crate::fold::ChangeProjection;
 
 /// The `GET /api/changes` response: matching changes as folded projections.
 ///
@@ -16,7 +16,7 @@ use crate::fold::ChangeProj;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeList {
-    pub changes: Vec<ChangeProj>,
+    pub changes: Vec<ChangeProjection>,
 }
 
 /// `GET /api/changes/{id}` response.

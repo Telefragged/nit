@@ -3,10 +3,10 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { changeDetail, foldEntry } from "../api/fold";
 import { openStream, type StreamHandle } from "../api/stream";
-import type { ChangeDetail, ChangeProj, StreamMsg } from "../api/types";
+import type { ChangeDetail, ChangeProjection, StreamMsg } from "../api/types";
 
 /** Keep a set of changes live over the websocket: subscribe in projection mode,
- * hold each change's ChangeProj, fold its live tail with the shared wasm fold,
+ * hold each change's ChangeProjection, fold its live tail with the shared wasm fold,
  * and write the published projection (revisions/threads/reviews) into the
  * ["change", id] react-query cache. The reviewer's drafts + draft decision are
  * not log state, so they ride a separate ["drafts", id] read (useDrafts); the
@@ -14,7 +14,7 @@ import type { ChangeDetail, ChangeProj, StreamMsg } from "../api/types";
 export function useChangeStream(ids: number[]): void {
   const queryClient = useQueryClient();
   // The folded projection per change, mutated in the socket callback (not render).
-  const projs = useRef(new Map<number, ChangeProj>());
+  const projs = useRef(new Map<number, ChangeProjection>());
   const handle = useRef<StreamHandle | null>(null);
 
   const publish = useCallback(

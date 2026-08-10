@@ -1,6 +1,6 @@
 // The change-event websocket: the only place the web opens WS /api/stream.
 // Components go through openStream (via useChangeStream)
-// in projection mode — the server folds a ChangeProj projection per change, then
+// in projection mode — the server folds a ChangeProjection per change, then
 // attaches its live tail. When VITE_MOCK is set the fixtures drive it instead
 // of the network, mirroring how client.ts routes HTTP.
 
@@ -13,7 +13,7 @@ export interface StreamHandle {
 }
 
 /** `onMessage` receives every `StreamMsg` frame the server writes — a
- * `projection` (a folded ChangeProj) or an `entry` (one log entry past it); the
+ * `projection` (a folded ChangeProjection) or an `entry` (one log entry past it); the
  * browser folds them. */
 export function openStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
   if (import.meta.env.VITE_MOCK) {

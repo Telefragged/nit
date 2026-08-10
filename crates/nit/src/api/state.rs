@@ -4,7 +4,7 @@
 //! the per-change append primitive, the server-wide event channel, and the
 //! API error type.
 //!
-//! Each change's [`ChangeProj`] is rebuilt by
+//! Each change's [`ChangeProjection`] is rebuilt by
 //! replaying its log on startup and kept current by [`append_to_change`],
 //! which appends to the DB log and folds in lock-step under the change's
 //! projection write lock. A chain owns no state — it is derived at read
@@ -28,7 +28,7 @@ use nit_types::error::ApiError;
 use nit_types::log::{LogEntry, LogPayload};
 
 use crate::db;
-use crate::review::{self, ChangeProj};
+use crate::review::{self, ChangeProjection};
 use nit_types::chain::RepoView;
 
 /// Live-event buffer.
@@ -94,11 +94,11 @@ impl RepoState {
 /// Write-locking `proj` both serializes appenders and guards the fold; held
 /// only inside `spawn_blocking`, never across `.await`.
 pub struct ChangeEntry {
-    proj: StdRwLock<ChangeProj>,
+    proj: StdRwLock<ChangeProjection>,
 }
 
 impl ChangeEntry {
-    fn new(proj: ChangeProj) -> ChangeEntry {
+    fn new(proj: ChangeProjection) -> ChangeEntry {
         ChangeEntry {
             proj: StdRwLock::new(proj),
         }
@@ -107,7 +107,7 @@ impl ChangeEntry {
     /// # Panics
     ///
     /// When the projection lock is poisoned.
-    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, ChangeProj> {
+    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, ChangeProjection> {
         self.proj.read().expect("projection lock poisoned")
     }
 }
@@ -335,8 +335,8 @@ impl AppState {
         conn: &Connection,
         repo_id: u64,
         statuses: &[ChangeStatus],
-    ) -> anyhow::Result<Vec<ChangeProj>> {
-        let mut changes: Vec<ChangeProj> = Vec::new();
+    ) -> anyhow::Result<Vec<ChangeProjection>> {
+        let mut changes: Vec<ChangeProjection> = Vec::new();
         for id in db::repo_change_ids(conn, repo_id, statuses)? {
             if let Some(entry) = self.change(conn, id)? {
                 changes.push(entry.read().clone());

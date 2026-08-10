@@ -418,7 +418,7 @@ pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Dura
     socket
 }
 
-/// Projection mode: the server folds a `ChangeProj` projection per id, then
+/// Projection mode: the server folds a `ChangeProjection` per id, then
 /// attaches each change's live tail.
 pub fn ws_subscribe_projection(server: &TestServer, ids: &[u64], read_timeout: Duration) -> WsSock {
     let mut socket = ws_open(server, read_timeout);

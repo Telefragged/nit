@@ -95,11 +95,11 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::fold::{ChangeProj, RevisionProj};
+    use nit_types::fold::{ChangeProjection, RevisionProjection};
     use nit_types::graph::HistoryCommit;
 
-    fn rev(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProj {
-        RevisionProj {
+    fn rev(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
+        RevisionProjection {
             number,
             commit_sha: sha.to_string(),
             parent_sha: parent.to_string(),
@@ -110,8 +110,8 @@ mod tests {
         }
     }
 
-    fn change(id: u64, key: &str, revs: Vec<RevisionProj>) -> ChangeProj {
-        let mut c = ChangeProj::new(id, 1, key.to_string());
+    fn change(id: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
+        let mut c = ChangeProjection::new(id, 1, key.to_string());
         c.revisions = revs;
         c
     }

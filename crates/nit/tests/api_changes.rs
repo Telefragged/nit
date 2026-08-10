@@ -45,7 +45,7 @@ fn status_filter_is_explicit_and_absent_means_all() {
     // The payload is the folded projection, not a summary shape.
     assert!(
         all.iter().all(|c| c["revisions"].is_array()),
-        "ChangeProj payload: {all:?}"
+        "ChangeProjection payload: {all:?}"
     );
 
     let ia = all

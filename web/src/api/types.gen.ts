@@ -254,7 +254,7 @@ export type RepoHistory = {
  * **latest revision** (terminal states win). **No `status` param means
  * every change** — the API bakes in no default subset.
  */
-export type ChangeList = { changes: Array<ChangeProj> };
+export type ChangeList = { changes: Array<ChangeProjection> };
 
 /**
  * `GET /api/changes/{id}` response.
@@ -641,7 +641,7 @@ export type ClientMsg =
 /**
  * A server → client websocket message. Externally tagged, `snake_case`.
  */
-export type StreamMsg = { projection: ChangeProj } | { entry: LogEntry };
+export type StreamMsg = { projection: ChangeProjection } | { entry: LogEntry };
 
 /**
  * A change's terminal lifecycle, folded from its `lifecycle` entries.
@@ -670,7 +670,7 @@ export type Anchor =
       };
     };
 
-export type RevisionProj = {
+export type RevisionProjection = {
   /**
    * 0-based, minted in the fold.
    */
@@ -693,7 +693,7 @@ export type RevisionProj = {
  * own note — which is what distinguishes reviewer from author (the only
  * consumer derives the label from it).
  */
-export type ThreadCommentProj = {
+export type ThreadCommentProjection = {
   body: string;
   review_id: number | null;
   created_at: string;
@@ -705,17 +705,17 @@ export type ThreadCommentProj = {
  * Its anchor and birth come from its first comment; the `id` is
  * fold-assigned by creation order, never stored.
  */
-export type ThreadProj = {
+export type ThreadProjection = {
   id: number;
   revision: number;
   anchor: Anchor;
   resolved: boolean;
-  comments: Array<ThreadCommentProj>;
+  comments: Array<ThreadCommentProjection>;
   created_at: string;
   updated_at: string;
 };
 
-export type ReviewProj = {
+export type ReviewProjection = {
   /**
    * The `idx` of the `review` entry this is the fold of.
    *
@@ -736,13 +736,13 @@ export type ReviewProj = {
  * form is opaque to the web, which only passes it back through the
  * shared WebAssembly fold.
  */
-export type ChangeProj = {
+export type ChangeProjection = {
   id: number;
   repo_id: number;
   change_key: string;
-  revisions: Array<RevisionProj>;
-  threads: Array<ThreadProj>;
-  reviews: Array<ReviewProj>;
+  revisions: Array<RevisionProjection>;
+  threads: Array<ThreadProjection>;
+  reviews: Array<ReviewProjection>;
   lifecycle: Lifecycle;
   /**
    * Bumped each time a thread is opened.

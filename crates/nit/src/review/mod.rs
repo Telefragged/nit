@@ -84,7 +84,7 @@ pub fn entry_from_row(change_id: u64, row: &db::LogRow) -> Result<LogEntry> {
 /// # Errors
 ///
 /// When a log payload fails to parse.
-pub fn replay_rows(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangeProj> {
+pub fn replay_rows(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangeProjection> {
     let entries = rows
         .iter()
         .map(|r| entry_from_row(row.id, r))

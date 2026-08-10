@@ -13,7 +13,7 @@ use nit_types::changes::{ChangeDetail, ChangeDrafts, DraftDecision};
 use nit_types::comments::Draft;
 
 use crate::db;
-use crate::review::ChangeProj;
+use crate::review::ChangeProjection;
 use nit_types::chain::{self, PathMember, RepoView};
 
 use super::Error;
@@ -45,7 +45,7 @@ fn path_entries(view: &RepoView, path: &[PathMember]) -> Vec<PathEntry> {
         .collect()
 }
 
-fn path_entry(change: &ChangeProj, member: &PathMember, position: u64) -> PathEntry {
+fn path_entry(change: &ChangeProjection, member: &PathMember, position: u64) -> PathEntry {
     let revision = member.revision;
     PathEntry {
         change_id: change.id,
@@ -155,7 +155,7 @@ pub fn change_overlay(conn: &Connection, change_id: u64) -> Result<ChangeDrafts>
 /// # Errors
 ///
 /// When reading drafts fails.
-pub fn build_change_detail(conn: &Connection, change: &ChangeProj) -> Result<ChangeDetail> {
+pub fn build_change_detail(conn: &Connection, change: &ChangeProjection) -> Result<ChangeDetail> {
     // The published view (revisions/threads/reviews) is the shared fold; the
     // reviewer's drafts and draft decision live outside the log, so overlay
     // them from the database here.

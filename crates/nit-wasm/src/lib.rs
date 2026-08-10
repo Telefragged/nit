@@ -2,7 +2,7 @@
 //!
 //! The fold is the shared one (`nit_types::fold`), so the websocket stream
 //! folds client-side with the very same code the server runs — the server
-//! ships a `ChangeProj` projection, the browser resumes folding the live tail
+//! ships a `ChangeProjection`, the browser resumes folding the live tail
 //! onto it and projects the published `ChangeDetail`, never reimplementing
 //! the fold. The intraline diff's per-character Myers wants a compiled
 //! language.
@@ -12,7 +12,7 @@
 //! representation the web already holds — so the wire types are unchanged.
 
 use nit_types::chain::RepoView;
-use nit_types::fold::{self, ChangeProj};
+use nit_types::fold::{self, ChangeProjection};
 use nit_types::graph::RepoHistory;
 use nit_types::log::LogEntry;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ struct ReplayInput {
     entries: Vec<LogEntry>,
 }
 
-/// Folds a change's whole log into its `ChangeProj` projection.
+/// Folds a change's whole log into its `ChangeProjection`.
 ///
 /// The mock builds projections this way to mirror the server, which folds
 /// natively.
@@ -59,7 +59,7 @@ pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
     to_js(&proj)
 }
 
-/// Applies one live log entry to a `ChangeProj`.
+/// Applies one live log entry to a `ChangeProjection`.
 ///
 /// Returns the advanced projection. Idempotent across the projection/live
 /// overlap: an entry below the projection's high-water mark is a no-op.
@@ -69,7 +69,7 @@ pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
 /// When either argument fails to parse or the result fails to serialize.
 #[wasm_bindgen]
 pub fn fold_entry(proj: JsValue, entry: JsValue) -> Result<JsValue, JsValue> {
-    let mut proj: ChangeProj = serde_wasm_bindgen::from_value(proj)?;
+    let mut proj: ChangeProjection = serde_wasm_bindgen::from_value(proj)?;
     let entry: LogEntry = serde_wasm_bindgen::from_value(entry)?;
     fold::fold(&mut proj, entry);
     to_js(&proj)
@@ -85,7 +85,7 @@ pub fn fold_entry(proj: JsValue, entry: JsValue) -> Result<JsValue, JsValue> {
 /// When either argument fails to parse or the graph fails to serialize.
 #[wasm_bindgen]
 pub fn repo_graph(changes: JsValue, history: JsValue) -> Result<JsValue, JsValue> {
-    let changes: Vec<ChangeProj> = serde_wasm_bindgen::from_value(changes)?;
+    let changes: Vec<ChangeProjection> = serde_wasm_bindgen::from_value(changes)?;
     let history: RepoHistory = serde_wasm_bindgen::from_value(history)?;
     to_js(&graph::assemble(&RepoView::new(changes), &history))
 }
@@ -105,7 +105,7 @@ pub fn intraline_marks(regions: JsValue) -> Result<JsValue, JsValue> {
     to_js(&intraline::marks(&regions))
 }
 
-/// Projects a `ChangeProj` to its published `ChangeDetail`.
+/// Projects a `ChangeProjection` to its published `ChangeDetail`.
 ///
 /// The detail carries revisions, threads and reviews. The reviewer's drafts
 /// and draft decision are not log state, so they come back empty; the
@@ -116,6 +116,6 @@ pub fn intraline_marks(regions: JsValue) -> Result<JsValue, JsValue> {
 /// When `proj` is not a valid projection or the result fails to serialize.
 #[wasm_bindgen]
 pub fn change_detail(proj: JsValue) -> Result<JsValue, JsValue> {
-    let proj: ChangeProj = serde_wasm_bindgen::from_value(proj)?;
+    let proj: ChangeProjection = serde_wasm_bindgen::from_value(proj)?;
     to_js(&fold::change_detail(&proj))
 }

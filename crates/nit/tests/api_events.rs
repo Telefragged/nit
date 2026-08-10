@@ -41,7 +41,7 @@ fn subscribe_replays_backlog_then_streams_live() {
     );
 }
 
-/// Projection mode ships the folded `ChangeProj` (its `entries_folded` the
+/// Projection mode ships the folded `ChangeProjection` (its `entries_folded` the
 /// high-water mark), then attaches the live tail past it.
 #[test]
 fn subscribe_projection_ships_it_then_streams_live() {

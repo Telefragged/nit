@@ -136,8 +136,8 @@ pub(super) async fn revision_lines(
 /// nothing live.
 struct Revs {
     git_dir: String,
-    rev: review::RevisionProj,
-    against: Option<review::RevisionProj>,
+    rev: review::RevisionProjection,
+    against: Option<review::RevisionProjection>,
 }
 
 fn resolve_revs(
@@ -199,7 +199,7 @@ fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff,
     Ok(wire)
 }
 
-fn at(r: &review::RevisionProj) -> rebase::Rev<'_> {
+fn at(r: &review::RevisionProjection) -> rebase::Rev<'_> {
     rebase::Rev {
         commit: &r.commit_sha,
         parent: &r.parent_sha,

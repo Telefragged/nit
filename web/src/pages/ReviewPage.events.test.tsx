@@ -1,4 +1,4 @@
-// The change page is event-driven: it subscribes for a ChangeProj projection,
+// The change page is event-driven: it subscribes for a ChangeProjection,
 // then folds the live tail (crates/nit-wasm) into the published state. These
 // tests drive the mock stream directly — append an entry, then wait (bounded by
 // a timeout, never polling) for the page to fold and re-render.

@@ -1,14 +1,14 @@
 //! Websocket messages over `WS /api/stream`.
 //!
 //! The client picks one of two subscribe modes; the server answers with
-//! [`StreamMsg`] frames — a `ChangeProj` projection (projection mode) and/or
+//! [`StreamMsg`] frames — a `ChangeProjection` (projection mode) and/or
 //! live log entries.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::fold::ChangeProj;
+use crate::fold::ChangeProjection;
 use crate::log::LogEntry;
 
 /// A client → server websocket message. Externally tagged, `snake_case`.
@@ -24,7 +24,7 @@ pub enum ClientMsg {
     Subscribe(HashMap<String, u64>),
     /// Projection mode (the web change page).
     ///
-    /// For each change id the server folds a [`ChangeProj`] projection and
+    /// For each change id the server folds a [`ChangeProjection`] projection and
     /// ships it, then attaches the live tail past the projection's
     /// high-water mark. A `Vec` has no map keys, so the ids stay `u64`
     /// (unlike `Subscribe`).
@@ -40,7 +40,7 @@ pub enum StreamMsg {
     ///
     /// The projection a projection-mode follower resumes from. Sent once per
     /// change, before its live tail.
-    Projection(ChangeProj),
+    Projection(ChangeProjection),
     /// One live (or replayed-backlog) log entry.
     ///
     /// Past the projection's `entries_folded` for a projection-mode follower.

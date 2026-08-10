@@ -2,8 +2,13 @@
 // truth for mock mode. The REST change read (./index) folds this same synth
 // log, so mock WS and mock REST agree in tests/screenshots as they do in prod.
 
-import { replayProj } from "../fold";
-import type { ChangeProj, LogEntry, LogPayload, StreamMsg } from "../types";
+import { replayProjection } from "../fold";
+import type {
+  ChangeProjection,
+  LogEntry,
+  LogPayload,
+  StreamMsg,
+} from "../types";
 import { changes, threads } from "./data";
 import { synthLog } from "./synth";
 
@@ -27,11 +32,11 @@ export function logFor(changeId: number): LogEntry[] {
   return logs.get(changeId) ?? [];
 }
 
-/** A change's projection: its synth log folded to a ChangeProj, the same shape the
+/** A change's projection: its synth log folded to a ChangeProjection, the same shape the
  * server ships. */
-export function projection(changeId: number): ChangeProj {
+export function projection(changeId: number): ChangeProjection {
   const c = changes.find((x) => x.id === changeId);
-  return replayProj({
+  return replayProjection({
     id: changeId,
     repo_id: c?.repo_id ?? 0,
     change_key: c?.change_key ?? "",
@@ -52,7 +57,7 @@ export interface MockStream {
   close(): void;
 }
 
-/** Open a mock stream. A new subscription ships the change's ChangeProj projection
+/** Open a mock stream. A new subscription ships the change's ChangeProjection
  * (folded from its synth log), then live appends arrive as `entry` frames. */
 export function mockOpenStream(listener: Listener): MockStream {
   const sub: Sub = { ids: new Set(), listener };

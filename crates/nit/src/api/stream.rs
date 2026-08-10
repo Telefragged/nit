@@ -11,7 +11,7 @@ use nit_types::events::{ClientMsg, StreamMsg};
 use nit_types::log::LogEntry;
 
 use crate::db;
-use crate::review::{self, ChangeProj};
+use crate::review::{self, ChangeProjection};
 
 use super::{AppState, with_conn};
 
@@ -30,7 +30,7 @@ pub(super) async fn stream(
 ///
 /// It holds one receiver on the server's event channel for its whole life,
 /// so every subscribe is armed before it reads its backlog (a `[from, head)`
-/// replay, or a `ChangeProj` projection) and the arm/read overlap is deduped
+/// replay, or a `ChangeProjection`) and the arm/read overlap is deduped
 /// by an idx watermark, never gapped. `watermark` is also the subscription
 /// set: an entry is forwarded only for a change the client asked for. An
 /// overflowed receiver closes the socket — the client reconnects and
@@ -160,7 +160,7 @@ async fn read_backlogs(
 /// No guard is held across a send — the one place a fold is resolved
 /// without a connection already in hand, so it borrows one for the whole
 /// batch.
-async fn read_projections(state: &Arc<AppState>, ids: Vec<u64>) -> Vec<(u64, ChangeProj)> {
+async fn read_projections(state: &Arc<AppState>, ids: Vec<u64>) -> Vec<(u64, ChangeProjection)> {
     let st = state.clone();
     with_conn(state.pool(), move |conn| {
         let mut out = Vec::with_capacity(ids.len());

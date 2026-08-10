@@ -1,6 +1,6 @@
 //! The fold: a **change's** reviewable state is the replay of its log.
 //!
-//! The log is append-only. [`ChangeProj`] is the in-memory state machine;
+//! The log is append-only. [`ChangeProjection`] is the in-memory state machine;
 //! [`fold`] applies one wire [`LogEntry`]; [`replay`] rebuilds a change's
 //! projection from its entries. A chain is never folded — it is composed
 //! at read time from member projections (`crate::chain`).
@@ -16,14 +16,14 @@
 //! Revision numbers (0-based) are minted **in the fold** by creation order — a
 //! pure function of the log, never stored. Thread ids are minted in the fold
 //! too: [`fold`] takes an entry by value and, via
-//! [`ChangeProj::mint_thread_id`], fills a new-thread comment's `thread_id` from
+//! [`ChangeProjection::mint_thread_id`], fills a new-thread comment's `thread_id` from
 //! `next_thread_id` and returns the entry with the id written into its payload,
 //! so the caller stores and broadcasts that one value. `next_thread_id` is the
 //! single source of truth — the only field minting touches — so a concurrent
 //! shared-change push can't duplicate an id, and replay (ids already set) just
 //! advances it. The fold therefore requires entries in ascending `idx` order.
 //!
-//! [`ChangeProj::entries_folded`] is the count of entries consumed (the next
+//! [`ChangeProjection::entries_folded`] is the count of entries consumed (the next
 //! `idx`): the server stamps it into a projection so a follower resumes folding
 //! the live tail at the boundary, and [`fold`] skips any entry below it, so the
 //! arm/projection overlap is idempotent, never doubled.
@@ -50,7 +50,7 @@ pub enum Lifecycle {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct RevisionProj {
+pub struct RevisionProjection {
     /// 0-based, minted in the fold.
     pub number: u64,
     pub commit_sha: String,
@@ -107,7 +107,7 @@ impl Anchor {
 /// fold-assigned by creation order, never stored.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct ThreadProj {
+pub struct ThreadProjection {
     pub id: u64,
     pub revision: u64,
     pub anchor: Anchor,
@@ -125,7 +125,11 @@ pub struct ThreadProj {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 // Shares the wire `ThreadComment` name but is a distinct type — only
 // ever round-tripped through the wasm fold.
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(rename = "ThreadCommentProj"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(rename = "ThreadCommentProjection")
+)]
 pub struct ThreadComment {
     pub body: String,
     pub review_id: Option<u64>,
@@ -134,7 +138,7 @@ pub struct ThreadComment {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct ReviewProj {
+pub struct ReviewProjection {
     /// The `idx` of the `review` entry this is the fold of.
     ///
     /// A log coordinate, reproduced by replay with nothing stored.
@@ -153,13 +157,13 @@ pub struct ReviewProj {
 /// shared WebAssembly fold.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct ChangeProj {
+pub struct ChangeProjection {
     pub id: u64,
     pub repo_id: u64,
     pub change_key: String,
-    pub revisions: Vec<RevisionProj>,
-    pub threads: Vec<ThreadProj>,
-    pub reviews: Vec<ReviewProj>,
+    pub revisions: Vec<RevisionProjection>,
+    pub threads: Vec<ThreadProjection>,
+    pub reviews: Vec<ReviewProjection>,
     pub lifecycle: Lifecycle,
     /// Bumped each time a thread is opened.
     pub next_thread_id: u64,
@@ -191,11 +195,11 @@ pub fn subject_of(message: &str) -> String {
     para.replace('\n', " ").trim().to_string()
 }
 
-impl ChangeProj {
+impl ChangeProjection {
     /// The fold builds the rest from the log.
     #[must_use]
-    pub fn new(id: u64, repo_id: u64, change_key: String) -> ChangeProj {
-        ChangeProj {
+    pub fn new(id: u64, repo_id: u64, change_key: String) -> ChangeProjection {
+        ChangeProjection {
             id,
             repo_id,
             change_key,
@@ -209,17 +213,17 @@ impl ChangeProj {
     }
 
     #[must_use]
-    pub fn latest_revision(&self) -> Option<&RevisionProj> {
+    pub fn latest_revision(&self) -> Option<&RevisionProjection> {
         self.revisions.last()
     }
 
     #[must_use]
-    pub fn revision(&self, number: u64) -> Option<&RevisionProj> {
+    pub fn revision(&self, number: u64) -> Option<&RevisionProjection> {
         self.revisions.iter().find(|r| r.number == number)
     }
 
     #[must_use]
-    pub fn thread(&self, id: u64) -> Option<&ThreadProj> {
+    pub fn thread(&self, id: u64) -> Option<&ThreadProjection> {
         self.threads.iter().find(|t| t.id == id)
     }
 
@@ -319,7 +323,7 @@ impl ChangeProj {
 ///
 /// Mints any new-thread ids into the entry's typed payload and returns
 /// the id-bearing entry (the server stores and broadcasts that one).
-pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
+pub fn fold(change: &mut ChangeProjection, mut entry: LogEntry) -> LogEntry {
     // Idempotent across the projection/live overlap: an entry already folded into
     // this projection (its idx below the high-water mark) leaves it untouched,
     // so a follower that re-receives the boundary entries the projection already
@@ -336,7 +340,7 @@ pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
     match &mut entry.payload {
         LogPayload::Revision(p) => fold_revision(change, p, &now),
         LogPayload::Review(p) => {
-            change.reviews.push(ReviewProj {
+            change.reviews.push(ReviewProjection {
                 id: review_id,
                 revision: p.revision,
                 verdict: p.verdict,
@@ -357,9 +361,9 @@ pub fn fold(change: &mut ChangeProj, mut entry: LogEntry) -> LogEntry {
     entry
 }
 
-fn fold_revision(change: &mut ChangeProj, p: &RevisionPayload, now: &str) {
+fn fold_revision(change: &mut ChangeProjection, p: &RevisionPayload, now: &str) {
     let number = u64::try_from(change.revisions.len()).expect("revision count fits u64");
-    change.revisions.push(RevisionProj {
+    change.revisions.push(RevisionProjection {
         number,
         commit_sha: p.commit_sha.clone(),
         parent_sha: p.parent_sha.clone(),
@@ -370,7 +374,7 @@ fn fold_revision(change: &mut ChangeProj, p: &RevisionPayload, now: &str) {
     });
 }
 
-fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
+fn fold_lifecycle(change: &mut ChangeProjection, p: &LifecyclePayload) {
     change.lifecycle = match p.action {
         LifecycleAction::Merged => Lifecycle::Merged,
         LifecycleAction::Abandoned => Lifecycle::Abandoned,
@@ -380,10 +384,15 @@ fn fold_lifecycle(change: &mut ChangeProj, p: &LifecyclePayload) {
 
 /// Applies one comment to a change's threads.
 ///
-/// Its `thread_id` is already resolved by [`ChangeProj::mint_thread_id`];
+/// Its `thread_id` is already resolved by [`ChangeProjection::mint_thread_id`];
 /// shared by `review` and `comment`. An unset id is a no-op: the mint left
 /// it alone because the body was empty.
-fn apply_comment(change: &mut ChangeProj, c: &CommentInput, review_id: Option<u64>, now: &str) {
+fn apply_comment(
+    change: &mut ChangeProjection,
+    c: &CommentInput,
+    review_id: Option<u64>,
+    now: &str,
+) {
     let Some(tid) = c.thread_id else { return };
     if let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) {
         if !c.body.trim().is_empty() {
@@ -404,10 +413,10 @@ fn apply_comment(change: &mut ChangeProj, c: &CommentInput, review_id: Option<u6
 
 /// Opens a new thread carrying `id` at the comment's anchor.
 ///
-/// `next_thread_id` is kept ahead by [`ChangeProj::mint_thread_id`], the
+/// `next_thread_id` is kept ahead by [`ChangeProjection::mint_thread_id`], the
 /// sole owner of the counter.
 fn open_thread(
-    change: &mut ChangeProj,
+    change: &mut ChangeProjection,
     c: &CommentInput,
     id: u64,
     review_id: Option<u64>,
@@ -416,7 +425,7 @@ fn open_thread(
     let revision = c
         .revision
         .unwrap_or_else(|| change.latest_revision().map_or(0, |r| r.number));
-    change.threads.push(ThreadProj {
+    change.threads.push(ThreadProjection {
         id,
         revision,
         anchor: Anchor::from_input(c),
@@ -436,8 +445,13 @@ fn open_thread(
 /// Requires ascending `idx` — `fold()`'s high-water mark silently skips
 /// anything out of order.
 #[must_use]
-pub fn replay(id: u64, repo_id: u64, change_key: String, entries: Vec<LogEntry>) -> ChangeProj {
-    let mut change = ChangeProj::new(id, repo_id, change_key);
+pub fn replay(
+    id: u64,
+    repo_id: u64,
+    change_key: String,
+    entries: Vec<LogEntry>,
+) -> ChangeProjection {
+    let mut change = ChangeProjection::new(id, repo_id, change_key);
     for entry in entries {
         fold(&mut change, entry);
     }
@@ -448,7 +462,7 @@ pub fn replay(id: u64, repo_id: u64, change_key: String, entries: Vec<LogEntry>)
 // server's change endpoint and the WebAssembly fold.
 
 #[must_use]
-pub fn revision_view(rev: &RevisionProj) -> Revision {
+pub fn revision_view(rev: &RevisionProjection) -> Revision {
     Revision {
         number: rev.number,
         commit_sha: rev.commit_sha.clone(),
@@ -460,7 +474,7 @@ pub fn revision_view(rev: &RevisionProj) -> Revision {
 }
 
 #[must_use]
-pub fn review_view(review: &ReviewProj) -> Review {
+pub fn review_view(review: &ReviewProjection) -> Review {
     Review {
         id: review.id,
         revision: review.revision,
@@ -471,7 +485,7 @@ pub fn review_view(review: &ReviewProj) -> Review {
 }
 
 #[must_use]
-pub fn thread_view(t: &ThreadProj, change_id: u64) -> Thread {
+pub fn thread_view(t: &ThreadProjection, change_id: u64) -> Thread {
     let (file, line, side, range, line_text) = match &t.anchor {
         Anchor::Change => (None, None, Side::New, None, None),
         Anchor::File { file } => (Some(file.clone()), None, Side::New, None, None),
@@ -520,7 +534,7 @@ fn thread_comment_view(c: &ThreadComment) -> crate::comments::ThreadComment {
 /// WebAssembly fold returns this verbatim and the browser fills its own
 /// drafts in.
 #[must_use]
-pub fn change_detail(change: &ChangeProj) -> ChangeDetail {
+pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
     ChangeDetail {
         id: change.id,
         repo_id: change.repo_id,
@@ -544,8 +558,8 @@ mod tests {
 
     use super::*;
 
-    fn empty() -> ChangeProj {
-        ChangeProj::new(1, 1, "Iabc".to_string())
+    fn empty() -> ChangeProjection {
+        ChangeProjection::new(1, 1, "Iabc".to_string())
     }
 
     fn entry(idx: u64, payload: LogPayload) -> LogEntry {
@@ -606,7 +620,7 @@ mod tests {
         }
     }
 
-    fn folded(payloads: Vec<LogPayload>) -> ChangeProj {
+    fn folded(payloads: Vec<LogPayload>) -> ChangeProjection {
         let mut c = empty();
         for (i, payload) in payloads.into_iter().enumerate() {
             fold(

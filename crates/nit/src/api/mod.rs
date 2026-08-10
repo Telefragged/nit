@@ -304,7 +304,7 @@ fn validate_anchor(
 
 fn snapshot_line_text(
     git_dir: &str,
-    rev: &review::RevisionProj,
+    rev: &review::RevisionProjection,
     file: Option<&str>,
     line: Option<u64>,
     side: Side,

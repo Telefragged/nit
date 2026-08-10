@@ -15,7 +15,7 @@ use nit_types::log::LogPayload;
 
 use crate::db;
 use crate::gitscan;
-use crate::review::ChangeProj;
+use crate::review::ChangeProjection;
 use nit_types::chain::RepoView;
 
 use super::{AppState, append_to_change, with_conn};
@@ -106,7 +106,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
 }
 
 /// The sweep's working set -- looked up once per new commit.
-fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProj> {
+fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProjection> {
     view.change_ids()
         .into_iter()
         .filter_map(|id| view.change(id))

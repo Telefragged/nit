@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::domain::{ChainState, ChangeStatus};
 
-use crate::fold::ChangeProj;
+use crate::fold::ChangeProjection;
 
 /// One member of a derived path, pinned to the revision the walk selected.
 #[derive(Debug, Clone)]
@@ -38,7 +38,7 @@ pub struct OpenNode {
 /// index built from them. All chain derivation is a pure function of
 /// this view, so it holds no locks and touches no git.
 pub struct RepoView {
-    changes: HashMap<u64, ChangeProj>,
+    changes: HashMap<u64, ChangeProjection>,
     index: HashMap<String, (u64, u64)>,
 }
 
@@ -48,7 +48,7 @@ impl RepoView {
     /// Each is cloned out from under its lock by the caller, so the view
     /// holds nothing live.
     #[must_use]
-    pub fn new(changes: Vec<ChangeProj>) -> RepoView {
+    pub fn new(changes: Vec<ChangeProjection>) -> RepoView {
         let mut index = HashMap::new();
         let mut map = HashMap::new();
         for c in changes {
@@ -64,7 +64,7 @@ impl RepoView {
     }
 
     #[must_use]
-    pub fn change(&self, id: u64) -> Option<&ChangeProj> {
+    pub fn change(&self, id: u64) -> Option<&ChangeProjection> {
         self.changes.get(&id)
     }
 
@@ -78,7 +78,7 @@ impl RepoView {
     /// A tip is a change's latest-revision sha that no revision records
     /// as a `parent_sha`. A superseded revision is never a tip — only
     /// the latest revision is a candidate.
-    fn tips_where(&self, keep: impl Fn(&ChangeProj) -> bool) -> Vec<String> {
+    fn tips_where(&self, keep: impl Fn(&ChangeProjection) -> bool) -> Vec<String> {
         let parents: HashSet<&str> = self
             .changes
             .values()
@@ -88,7 +88,7 @@ impl RepoView {
             .changes
             .values()
             .filter(|&c| keep(c))
-            .filter_map(ChangeProj::latest_revision)
+            .filter_map(ChangeProjection::latest_revision)
             .map(|r| r.commit_sha.clone())
             .filter(|sha| !parents.contains(sha.as_str()))
             .collect();
@@ -165,7 +165,7 @@ impl RepoView {
         self.index
             .get(sha)
             .and_then(|&(id, _)| self.change(id))
-            .is_some_and(ChangeProj::is_merged)
+            .is_some_and(ChangeProjection::is_merged)
     }
 
     /// A change by its `Change-Id` key.
@@ -173,7 +173,7 @@ impl RepoView {
     /// The graph enriches a merged history commit from its commit-message
     /// trailer.
     #[must_use]
-    pub fn change_by_key(&self, key: &str) -> Option<&ChangeProj> {
+    pub fn change_by_key(&self, key: &str) -> Option<&ChangeProjection> {
         self.changes.values().find(|c| c.change_key == key)
     }
 
@@ -310,10 +310,10 @@ mod tests {
     use super::*;
     use crate::domain::Verdict;
 
-    use crate::fold::{ChangeProj, Lifecycle, ReviewProj, RevisionProj};
+    use crate::fold::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
 
-    fn rev(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProj {
-        RevisionProj {
+    fn rev(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
+        RevisionProjection {
             number,
             commit_sha: sha.to_string(),
             parent_sha: parent.to_string(),
@@ -324,8 +324,8 @@ mod tests {
         }
     }
 
-    fn change(id: u64, key: &str, revs: Vec<RevisionProj>) -> ChangeProj {
-        let mut c = ChangeProj::new(id, 1, key.to_string());
+    fn change(id: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
+        let mut c = ChangeProjection::new(id, 1, key.to_string());
         c.revisions = revs;
         c
     }
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn state_is_derived_from_members() {
         let mut a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);
-        a.reviews.push(ReviewProj {
+        a.reviews.push(ReviewProjection {
             id: 100,
             revision: 0,
             verdict: Verdict::Approve,
