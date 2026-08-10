@@ -3,7 +3,11 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { changeDetail, foldEntry } from "../api/fold";
 import { openStream, type StreamHandle } from "../api/stream";
-import type { ChangeDetail, ChangeProjection, StreamMsg } from "../api/types";
+import type {
+  ChangeDetail,
+  ChangeProjection,
+  StreamMessage,
+} from "../api/types";
 
 /** Keep a set of changes live over the websocket: subscribe in projection mode,
  * hold each change's ChangeProjection, fold its live tail with the shared wasm fold,
@@ -31,7 +35,7 @@ export function useChangeStream(ids: number[]): void {
   );
 
   useEffect(() => {
-    const stream = openStream((msg: StreamMsg) => {
+    const stream = openStream((msg: StreamMessage) => {
       if ("projection" in msg) {
         projs.current.set(msg.projection.id, msg.projection);
         publish(msg.projection.id);

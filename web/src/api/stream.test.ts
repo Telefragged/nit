@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { ASYNC_TIMEOUT_MS } from "../test-setup";
 import { mockAppend } from "./fixtures/stream";
 import { openStream } from "./stream";
-import type { StreamMsg } from "./types";
+import type { StreamMessage } from "./types";
 
 describe("openStream (mock mode)", () => {
   it("queues subscriptions until the mock loads, then projects and goes live", async () => {
-    const got: StreamMsg[] = [];
+    const got: StreamMessage[] = [];
     const handle = openStream((m) => {
       got.push(m);
     });

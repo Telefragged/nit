@@ -7,7 +7,7 @@ use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 
-use nit_types::events::{ClientMsg, StreamMsg};
+use nit_types::events::{ClientMessage, StreamMessage};
 use nit_types::log::LogEntry;
 
 use crate::db;
@@ -45,7 +45,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 let Some(Ok(msg)) = incoming else { break };
                 match msg {
                     Message::Text(text) => {
-                        let Ok(client) = serde_json::from_str::<ClientMsg>(&text) else {
+                        let Ok(client) = serde_json::from_str::<ClientMessage>(&text) else {
                             continue;
                         };
                         if apply_client_msg(&mut socket, &state, &mut watermark, client)
@@ -70,7 +70,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 if entry.idx < mark {
                     continue;
                 }
-                if send(&mut socket, &StreamMsg::Entry(entry)).await.is_err() {
+                if send(&mut socket, &StreamMessage::Entry(entry)).await.is_err() {
                     break;
                 }
             }
@@ -85,10 +85,10 @@ async fn apply_client_msg(
     socket: &mut WebSocket,
     state: &Arc<AppState>,
     watermark: &mut HashMap<u64, u64>,
-    client: ClientMsg,
+    client: ClientMessage,
 ) -> Result<(), ()> {
     match client {
-        ClientMsg::Subscribe(map) => {
+        ClientMessage::Subscribe(map) => {
             let cursors = map
                 .iter()
                 .filter_map(|(id, from)| Some((id.parse::<u64>().ok()?, *from)))
@@ -96,25 +96,25 @@ async fn apply_client_msg(
             for (change_id, next, backlog) in read_backlogs(state, cursors).await {
                 watermark.insert(change_id, next);
                 for e in backlog {
-                    send(socket, &StreamMsg::Entry(e)).await?;
+                    send(socket, &StreamMessage::Entry(e)).await?;
                 }
             }
         }
-        ClientMsg::SubscribeProjection(ids) => {
+        ClientMessage::SubscribeProjection(ids) => {
             for (change_id, proj) in read_projections(state, ids).await {
                 // The projection's `entries_folded` is the high-water mark, so an
                 // append that lands after it rides the channel and is deduped
                 // there: the projection and its live tail neither gap nor
                 // double.
                 watermark.insert(change_id, proj.entries_folded);
-                send(socket, &StreamMsg::Projection(proj)).await?;
+                send(socket, &StreamMessage::Projection(proj)).await?;
             }
         }
     }
     Ok(())
 }
 
-async fn send(socket: &mut WebSocket, msg: &StreamMsg) -> Result<(), ()> {
+async fn send(socket: &mut WebSocket, msg: &StreamMessage) -> Result<(), ()> {
     let text = serde_json::to_string(msg).map_err(|_| ())?;
     socket
         .send(Message::Text(text.into()))

@@ -7,7 +7,7 @@ import type {
   ChangeProjection,
   LogEntry,
   LogPayload,
-  StreamMsg,
+  StreamMessage,
 } from "../types";
 import { changes, threads } from "./data";
 import { synthLog } from "./synth";
@@ -44,7 +44,7 @@ export function projection(changeId: number): ChangeProjection {
   });
 }
 
-type Listener = (msg: StreamMsg) => void;
+type Listener = (msg: StreamMessage) => void;
 interface Sub {
   ids: Set<number>;
   listener: Listener;

@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow, bail};
 
 use nit_types::chains::Chain;
 use nit_types::domain::LifecycleAction;
-use nit_types::events::StreamMsg;
+use nit_types::events::StreamMessage;
 use nit_types::log::{ChainLog, LogEntry, LogPayload};
 
 use super::client::{Client, Retry, ServerOpt, next_text, server_url};
@@ -186,7 +186,8 @@ fn follow(
         while let Some(text) = next_text(&mut socket) {
             // Cursor mode never asks for a projection, so only `entry` frames
             // arrive; ignore anything else.
-            let Ok(StreamMsg::Entry(entry)) = serde_json::from_str::<StreamMsg>(&text) else {
+            let Ok(StreamMessage::Entry(entry)) = serde_json::from_str::<StreamMessage>(&text)
+            else {
                 continue;
             };
             cursor = cursor.max(entry.seq);

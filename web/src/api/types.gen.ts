@@ -634,14 +634,16 @@ export type LogEntry = {
 /**
  * A client → server websocket message. Externally tagged, `snake_case`.
  */
-export type ClientMsg =
+export type ClientMessage =
   | { subscribe: { [key in string]: number } }
   | { subscribe_projection: Array<number> };
 
 /**
  * A server → client websocket message. Externally tagged, `snake_case`.
  */
-export type StreamMsg = { projection: ChangeProjection } | { entry: LogEntry };
+export type StreamMessage =
+  | { projection: ChangeProjection }
+  | { entry: LogEntry };
 
 /**
  * A change's terminal lifecycle, folded from its `lifecycle` entries.

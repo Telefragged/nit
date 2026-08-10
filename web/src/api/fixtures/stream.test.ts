@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { StreamMsg } from "../types";
+import type { StreamMessage } from "../types";
 import { mockAppend, mockOpenStream } from "./stream";
 
 describe("mock stream", () => {
   it("projects a change on subscribe, then delivers live appends", () => {
-    const got: StreamMsg[] = [];
+    const got: StreamMessage[] = [];
     const handle = mockOpenStream((m) => got.push(m));
 
     handle.add([11]); // change 11: revisions + a review + threads
@@ -34,7 +34,7 @@ describe("mock stream", () => {
   });
 
   it("only projects subscribed changes", () => {
-    const got: StreamMsg[] = [];
+    const got: StreamMessage[] = [];
     const handle = mockOpenStream((m) => got.push(m));
     handle.add([20]);
     expect(got).toHaveLength(1);

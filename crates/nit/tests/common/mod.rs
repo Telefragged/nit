@@ -429,12 +429,12 @@ pub fn ws_subscribe_projection(server: &TestServer, ids: &[u64], read_timeout: D
     socket
 }
 
-/// The next frame's `entry` body — a `StreamMsg::Entry` — or `None` on timeout.
+/// The next frame's `entry` body — a `StreamMessage::Entry` — or `None` on timeout.
 pub fn ws_entry(socket: &mut WsSock) -> Option<Value> {
     ws_read(socket).map(|f| f["entry"].clone())
 }
 
-/// The next Text frame (a `StreamMsg`) parsed as JSON, or `None` on read
+/// The next Text frame (a `StreamMessage`) parsed as JSON, or `None` on read
 /// timeout / close.
 pub fn ws_read(socket: &mut WsSock) -> Option<Value> {
     loop {

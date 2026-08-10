@@ -7,7 +7,7 @@
 
 use anyhow::{Result, anyhow};
 use nit_types::error::ApiError;
-use nit_types::events::ClientMsg;
+use nit_types::events::ClientMessage;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -173,7 +173,7 @@ impl Client {
         let url = format!("{}/api/stream", self.base.replacen("http", "ws", 1));
         let map: std::collections::HashMap<String, u64> =
             subs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let sub = serde_json::to_string(&ClientMsg::Subscribe(map))?;
+        let sub = serde_json::to_string(&ClientMessage::Subscribe(map))?;
         self.retry_loop(retry, || Self::try_ws(&url, &sub))
     }
 

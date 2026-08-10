@@ -4,7 +4,7 @@
 // attaches its live tail. When VITE_MOCK is set the fixtures drive it instead
 // of the network, mirroring how client.ts routes HTTP.
 
-import type { ClientMsg, StreamMsg } from "./types";
+import type { ClientMessage, StreamMessage } from "./types";
 
 export interface StreamHandle {
   /** Subscribe to more changes; each yields a projection, then its live tail. */
@@ -12,10 +12,12 @@ export interface StreamHandle {
   close(): void;
 }
 
-/** `onMessage` receives every `StreamMsg` frame the server writes — a
+/** `onMessage` receives every `StreamMessage` frame the server writes — a
  * `projection` (a folded ChangeProjection) or an `entry` (one log entry past it); the
  * browser folds them. */
-export function openStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
+export function openStream(
+  onMessage: (msg: StreamMessage) => void,
+): StreamHandle {
   if (import.meta.env.VITE_MOCK) {
     return openMockStream(onMessage);
   }
@@ -25,7 +27,9 @@ export function openStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
 /** The real socket. Subscribes in projection mode; a reconnect (the server closes
  * the socket when a follower overflows) re-subscribes the wanted set, which
  * re-reads the projection, which subsumes a cursor, so none is tracked. */
-function openSocketStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
+function openSocketStream(
+  onMessage: (msg: StreamMessage) => void,
+): StreamHandle {
   const wanted = new Set<number>();
   let ws: WebSocket | null = null;
   let closed = false;
@@ -40,7 +44,7 @@ function openSocketStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
     if (ws?.readyState !== WebSocket.OPEN) return;
     const subscribe_projection = [...ids];
     if (subscribe_projection.length) {
-      ws.send(JSON.stringify({ subscribe_projection } satisfies ClientMsg));
+      ws.send(JSON.stringify({ subscribe_projection } satisfies ClientMessage));
     }
   };
 
@@ -51,9 +55,9 @@ function openSocketStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
       subscribe(wanted);
     };
     ws.onmessage = (ev) => {
-      let msg: StreamMsg;
+      let msg: StreamMessage;
       try {
-        msg = JSON.parse(ev.data as string) as StreamMsg;
+        msg = JSON.parse(ev.data as string) as StreamMessage;
       } catch {
         return;
       }
@@ -85,7 +89,7 @@ function openSocketStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
 
 /** Mock mode: the fixtures replay/emit the stream. Loaded lazily so they stay
  * out of production bundles; `add`/`close` queue until the import resolves. */
-function openMockStream(onMessage: (msg: StreamMsg) => void): StreamHandle {
+function openMockStream(onMessage: (msg: StreamMessage) => void): StreamHandle {
   let mock: StreamHandle | null = null;
   let closed = false;
   const queued: number[] = [];

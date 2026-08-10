@@ -1,7 +1,7 @@
 //! Websocket messages over `WS /api/stream`.
 //!
 //! The client picks one of two subscribe modes; the server answers with
-//! [`StreamMsg`] frames — a `ChangeProjection` (projection mode) and/or
+//! [`StreamMessage`] frames — a `ChangeProjection` (projection mode) and/or
 //! live log entries.
 
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ use crate::log::LogEntry;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
-pub enum ClientMsg {
+pub enum ClientMessage {
     /// Cursor replay (the CLI follower): `change_id` → from-idx.
     ///
     /// The server replays each change's `[from, head)` backlog, then
@@ -35,7 +35,7 @@ pub enum ClientMsg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
-pub enum StreamMsg {
+pub enum StreamMessage {
     /// The change's folded projection at subscribe time.
     ///
     /// The projection a projection-mode follower resumes from. Sent once per
