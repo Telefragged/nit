@@ -30,8 +30,9 @@ code narration padding a commit message.
 | nit thread     | the review history: questions, verdicts, fixes | reviewer and author, during review         |
 
 The domain model is `crates/nit-types/src/domain.rs`: a term is defined
-once, on the thing it names, and a doc-comment elsewhere may rely on
-that meaning instead of restating it. A definition holds only what a
+once, on the type that carries it, and that type lives there, so the
+module reads as the whole vocabulary. A doc-comment elsewhere may rely
+on that meaning instead of restating it. A definition holds only what a
 code change cannot falsify — never a count, a route, a column, a status
 code or a behavior, all of which belong to the code they describe.
 

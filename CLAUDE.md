@@ -64,10 +64,11 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
     every review pass. A `/simplify` or `/code-review` run additionally
     spawns the comment-audit agent that skill defines.
 11. **The domain model is `crates/nit-types/src/domain.rs`** — what a
-    term means is defined there once, on the thing it names, and every
-    component speaks that vocabulary. Read it before naming anything;
-    an identifier spells its term in full, and the exemptions are a
-    closed set.
+    term means is defined there once, on the type that carries it, and
+    that type lives there too; every component speaks that vocabulary.
+    A shape a route needs stays with the route. Read it before naming
+    anything; an identifier spells its term in full, and the exemptions
+    are a closed set.
 
 ## Layout
 
