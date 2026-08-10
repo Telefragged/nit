@@ -3,10 +3,10 @@
 // badly CPU-starved — the mock's real setTimeout latency (fixtures/index) and
 // React's renders then land far later than on an idle box. testing-library's
 // 1000ms `asyncUtilTimeout` default is too tight for that and flakes the
-// rail-load `findBy`s. findBy/waitFor poll until the state holds, so a generous
-// ceiling is a true fix, not a probability shift: the assertion still resolves
-// the instant the element appears — the ceiling only has to clear the
-// worst-case load-stretched completion, never the happy path.
+// rail-load `findBy`s. findBy/waitFor poll until the state holds, so the
+// ceiling only has to clear the worst-case load-stretched completion, never
+// the happy path: the assertion still resolves the instant the element
+// appears.
 import { configure } from "@testing-library/react";
 
 export const ASYNC_TIMEOUT_MS = 10_000;

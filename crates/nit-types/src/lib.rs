@@ -12,8 +12,7 @@
 //!
 //! Dependency-light by construction — `serde` only (the `clap` derive on
 //! `Side` is feature-gated off) and never `serde_json::Value` — so a future
-//! web build can share these types without pulling in the server, and every
-//! payload is a typed shape rather than dynamic JSON.
+//! web build can share these types without pulling in the server.
 
 pub mod chain;
 pub mod chains;

@@ -2,9 +2,7 @@
 
 You are reviewing code for design quality. Each rule below is a real
 anti-pattern that shipped in a _first draft_ in this repo and took several
-review rounds to correct. The corrections were obvious in hindsight and should
-not have needed pointing out one at a time. Your job as a reviewer is to catch
-them here.
+review rounds to correct. Your job as a reviewer is to catch them here.
 
 For each rule: what to **require**, what to **reject**, and a before/after of
 what bad vs good looked like. The **meta-rule** at the end is the most
@@ -65,7 +63,7 @@ order) that downstream consumers need (events, the log endpoint, the CLI).
 updated, and write it into the record you **already** persist and broadcast.
 
 **Reject:** (a) re-deriving it on every read, and (b) adding a new column /
-denormalized field to hold it. Both were tried here and both were wrong:
+denormalized field to hold it:
 
 ```rust
 // BAD (a) — re-derive on read: the fold returns the ids, callers zip them onto
@@ -107,9 +105,7 @@ forward-compatible. Old rows stay exactly as written.
 
 **Reject:** any `UPDATE`/backfill/reconcile of an append-only log's rows. If a
 new column needs values for historical rows, that is a sign the value does not
-belong in a column (see rule 2). The first draft here added a `NOT NULL
-DEFAULT` column **and** a startup pass that rewrote old log rows — both gone in
-the final design.
+belong in a column (see rule 2).
 
 ```sql
 -- BAD: rewriting immutable history to populate a new column.
@@ -129,7 +125,7 @@ rewrites it.
 one field and updated in exactly one place.
 
 **Reject:** a second copy threaded alongside the real one "for convenience." It
-will drift; here it risked a double-increment.
+will drift — two owners of one counter double-increment it.
 
 ```rust
 // BAD — minting used a local counter passed around, separate from the

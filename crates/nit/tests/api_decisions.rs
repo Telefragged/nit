@@ -2,9 +2,9 @@
 //! reviewer scratch like a comment draft
 //! (`PUT`/`DELETE /api/changes/{id}/decision`), published only by
 //! `POST /api/chains/{id}/submit`, which publishes each member's draft
-//! decision at the revision the chain path pins. Abandonment is a
-//! decision, not a separate button; submit is idempotent (a published
-//! decision's row is gone).
+//! decision at the revision the chain path pins. Abandonment is one of
+//! the decisions, published by the same submit; submit is idempotent (a
+//! published decision's row is gone).
 
 mod common;
 

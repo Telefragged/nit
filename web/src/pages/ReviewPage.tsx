@@ -269,7 +269,7 @@ export default function ReviewPage() {
   // first sight, not read from the live `latest`: a revision folding in over
   // the websocket must not move it. A revision arriving before the pin effect
   // (below) commits would otherwise slide the default forward and jump the
-  // view to the just-pushed revision — a live-build bug, not just a flake.
+  // view to the just-pushed revision.
   // Keyed by change (the component is reused across /changes/:id without
   // remounting) via the adjust-during-render idiom used for `shownChange`
   // below.

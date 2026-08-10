@@ -208,11 +208,9 @@ pub(crate) fn print_comment(thread: &Thread, replied: bool) {
 
 /// The multi-line rendering of one log entry (no trailing blank line).
 ///
-/// A pure function of that entry. Two facts a raw entry omits are deliberately
-/// not reconstructed, to keep rendering stateless: a `revision` entry shows no
-/// minted revision number (it returns once the number rides on the log entry
-/// itself), and a reply names only its thread — a reply's anchor lives on the
-/// thread's opening entry, not here.
+/// A pure function of that entry, so it reconstructs nothing the entry does
+/// not carry: a `revision` entry shows no revision number, and a reply names
+/// only its thread — a reply's anchor lives on the thread's opening entry.
 pub(crate) fn render_entry(entry: &LogEntry) -> String {
     let sequence = entry.sequence;
     let change = entry.change_id;
