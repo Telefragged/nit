@@ -26,7 +26,7 @@ pub struct Chain {
 /// One member of a derived path: structure only.
 ///
 /// Read at the revision the path pins. Per-change review state (counts,
-/// staged decision, the newest patchset) is not here — a client reads it
+/// staged decision, the newest revision) is not here — a client reads it
 /// from `GET /api/changes/{id}` per member.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -35,7 +35,7 @@ pub struct PathEntry {
     /// Position in THIS path (0-based).
     pub position: u64,
     pub change_key: String,
-    /// The patchset this path walks.
+    /// The revision this path walks.
     pub revision: u64,
     /// Per `(change, this revision)`.
     pub status: ChangeStatus,

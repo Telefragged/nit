@@ -24,9 +24,9 @@
 //     tip change 20  agents_turn — a changes_requested change.
 //     tip change 30  approved — single approved change.
 //   repo 3 (orbit)  the B-in-two-chains example: one change
-//            (B = 51) reached by two tips at two patchsets — tip C (53) walks
+//            (B = 51) reached by two tips at two revisions — tip C (53) walks
 //            B at rev0, tip E (55) walks B at rev1. B's rev0 member shows the
-//            newer-elsewhere badge (a newer patchset lives on E's chain);
+//            newer-elsewhere badge (a newer revision lives on E's chain);
 //            ChangeDetail.chains lists both tips.
 //
 // Every stored diff leads with the synthetic /COMMIT_MSG file, like the
@@ -1101,7 +1101,7 @@ const change30: ChangeRecord = {
 //   push 1:  m → A(50) → B(51) → C(53)      Change-Ids Ia, Ib, Ic
 //   push 2:  m → D(52) → B′(51) → E(55)     Change-Ids Id, Ib, Ie
 //
-// B is one change (51) with two patchsets: rev0 parent=A, rev1 parent=D.
+// B is one change (51) with two revisions: rev0 parent=A, rev1 parent=D.
 // Two tips, two chains: chains/53 walks B at rev0, chains/55 walks B at rev1.
 // Threads/reviews on B are shared (they belong to the change), each anchored
 // to the revision it was written against. Revisions are 0-based here (the new
@@ -1190,8 +1190,8 @@ const changeD: ChangeRecord = {
   },
 };
 
-// B: two patchsets. rev0 (parent A) is approved; rev1 (parent D) is pending.
-// From C's chain B sits at rev0, older than its latest patchset rev1 (the
+// B: two revisions. rev0 (parent A) is approved; rev1 (parent D) is pending.
+// From C's chain B sits at rev0, older than its latest revision rev1 (the
 // newer-elsewhere badge); from E's chain B sits at rev1.
 const changeB: ChangeRecord = {
   id: 51,
@@ -1221,7 +1221,7 @@ const changeB: ChangeRecord = {
       id: 2,
       revision: 0,
       verdict: "approve",
-      message: "Weighting looks right; LGTM on this patchset.",
+      message: "Weighting looks right; LGTM on this revision.",
       created_at: ago(5 * 60),
     },
   ],
@@ -1549,8 +1549,8 @@ export const threads: ThreadRecord[] = [
     created_at: ago(3 * 60),
     updated_at: ago(3 * 60),
   },
-  // Shared thread that patchset C's chain also walks: it belongs to the change
-  // (not a patchset), so both chains see it.
+  // Shared thread that revision C's chain also walks: it belongs to the change
+  // (not a revision), so both chains see it.
   {
     id: 82,
     change_id: 51,

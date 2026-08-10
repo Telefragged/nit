@@ -1,6 +1,6 @@
 // Comment placement: which column of a diff range a thread renders in, and
 // the inverse — which (revision, side) a new draft on a column stores to.
-// Threads are pinned to their patchset — one renders only when its
+// Threads are pinned to their revision — one renders only when its
 // (revision, side) names a displayed tree, never ported onto another
 // revision; the server stores anchors verbatim and this module is the sole
 // owner of the placement rules. Plus assembling the server's published

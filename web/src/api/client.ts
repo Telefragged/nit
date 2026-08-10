@@ -65,8 +65,8 @@ export const listRepos = () => request<RepoList>("GET", "/repos");
 
 export const getRepo = (id: number) => request<Repo>("GET", `/repos/${id}`);
 
-/** The derived chain through a change's tip. `revision` selects which patchset
- * of the change to root on (and hence the chain context). */
+/** The derived chain through a change's tip. `revision` selects which
+ * version of the change to root on (and hence the chain context). */
 export const getChain = (changeId: number, revision?: number) =>
   request<Chain>(
     "GET",
@@ -138,7 +138,7 @@ export const clearDecision = (changeId: number) =>
   request("DELETE", `/changes/${changeId}/decision`);
 
 /** Publish every member's staged decision for the chain rooted at `tipChangeId`.
- * `revision` picks the chain context (the tip's patchset), like getChain. */
+ * `revision` picks the chain context (the tip's own), like getChain. */
 export const submitChain = (tipChangeId: number, revision?: number) =>
   request<BatchSubmitResult>(
     "POST",

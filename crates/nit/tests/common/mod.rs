@@ -331,7 +331,7 @@ pub fn review(server: &TestServer, change_id: u64, verdict: &str, message: &str)
 }
 
 /// A change's displayed status off its derived chain path — the change is
-/// its own degenerate tip once terminal. `revision` pins a patchset;
+/// its own degenerate tip once terminal. `revision` pins a revision;
 /// `None` reads the one the chain's tip pins. `None` back means the chain
 /// did not resolve.
 pub fn status_at(server: &TestServer, change_id: u64, revision: Option<u64>) -> Option<String> {

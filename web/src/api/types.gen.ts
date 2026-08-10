@@ -125,7 +125,7 @@ export type Chain = {
  * One member of a derived path: structure only.
  *
  * Read at the revision the path pins. Per-change review state (counts,
- * staged decision, the newest patchset) is not here — a client reads it
+ * staged decision, the newest revision) is not here — a client reads it
  * from `GET /api/changes/{id}` per member.
  */
 export type PathEntry = {
@@ -136,7 +136,7 @@ export type PathEntry = {
   position: number;
   change_key: string;
   /**
-   * The patchset this path walks.
+   * The revision this path walks.
    */
   revision: number;
   /**
@@ -198,7 +198,7 @@ export type GraphNode = {
   change_id: number | null;
   change_key: string | null;
   /**
-   * The pinned patchset (open nodes); `None` off the open region.
+   * The pinned revision (open nodes); `None` off the open region.
    */
   revision: number | null;
 };
@@ -561,7 +561,7 @@ export type CommentInput = {
   /**
    * Anchor revision for a new thread.
    *
-   * A draft's own patchset — an interdiff old side pins to an earlier
+   * A draft's own revision — an interdiff old side pins to an earlier
    * revision. The API always stamps it; the fold falls back to the
    * change's latest only for a malformed payload.
    */

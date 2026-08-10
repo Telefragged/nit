@@ -38,7 +38,7 @@ export interface ChangeRecord {
 export interface TipRecord {
   tip_change_id: number;
   repo_id: number;
-  /** The patchset of the tip change this tip pins (its head revision). */
+  /** The revision of the tip change this tip pins. */
   revision: number;
   /** Terminal tips (every member merged/abandoned) — off the dashboard's
    * default `active` view. */

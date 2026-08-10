@@ -76,7 +76,7 @@ impl RepoView {
     /// Leaf commit-shas over the changes `keep` admits, sorted.
     ///
     /// A leaf is a change's latest-revision sha that no revision records
-    /// as a `parent_sha`. A superseded patchset is never a leaf — only
+    /// as a `parent_sha`. A superseded revision is never a leaf — only
     /// the latest revision is a candidate.
     fn leaves_where(&self, keep: impl Fn(&ChangeProj) -> bool) -> Vec<String> {
         let parents: HashSet<&str> = self
@@ -331,7 +331,7 @@ mod tests {
     }
 
     /// push1 `m → A → B → C` and push2 `m → D → B' → E`: B is one change at two
-    /// patchsets, surfaced as two tips/chains.
+    /// revisions, surfaced as two tips/chains.
     #[test]
     fn b_in_two_chains() {
         let ca = change(10, "Ia", vec![rev(0, "A", "m", "m")]);
@@ -401,7 +401,7 @@ mod tests {
 
     #[test]
     fn open_nodes_dedupes_shared_change_keeps_two_revisions() {
-        // The b_in_two_chains topology: B is one change at two patchsets under
+        // The b_in_two_chains topology: B is one change at two revisions under
         // two live tips. Open nodes dedupe by sha, so B@rev0 (sha "B") and
         // B@rev1 (sha "Bp") are two nodes — different commits, different parents.
         let ca = change(10, "Ia", vec![rev(0, "A", "m", "m")]);

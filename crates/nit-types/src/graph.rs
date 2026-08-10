@@ -74,6 +74,6 @@ pub struct GraphNode {
     /// The backing change, or `None` for a bare git commit (merge / pre-nit).
     pub change_id: Option<u64>,
     pub change_key: Option<String>,
-    /// The pinned patchset (open nodes); `None` off the open region.
+    /// The pinned revision (open nodes); `None` off the open region.
     pub revision: Option<u64>,
 }

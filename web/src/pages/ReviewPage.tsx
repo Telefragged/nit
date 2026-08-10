@@ -155,7 +155,7 @@ function DiffRangeSelect({
       <select
         className="rev-select"
         aria-label="Revision"
-        title="Revision (patchset) under review"
+        title="Revision under review"
         value={String(selected)}
         onChange={(e) => {
           onRight(Number(e.target.value));
@@ -267,7 +267,7 @@ export default function ReviewPage() {
 
   // The revision the page defaults to (until the URL pins one) is frozen at
   // first sight, not read from the live `latest`: a revision folding in over
-  // the websocket must not move it. A patchset arriving before the pin effect
+  // the websocket must not move it. A revision arriving before the pin effect
   // (below) commits would otherwise slide the default forward and jump the
   // view to the just-pushed revision — a live-build bug, not just a flake.
   // Keyed by change (the component is reused across /changes/:id without
@@ -289,7 +289,7 @@ export default function ReviewPage() {
 
   // The chain context is the derived chain through this change rooted at the
   // viewed revision — the path that pins `selected`. Fetched with the revision
-  // so switching patchsets re-roots onto that revision's chain.
+  // so switching revisions re-roots onto that revision's chain.
   const chainQ = useQuery({
     queryKey: ["chain", changeId, selected],
     queryFn: published ? () => getChain(changeId, selected) : skipToken,
@@ -316,7 +316,7 @@ export default function ReviewPage() {
 
   // Pin the frozen default into the URL on first load, so the address reflects
   // the viewed revision. It writes `defaultRev` (the first-seen revision), not
-  // the live latest — a patchset arriving in this effect's post-commit gap
+  // the live latest — a revision arriving in this effect's post-commit gap
   // can't be captured as the pin, and `selected` already falls back to
   // `defaultRev`, so nothing moves regardless of when the effect flushes.
   useEffect(() => {

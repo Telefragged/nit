@@ -323,7 +323,7 @@ fn batch_submit_publishes_every_member() {
 }
 
 /// A decision publishes at the revision the chain pins (the live latest), never
-/// a superseded patchset: after an amend, submitting approves r1, leaving r0's
+/// a superseded revision: after an amend, submitting approves r1, leaving r0's
 /// own status untouched.
 #[test]
 fn batch_submit_publishes_at_pinned_revision() {

@@ -262,14 +262,14 @@ impl ChangeProj {
     /// The displayed status at a pinned revision.
     ///
     /// The lifecycle overlay (`abandoned` change-wide, `merged` at the
-    /// latest patchset) over the verdict-derived review status
+    /// latest revision) over the verdict-derived review status
     /// (`review_status_at`).
     #[must_use]
     pub fn status_at(&self, revision: u64) -> ChangeStatus {
         if matches!(self.lifecycle, Lifecycle::Abandoned) {
             return ChangeStatus::Abandoned;
         }
-        // A landing may carry content matching no recorded patchset (the
+        // A landing may carry content matching no recorded revision (the
         // approve action rebases before merging; the timer only records the
         // landing by Change-Id), so the latest stands in for it.
         if self.is_merged() && self.latest_revision().is_some_and(|r| r.number == revision) {
@@ -634,7 +634,7 @@ mod tests {
         let c = folded(vec![
             revision("A", "base", "base", true),
             review(0, Verdict::RequestChanges),
-            revision("B", "base", "base", true), // reword: new patchset
+            revision("B", "base", "base", true), // reword: new revision
         ]);
         // The review landed on r0; r1 has no review yet and resets → pending.
         assert_eq!(c.status_at(0), ChangeStatus::ChangesRequested);
