@@ -34,10 +34,7 @@ impl Verdict {
 /// and published on batch submit. A superset of [`Verdict`] with the two
 /// lifecycle actions, so abandonment is a decision rather than a separate
 /// button; it translates back to a [`Verdict`] or a [`LifecycleAction`]
-/// at publish time ([`as_verdict`], [`as_lifecycle`]).
-///
-/// [`as_verdict`]: Decision::as_verdict
-/// [`as_lifecycle`]: Decision::as_lifecycle
+/// at publish time ([`Decision::as_verdict`], [`Decision::as_lifecycle`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]

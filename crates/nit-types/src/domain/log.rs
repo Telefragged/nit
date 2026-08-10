@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 /// The kind of one log entry.
 ///
 /// The fold dispatches on it; the db `log.kind` TEXT column stores its
-/// [`as_str`].
-///
-/// [`as_str`]: LogKind::as_str
+/// [`LogKind::as_str`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogKind {

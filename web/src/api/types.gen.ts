@@ -1,10 +1,30 @@
 // @generated from crates/nit-types by `nix run .#gen-types` — DO NOT EDIT.
 // Change the Rust wire types, then regenerate.
 
+/**
+ * Which tree of a revision a line comment is anchored to.
+ *
+ * `new` is the revision's commit tree, `old` its parent tree. Defaults
+ * to `new` where a request omits it.
+ */
 export type Side = "old" | "new";
 
+/**
+ * A reviewer's verdict on one change.
+ *
+ * Folds to the matching [`ChangeStatus`] (`From<Verdict>`).
+ */
 export type Verdict = "approve" | "request_changes" | "comment";
 
+/**
+ * A reviewer's **staged** decision on a change.
+ *
+ * The review modal's single set of choices, drafted in `draft_reviews`
+ * and published on batch submit. A superset of [`Verdict`] with the two
+ * lifecycle actions, so abandonment is a decision rather than a separate
+ * button; it translates back to a [`Verdict`] or a [`LifecycleAction`]
+ * at publish time ([`Decision::as_verdict`], [`Decision::as_lifecycle`]).
+ */
 export type Decision =
   | "approve"
   | "request_changes"
@@ -12,6 +32,11 @@ export type Decision =
   | "abandon"
   | "reopen";
 
+/**
+ * A change's displayed status at a pinned revision.
+ *
+ * Per `(change, revision)`, never a change-wide scalar.
+ */
 export type ChangeStatus =
   | "pending"
   | "approved"
@@ -20,18 +45,46 @@ export type ChangeStatus =
   | "merged"
   | "abandoned";
 
+/**
+ * A chain's derived, actionable state.
+ *
+ * Computed at read time from the path's members (the server's
+ * `chain::derive_state`); it is informational on the wire, never stored.
+ * Abandonment is derivation-inert — there is no abandoned chain state.
+ */
 export type ChainState =
   | "merged"
   | "agents_turn"
   | "waiting_for_review"
   | "approved";
 
+/**
+ * Which region of the change graph a node sits in.
+ *
+ * `open` ascends above the canonical HEAD, `head` is the HEAD anchor,
+ * and `history` descends below it (merged commits, fading with depth).
+ * The client styles a node by its `section` first (head → ring,
+ * history → grey/fade), falling back to its `ChangeStatus` for open
+ * nodes.
+ */
 export type GraphSection = "open" | "head" | "history";
 
+/**
+ * `DiffFile.status` — how a file changed between the two diffed trees.
+ */
 export type FileStatus = "added" | "deleted" | "modified" | "renamed";
 
+/**
+ * `Line.kind` — a diff line's role.
+ */
 export type LineKind = "context" | "add" | "del";
 
+/**
+ * What a `lifecycle` log entry records about a change.
+ *
+ * The merge/abandon timer writes `merged`/`abandoned`; `nit reopen`
+ * writes `reopened`.
+ */
 export type LifecycleAction = "merged" | "abandoned" | "reopened";
 
 export type Repo = {
@@ -52,6 +105,12 @@ export type Repo = {
 
 export type RepoList = { repos: Array<Repo> };
 
+/**
+ * A derived chain: a tip change's path plus its rolled-up state.
+ *
+ * The list element (`GET /api/chains`) and the single-chain shape
+ * (`GET /api/chains/{id}`) are identical.
+ */
 export type Chain = {
   tip_change_id: number;
   repo_id: number;
@@ -62,6 +121,13 @@ export type Chain = {
   path: Array<PathEntry>;
 };
 
+/**
+ * One member of a derived path: structure only.
+ *
+ * Read at the revision the path pins. Per-change review state (counts,
+ * staged decision, the newest patchset) is not here — a client reads it
+ * from `GET /api/changes/{id}` per member.
+ */
 export type PathEntry = {
   change_id: number;
   /**
@@ -81,6 +147,13 @@ export type PathEntry = {
   commit_sha: string;
 };
 
+/**
+ * One repo's change graph: a commit-sha-keyed DAG over the canonical branch.
+ *
+ * Not a response body — the browser assembles it (`crates/nit-wasm`) from
+ * the two primitive reads, `GET /api/changes` and `GET /api/history`; the
+ * shape lives here because it crosses the wasm↔JS boundary.
+ */
 export type RepoGraph = {
   /**
    * The canonical branch has merged commits below the displayed window — the
@@ -96,6 +169,12 @@ export type RepoGraph = {
   nodes: Array<GraphNode>;
 };
 
+/**
+ * One node of the change graph, keyed by its `commit_sha`.
+ *
+ * Edges are its `parents` (an edge is drawn to each that is in the node
+ * set; `len > 1` is a merge).
+ */
 export type GraphNode = {
   /**
    * The node's stable id — a full 40-hex commit-sha; the client truncates.
@@ -124,6 +203,11 @@ export type GraphNode = {
   revision: number | null;
 };
 
+/**
+ * One commit of the canonical branch's merged history.
+ *
+ * Walked from the tracked ref's HEAD down (`GET /api/history?repo={id}`).
+ */
 export type HistoryCommit = {
   /**
    * Full 40-hex commit-sha.
@@ -144,6 +228,12 @@ export type HistoryCommit = {
   change_key: string | null;
 };
 
+/**
+ * A window of the canonical branch's merged history (`GET /api/history`).
+ *
+ * The tracked ref's HEAD first, then its ancestors, a **fixed window of 5
+ * commits** deep.
+ */
 export type RepoHistory = {
   /**
    * HEAD-first; each commit's `parents` carry the edges.
@@ -155,8 +245,20 @@ export type RepoHistory = {
   truncated: boolean;
 };
 
+/**
+ * The `GET /api/changes` response: matching changes as folded projections.
+ *
+ * The same shape the websocket ships in snapshot mode. `repo` narrows to
+ * one repo (an unknown id matches nothing); `status` is repeatable
+ * (`?status={s}&status={s}`) and matches each change's status at its
+ * **latest revision** (terminal states win). **No `status` param means
+ * every change** — the API bakes in no default subset.
+ */
 export type ChangeList = { changes: Array<ChangeProj> };
 
+/**
+ * `GET /api/changes/{id}` response.
+ */
 export type ChangeDetail = {
   id: number;
   repo_id: number;
@@ -179,6 +281,12 @@ export type ChangeDetail = {
   draft_decision: StagedDecision | null;
 };
 
+/**
+ * `GET /api/changes/{id}/drafts` response.
+ *
+ * The reviewer's private overlay — unpublished drafts and the staged
+ * decision.
+ */
 export type ChangeDrafts = {
   drafts: Array<Draft>;
   draft_decision: StagedDecision | null;
@@ -207,8 +315,23 @@ export type Review = {
   created_at: string;
 };
 
+/**
+ * A reviewer's staged decision plus its cover note/reason.
+ *
+ * The body of [`ChangeDetail::draft_decision`] and the
+ * `PUT /api/changes/{id}/decision` request.
+ */
 export type StagedDecision = { decision: Decision; message: string };
 
+/**
+ * Selected-text anchor of a line comment.
+ *
+ * 1-based lines on the comment's side, 0-based chars, `end_char`
+ * exclusive, `end_line` = the comment's `line`. The JSON shape is these
+ * four fields. They are domain coordinates (always non-negative), so the
+ * shape is `u64`; the server's `SQLite` columns are signed, converted at
+ * the db boundary like every other id.
+ */
 export type CommentRange = {
   start_line: number;
   start_char: number;
@@ -216,6 +339,9 @@ export type CommentRange = {
   end_char: number;
 };
 
+/**
+ * A published comment thread.
+ */
 export type Thread = {
   /**
    * Fold-assigned by creation order (not stored).
@@ -240,6 +366,9 @@ export type Thread = {
   updated_at: string;
 };
 
+/**
+ * One message in a [`Thread`].
+ */
 export type ThreadComment = {
   body: string;
   /**
@@ -252,6 +381,9 @@ export type ThreadComment = {
   created_at: string;
 };
 
+/**
+ * A reviewer's unpublished comment.
+ */
 export type Draft = {
   id: number;
   change_id: number;
@@ -277,6 +409,9 @@ export type Draft = {
   updated_at: string;
 };
 
+/**
+ * `POST /api/changes/{id}/drafts` request.
+ */
 export type NewDraft = {
   revision: number;
   file?: string;
@@ -288,6 +423,9 @@ export type NewDraft = {
   resolved?: boolean;
 };
 
+/**
+ * `PATCH /api/drafts/{id}` request.
+ */
 export type EditDraft = { body: string; resolved?: boolean };
 
 export type Diff = { files: Array<DiffFile> };
@@ -318,6 +456,13 @@ export type DiffFile = {
   hunks: Array<Hunk>;
 };
 
+/**
+ * A file's full-context diff lines.
+ *
+ * For expanding the unchanged runs the shown diff hides. Same `Line`
+ * shape as the diff, so revealed lines carry their drift exactly as the
+ * hunks do.
+ */
 export type FileLines = { lines: Array<Line> };
 
 export type Hunk = {
@@ -349,6 +494,11 @@ export type Line = {
   text: string;
 };
 
+/**
+ * `POST /api/chains/{id}/submit` response.
+ *
+ * The outcome of publishing every chain member's staged decision.
+ */
 export type BatchSubmitResult = {
   /**
    * Members whose staged decision published.
@@ -362,6 +512,13 @@ export type BatchSubmitResult = {
 
 export type SubmitError = { change_id: number; message: string };
 
+/**
+ * A `revision` entry: one new commit-sha observed for this change.
+ *
+ * The revision `number` is **not** carried — the fold mints it (0-based,
+ * by append order) so a concurrent shared-change push cannot duplicate
+ * it.
+ */
 export type RevisionPayload = {
   commit_sha: string;
   parent_sha: string;
@@ -389,6 +546,13 @@ export type ReviewPayload = {
   comments: Array<CommentInput>;
 };
 
+/**
+ * A comment inside a `review` or `comment` payload.
+ *
+ * With `thread_id` unset it **opens a new thread** anchored by the
+ * fields below; with it set it **replies** to that thread (the anchor is
+ * ignored — the thread owns it).
+ */
 export type CommentInput = {
   /**
    * `None` opens a new thread; `Some` appends to that thread.
@@ -421,18 +585,40 @@ export type CommentInput = {
   resolved: boolean | null;
 };
 
+/**
+ * A `lifecycle` entry: a merge, an abandon, or a reopen.
+ *
+ * The merge timer (`merged`) and the `nit abandon` / `nit reopen`
+ * actions. `commit_sha` is set only for `merged` — the landed commit on
+ * the canonical branch; `message` is an optional reason on `abandoned`.
+ */
 export type LifecyclePayload = {
   action: LifecycleAction;
   commit_sha?: string | null;
   message?: string | null;
 };
 
+/**
+ * A log entry's payload as a closed union tagged by `kind`.
+ *
+ * The server's fold holds it typed; flattened into [`LogEntry`] the
+ * adjacent tag produces the wire's `{…, "kind": …, "payload": …}`.
+ * Storage serializes the inner struct alone (the `kind` lives in its own
+ * column), via the boundary in `crate::review`.
+ */
 export type LogPayload =
   | { kind: "revision"; payload: RevisionPayload }
   | { kind: "review"; payload: ReviewPayload }
   | { kind: "comment"; payload: CommentInput }
   | { kind: "lifecycle"; payload: LifecyclePayload };
 
+/**
+ * One log entry.
+ *
+ * Belongs to one change; `seq` totally orders the whole repo, `idx`
+ * orders one change. The flattened [`LogPayload`] contributes the `kind`
+ * discriminant and the `payload` body.
+ */
 export type LogEntry = {
   change_id: number;
   idx: number;
@@ -445,14 +631,32 @@ export type LogEntry = {
   | { kind: "lifecycle"; payload: LifecyclePayload }
 );
 
+/**
+ * A client → server websocket message. Externally tagged, `snake_case`.
+ */
 export type ClientMsg =
   | { subscribe: { [key in string]: number } }
   | { subscribe_snapshot: Array<number> };
 
+/**
+ * A server → client websocket message. Externally tagged, `snake_case`.
+ */
 export type StreamMsg = { snapshot: ChangeProj } | { entry: LogEntry };
 
+/**
+ * A change's terminal lifecycle, folded from its `lifecycle` entries.
+ *
+ * The landed commit's sha stays on the `merged` log entry, not here —
+ * the fold answers "is it landed", the log answers "as what".
+ */
 export type Lifecycle = "active" | "merged" | "abandoned";
 
+/**
+ * Where a thread is anchored within a revision.
+ *
+ * Modeled so the invalid combinations the flat wire fields allow are
+ * unrepresentable.
+ */
 export type Anchor =
   | "change"
   | { file: { file: string } }
@@ -482,12 +686,25 @@ export type RevisionProj = {
   created_at: string;
 };
 
+/**
+ * One message in a thread.
+ *
+ * `review_id` is the review that published it, or `None` for an agent's
+ * own note — which is what distinguishes reviewer from agent (the only
+ * consumer derives the label from it).
+ */
 export type ThreadCommentProj = {
   body: string;
   review_id: number | null;
   created_at: string;
 };
 
+/**
+ * A located, resolvable conversation.
+ *
+ * Its anchor and birth come from its first comment; the `id` is
+ * fold-assigned by creation order, never stored.
+ */
 export type ThreadProj = {
   id: number;
   revision: number;
@@ -511,6 +728,14 @@ export type ReviewProj = {
   created_at: string;
 };
 
+/**
+ * The fold of one change's log.
+ *
+ * Serializable so the server can ship it as the subscribe **snapshot**
+ * and the browser can resume folding the live tail from it; the wire
+ * form is opaque to the web, which only passes it back through the
+ * shared WebAssembly fold.
+ */
 export type ChangeProj = {
   id: number;
   repo_id: number;

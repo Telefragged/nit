@@ -2,7 +2,9 @@
 //! concatenates every web-facing wire type's ts-rs declaration into one module
 //! and writes it where the `gen-types` app / `types-drift` check ask (the
 //! `TYPES_GEN_OUT` env var). The exact TS shapes come from the types' own
-//! `ts`/`serde` attributes; this file only fixes their order. No `TYPES_GEN_OUT`
+//! `ts`/`serde` attributes and their doc-comments, so a term defined on a wire
+//! type reaches the web with it; this file only fixes their order. No
+//! `TYPES_GEN_OUT`
 //! means a no-op, so `cargo test --features ts` stays read-only.
 
 use ts_rs::{Config, TS};
@@ -19,6 +21,9 @@ fn write_wire_types() {
     );
     macro_rules! emit {
         ($($t:ty),* $(,)?) => {$({
+            if let Some(docs) = <$t as TS>::docs() {
+                out.push_str(&docs);
+            }
             out.push_str("export ");
             out.push_str(&<$t as TS>::decl(&cfg));
             out.push_str("\n\n");
