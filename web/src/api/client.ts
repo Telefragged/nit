@@ -83,7 +83,7 @@ export const getChanges = (repoId: number, statuses: ChangeStatus[]) =>
     `/changes?repo=${repoId}${statuses.map((s) => `&status=${s}`).join("")}`,
   );
 
-/** A window of the repo's canonical branch below its HEAD; the window is
+/** A window of the repo's canonical ref below its HEAD; the window is
  * fixed server-side. */
 export const getHistory = (repoId: number) =>
   request<RepoHistory>("GET", `/history?repo=${repoId}`);

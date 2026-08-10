@@ -91,7 +91,7 @@ export default function Dashboard() {
         {repo ? (
           <>
             {" "}
-            over <span className="mono">{repo.base_ref}</span>
+            over <span className="mono">{repo.canonical_ref}</span>
           </>
         ) : null}
         .

@@ -29,14 +29,14 @@ pub(super) async fn push(
         let repo = Repository::open(&canonical)
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
 
-        // Push takes no base parameter -- the repo's stored canonical branch is used.
+        // Push takes no base parameter -- the repo's stored canonical ref is used.
         let repo_row = db::find_repo(conn, &canonical)?.ok_or_else(|| {
             Error::not_found(format!(
                 "repo at {canonical} is not registered — run `nit repo create`"
             ))
         })?;
         state.ensure_repo(&repo_row);
-        let base = repo_row.base_ref.clone();
+        let base = repo_row.canonical_ref.clone();
 
         let walk = gitscan::walk_push(&canonical, &base, &req.tip).map_err(Error::bad_request)?;
         // A tip that is ancestor-or-equal of the base walks to nothing: the work

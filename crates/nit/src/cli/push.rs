@@ -23,7 +23,7 @@ pub struct PushArgs {
 /// Pushes the cwd's checked-out commit (or an explicit rev) for review.
 ///
 /// Idempotent. The repo must already be registered (`nit repo create`). The
-/// canonical branch comes from the registered repo, so no base is sent. Prints
+/// canonical ref comes from the registered repo, so no base is sent. Prints
 /// the resulting chain digest — every change the push registered, not just the
 /// tip — so the author needs no follow-up read.
 ///

@@ -117,19 +117,19 @@ export const repos: RepoRecord[] = [
   {
     id: 1,
     git_dir: "/home/vetle/src/acme-runtime/.git",
-    base_ref: "main",
+    canonical_ref: "main",
     history: deepHistory,
   },
   {
     id: 2,
     git_dir: "/home/vetle/src/quarry/.git",
-    base_ref: "main",
+    canonical_ref: "main",
     history: graphHistory,
   },
   {
     id: 3,
     git_dir: "/home/vetle/src/orbit/.git",
-    base_ref: "main",
+    canonical_ref: "main",
     history: graphHistory,
   },
 ];

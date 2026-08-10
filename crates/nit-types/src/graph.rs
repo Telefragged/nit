@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{ChangeStatus, GraphSection};
 
-/// One commit of the canonical branch's merged history.
+/// One commit of the canonical ref's merged history.
 ///
 /// Walked from the tracked ref's HEAD down (`GET /api/history?repo={id}`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,7 +23,7 @@ pub struct HistoryCommit {
     pub change_key: Option<String>,
 }
 
-/// A window of the canonical branch's merged history (`GET /api/history`).
+/// A window of the canonical ref's merged history (`GET /api/history`).
 ///
 /// The tracked ref's HEAD first, then its ancestors, a **fixed window of 5
 /// commits** deep.
@@ -36,7 +36,7 @@ pub struct RepoHistory {
     pub truncated: bool,
 }
 
-/// One repo's change graph: a commit-sha-keyed DAG over the canonical branch.
+/// One repo's change graph: a commit-sha-keyed DAG over the canonical ref.
 ///
 /// Not a response body — the browser assembles it (`crates/nit-wasm`) from
 /// the two primitive reads, `GET /api/changes` and `GET /api/history`; the
@@ -44,7 +44,7 @@ pub struct RepoHistory {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RepoGraph {
-    /// The canonical branch has merged commits below the displayed window — the
+    /// The canonical ref has merged commits below the displayed window — the
     /// client shows an "earlier history hidden" marker and dangles deep forks
     /// to it.
     pub history_truncated: bool,

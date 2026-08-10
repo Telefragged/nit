@@ -49,7 +49,7 @@ export interface TipRecord {
 export interface RepoRecord {
   id: number;
   git_dir: string;
-  base_ref: string;
+  canonical_ref: string;
   /** The repo's synthetic canonical history, HEAD-first (the merged history
    * below HEAD the mock has no git to walk). */
   history: HistNode[];

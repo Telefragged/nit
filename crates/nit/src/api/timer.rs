@@ -32,7 +32,7 @@ fn timer_interval() -> Duration {
 
 /// The background sweep for **merged** changes.
 ///
-/// Detects a change merged onto the canonical branch and appends
+/// Detects a change merged onto the canonical ref and appends
 /// `lifecycle{merged}` entries. The only writer of `merged`. It never
 /// abandons — abandonment is an explicit action (`abandon_change`).
 pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
@@ -60,11 +60,11 @@ pub async fn sweep_once(state: &Arc<AppState>) {
     .await;
 }
 
-/// One sweep of every repo whose canonical branch has moved.
+/// One sweep of every repo whose canonical ref has moved.
 ///
 /// For each such repo — moved since the last sweep — scan only the new
 /// commits for landings, append `lifecycle{merged}`, and record the new HEAD
-/// as the baseline. The baseline lives only in the DB (`repos.base_head`) —
+/// as the baseline. The baseline lives only in the DB (`repos.canonical_head`) —
 /// the single source of truth — so a repo whose branch is unchanged costs
 /// one ref resolution and one indexed row read.
 fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
@@ -75,13 +75,13 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         let Ok(repo) = Repository::open(repo_state.git_dir()) else {
             continue;
         };
-        let Some(head) = gitscan::resolve_head(&repo, &repo_state.base_ref) else {
+        let Some(head) = gitscan::resolve_head(&repo, &repo_state.canonical_ref) else {
             continue;
         };
         let recorded = db::get_repo(conn, repo_id)
             .ok()
             .flatten()
-            .and_then(|r| r.base_head);
+            .and_then(|r| r.canonical_head);
         if recorded.as_deref() == Some(head.as_str()) {
             continue;
         }
@@ -99,7 +99,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         // Record the baseline last: a crash before this re-scans the same delta
         // next time, which is harmless — a change merged above is terminal, so
         // it has already dropped out of the open set.
-        if let Err(e) = db::update_repo_base_head(conn, repo_id, &head) {
+        if let Err(e) = db::update_repo_canonical_head(conn, repo_id, &head) {
             tracing::warn!(repo_id, "recording base head failed: {e:#}");
         }
     }

@@ -19,14 +19,14 @@ fn repo_json(state: &AppState, conn: &Connection, row: db::RepoRow) -> Result<Re
     Ok(Repo {
         id: row.id,
         git_dir: row.git_dir,
-        base_ref: row.base_ref,
+        canonical_ref: row.canonical_ref,
         active_chains: u64::try_from(tips).unwrap_or(u64::MAX),
     })
 }
 
-/// Registers a repo (`nit repo create`) with its base ref.
+/// Registers a repo (`nit repo create`) with its canonical ref.
 ///
-/// The one canonical base ref of the repo: `base` must resolve to a commit
+/// `canonical_ref` must resolve to a commit
 /// — any git ref, e.g. `origin/main` (400 otherwise); nit never guesses it.
 /// 409 if the git dir is already registered.
 pub(super) async fn create_repo(
@@ -48,20 +48,20 @@ pub(super) async fn create_repo(
             )));
         }
         let base_commit = repo
-            .revparse_single(&req.base)
+            .revparse_single(&req.canonical_ref)
             .and_then(|o| o.peel_to_commit())
             .map_err(|e| {
                 Error::bad_request(format!(
-                    "cannot resolve '{}' to a commit — name an existing git ref as the base: {}",
-                    req.base,
+                    "cannot resolve '{}' to a commit — name an existing git ref: {}",
+                    req.canonical_ref,
                     e.message()
                 ))
             })?;
-        let row = db::create_repo(conn, &canonical, &req.base)?;
-        // Seed the merge timer's baseline at the base ref's current HEAD, so the
+        let row = db::create_repo(conn, &canonical, &req.canonical_ref)?;
+        // Seed the merge timer's baseline at the canonical ref's current HEAD, so the
         // first merge after registration shows up in a delta scan rather than
         // being swallowed as pre-tracking history.
-        db::update_repo_base_head(conn, row.id, &base_commit.id().to_string())?;
+        db::update_repo_canonical_head(conn, row.id, &base_commit.id().to_string())?;
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, conn, row)?))
     })
@@ -123,8 +123,8 @@ pub(super) async fn relocate_repo(
         let row = db::RepoRow {
             id: repo_id,
             git_dir: canonical,
-            base_ref: existing.base_ref,
-            base_head: existing.base_head,
+            canonical_ref: existing.canonical_ref,
+            canonical_head: existing.canonical_head,
         };
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, conn, row)?))

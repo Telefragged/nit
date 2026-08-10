@@ -63,7 +63,7 @@ pub(super) struct HistoryQuery {
     repo: u64,
 }
 
-/// Serves `GET /api/history`: a window of the canonical branch's history.
+/// Serves `GET /api/history`: a window of the canonical ref's history.
 ///
 /// `nit_types::graph::RepoHistory` carries the walk's contract. `repo` is
 /// required — a walk has no cross-repo meaning; 404 if unknown.
@@ -78,7 +78,7 @@ pub(super) async fn repo_history(
         let repo = Repository::open(repo_state.git_dir())
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
         let (walked, truncated) =
-            gitscan::canonical_history(&repo, &repo_state.base_ref, MERGED_WINDOW)
+            gitscan::canonical_history(&repo, &repo_state.canonical_ref, MERGED_WINDOW)
                 .map_err(Error::internal)?;
         let mut commits = Vec::with_capacity(walked.len());
         for c in walked {

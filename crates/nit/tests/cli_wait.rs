@@ -12,7 +12,7 @@ use serde_json::json;
 /// and returns the chain's tip change id (the push prints text, so the id comes
 /// from the chain list).
 fn push_head(server: &TestServer, g: &GitRepo) -> u64 {
-    let (ok, _, err) = nit(server, g, &["repo", "create", "--base", "main"]);
+    let (ok, _, err) = nit(server, g, &["repo", "create", "--canonical-ref", "main"]);
     assert!(ok, "repo create failed: {err}");
     let (ok, _, err) = nit(server, g, &["push"]);
     assert!(ok, "push failed: {err}");

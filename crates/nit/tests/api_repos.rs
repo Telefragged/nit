@@ -1,6 +1,6 @@
 //! The repo registry over HTTP. A repo is registered explicitly with
 //! `nit repo create` (`POST /api/repos`), pinning its one canonical
-//! `base_ref`; its identity is the git-common-dir, and a push into an
+//! `canonical_ref`; its identity is the git-common-dir, and a push into an
 //! unregistered repo is a 404. `GET /api/repos` lists each repo with
 //! its live-tip `active_chains` count, which excludes a fully merged/abandoned
 //! chain (decided only by the background timer). `GET /api/chains?repo={id}`
@@ -40,7 +40,7 @@ fn active_chains(server: &TestServer, id: u64) -> u64 {
 }
 
 #[test]
-fn repos_list_shape_base_ref_and_scoped_chains() {
+fn repos_list_shape_canonical_ref_and_scoped_chains() {
     // Two distinct repos (distinct git dirs); the second carries two chains —
     // `feat` and `topic` both fork straight off `main`, so each is its own
     // live tip in the parent DAG, not one stacked on the other.
@@ -82,8 +82,8 @@ fn repos_list_shape_base_ref_and_scoped_chains() {
     let id_b = repo_b["id"].as_u64().unwrap();
     assert_ne!(id_a, id_b, "distinct git dirs are distinct repos");
 
-    assert_eq!(repo_a["base_ref"], "main");
-    assert_eq!(repo_b["base_ref"], "main");
+    assert_eq!(repo_a["canonical_ref"], "main");
+    assert_eq!(repo_b["canonical_ref"], "main");
     assert_eq!(active_chains(&server, id_a), 1);
     assert_eq!(active_chains(&server, id_b), 2, "two independent tips");
 
@@ -132,7 +132,7 @@ fn base_can_be_a_remote_tracking_ref() {
 
     let (st, repo) = create_repo(&server, &g, "origin/main");
     assert_eq!(st, 200, "{repo}");
-    assert_eq!(repo["base_ref"], "origin/main");
+    assert_eq!(repo["canonical_ref"], "origin/main");
 }
 
 #[test]
@@ -147,12 +147,12 @@ fn create_repo_registers_and_pins_base() {
     let (st, repo) = create_repo(&server, &g, "main");
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
-    assert_eq!(repo["base_ref"], "main");
+    assert_eq!(repo["canonical_ref"], "main");
     assert_eq!(repo["active_chains"].as_u64(), Some(0));
     let id = first_repo(&server);
 
     // Re-registering is a 409 even when it names a different base — create means
-    // create, and the pinned base is fixed (one canonical branch per repo).
+    // create, and the pinned base is fixed (one canonical ref per repo).
     let (st, err) = create_repo(&server, &g, "trunk");
     assert_eq!(st, 409, "{err}");
     assert!(
@@ -226,11 +226,11 @@ fn nit_repo_create_cli() {
             .expect("running nit repo create")
     };
 
-    // `--base` is required: a bare create can't even parse.
+    // `--canonical-ref` is required: a bare create can't even parse.
     assert!(!run(&["repo", "create"]).status.success());
 
-    // `nit repo create --base main` from inside the repo registers the git dir.
-    let out = run(&["repo", "create", "--base", "main"]);
+    // `nit repo create --canonical-ref main` from inside the repo registers the git dir.
+    let out = run(&["repo", "create", "--canonical-ref", "main"]);
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -238,7 +238,7 @@ fn nit_repo_create_cli() {
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.contains(&g.git_dir()) && stdout.contains("base=main"),
+        stdout.contains(&g.git_dir()) && stdout.contains("canonical_ref=main"),
         "{stdout}"
     );
 
@@ -290,7 +290,7 @@ fn relocate_repo_endpoint() {
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["git_dir"].as_str().unwrap(), new_git_dir);
     assert_eq!(repo["id"].as_u64(), Some(repo_id));
-    assert_eq!(repo["base_ref"], "main", "base survives a relocation");
+    assert_eq!(repo["canonical_ref"], "main", "base survives a relocation");
 
     let (_, list) = http_get(&server.url("/api/repos"));
     let row = list["repos"]
@@ -316,7 +316,7 @@ fn get_repo_by_id_endpoint() {
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["id"].as_u64(), Some(repo_id));
     assert_eq!(repo["git_dir"].as_str().unwrap(), a.git_dir());
-    assert_eq!(repo["base_ref"], "main");
+    assert_eq!(repo["canonical_ref"], "main");
     assert_eq!(repo["active_chains"].as_u64(), Some(1));
 
     let (st, _) = http_get(&server.url("/api/repos/9999"));
@@ -415,8 +415,8 @@ fn repo_base(server: &TestServer, id: u64) -> String {
         .iter()
         .find(|r| r["id"].as_u64() == Some(id))
         .unwrap_or_else(|| panic!("repo {id} missing"))
-        .get("base_ref")
+        .get("canonical_ref")
         .and_then(|v| v.as_str())
-        .unwrap_or_else(|| panic!("no base_ref on repo {id}"))
+        .unwrap_or_else(|| panic!("no canonical_ref on repo {id}"))
         .to_string()
 }

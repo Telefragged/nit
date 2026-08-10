@@ -1,7 +1,7 @@
 //! Chain derivation — a chain is **never stored**.
 //!
 //! Given a repo's per-change folds, [`RepoView`] resolves a commit-sha to
-//! `(change, revision)`, walks a tip back to the canonical base through
+//! `(change, revision)`, walks a tip back to the canonical ref through
 //! each revision's recorded `parent_sha` (gerrit relation chains), and
 //! derives the live tip set and a chain's actionable state. Everything
 //! here is a **pure function** of an owned snapshot of the changes.
@@ -106,7 +106,7 @@ impl RepoView {
 
     /// The **active frontier**: tips of non-terminal changes.
     ///
-    /// The dashboard's `status=active`. A merged change is on the canonical branch and an
+    /// The dashboard's `status=active`. A merged change is on the canonical ref and an
     /// abandoned change is dead, so neither is an active tip — but an
     /// abandoned change is still an enumerable member
     /// ([`enumerable_tips`](Self::enumerable_tips)).
@@ -126,7 +126,7 @@ impl RepoView {
         self.tips_where(|c| !c.is_merged())
     }
 
-    /// Walks a tip commit-sha back to the canonical branch.
+    /// Walks a tip commit-sha back to the canonical ref.
     ///
     /// Follows each revision's recorded `parent`, returning the path
     /// oldest-first. The walk stops at the branch: the recorded fork
@@ -160,7 +160,7 @@ impl RepoView {
         path
     }
 
-    /// Whether `sha` is a change that has merged onto the canonical branch.
+    /// Whether `sha` is a change that has merged onto the canonical ref.
     fn is_merged(&self, sha: &str) -> bool {
         self.index
             .get(sha)
@@ -368,7 +368,7 @@ mod tests {
     #[test]
     fn walk_stops_at_a_merged_ancestor() {
         // A → B forked from "m"; A has since merged. The walk stops at
-        // the canonical branch, so B's path is the open member alone — the
+        // the canonical ref, so B's path is the open member alone — the
         // merged ancestor sits below the branch now, not in the chain.
         let mut a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);
         a.lifecycle = Lifecycle::Merged;
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(
             path,
             vec![2],
-            "the merged ancestor is below the canonical branch"
+            "the merged ancestor is below the canonical ref"
         );
         // The graph's open region inherits the stop — no merged node leaks in.
         let open: Vec<u64> = view.open_nodes().iter().map(|n| n.change_id).collect();

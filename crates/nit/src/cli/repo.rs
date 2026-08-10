@@ -29,9 +29,9 @@ pub enum RepoCmd {
 
 #[derive(clap::Args)]
 pub struct RepoCreateArgs {
-    /// The repo's canonical base ref — any git ref, e.g. `origin/main`.
+    /// The ref this repo tracks — any git ref, e.g. `origin/main`.
     #[arg(long)]
-    pub base: String,
+    pub canonical_ref: String,
 }
 
 #[derive(clap::Args)]
@@ -62,12 +62,12 @@ pub fn repo(args: RepoArgs) -> Result<()> {
     }
 }
 
-/// One aligned line per repo: `id  git_dir  base_ref  N active`.
+/// One aligned line per repo: `id  git_dir  canonical_ref  N active`.
 fn print_repos(list: &RepoList) {
     let rows: Vec<[String; 3]> = list
         .repos
         .iter()
-        .map(|r| [r.id.to_string(), r.git_dir.clone(), r.base_ref.clone()])
+        .map(|r| [r.id.to_string(), r.git_dir.clone(), r.canonical_ref.clone()])
         .collect();
     let widths = column_widths(&rows);
     for (r, cols) in list.repos.iter().zip(&rows) {
@@ -83,12 +83,12 @@ fn repo_create(args: &RepoCreateArgs, server: Option<String>) -> Result<()> {
     let client = Client::new(server_url(server));
     let body = CreateRepo {
         git_dir,
-        base: args.base.clone(),
+        canonical_ref: args.canonical_ref.clone(),
     };
     let repo: Repo = client.post("/api/repos", &body)?;
     println!(
-        "registered repo {}  {}  base={}",
-        repo.id, repo.git_dir, repo.base_ref
+        "registered repo {}  {}  canonical_ref={}",
+        repo.id, repo.git_dir, repo.canonical_ref
     );
     Ok(())
 }

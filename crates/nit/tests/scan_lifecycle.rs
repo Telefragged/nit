@@ -29,7 +29,7 @@ fn change_landed_on_main_becomes_merged() {
     assert_eq!(res["tip_change"]["revision"], 0);
     assert_eq!(res["tip_change"]["status"], "pending");
 
-    // Land the same change on the canonical branch: the timer recognises
+    // Land the same change on the canonical ref: the timer recognises
     // its Change-Id.
     let merged = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("main", merged);
@@ -78,7 +78,7 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     assert_eq!(status_at(&server, tip, Some(0)).as_deref(), Some("pending"));
 
     // One live member keeps the partially-merged stack on the active list, but
-    // the walk stops at the canonical branch: the ancestor has merged, so it
+    // the walk stops at the canonical ref: the ancestor has merged, so it
     // drops out of the path — only the open tip remains.
     let repo = first_repo_id(&server);
     let (_, active) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=active")));
@@ -94,7 +94,7 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     assert_eq!(path[0]["status"], "pending");
     assert!(
         path.iter().all(|m| m["change_id"] != ancestor),
-        "the merged ancestor sits below the canonical branch now: {active}"
+        "the merged ancestor sits below the canonical ref now: {active}"
     );
 }
 

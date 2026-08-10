@@ -1,7 +1,7 @@
 //! Assembles the change graph from the two primitive reads.
 //!
 //! The reads are the repo's change folds (`GET /api/changes`) and the
-//! canonical branch's merged history (`GET /api/history`). Runs only in the
+//! canonical ref's merged history (`GET /api/history`). Runs only in the
 //! browser — the server serves the parts, never the whole.
 //!
 //! Kept `cfg`-free so the host build compiles the same code wasm32 does and

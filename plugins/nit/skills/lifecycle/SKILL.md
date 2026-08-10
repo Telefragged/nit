@@ -12,7 +12,7 @@ with the `comment` skill for talking to the reviewer.
 Run `nit` from `PATH`; if it isn't installed, use
 `nix run github:Telefragged/nit -- <args>` (run `/nit:install` to set it up).
 The server defaults to `$NIT_SERVER` or `http://127.0.0.1:8877`. The repo must
-already be registered (`nit repo create --base <branch>`, which `/nit:install`
+already be registered (`nit repo create --canonical-ref <branch>`, which `/nit:install`
 does) — a push into an unregistered repo is a 404.
 
 ## Push as you build

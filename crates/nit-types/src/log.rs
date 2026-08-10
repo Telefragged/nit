@@ -82,7 +82,7 @@ pub struct CommentInput {
 ///
 /// The merge timer (`merged`) and the `nit abandon` / `nit reopen`
 /// actions. `commit_sha` is set only for `merged` — the merged commit on
-/// the canonical branch; `message` is an optional reason on `abandoned`.
+/// the canonical ref; `message` is an optional reason on `abandoned`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LifecyclePayload {

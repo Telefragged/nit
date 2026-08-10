@@ -7,7 +7,7 @@ use crate::domain::ChangeStatus;
 /// `POST /api/push` request (this is `nit push`).
 ///
 /// The repo must already be registered (`nit repo create`); the canonical
-/// branch is its stored `base_ref`, so push takes no base.
+/// branch is its stored `canonical_ref`, so push takes no base.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushRequest {
     pub git_dir: String,

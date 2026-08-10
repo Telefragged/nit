@@ -94,9 +94,9 @@ export type Repo = {
    */
   git_dir: string;
   /**
-   * The one canonical base ref; mergedness tracks it.
+   * The one canonical ref; mergedness tracks it.
    */
-  base_ref: string;
+  canonical_ref: string;
   /**
    * Live tip count (derived from the tip set, never stored).
    */
@@ -148,7 +148,7 @@ export type PathEntry = {
 };
 
 /**
- * One repo's change graph: a commit-sha-keyed DAG over the canonical branch.
+ * One repo's change graph: a commit-sha-keyed DAG over the canonical ref.
  *
  * Not a response body — the browser assembles it (`crates/nit-wasm`) from
  * the two primitive reads, `GET /api/changes` and `GET /api/history`; the
@@ -156,7 +156,7 @@ export type PathEntry = {
  */
 export type RepoGraph = {
   /**
-   * The canonical branch has merged commits below the displayed window — the
+   * The canonical ref has merged commits below the displayed window — the
    * client shows an "earlier history hidden" marker and dangles deep forks
    * to it.
    */
@@ -204,7 +204,7 @@ export type GraphNode = {
 };
 
 /**
- * One commit of the canonical branch's merged history.
+ * One commit of the canonical ref's merged history.
  *
  * Walked from the tracked ref's HEAD down (`GET /api/history?repo={id}`).
  */
@@ -229,7 +229,7 @@ export type HistoryCommit = {
 };
 
 /**
- * A window of the canonical branch's merged history (`GET /api/history`).
+ * A window of the canonical ref's merged history (`GET /api/history`).
  *
  * The tracked ref's HEAD first, then its ancestors, a **fixed window of 5
  * commits** deep.
@@ -590,7 +590,7 @@ export type CommentInput = {
  *
  * The merge timer (`merged`) and the `nit abandon` / `nit reopen`
  * actions. `commit_sha` is set only for `merged` — the merged commit on
- * the canonical branch; `message` is an optional reason on `abandoned`.
+ * the canonical ref; `message` is an optional reason on `abandoned`.
  */
 export type LifecyclePayload = {
   action: LifecycleAction;

@@ -357,7 +357,7 @@ fn bare_push_resolves_head() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _, stderr) = nit(&server, &g, &["repo", "create", "--base", "main"]);
+    let (ok, _, stderr) = nit(&server, &g, &["repo", "create", "--canonical-ref", "main"]);
     assert!(ok, "repo create: {stderr}");
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "bare push resolves HEAD: {stderr}");
@@ -373,7 +373,7 @@ fn push_resolves_detached_head() {
     g.repo.set_head_detached(c1).unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _, stderr) = nit(&server, &g, &["repo", "create", "--base", "main"]);
+    let (ok, _, stderr) = nit(&server, &g, &["repo", "create", "--canonical-ref", "main"]);
     assert!(ok, "repo create: {stderr}");
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "detached HEAD resolves: {stderr}");

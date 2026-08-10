@@ -43,7 +43,7 @@ pub struct WalkedCommit {
 
 /// A push walk's fork point and the commits between it and the tip.
 ///
-/// The fork point is on the canonical branch; the commits are
+/// The fork point is on the canonical ref; the commits are
 /// oldest-first.
 #[derive(Debug, Clone)]
 pub struct PushWalk {
@@ -159,16 +159,16 @@ pub fn pure_rebase(
         )
 }
 
-/// The canonical branch's current HEAD sha.
+/// The canonical ref's current HEAD sha.
 ///
 /// `None` when it can't be resolved (the merge timer's per-sweep baseline
 /// check).
 #[must_use]
-pub fn resolve_head(repo: &Repository, base_ref: &str) -> Option<String> {
-    Some(resolve_commit(repo, base_ref).ok()?.to_string())
+pub fn resolve_head(repo: &Repository, canonical_ref: &str) -> Option<String> {
+    Some(resolve_commit(repo, canonical_ref).ok()?.to_string())
 }
 
-/// Landings observed on the canonical branch in `since..head`.
+/// Landings observed on the canonical ref in `since..head`.
 ///
 /// That window is the commits added since the last sweep: each open
 /// change whose `Change-Id` appears on a new single-parent commit, paired
@@ -220,7 +220,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
     landings.into_iter().collect()
 }
 
-/// One walked commit of the canonical branch.
+/// One walked commit of the canonical ref.
 ///
 /// `trailer` is the commit's raw `Change-Id:` trailer when present; the api
 /// layer resolves it to the change it names when building the wire shape.
@@ -232,7 +232,7 @@ pub struct HistoryCommit {
     pub trailer: Option<String>,
 }
 
-/// Walks the canonical branch from its HEAD, newest-first.
+/// Walks the canonical ref from its HEAD, newest-first.
 ///
 /// The HEAD commit (the graph anchor) followed by up to `window` ancestor
 /// commits — the merged history that descends below HEAD. Topological, so
@@ -244,13 +244,13 @@ pub struct HistoryCommit {
 ///
 /// # Errors
 ///
-/// When the canonical branch can't be resolved or the walk fails.
+/// When the canonical ref can't be resolved or the walk fails.
 pub fn canonical_history(
     repo: &Repository,
-    base_ref: &str,
+    canonical_ref: &str,
     window: u64,
 ) -> Result<(Vec<HistoryCommit>, bool), String> {
-    let head = resolve_commit(repo, base_ref)?;
+    let head = resolve_commit(repo, canonical_ref)?;
     let mut walk = repo.revwalk().map_err(|e| e.to_string())?;
     walk.push(head).map_err(|e| e.to_string())?;
     walk.set_sorting(Sort::TOPOLOGICAL)

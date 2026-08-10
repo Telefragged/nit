@@ -103,7 +103,7 @@ const MIGRATIONS: &[&str] = &[
     CREATE TABLE repos (
       id          INTEGER PRIMARY KEY,
       git_dir     TEXT NOT NULL UNIQUE,   -- canonical git-common-dir; identity + name
-      base_branch TEXT NOT NULL           -- the one canonical branch; mergedness tracks it
+      base_branch TEXT NOT NULL           -- the one canonical ref; mergedness tracks it
     );
     CREATE TABLE changes (
       id         INTEGER PRIMARY KEY,      -- rowid; the identity everything carries
@@ -171,6 +171,11 @@ const MIGRATIONS: &[&str] = &[
     // `MAX(idx) + 1` and the fold orders by idx, never assuming
     // contiguity.
     "DELETE FROM log WHERE kind = 'partial';",
+    // v6: the tracked ref is the repo's canonical ref, and the timer's
+    // baseline is that ref's head — one name for the thing a chain forks
+    // from and mergedness is decided against.
+    "ALTER TABLE repos RENAME COLUMN base_ref TO canonical_ref;
+     ALTER TABLE repos RENAME COLUMN base_head TO canonical_head;",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -238,20 +243,20 @@ pub struct RepoRow {
     pub id: u64,
     /// Canonical git-common-dir — the repo's identity and its display name.
     pub git_dir: String,
-    /// The repo's one canonical branch; mergedness always tracks it.
-    pub base_ref: String,
+    /// The repo's one canonical ref; mergedness always tracks it.
+    pub canonical_ref: String,
     /// The canonical-branch HEAD the merge timer last reconciled against.
     ///
     /// `None` until first observed.
-    pub base_head: Option<String>,
+    pub canonical_head: Option<String>,
 }
 
 fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
     Ok(RepoRow {
         id: col_u64(row.get("id")?)?,
         git_dir: row.get("git_dir")?,
-        base_ref: row.get("base_ref")?,
-        base_head: row.get("base_head")?,
+        canonical_ref: row.get("canonical_ref")?,
+        canonical_head: row.get("canonical_head")?,
     })
 }
 
@@ -264,16 +269,16 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
 /// # Errors
 ///
 /// On a database failure, including the `UNIQUE(git_dir)` clash.
-pub fn create_repo(conn: &Connection, git_dir: &str, base_ref: &str) -> Result<RepoRow> {
+pub fn create_repo(conn: &Connection, git_dir: &str, canonical_ref: &str) -> Result<RepoRow> {
     conn.execute(
-        "INSERT INTO repos (git_dir, base_ref) VALUES (?1, ?2)",
-        params![git_dir, base_ref],
+        "INSERT INTO repos (git_dir, canonical_ref) VALUES (?1, ?2)",
+        params![git_dir, canonical_ref],
     )?;
     Ok(RepoRow {
         id: col_u64(conn.last_insert_rowid())?,
         git_dir: git_dir.to_string(),
-        base_ref: base_ref.to_string(),
-        base_head: None,
+        canonical_ref: canonical_ref.to_string(),
+        canonical_head: None,
     })
 }
 
@@ -340,10 +345,10 @@ pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<
 /// # Errors
 ///
 /// On a database failure.
-pub fn update_repo_base_head(conn: &Connection, id: u64, base_head: &str) -> Result<()> {
+pub fn update_repo_canonical_head(conn: &Connection, id: u64, canonical_head: &str) -> Result<()> {
     conn.execute(
-        "UPDATE repos SET base_head = ?1 WHERE id = ?2",
-        params![base_head, i64::try_from(id)?],
+        "UPDATE repos SET canonical_head = ?1 WHERE id = ?2",
+        params![canonical_head, i64::try_from(id)?],
     )?;
     Ok(())
 }
@@ -892,22 +897,22 @@ mod tests {
     fn create_repo_registers_and_find_locates() {
         let conn = mem();
         let a = create_repo(&conn, "/r/.git", "main").expect("create");
-        assert_eq!(a.base_ref, "main");
+        assert_eq!(a.canonical_ref, "main");
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
         assert_eq!(found.id, a.id);
-        assert_eq!(found.base_ref, "main");
+        assert_eq!(found.canonical_ref, "main");
         let b = create_repo(&conn, "/other/.git", "main").expect("create");
         assert_ne!(a.id, b.id);
     }
 
     #[test]
-    fn base_head_starts_null_and_round_trips() {
+    fn canonical_head_starts_null_and_round_trips() {
         let conn = mem();
         let a = create_repo(&conn, "/r/.git", "main").expect("create");
-        assert_eq!(a.base_head, None, "no baseline until first observed");
-        update_repo_base_head(&conn, a.id, "deadbeef").expect("record");
+        assert_eq!(a.canonical_head, None, "no baseline until first observed");
+        update_repo_canonical_head(&conn, a.id, "deadbeef").expect("record");
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
-        assert_eq!(found.base_head.as_deref(), Some("deadbeef"));
+        assert_eq!(found.canonical_head.as_deref(), Some("deadbeef"));
     }
 
     #[test]

@@ -228,7 +228,7 @@ impl ChangeProj {
         !matches!(self.lifecycle, Lifecycle::Active)
     }
 
-    /// Whether the change has **merged** onto the canonical branch.
+    /// Whether the change has **merged** onto the canonical ref.
     ///
     /// Distinct from `is_terminal`: an abandoned change is terminal but
     /// not merged, and stays an enumerable member/tip of its chains

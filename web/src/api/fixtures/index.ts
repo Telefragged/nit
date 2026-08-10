@@ -197,7 +197,7 @@ function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
 /** Walk a tip back to base through parent_sha, oldest-first (base → tip).
  * Each member pins the revision the tip walked through (the sha in the
  * index); the walk stops at a parent_sha that is no change (the merge-base
- * on the canonical branch). */
+ * on the canonical ref). */
 function walkPath(
   tip: TipRecord,
 ): { change: ChangeRecord; revision: Revision }[] {
@@ -299,7 +299,7 @@ function repoList(): Repo[] {
   return repos.map((r) => ({
     id: r.id,
     git_dir: r.git_dir,
-    base_ref: r.base_ref,
+    canonical_ref: r.canonical_ref,
     active_chains: tips.filter((t) => t.repo_id === r.id && t.active).length,
   }));
 }

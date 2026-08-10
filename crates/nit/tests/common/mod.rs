@@ -247,10 +247,10 @@ pub fn nit(server: &TestServer, repo: &GitRepo, args: &[&str]) -> (bool, Value, 
 
 /// `nit push <branch>` from inside the repo: the branch is the positional
 /// commit (resolved locally). Registers the repo first (`nit repo create
-/// --base main`) so the push has somewhere to land; a repeat create just
+/// --canonical-ref main`) so the push has a base to fork from; a repeat create just
 /// errors, which is ignored.
 pub fn nit_register(server: &TestServer, repo: &GitRepo, branch: &str) -> (bool, Value, String) {
-    let _ = nit(server, repo, &["repo", "create", "--base", "main"]);
+    let _ = nit(server, repo, &["repo", "create", "--canonical-ref", "main"]);
     nit(server, repo, &["push", branch])
 }
 
@@ -293,14 +293,14 @@ pub fn http_delete(url: &str) -> (u16, Value) {
 }
 
 /// `POST /api/repos` over HTTP (≡ `nit repo create`). `base` pins the canonical
-/// base ref (any git ref that resolves to a commit). Returns `(status, Repo)`.
-pub fn create_repo(server: &TestServer, repo: &GitRepo, base: &str) -> (u16, Value) {
-    let body = json!({"git_dir": repo.git_dir(), "base": base});
+/// canonical ref (any git ref that resolves to a commit). Returns `(status, Repo)`.
+pub fn create_repo(server: &TestServer, repo: &GitRepo, canonical_ref: &str) -> (u16, Value) {
+    let body = json!({"git_dir": repo.git_dir(), "canonical_ref": canonical_ref});
     http_post(&server.url("/api/repos"), &body)
 }
 
 /// `POST /api/push` over HTTP, registering the repo first (`create_repo` with
-/// `base`, pinning the canonical base ref). `tip` is a branch name or sha. A
+/// `canonical_ref`). `tip` is a branch name or sha. A
 /// failing registration other than "already registered" (409) is returned
 /// as-is. Returns `(status, PushResult)`.
 pub fn push(server: &TestServer, repo: &GitRepo, tip: &str, base: &str) -> (u16, Value) {

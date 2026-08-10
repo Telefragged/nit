@@ -64,16 +64,16 @@ pub struct AppState {
 ///
 /// `git_dir` is in an `RwLock` because `nit repo move` repoints it in-place.
 /// The merge timer's baseline is not cached here — it lives only in
-/// `repos.base_head` (the merge sweep's cursor, `crate::api::timer`).
+/// `repos.canonical_head` (the merge sweep's cursor, `crate::api::timer`).
 pub struct RepoState {
-    pub base_ref: String,
+    pub canonical_ref: String,
     pub git_dir: StdRwLock<String>,
 }
 
 impl RepoState {
     fn new(row: &db::RepoRow) -> RepoState {
         RepoState {
-            base_ref: row.base_ref.clone(),
+            canonical_ref: row.canonical_ref.clone(),
             git_dir: StdRwLock::new(row.git_dir.clone()),
         }
     }

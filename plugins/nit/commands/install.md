@@ -54,15 +54,15 @@ it's not on the default `http://127.0.0.1:8877`.
 
 A repo must be registered before anything can be pushed — a `nit push` into an
 unregistered repo is rejected (404). Register it once, pinning its canonical
-base branch (the branch mergedness is tracked against):
+canonical ref (the ref mergedness is tracked against):
 
 ```sh
-nit repo create --base <branch>
+nit repo create --canonical-ref <branch>
 ```
 
-`--base` is **required** and must name an existing branch — nit never guesses
+`--canonical-ref` is **required** and must name an existing git ref — nit never guesses
 it, and **neither do you**. You **MUST ask the user (AskUserQuestion) to choose
-the base branch** before registering — never assume or infer it, not even when
+the canonical ref** before registering — never assume or infer it, not even when
 the repo has a single branch. Detect the likely candidates (the current
 branch, `main`/`master`, `git symbolic-ref refs/remotes/origin/HEAD`) and offer
 them as the suggested options, but the choice is the user's. A 409 means the
@@ -140,7 +140,7 @@ script). This is project-specific; nit does not prescribe it.
 
 Then append a short section to the file you chose in step 4, so every agent
 knows to route work through review (filling in `<base>` with the registered
-base branch and their approve action verbatim):
+canonical ref and their approve action verbatim):
 
 ```markdown
 ## Reviewing changes with nit
@@ -153,7 +153,7 @@ as comments. Say "drive it through nit" to take a change through the loop; the
 `/nit:goal`, `/nit:fork`, and `/nit:plan` commands are opinionated shortcuts.
 
 Never build a change you'll push for review on `<base>` itself — that is the
-canonical branch nit watches for landings, so pushed commits must not live on
+canonical ref nit watches for merges, so pushed commits must not live on
 it.
 
 **Approve action** — when a change reaches the `approved` state, land it by:
@@ -164,6 +164,6 @@ it.
 ## 7. Confirm
 
 Report back: how `nit` is reachable, whether the server answered, that the
-repo is registered (and its base branch), how Change-Ids are provided, and
+repo is registered (and its canonical ref), how Change-Ids are provided, and
 which file you wrote the approve action into. Suggest the user try `/nit:goal`
 on their next change.
