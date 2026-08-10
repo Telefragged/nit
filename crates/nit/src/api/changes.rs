@@ -12,9 +12,8 @@ use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
 use nit_types::domain::RevisionNumber;
+use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
-
-use crate::review;
 
 use super::diff;
 use super::rebase;
@@ -139,8 +138,8 @@ pub(super) async fn revision_lines(
 /// nothing live.
 struct Revs {
     git_dir: String,
-    revision: review::RevisionProjection,
-    against: Option<review::RevisionProjection>,
+    revision: RevisionProjection,
+    against: Option<RevisionProjection>,
 }
 
 fn resolve_revs(
@@ -202,7 +201,7 @@ fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff,
     Ok(wire)
 }
 
-fn at(r: &review::RevisionProjection) -> rebase::Rev<'_> {
+fn at(r: &RevisionProjection) -> rebase::Rev<'_> {
     rebase::Rev {
         commit: &r.commit_sha,
         parent: &r.parent_sha,

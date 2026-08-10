@@ -82,13 +82,13 @@ fn write_wire_types() {
         crate::events::StreamMessage,
         // The folded projection the server ships over the stream; the web
         // holds it opaque and only round-trips it through the wasm fold.
-        crate::fold::Lifecycle,
-        crate::fold::Anchor,
-        crate::fold::RevisionProjection,
-        crate::fold::ThreadComment,
-        crate::fold::ThreadProjection,
-        crate::fold::ReviewProjection,
-        crate::fold::ChangeProjection,
+        crate::domain::Lifecycle,
+        crate::domain::Anchor,
+        crate::domain::RevisionProjection,
+        crate::domain::ThreadComment,
+        crate::domain::ThreadProjection,
+        crate::domain::ReviewProjection,
+        crate::domain::ChangeProjection,
     );
     std::fs::write(path, out).expect("write types.gen.ts");
 }

@@ -18,8 +18,8 @@ use nit_types::log::LogPayload;
 
 use crate::db;
 use crate::gitscan;
-use crate::review::ChangeProjection;
 use nit_types::chain::RepoView;
+use nit_types::domain::ChangeProjection;
 
 use super::{AppState, append_to_change, with_conn};
 

@@ -17,10 +17,10 @@ use std::collections::HashMap;
 
 use git2::{Commit, Oid, Repository, Sort};
 
+use nit_types::domain::subject_of;
 use nit_types::domain::{ChangeId, ChangeNumber, Sha};
-use nit_types::fold::subject_of;
 
-use crate::review::ChangeProjection;
+use nit_types::domain::ChangeProjection;
 
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
@@ -302,8 +302,8 @@ mod tests {
     use git2::{Oid, Repository, Signature};
 
     use super::detect_merges;
-    use crate::review::{ChangeProjection, RevisionProjection};
     use nit_types::domain::{ChangeId, ChangeNumber, Sha};
+    use nit_types::domain::{ChangeProjection, RevisionProjection};
 
     /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
     /// tests need.

@@ -12,7 +12,9 @@ use nit_types::events::{ClientMessage, StreamMessage};
 use nit_types::log::LogEntry;
 
 use crate::db;
-use crate::review::{self, ChangeProjection};
+use nit_types::domain::ChangeProjection;
+
+use crate::review;
 
 use super::{AppState, with_conn};
 

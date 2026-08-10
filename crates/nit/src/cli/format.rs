@@ -15,7 +15,7 @@ use nit_types::domain::ChangeNumber;
 use nit_types::log::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
-use nit_types::fold::subject_of;
+use nit_types::domain::subject_of;
 
 use super::client::Client;
 use super::resolve::resolve_change;

@@ -12,7 +12,9 @@ use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
 use nit_types::log::{CommentInput, LogPayload};
 
-use crate::review::{self, Lifecycle};
+use nit_types::domain::Lifecycle;
+
+use crate::review;
 
 use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{change_detail_json, change_or_404, map_busy, snapshot_line_text, validate_anchor};

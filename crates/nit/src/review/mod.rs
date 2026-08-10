@@ -12,6 +12,7 @@
 use anyhow::{Result, anyhow};
 
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::ChangeProjection;
 use nit_types::domain::LogKind;
 use nit_types::log::{LogEntry, LogPayload};
 

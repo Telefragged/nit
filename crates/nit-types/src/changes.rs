@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 use crate::comments::{Draft, Thread};
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
+use crate::domain::ChangeProjection;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{Decision, Verdict};
-use crate::fold::ChangeProjection;
 
 /// The `GET /api/changes` response: matching changes as folded projections.
 ///

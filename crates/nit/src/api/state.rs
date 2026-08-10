@@ -29,7 +29,9 @@ use nit_types::error::ApiError;
 use nit_types::log::{LogEntry, LogPayload};
 
 use crate::db;
-use crate::review::{self, ChangeProjection};
+use nit_types::domain::ChangeProjection;
+
+use crate::review;
 use nit_types::chain::RepoView;
 
 /// Live-event buffer.

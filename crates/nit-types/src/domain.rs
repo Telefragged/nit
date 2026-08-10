@@ -1,9 +1,14 @@
 //! nit's domain model: the vocabulary every component speaks.
 //!
-//! A term is defined once, on the thing it names — the closed value sets
-//! as the enums below, every other term on the type that carries it.
-//! Terms with no type of their own live here: roles, acts, and the
-//! relations between terms.
+//! A term is defined once, on the type that carries it, and that type
+//! lives here — so this page is the model in full. A term with no type of
+//! its own is defined in the prose below: roles, acts, and the relations
+//! between terms.
+//!
+//! A shape that exists to serve a route — a request body, a list
+//! envelope, the published rendering of a term defined here — belongs to
+//! the module behind that route and points back here for what its fields
+//! mean.
 //!
 //! A definition says what a term **is**. Anything a code change could
 //! falsify — a count, a route, a column, a status code, a behavior —
@@ -24,6 +29,14 @@
 //!
 //! **Chain** — a change and the changes stacked on it, walked from the
 //! tip back to the canonical ref.
+//!
+//! # The conversation
+//!
+//! **Thread** — a located, resolvable conversation, anchored to a change,
+//! a file, or a line of a revision.
+//!
+//! **Comment** — one message in a thread. A reviewer's is published by a
+//! review; an author's stands on its own.
 //!
 //! # What happens
 //!
@@ -52,7 +65,8 @@
 //! # How current state is arrived at
 //!
 //! **Folding** — replaying a change's log entries in order to arrive at
-//! what is true of it now. **Projection** — what a fold produces.
+//! what is true of it now. **Projection** — what a fold produces
+//! ([`ChangeProjection`]); the algorithm is `crate::fold`.
 //!
 //! # Verdict, decision, status, state
 //!
@@ -91,12 +105,14 @@
 //! Serde renamings pin the exact wire spellings, so swapping a `String`
 //! field for one of these enums is not a wire change.
 
+mod change;
 mod conversation;
 mod identity;
 mod log;
 mod rendering;
 mod verdict;
 
+pub use change::*;
 pub use conversation::*;
 pub use identity::*;
 pub use log::*;

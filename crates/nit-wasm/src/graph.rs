@@ -97,7 +97,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
 mod tests {
     use super::*;
     use nit_types::domain::{ChangeId, ChangeNumber, RevisionNumber};
-    use nit_types::fold::{ChangeProjection, RevisionProjection};
+    use nit_types::domain::{ChangeProjection, RevisionProjection};
     use nit_types::graph::HistoryCommit;
 
     fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {

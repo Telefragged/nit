@@ -44,10 +44,10 @@ use nit_types::changes::ChangeDetail;
 use nit_types::comments::CommentRange;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::RevisionNumber;
+use nit_types::domain::RevisionProjection;
 use nit_types::domain::{Sha, Side};
 use nit_types::health::Health;
 
-use crate::review;
 use nit_types::chain::RepoView;
 
 pub use state::{
@@ -306,7 +306,7 @@ fn validate_anchor(
 
 fn snapshot_line_text(
     git_dir: &str,
-    revision: &review::RevisionProjection,
+    revision: &RevisionProjection,
     file: Option<&str>,
     line: Option<u64>,
     side: Side,

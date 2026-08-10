@@ -13,7 +13,7 @@ use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChainState, ChangeStatus};
 
-use crate::fold::ChangeProjection;
+use crate::domain::ChangeProjection;
 
 /// One member of a derived path, pinned to the revision the walk selected.
 #[derive(Debug, Clone)]
@@ -313,7 +313,7 @@ mod tests {
     use super::*;
     use crate::domain::Verdict;
 
-    use crate::fold::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
+    use crate::domain::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
 
     fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
         let number = RevisionNumber(number);

@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use nit_types::fold::subject_of;
+use nit_types::domain::subject_of;
 
 /// The message's `Change-Id:` trailer value, if it carries one.
 ///

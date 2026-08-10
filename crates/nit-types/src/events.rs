@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeNumber;
-use crate::fold::ChangeProjection;
+use crate::domain::ChangeProjection;
 use crate::log::LogEntry;
 
 /// A client → server websocket message. Externally tagged, `snake_case`.

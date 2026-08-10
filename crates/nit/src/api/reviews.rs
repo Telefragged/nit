@@ -16,7 +16,7 @@ use nit_types::domain::{Decision, LifecycleAction, Verdict};
 use nit_types::log::{CommentInput, LogPayload, ReviewPayload};
 
 use crate::db;
-use crate::review::Lifecycle;
+use nit_types::domain::Lifecycle;
 
 use super::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change_with, with_conn,

@@ -11,7 +11,7 @@ use nit_types::push::{PushRequest, PushResult, TipChange};
 
 use crate::db;
 use crate::gitscan;
-use crate::review::Lifecycle;
+use nit_types::domain::Lifecycle;
 
 use super::{AppJson, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{canonical_git_dir, map_busy};

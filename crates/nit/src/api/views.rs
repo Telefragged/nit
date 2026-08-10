@@ -16,8 +16,8 @@ use nit_types::domain::RevisionNumber;
 use nit_types::domain::Sha;
 
 use crate::db;
-use crate::review::ChangeProjection;
 use nit_types::chain::{self, PathMember, RepoView};
+use nit_types::domain::ChangeProjection;
 
 use super::Error;
 

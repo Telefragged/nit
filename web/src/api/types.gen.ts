@@ -776,7 +776,7 @@ export type ChangeProjection = {
    * Count of entries folded = the next unconsumed `position`.
    *
    * A high-water mark, carried in the projection so the client resumes
-   * folding the live tail at the right boundary and [`fold`] stays
+   * folding the live tail at the right boundary and the fold stays
    * idempotent across the overlap.
    */
   entries_folded: number;
