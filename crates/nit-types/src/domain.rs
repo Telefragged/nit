@@ -56,6 +56,9 @@
 //!
 //! # Where things sit
 //!
+//! **Repo** — a git repository nit reviews for, identified by its
+//! git-common-dir.
+//!
 //! **Canonical ref** — the one ref a repo tracks. It is the base a chain
 //! forks from and the yardstick for whether a change has merged.
 //!
