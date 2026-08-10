@@ -62,14 +62,14 @@ const expandAllFiles = async (page) => {
 const captures = [
   // Main page: the repo registry, one row per repository.
   { name: "repos", path: "/" },
-  // The repo dashboard: one spine-centered change graph over main — open
+  // The repo dashboard: one change graph centered on main — open
   // changes ascending above the HEAD anchor, merged history descending and
   // fading below it. Repo 2 = quarry: two separate
   // chains — one off HEAD, one forked two commits behind (the dashed "behind"
   // edge) — over a history window that includes a merge commit.
   { name: "dashboard", path: "/repos/2" },
   // Repo 1: a chain whose base is older than the shown window — its lineage
-  // dangles into the "earlier history hidden" marker the spine descends into.
+  // dangles into the "earlier history hidden" marker the canonical ref descends into.
   // The Activity column carries change 11's drafts and change 12's decision.
   { name: "change-graph-earlier", path: "/repos/1" },
   // Repo 3: the B-in-two-chains fan-out — a change shared by two tips appears

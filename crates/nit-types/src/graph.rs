@@ -1,4 +1,4 @@
-//! The spine-centered change graph.
+//! The change graph, centered on the canonical ref.
 
 use serde::{Deserialize, Serialize};
 

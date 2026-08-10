@@ -4,7 +4,7 @@
 // edge paths, ready for the SVG renderer.
 //
 // Lanes are assigned gleisbau-style (git-graph 0.7's interval-graph coloring):
-// the canonical spine is pinned to lane 0 (the center column), every other
+// the canonical ref is pinned to lane 0 (the center column), every other
 // branch is a row span packed into the first lane (1, 2, …) whose occupants
 // don't overlap it. The row coordinate is the array index — children sit above
 // their parents, so open changes ascend from the HEAD anchor and merged
@@ -20,7 +20,7 @@ import type { GraphNode, RepoGraph } from "../api/types";
 export const LAYOUT_B = {
   /** The SVG node centers align to each table row's center. */
   rowH: 46,
-  /** Center of lane 0 (the canonical spine) from the rail's left edge. */
+  /** Center of lane 0 (the canonical ref) from the rail's left edge. */
   railPadL: 42,
   laneGap: 42,
   railPadR: 26,
@@ -74,8 +74,9 @@ export interface GraphLayout {
   /** Row of the HEAD anchor, or -1 when the graph has no head. */
   anchorRow: number;
   /** The "earlier history hidden" marker when the window is truncated: the
-   * spine continues into it and deep-behind forks dangle to it. Its opacity is
-   * the next grey-gradient step past the deepest spine node. Null otherwise. */
+   * canonical ref continues into it and deep-behind forks dangle to it. Its
+   * opacity is the next grey-gradient step past its deepest node. Null
+   * otherwise. */
   collapsed: { cx: number; cy: number; opacity: number } | null;
 }
 
@@ -114,31 +115,31 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
   // The collapsed-history marker row (one below the last node), or -1.
   const markerRow = graph.history_truncated && n > 0 ? n : -1;
 
-  // 1. Spine: first-parent chain down from the anchor (top row if none);
-  //    then up via the primary (smallest-row, per the childRows sort
-  //    above) child.
-  const spine = new Set<number>();
+  // 1. The canonical ref: first-parent chain down from the anchor (top row
+  //    if none); then up via the primary (smallest-row, per the childRows
+  //    sort above) child.
+  const canonical = new Set<number>();
   let cur = anchorRow >= 0 ? anchorRow : 0;
-  while (cur >= 0 && cur < n && !spine.has(cur)) {
-    spine.add(cur);
+  while (cur >= 0 && cur < n && !canonical.has(cur)) {
+    canonical.add(cur);
     cur = firstParent(cur);
   }
   if (anchorRow >= 0) {
     cur = anchorRow;
     for (;;) {
       const kid = childrenAt(cur).find(
-        (c) => firstParent(c) === cur && !spine.has(c),
+        (c) => firstParent(c) === cur && !canonical.has(c),
       );
       if (kid === undefined) break;
-      spine.add(kid);
+      canonical.add(kid);
       cur = kid;
     }
   }
 
-  // 2. Decompose the rest into branches: each non-spine node walks down its
+  // 2. Decompose the rest into branches: each node off it walks down its
   //    first-parent chain (claiming nodes) until it meets a claimed one.
   const branches: Branch[] = [];
-  const claimed = new Set<number>(spine);
+  const claimed = new Set<number>(canonical);
   for (let i = 0; i < n; i++) {
     if (claimed.has(i)) continue;
     const rows: number[] = [];
@@ -229,10 +230,10 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
 
   // The collapsed-history marker: one row below the last node when the window
   // is truncated (more merged commits exist below). It continues the merged
-  // grey gradient one step further (the fade of the next depth); the spine
+  // grey gradient one step further (the fade of the next depth); the canonical ref
   // descends into it and a deep-behind fork (base older than the window)
   // dangles to it.
-  const spineBottom =
+  const canonicalBottom =
     markerRow >= 0
       ? laidNodes
           .filter((l) => l.lane === 0)
@@ -243,7 +244,7 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
       ? {
           cx: cx(0),
           cy: cy(markerRow),
-          opacity: fade((spineBottom?.depth ?? 0) + 1),
+          opacity: fade((canonicalBottom?.depth ?? 0) + 1),
         }
       : null;
   const totalRows = markerRow >= 0 ? n + 1 : n;
@@ -262,7 +263,7 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
         // HEAD, another open commit, or a merged commit still in the window.
         kind = "open";
       } else {
-        kind = "history"; // the merged spine below HEAD
+        kind = "history"; // the merged canonical ref below HEAD
         opacity = fade(Math.max(ln.depth, p.depth));
       }
       edges.push({
@@ -290,10 +291,15 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
     }
   });
 
-  if (collapsed && spineBottom) {
+  if (collapsed && canonicalBottom) {
     edges.push({
-      key: "spine>collapsed",
-      d: edgePath(spineBottom.cx, spineBottom.cy, collapsed.cx, collapsed.cy),
+      key: "canonical>collapsed",
+      d: edgePath(
+        canonicalBottom.cx,
+        canonicalBottom.cy,
+        collapsed.cx,
+        collapsed.cy,
+      ),
       kind: "history",
       lane: 0,
       opacity: collapsed.opacity,

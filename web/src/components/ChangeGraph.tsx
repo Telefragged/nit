@@ -25,8 +25,8 @@ function edgeClass(e: LaidEdge): string {
     : `graph-edge ${lane}`;
 }
 
-// The spine-centered change graph: one DAG over the
-// canonical ref, rendered as an SVG rail (left column) beside per-row change
+// The change graph, centered on the canonical ref: one DAG over it,
+// rendered as an SVG rail (left column) beside per-row change
 // cards. The layout pass (lib/graphLayout) owns all geometry; this component
 // only paints the computed coordinates and the row content.
 

@@ -1,4 +1,4 @@
-/* change graph — one spine-centered DAG over the canonical branch. A left
+/* change graph — one DAG centered on the canonical ref. A left
    SVG rail (lanes + nodes) beside per-row change cards:
    GRAPH | CHANGE | STATUS | REV | ACTIVITY. */
 .change-graph {

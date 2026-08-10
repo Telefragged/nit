@@ -13,7 +13,7 @@ use nit_types::chain::{self, RepoView};
 use nit_types::domain::{ChangeStatus, GraphSection};
 use nit_types::graph::{GraphNode, RepoGraph, RepoHistory};
 
-/// Assembles the spine-centered DAG from a repo view and its merged history.
+/// Assembles the canonical-ref-centered DAG from a repo view and its merged history.
 ///
 /// The history's HEAD anchor and merged window sit below, every active
 /// change ascends above (the same derivation as a chain, unioned and

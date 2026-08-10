@@ -20,8 +20,8 @@ const GRAPH_STATUSES: ChangeStatus[] = [
   "abandoned",
 ];
 
-/** A repo's review dashboard: one spine-centered change graph over the
- * canonical branch — open changes ascending above the HEAD anchor, merged
+/** A repo's review dashboard: one change graph centered on the canonical
+ * ref — open changes ascending above the HEAD anchor, merged
  * history descending below it — assembled in the browser (api/fold) from the
  * repo's unmerged change folds and its canonical history. */
 export default function Dashboard() {

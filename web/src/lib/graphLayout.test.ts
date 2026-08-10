@@ -64,7 +64,7 @@ function mockGraph(): RepoGraph {
 }
 
 describe("layoutGraph lanes", () => {
-  it("pins the spine through HEAD to lane 0", () => {
+  it("pins the canonical ref through HEAD to lane 0", () => {
     const g = layoutGraph(mockGraph());
     for (const sha of ["A1", "A3", "A4", "H", "G1", "G2", "G3", "G5"]) {
       expect(laneOf(g, sha)).toBe(0);
@@ -115,10 +115,10 @@ describe("layoutGraph node semantics", () => {
 });
 
 describe("layoutGraph edges", () => {
-  it("colors open edges by lane and the merged spine as history", () => {
+  it("colors open edges by lane and the merged canonical ref as history", () => {
     const g = layoutGraph(mockGraph());
     expect(edge(g, "A4", "H").kind).toBe("open"); // open chain joins HEAD
-    expect(edge(g, "A4", "H").lane).toBe(0); // on the spine
+    expect(edge(g, "A4", "H").lane).toBe(0); // on the canonical ref
     expect(edge(g, "A2", "A3").kind).toBe("open"); // cross-lane fork
     expect(edge(g, "A2", "A3").lane).toBe(1); // A2's side lane carries the color
     expect(edge(g, "H", "G1").kind).toBe("history"); // into merged history
@@ -164,18 +164,18 @@ describe("layoutGraph behind-HEAD base (below window)", () => {
       ],
     });
     expect(g.collapsed).not.toBeNull();
-    // The marker sits one row below the last node, on the spine (lane 0).
+    // The marker sits one row below the last node, on the canonical ref (lane 0).
     expect(g.collapsed?.cy).toBe(4 * LAYOUT_B.rowH + LAYOUT_B.rowH / 2);
     expect(g.collapsed?.cx).toBe(LAYOUT_B.railPadL);
     expect(g.height).toBe(5 * LAYOUT_B.rowH); // 4 nodes + the marker row
-    // It continues the grey gradient one step past the deepest spine node
+    // It continues the grey gradient one step past the deepest node on it
     // (G2 at depth 2 → the marker fades at depth 3).
     expect(g.collapsed?.opacity).toBeCloseTo(1 - 3 * LAYOUT_B.fadeStep);
-    // The deep fork dangles to the marker; the spine descends into it too, at
+    // The deep fork dangles to the marker; the canonical ref descends into it too, at
     // the same next-gradient opacity as the marker.
     expect(edge(g, "X", "collapsed").kind).toBe("behind");
-    expect(edge(g, "spine", "collapsed").kind).toBe("history");
-    expect(edge(g, "spine", "collapsed").opacity).toBeCloseTo(
+    expect(edge(g, "canonical", "collapsed").kind).toBe("history");
+    expect(edge(g, "canonical", "collapsed").opacity).toBeCloseTo(
       g.collapsed?.opacity ?? 0,
     );
   });
