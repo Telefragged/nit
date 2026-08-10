@@ -219,7 +219,7 @@ export type HistoryCommit = {
   parents: Array<string>;
   subject: string;
   /**
-   * The landed change this commit carries, matched by its `Change-Id:`
+   * The merged change this commit carries, matched by its `Change-Id:`
    * trailer. Coupled with `change_key`: a commit whose trailer names no
    * known change (a merge, a pre-nit commit, a foreign trailer) reports
    * both as `None`, never an orphan key.
@@ -589,7 +589,7 @@ export type CommentInput = {
  * A `lifecycle` entry: a merge, an abandon, or a reopen.
  *
  * The merge timer (`merged`) and the `nit abandon` / `nit reopen`
- * actions. `commit_sha` is set only for `merged` — the landed commit on
+ * actions. `commit_sha` is set only for `merged` — the merged commit on
  * the canonical branch; `message` is an optional reason on `abandoned`.
  */
 export type LifecyclePayload = {
@@ -646,8 +646,8 @@ export type StreamMsg = { snapshot: ChangeProj } | { entry: LogEntry };
 /**
  * A change's terminal lifecycle, folded from its `lifecycle` entries.
  *
- * The landed commit's sha stays on the `merged` log entry, not here —
- * the fold answers "is it landed", the log answers "as what".
+ * The merged commit's sha stays on the `merged` log entry, not here —
+ * the fold answers "is it merged", the log answers "as what".
  */
 export type Lifecycle = "active" | "merged" | "abandoned";
 

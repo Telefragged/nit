@@ -1,7 +1,7 @@
 //! The git layer: the push walk and merged/abandoned detection.
 //!
 //! The detection serves the background timer; [`walk_push`] and
-//! [`detect_landings`] carry the contract.
+//! [`detect_merges`] carry the contract.
 //!
 //! Everything here is pure with respect to the database: it reads git and
 //! returns values the caller (the api layer) folds into the per-change logs.
@@ -172,14 +172,14 @@ pub fn resolve_head(repo: &Repository, base_ref: &str) -> Option<String> {
 ///
 /// That window is the commits added since the last sweep: each open
 /// change whose `Change-Id` appears on a new single-parent commit, paired
-/// with the landed commit's sha. One walk covers every change; `open`
-/// maps `change_key →` the change. At most one landing per change.
+/// with the merged commit's sha. One walk covers every change; `open`
+/// maps `change_key →` the change. At most one merge per change.
 ///
-/// A landing that *stripped* its Change-Id is not detected — nit's own approve
+/// A merge that *stripped* its Change-Id is not detected — nit's own approve
 /// action preserves the trailer through rebase + fast-forward, and chasing
 /// keyless landings is what forced an unbounded per-change diff every sweep.
 #[must_use]
-pub fn detect_landings<S: std::hash::BuildHasher>(
+pub fn detect_merges<S: std::hash::BuildHasher>(
     repo: &Repository,
     since: &str,
     head: &str,
@@ -214,7 +214,7 @@ pub fn detect_landings<S: std::hash::BuildHasher>(
             continue;
         };
         // First seen wins: the unsorted walk is newest-first, so a key
-        // appearing on several new commits records the newest landing.
+        // appearing on several new commits records the newest merge.
         landings.entry(change.id).or_insert_with(|| oid.to_string());
     }
     landings.into_iter().collect()
@@ -291,7 +291,7 @@ mod tests {
 
     use git2::{Oid, Repository, Signature};
 
-    use super::detect_landings;
+    use super::detect_merges;
     use crate::review::{ChangeProj, RevisionProj};
 
     /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
@@ -356,9 +356,9 @@ mod tests {
     // pins the walk's content-blindness (no fixture elsewhere lands a diff
     // that matches no pushed revision).
 
-    /// The landing rebase may adapt the diff, so the landed content can
-    /// match no pushed revision; the Change-Id still identifies the landing
-    /// and the landed commit's sha is recorded.
+    /// The merge rebase may adapt the diff, so the merged content can
+    /// match no pushed revision; the Change-Id still identifies the merge
+    /// and the merged commit's sha is recorded.
     #[test]
     fn drifted_landing_is_detected() {
         let (_dir, repo, root) = repo();
@@ -369,19 +369,19 @@ mod tests {
             &[("a.txt", "a\n")],
         );
         let change = change_proj(1, "I001", feat, root);
-        let landed = commit(
+        let merged = commit(
             &repo,
             Some(root),
             &keyed("feat", "I001"),
             &[("a.txt", "a adapted\n")],
         );
-        let got = detect_landings(
+        let got = detect_merges(
             &repo,
             &root.to_string(),
-            &landed.to_string(),
+            &merged.to_string(),
             &open(&[&change]),
         );
-        assert_eq!(got, vec![(1, landed.to_string())]);
+        assert_eq!(got, vec![(1, merged.to_string())]);
     }
 
     #[test]
@@ -394,23 +394,23 @@ mod tests {
             &[("a.txt", "a\n")],
         );
         let change = change_proj(1, "I001", feat, root);
-        let landed = commit(
+        let merged = commit(
             &repo,
             Some(root),
-            "landed without a trailer\n",
+            "merged without a trailer\n",
             &[("a.txt", "a\n")],
         );
-        let got = detect_landings(
+        let got = detect_merges(
             &repo,
             &root.to_string(),
-            &landed.to_string(),
+            &merged.to_string(),
             &open(&[&change]),
         );
         assert_eq!(got, vec![]);
     }
 
-    /// One delta walk detects every member that landed — a stacked prefix
-    /// (A and B land, each at its own revision) falls out for free.
+    /// One delta walk detects every member that merged — a stacked prefix
+    /// (A and B merge, each at its own revision) falls out for free.
     #[test]
     fn stacked_prefix_detects_each_member() {
         let (_dir, repo, root) = repo();
@@ -430,7 +430,7 @@ mod tests {
             &keyed("b", "I002"),
             &[("b.txt", "b\n")],
         );
-        let mut got = detect_landings(
+        let mut got = detect_merges(
             &repo,
             &root.to_string(),
             &landed_b.to_string(),
@@ -453,16 +453,16 @@ mod tests {
             &[("a.txt", "a\n")],
         );
         let change = change_proj(1, "I001", feat, root);
-        let landed = commit(
+        let merged = commit(
             &repo,
             Some(root),
             &keyed("other", "I999"),
             &[("z.txt", "z\n")],
         );
-        let got = detect_landings(
+        let got = detect_merges(
             &repo,
             &root.to_string(),
-            &landed.to_string(),
+            &merged.to_string(),
             &open(&[&change]),
         );
         assert_eq!(got, vec![]);
@@ -478,14 +478,14 @@ mod tests {
             &[("a.txt", "a\n")],
         );
         let change = change_proj(1, "I001", feat, root);
-        let landed = commit(
+        let merged = commit(
             &repo,
             Some(root),
             &keyed("feat", "I001"),
             &[("a.txt", "a\n")],
         );
         let absent = "0".repeat(40);
-        let got = detect_landings(&repo, &absent, &landed.to_string(), &open(&[&change]));
+        let got = detect_merges(&repo, &absent, &merged.to_string(), &open(&[&change]));
         assert_eq!(got, vec![]);
     }
 }

@@ -32,7 +32,7 @@ fn timer_interval() -> Duration {
 
 /// The background sweep for **merged** changes.
 ///
-/// Detects a change landed on the canonical branch and appends
+/// Detects a change merged onto the canonical branch and appends
 /// `lifecycle{merged}` entries. The only writer of `merged`. It never
 /// abandons — abandonment is an explicit action (`abandon_change`).
 pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
@@ -92,7 +92,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
                 continue;
             };
             let open = open_changes_by_key(&view);
-            for (change_id, sha) in gitscan::detect_landings(&repo, since, &head, &open) {
+            for (change_id, sha) in gitscan::detect_merges(&repo, since, &head, &open) {
                 record_landing(state, conn, change_id, sha);
             }
         }
@@ -121,7 +121,7 @@ fn record_landing(state: &AppState, conn: &mut Connection, change_id: u64, sha: 
         Ok(Some(entry)) => entry,
         Ok(None) => return,
         Err(e) => {
-            tracing::warn!(change_id, "landed change failed to load: {e:#}");
+            tracing::warn!(change_id, "merged change failed to load: {e:#}");
             return;
         }
     };

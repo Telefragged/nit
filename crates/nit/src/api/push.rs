@@ -40,7 +40,7 @@ pub(super) async fn push(
 
         let walk = gitscan::walk_push(&canonical, &base, &req.tip).map_err(Error::bad_request)?;
         // A tip that is ancestor-or-equal of the base walks to nothing: the work
-        // already landed (or you pushed the base itself). Reject it loudly rather
+        // already merged (or you pushed the base itself). Reject it loudly rather
         // than recording nothing, so a stray push of a merged commit is a visible
         // mistake, not a silent no-op.
         if walk.commits.is_empty() {

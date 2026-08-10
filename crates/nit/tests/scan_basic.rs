@@ -191,7 +191,7 @@ fn merge_commit_rejects_the_push() {
 #[test]
 fn already_merged_commit_rejects_the_push() {
     // A tip that is ancestor-or-equal of the base walks to nothing — the work
-    // already landed. The push fails (409) rather than silently recording
+    // already merged. The push fails (409) rather than silently recording
     // nothing.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);

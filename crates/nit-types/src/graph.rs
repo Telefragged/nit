@@ -15,7 +15,7 @@ pub struct HistoryCommit {
     /// Parent commit-shas; more than one is a merge.
     pub parents: Vec<String>,
     pub subject: String,
-    /// The landed change this commit carries, matched by its `Change-Id:`
+    /// The merged change this commit carries, matched by its `Change-Id:`
     /// trailer. Coupled with `change_key`: a commit whose trailer names no
     /// known change (a merge, a pre-nit commit, a foreign trailer) reports
     /// both as `None`, never an orphan key.

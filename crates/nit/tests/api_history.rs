@@ -67,7 +67,7 @@ fn trailer_enrichment_couples_id_and_key() {
     assert_eq!(st, 200, "{res}");
 
     // Land the change: main advances to the pushed commit, and the sweep
-    // records the landing by Change-Id.
+    // records the merge by Change-Id.
     g.branch("main", topic);
     common::sweep(&server);
 
@@ -76,10 +76,10 @@ fn trailer_enrichment_couples_id_and_key() {
     let commits = history["commits"].as_array().expect("commits");
     assert_eq!(commits.len(), 3, "{history}");
 
-    let landed = &commits[0];
-    assert_eq!(landed["sha"], topic.to_string());
-    assert_eq!(landed["change_key"], "Itopic", "landed change enriched");
-    assert!(landed["change_id"].is_u64(), "{landed}");
+    let merged = &commits[0];
+    assert_eq!(merged["sha"], topic.to_string());
+    assert_eq!(merged["change_key"], "Itopic", "merged change enriched");
+    assert!(merged["change_id"].is_u64(), "{merged}");
 
     let foreign = &commits[1];
     assert_eq!(foreign["sha"], c1.to_string());

@@ -106,7 +106,7 @@ impl RepoView {
 
     /// The **active frontier**: tips of non-terminal changes.
     ///
-    /// The dashboard's `status=active`. A merged change has landed and an
+    /// The dashboard's `status=active`. A merged change is on the canonical branch and an
     /// abandoned change is dead, so neither is an active tip — but an
     /// abandoned change is still an enumerable member
     /// ([`enumerable_tips`](Self::enumerable_tips)).
@@ -131,7 +131,7 @@ impl RepoView {
     /// Follows each revision's recorded `parent`, returning the path
     /// oldest-first. The walk stops at the branch: the recorded fork
     /// (`parent_sha == base_sha`), or the first parent that has since
-    /// merged — so a partially-landed stack derives to its open members
+    /// merged — so a partially-merged stack derives to its open members
     /// alone. **Total**: an unresolved parent (below the merge-base, or a
     /// torn push) truncates the path, never errors.
     #[must_use]
@@ -160,7 +160,7 @@ impl RepoView {
         path
     }
 
-    /// Whether `sha` is a change that has landed on the canonical branch.
+    /// Whether `sha` is a change that has merged onto the canonical branch.
     fn is_merged(&self, sha: &str) -> bool {
         self.index
             .get(sha)
@@ -367,7 +367,7 @@ mod tests {
 
     #[test]
     fn walk_stops_at_a_merged_ancestor() {
-        // A → B forked from "m"; A has since landed (merged). The walk stops at
+        // A → B forked from "m"; A has since merged. The walk stops at
         // the canonical branch, so B's path is the open member alone — the
         // merged ancestor sits below the branch now, not in the chain.
         let mut a = change(1, "Ia", vec![rev(0, "A", "m", "m")]);

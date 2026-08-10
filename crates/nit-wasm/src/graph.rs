@@ -167,13 +167,13 @@ mod tests {
         let a = change(1, "Ia", vec![rev(0, "A", "h", "h")]);
         let b = change(2, "Ib", vec![rev(0, "B", "A", "h")]);
         let view = RepoView::new(vec![a, b]);
-        let landed = HistoryCommit {
+        let merged = HistoryCommit {
             change_id: Some(9),
             change_key: Some("Iland".to_string()),
             ..commit("g1", &["g2"])
         };
         let history = RepoHistory {
-            commits: vec![commit("h", &["g1"]), landed, commit("g2", &[])],
+            commits: vec![commit("h", &["g1"]), merged, commit("g2", &[])],
             truncated: true,
         };
 

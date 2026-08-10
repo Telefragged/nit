@@ -31,8 +31,8 @@ fn change_landed_on_main_becomes_merged() {
 
     // Land the same change on the canonical branch: the timer recognises
     // its Change-Id.
-    let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    g.branch("main", landed);
+    let merged = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("main", merged);
 
     sweep(&server);
     assert_eq!(
@@ -67,8 +67,8 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     assert_eq!(tip, member_id(&server, &res, "I002"));
 
     // Land only the ancestor (I001) on main — the tip (I002) stays unlanded.
-    let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    g.branch("main", landed);
+    let merged = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("main", merged);
 
     sweep(&server);
     assert_eq!(
@@ -77,8 +77,8 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     );
     assert_eq!(status_at(&server, tip, Some(0)).as_deref(), Some("pending"));
 
-    // One live member keeps the partially-landed stack on the active list, but
-    // the walk stops at the canonical branch: the ancestor has landed, so it
+    // One live member keeps the partially-merged stack on the active list, but
+    // the walk stops at the canonical branch: the ancestor has merged, so it
     // drops out of the path — only the open tip remains.
     let repo = first_repo_id(&server);
     let (_, active) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=active")));
@@ -123,7 +123,7 @@ fn branchless_change_stays_live_without_auto_abandon() {
     let change_id = member_id(&server, &res, "I001");
 
     // Delete the only branch, then move main with an unrelated commit (a
-    // foreign Change-Id, so no false landing) so the sweep does real work
+    // foreign Change-Id, so no false merge) so the sweep does real work
     // over the open set containing this change — and demonstrably leaves it
     // pending, never auto-abandoned.
     g.delete_branch("feat");
@@ -177,8 +177,8 @@ fn push_to_merged_change_409s() {
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
 
-    let landed = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    g.branch("main", landed);
+    let merged = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("main", merged);
     sweep(&server);
 
     let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
@@ -214,7 +214,7 @@ fn push_to_abandoned_change_409s_until_reopened() {
     assert_eq!(st, 200);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    assert_eq!(res["tip_change"]["revision"], 1, "the new revision landed");
+    assert_eq!(res["tip_change"]["revision"], 1, "the new revision merged");
     assert_eq!(
         res["tip_change"]["status"], "pending",
         "a content change resets status"

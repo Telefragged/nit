@@ -37,8 +37,8 @@ use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionP
 
 /// A change's terminal lifecycle, folded from its `lifecycle` entries.
 ///
-/// The landed commit's sha stays on the `merged` log entry, not here —
-/// the fold answers "is it landed", the log answers "as what".
+/// The merged commit's sha stays on the `merged` log entry, not here —
+/// the fold answers "is it merged", the log answers "as what".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -228,7 +228,7 @@ impl ChangeProj {
         !matches!(self.lifecycle, Lifecycle::Active)
     }
 
-    /// Whether the change has **landed** on the canonical branch.
+    /// Whether the change has **merged** onto the canonical branch.
     ///
     /// Distinct from `is_terminal`: an abandoned change is terminal but
     /// not merged, and stays an enumerable member/tip of its chains
@@ -269,9 +269,9 @@ impl ChangeProj {
         if matches!(self.lifecycle, Lifecycle::Abandoned) {
             return ChangeStatus::Abandoned;
         }
-        // A landing may carry content matching no recorded revision (the
+        // A merge may carry content matching no recorded revision (the
         // approve action rebases before merging; the timer only records the
-        // landing by Change-Id), so the latest stands in for it.
+        // merge by Change-Id), so the latest stands in for it.
         if self.is_merged() && self.latest_revision().is_some_and(|r| r.number == revision) {
             return ChangeStatus::Merged;
         }
