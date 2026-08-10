@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 
-use nit_types::chains::Chain;
+use nit_types::domain::Chain;
 use nit_types::domain::ChangeNumber;
 
 use super::client::{Client, Retry, ServerOpt, server_url};

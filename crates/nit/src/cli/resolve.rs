@@ -5,7 +5,8 @@
 
 use anyhow::{Result, anyhow};
 
-use nit_types::chains::{Chain, ChainList};
+use nit_types::chains::ChainList;
+use nit_types::domain::Chain;
 use nit_types::domain::ChangeNumber;
 use nit_types::repos::RepoList;
 

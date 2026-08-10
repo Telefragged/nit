@@ -7,9 +7,9 @@ use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 
-use nit_types::chains::Chain;
 use nit_types::changes::ChangeDetail;
 use nit_types::comments::{CommentRange, Thread};
+use nit_types::domain::Chain;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::{CommentInput, LogEntry, LogPayload};
@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn chain_digest_aligns_columns_and_headers() {
-        use nit_types::chains::PathEntry;
+        use nit_types::domain::PathEntry;
         use nit_types::domain::{ChainState, ChangeStatus};
         let member =
             |change_id, position, key: &str, status, revision: u64, subject: &str| PathEntry {

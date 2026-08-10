@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 
-use nit_types::chains::Chain;
+use nit_types::domain::Chain;
 use nit_types::push::{PushRequest, PushResult};
 
 use super::client::{Client, ServerOpt, server_url};

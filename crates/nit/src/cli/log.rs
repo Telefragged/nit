@@ -6,8 +6,8 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 
-use nit_types::chains::Chain;
 use nit_types::chains::ChainLog;
+use nit_types::domain::Chain;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
 use nit_types::domain::{LogEntry, LogPayload};

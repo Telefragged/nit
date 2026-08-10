@@ -108,6 +108,7 @@
 //! Serde renamings pin the exact wire spellings, so swapping a `String`
 //! field for one of these enums is not a wire change.
 
+mod chain;
 mod change;
 mod conversation;
 mod identity;
@@ -115,6 +116,7 @@ mod log;
 mod rendering;
 mod verdict;
 
+pub use chain::*;
 pub use change::*;
 pub use conversation::*;
 pub use identity::*;
