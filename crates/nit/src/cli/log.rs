@@ -1,6 +1,6 @@
 //! `nit log` — read the aggregated chain log.
 //!
-//! Prints entries by global `seq`, `--follow`s the log as a parked monitor
+//! Prints entries by global `sequence`, `--follow`s the log as a parked monitor
 //! over the websocket change stream, or `--wait`s for the next entries past a
 //! cursor and exits.
 
@@ -21,11 +21,11 @@ use super::resolve::resolve_chain;
     reason = "independent CLI flags, not encodable state"
 )]
 pub struct LogArgs {
-    /// Default (one-shot): global `seq` values or half-open `seq` ranges into
+    /// Default (one-shot): global `sequence` values or half-open `sequence` ranges into
     /// the aggregated chain log: `3`, `5..9`, `5..`, `..9`, `..` (all, the
     /// default). A range may span seqs absent from this chain (they belong to
     /// other changes); those simply match nothing. With `--follow`/`--wait`: a
-    /// single global `seq` cursor to stream/drain from.
+    /// single global `sequence` cursor to stream/drain from.
     #[arg(default_value = "..")]
     pub ranges: Vec<String>,
     /// Chain to read, by its tip change id; overrides the cwd lookup.
@@ -38,7 +38,7 @@ pub struct LogArgs {
     /// lands — a parked monitor. Rides out restarts; runs until stopped.
     #[arg(long)]
     pub follow: bool,
-    /// Block until entries land past the seq cursor, print them once beneath the
+    /// Block until entries land past the sequence cursor, print them once beneath the
     /// chain digest, then exit — the one-shot wait.
     #[arg(long, conflicts_with = "follow")]
     pub wait: bool,
@@ -51,7 +51,7 @@ pub struct LogArgs {
     pub server: ServerOpt,
 }
 
-/// Prints entries of the aggregated chain log by global `seq`.
+/// Prints entries of the aggregated chain log by global `sequence`.
 ///
 /// With `--follow`/`--wait`, streams or drains past a cursor instead.
 ///
@@ -62,7 +62,7 @@ pub fn log(args: LogArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
     if args.follow || args.wait {
         let [spec] = args.ranges.as_slice() else {
-            bail!("--follow/--wait take a single starting seq cursor (e.g. `0` or `..`)");
+            bail!("--follow/--wait take a single starting sequence cursor (e.g. `0` or `..`)");
         };
         let cursor = follow_cursor(spec)?;
         let change_id = resolve_chain(&client, args.chain, Retry::No)?;
@@ -82,7 +82,7 @@ pub fn log(args: LogArgs) -> Result<()> {
     let entries: Vec<LogEntry> = log
         .entries
         .into_iter()
-        .filter(|e| ranges.iter().any(|r| r.contains(e.seq)))
+        .filter(|e| ranges.iter().any(|r| r.contains(e.sequence)))
         .filter(|e| !(args.reviewer_only && muted_by_reviewer_only(e)))
         .collect();
     if args.oneline {
@@ -93,7 +93,7 @@ pub fn log(args: LogArgs) -> Result<()> {
     Ok(())
 }
 
-/// Blocks until the chain's aggregated log passes the `seq` cursor.
+/// Blocks until the chain's aggregated log passes the `sequence` cursor.
 ///
 /// Prints the chain digest and the entries past the cursor, then exits. Each
 /// pass drains `(cursor, head]` from the log (the source of truth); otherwise
@@ -118,7 +118,7 @@ fn wait(
         let fresh: Vec<LogEntry> = log
             .entries
             .iter()
-            .filter(|e| e.seq > cursor)
+            .filter(|e| e.sequence > cursor)
             .filter(|e| !(reviewer_only && muted_by_reviewer_only(e)))
             .cloned()
             .collect();
@@ -176,8 +176,8 @@ fn follow(
         // (server restart, overflow) re-reads whatever landed during the gap.
         let log: ChainLog = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
         for e in &log.entries {
-            if e.seq > cursor {
-                cursor = cursor.max(e.seq);
+            if e.sequence > cursor {
+                cursor = cursor.max(e.sequence);
                 relay(e, oneline, reviewer_only);
             }
         }
@@ -190,7 +190,7 @@ fn follow(
             else {
                 continue;
             };
-            cursor = cursor.max(entry.seq);
+            cursor = cursor.max(entry.sequence);
             relay(&entry, oneline, reviewer_only);
         }
     }
@@ -207,26 +207,26 @@ fn relay(entry: &LogEntry, oneline: bool, reviewer_only: bool) {
     }
 }
 
-/// Each change's head idx (max idx + 1) from the aggregated log.
+/// Each change's head position (max position + 1) from the aggregated log.
 ///
-/// The from-idx to subscribe at so the backlog replay is empty (doorbell
+/// The from-position to subscribe at so the backlog replay is empty (doorbell
 /// mode).
 fn heads(entries: &[LogEntry]) -> std::collections::HashMap<u64, u64> {
     let mut heads: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
     for e in entries {
         heads
             .entry(e.change_id)
-            .and_modify(|h| *h = (*h).max(e.idx + 1))
-            .or_insert(e.idx + 1);
+            .and_modify(|h| *h = (*h).max(e.position + 1))
+            .or_insert(e.position + 1);
     }
     heads
 }
 
 fn max_seq(entries: &[LogEntry]) -> u64 {
-    entries.iter().map(|e| e.seq).max().unwrap_or(0)
+    entries.iter().map(|e| e.sequence).max().unwrap_or(0)
 }
 
-/// Parses the single `--follow` positional into a starting `seq` cursor.
+/// Parses the single `--follow` positional into a starting `sequence` cursor.
 ///
 /// A bare `N` follows from `N`, `..` from `0`.
 fn follow_cursor(spec: &str) -> Result<u64> {
@@ -236,7 +236,7 @@ fn follow_cursor(spec: &str) -> Result<u64> {
     }
     spec.trim_end_matches("..")
         .parse::<u64>()
-        .with_context(|| format!("bad seq cursor {spec:?}"))
+        .with_context(|| format!("bad sequence cursor {spec:?}"))
 }
 
 /// Whether `--reviewer-only` suppresses this log entry.
@@ -253,9 +253,9 @@ fn muted_by_reviewer_only(entry: &LogEntry) -> bool {
     }
 }
 
-/// A parsed `nit log` selector over global `seq`, half-open.
+/// A parsed `nit log` selector over global `sequence`, half-open.
 ///
-/// `contains(seq)` tests membership; a bare `N` is the singleton `[N, N+1)`.
+/// `contains(sequence)` tests membership; a bare `N` is the singleton `[N, N+1)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LogRange {
     Open { from: u64 },
@@ -287,10 +287,10 @@ impl LogRange {
         Ok(LogRange::Closed { from, to })
     }
 
-    fn contains(self, seq: u64) -> bool {
+    fn contains(self, sequence: u64) -> bool {
         match self {
-            LogRange::Open { from } => seq >= from,
-            LogRange::Closed { from, to } => seq >= from && seq < to,
+            LogRange::Open { from } => sequence >= from,
+            LogRange::Closed { from, to } => sequence >= from && sequence < to,
         }
     }
 }
@@ -322,7 +322,7 @@ mod tests {
         // Half-open: end excluded.
         assert!(LogRange::Closed { from: 3, to: 6 }.contains(5));
         assert!(!LogRange::Closed { from: 3, to: 6 }.contains(6));
-        // Open-ended matches every seq at or past `from`.
+        // Open-ended matches every sequence at or past `from`.
         assert!(!LogRange::Open { from: 2 }.contains(1));
         assert!(LogRange::Open { from: 2 }.contains(2));
         assert!(LogRange::Open { from: 2 }.contains(1000));
@@ -335,8 +335,8 @@ mod tests {
         let muted = |payload| {
             muted_by_reviewer_only(&LogEntry {
                 change_id: 1,
-                idx: 0,
-                seq: 0,
+                position: 0,
+                sequence: 0,
                 created_at: String::new(),
                 payload,
             })

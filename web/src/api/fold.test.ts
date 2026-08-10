@@ -5,8 +5,8 @@ import type { LogEntry } from "./types";
 
 const revision: LogEntry = {
   change_id: 1,
-  idx: 0,
-  seq: 0,
+  position: 0,
+  sequence: 0,
   created_at: "t0",
   kind: "revision",
   payload: {
@@ -19,8 +19,8 @@ const revision: LogEntry = {
 };
 const review: LogEntry = {
   change_id: 1,
-  idx: 1,
-  seq: 1,
+  position: 1,
+  sequence: 1,
   created_at: "t1",
   kind: "review",
   payload: {
@@ -39,7 +39,7 @@ describe("the shared wasm fold", () => {
       change_key: "I1",
       entries: [revision],
     });
-    // entries_folded is the high-water mark (next idx to fold), not a count.
+    // entries_folded is the high-water mark (next position to fold), not a count.
     expect(proj.entries_folded).toBe(1);
 
     const detail = changeDetail(proj);

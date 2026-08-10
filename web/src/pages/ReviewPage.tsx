@@ -486,9 +486,9 @@ export default function ReviewPage() {
         revealFile(next);
       } else if (e.key === "n" || e.key === "p") {
         if (!chainPath) return;
-        const idx = chainPath.findIndex((c) => c.change_id === changeId);
-        if (idx < 0) return;
-        const next = chainPath[idx + (e.key === "n" ? 1 : -1)];
+        const position = chainPath.findIndex((c) => c.change_id === changeId);
+        if (position < 0) return;
+        const next = chainPath[position + (e.key === "n" ? 1 : -1)];
         if (next) void navigate(`/changes/${next.change_id}`);
       } else if (e.key === "c") {
         // Draft a comment on the selected diff text (gerrit's c) — or on

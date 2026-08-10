@@ -24,7 +24,7 @@ for (const change of changes) {
 }
 
 // Appended entries (mutations, test injections) get seqs past every synthesized
-// one; the fold orders per-change by idx, so the exact value only has to climb.
+// one; the fold orders per-change by position, so the exact value only has to climb.
 let nextSeq = 1_000_000;
 
 /** A change's current synth log — the source the REST read folds (./index). */
@@ -87,8 +87,8 @@ export function mockAppend(
   const log = logFor(change_id);
   const entry: LogEntry = {
     change_id,
-    idx: log.length,
-    seq: nextSeq++,
+    position: log.length,
+    sequence: nextSeq++,
     created_at,
     ...payload,
   };

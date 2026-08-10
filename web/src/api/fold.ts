@@ -24,7 +24,7 @@ import type {
 } from "./types";
 
 /** A change's identity (not carried in the log) plus its entries, ascending by
- * `idx` — the input to {@link replayProjection}. */
+ * `position` — the input to {@link replayProjection}. */
 export interface ReplayInput {
   id: number;
   repo_id: number;

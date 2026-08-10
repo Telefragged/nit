@@ -46,12 +46,12 @@ impl ChangeTarget {
 
 /// The opt-in terse form (`--oneline`).
 ///
-/// One whitespace-separated line per entry keyed by its global `seq`.
+/// One whitespace-separated line per entry keyed by its global `sequence`.
 pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
     for e in entries {
         println!(
-            "seq {}  {}  {}",
-            e.seq,
+            "sequence {}  {}  {}",
+            e.sequence,
             e.payload.kind().as_str(),
             entry_summary(e)
         );
@@ -122,7 +122,7 @@ fn chain_digest(chain: &Chain, unresolved: &HashMap<u64, u64>, cursor: Option<u6
     let inf = "write to String is infallible";
     let mut out = String::new();
     match cursor {
-        Some(seq) => writeln!(out, "cursor={seq} state={}", chain.state.as_str()),
+        Some(sequence) => writeln!(out, "cursor={sequence} state={}", chain.state.as_str()),
         None => writeln!(out, "state={}", chain.state.as_str()),
     }
     .expect(inf);
@@ -208,17 +208,17 @@ pub(crate) fn print_comment(thread: &Thread, replied: bool) {
 /// itself), and a reply names only its thread — a reply's anchor lives on the
 /// thread's opening entry, not here.
 pub(crate) fn render_entry(entry: &LogEntry) -> String {
-    let seq = entry.seq;
+    let sequence = entry.sequence;
     let change = entry.change_id;
     match &entry.payload {
         LogPayload::Revision(p) => format!(
-            "seq {seq}  change {change}  revision {}  {}",
+            "sequence {sequence}  change {change}  revision {}  {}",
             short_sha(&p.commit_sha),
             subject_of(&p.message),
         ),
         LogPayload::Review(p) => {
             let mut out = format!(
-                "seq {seq}  change {change} r{}  reviewer: {}",
+                "sequence {sequence}  change {change} r{}  reviewer: {}",
                 p.revision,
                 p.verdict.as_str()
             );
@@ -234,16 +234,24 @@ pub(crate) fn render_entry(entry: &LogEntry) -> String {
         }
         LogPayload::Comment(c) => {
             let head = match comment_target(c) {
-                Some(target) => format!("seq {seq}  change {change}  comment on {target}"),
-                None => format!("seq {seq}  change {change}  comment"),
+                Some(target) => {
+                    format!("sequence {sequence}  change {change}  comment on {target}")
+                }
+                None => format!("sequence {sequence}  change {change}  comment"),
             };
             format!("{head}\n{}", indent(&c.body, 4))
         }
         LogPayload::Lifecycle(p) => match &p.message {
             Some(m) if !m.is_empty() => {
-                format!("seq {seq}  change {change}  {}: {m}", p.action.as_str())
+                format!(
+                    "sequence {sequence}  change {change}  {}: {m}",
+                    p.action.as_str()
+                )
             }
-            _ => format!("seq {seq}  change {change}  {}", p.action.as_str()),
+            _ => format!(
+                "sequence {sequence}  change {change}  {}",
+                p.action.as_str()
+            ),
         },
     }
 }
@@ -343,8 +351,8 @@ mod tests {
         use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let entry = |payload| LogEntry {
             change_id: 7,
-            idx: 0,
-            seq: 0,
+            position: 0,
+            sequence: 0,
             created_at: String::new(),
             payload,
         };
@@ -388,10 +396,10 @@ mod tests {
         use nit_types::comments::CommentRange;
         use nit_types::domain::{Side, Verdict};
         use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
-        let entry = |change_id, idx, seq, payload| LogEntry {
+        let entry = |change_id, position, sequence, payload| LogEntry {
             change_id,
-            idx,
-            seq,
+            position,
+            sequence,
             created_at: String::new(),
             payload,
         };
@@ -445,7 +453,7 @@ mod tests {
         // the full form and the resolved marker sits on the anchor line.
         assert_eq!(
             render_entry(&review),
-            "seq 12  change 42 r2  reviewer: request_changes\n\
+            "sequence 12  change 42 r2  reviewer: request_changes\n\
              \x20   Cover one.\n\
              \x20   Cover two.\n\
              \x20   t3  (change-level)\n\
@@ -457,11 +465,11 @@ mod tests {
         );
 
         // A revision entry shows its short sha and subject — no minted number.
-        let rev = |idx, seq, sha: &str, msg: &str| {
+        let rev = |position, sequence, sha: &str, msg: &str| {
             entry(
                 42,
-                idx,
-                seq,
+                position,
+                sequence,
                 LogPayload::Revision(RevisionPayload {
                     commit_sha: sha.to_string(),
                     parent_sha: String::new(),
@@ -473,11 +481,11 @@ mod tests {
         };
         assert_eq!(
             render_entry(&rev(0, 3, "abcdef0123456789", "queue: first\n\nbody")),
-            "seq 3  change 42  revision abcdef012345  queue: first"
+            "sequence 3  change 42  revision abcdef012345  queue: first"
         );
         assert_eq!(
             render_entry(&rev(6, 20, "1234567890abcdef", "queue: second")),
-            "seq 20  change 42  revision 1234567890ab  queue: second"
+            "sequence 20  change 42  revision 1234567890ab  queue: second"
         );
     }
 

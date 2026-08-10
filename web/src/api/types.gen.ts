@@ -615,14 +615,14 @@ export type LogPayload =
 /**
  * One log entry.
  *
- * Belongs to one change; `seq` totally orders the whole repo, `idx`
+ * Belongs to one change; `sequence` totally orders the whole repo, `position`
  * orders one change. The flattened [`LogPayload`] contributes the `kind`
  * discriminant and the `payload` body.
  */
 export type LogEntry = {
   change_id: number;
-  idx: number;
-  seq: number;
+  position: number;
+  sequence: number;
   created_at: string;
 } & (
   | { kind: "revision"; payload: RevisionPayload }
@@ -719,7 +719,7 @@ export type ThreadProjection = {
 
 export type ReviewProjection = {
   /**
-   * The `idx` of the `review` entry this is the fold of.
+   * The `position` of the `review` entry this is the fold of.
    *
    * A log coordinate, reproduced by replay with nothing stored.
    */
@@ -751,7 +751,7 @@ export type ChangeProjection = {
    */
   next_thread_id: number;
   /**
-   * Count of entries folded = the next unconsumed `idx`.
+   * Count of entries folded = the next unconsumed `position`.
    *
    * A high-water mark, carried in the projection so the client resumes
    * folding the live tail at the right boundary and [`fold`] stays

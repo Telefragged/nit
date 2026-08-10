@@ -16,7 +16,7 @@ use crate::log::LogEntry;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum ClientMessage {
-    /// Cursor replay (the CLI follower): `change_id` → from-idx.
+    /// Cursor replay (the CLI follower): `change_id` → from-position.
     ///
     /// The server replays each change's `[from, head)` backlog, then
     /// streams live. Integer map keys can't survive serde's tagged-enum

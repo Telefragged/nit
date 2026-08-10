@@ -405,7 +405,7 @@ fn ws_open(server: &TestServer, read_timeout: Duration) -> WsSock {
     socket
 }
 
-/// Cursor mode: `change_id` → `from-idx` pairs; the server replays each
+/// Cursor mode: `change_id` → `from-position` pairs; the server replays each
 /// `[from, head)` backlog, then streams live.
 pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Duration) -> WsSock {
     let mut socket = ws_open(server, read_timeout);

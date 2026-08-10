@@ -1,4 +1,4 @@
-//! `WS /api/stream`: backlog replay, the idx watermark, and live
+//! `WS /api/stream`: backlog replay, the position watermark, and live
 //! streaming.
 
 mod common;
@@ -12,7 +12,7 @@ use common::{
 
 const READ: Duration = Duration::from_secs(3);
 
-/// At idx 0 replays full backlog; `seq` is monotone across the replay/live boundary.
+/// At position 0 replays full backlog; `sequence` is monotone across the replay/live boundary.
 #[test]
 fn subscribe_replays_backlog_then_streams_live() {
     let g = GitRepo::new();
@@ -26,18 +26,18 @@ fn subscribe_replays_backlog_then_streams_live() {
     let mut socket = ws_subscribe(&server, &[(change_id, 0)], READ);
     let backlog = ws_entry(&mut socket).expect("backlog revision entry");
     assert_eq!(backlog["change_id"], change_id);
-    assert_eq!(backlog["idx"], 0);
+    assert_eq!(backlog["position"], 0);
     assert_eq!(backlog["kind"], "revision");
 
     // review() drafts via a side-table write (no log entry), then submits —
-    // that's why the `review` lands at idx 1.
+    // that's why the `review` lands at position 1.
     review(&server, change_id, "request_changes", "fix");
     let live = ws_entry(&mut socket).expect("live review entry");
     assert_eq!(live["kind"], "review");
-    assert_eq!(live["idx"], 1);
+    assert_eq!(live["position"], 1);
     assert!(
-        live["seq"].as_u64().unwrap() > backlog["seq"].as_u64().unwrap(),
-        "seq is monotone: {live} after {backlog}"
+        live["sequence"].as_u64().unwrap() > backlog["sequence"].as_u64().unwrap(),
+        "sequence is monotone: {live} after {backlog}"
     );
 }
 
@@ -57,13 +57,13 @@ fn subscribe_projection_ships_it_then_streams_live() {
     let snap = ws_read(&mut socket).expect("projection frame")["projection"].clone();
     assert_eq!(snap["id"], change_id);
     assert_eq!(snap["revisions"].as_array().expect("revisions").len(), 1);
-    // One entry (the revision) is folded, so the live tail resumes at idx 1.
+    // One entry (the revision) is folded, so the live tail resumes at position 1.
     assert_eq!(snap["entries_folded"], 1);
 
     review(&server, change_id, "approve", "lgtm");
     let live = ws_entry(&mut socket).expect("live review entry past the projection");
     assert_eq!(live["kind"], "review");
-    assert_eq!(live["idx"], 1);
+    assert_eq!(live["position"], 1);
 }
 
 /// The connection stays live past an empty backlog drain — the doorbell `nit wait` relies on.
@@ -76,7 +76,7 @@ fn subscribe_at_head_skips_backlog() {
     let (_, res) = push(&server, &g, "feat", "main");
     let change_id = member_id(&server, &res, "I001");
 
-    // The revision is at idx 0, so head is idx 1: no backlog replays.
+    // The revision is at position 0, so head is position 1: no backlog replays.
     let mut socket = ws_subscribe(&server, &[(change_id, 1)], Duration::from_millis(400));
     assert!(ws_read(&mut socket).is_none(), "no backlog at head");
 
@@ -84,7 +84,7 @@ fn subscribe_at_head_skips_backlog() {
     review(&server, change_id, "approve", "lgtm");
     let live = ws_entry(&mut socket).expect("live entry after head subscribe");
     assert_eq!(live["kind"], "review");
-    assert_eq!(live["idx"], 1);
+    assert_eq!(live["position"], 1);
 }
 
 #[test]
@@ -115,5 +115,5 @@ fn unsubscribed_changes_are_silent() {
     let frame = ws_entry(&mut socket).expect("review for one");
     assert_eq!(frame["change_id"], one);
     assert_eq!(frame["kind"], "review");
-    assert_eq!(frame["idx"], 1);
+    assert_eq!(frame["position"], 1);
 }

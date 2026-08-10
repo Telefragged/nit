@@ -367,7 +367,7 @@ impl AppState {
 /// Appends a batch of entries to one change, in one transaction.
 ///
 /// Folds them in lock-step and returns the applied entries (with their
-/// minted `seq`). See [`append_to_change_with`]; this is the no-extra-work
+/// minted `sequence`). See [`append_to_change_with`]; this is the no-extra-work
 /// case.
 ///
 /// # Errors
@@ -387,7 +387,7 @@ pub fn append_to_change(
 ///
 /// `pre_commit` runs inside the **same** transaction first (e.g. draining
 /// drafts atomically with a `review` append). The change's projection write
-/// lock serializes appenders, so the committed-state `idx` is consistent and
+/// lock serializes appenders, so the committed-state `position` is consistent and
 /// applies happen in order — no reorder buffer needed. The lock spans the
 /// commit, so a reader can briefly stall behind an in-flight append;
 /// cross-change appends never contend.
@@ -427,7 +427,7 @@ pub fn append_to_change_with(
     // bad payload aborts here, before any write. The validated clone is then
     // installed verbatim after the commit — one fold, not two, and the
     // installed object is provably the one that validated (the fold ignores the
-    // global `seq`, so the clone equals what re-folding the committed rows
+    // global `sequence`, so the clone equals what re-folding the committed rows
     // gives).
     let start = db::log_head(conn, change_id)?;
     let mut next = proj.clone();
@@ -441,8 +441,8 @@ pub fn append_to_change_with(
                 &mut next,
                 LogEntry {
                     change_id,
-                    seq: 0,
-                    idx: start + u64::try_from(k).expect("batch fits u64"),
+                    sequence: 0,
+                    position: start + u64::try_from(k).expect("batch fits u64"),
                     created_at: now.clone(),
                     payload,
                 },
@@ -455,15 +455,15 @@ pub fn append_to_change_with(
     let mut applied = Vec::with_capacity(prepared.len());
     for e in prepared {
         let payload = review::payload_to_json(&e.payload)?;
-        let seq = db::append_log(
+        let sequence = db::append_log(
             &tx,
             change_id,
-            e.idx,
+            e.position,
             e.payload.kind().as_str(),
             &payload,
             &now,
         )?;
-        applied.push(LogEntry { seq, ..e });
+        applied.push(LogEntry { sequence, ..e });
     }
     // Re-stamp the denormalized status from the validated projection, in the
     // same transaction as the appends.

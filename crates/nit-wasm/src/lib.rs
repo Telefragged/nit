@@ -35,7 +35,7 @@ fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
 /// The input to [`replay_proj`].
 ///
 /// A change's identity (not carried in the log) plus its log entries,
-/// ascending by `idx`.
+/// ascending by `position`.
 #[derive(Deserialize)]
 struct ReplayInput {
     id: u64,

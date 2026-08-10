@@ -971,7 +971,7 @@ const change20: ChangeRecord = {
                   89,
                   "        self.checkpoint()?; // stalls every writer behind fsync",
                 ),
-                ctx(90, 89, "        Ok(seq)"),
+                ctx(90, 89, "        Ok(sequence)"),
                 ctx(91, 90, "    }"),
                 ctx(92, 91, ""),
                 add(

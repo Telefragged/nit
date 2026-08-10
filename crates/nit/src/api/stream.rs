@@ -31,7 +31,7 @@ pub(super) async fn stream(
 /// It holds one receiver on the server's event channel for its whole life,
 /// so every subscribe is armed before it reads its backlog (a `[from, head)`
 /// replay, or a `ChangeProjection`) and the arm/read overlap is deduped
-/// by an idx watermark, never gapped. `watermark` is also the subscription
+/// by a position watermark, never gapped. `watermark` is also the subscription
 /// set: an entry is forwarded only for a change the client asked for. An
 /// overflowed receiver closes the socket — the client reconnects and
 /// re-reads the log.
@@ -67,7 +67,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 let Some(&mark) = watermark.get(&entry.change_id) else {
                     continue;
                 };
-                if entry.idx < mark {
+                if entry.position < mark {
                     continue;
                 }
                 if send(&mut socket, &StreamMessage::Entry(entry)).await.is_err() {
@@ -124,7 +124,7 @@ async fn send(socket: &mut WebSocket, msg: &StreamMessage) -> Result<(), ()> {
 
 /// Each cursor's log slice `[from, head)` as tagged entries.
 ///
-/// With the idx that slice ends at, read over one borrowed connection — a
+/// With the position that slice ends at, read over one borrowed connection — a
 /// subscribe carries a whole chain, so the frames it answers with are sent
 /// after the read rather than between two of them. A change left out of the
 /// result is left unsubscribed: it does not exist, or the read failed and
@@ -146,7 +146,7 @@ async fn read_backlogs(
                 .iter()
                 .map(|r| review::entry_from_row(change_id, r))
                 .collect::<anyhow::Result<Vec<_>>>()?;
-            let next = entries.last().map_or(from, |e| e.idx + 1);
+            let next = entries.last().map_or(from, |e| e.position + 1);
             out.push((change_id, next, entries));
         }
         Ok(out)

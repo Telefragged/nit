@@ -3,14 +3,14 @@
 // projects it and the REST change read folds it (./index), both through the
 // shared crates/nit-wasm fold, so the two never disagree. Thread ids are
 // emitted explicitly so the fold reproduces the record ids the reviewer's
-// drafts reference; a review's id is its entry's `idx`, so the records number
+// drafts reference; a review's id is its entry's `position`, so the records number
 // their reviews by where this places them.
 
 import type { CommentInput, LogEntry, LogPayload } from "../types";
 import type { ChangeRecord, ThreadRecord } from "./store";
 
-// Monotonic across all changes — the global `seq` ordering of the real log.
-let seq = 0;
+// Monotonic across all changes — the global `sequence` ordering of the real log.
+let sequence = 0;
 
 /** One thread comment → its wire `CommentInput`. The opening comment (index 0)
  * carries the anchor + explicit thread id; the last carries the rolled-up
@@ -34,7 +34,7 @@ function commentInput(
   };
 }
 
-/** A change's records → its log, ascending by `idx`: every revision, then the
+/** A change's records → its log, ascending by `position`: every revision, then the
  * reviews and author comments that opened and answered its threads, in time
  * order, then a terminal lifecycle entry. */
 export function synthLog(
@@ -45,8 +45,8 @@ export function synthLog(
   const add = (created_at: string, payload: LogPayload) =>
     entries.push({
       change_id: change.id,
-      idx: entries.length,
-      seq: seq++,
+      position: entries.length,
+      sequence: sequence++,
       created_at,
       ...payload,
     });

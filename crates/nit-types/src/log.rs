@@ -139,15 +139,15 @@ impl LogPayload {
 
 /// One log entry.
 ///
-/// Belongs to one change; `seq` totally orders the whole repo, `idx`
+/// Belongs to one change; `sequence` totally orders the whole repo, `position`
 /// orders one change. The flattened [`LogPayload`] contributes the `kind`
 /// discriminant and the `payload` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LogEntry {
     pub change_id: u64,
-    pub idx: u64,
-    pub seq: u64,
+    pub position: u64,
+    pub sequence: u64,
     pub created_at: String,
     #[serde(flatten)]
     pub payload: LogPayload,
@@ -156,7 +156,7 @@ pub struct LogEntry {
 /// `GET /api/chains/{change_id}/log` response.
 ///
 /// The aggregated chain log, merged across members and sorted by global
-/// `seq`.
+/// `sequence`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainLog {
     pub entries: Vec<LogEntry>,

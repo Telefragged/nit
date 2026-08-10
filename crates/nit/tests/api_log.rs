@@ -1,5 +1,5 @@
 //! The aggregated chain log over real HTTP: `GET /api/chains/{change_id}/log`
-//! merges every member's entries, sorted by ascending global `seq`.
+//! merges every member's entries, sorted by ascending global `sequence`.
 
 mod common;
 
@@ -9,7 +9,7 @@ use serde_json::Value;
 fn seqs(resp: &Value) -> Vec<u64> {
     entries(resp)
         .iter()
-        .map(|e| e["seq"].as_u64().unwrap())
+        .map(|e| e["sequence"].as_u64().unwrap())
         .collect()
 }
 
@@ -21,7 +21,7 @@ fn entries(resp: &Value) -> &Vec<Value> {
 fn chain_log_aggregates_members_in_seq_order() {
     // m → A → B: two changes in one chain. A comment lands on A *between* the
     // two pushes, so the aggregated chain log must interleave it by global
-    // `seq`, not group by member.
+    // `sequence`, not group by member.
     let g = GitRepo::new();
     let a = g.commit(&[g.root], &msg("core: A", "Ia"), &[("a.txt", "a\n")]);
     g.branch("feat", a);
@@ -33,7 +33,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     assert_eq!(st, 200, "{res}");
     let a_id = member_id(&server, &res, "Ia");
 
-    // An author comment on A (seq: A.comment) — written before B exists, so it
+    // An author comment on A (sequence: A.comment) — written before B exists, so it
     // must sort before B's revision in the merged timeline.
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{a_id}/comments")),
@@ -52,11 +52,11 @@ fn chain_log_aggregates_members_in_seq_order() {
     let (st, log) = http_get(&server.url(&format!("/api/chains/{b_id}/log")));
     assert_eq!(st, 200, "{log}");
 
-    let seq = seqs(&log);
-    assert_eq!(seq.len(), 3, "{log}");
+    let sequence = seqs(&log);
+    assert_eq!(sequence.len(), 3, "{log}");
     assert!(
-        seq.windows(2).all(|w| w[0] < w[1]),
-        "seq strictly ascending"
+        sequence.windows(2).all(|w| w[0] < w[1]),
+        "sequence strictly ascending"
     );
 
     let got: Vec<(u64, &str)> = entries(&log)
@@ -90,7 +90,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     // yields the identical aggregate (the chain is tip-rooted either way).
     let (st, from_a) = http_get(&server.url(&format!("/api/chains/{a_id}/log")));
     assert_eq!(st, 200, "{from_a}");
-    assert_eq!(seqs(&from_a), seq);
+    assert_eq!(seqs(&from_a), sequence);
 }
 
 #[test]

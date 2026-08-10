@@ -360,8 +360,8 @@ pub fn nth_line(text: &str, line: u64) -> Option<String> {
     if line < 1 {
         return None;
     }
-    let idx = usize::try_from(line - 1).ok()?;
-    text.lines().nth(idx).map(str::to_string)
+    let position = usize::try_from(line - 1).ok()?;
+    text.lines().nth(position).map(str::to_string)
 }
 
 /// The full text of `file` in `tree`, `None` for a missing/binary path.

@@ -2,7 +2,7 @@
 //!
 //! This module's docs are the schema contract. Five tables: the `repos`
 //! registry, the `changes` identity registry, the append-only event `log`
-//! (keyed on the change, with a global `seq`), and the reviewer's
+//! (keyed on the change, with a global `sequence`), and the reviewer's
 //! `draft_comments` and `draft_reviews`. All reviewable state is the
 //! fold of the per-change logs (`crate::review`), held in memory and rebuilt
 //! by replay. Nothing in the log is ever mutated or deleted.
@@ -185,6 +185,13 @@ const MIGRATIONS: &[&str] = &[
               json_set(payload, '$.fork_sha', json_extract(payload, '$.base_sha')),
               '$.base_sha')
       WHERE kind = 'revision' AND json_extract(payload, '$.base_sha') IS NOT NULL;",
+    // v8: the log's two orderings spell themselves out — `position` for an
+    // entry's 0-based place in its change, `sequence` for the global order.
+    // `index` would have been the literal expansion of `idx`, but SQLite
+    // reserves it, and `position` is already the wire's word for a 0-based
+    // ordinal.
+    "ALTER TABLE log RENAME COLUMN idx TO position;
+     ALTER TABLE log RENAME COLUMN seq TO sequence;",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -507,27 +514,27 @@ pub fn all_changes(conn: &Connection) -> Result<Vec<ChangeRow>> {
 }
 
 // ---------------------------------------------------------------------------
-// Log (the append-only event log, keyed on the change, globally ordered by seq)
+// Log (the append-only event log, keyed on the change, globally ordered by sequence)
 
 #[derive(Debug, Clone)]
 pub struct LogRow {
     /// Globally monotone across the repo — the cross-change order.
-    pub seq: u64,
+    pub sequence: u64,
     /// 0-based, contiguous per change.
-    pub idx: u64,
+    pub position: u64,
     pub kind: String,
     pub payload: String,
     pub created_at: String,
 }
 
-/// `head` = number of entries for a change = idx of its next entry.
+/// `head` = number of entries for a change = position of its next entry.
 ///
 /// # Errors
 ///
 /// On a database failure.
 pub fn log_head(conn: &Connection, change_id: u64) -> Result<u64> {
     let max: Option<i64> = conn.query_row(
-        "SELECT MAX(idx) FROM log WHERE change_id = ?1",
+        "SELECT MAX(position) FROM log WHERE change_id = ?1",
         params![i64::try_from(change_id)?],
         |r| r.get(0),
     )?;
@@ -537,29 +544,29 @@ pub fn log_head(conn: &Connection, change_id: u64) -> Result<u64> {
     })
 }
 
-/// Appends one entry at `idx`.
+/// Appends one entry at `position`.
 ///
-/// `idx` must equal the change's current head; the caller computes it
-/// under the change's projection write lock. Returns the global `seq`
+/// `position` must equal the change's current head; the caller computes it
+/// under the change's projection write lock. Returns the global `sequence`
 /// `SQLite` minted for the entry.
 ///
 /// # Errors
 ///
-/// On a database failure (including a `UNIQUE(change_id, idx)` clash).
+/// On a database failure (including a `UNIQUE(change_id, position)` clash).
 pub fn append_log(
     conn: &Connection,
     change_id: u64,
-    idx: u64,
+    position: u64,
     kind: &str,
     payload: &str,
     created_at: &str,
 ) -> Result<u64> {
     conn.execute(
-        "INSERT INTO log (change_id, idx, kind, payload, created_at)
+        "INSERT INTO log (change_id, position, kind, payload, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
             i64::try_from(change_id)?,
-            i64::try_from(idx)?,
+            i64::try_from(position)?,
             kind,
             payload,
             created_at
@@ -570,15 +577,15 @@ pub fn append_log(
 
 fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
     Ok(LogRow {
-        seq: col_u64(row.get("seq")?)?,
-        idx: col_u64(row.get("idx")?)?,
+        sequence: col_u64(row.get("sequence")?)?,
+        position: col_u64(row.get("position")?)?,
         kind: row.get("kind")?,
         payload: row.get("payload")?,
         created_at: row.get("created_at")?,
     })
 }
 
-/// One change's entries in `[from, to)`, idx-ascending.
+/// One change's entries in `[from, to)`, position-ascending.
 ///
 /// `to = None` means through head.
 ///
@@ -597,15 +604,15 @@ pub fn log_entries(
     let rows = match to {
         Some(to) => conn
             .prepare(
-                "SELECT seq, idx, kind, payload, created_at FROM log
-                 WHERE change_id = ?1 AND idx >= ?2 AND idx < ?3 ORDER BY idx",
+                "SELECT sequence, position, kind, payload, created_at FROM log
+                 WHERE change_id = ?1 AND position >= ?2 AND position < ?3 ORDER BY position",
             )?
             .query_map(params![change_id, from, i64::try_from(to)?], map_log)?
             .collect::<rusqlite::Result<Vec<_>>>()?,
         None => conn
             .prepare(
-                "SELECT seq, idx, kind, payload, created_at FROM log
-                 WHERE change_id = ?1 AND idx >= ?2 ORDER BY idx",
+                "SELECT sequence, position, kind, payload, created_at FROM log
+                 WHERE change_id = ?1 AND position >= ?2 ORDER BY position",
             )?
             .query_map(params![change_id, from], map_log)?
             .collect::<rusqlite::Result<Vec<_>>>()?,
@@ -969,26 +976,26 @@ mod tests {
     }
 
     #[test]
-    fn log_append_mints_seq_and_idx() {
+    fn log_append_mints_sequence_and_position() {
         let conn = mem();
         let c = change(&conn);
         assert_eq!(log_head(&conn, c).expect("head"), 0);
         let s0 =
             append_log(&conn, c, 0, "revision", r#"{"commit_sha":"a"}"#, "t0").expect("append");
         let s1 = append_log(&conn, c, 1, "comment", r#"{"body":"note"}"#, "t1").expect("append");
-        assert!(s1 > s0, "seq is monotone");
+        assert!(s1 > s0, "sequence is monotone");
         assert_eq!(log_head(&conn, c).expect("head"), 2);
         let entries = log_entries(&conn, c, 0, None).expect("entries");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].kind, "revision");
-        assert_eq!(entries[1].idx, 1);
+        assert_eq!(entries[1].position, 1);
         let tail = log_entries(&conn, c, 1, None).expect("tail");
         assert_eq!(tail.len(), 1);
         assert_eq!(tail[0].kind, "comment");
     }
 
     #[test]
-    fn seq_is_global_across_changes() {
+    fn sequence_is_global_across_changes() {
         let conn = mem();
         let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
         let a = upsert_change(&conn, repo.id, "Ia").expect("a");
@@ -996,7 +1003,7 @@ mod tests {
         let sa = append_log(&conn, a, 0, "comment", "{}", "t0").expect("a0");
         let sb = append_log(&conn, b, 0, "comment", "{}", "t1").expect("b0");
         let sa1 = append_log(&conn, a, 1, "comment", "{}", "t2").expect("a1");
-        // Both changes' idx restart at 0, but seq totally orders the interleave.
+        // Both changes' position restart at 0, but sequence totally orders the interleave.
         assert!(sa < sb && sb < sa1);
     }
 

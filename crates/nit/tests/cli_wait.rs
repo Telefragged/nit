@@ -57,13 +57,13 @@ fn wait_blocks_then_wakes_on_a_review() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let change_id = push_head(&server, &g);
 
-    // The head seq after the push (the author's revision entry).
+    // The head sequence after the push (the author's revision entry).
     let (_, log) = http_get(&server.url(&format!("/api/chains/{change_id}/log")));
     let head_seq = log["entries"]
         .as_array()
         .unwrap()
         .iter()
-        .filter_map(|e| e["seq"].as_u64())
+        .filter_map(|e| e["sequence"].as_u64())
         .max()
         .unwrap();
 

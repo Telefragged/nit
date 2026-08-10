@@ -66,20 +66,20 @@ pub fn entry_from_row(change_id: u64, row: &db::LogRow) -> Result<LogEntry> {
     let kind: LogKind = row
         .kind
         .parse()
-        .map_err(|e| anyhow!("log entry {}: {e}", row.idx))?;
+        .map_err(|e| anyhow!("log entry {}: {e}", row.position))?;
     Ok(LogEntry {
         change_id,
-        idx: row.idx,
-        seq: row.seq,
+        position: row.position,
+        sequence: row.sequence,
         created_at: row.created_at.clone(),
         payload: payload_from_json(kind, &row.payload)
-            .map_err(|e| anyhow!("log entry {}: bad payload: {e}", row.idx))?,
+            .map_err(|e| anyhow!("log entry {}: bad payload: {e}", row.position))?,
     })
 }
 
 /// Rebuilds a change's projection from its row and its log rows.
 ///
-/// The log rows are in ascending idx order.
+/// The log rows are in ascending position order.
 ///
 /// # Errors
 ///

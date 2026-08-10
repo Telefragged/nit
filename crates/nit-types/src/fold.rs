@@ -10,7 +10,7 @@
 //! `LogEntry`s and store/broadcast the entries it returns; the same code folds
 //! the websocket stream client-side once compiled to WebAssembly.
 //!
-//! Fold-assigned ids: a review's id is its `review` entry's `idx` — a log
+//! Fold-assigned ids: a review's id is its `review` entry's `position` — a log
 //! coordinate, reproduced by replay with nothing stored and nothing minted.
 //! The change id is the `changes` rowid, carried on the projection.
 //! Revision numbers (0-based) are minted **in the fold** by creation order — a
@@ -21,10 +21,10 @@
 //! so the caller stores and broadcasts that one value. `next_thread_id` is the
 //! single source of truth — the only field minting touches — so a concurrent
 //! shared-change push can't duplicate an id, and replay (ids already set) just
-//! advances it. The fold therefore requires entries in ascending `idx` order.
+//! advances it. The fold therefore requires entries in ascending `position` order.
 //!
 //! [`ChangeProjection::entries_folded`] is the count of entries consumed (the next
-//! `idx`): the server stamps it into a projection so a follower resumes folding
+//! `position`): the server stamps it into a projection so a follower resumes folding
 //! the live tail at the boundary, and [`fold`] skips any entry below it, so the
 //! arm/projection overlap is idempotent, never doubled.
 
@@ -139,7 +139,7 @@ pub struct ThreadComment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReviewProjection {
-    /// The `idx` of the `review` entry this is the fold of.
+    /// The `position` of the `review` entry this is the fold of.
     ///
     /// A log coordinate, reproduced by replay with nothing stored.
     pub id: u64,
@@ -167,7 +167,7 @@ pub struct ChangeProjection {
     pub lifecycle: Lifecycle,
     /// Bumped each time a thread is opened.
     pub next_thread_id: u64,
-    /// Count of entries folded = the next unconsumed `idx`.
+    /// Count of entries folded = the next unconsumed `position`.
     ///
     /// A high-water mark, carried in the projection so the client resumes
     /// folding the live tail at the right boundary and [`fold`] stays
@@ -325,18 +325,18 @@ impl ChangeProjection {
 /// the id-bearing entry (the server stores and broadcasts that one).
 pub fn fold(change: &mut ChangeProjection, mut entry: LogEntry) -> LogEntry {
     // Idempotent across the projection/live overlap: an entry already folded into
-    // this projection (its idx below the high-water mark) leaves it untouched,
+    // this projection (its position below the high-water mark) leaves it untouched,
     // so a follower that re-receives the boundary entries the projection already
     // covers never double-applies them.
-    if entry.idx < change.entries_folded {
+    if entry.position < change.entries_folded {
         return entry;
     }
-    change.entries_folded = entry.idx + 1;
+    change.entries_folded = entry.position + 1;
     let now = entry.created_at.clone();
     // A review is identified by where it sits in its change's log: replay
     // reproduces the id with nothing stored and nothing minted, and no reader
     // outside this fold references a review at all.
-    let review_id = entry.idx;
+    let review_id = entry.position;
     match &mut entry.payload {
         LogPayload::Revision(p) => fold_revision(change, p, &now),
         LogPayload::Review(p) => {
@@ -442,7 +442,7 @@ fn open_thread(
 
 /// Rebuilds a change's projection from `entries`.
 ///
-/// Requires ascending `idx` — `fold()`'s high-water mark silently skips
+/// Requires ascending `position` — `fold()`'s high-water mark silently skips
 /// anything out of order.
 #[must_use]
 pub fn replay(
@@ -562,12 +562,12 @@ mod tests {
         ChangeProjection::new(1, 1, "Iabc".to_string())
     }
 
-    fn entry(idx: u64, payload: LogPayload) -> LogEntry {
+    fn entry(position: u64, payload: LogPayload) -> LogEntry {
         LogEntry {
             change_id: 1,
-            seq: idx,
-            idx,
-            created_at: format!("t{idx}"),
+            sequence: position,
+            position,
+            created_at: format!("t{position}"),
             payload,
         }
     }
@@ -839,7 +839,7 @@ mod tests {
         fold(&mut c, entry(0, revision("A", "base", "base", true)));
         fold(&mut c, entry(1, review(0, Verdict::Approve)));
         assert_eq!(c.entries_folded, 2);
-        // Re-delivering the projection/live boundary (idx 1) is a no-op.
+        // Re-delivering the projection/live boundary (position 1) is a no-op.
         fold(&mut c, entry(1, review(0, Verdict::RequestChanges)));
         assert_eq!(c.reviews.len(), 1);
         assert_eq!(c.entries_folded, 2);

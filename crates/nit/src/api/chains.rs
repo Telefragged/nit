@@ -112,7 +112,7 @@ pub(super) async fn get_chain(
     .await
 }
 
-/// The aggregated chain log: every member's entries, sorted by global `seq`.
+/// The aggregated chain log: every member's entries, sorted by global `sequence`.
 pub(super) async fn chain_log(
     State(state): State<Arc<AppState>>,
     AppPath(change_id): AppPath<u64>,
@@ -127,7 +127,7 @@ pub(super) async fn chain_log(
                 entries.push(review::entry_from_row(member.change_id, &row)?);
             }
         }
-        entries.sort_by_key(|e| e.seq);
+        entries.sort_by_key(|e| e.sequence);
         Ok(Json(ChainLog { entries }))
     })
     .await
