@@ -42,8 +42,6 @@ export type Side = "old" | "new";
 
 /**
  * A reviewer's verdict on one change.
- *
- * Folds to the matching [`ChangeStatus`] (`From<Verdict>`).
  */
 export type Verdict = "approve" | "request_changes" | "comment";
 
@@ -51,10 +49,9 @@ export type Verdict = "approve" | "request_changes" | "comment";
  * A reviewer's **draft** decision on a change.
  *
  * The review modal's single set of choices, drafted in `draft_reviews`
- * and published on batch submit. A superset of [`Verdict`] with the two
- * lifecycle actions, so abandonment is a decision rather than a separate
- * button; it translates back to a [`Verdict`] or a [`LifecycleAction`]
- * at publish time ([`Decision::as_verdict`], [`Decision::as_lifecycle`]).
+ * and published on batch submit, where it translates back to a
+ * [`Verdict`] or a [`LifecycleAction`] ([`Decision::as_verdict`],
+ * [`Decision::as_lifecycle`]).
  */
 export type Decision =
   | "approve"
@@ -65,8 +62,6 @@ export type Decision =
 
 /**
  * A change's displayed status at a pinned revision.
- *
- * Per `(change, revision)`, never a change-wide scalar.
  */
 export type ChangeStatus =
   | "pending"
@@ -208,7 +203,7 @@ export type RepoGraph = {
  */
 export type GraphNode = {
   /**
-   * The node's stable id — a full 40-hex commit-sha; the client truncates.
+   * The node's stable id.
    */
   commit_sha: Sha;
   section: GraphSection;
@@ -240,9 +235,6 @@ export type GraphNode = {
  * Walked from the tracked ref's HEAD down (`GET /api/history?repo={id}`).
  */
 export type HistoryCommit = {
-  /**
-   * Full 40-hex commit-sha.
-   */
   sha: Sha;
   /**
    * Parent commit-shas; more than one is a merge.
@@ -546,9 +538,8 @@ export type SubmitError = { change_id: ChangeNumber; message: string };
 /**
  * A `revision` entry: one new commit-sha observed for this change.
  *
- * The revision `number` is **not** carried — the fold mints it (0-based,
- * by append order) so a concurrent shared-change push cannot duplicate
- * it.
+ * The revision `number` is **not** carried — the fold mints it, so a
+ * concurrent shared-change push cannot duplicate it.
  */
 export type RevisionPayload = {
   commit_sha: Sha;

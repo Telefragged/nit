@@ -241,9 +241,8 @@ function derivePath(tip: TipRecord): PathEntry[] {
   return walkPath(tip).map((m, i) => pathEntry(m, i));
 }
 
-/** Mirrors the server's chain-state rollup. Abandonment is derivation-inert:
- * abandoned members are dropped before the rollup, and there is no abandoned
- * chain state. */
+/** Mirrors the server's chain-state rollup: abandoned members are dropped
+ * before it. */
 function chainState(path: PathEntry[]): ChainState {
   const live = path.filter((e) => e.status !== "abandoned");
   if (live.length === 0) return "authors_turn";

@@ -14,7 +14,6 @@ use crate::domain::{ChangeStatus, GraphSection};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct HistoryCommit {
-    /// Full 40-hex commit-sha.
     pub sha: Sha,
     /// Parent commit-shas; more than one is a merge.
     pub parents: Vec<Sha>,
@@ -65,7 +64,7 @@ pub struct RepoGraph {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct GraphNode {
-    /// The node's stable id — a full 40-hex commit-sha; the client truncates.
+    /// The node's stable id.
     pub commit_sha: Sha,
     pub section: GraphSection,
     pub subject: String,

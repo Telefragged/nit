@@ -5,8 +5,6 @@ use serde::{Deserialize, Serialize};
 use super::LifecycleAction;
 
 /// A reviewer's verdict on one change.
-///
-/// Folds to the matching [`ChangeStatus`] (`From<Verdict>`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -31,10 +29,9 @@ impl Verdict {
 /// A reviewer's **draft** decision on a change.
 ///
 /// The review modal's single set of choices, drafted in `draft_reviews`
-/// and published on batch submit. A superset of [`Verdict`] with the two
-/// lifecycle actions, so abandonment is a decision rather than a separate
-/// button; it translates back to a [`Verdict`] or a [`LifecycleAction`]
-/// at publish time ([`Decision::as_verdict`], [`Decision::as_lifecycle`]).
+/// and published on batch submit, where it translates back to a
+/// [`Verdict`] or a [`LifecycleAction`] ([`Decision::as_verdict`],
+/// [`Decision::as_lifecycle`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -96,8 +93,6 @@ impl std::str::FromStr for Decision {
 }
 
 /// A change's displayed status at a pinned revision.
-///
-/// Per `(change, revision)`, never a change-wide scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]

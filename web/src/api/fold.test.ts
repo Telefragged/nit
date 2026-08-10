@@ -45,7 +45,7 @@ describe("the shared wasm fold", () => {
     const detail = changeDetail(proj);
     expect(detail.id).toBe(1);
     expect(detail.revisions).toHaveLength(1);
-    // Revision numbers are minted in the fold, 0-based.
+    // Revision numbers are minted in the fold, not carried in the entry.
     expect(detail.revisions[0]?.number).toBe(0);
     expect(detail.reviews).toHaveLength(0);
     // Drafts/decision are not log state.

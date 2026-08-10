@@ -12,9 +12,8 @@ use crate::domain::{LifecycleAction, LogKind, Side, Verdict};
 
 /// A `revision` entry: one new commit-sha observed for this change.
 ///
-/// The revision `number` is **not** carried — the fold mints it (0-based,
-/// by append order) so a concurrent shared-change push cannot duplicate
-/// it.
+/// The revision `number` is **not** carried — the fold mints it, so a
+/// concurrent shared-change push cannot duplicate it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RevisionPayload {

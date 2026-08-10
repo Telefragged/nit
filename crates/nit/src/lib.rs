@@ -2,9 +2,8 @@
 //!
 //! Library surface for the `nit` binary and its tests:
 //!
-//! - [`nit_types::domain`] — the shared closed vocabularies (sides, verdicts,
-//!   statuses, kinds): one serde enum per fixed value set, used by the domain,
-//!   the wire, and the CLI alike (never a `String`).
+//! - [`nit_types::domain`] — the domain model: every term defined once, on
+//!   the thing it names.
 //! - [`db`] — `SQLite` persistence: open/migrate, typed rows, query helpers;
 //!   its own doc-comments are the schema contract.
 //! - [`review`] — the per-change fold: a change's reviewable state is the

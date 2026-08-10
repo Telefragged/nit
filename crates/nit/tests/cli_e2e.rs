@@ -4,8 +4,8 @@
 //! `--wait` live in `cli_wait.rs`).
 //!
 //! `nit push` walks the change-centric model: oldest-first, upsert each change
-//! by its `Change-Id`, append a revision iff the sha moved (revisions are
-//! 0-based). `nit status`/`nit log` resolve the cwd's tip change from local
+//! by its `Change-Id`, append a revision iff the sha moved. `nit status`
+//! and `nit log` resolve the cwd's tip change from local
 //! HEAD, then read the derived chain on demand.
 
 mod common;

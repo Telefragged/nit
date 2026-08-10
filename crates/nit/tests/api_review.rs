@@ -2,8 +2,7 @@
 //! threads/drafts/reviews; comment drafts are reviewer-private until a draft
 //! decision's chain submit (`common::review`) drains them into one log entry,
 //! sets the per-(change, revision) status to the verdict, and applies each
-//! thread's draft resolution in draft order. Revisions are 0-based: the first
-//! push is revision 0, an amend is revision 1.
+//! thread's draft resolution in draft order.
 
 mod common;
 

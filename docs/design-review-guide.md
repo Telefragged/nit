@@ -178,12 +178,10 @@ fn fold(change, mut entry: LogEntry) -> LogEntry { match &mut entry.payload { ..
 a convention:
 
 - **A closed set of values is an `enum`, never a `String`** (sides,
-  verdicts, statuses, kinds…). Home: `crates/nit-types/src/domain.rs`, from
-  which the TS unions in `web/src/api/types.gen.ts` are generated.
-  `#[serde(rename_all = …)]` keeps the wire spelling, so it is not a wire
-  change. Buys exhaustive `match`es and a 400 on an unknown value at
-  deserialize time. A `String` is fine only at the storage boundary,
-  converted to the enum immediately.
+  verdicts, statuses, kinds…) — the rule and its payoff are in
+  `crates/nit-types/src/domain.rs`, from which the TS unions in
+  `web/src/api/types.gen.ts` are generated. A `String` is fine only at the
+  storage boundary, converted to the enum immediately.
 - **Absence is not a state — model it.** Encode the legal combinations of
   a cluster of `Option`s as an enum so the illegal ones can't be built: a
   thread's location is `Anchor` (`Change | File | Line { … }`,

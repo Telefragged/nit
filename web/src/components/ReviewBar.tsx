@@ -27,10 +27,9 @@ function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
 }
 
 /**
- * Slim sticky bottom bar and the review modal it opens (`a`). A decision is
- * drafted, not published: the modal drafts a verdict — or an abandon/reopen —
- * into the change's `draft_decision`, and the bar's **Submit chain**
- * publishes every member's draft decision at once.
+ * Slim sticky bottom bar and the review modal it opens (`a`). The modal
+ * drafts into the change's `draft_decision`; the bar's **Submit chain**
+ * publishes every member's at once.
  * The bar shows the draft/unresolved counts plus the draft decision so the
  * reviewer can see and submit pending work without leaving the diff.
  */

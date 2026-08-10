@@ -129,8 +129,7 @@ export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 
 // Reviewer decisions (drafted like comments, published per chain)
 
-/** Set (or overwrite) a change's draft decision — a verdict or an
- * abandon/reopen. */
+/** Set (or overwrite) a change's draft decision. */
 export const setDraftDecision = (changeId: number, req: DraftDecision) =>
   request<DraftDecision>("PUT", `/changes/${changeId}/decision`, req);
 

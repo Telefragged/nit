@@ -5,9 +5,9 @@
 // Chains are DERIVED, never stored: a tip is a (tip_change_id, repo) pair,
 // and its path is computed by walking the tip revision's parent_sha back to
 // the repo's base through the commit-sha → (change, revision) index (a
-// gerrit relation chain). A change's displayed status is per (change,
-// revision): the verdict of the latest review at that revision, else
-// pending (terminal merged/abandoned win).
+// gerrit relation chain). A change's displayed status is the verdict of the
+// latest review at that revision, else pending (terminal merged/abandoned
+// win).
 //
 // Coverage on purpose:
 //   repo 1 (acme-runtime)
@@ -1104,8 +1104,8 @@ const change30: ChangeRecord = {
 // B is one change (51) with two revisions: rev0 parent=A, rev1 parent=D.
 // Two tips, two chains: chains/53 walks B at rev0, chains/55 walks B at rev1.
 // Threads/reviews on B are shared (they belong to the change), each anchored
-// to the revision it was written against. Revisions are 0-based here (the new
-// API), so this scenario exercises rev0 / rev1 display directly.
+// to the revision it was written against, so this scenario exercises
+// rev0 / rev1 display directly.
 
 const mOrbit = sha(900); // fork on main: the canonical HEAD
 const cA = sha(501);

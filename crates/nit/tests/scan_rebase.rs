@@ -1,8 +1,7 @@
 //! Pure-rebase vs reword semantics through `POST /api/push`: a patch-id-equal,
 //! same-message commit on a new parent appends a revision but carries the
 //! reviewed status forward; changing the message resets the change to pending.
-//! Revisions are 0-based (revision 0 is the first). Asserted through
-//! `GET /api/changes/{id}` and the derived chain path.
+//! Asserted through `GET /api/changes/{id}` and the derived chain path.
 
 mod common;
 
