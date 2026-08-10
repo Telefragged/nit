@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::comments::CommentRange;
+use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{LifecycleAction, LogKind, Side, Verdict};
@@ -147,7 +148,7 @@ impl LogPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LogEntry {
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub position: u64,
     pub sequence: u64,
     pub created_at: String,

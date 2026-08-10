@@ -4,6 +4,7 @@ use axum::Json;
 use axum::extract::State;
 use git2::Repository;
 
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::RevisionNumber;
 use nit_types::log::{LogPayload, RevisionPayload};
 use nit_types::push::{PushRequest, PushResult, TipChange};
@@ -18,7 +19,7 @@ use super::{canonical_git_dir, map_busy};
 /// Bridges push pre-flight into the append phase.
 struct Target {
     entry: Arc<ChangeEntry>,
-    change_id: u64,
+    change_id: ChangeNumber,
 }
 
 pub(super) async fn push(

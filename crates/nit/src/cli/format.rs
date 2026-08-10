@@ -11,6 +11,7 @@ use nit_types::chains::Chain;
 use nit_types::changes::ChangeDetail;
 use nit_types::comments::{CommentRange, Thread};
 use nit_types::domain::ChangeId;
+use nit_types::domain::ChangeNumber;
 use nit_types::log::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
@@ -28,7 +29,7 @@ pub struct ChangeTarget {
         conflicts_with = "change_id",
         required_unless_present = "change_id"
     )]
-    pub change: Option<u64>,
+    pub change: Option<ChangeNumber>,
     /// The change, by its `Change-Id:` trailer.
     #[arg(long)]
     pub change_id: Option<String>,
@@ -36,7 +37,7 @@ pub struct ChangeTarget {
 
 impl ChangeTarget {
     /// Resolves to a numeric change id, querying the server for a `Change-Id:`.
-    pub(crate) fn resolve(&self, client: &Client) -> Result<u64> {
+    pub(crate) fn resolve(&self, client: &Client) -> Result<ChangeNumber> {
         match (self.change, self.change_id.as_deref()) {
             (Some(id), _) => Ok(id),
             (None, Some(key)) => resolve_change(client, key),
@@ -104,7 +105,7 @@ pub(crate) fn print_chain_digest(
 }
 
 /// Unresolved-thread count per member, scoped to the revision the path pins.
-fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<u64, u64>> {
+fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<ChangeNumber, u64>> {
     let mut counts = HashMap::new();
     for member in &chain.path {
         let detail: ChangeDetail = client.get(&format!("/api/changes/{}", member.change_id))?;
@@ -118,7 +119,11 @@ fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<u64, u64>
     Ok(counts)
 }
 
-fn chain_digest(chain: &Chain, unresolved: &HashMap<u64, u64>, cursor: Option<u64>) -> String {
+fn chain_digest(
+    chain: &Chain,
+    unresolved: &HashMap<ChangeNumber, u64>,
+    cursor: Option<u64>,
+) -> String {
     use std::fmt::Write;
     let inf = "write to String is infallible";
     let mut out = String::new();
@@ -352,7 +357,7 @@ mod tests {
         use nit_types::domain::{LifecycleAction, Verdict};
         use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let entry = |payload| LogEntry {
-            change_id: 7,
+            change_id: ChangeNumber(7),
             position: 0,
             sequence: 0,
             created_at: String::new(),
@@ -420,7 +425,7 @@ mod tests {
             resolved,
         };
         let review = entry(
-            42,
+            ChangeNumber(42),
             5,
             12,
             LogPayload::Review(ReviewPayload {
@@ -472,7 +477,7 @@ mod tests {
         // A revision entry shows its short sha and subject — no minted number.
         let revision = |position, sequence, sha: &str, msg: &str| {
             entry(
-                42,
+                ChangeNumber(42),
                 position,
                 sequence,
                 LogPayload::Revision(RevisionPayload {
@@ -509,12 +514,12 @@ mod tests {
                 commit_sha: "".into(),
             };
         let chain = Chain {
-            tip_change_id: 2,
+            tip_change_id: ChangeNumber(2),
             repo_id: 1,
             state: ChainState::AuthorsTurn,
             path: vec![
                 member(
-                    1,
+                    ChangeNumber(1),
                     0,
                     "I0123456789abc",
                     ChangeStatus::ChangesRequested,
@@ -522,7 +527,7 @@ mod tests {
                     "server: add health endpoint",
                 ),
                 member(
-                    2,
+                    ChangeNumber(2),
                     1,
                     "Iabcdef0123456",
                     ChangeStatus::Approved,
@@ -531,7 +536,7 @@ mod tests {
                 ),
             ],
         };
-        let unresolved = HashMap::from([(1, 3), (2, 0)]);
+        let unresolved = HashMap::from([(ChangeNumber(1), 3), (ChangeNumber(2), 0)]);
         // Columns padded to the widest cell (here `changes_requested`), no tabs.
         assert_eq!(
             chain_digest(&chain, &unresolved, None),

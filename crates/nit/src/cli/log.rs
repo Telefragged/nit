@@ -7,6 +7,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 
 use nit_types::chains::Chain;
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
 use nit_types::events::StreamMessage;
 use nit_types::log::{ChainLog, LogEntry, LogPayload};
@@ -30,7 +31,7 @@ pub struct LogArgs {
     pub ranges: Vec<String>,
     /// Chain to read, by its tip change id; overrides the cwd lookup.
     #[arg(long)]
-    pub chain: Option<u64>,
+    pub chain: Option<ChangeNumber>,
     /// Print the terse one-line-per-entry digest instead of the full rendering.
     #[arg(long)]
     pub oneline: bool,
@@ -107,7 +108,7 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// When the server returns a malformed response or a fatal client error.
 fn wait(
     client: &Client,
-    change_id: u64,
+    change_id: ChangeNumber,
     mut cursor: u64,
     oneline: bool,
     reviewer_only: bool,
@@ -165,7 +166,7 @@ fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result
 /// When a connect fails fatally or stdout can't be written.
 fn follow(
     client: &Client,
-    change_id: u64,
+    change_id: ChangeNumber,
     mut cursor: u64,
     oneline: bool,
     reviewer_only: bool,
@@ -211,8 +212,8 @@ fn relay(entry: &LogEntry, oneline: bool, reviewer_only: bool) {
 ///
 /// The from-position to subscribe at so the backlog replay is empty (doorbell
 /// mode).
-fn heads(entries: &[LogEntry]) -> std::collections::HashMap<u64, u64> {
-    let mut heads: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
+fn heads(entries: &[LogEntry]) -> std::collections::HashMap<ChangeNumber, u64> {
+    let mut heads: std::collections::HashMap<ChangeNumber, u64> = std::collections::HashMap::new();
     for e in entries {
         heads
             .entry(e.change_id)
@@ -335,7 +336,7 @@ mod tests {
         use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let muted = |payload| {
             muted_by_reviewer_only(&LogEntry {
-                change_id: 1,
+                change_id: ChangeNumber(1),
                 position: 0,
                 sequence: 0,
                 created_at: String::new(),

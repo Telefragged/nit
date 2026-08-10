@@ -11,6 +11,7 @@
 
 use anyhow::{Result, anyhow};
 
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::LogKind;
 use nit_types::log::{LogEntry, LogPayload};
 
@@ -62,7 +63,7 @@ pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload>
 /// # Errors
 ///
 /// When the stored `kind` is unknown or the payload is not valid JSON.
-pub fn entry_from_row(change_id: u64, row: &db::LogRow) -> Result<LogEntry> {
+pub fn entry_from_row(change_id: ChangeNumber, row: &db::LogRow) -> Result<LogEntry> {
     let kind: LogKind = row
         .kind
         .parse()

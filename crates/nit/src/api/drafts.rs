@@ -7,6 +7,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 
 use nit_types::comments::{Draft, EditDraft, NewDraft};
+use nit_types::domain::ChangeNumber;
 
 use crate::db;
 
@@ -16,7 +17,7 @@ use super::{change_or_404, snapshot_line_text, validate_anchor};
 
 pub(super) async fn create_draft(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
+    AppPath(id): AppPath<ChangeNumber>,
     AppJson(req): AppJson<NewDraft>,
 ) -> Result<Json<Draft>, Error> {
     with_conn(state.pool(), move |conn| {

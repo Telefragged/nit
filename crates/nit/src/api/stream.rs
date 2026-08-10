@@ -7,6 +7,7 @@ use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 
+use nit_types::domain::ChangeNumber;
 use nit_types::events::{ClientMessage, StreamMessage};
 use nit_types::log::LogEntry;
 
@@ -37,7 +38,7 @@ pub(super) async fn stream(
 /// re-reads the log.
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let mut events = state.subscribe();
-    let mut watermark: HashMap<u64, u64> = HashMap::new();
+    let mut watermark: HashMap<ChangeNumber, u64> = HashMap::new();
     let mut shutdown = state.shutdown_watch();
     loop {
         tokio::select! {
@@ -84,14 +85,14 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 async fn apply_client_msg(
     socket: &mut WebSocket,
     state: &Arc<AppState>,
-    watermark: &mut HashMap<u64, u64>,
+    watermark: &mut HashMap<ChangeNumber, u64>,
     client: ClientMessage,
 ) -> Result<(), ()> {
     match client {
         ClientMessage::Subscribe(map) => {
             let cursors = map
                 .iter()
-                .filter_map(|(id, from)| Some((id.parse::<u64>().ok()?, *from)))
+                .filter_map(|(id, from)| Some((id.parse::<ChangeNumber>().ok()?, *from)))
                 .collect();
             for (change_id, next, backlog) in read_backlogs(state, cursors).await {
                 watermark.insert(change_id, next);
@@ -131,8 +132,8 @@ async fn send(socket: &mut WebSocket, msg: &StreamMessage) -> Result<(), ()> {
 /// the follower re-reads on reconnect.
 async fn read_backlogs(
     state: &Arc<AppState>,
-    cursors: Vec<(u64, u64)>,
-) -> Vec<(u64, u64, Vec<LogEntry>)> {
+    cursors: Vec<(ChangeNumber, u64)>,
+) -> Vec<(ChangeNumber, u64, Vec<LogEntry>)> {
     with_conn(state.pool(), move |conn| {
         let mut out = Vec::with_capacity(cursors.len());
         for (change_id, from) in cursors {
@@ -160,7 +161,10 @@ async fn read_backlogs(
 /// No guard is held across a send — the one place a fold is resolved
 /// without a connection already in hand, so it borrows one for the whole
 /// batch.
-async fn read_projections(state: &Arc<AppState>, ids: Vec<u64>) -> Vec<(u64, ChangeProjection)> {
+async fn read_projections(
+    state: &Arc<AppState>,
+    ids: Vec<ChangeNumber>,
+) -> Vec<(ChangeNumber, ChangeProjection)> {
     let st = state.clone();
     with_conn(state.pool(), move |conn| {
         let mut out = Vec::with_capacity(ids.len());

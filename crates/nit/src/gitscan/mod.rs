@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use git2::{Commit, Oid, Repository, Sort};
 
-use nit_types::domain::{ChangeId, Sha};
+use nit_types::domain::{ChangeId, ChangeNumber, Sha};
 use nit_types::fold::subject_of;
 
 use crate::review::ChangeProjection;
@@ -187,7 +187,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
     since: &Sha,
     head: &Sha,
     open: &HashMap<ChangeId, &ChangeProjection, S>,
-) -> Vec<(u64, Sha)> {
+) -> Vec<(ChangeNumber, Sha)> {
     let (Ok(since), Ok(head)) = (Oid::from_str(since.as_str()), Oid::from_str(head.as_str()))
     else {
         return Vec::new();
@@ -201,7 +201,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
         return Vec::new();
     }
 
-    let mut landings: HashMap<u64, Sha> = HashMap::new();
+    let mut landings: HashMap<ChangeNumber, Sha> = HashMap::new();
     for oid in walk.flatten() {
         let Ok(commit) = repo.find_commit(oid) else {
             continue;
@@ -303,7 +303,7 @@ mod tests {
 
     use super::detect_merges;
     use crate::review::{ChangeProjection, RevisionProjection};
-    use nit_types::domain::{ChangeId, Sha};
+    use nit_types::domain::{ChangeId, ChangeNumber, Sha};
 
     /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
     /// tests need.
@@ -336,7 +336,7 @@ mod tests {
     }
 
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProjection {
-        let mut proj = ChangeProjection::new(id, 1, key.into());
+        let mut proj = ChangeProjection::new(ChangeNumber(id), 1, key.into());
         proj.revisions.push(RevisionProjection {
             number: RevisionNumber(0),
             commit_sha: commit.to_string().into(),
@@ -392,7 +392,7 @@ mod tests {
             &Sha::from(merged.to_string()),
             &open(&[&change]),
         );
-        assert_eq!(got, vec![(1, Sha::from(merged.to_string()))]);
+        assert_eq!(got, vec![(ChangeNumber(1), Sha::from(merged.to_string()))]);
     }
 
     #[test]
@@ -451,8 +451,8 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                (1, Sha::from(landed_a.to_string())),
-                (2, Sha::from(landed_b.to_string()))
+                (ChangeNumber(1), Sha::from(landed_a.to_string())),
+                (ChangeNumber(2), Sha::from(landed_b.to_string()))
             ]
         );
     }

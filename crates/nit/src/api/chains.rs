@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use nit_types::chains::{Chain, ChainList};
 use nit_types::domain::ChangeId;
+use nit_types::domain::ChangeNumber;
 use nit_types::graph::{HistoryCommit, RepoHistory};
 use nit_types::log::ChainLog;
 
@@ -103,7 +104,7 @@ pub(super) async fn repo_history(
 
 pub(super) async fn get_chain(
     State(state): State<Arc<AppState>>,
-    AppPath(change_id): AppPath<u64>,
+    AppPath(change_id): AppPath<ChangeNumber>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<Chain>, Error> {
     with_conn(state.pool(), move |conn| {
@@ -116,7 +117,7 @@ pub(super) async fn get_chain(
 /// The aggregated chain log: every member's entries, sorted by global `sequence`.
 pub(super) async fn chain_log(
     State(state): State<Arc<AppState>>,
-    AppPath(change_id): AppPath<u64>,
+    AppPath(change_id): AppPath<ChangeNumber>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<ChainLog>, Error> {
     with_conn(state.pool(), move |conn| {

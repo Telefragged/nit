@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList};
 use nit_types::diff::{Diff, FileLines};
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Sha;
@@ -49,7 +50,7 @@ pub(super) async fn list_changes(
 
 pub(super) async fn get_change_detail(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
+    AppPath(id): AppPath<ChangeNumber>,
 ) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
@@ -64,7 +65,7 @@ pub(super) async fn get_change_detail(
 /// and the folded projection over the websocket.
 pub(super) async fn get_change_drafts(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
+    AppPath(id): AppPath<ChangeNumber>,
 ) -> Result<Json<ChangeDrafts>, Error> {
     with_conn(state.pool(), move |conn| {
         change_or_404(&state, conn, id)?;
@@ -75,12 +76,12 @@ pub(super) async fn get_change_drafts(
 
 #[derive(Deserialize)]
 pub(super) struct DiffQuery {
-    against: Option<u64>,
+    against: Option<RevisionNumber>,
 }
 
 pub(super) async fn revision_diff(
     State(state): State<Arc<AppState>>,
-    AppPath((id, n)): AppPath<(u64, u64)>,
+    AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,
     AppQuery(q): AppQuery<DiffQuery>,
 ) -> Result<Json<Diff>, Error> {
     with_conn(state.pool(), move |conn| {
@@ -103,7 +104,7 @@ pub(super) async fn revision_diff(
 #[derive(Deserialize)]
 pub(super) struct LinesQuery {
     path: String,
-    against: Option<u64>,
+    against: Option<RevisionNumber>,
 }
 
 /// File `path`'s full-context diff lines.
@@ -114,7 +115,7 @@ pub(super) struct LinesQuery {
 /// hunk; the client slices the gap it needs.
 pub(super) async fn revision_lines(
     State(state): State<Arc<AppState>>,
-    AppPath((id, n)): AppPath<(u64, u64)>,
+    AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,
     AppQuery(q): AppQuery<LinesQuery>,
 ) -> Result<Json<FileLines>, Error> {
     with_conn(state.pool(), move |conn| {
@@ -145,12 +146,12 @@ struct Revs {
 fn resolve_revs(
     state: &AppState,
     entry: &ChangeEntry,
-    n: u64,
-    against: Option<u64>,
+    n: RevisionNumber,
+    against: Option<RevisionNumber>,
 ) -> Result<Revs, Error> {
     let proj = entry.read();
-    let find = |k: u64| {
-        proj.revision(RevisionNumber(k))
+    let find = |k: RevisionNumber| {
+        proj.revision(k)
             .cloned()
             .ok_or_else(|| Error::not_found(format!("revision {k} not found")))
     };

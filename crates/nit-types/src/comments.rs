@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::Side;
 
@@ -28,7 +29,7 @@ pub struct CommentRange {
 pub struct Thread {
     /// Fold-assigned by creation order (not stored).
     pub id: u64,
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     /// The revision the thread is pinned to.
     pub revision: RevisionNumber,
     pub file: Option<String>,
@@ -61,7 +62,7 @@ pub struct ThreadComment {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Draft {
     pub id: u64,
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub thread_id: Option<u64>,
     /// The request's anchor revision; only a new thread uses it.
     pub revision: RevisionNumber,

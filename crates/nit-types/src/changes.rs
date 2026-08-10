@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::comments::{Draft, Thread};
 use crate::domain::ChangeId;
+use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{Decision, Verdict};
@@ -26,7 +27,7 @@ pub struct ChangeList {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeDetail {
-    pub id: u64,
+    pub id: ChangeNumber,
     pub repo_id: u64,
     pub change_key: ChangeId,
     /// Ascending.

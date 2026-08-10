@@ -42,6 +42,7 @@ use serde::Deserialize;
 
 use nit_types::changes::ChangeDetail;
 use nit_types::comments::CommentRange;
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::{Sha, Side};
 use nit_types::health::Health;
@@ -197,7 +198,7 @@ pub async fn serve_on_state(
 fn change_or_404(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
-    change_id: u64,
+    change_id: ChangeNumber,
 ) -> Result<Arc<ChangeEntry>, Error> {
     state
         .change(conn, change_id)?
@@ -212,7 +213,7 @@ fn change_or_404(
 fn chain_context(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
-    change_id: u64,
+    change_id: ChangeNumber,
     revision: Option<RevisionNumber>,
 ) -> Result<(RepoView, u64, Sha), Error> {
     let repo_id = change_or_404(state, conn, change_id)?.read().repo_id;

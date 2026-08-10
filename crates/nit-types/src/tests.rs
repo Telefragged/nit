@@ -2,12 +2,13 @@
 //! optional features — exercising the serde-only baseline that an optional
 //! feature (clap, ts) would otherwise mask.
 
+use crate::domain::ChangeNumber;
 use crate::domain::{LifecycleAction, Side};
 use crate::log::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
 fn revision_entry() -> LogEntry {
     LogEntry {
-        change_id: 7,
+        change_id: ChangeNumber(7),
         position: 2,
         sequence: 42,
         created_at: "t".to_string(),
@@ -62,7 +63,7 @@ fn payload_serializes_as_the_bare_inner_struct() {
 #[test]
 fn lifecycle_skips_absent_fields_under_flatten() {
     let entry = LogEntry {
-        change_id: 1,
+        change_id: ChangeNumber(1),
         position: 0,
         sequence: 0,
         created_at: "t".to_string(),

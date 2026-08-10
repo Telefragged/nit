@@ -33,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use crate::changes::{ChangeDetail, Review, Revision};
 use crate::comments::{CommentRange, Thread};
 use crate::domain::ChangeId;
+use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
@@ -161,7 +162,7 @@ pub struct ReviewProjection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeProjection {
-    pub id: u64,
+    pub id: ChangeNumber,
     pub repo_id: u64,
     pub change_key: ChangeId,
     pub revisions: Vec<RevisionProjection>,
@@ -201,7 +202,7 @@ pub fn subject_of(message: &str) -> String {
 impl ChangeProjection {
     /// The fold builds the rest from the log.
     #[must_use]
-    pub fn new(id: u64, repo_id: u64, change_key: ChangeId) -> ChangeProjection {
+    pub fn new(id: ChangeNumber, repo_id: u64, change_key: ChangeId) -> ChangeProjection {
         ChangeProjection {
             id,
             repo_id,
@@ -458,7 +459,7 @@ fn open_thread(
 /// anything out of order.
 #[must_use]
 pub fn replay(
-    id: u64,
+    id: ChangeNumber,
     repo_id: u64,
     change_key: ChangeId,
     entries: Vec<LogEntry>,
@@ -497,7 +498,7 @@ pub fn review_view(review: &ReviewProjection) -> Review {
 }
 
 #[must_use]
-pub fn thread_view(t: &ThreadProjection, change_id: u64) -> Thread {
+pub fn thread_view(t: &ThreadProjection, change_id: ChangeNumber) -> Thread {
     let (file, line, side, range, line_text) = match &t.anchor {
         Anchor::Change => (None, None, Side::New, None, None),
         Anchor::File { file } => (Some(file.clone()), None, Side::New, None, None),
@@ -571,12 +572,12 @@ mod tests {
     use super::*;
 
     fn empty() -> ChangeProjection {
-        ChangeProjection::new(1, 1, "Iabc".into())
+        ChangeProjection::new(ChangeNumber(1), 1, "Iabc".into())
     }
 
     fn entry(position: u64, payload: LogPayload) -> LogEntry {
         LogEntry {
-            change_id: 1,
+            change_id: ChangeNumber(1),
             sequence: position,
             position,
             created_at: format!("t{position}"),
@@ -840,7 +841,7 @@ mod tests {
     #[test]
     fn replay_folds_entries_in_order() {
         let c = replay(
-            1,
+            ChangeNumber(1),
             1,
             "Iabc".into(),
             vec![

@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use nit_types::comments::CommentRange;
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha, Side};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -376,7 +377,7 @@ pub fn update_repo_canonical_head(conn: &Connection, id: u64, canonical_head: &S
 
 #[derive(Debug, Clone)]
 pub struct ChangeRow {
-    pub id: u64,
+    pub id: ChangeNumber,
     pub repo_id: u64,
     pub change_key: ChangeId,
     /// The denormalized status cache; authoritative state is the fold.
@@ -388,7 +389,7 @@ pub struct ChangeRow {
 
 fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
     Ok(ChangeRow {
-        id: col_u64(row.get("id")?)?,
+        id: ChangeNumber(col_u64(row.get("id")?)?),
         repo_id: col_u64(row.get("repo_id")?)?,
         change_key: row.get::<_, String>("change_key")?.into(),
         status: row
@@ -409,7 +410,11 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &ChangeId) -> Result<u64> {
+pub fn upsert_change(
+    conn: &Connection,
+    repo_id: u64,
+    change_key: &ChangeId,
+) -> Result<ChangeNumber> {
     conn.execute(
         "INSERT INTO changes (repo_id, change_key, created_at) VALUES (?1, ?2, ?3)
          ON CONFLICT (repo_id, change_key) DO NOTHING",
@@ -420,7 +425,7 @@ pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &ChangeId) -> 
         params![i64::try_from(repo_id)?, change_key.as_str()],
         |r| r.get(0),
     )?;
-    Ok(col_u64(id)?)
+    Ok(ChangeNumber(col_u64(id)?))
 }
 
 /// Returns the change id a `Change-Id` key names in one repo, if any.
@@ -434,7 +439,7 @@ pub fn change_id_by_key(
     conn: &Connection,
     repo_id: u64,
     change_key: &ChangeId,
-) -> Result<Option<u64>> {
+) -> Result<Option<ChangeNumber>> {
     let id: Option<i64> = conn
         .query_row(
             "SELECT id FROM changes WHERE repo_id = ?1 AND change_key = ?2",
@@ -442,7 +447,7 @@ pub fn change_id_by_key(
             |r| r.get(0),
         )
         .optional()?;
-    Ok(col_u64_opt(id)?)
+    Ok(col_u64_opt(id)?.map(ChangeNumber))
 }
 
 /// Re-stamps a change's denormalized `status`.
@@ -455,10 +460,14 @@ pub fn change_id_by_key(
 /// # Errors
 ///
 /// On a database failure.
-pub fn update_change_status(conn: &Connection, id: u64, status: ChangeStatus) -> Result<()> {
+pub fn update_change_status(
+    conn: &Connection,
+    id: ChangeNumber,
+    status: ChangeStatus,
+) -> Result<()> {
     conn.execute(
         "UPDATE changes SET status = ?1 WHERE id = ?2",
-        params![status.as_str(), i64::try_from(id)?],
+        params![status.as_str(), i64::try_from(id.get())?],
     )?;
     Ok(())
 }
@@ -466,10 +475,10 @@ pub fn update_change_status(conn: &Connection, id: u64, status: ChangeStatus) ->
 /// # Errors
 ///
 /// On a database failure.
-pub fn get_change(conn: &Connection, id: u64) -> Result<Option<ChangeRow>> {
+pub fn get_change(conn: &Connection, id: ChangeNumber) -> Result<Option<ChangeRow>> {
     conn.query_row(
         "SELECT * FROM changes WHERE id = ?1",
-        params![i64::try_from(id)?],
+        params![i64::try_from(id.get())?],
         map_change,
     )
     .optional()
@@ -487,7 +496,7 @@ pub fn repo_change_ids(
     conn: &Connection,
     repo_id: u64,
     statuses: &[ChangeStatus],
-) -> Result<Vec<u64>> {
+) -> Result<Vec<ChangeNumber>> {
     // The denormalized `status` column exists for exactly this: selecting by
     // status without folding a single log. Empty means every change.
     let mut sql = String::from("SELECT id FROM changes WHERE repo_id = ?1");
@@ -501,7 +510,9 @@ pub fn repo_change_ids(
     values.extend(statuses.iter().map(|s| s.as_str().to_string().into()));
     let mut stmt = conn.prepare(&sql)?;
     let ids = stmt
-        .query_map(rusqlite::params_from_iter(values), |r| col_u64(r.get(0)?))?
+        .query_map(rusqlite::params_from_iter(values), |r| {
+            col_u64(r.get(0)?).map(ChangeNumber)
+        })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(ids)
 }
@@ -538,10 +549,10 @@ pub struct LogRow {
 /// # Errors
 ///
 /// On a database failure.
-pub fn log_head(conn: &Connection, change_id: u64) -> Result<u64> {
+pub fn log_head(conn: &Connection, change_id: ChangeNumber) -> Result<u64> {
     let max: Option<i64> = conn.query_row(
         "SELECT MAX(position) FROM log WHERE change_id = ?1",
-        params![i64::try_from(change_id)?],
+        params![i64::try_from(change_id.get())?],
         |r| r.get(0),
     )?;
     Ok(match max {
@@ -561,7 +572,7 @@ pub fn log_head(conn: &Connection, change_id: u64) -> Result<u64> {
 /// On a database failure (including a `UNIQUE(change_id, position)` clash).
 pub fn append_log(
     conn: &Connection,
-    change_id: u64,
+    change_id: ChangeNumber,
     position: u64,
     kind: &str,
     payload: &str,
@@ -571,7 +582,7 @@ pub fn append_log(
         "INSERT INTO log (change_id, position, kind, payload, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
-            i64::try_from(change_id)?,
+            i64::try_from(change_id.get())?,
             i64::try_from(position)?,
             kind,
             payload,
@@ -600,11 +611,11 @@ fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
 /// On a database failure.
 pub fn log_entries(
     conn: &Connection,
-    change_id: u64,
+    change_id: ChangeNumber,
     from: u64,
     to: Option<u64>,
 ) -> Result<Vec<LogRow>> {
-    let change_id = i64::try_from(change_id)?;
+    let change_id = i64::try_from(change_id.get())?;
     let from = i64::try_from(from)?;
     // Omit the upper bound entirely rather than fake one with a sentinel.
     let rows = match to {
@@ -632,7 +643,7 @@ pub fn log_entries(
 #[derive(Debug, Clone)]
 pub struct DraftRow {
     pub id: u64,
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub revision: RevisionNumber,
     /// The thread this draft replies to; `None` opens a new thread.
     pub thread_id: Option<u64>,
@@ -669,7 +680,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
     };
     Ok(DraftRow {
         id: col_u64(row.get("id")?)?,
-        change_id: col_u64(row.get("change_id")?)?,
+        change_id: ChangeNumber(col_u64(row.get("change_id")?)?),
         revision: RevisionNumber(col_u64(row.get("revision")?)?),
         thread_id: col_u64_opt(row.get("thread_id")?)?,
         file: row.get("file")?,
@@ -685,7 +696,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
 }
 
 pub struct NewDraft<'a> {
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub revision: RevisionNumber,
     pub thread_id: Option<u64>,
     pub file: Option<&'a str>,
@@ -724,7 +735,7 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
             line_text, body, resolved, created_at, updated_at)
          VALUES (?14, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?15, ?13, ?13)",
         params![
-            i64::try_from(d.change_id)?,
+            i64::try_from(d.change_id.get())?,
             i64::try_from(d.revision.get())?,
             thread_id,
             d.file,
@@ -804,10 +815,10 @@ pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn drafts_for_change(conn: &Connection, change_id: u64) -> Result<Vec<DraftRow>> {
+pub fn drafts_for_change(conn: &Connection, change_id: ChangeNumber) -> Result<Vec<DraftRow>> {
     let mut stmt = conn.prepare("SELECT * FROM draft_comments WHERE change_id = ?1 ORDER BY id")?;
     let rows = stmt
-        .query_map(params![i64::try_from(change_id)?], map_draft)?
+        .query_map(params![i64::try_from(change_id.get())?], map_draft)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
@@ -817,10 +828,10 @@ pub fn drafts_for_change(conn: &Connection, change_id: u64) -> Result<Vec<DraftR
 /// # Errors
 ///
 /// On a database failure.
-pub fn delete_drafts_for_change(conn: &Connection, change_id: u64) -> Result<()> {
+pub fn delete_drafts_for_change(conn: &Connection, change_id: ChangeNumber) -> Result<()> {
     conn.execute(
         "DELETE FROM draft_comments WHERE change_id = ?1",
-        params![i64::try_from(change_id)?],
+        params![i64::try_from(change_id.get())?],
     )?;
     Ok(())
 }
@@ -832,7 +843,7 @@ pub fn delete_drafts_for_change(conn: &Connection, change_id: u64) -> Result<()>
 /// A reviewer's draft decision on a change.
 #[derive(Debug, Clone)]
 pub struct DraftReviewRow {
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub decision: Decision,
     /// Cover note (for a verdict) or reason (for `abandon`).
     pub message: String,
@@ -840,7 +851,7 @@ pub struct DraftReviewRow {
 
 fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
     Ok(DraftReviewRow {
-        change_id: col_u64(row.get("change_id")?)?,
+        change_id: ChangeNumber(col_u64(row.get("change_id")?)?),
         decision: col_enum(&row.get::<_, String>("decision")?)?,
         message: row.get("message")?,
     })
@@ -856,14 +867,14 @@ fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
 /// On a database failure.
 pub fn upsert_draft_review(
     conn: &Connection,
-    change_id: u64,
+    change_id: ChangeNumber,
     decision: Decision,
     message: &str,
 ) -> Result<()> {
     conn.execute(
         "INSERT INTO draft_reviews (change_id, decision, message) VALUES (?1, ?2, ?3)
          ON CONFLICT (change_id) DO UPDATE SET decision = ?2, message = ?3",
-        params![i64::try_from(change_id)?, decision.as_str(), message],
+        params![i64::try_from(change_id.get())?, decision.as_str(), message],
     )?;
     Ok(())
 }
@@ -873,10 +884,13 @@ pub fn upsert_draft_review(
 /// # Errors
 ///
 /// On a database failure.
-pub fn get_draft_review(conn: &Connection, change_id: u64) -> Result<Option<DraftReviewRow>> {
+pub fn get_draft_review(
+    conn: &Connection,
+    change_id: ChangeNumber,
+) -> Result<Option<DraftReviewRow>> {
     conn.query_row(
         "SELECT * FROM draft_reviews WHERE change_id = ?1",
-        params![i64::try_from(change_id)?],
+        params![i64::try_from(change_id.get())?],
         map_draft_review,
     )
     .optional()
@@ -891,10 +905,10 @@ pub fn get_draft_review(conn: &Connection, change_id: u64) -> Result<Option<Draf
 /// # Errors
 ///
 /// On a database failure.
-pub fn delete_draft_review(conn: &Connection, change_id: u64) -> Result<()> {
+pub fn delete_draft_review(conn: &Connection, change_id: ChangeNumber) -> Result<()> {
     conn.execute(
         "DELETE FROM draft_reviews WHERE change_id = ?1",
-        params![i64::try_from(change_id)?],
+        params![i64::try_from(change_id.get())?],
     )?;
     Ok(())
 }
@@ -910,7 +924,7 @@ mod tests {
         conn
     }
 
-    fn change(conn: &Connection) -> u64 {
+    fn change(conn: &Connection) -> ChangeNumber {
         let repo = create_repo(conn, "/r/.git", "main").expect("repo");
         upsert_change(conn, repo.id, &"I1".into()).expect("change")
     }
@@ -959,7 +973,7 @@ mod tests {
         let status = |conn: &Connection| -> Option<String> {
             conn.query_row(
                 "SELECT status FROM changes WHERE id = ?1",
-                params![i64::try_from(c).expect("id fits i64")],
+                params![i64::try_from(c.get()).expect("id fits i64")],
                 |r| r.get(0),
             )
             .expect("query status")

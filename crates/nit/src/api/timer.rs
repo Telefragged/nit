@@ -11,6 +11,7 @@ use git2::Repository;
 use rusqlite::Connection;
 
 use nit_types::domain::ChangeId;
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
 use nit_types::domain::Sha;
 use nit_types::log::LogPayload;
@@ -118,17 +119,23 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<ChangeId, &ChangeProjection> 
 }
 
 /// The merge sweep's only lifecycle write.
-fn record_landing(state: &AppState, conn: &mut Connection, change_id: u64, sha: Sha) {
+fn record_landing(state: &AppState, conn: &mut Connection, change_id: ChangeNumber, sha: Sha) {
     let entry = match state.change(conn, change_id) {
         Ok(Some(entry)) => entry,
         Ok(None) => return,
         Err(e) => {
-            tracing::warn!(change_id, "merged change failed to load: {e:#}");
+            tracing::warn!(
+                change_id = change_id.get(),
+                "merged change failed to load: {e:#}"
+            );
             return;
         }
     };
     let new = LogPayload::lifecycle(LifecycleAction::Merged, Some(sha), None);
     if let Err(e) = append_to_change(state, conn, &entry, change_id, vec![new]) {
-        tracing::warn!(change_id, "lifecycle append failed: {e:#}");
+        tracing::warn!(
+            change_id = change_id.get(),
+            "lifecycle append failed: {e:#}"
+        );
     }
 }

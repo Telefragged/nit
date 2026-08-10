@@ -6,7 +6,7 @@ use super::*;
 
 fn change_row() -> db::ChangeRow {
     db::ChangeRow {
-        id: 1,
+        id: ChangeNumber(1),
         repo_id: 1,
         change_key: "Iabc".into(),
         status: None,

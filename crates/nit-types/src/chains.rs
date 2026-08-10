@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
+use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChainState, ChangeStatus};
@@ -19,7 +20,7 @@ pub struct ChainList {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Chain {
-    pub tip_change_id: u64,
+    pub tip_change_id: ChangeNumber,
     pub repo_id: u64,
     pub state: ChainState,
     /// Oldest-first, base → tip.
@@ -34,7 +35,7 @@ pub struct Chain {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct PathEntry {
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     /// Position in THIS path (0-based).
     pub position: u64,
     pub change_key: ChangeId,

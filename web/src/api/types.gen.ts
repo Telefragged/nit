@@ -25,6 +25,14 @@ export type Sha = string;
 export type RevisionNumber = number;
 
 /**
+ * A change's number: the handle nit assigns it and everything carries.
+ *
+ * Scoped to one nit instance, unlike the [`ChangeId`] that travels in the
+ * commit message.
+ */
+export type ChangeNumber = number;
+
+/**
  * Which tree of a revision a line comment is anchored to.
  *
  * `new` is the revision's commit tree, `old` its parent tree. Defaults
@@ -135,7 +143,7 @@ export type RepoList = { repos: Array<Repo> };
  * (`GET /api/chains/{id}`) are identical.
  */
 export type Chain = {
-  tip_change_id: number;
+  tip_change_id: ChangeNumber;
   repo_id: number;
   state: ChainState;
   /**
@@ -152,7 +160,7 @@ export type Chain = {
  * from `GET /api/changes/{id}` per member.
  */
 export type PathEntry = {
-  change_id: number;
+  change_id: ChangeNumber;
   /**
    * Position in THIS path (0-based).
    */
@@ -218,7 +226,7 @@ export type GraphNode = {
   /**
    * The backing change, or `None` for a bare git commit (merge / pre-nit).
    */
-  change_id: number | null;
+  change_id: ChangeNumber | null;
   change_key: ChangeId | null;
   /**
    * The pinned revision (open nodes); `None` off the open region.
@@ -247,7 +255,7 @@ export type HistoryCommit = {
    * known change (a merge, a pre-nit commit, a foreign trailer) reports
    * both as `None`, never an orphan key.
    */
-  change_id: number | null;
+  change_id: ChangeNumber | null;
   change_key: ChangeId | null;
 };
 
@@ -283,7 +291,7 @@ export type ChangeList = { changes: Array<ChangeProjection> };
  * `GET /api/changes/{id}` response.
  */
 export type ChangeDetail = {
-  id: number;
+  id: ChangeNumber;
   repo_id: number;
   change_key: ChangeId;
   /**
@@ -370,7 +378,7 @@ export type Thread = {
    * Fold-assigned by creation order (not stored).
    */
   id: number;
-  change_id: number;
+  change_id: ChangeNumber;
   /**
    * The revision the thread is pinned to.
    */
@@ -409,7 +417,7 @@ export type ThreadComment = {
  */
 export type Draft = {
   id: number;
-  change_id: number;
+  change_id: ChangeNumber;
   thread_id: number | null;
   /**
    * The request's anchor revision; only a new thread uses it.
@@ -533,7 +541,7 @@ export type BatchSubmitResult = {
   errors: Array<SubmitError>;
 };
 
-export type SubmitError = { change_id: number; message: string };
+export type SubmitError = { change_id: ChangeNumber; message: string };
 
 /**
  * A `revision` entry: one new commit-sha observed for this change.
@@ -643,7 +651,7 @@ export type LogPayload =
  * discriminant and the `payload` body.
  */
 export type LogEntry = {
-  change_id: number;
+  change_id: ChangeNumber;
   position: number;
   sequence: number;
   created_at: string;
@@ -659,7 +667,7 @@ export type LogEntry = {
  */
 export type ClientMessage =
   | { subscribe: { [key in string]: number } }
-  | { subscribe_projection: Array<number> };
+  | { subscribe_projection: Array<ChangeNumber> };
 
 /**
  * A server → client websocket message. Externally tagged, `snake_case`.
@@ -762,7 +770,7 @@ export type ReviewProjection = {
  * shared WebAssembly fold.
  */
 export type ChangeProjection = {
-  id: number;
+  id: ChangeNumber;
   repo_id: number;
   change_key: ChangeId;
   revisions: Array<RevisionProjection>;

@@ -122,3 +122,39 @@ impl std::str::FromStr for RevisionNumber {
         s.parse().map(RevisionNumber)
     }
 }
+
+/// A change's number: the handle nit assigns it and everything carries.
+///
+/// Scoped to one nit instance, unlike the [`ChangeId`] that travels in the
+/// commit message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ChangeNumber(pub u64);
+
+impl ChangeNumber {
+    #[must_use]
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for ChangeNumber {
+    fn from(id: u64) -> ChangeNumber {
+        ChangeNumber(id)
+    }
+}
+
+impl std::fmt::Display for ChangeNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::str::FromStr for ChangeNumber {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<ChangeNumber, std::num::ParseIntError> {
+        s.parse().map(ChangeNumber)
+    }
+}

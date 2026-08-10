@@ -6,6 +6,7 @@
 //! `nit-types` shape — no `serde_json::Value` crosses this boundary.
 
 use anyhow::{Result, anyhow};
+use nit_types::domain::ChangeNumber;
 use nit_types::error::ApiError;
 use nit_types::events::ClientMessage;
 use serde::Serialize;
@@ -167,7 +168,7 @@ impl Client {
     /// `subs` maps `change_id` → from-position.
     pub(crate) fn ws_connect(
         &self,
-        subs: &std::collections::HashMap<u64, u64>,
+        subs: &std::collections::HashMap<ChangeNumber, u64>,
         retry: Retry,
     ) -> Result<WsConn> {
         let url = format!("{}/api/stream", self.base.replacen("http", "ws", 1));

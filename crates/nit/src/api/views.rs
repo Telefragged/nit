@@ -11,6 +11,7 @@ use rusqlite::Connection;
 use nit_types::chains::{Chain, PathEntry};
 use nit_types::changes::{ChangeDetail, ChangeDrafts, DraftDecision};
 use nit_types::comments::Draft;
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Sha;
 
@@ -27,7 +28,7 @@ use super::Error;
 #[must_use]
 pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &Sha) -> Chain {
     let path = view.path_from_tip(tip_sha);
-    let tip_change_id = path.last().map_or(0, |m| m.change_id);
+    let tip_change_id = path.last().map_or(ChangeNumber(0), |m| m.change_id);
     Chain {
         tip_change_id,
         repo_id,
@@ -67,7 +68,7 @@ fn path_entry(change: &ChangeProjection, member: &PathMember, position: u64) -> 
 /// an abandoned change resolves to a real chain, not only the degenerate
 /// fallback.
 #[must_use]
-pub fn tip_for(view: &RepoView, change_id: u64, revision: RevisionNumber) -> Option<Sha> {
+pub fn tip_for(view: &RepoView, change_id: ChangeNumber, revision: RevisionNumber) -> Option<Sha> {
     for tip in view.enumerable_tips() {
         let path = view.path_from_tip(&tip);
         if path
@@ -93,7 +94,7 @@ pub fn tip_for(view: &RepoView, change_id: u64, revision: RevisionNumber) -> Opt
 /// no enclosing tip.
 pub fn resolve_revision_tip(
     view: &RepoView,
-    change_id: u64,
+    change_id: ChangeNumber,
     requested: Option<RevisionNumber>,
 ) -> Result<(RevisionNumber, Sha), Error> {
     let revision = requested
@@ -108,7 +109,7 @@ pub fn resolve_revision_tip(
 }
 
 #[must_use]
-pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
+pub fn draft_view(d: &db::DraftRow, change_id: ChangeNumber) -> Draft {
     Draft {
         id: d.id,
         change_id,
@@ -136,7 +137,7 @@ pub fn draft_view(d: &db::DraftRow, change_id: u64) -> Draft {
 /// # Errors
 ///
 /// When reading drafts fails.
-pub fn change_overlay(conn: &Connection, change_id: u64) -> Result<ChangeDrafts> {
+pub fn change_overlay(conn: &Connection, change_id: ChangeNumber) -> Result<ChangeDrafts> {
     Ok(ChangeDrafts {
         drafts: db::drafts_for_change(conn, change_id)?
             .iter()

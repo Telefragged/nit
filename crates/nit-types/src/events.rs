@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::ChangeNumber;
 use crate::fold::ChangeProjection;
 use crate::log::LogEntry;
 
@@ -28,7 +29,7 @@ pub enum ClientMessage {
     /// ships it, then attaches the live tail past the projection's
     /// high-water mark. A `Vec` has no map keys, so the ids stay `u64`
     /// (unlike `Subscribe`).
-    SubscribeProjection(Vec<u64>),
+    SubscribeProjection(Vec<ChangeNumber>),
 }
 
 /// A server → client websocket message. Externally tagged, `snake_case`.

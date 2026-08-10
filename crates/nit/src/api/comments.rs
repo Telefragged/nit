@@ -8,6 +8,7 @@ use rusqlite::Connection;
 
 use nit_types::changes::{AbandonRequest, ChangeDetail};
 use nit_types::comments::{NewComment, Thread};
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
 use nit_types::log::{CommentInput, LogPayload};
 
@@ -18,7 +19,7 @@ use super::{change_detail_json, change_or_404, map_busy, snapshot_line_text, val
 
 pub(super) async fn create_comment(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
+    AppPath(id): AppPath<ChangeNumber>,
     AppJson(req): AppJson<NewComment>,
 ) -> Result<Json<Thread>, Error> {
     with_conn(state.pool(), move |conn| {
@@ -101,7 +102,7 @@ fn set_lifecycle(
     state: &AppState,
     conn: &mut Connection,
     entry: &ChangeEntry,
-    id: u64,
+    id: ChangeNumber,
     guard: fn(&Lifecycle) -> bool,
     action: LifecycleAction,
     message: Option<String>,
@@ -119,7 +120,7 @@ fn set_lifecycle(
 /// `message` records a reason. A no-op on an already-terminal change.
 pub(super) async fn abandon_change(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
+    AppPath(id): AppPath<ChangeNumber>,
     AppJson(req): AppJson<AbandonRequest>,
 ) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
@@ -142,7 +143,7 @@ pub(super) async fn abandon_change(
 /// Clears it back to its retained verdict status (`nit reopen`).
 pub(super) async fn reopen_change(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
+    AppPath(id): AppPath<ChangeNumber>,
 ) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;

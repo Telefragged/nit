@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
+use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChangeStatus, GraphSection};
@@ -22,7 +23,7 @@ pub struct HistoryCommit {
     /// trailer. Coupled with `change_key`: a commit whose trailer names no
     /// known change (a merge, a pre-nit commit, a foreign trailer) reports
     /// both as `None`, never an orphan key.
-    pub change_id: Option<u64>,
+    pub change_id: Option<ChangeNumber>,
     pub change_key: Option<ChangeId>,
 }
 
@@ -75,7 +76,7 @@ pub struct GraphNode {
     /// Parent commit-shas; an edge is drawn to each that is in the node set.
     pub parents: Vec<Sha>,
     /// The backing change, or `None` for a bare git commit (merge / pre-nit).
-    pub change_id: Option<u64>,
+    pub change_id: Option<ChangeNumber>,
     pub change_key: Option<ChangeId>,
     /// The pinned revision (open nodes); `None` off the open region.
     pub revision: Option<RevisionNumber>,

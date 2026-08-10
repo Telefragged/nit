@@ -96,7 +96,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::domain::{ChangeId, RevisionNumber};
+    use nit_types::domain::{ChangeId, ChangeNumber, RevisionNumber};
     use nit_types::fold::{ChangeProjection, RevisionProjection};
     use nit_types::graph::HistoryCommit;
 
@@ -113,7 +113,7 @@ mod tests {
     }
 
     fn change(id: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(id, 1, key.into());
+        let mut c = ChangeProjection::new(ChangeNumber(id), 1, key.into());
         c.revisions = revs;
         c
     }
@@ -170,7 +170,7 @@ mod tests {
         let b = change(2, "Ib", vec![revision(0, "B", "A", "h")]);
         let view = RepoView::new(vec![a, b]);
         let merged = HistoryCommit {
-            change_id: Some(9),
+            change_id: Some(ChangeNumber(9)),
             change_key: Some("Iland".into()),
             ..commit("g1", &["g2"])
         };
@@ -185,7 +185,7 @@ mod tests {
         // Children ascend: the tip B sits above its parent A, both above HEAD.
         assert_eq!(shas, vec!["B", "A", "h", "g1", "g2"]);
         let g1 = g.nodes.iter().find(|n| n.commit_sha == "g1").expect("g1");
-        assert_eq!(g1.change_id, Some(9));
+        assert_eq!(g1.change_id, Some(ChangeNumber(9)));
         assert_eq!(g1.change_key.as_ref().map(ChangeId::as_str), Some("Iland"));
     }
 }

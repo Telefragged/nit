@@ -3,6 +3,7 @@
 use anyhow::Result;
 
 use nit_types::chains::Chain;
+use nit_types::domain::ChangeNumber;
 
 use super::client::{Client, Retry, ServerOpt, server_url};
 use super::format::print_chain_digest;
@@ -12,7 +13,7 @@ use super::resolve::resolve_chain;
 pub struct StatusArgs {
     /// Chain to read, by its tip change id; overrides the cwd lookup.
     #[arg(long)]
-    pub chain: Option<u64>,
+    pub chain: Option<ChangeNumber>,
     #[command(flatten)]
     pub server: ServerOpt,
 }

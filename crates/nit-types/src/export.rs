@@ -33,6 +33,7 @@ fn write_wire_types() {
         crate::domain::ChangeId,
         crate::domain::Sha,
         crate::domain::RevisionNumber,
+        crate::domain::ChangeNumber,
         crate::domain::Side,
         crate::domain::Verdict,
         crate::domain::Decision,

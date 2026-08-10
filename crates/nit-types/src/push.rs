@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
+use crate::domain::ChangeNumber;
 use crate::domain::ChangeStatus;
 use crate::domain::RevisionNumber;
 
@@ -29,7 +30,7 @@ pub struct PushResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TipChange {
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub change_key: ChangeId,
     pub revision: RevisionNumber,
     pub status: ChangeStatus,

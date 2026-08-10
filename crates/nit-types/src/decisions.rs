@@ -1,5 +1,6 @@
 //! The outcome of batch-submitting a chain's draft decisions.
 
+use crate::domain::ChangeNumber;
 use serde::{Deserialize, Serialize};
 
 /// `POST /api/chains/{id}/submit` response.
@@ -17,6 +18,6 @@ pub struct BatchSubmitResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct SubmitError {
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub message: String,
 }

@@ -10,6 +10,7 @@ use axum::http::StatusCode;
 
 use nit_types::changes::DraftDecision;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::{Decision, LifecycleAction, Verdict};
 use nit_types::log::{CommentInput, LogPayload, ReviewPayload};
@@ -28,7 +29,7 @@ use super::{ChainQuery, chain_context, change_or_404, map_busy};
 /// thread carries its anchor).
 fn drafts_to_comments(
     conn: &rusqlite::Connection,
-    change_id: u64,
+    change_id: ChangeNumber,
 ) -> anyhow::Result<Vec<CommentInput>> {
     Ok(db::drafts_for_change(conn, change_id)?
         .iter()
@@ -62,7 +63,7 @@ fn publish_member(
     conn: &mut rusqlite::Connection,
     state: &Arc<AppState>,
     entry: &ChangeEntry,
-    change_id: u64,
+    change_id: ChangeNumber,
     decision: Decision,
     message: &str,
     revision: RevisionNumber,
@@ -117,7 +118,7 @@ fn publish_member(
 /// (a draft is reviewer scratch).
 pub(super) async fn set_draft_decision(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
+    AppPath(id): AppPath<ChangeNumber>,
     AppJson(req): AppJson<DraftDecision>,
 ) -> Result<Json<DraftDecision>, Error> {
     with_conn(state.pool(), move |conn| {
@@ -133,7 +134,7 @@ pub(super) async fn set_draft_decision(
 /// 204; a no-op when nothing is drafted.
 pub(super) async fn clear_decision(
     State(state): State<Arc<AppState>>,
-    AppPath(id): AppPath<u64>,
+    AppPath(id): AppPath<ChangeNumber>,
 ) -> Result<StatusCode, Error> {
     with_conn(state.pool(), move |conn| {
         change_or_404(&state, conn, id)?;
@@ -153,7 +154,7 @@ pub(super) async fn clear_decision(
 /// re-submit finishes a torn batch without double-publishing.
 pub(super) async fn submit_chain(
     State(state): State<Arc<AppState>>,
-    AppPath(change_id): AppPath<u64>,
+    AppPath(change_id): AppPath<ChangeNumber>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<BatchSubmitResult>, Error> {
     with_conn(state.pool(), move |conn| {

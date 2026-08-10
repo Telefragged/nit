@@ -12,6 +12,7 @@
 //! representation the web already holds — so the wire types are unchanged.
 
 use nit_types::chain::RepoView;
+use nit_types::domain::ChangeNumber;
 use nit_types::fold::{self, ChangeProjection};
 use nit_types::graph::RepoHistory;
 use nit_types::log::LogEntry;
@@ -56,7 +57,7 @@ struct ReplayInput {
 pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
     let input: ReplayInput = serde_wasm_bindgen::from_value(input)?;
     let proj = fold::replay(
-        input.id,
+        ChangeNumber(input.id),
         input.repo_id,
         input.change_key.into(),
         input.entries,

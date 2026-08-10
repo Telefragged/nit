@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use git2::{Commit, Oid, Repository, Tree};
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Sha;
 
@@ -50,7 +51,7 @@ pub fn sha_patch_id(repo: &Repository, sha: &Sha) -> Option<String> {
 /// can orphan objects the sha-walk, a vs-parent diff of retained history,
 /// or the timer's `fork_sha..canonical` walk still needs.
 #[must_use]
-pub fn keep_ref_name(change_id: u64, revision_number: RevisionNumber) -> String {
+pub fn keep_ref_name(change_id: ChangeNumber, revision_number: RevisionNumber) -> String {
     format!("refs/nit/keep/{change_id}/{revision_number}")
 }
 
@@ -61,13 +62,13 @@ pub fn keep_ref_name(change_id: u64, revision_number: RevisionNumber) -> String 
 /// pruned) are logged, never fatal.
 pub fn ensure_keep_ref(
     repo: &Repository,
-    change_id: u64,
+    change_id: ChangeNumber,
     number: RevisionNumber,
     commit_sha: &Sha,
 ) {
     if let Err(err) = try_ensure_keep_ref(repo, change_id, number, commit_sha) {
         tracing::warn!(
-            change_id,
+            change_id = change_id.get(),
             revision = number.get(),
             "cannot maintain keep ref: {err:#}"
         );
@@ -76,7 +77,7 @@ pub fn ensure_keep_ref(
 
 fn try_ensure_keep_ref(
     repo: &Repository,
-    change_id: u64,
+    change_id: ChangeNumber,
     number: RevisionNumber,
     commit_sha: &Sha,
 ) -> Result<()> {

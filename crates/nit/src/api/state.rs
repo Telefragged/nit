@@ -23,6 +23,7 @@ use deadpool_sqlite::Pool;
 use rusqlite::{Connection, TransactionBehavior};
 use tokio::sync::watch;
 
+use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
 use nit_types::error::ApiError;
 use nit_types::log::{LogEntry, LogPayload};
@@ -42,7 +43,7 @@ const EVENTS_BUFFER: usize = 1024;
 pub struct AppState {
     pool: Pool,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
-    changes: StdMutex<HashMap<u64, Arc<ChangeEntry>>>,
+    changes: StdMutex<HashMap<ChangeNumber, Arc<ChangeEntry>>>,
     /// Every appended entry, for every change.
     ///
     /// One channel keeps following orthogonal to a change's residency and
@@ -285,7 +286,7 @@ impl AppState {
     pub fn change(
         &self,
         conn: &Connection,
-        change_id: u64,
+        change_id: ChangeNumber,
     ) -> anyhow::Result<Option<Arc<ChangeEntry>>> {
         if let Some(existing) = self
             .changes
@@ -377,7 +378,7 @@ pub fn append_to_change(
     state: &AppState,
     conn: &mut Connection,
     entry: &ChangeEntry,
-    change_id: u64,
+    change_id: ChangeNumber,
     news: Vec<LogPayload>,
 ) -> anyhow::Result<Vec<LogEntry>> {
     append_to_change_with(state, conn, entry, change_id, news, |_| Ok(()))
@@ -411,7 +412,7 @@ pub fn append_to_change_with(
     state: &AppState,
     conn: &mut Connection,
     entry: &ChangeEntry,
-    change_id: u64,
+    change_id: ChangeNumber,
     news: Vec<LogPayload>,
     pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
 ) -> anyhow::Result<Vec<LogEntry>> {

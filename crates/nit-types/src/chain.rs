@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChainState, ChangeStatus};
@@ -17,7 +18,7 @@ use crate::fold::ChangeProjection;
 /// One member of a derived path, pinned to the revision the walk selected.
 #[derive(Debug, Clone)]
 pub struct PathMember {
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub revision: RevisionNumber,
     pub commit_sha: Sha,
 }
@@ -28,7 +29,7 @@ pub struct PathMember {
 /// commit it parents onto.
 #[derive(Debug, Clone)]
 pub struct OpenNode {
-    pub change_id: u64,
+    pub change_id: ChangeNumber,
     pub revision: RevisionNumber,
     pub commit_sha: Sha,
     pub parent_sha: Sha,
@@ -40,8 +41,8 @@ pub struct OpenNode {
 /// index built from them. All chain derivation is a pure function of
 /// this view, so it holds no locks and touches no git.
 pub struct RepoView {
-    changes: HashMap<u64, ChangeProjection>,
-    index: HashMap<Sha, (u64, RevisionNumber)>,
+    changes: HashMap<ChangeNumber, ChangeProjection>,
+    index: HashMap<Sha, (ChangeNumber, RevisionNumber)>,
 }
 
 impl RepoView {
@@ -66,12 +67,12 @@ impl RepoView {
     }
 
     #[must_use]
-    pub fn change(&self, id: u64) -> Option<&ChangeProjection> {
+    pub fn change(&self, id: ChangeNumber) -> Option<&ChangeProjection> {
         self.changes.get(&id)
     }
 
     #[must_use]
-    pub fn change_ids(&self) -> Vec<u64> {
+    pub fn change_ids(&self) -> Vec<ChangeNumber> {
         self.changes.keys().copied().collect()
     }
 
@@ -328,7 +329,7 @@ mod tests {
     }
 
     fn change(id: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(id, 1, key.into());
+        let mut c = ChangeProjection::new(ChangeNumber(id), 1, key.into());
         c.revisions = revs;
         c
     }
@@ -354,7 +355,7 @@ mod tests {
         assert_eq!(
             c_path
                 .iter()
-                .map(|m| (m.change_id, m.revision.get()))
+                .map(|m| (m.change_id.get(), m.revision.get()))
                 .collect::<Vec<_>>(),
             vec![(10, 0), (11, 0), (12, 0)]
         );
@@ -362,7 +363,7 @@ mod tests {
         assert_eq!(
             e_path
                 .iter()
-                .map(|m| (m.change_id, m.revision.get()))
+                .map(|m| (m.change_id.get(), m.revision.get()))
                 .collect::<Vec<_>>(),
             vec![(13, 0), (11, 1), (14, 0)]
         );
@@ -381,7 +382,7 @@ mod tests {
         let path: Vec<u64> = view
             .path_from_tip(&"B".into())
             .iter()
-            .map(|m| m.change_id)
+            .map(|m| m.change_id.get())
             .collect();
         assert_eq!(
             path,
@@ -389,7 +390,11 @@ mod tests {
             "the merged ancestor is below the canonical ref"
         );
         // The graph's open region inherits the stop — no merged node leaks in.
-        let open: Vec<u64> = view.open_nodes().iter().map(|n| n.change_id).collect();
+        let open: Vec<u64> = view
+            .open_nodes()
+            .iter()
+            .map(|n| n.change_id.get())
+            .collect();
         assert_eq!(open, vec![2]);
     }
 
@@ -428,7 +433,7 @@ mod tests {
         let b_nodes: Vec<u64> = view
             .open_nodes()
             .iter()
-            .filter(|n| n.change_id == 11)
+            .filter(|n| n.change_id == ChangeNumber(11))
             .map(|n| n.revision.get())
             .collect();
         assert_eq!(b_nodes.len(), 2);

@@ -6,6 +6,7 @@
 use anyhow::{Result, anyhow};
 
 use nit_types::chains::{Chain, ChainList};
+use nit_types::domain::ChangeNumber;
 use nit_types::repos::RepoList;
 
 use super::client::{Client, Retry};
@@ -16,7 +17,7 @@ use super::git::{discover_repo, head_sha};
 /// `retry` covers only the network GETs (here and in `repo_id_for`); repo
 /// discovery and a failed lookup (unregistered repo, or no chain matching
 /// HEAD) stay fatal — never retried.
-pub(crate) fn resolve_tip_change(client: &Client, retry: Retry) -> Result<u64> {
+pub(crate) fn resolve_tip_change(client: &Client, retry: Retry) -> Result<ChangeNumber> {
     let (git_dir, repo) = discover_repo()?;
     let head = head_sha(&repo)?;
     let repo_id = repo_id_for(client, &git_dir, retry)?;
@@ -29,14 +30,18 @@ pub(crate) fn resolve_tip_change(client: &Client, retry: Retry) -> Result<u64> {
         .ok_or_else(|| anyhow!("HEAD is not registered with nit — run 'nit push' first"))
 }
 
-pub(crate) fn resolve_chain(client: &Client, explicit: Option<u64>, retry: Retry) -> Result<u64> {
+pub(crate) fn resolve_chain(
+    client: &Client,
+    explicit: Option<ChangeNumber>,
+    retry: Retry,
+) -> Result<ChangeNumber> {
     match explicit {
         Some(id) => Ok(id),
         None => resolve_tip_change(client, retry),
     }
 }
 
-pub(crate) fn resolve_change(client: &Client, change_key: &str) -> Result<u64> {
+pub(crate) fn resolve_change(client: &Client, change_key: &str) -> Result<ChangeNumber> {
     let tip = resolve_tip_change(client, Retry::No)?;
     let chain: Chain = client.get(&format!("/api/chains/{tip}"))?;
     chain
