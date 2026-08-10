@@ -8,8 +8,8 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::LogEntry;
 use nit_types::events::{ClientMessage, StreamMessage};
-use nit_types::log::LogEntry;
 
 use crate::db;
 use nit_types::domain::ChangeProjection;

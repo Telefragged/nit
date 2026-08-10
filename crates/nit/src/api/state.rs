@@ -25,8 +25,8 @@ use tokio::sync::watch;
 
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
+use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::error::ApiError;
-use nit_types::log::{LogEntry, LogPayload};
 
 use crate::db;
 use nit_types::domain::ChangeProjection;

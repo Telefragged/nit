@@ -64,6 +64,9 @@
 //!
 //! # How current state is arrived at
 //!
+//! **Log** — a change's append-only record: one [`LogEntry`] per thing
+//! that happened to it, in the order it happened.
+//!
 //! **Folding** — replaying a change's log entries in order to arrive at
 //! what is true of it now. **Projection** — what a fold produces
 //! ([`ChangeProjection`]); the algorithm is `crate::fold`.

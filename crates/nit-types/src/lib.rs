@@ -26,7 +26,6 @@ pub mod events;
 pub mod fold;
 pub mod graph;
 pub mod health;
-pub mod log;
 pub mod push;
 pub mod repos;
 

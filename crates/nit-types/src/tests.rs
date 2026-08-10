@@ -4,7 +4,7 @@
 
 use crate::domain::ChangeNumber;
 use crate::domain::{LifecycleAction, Side};
-use crate::log::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
+use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
 fn revision_entry() -> LogEntry {
     LogEntry {

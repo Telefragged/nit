@@ -13,8 +13,8 @@ use rusqlite::Connection;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
+use nit_types::domain::LogPayload;
 use nit_types::domain::Sha;
-use nit_types::log::LogPayload;
 
 use crate::db;
 use crate::gitscan;

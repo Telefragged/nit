@@ -1,6 +1,6 @@
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::{ChangeStatus, Verdict};
-use nit_types::log::{LogPayload, ReviewPayload, RevisionPayload};
+use nit_types::domain::{LogPayload, ReviewPayload, RevisionPayload};
 
 use super::*;
 

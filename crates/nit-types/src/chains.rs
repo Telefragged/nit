@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
+use crate::domain::LogEntry;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::{ChainState, ChangeStatus};
@@ -45,4 +46,13 @@ pub struct PathEntry {
     pub status: ChangeStatus,
     pub subject: String,
     pub commit_sha: Sha,
+}
+
+/// `GET /api/chains/{change_id}/log` response.
+///
+/// The aggregated chain log, merged across members and sorted by global
+/// `sequence`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainLog {
+    pub entries: Vec<LogEntry>,
 }

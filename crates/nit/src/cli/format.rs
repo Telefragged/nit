@@ -12,7 +12,7 @@ use nit_types::changes::ChangeDetail;
 use nit_types::comments::{CommentRange, Thread};
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
-use nit_types::log::{CommentInput, LogEntry, LogPayload};
+use nit_types::domain::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
 use nit_types::domain::subject_of;
@@ -352,8 +352,8 @@ mod tests {
 
     #[test]
     fn entry_summary_digests_each_kind() {
+        use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         use nit_types::domain::{LifecycleAction, Verdict};
-        use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let entry = |payload| LogEntry {
             change_id: ChangeNumber(7),
             position: 0,
@@ -402,8 +402,8 @@ mod tests {
     #[test]
     fn log_render_review_and_revision() {
         use nit_types::comments::CommentRange;
+        use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         use nit_types::domain::{Side, Verdict};
-        use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
         let entry = |change_id, position, sequence, payload| LogEntry {
             change_id,
             position,

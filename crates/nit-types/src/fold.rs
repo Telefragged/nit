@@ -38,7 +38,7 @@ use crate::domain::{
     Anchor, ChangeProjection, Lifecycle, LifecycleAction, ReviewProjection, RevisionProjection,
     Side, ThreadComment, ThreadProjection,
 };
-use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
+use crate::domain::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
 /// Applies one wire entry to a change's projection.
 ///
@@ -278,8 +278,8 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
 
 #[cfg(test)]
 mod tests {
+    use crate::domain::ReviewPayload;
     use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
-    use crate::log::ReviewPayload;
 
     use super::*;
 

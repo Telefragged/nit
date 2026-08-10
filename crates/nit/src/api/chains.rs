@@ -7,11 +7,11 @@ use axum::extract::State;
 use git2::Repository;
 use serde::Deserialize;
 
+use nit_types::chains::ChainLog;
 use nit_types::chains::{Chain, ChainList};
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::graph::{HistoryCommit, RepoHistory};
-use nit_types::log::ChainLog;
 
 use crate::db;
 use crate::gitscan;

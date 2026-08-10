@@ -14,9 +14,9 @@
 use nit_types::chain::RepoView;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
+use nit_types::domain::LogEntry;
 use nit_types::fold;
 use nit_types::graph::RepoHistory;
-use nit_types::log::LogEntry;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 

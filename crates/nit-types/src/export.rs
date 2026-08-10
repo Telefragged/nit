@@ -72,12 +72,12 @@ fn write_wire_types() {
         crate::decisions::SubmitError,
         // The websocket event stream: the change page folds these
         // client-side.
-        crate::log::RevisionPayload,
-        crate::log::ReviewPayload,
-        crate::log::CommentInput,
-        crate::log::LifecyclePayload,
-        crate::log::LogPayload,
-        crate::log::LogEntry,
+        crate::domain::RevisionPayload,
+        crate::domain::ReviewPayload,
+        crate::domain::CommentInput,
+        crate::domain::LifecyclePayload,
+        crate::domain::LogPayload,
+        crate::domain::LogEntry,
         crate::events::ClientMessage,
         crate::events::StreamMessage,
         // The folded projection the server ships over the stream; the web

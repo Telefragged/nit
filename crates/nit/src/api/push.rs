@@ -6,7 +6,7 @@ use git2::Repository;
 
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::RevisionNumber;
-use nit_types::log::{LogPayload, RevisionPayload};
+use nit_types::domain::{LogPayload, RevisionPayload};
 use nit_types::push::{PushRequest, PushResult, TipChange};
 
 use crate::db;

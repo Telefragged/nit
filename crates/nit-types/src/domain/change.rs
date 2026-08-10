@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 use super::ChangeId;
 use super::ChangeNumber;
 use super::ChangeStatus;
+use super::CommentInput;
 use super::RevisionNumber;
 use super::Sha;
 use super::ThreadProjection;
 use super::Verdict;
-use crate::log::CommentInput;
 
 /// A change's terminal lifecycle, folded from its `lifecycle` entries.
 ///

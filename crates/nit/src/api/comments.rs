@@ -10,7 +10,7 @@ use nit_types::changes::{AbandonRequest, ChangeDetail};
 use nit_types::comments::{NewComment, Thread};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
-use nit_types::log::{CommentInput, LogPayload};
+use nit_types::domain::{CommentInput, LogPayload};
 
 use nit_types::domain::Lifecycle;
 

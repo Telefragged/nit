@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeNumber;
 use crate::domain::ChangeProjection;
-use crate::log::LogEntry;
+use crate::domain::LogEntry;
 
 /// A client → server websocket message. Externally tagged, `snake_case`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

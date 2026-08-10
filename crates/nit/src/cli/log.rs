@@ -7,10 +7,11 @@
 use anyhow::{Context, Result, anyhow, bail};
 
 use nit_types::chains::Chain;
+use nit_types::chains::ChainLog;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
+use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::events::StreamMessage;
-use nit_types::log::{ChainLog, LogEntry, LogPayload};
 
 use super::client::{Client, Retry, ServerOpt, next_text, server_url};
 use super::format::{print_chain_digest, print_entries, print_oneline_entries, render_entry};
@@ -333,7 +334,7 @@ mod tests {
     #[test]
     fn reviewer_only_mutes_agent_echoes_and_auto_merge() {
         use nit_types::domain::Verdict;
-        use nit_types::log::{CommentInput, ReviewPayload, RevisionPayload};
+        use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         let muted = |payload| {
             muted_by_reviewer_only(&LogEntry {
                 change_id: ChangeNumber(1),

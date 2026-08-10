@@ -3,9 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::CommentInput;
 use super::RevisionNumber;
 use crate::comments::CommentRange;
-use crate::log::CommentInput;
 
 /// Which tree of a revision a line comment is anchored to.
 ///
