@@ -100,8 +100,6 @@ impl std::str::FromStr for Decision {
 
 /// A change's displayed status at a pinned revision.
 ///
-/// The verdict-derived value (the [`Verdict`] arms) under the lifecycle
-/// overlay (`merged` at the latest patchset, `abandoned` change-wide).
 /// Per `(change, revision)`, never a change-wide scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -165,9 +163,7 @@ impl From<Verdict> for ChangeStatus {
 ///
 /// Computed at read time from the path's members (the server's
 /// `chain::derive_state`); it is informational on the wire, never stored.
-/// Abandonment is derivation-inert — there is no abandoned chain state
-/// (an abandoned member is excluded from the rollup; the agent reasons
-/// about its per-change status).
+/// Abandonment is derivation-inert — there is no abandoned chain state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
