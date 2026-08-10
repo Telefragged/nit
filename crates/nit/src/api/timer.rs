@@ -12,6 +12,7 @@ use rusqlite::Connection;
 
 use nit_types::domain::ChangeId;
 use nit_types::domain::LifecycleAction;
+use nit_types::domain::Sha;
 use nit_types::log::LogPayload;
 
 use crate::db;
@@ -83,7 +84,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
             .ok()
             .flatten()
             .and_then(|r| r.canonical_head);
-        if recorded.as_deref() == Some(head.as_str()) {
+        if recorded.as_ref() == Some(&head) {
             continue;
         }
         // First observation has no baseline -- no landings are detected;
@@ -117,7 +118,7 @@ fn open_changes_by_key(view: &RepoView) -> HashMap<ChangeId, &ChangeProjection> 
 }
 
 /// The merge sweep's only lifecycle write.
-fn record_landing(state: &AppState, conn: &mut Connection, change_id: u64, sha: String) {
+fn record_landing(state: &AppState, conn: &mut Connection, change_id: u64, sha: Sha) {
     let entry = match state.change(conn, change_id) {
         Ok(Some(entry)) => entry,
         Ok(None) => return,

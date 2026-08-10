@@ -12,9 +12,9 @@ fn revision_entry() -> LogEntry {
         sequence: 42,
         created_at: "t".to_string(),
         payload: LogPayload::Revision(RevisionPayload {
-            commit_sha: "a".to_string(),
-            parent_sha: "b".to_string(),
-            fork_sha: "c".to_string(),
+            commit_sha: "a".into(),
+            parent_sha: "b".into(),
+            fork_sha: "c".into(),
             message: "m".to_string(),
             resets_status: true,
         }),
@@ -46,9 +46,9 @@ fn payload_serializes_as_the_bare_inner_struct() {
     // The storage boundary serializes the inner struct alone (kind goes in its
     // own column) — never the adjacently-tagged LogPayload wrapper.
     let p = RevisionPayload {
-        commit_sha: "a".to_string(),
-        parent_sha: "b".to_string(),
-        fork_sha: "c".to_string(),
+        commit_sha: "a".into(),
+        parent_sha: "b".into(),
+        fork_sha: "c".into(),
         message: "m".to_string(),
         resets_status: true,
     };

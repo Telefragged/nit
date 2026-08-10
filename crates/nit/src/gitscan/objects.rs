@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use git2::{Commit, Oid, Repository, Tree};
+use nit_types::domain::Sha;
 
 /// Patch-id of the empty diff: the sha1 of the empty string.
 const EMPTY_PATCH_ID: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
@@ -33,8 +34,8 @@ fn commit_patch_id(repo: &Repository, commit: &Commit) -> Result<String> {
 ///
 /// Its diff against its first parent, whitespace-normalized.
 #[must_use]
-pub fn sha_patch_id(repo: &Repository, sha: &str) -> Option<String> {
-    let commit = repo.find_commit(Oid::from_str(sha).ok()?).ok()?;
+pub fn sha_patch_id(repo: &Repository, sha: &Sha) -> Option<String> {
+    let commit = repo.find_commit(Oid::from_str(sha.as_str()).ok()?).ok()?;
     commit_patch_id(repo, &commit).ok()
 }
 
@@ -57,7 +58,7 @@ pub fn keep_ref_name(change_id: u64, revision_number: u64) -> String {
 /// Points it at the revision's commit — its parent (the diff's old side)
 /// is reachable through it. Best-effort: failures (e.g. objects already
 /// pruned) are logged, never fatal.
-pub fn ensure_keep_ref(repo: &Repository, change_id: u64, number: u64, commit_sha: &str) {
+pub fn ensure_keep_ref(repo: &Repository, change_id: u64, number: u64, commit_sha: &Sha) {
     if let Err(err) = try_ensure_keep_ref(repo, change_id, number, commit_sha) {
         tracing::warn!(
             change_id,
@@ -71,10 +72,10 @@ fn try_ensure_keep_ref(
     repo: &Repository,
     change_id: u64,
     number: u64,
-    commit_sha: &str,
+    commit_sha: &Sha,
 ) -> Result<()> {
     let name = keep_ref_name(change_id, number);
-    let oid = Oid::from_str(commit_sha)?;
+    let oid = Oid::from_str(commit_sha.as_str())?;
     let current = repo.find_reference(&name).ok().and_then(|r| r.target());
     if current != Some(oid) {
         // Writing the ref validates the target object exists.

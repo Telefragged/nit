@@ -18,6 +18,7 @@ use git2::Oid;
 use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, git_diff, render};
 use nit::api::rebase::{Rev, analyze};
 use nit_types::diff::{Diff, DiffFile};
+use nit_types::domain::Sha;
 use nit_types::domain::{FileStatus, LineKind};
 
 fn body<S: std::borrow::Borrow<str>>(lines: &[S]) -> Vec<u8> {
@@ -49,7 +50,7 @@ fn snapshot(g: &GitRepo, files: &[(&str, &[u8])]) -> Oid {
 /// endpoint exactly: analyse first, render only the files the drift leaves
 /// standing, then tag them.
 fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff, Diff) {
-    let sha = |o: Oid| o.to_string();
+    let sha = |o: Oid| Sha::from(o.to_string());
     let (m, parent_m, n, parent_n) = (sha(m), sha(parent_m), sha(n), sha(parent_n));
     let tm = commit_tree(&g.repo, &m).expect("m tree resolves");
     let tn = commit_tree(&g.repo, &n).expect("n tree resolves");

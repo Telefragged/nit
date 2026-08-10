@@ -10,6 +10,7 @@ use serde::Deserialize;
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList};
 use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeStatus;
+use nit_types::domain::Sha;
 
 use crate::review;
 
@@ -211,6 +212,6 @@ fn open_repo(git_dir: &str) -> Result<Repository, Error> {
         .map_err(|e| Error::internal(format!("cannot open the repository: {e}")))
 }
 
-fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Result<Tree<'r>, Error> {
+fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Result<Tree<'r>, Error> {
     diff::commit_tree(repo, sha).ok_or_else(|| Error::internal(format!("tree for {sha} missing")))
 }

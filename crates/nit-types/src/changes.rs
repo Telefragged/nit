@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::comments::{Draft, Thread};
 use crate::domain::ChangeId;
+use crate::domain::Sha;
 use crate::domain::{Decision, Verdict};
 use crate::fold::ChangeProjection;
 
@@ -66,9 +67,9 @@ pub struct DraftDecision {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Revision {
     pub number: u64,
-    pub commit_sha: String,
-    pub parent_sha: String,
-    pub fork_sha: String,
+    pub commit_sha: Sha,
+    pub parent_sha: Sha,
+    pub fork_sha: Sha,
     /// Full commit message.
     pub message: String,
     pub created_at: String,

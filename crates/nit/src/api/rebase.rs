@@ -45,6 +45,7 @@ use imara_diff::InternedInput;
 
 use nit_types::diff::{Diff, Line};
 use nit_types::domain::LineKind;
+use nit_types::domain::Sha;
 
 use super::diff;
 
@@ -347,8 +348,8 @@ pub fn analyze(
 /// The pair `analyze` needs at each end of an interdiff, named so the two
 /// cannot be swapped.
 pub struct Rev<'a> {
-    pub commit: &'a str,
-    pub parent: &'a str,
+    pub commit: &'a Sha,
+    pub parent: &'a Sha,
 }
 
 #[cfg(test)]

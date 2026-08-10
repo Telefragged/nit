@@ -343,9 +343,9 @@ mod tests {
         };
         let revision = || {
             LogPayload::Revision(RevisionPayload {
-                commit_sha: String::new(),
-                parent_sha: String::new(),
-                fork_sha: String::new(),
+                commit_sha: "".into(),
+                parent_sha: "".into(),
+                fork_sha: "".into(),
                 message: String::new(),
                 resets_status: true,
             })

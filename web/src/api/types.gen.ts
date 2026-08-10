@@ -11,6 +11,14 @@
 export type ChangeId = string;
 
 /**
+ * A git object name, in full: 40 hex characters.
+ *
+ * Clients truncate it for display; nothing but display uses the short
+ * form.
+ */
+export type Sha = string;
+
+/**
  * Which tree of a revision a line comment is anchored to.
  *
  * `new` is the revision's commit tree, `old` its parent tree. Defaults
@@ -153,7 +161,7 @@ export type PathEntry = {
    */
   status: ChangeStatus;
   subject: string;
-  commit_sha: string;
+  commit_sha: Sha;
 };
 
 /**
@@ -188,7 +196,7 @@ export type GraphNode = {
   /**
    * The node's stable id — a full 40-hex commit-sha; the client truncates.
    */
-  commit_sha: string;
+  commit_sha: Sha;
   section: GraphSection;
   subject: string;
   /**
@@ -200,7 +208,7 @@ export type GraphNode = {
   /**
    * Parent commit-shas; an edge is drawn to each that is in the node set.
    */
-  parents: Array<string>;
+  parents: Array<Sha>;
   /**
    * The backing change, or `None` for a bare git commit (merge / pre-nit).
    */
@@ -221,11 +229,11 @@ export type HistoryCommit = {
   /**
    * Full 40-hex commit-sha.
    */
-  sha: string;
+  sha: Sha;
   /**
    * Parent commit-shas; more than one is a merge.
    */
-  parents: Array<string>;
+  parents: Array<Sha>;
   subject: string;
   /**
    * The merged change this commit carries, matched by its `Change-Id:`
@@ -303,9 +311,9 @@ export type ChangeDrafts = {
 
 export type Revision = {
   number: number;
-  commit_sha: string;
-  parent_sha: string;
-  fork_sha: string;
+  commit_sha: Sha;
+  parent_sha: Sha;
+  fork_sha: Sha;
   /**
    * Full commit message.
    */
@@ -529,9 +537,9 @@ export type SubmitError = { change_id: number; message: string };
  * it.
  */
 export type RevisionPayload = {
-  commit_sha: string;
-  parent_sha: string;
-  fork_sha: string;
+  commit_sha: Sha;
+  parent_sha: Sha;
+  fork_sha: Sha;
   message: string;
   /**
    * `false` only for a pure rebase (patch-id-equal, message unchanged).
@@ -603,7 +611,7 @@ export type CommentInput = {
  */
 export type LifecyclePayload = {
   action: LifecycleAction;
-  commit_sha?: string | null;
+  commit_sha?: Sha | null;
   message?: string | null;
 };
 
@@ -686,9 +694,9 @@ export type RevisionProjection = {
    * 0-based, minted in the fold.
    */
   number: number;
-  commit_sha: string;
-  parent_sha: string;
-  fork_sha: string;
+  commit_sha: Sha;
+  parent_sha: Sha;
+  fork_sha: Sha;
   message: string;
   /**
    * `false` for a pure rebase — the revision inherits the prior status.

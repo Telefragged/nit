@@ -12,6 +12,7 @@ use git2::{Delta, Repository, Tree};
 use imara_diff::{Algorithm, InternedInput};
 
 use nit_types::diff::{Diff, DiffFile, Hunk, Line};
+use nit_types::domain::Sha;
 use nit_types::domain::{FileStatus, LineKind};
 
 /// The reserved synthetic diff path for the revision's commit message.
@@ -22,8 +23,8 @@ pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
 
 /// The tree of the commit `sha` names, when everything resolves.
 #[must_use]
-pub fn commit_tree<'r>(repo: &'r Repository, sha: &str) -> Option<Tree<'r>> {
-    repo.find_commit(git2::Oid::from_str(sha).ok()?)
+pub fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Option<Tree<'r>> {
+    repo.find_commit(git2::Oid::from_str(sha.as_str()).ok()?)
         .ok()?
         .tree()
         .ok()

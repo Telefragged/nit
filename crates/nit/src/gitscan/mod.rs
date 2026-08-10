@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use git2::{Commit, Oid, Repository, Sort};
 
-use nit_types::domain::ChangeId;
+use nit_types::domain::{ChangeId, Sha};
 use nit_types::fold::subject_of;
 
 use crate::review::ChangeProjection;
@@ -26,8 +26,8 @@ pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase on
 
 /// A commit sha truncated to 12 chars — the canonical short form for display.
 #[must_use]
-pub fn short_sha(sha: &str) -> String {
-    sha.chars().take(12).collect()
+pub fn short_sha(sha: &Sha) -> String {
+    sha.as_str().chars().take(12).collect()
 }
 
 /// One commit the push walk recorded, oldest-first.
@@ -37,8 +37,8 @@ pub fn short_sha(sha: &str) -> String {
 #[derive(Debug, Clone)]
 pub struct WalkedCommit {
     pub change_key: ChangeId,
-    pub commit_sha: String,
-    pub parent_sha: String,
+    pub commit_sha: Sha,
+    pub parent_sha: Sha,
     pub message: String,
 }
 
@@ -48,7 +48,7 @@ pub struct WalkedCommit {
 /// oldest-first.
 #[derive(Debug, Clone)]
 pub struct PushWalk {
-    pub fork_sha: String,
+    pub fork_sha: Sha,
     pub commits: Vec<WalkedCommit>,
 }
 
@@ -88,14 +88,14 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
         .collect();
     let short_shas: Vec<String> = commits
         .iter()
-        .map(|c| short_sha(&c.id().to_string()))
+        .map(|c| short_sha(&Sha::from(c.id().to_string())))
         .collect();
     let keys = identity::require_keys(&messages, &short_shas)?;
 
     let mut walked = Vec::with_capacity(commits.len());
-    let mut prev = fork.to_string();
+    let mut prev = Sha::from(fork.to_string());
     for (i, commit) in commits.iter().enumerate() {
-        let sha = commit.id().to_string();
+        let sha = Sha::from(commit.id().to_string());
         walked.push(WalkedCommit {
             change_key: keys[i].clone().into(),
             commit_sha: sha.clone(),
@@ -105,7 +105,7 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
         prev = sha;
     }
     Ok(PushWalk {
-        fork_sha: fork.to_string(),
+        fork_sha: Sha::from(fork.to_string()),
         commits: walked,
     })
 }
@@ -145,9 +145,9 @@ fn walk_linear(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>
 #[must_use]
 pub fn pure_rebase(
     repo: &Repository,
-    old_sha: &str,
+    old_sha: &Sha,
     old_msg: &str,
-    new_sha: &str,
+    new_sha: &Sha,
     new_msg: &str,
 ) -> bool {
     if old_msg != new_msg {
@@ -165,8 +165,10 @@ pub fn pure_rebase(
 /// `None` when it can't be resolved (the merge timer's per-sweep baseline
 /// check).
 #[must_use]
-pub fn resolve_head(repo: &Repository, canonical_ref: &str) -> Option<String> {
-    Some(resolve_commit(repo, canonical_ref).ok()?.to_string())
+pub fn resolve_head(repo: &Repository, canonical_ref: &str) -> Option<Sha> {
+    Some(Sha::from(
+        resolve_commit(repo, canonical_ref).ok()?.to_string(),
+    ))
 }
 
 /// Landings observed on the canonical ref in `since..head`.
@@ -182,11 +184,12 @@ pub fn resolve_head(repo: &Repository, canonical_ref: &str) -> Option<String> {
 #[must_use]
 pub fn detect_merges<S: std::hash::BuildHasher>(
     repo: &Repository,
-    since: &str,
-    head: &str,
+    since: &Sha,
+    head: &Sha,
     open: &HashMap<ChangeId, &ChangeProjection, S>,
-) -> Vec<(u64, String)> {
-    let (Ok(since), Ok(head)) = (Oid::from_str(since), Oid::from_str(head)) else {
+) -> Vec<(u64, Sha)> {
+    let (Ok(since), Ok(head)) = (Oid::from_str(since.as_str()), Oid::from_str(head.as_str()))
+    else {
         return Vec::new();
     };
     let Ok(mut walk) = repo.revwalk() else {
@@ -198,7 +201,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
         return Vec::new();
     }
 
-    let mut landings: HashMap<u64, String> = HashMap::new();
+    let mut landings: HashMap<u64, Sha> = HashMap::new();
     for oid in walk.flatten() {
         let Ok(commit) = repo.find_commit(oid) else {
             continue;
@@ -216,7 +219,9 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
         };
         // First seen wins: the unsorted walk is newest-first, so a key
         // appearing on several new commits records the newest merge.
-        landings.entry(change.id).or_insert_with(|| oid.to_string());
+        landings
+            .entry(change.id)
+            .or_insert_with(|| Sha::from(oid.to_string()));
     }
     landings.into_iter().collect()
 }
@@ -227,8 +232,8 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
 /// layer resolves it to the change it names when building the wire shape.
 #[derive(Debug, Clone)]
 pub struct HistoryCommit {
-    pub sha: String,
-    pub parents: Vec<String>,
+    pub sha: Sha,
+    pub parents: Vec<Sha>,
     pub subject: String,
     pub trailer: Option<String>,
 }
@@ -270,8 +275,11 @@ pub fn canonical_history(
         let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
         let message = String::from_utf8_lossy(commit.message_bytes());
         out.push(HistoryCommit {
-            sha: oid.to_string(),
-            parents: commit.parent_ids().map(|p| p.to_string()).collect(),
+            sha: oid.to_string().into(),
+            parents: commit
+                .parent_ids()
+                .map(|p| Sha::from(p.to_string()))
+                .collect(),
             subject: subject_of(&message),
             trailer: identity::change_id_trailer(&message),
         });
@@ -294,7 +302,7 @@ mod tests {
 
     use super::detect_merges;
     use crate::review::{ChangeProjection, RevisionProjection};
-    use nit_types::domain::ChangeId;
+    use nit_types::domain::{ChangeId, Sha};
 
     /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
     /// tests need.
@@ -330,9 +338,9 @@ mod tests {
         let mut proj = ChangeProjection::new(id, 1, key.into());
         proj.revisions.push(RevisionProjection {
             number: 0,
-            commit_sha: commit.to_string(),
-            parent_sha: base.to_string(),
-            fork_sha: base.to_string(),
+            commit_sha: commit.to_string().into(),
+            parent_sha: base.to_string().into(),
+            fork_sha: base.to_string().into(),
             message: keyed("subject", key),
             resets_status: true,
             created_at: "t0".to_string(),
@@ -379,11 +387,11 @@ mod tests {
         );
         let got = detect_merges(
             &repo,
-            &root.to_string(),
-            &merged.to_string(),
+            &Sha::from(root.to_string()),
+            &Sha::from(merged.to_string()),
             &open(&[&change]),
         );
-        assert_eq!(got, vec![(1, merged.to_string())]);
+        assert_eq!(got, vec![(1, Sha::from(merged.to_string()))]);
     }
 
     #[test]
@@ -404,8 +412,8 @@ mod tests {
         );
         let got = detect_merges(
             &repo,
-            &root.to_string(),
-            &merged.to_string(),
+            &Sha::from(root.to_string()),
+            &Sha::from(merged.to_string()),
             &open(&[&change]),
         );
         assert_eq!(got, vec![]);
@@ -434,14 +442,17 @@ mod tests {
         );
         let mut got = detect_merges(
             &repo,
-            &root.to_string(),
-            &landed_b.to_string(),
+            &Sha::from(root.to_string()),
+            &Sha::from(landed_b.to_string()),
             &open(&[&a, &b]),
         );
         got.sort_unstable();
         assert_eq!(
             got,
-            vec![(1, landed_a.to_string()), (2, landed_b.to_string())]
+            vec![
+                (1, Sha::from(landed_a.to_string())),
+                (2, Sha::from(landed_b.to_string()))
+            ]
         );
     }
 
@@ -463,8 +474,8 @@ mod tests {
         );
         let got = detect_merges(
             &repo,
-            &root.to_string(),
-            &merged.to_string(),
+            &Sha::from(root.to_string()),
+            &Sha::from(merged.to_string()),
             &open(&[&change]),
         );
         assert_eq!(got, vec![]);
@@ -486,8 +497,13 @@ mod tests {
             &keyed("feat", "I001"),
             &[("a.txt", "a\n")],
         );
-        let absent = "0".repeat(40);
-        let got = detect_merges(&repo, &absent, &merged.to_string(), &open(&[&change]));
+        let absent = Sha::from("0".repeat(40));
+        let got = detect_merges(
+            &repo,
+            &absent,
+            &Sha::from(merged.to_string()),
+            &open(&[&change]),
+        );
         assert_eq!(got, vec![]);
     }
 }

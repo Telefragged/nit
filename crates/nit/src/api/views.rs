@@ -11,6 +11,7 @@ use rusqlite::Connection;
 use nit_types::chains::{Chain, PathEntry};
 use nit_types::changes::{ChangeDetail, ChangeDrafts, DraftDecision};
 use nit_types::comments::Draft;
+use nit_types::domain::Sha;
 
 use crate::db;
 use crate::review::ChangeProjection;
@@ -23,7 +24,7 @@ use super::Error;
 /// The dashboard list entry, the chain page, and the push result all share
 /// this one shape.
 #[must_use]
-pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &str) -> Chain {
+pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &Sha) -> Chain {
     let path = view.path_from_tip(tip_sha);
     let tip_change_id = path.last().map_or(0, |m| m.change_id);
     Chain {
@@ -65,7 +66,7 @@ fn path_entry(change: &ChangeProjection, member: &PathMember, position: u64) -> 
 /// an abandoned change resolves to a real chain, not only the degenerate
 /// fallback.
 #[must_use]
-pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<String> {
+pub fn tip_for(view: &RepoView, change_id: u64, revision: u64) -> Option<Sha> {
     for tip in view.enumerable_tips() {
         let path = view.path_from_tip(&tip);
         if path
@@ -93,7 +94,7 @@ pub fn resolve_revision_tip(
     view: &RepoView,
     change_id: u64,
     requested: Option<u64>,
-) -> Result<(u64, String), Error> {
+) -> Result<(u64, Sha), Error> {
     let revision = requested
         .or_else(|| {
             view.change(change_id)

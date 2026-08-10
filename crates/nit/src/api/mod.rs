@@ -42,7 +42,7 @@ use serde::Deserialize;
 
 use nit_types::changes::ChangeDetail;
 use nit_types::comments::CommentRange;
-use nit_types::domain::Side;
+use nit_types::domain::{Sha, Side};
 use nit_types::health::Health;
 
 use crate::review;
@@ -213,7 +213,7 @@ fn chain_context(
     conn: &rusqlite::Connection,
     change_id: u64,
     revision: Option<u64>,
-) -> Result<(RepoView, u64, String), Error> {
+) -> Result<(RepoView, u64, Sha), Error> {
     let repo_id = change_or_404(state, conn, change_id)?.read().repo_id;
     let view = state.repo_view(conn, repo_id)?;
     let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, revision)?;

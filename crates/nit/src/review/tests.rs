@@ -15,9 +15,9 @@ fn change_row() -> db::ChangeRow {
 
 fn revision(sha: &str) -> LogPayload {
     LogPayload::Revision(RevisionPayload {
-        commit_sha: sha.to_string(),
-        parent_sha: "base".to_string(),
-        fork_sha: "base".to_string(),
+        commit_sha: sha.to_string().into(),
+        parent_sha: "base".into(),
+        fork_sha: "base".into(),
         message: format!("subject {sha}\n\nChange-Id: Iabc\n"),
         resets_status: true,
     })

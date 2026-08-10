@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::comments::CommentRange;
+use crate::domain::Sha;
 use crate::domain::{LifecycleAction, LogKind, Side, Verdict};
 
 /// A `revision` entry: one new commit-sha observed for this change.
@@ -15,9 +16,9 @@ use crate::domain::{LifecycleAction, LogKind, Side, Verdict};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RevisionPayload {
-    pub commit_sha: String,
-    pub parent_sha: String,
-    pub fork_sha: String,
+    pub commit_sha: Sha,
+    pub parent_sha: Sha,
+    pub fork_sha: Sha,
     pub message: String,
     /// `false` only for a pure rebase (patch-id-equal, message unchanged).
     ///
@@ -88,7 +89,7 @@ pub struct CommentInput {
 pub struct LifecyclePayload {
     pub action: LifecycleAction,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit_sha: Option<String>,
+    pub commit_sha: Option<Sha>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
@@ -126,7 +127,7 @@ impl LogPayload {
     #[must_use]
     pub fn lifecycle(
         action: LifecycleAction,
-        commit_sha: Option<String>,
+        commit_sha: Option<Sha>,
         message: Option<String>,
     ) -> LogPayload {
         LogPayload::Lifecycle(LifecyclePayload {

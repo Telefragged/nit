@@ -31,7 +31,53 @@ impl From<&str> for ChangeId {
     }
 }
 
+impl PartialEq<&str> for ChangeId {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
 impl std::fmt::Display for ChangeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// A git object name, in full: 40 hex characters.
+///
+/// Clients truncate it for display; nothing but display uses the short
+/// form.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Sha(pub String);
+
+impl Sha {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for Sha {
+    fn from(s: String) -> Sha {
+        Sha(s)
+    }
+}
+
+impl From<&str> for Sha {
+    fn from(s: &str) -> Sha {
+        Sha(s.to_string())
+    }
+}
+
+impl PartialEq<&str> for Sha {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl std::fmt::Display for Sha {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }

@@ -369,9 +369,9 @@ mod tests {
             resolved: None,
         };
         let revision = entry(LogPayload::Revision(RevisionPayload {
-            commit_sha: "abcdef0123456789".to_string(),
-            parent_sha: String::new(),
-            fork_sha: String::new(),
+            commit_sha: "abcdef0123456789".into(),
+            parent_sha: "".into(),
+            fork_sha: "".into(),
             message: String::new(),
             resets_status: true,
         }));
@@ -475,9 +475,9 @@ mod tests {
                 position,
                 sequence,
                 LogPayload::Revision(RevisionPayload {
-                    commit_sha: sha.to_string(),
-                    parent_sha: String::new(),
-                    fork_sha: String::new(),
+                    commit_sha: sha.into(),
+                    parent_sha: "".into(),
+                    fork_sha: "".into(),
                     message: msg.to_string(),
                     resets_status: true,
                 }),
@@ -504,7 +504,7 @@ mod tests {
             status,
             revision,
             subject: subject.to_string(),
-            commit_sha: String::new(),
+            commit_sha: "".into(),
         };
         let chain = Chain {
             tip_change_id: 2,

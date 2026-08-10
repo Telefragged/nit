@@ -33,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use crate::changes::{ChangeDetail, Review, Revision};
 use crate::comments::{CommentRange, Thread};
 use crate::domain::ChangeId;
+use crate::domain::Sha;
 use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
 use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
@@ -54,9 +55,9 @@ pub enum Lifecycle {
 pub struct RevisionProjection {
     /// 0-based, minted in the fold.
     pub number: u64,
-    pub commit_sha: String,
-    pub parent_sha: String,
-    pub fork_sha: String,
+    pub commit_sha: Sha,
+    pub parent_sha: Sha,
+    pub fork_sha: Sha,
     pub message: String,
     /// `false` for a pure rebase — the revision inherits the prior status.
     pub resets_status: bool,
@@ -576,9 +577,9 @@ mod tests {
     /// A `revision` payload; the fold mints its 0-based number.
     fn revision(sha: &str, parent: &str, base: &str, resets: bool) -> LogPayload {
         LogPayload::Revision(RevisionPayload {
-            commit_sha: sha.to_string(),
-            parent_sha: parent.to_string(),
-            fork_sha: base.to_string(),
+            commit_sha: sha.into(),
+            parent_sha: parent.into(),
+            fork_sha: base.into(),
             message: format!("subject {sha}\n\nChange-Id: Iabc\n"),
             resets_status: resets,
         })
@@ -710,7 +711,7 @@ mod tests {
             revision("A", "base", "base", true),
             review(0, Verdict::Approve),
             revision("B", "base", "base", true),
-            LogPayload::lifecycle(LifecycleAction::Merged, Some("C".to_string()), None),
+            LogPayload::lifecycle(LifecycleAction::Merged, Some("C".into()), None),
         ]);
         // Merged shows at the latest revision; older ones keep their own status.
         assert_eq!(c.status_at(1), ChangeStatus::Merged);

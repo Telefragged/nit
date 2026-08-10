@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
+use crate::domain::Sha;
 use crate::domain::{ChainState, ChangeStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,5 +42,5 @@ pub struct PathEntry {
     /// Per `(change, this revision)`.
     pub status: ChangeStatus,
     pub subject: String,
-    pub commit_sha: String,
+    pub commit_sha: Sha,
 }

@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use nit_types::comments::CommentRange;
-use nit_types::domain::{ChangeId, ChangeStatus, Decision, Side};
+use nit_types::domain::{ChangeId, ChangeStatus, Decision, Sha, Side};
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// RFC3339 timestamp for "now" (UTC).
@@ -264,7 +264,7 @@ pub struct RepoRow {
     /// The canonical-branch HEAD the merge timer last reconciled against.
     ///
     /// `None` until first observed.
-    pub canonical_head: Option<String>,
+    pub canonical_head: Option<Sha>,
 }
 
 fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
@@ -272,7 +272,9 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
         id: col_u64(row.get("id")?)?,
         git_dir: row.get("git_dir")?,
         canonical_ref: row.get("canonical_ref")?,
-        canonical_head: row.get("canonical_head")?,
+        canonical_head: row
+            .get::<_, Option<String>>("canonical_head")?
+            .map(Sha::from),
     })
 }
 
@@ -361,10 +363,10 @@ pub fn update_repo_git_dir(conn: &Connection, id: u64, git_dir: &str) -> Result<
 /// # Errors
 ///
 /// On a database failure.
-pub fn update_repo_canonical_head(conn: &Connection, id: u64, canonical_head: &str) -> Result<()> {
+pub fn update_repo_canonical_head(conn: &Connection, id: u64, canonical_head: &Sha) -> Result<()> {
     conn.execute(
         "UPDATE repos SET canonical_head = ?1 WHERE id = ?2",
-        params![canonical_head, i64::try_from(id)?],
+        params![canonical_head.as_str(), i64::try_from(id)?],
     )?;
     Ok(())
 }
@@ -930,9 +932,9 @@ mod tests {
         let conn = mem();
         let a = create_repo(&conn, "/r/.git", "main").expect("create");
         assert_eq!(a.canonical_head, None, "no baseline until first observed");
-        update_repo_canonical_head(&conn, a.id, "deadbeef").expect("record");
+        update_repo_canonical_head(&conn, a.id, &"deadbeef".into()).expect("record");
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
-        assert_eq!(found.canonical_head.as_deref(), Some("deadbeef"));
+        assert_eq!(found.canonical_head, Some(Sha::from("deadbeef")));
     }
 
     #[test]

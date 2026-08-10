@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
+use crate::domain::Sha;
 use crate::domain::{ChangeStatus, GraphSection};
 
 /// One commit of the canonical ref's merged history.
@@ -12,9 +13,9 @@ use crate::domain::{ChangeStatus, GraphSection};
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct HistoryCommit {
     /// Full 40-hex commit-sha.
-    pub sha: String,
+    pub sha: Sha,
     /// Parent commit-shas; more than one is a merge.
-    pub parents: Vec<String>,
+    pub parents: Vec<Sha>,
     pub subject: String,
     /// The merged change this commit carries, matched by its `Change-Id:`
     /// trailer. Coupled with `change_key`: a commit whose trailer names no
@@ -63,7 +64,7 @@ pub struct RepoGraph {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct GraphNode {
     /// The node's stable id — a full 40-hex commit-sha; the client truncates.
-    pub commit_sha: String,
+    pub commit_sha: Sha,
     pub section: GraphSection,
     pub subject: String,
     /// `ChangeStatus` at the pinned revision; head/history read as merged.
@@ -71,7 +72,7 @@ pub struct GraphNode {
     /// The client styles by `section`.
     pub status: ChangeStatus,
     /// Parent commit-shas; an edge is drawn to each that is in the node set.
-    pub parents: Vec<String>,
+    pub parents: Vec<Sha>,
     /// The backing change, or `None` for a bare git commit (merge / pre-nit).
     pub change_id: Option<u64>,
     pub change_key: Option<ChangeId>,

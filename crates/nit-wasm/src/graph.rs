@@ -10,6 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use nit_types::chain::{self, RepoView};
+use nit_types::domain::Sha;
 use nit_types::domain::{ChangeStatus, GraphSection};
 use nit_types::graph::{GraphNode, RepoGraph, RepoHistory};
 
@@ -52,11 +53,11 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
     // "behind" edge to it when it is a visible history node, or dangles it into
     // the "earlier history hidden" marker when the fork predates the window.
 
-    let pairs: Vec<(String, Vec<String>)> = nodes
+    let pairs: Vec<(Sha, Vec<Sha>)> = nodes
         .iter()
         .map(|n| (n.commit_sha.clone(), n.parents.clone()))
         .collect();
-    let pos: HashMap<String, usize> = chain::graph_row_order(&pairs)
+    let pos: HashMap<Sha, usize> = chain::graph_row_order(&pairs)
         .into_iter()
         .enumerate()
         .map(|(i, sha)| (sha, i))
@@ -102,9 +103,9 @@ mod tests {
     fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
         RevisionProjection {
             number,
-            commit_sha: sha.to_string(),
-            parent_sha: parent.to_string(),
-            fork_sha: base.to_string(),
+            commit_sha: sha.into(),
+            parent_sha: parent.into(),
+            fork_sha: base.into(),
             message: format!("subject {sha}"),
             resets_status: true,
             created_at: "t0".to_string(),
@@ -119,8 +120,8 @@ mod tests {
 
     fn commit(sha: &str, parents: &[&str]) -> HistoryCommit {
         HistoryCommit {
-            sha: sha.to_string(),
-            parents: parents.iter().map(ToString::to_string).collect(),
+            sha: sha.into(),
+            parents: parents.iter().map(|p| Sha::from(*p)).collect(),
             subject: format!("main {sha}"),
             change_id: None,
             change_key: None,
@@ -156,7 +157,7 @@ mod tests {
         );
         assert_eq!(
             g.nodes[row("T")].parents,
-            vec!["c1".to_string()],
+            vec![Sha::from("c1")],
             "topic keeps its real fork base, never re-rooted onto HEAD"
         );
     }

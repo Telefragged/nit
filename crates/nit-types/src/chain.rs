@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::domain::Sha;
 use crate::domain::{ChainState, ChangeStatus};
 
 use crate::fold::ChangeProjection;
@@ -17,7 +18,7 @@ use crate::fold::ChangeProjection;
 pub struct PathMember {
     pub change_id: u64,
     pub revision: u64,
-    pub commit_sha: String,
+    pub commit_sha: Sha,
 }
 
 /// One node of the graph's open region.
@@ -28,8 +29,8 @@ pub struct PathMember {
 pub struct OpenNode {
     pub change_id: u64,
     pub revision: u64,
-    pub commit_sha: String,
-    pub parent_sha: String,
+    pub commit_sha: Sha,
+    pub parent_sha: Sha,
 }
 
 /// A read-time view over one repo's changes.
@@ -39,7 +40,7 @@ pub struct OpenNode {
 /// this view, so it holds no locks and touches no git.
 pub struct RepoView {
     changes: HashMap<u64, ChangeProjection>,
-    index: HashMap<String, (u64, u64)>,
+    index: HashMap<Sha, (u64, u64)>,
 }
 
 impl RepoView {
@@ -78,19 +79,19 @@ impl RepoView {
     /// A tip is a change's latest-revision sha that no revision records
     /// as a `parent_sha`. A superseded revision is never a tip — only
     /// the latest revision is a candidate.
-    fn tips_where(&self, keep: impl Fn(&ChangeProjection) -> bool) -> Vec<String> {
-        let parents: HashSet<&str> = self
+    fn tips_where(&self, keep: impl Fn(&ChangeProjection) -> bool) -> Vec<Sha> {
+        let parents: HashSet<&Sha> = self
             .changes
             .values()
-            .flat_map(|c| c.revisions.iter().map(|r| r.parent_sha.as_str()))
+            .flat_map(|c| c.revisions.iter().map(|r| &r.parent_sha))
             .collect();
-        let mut tips: Vec<String> = self
+        let mut tips: Vec<Sha> = self
             .changes
             .values()
             .filter(|&c| keep(c))
             .filter_map(ChangeProjection::latest_revision)
             .map(|r| r.commit_sha.clone())
-            .filter(|sha| !parents.contains(sha.as_str()))
+            .filter(|sha| !parents.contains(sha))
             .collect();
         tips.sort();
         tips
@@ -100,7 +101,7 @@ impl RepoView {
     ///
     /// It still surfaces recently merged/abandoned chains.
     #[must_use]
-    pub fn all_tips(&self) -> Vec<String> {
+    pub fn all_tips(&self) -> Vec<Sha> {
         self.tips_where(|_| true)
     }
 
@@ -111,7 +112,7 @@ impl RepoView {
     /// abandoned change is still an enumerable member
     /// ([`enumerable_tips`](Self::enumerable_tips)).
     #[must_use]
-    pub fn tips(&self) -> Vec<String> {
+    pub fn tips(&self) -> Vec<Sha> {
         self.tips_where(|c| !c.is_terminal())
     }
 
@@ -122,7 +123,7 @@ impl RepoView {
     /// [`tips`](Self::tips); resolving the chain a change sits on
     /// enumerates them.
     #[must_use]
-    pub fn enumerable_tips(&self) -> Vec<String> {
+    pub fn enumerable_tips(&self) -> Vec<Sha> {
         self.tips_where(|c| !c.is_merged())
     }
 
@@ -135,9 +136,9 @@ impl RepoView {
     /// alone. **Total**: an unresolved parent (below the merge-base, or a
     /// torn push) truncates the path, never errors.
     #[must_use]
-    pub fn path_from_tip(&self, tip_sha: &str) -> Vec<PathMember> {
+    pub fn path_from_tip(&self, tip_sha: &Sha) -> Vec<PathMember> {
         let mut path = Vec::new();
-        let mut sha = tip_sha.to_string();
+        let mut sha = tip_sha.clone();
         let mut seen = HashSet::new();
         while let Some(&(change_id, number)) = self.index.get(&sha) {
             if !seen.insert(sha.clone()) {
@@ -161,7 +162,7 @@ impl RepoView {
     }
 
     /// Whether `sha` is a change that has merged onto the canonical ref.
-    fn is_merged(&self, sha: &str) -> bool {
+    fn is_merged(&self, sha: &Sha) -> bool {
         self.index
             .get(sha)
             .and_then(|&(id, _)| self.change(id))
@@ -195,7 +196,7 @@ impl RepoView {
                 let parent_sha = self
                     .change(m.change_id)
                     .and_then(|c| c.revision(m.revision))
-                    .map_or_else(String::new, |r| r.parent_sha.clone());
+                    .map_or_else(|| Sha::from(""), |r| r.parent_sha.clone());
                 out.push(OpenNode {
                     change_id: m.change_id,
                     revision: m.revision,
@@ -257,7 +258,7 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
 /// children and groups a fan-out's branches adjacently; the input-order
 /// tie-break keeps it deterministic.
 #[must_use]
-pub fn graph_row_order(nodes: &[(String, Vec<String>)]) -> Vec<String> {
+pub fn graph_row_order(nodes: &[(Sha, Vec<Sha>)]) -> Vec<Sha> {
     fn rank(
         i: usize,
         children: &[Vec<usize>],
@@ -281,15 +282,15 @@ pub fn graph_row_order(nodes: &[(String, Vec<String>)]) -> Vec<String> {
         r
     }
 
-    let index: HashMap<&str, usize> = nodes
+    let index: HashMap<&Sha, usize> = nodes
         .iter()
         .enumerate()
-        .map(|(i, (sha, _))| (sha.as_str(), i))
+        .map(|(i, (sha, _))| (sha, i))
         .collect();
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
     for (i, (_, parents)) in nodes.iter().enumerate() {
         for p in parents {
-            if let Some(&pi) = index.get(p.as_str()) {
+            if let Some(&pi) = index.get(p) {
                 children[pi].push(i);
             }
         }
@@ -315,9 +316,9 @@ mod tests {
     fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
         RevisionProjection {
             number,
-            commit_sha: sha.to_string(),
-            parent_sha: parent.to_string(),
-            fork_sha: base.to_string(),
+            commit_sha: sha.into(),
+            parent_sha: parent.into(),
+            fork_sha: base.into(),
             message: format!("subject {sha}"),
             resets_status: true,
             created_at: "t0".to_string(),
@@ -345,9 +346,9 @@ mod tests {
         let ce = change(14, "Ie", vec![revision(0, "E", "Bp", "m")]);
         let view = RepoView::new(vec![ca, cb, cc, cd, ce]);
 
-        assert_eq!(view.tips(), vec!["C".to_string(), "E".to_string()]);
+        assert_eq!(view.tips(), vec![Sha::from("C"), Sha::from("E")]);
 
-        let c_path = view.path_from_tip("C");
+        let c_path = view.path_from_tip(&"C".into());
         assert_eq!(
             c_path
                 .iter()
@@ -355,7 +356,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(10, 0), (11, 0), (12, 0)]
         );
-        let e_path = view.path_from_tip("E");
+        let e_path = view.path_from_tip(&"E".into());
         assert_eq!(
             e_path
                 .iter()
@@ -376,7 +377,7 @@ mod tests {
         let view = RepoView::new(vec![a, b]);
 
         let path: Vec<u64> = view
-            .path_from_tip("B")
+            .path_from_tip(&"B".into())
             .iter()
             .map(|m| m.change_id)
             .collect();
@@ -396,7 +397,7 @@ mod tests {
         let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
         let c = change(3, "Ic", vec![revision(0, "C", "B", "m")]);
         let view = RepoView::new(vec![a, b, c]);
-        assert_eq!(view.tips(), vec!["C".to_string()]);
+        assert_eq!(view.tips(), vec![Sha::from("C")]);
     }
 
     #[test]
@@ -415,7 +416,7 @@ mod tests {
         let ce = change(14, "Ie", vec![revision(0, "E", "Bp", "m")]);
         let view = RepoView::new(vec![ca, cb, cc, cd, ce]);
 
-        let mut shas: Vec<String> = view
+        let mut shas: Vec<Sha> = view
             .open_nodes()
             .iter()
             .map(|n| n.commit_sha.clone())
@@ -437,16 +438,16 @@ mod tests {
         // The change-graph mock topology: two open tips (A1, A2) fanning from
         // A3 → A4 → HEAD, then merged history H → G1 → G2(merge of G3,G4) → G5.
         let pairs = vec![
-            ("A1".to_string(), vec!["A3".to_string()]),
-            ("A2".to_string(), vec!["A3".to_string()]),
-            ("A3".to_string(), vec!["A4".to_string()]),
-            ("A4".to_string(), vec!["H".to_string()]),
-            ("H".to_string(), vec!["G1".to_string()]),
-            ("G1".to_string(), vec!["G2".to_string()]),
-            ("G2".to_string(), vec!["G3".to_string(), "G4".to_string()]),
-            ("G3".to_string(), vec!["G5".to_string()]),
-            ("G4".to_string(), vec!["G5".to_string()]),
-            ("G5".to_string(), vec![]),
+            (Sha::from("A1"), vec![Sha::from("A3")]),
+            (Sha::from("A2"), vec![Sha::from("A3")]),
+            (Sha::from("A3"), vec![Sha::from("A4")]),
+            (Sha::from("A4"), vec![Sha::from("H")]),
+            (Sha::from("H"), vec![Sha::from("G1")]),
+            (Sha::from("G1"), vec![Sha::from("G2")]),
+            (Sha::from("G2"), vec![Sha::from("G3"), Sha::from("G4")]),
+            (Sha::from("G3"), vec![Sha::from("G5")]),
+            (Sha::from("G4"), vec![Sha::from("G5")]),
+            (Sha::from("G5"), vec![]),
         ];
         assert_eq!(
             graph_row_order(&pairs),
@@ -454,7 +455,7 @@ mod tests {
         );
         // None < Some keeps the comparison honest if a sha is ever missing.
         let order = graph_row_order(&pairs);
-        let pos = |s: &str| order.iter().position(|x| x == s);
+        let pos = |s: &Sha| order.iter().position(|x| x == s);
         for (child, parents) in &pairs {
             for p in parents {
                 assert!(pos(child) < pos(p), "{child} should precede parent {p}");
@@ -474,7 +475,7 @@ mod tests {
         });
         let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
         let view = RepoView::new(vec![a, b]);
-        let path = view.path_from_tip("B");
+        let path = view.path_from_tip(&"B".into());
         assert_eq!(derive_state(&view, &path), ChainState::WaitingForReview);
     }
 }
