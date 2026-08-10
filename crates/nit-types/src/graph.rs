@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::ChangeId;
 use crate::domain::{ChangeStatus, GraphSection};
 
 /// One commit of the canonical ref's merged history.
@@ -20,7 +21,7 @@ pub struct HistoryCommit {
     /// known change (a merge, a pre-nit commit, a foreign trailer) reports
     /// both as `None`, never an orphan key.
     pub change_id: Option<u64>,
-    pub change_key: Option<String>,
+    pub change_key: Option<ChangeId>,
 }
 
 /// A window of the canonical ref's merged history (`GET /api/history`).
@@ -73,7 +74,7 @@ pub struct GraphNode {
     pub parents: Vec<String>,
     /// The backing change, or `None` for a bare git commit (merge / pre-nit).
     pub change_id: Option<u64>,
-    pub change_key: Option<String>,
+    pub change_key: Option<ChangeId>,
     /// The pinned revision (open nodes); `None` off the open region.
     pub revision: Option<u64>,
 }

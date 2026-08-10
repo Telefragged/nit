@@ -174,7 +174,7 @@ impl RepoView {
     /// trailer.
     #[must_use]
     pub fn change_by_key(&self, key: &str) -> Option<&ChangeProjection> {
-        self.changes.values().find(|c| c.change_key == key)
+        self.changes.values().find(|c| c.change_key.as_str() == key)
     }
 
     /// The graph's **open region**: active tips walked back to their forks.
@@ -325,7 +325,7 @@ mod tests {
     }
 
     fn change(id: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(id, 1, key.to_string());
+        let mut c = ChangeProjection::new(id, 1, key.into());
         c.revisions = revs;
         c
     }

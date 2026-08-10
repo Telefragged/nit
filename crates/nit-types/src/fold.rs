@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::changes::{ChangeDetail, Review, Revision};
 use crate::comments::{CommentRange, Thread};
+use crate::domain::ChangeId;
 use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
 use crate::log::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
@@ -160,7 +161,7 @@ pub struct ReviewProjection {
 pub struct ChangeProjection {
     pub id: u64,
     pub repo_id: u64,
-    pub change_key: String,
+    pub change_key: ChangeId,
     pub revisions: Vec<RevisionProjection>,
     pub threads: Vec<ThreadProjection>,
     pub reviews: Vec<ReviewProjection>,
@@ -198,7 +199,7 @@ pub fn subject_of(message: &str) -> String {
 impl ChangeProjection {
     /// The fold builds the rest from the log.
     #[must_use]
-    pub fn new(id: u64, repo_id: u64, change_key: String) -> ChangeProjection {
+    pub fn new(id: u64, repo_id: u64, change_key: ChangeId) -> ChangeProjection {
         ChangeProjection {
             id,
             repo_id,
@@ -448,7 +449,7 @@ fn open_thread(
 pub fn replay(
     id: u64,
     repo_id: u64,
-    change_key: String,
+    change_key: ChangeId,
     entries: Vec<LogEntry>,
 ) -> ChangeProjection {
     let mut change = ChangeProjection::new(id, repo_id, change_key);
@@ -559,7 +560,7 @@ mod tests {
     use super::*;
 
     fn empty() -> ChangeProjection {
-        ChangeProjection::new(1, 1, "Iabc".to_string())
+        ChangeProjection::new(1, 1, "Iabc".into())
     }
 
     fn entry(position: u64, payload: LogPayload) -> LogEntry {
@@ -823,7 +824,7 @@ mod tests {
         let c = replay(
             1,
             1,
-            "Iabc".to_string(),
+            "Iabc".into(),
             vec![
                 entry(0, revision("A", "base", "base", true)),
                 entry(1, review(0, Verdict::Approve)),

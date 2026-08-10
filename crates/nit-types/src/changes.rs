@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::comments::{Draft, Thread};
+use crate::domain::ChangeId;
 use crate::domain::{Decision, Verdict};
 use crate::fold::ChangeProjection;
 
@@ -25,7 +26,7 @@ pub struct ChangeList {
 pub struct ChangeDetail {
     pub id: u64,
     pub repo_id: u64,
-    pub change_key: String,
+    pub change_key: ChangeId,
     /// Ascending.
     pub revisions: Vec<Revision>,
     /// Published threads, all revisions; anchors verbatim.

@@ -42,7 +42,7 @@ pub(crate) fn resolve_change(client: &Client, change_key: &str) -> Result<u64> {
     chain
         .path
         .iter()
-        .find(|m| m.change_key == change_key)
+        .find(|m| m.change_key.as_str() == change_key)
         .map(|m| m.change_id)
         .ok_or_else(|| anyhow!("no change with Change-Id {change_key:?} on this chain"))
 }

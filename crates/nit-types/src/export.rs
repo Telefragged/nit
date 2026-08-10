@@ -30,6 +30,7 @@ fn write_wire_types() {
         })*};
     }
     emit!(
+        crate::domain::ChangeId,
         crate::domain::Side,
         crate::domain::Verdict,
         crate::domain::Decision,

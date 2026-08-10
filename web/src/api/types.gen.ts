@@ -2,6 +2,15 @@
 // Change the Rust wire types, then regenerate.
 
 /**
+ * A change's identity: its `Change-Id` trailer, verbatim.
+ *
+ * It is carried in the commit message and survives the rewrites review
+ * provokes, which is what binds a new revision to the change it revises;
+ * a commit sha does not.
+ */
+export type ChangeId = string;
+
+/**
  * Which tree of a revision a line comment is anchored to.
  *
  * `new` is the revision's commit tree, `old` its parent tree. Defaults
@@ -134,7 +143,7 @@ export type PathEntry = {
    * Position in THIS path (0-based).
    */
   position: number;
-  change_key: string;
+  change_key: ChangeId;
   /**
    * The revision this path walks.
    */
@@ -196,7 +205,7 @@ export type GraphNode = {
    * The backing change, or `None` for a bare git commit (merge / pre-nit).
    */
   change_id: number | null;
-  change_key: string | null;
+  change_key: ChangeId | null;
   /**
    * The pinned revision (open nodes); `None` off the open region.
    */
@@ -225,7 +234,7 @@ export type HistoryCommit = {
    * both as `None`, never an orphan key.
    */
   change_id: number | null;
-  change_key: string | null;
+  change_key: ChangeId | null;
 };
 
 /**
@@ -262,7 +271,7 @@ export type ChangeList = { changes: Array<ChangeProjection> };
 export type ChangeDetail = {
   id: number;
   repo_id: number;
-  change_key: string;
+  change_key: ChangeId;
   /**
    * Ascending.
    */
@@ -741,7 +750,7 @@ export type ReviewProjection = {
 export type ChangeProjection = {
   id: number;
   repo_id: number;
-  change_key: string;
+  change_key: ChangeId;
   revisions: Array<RevisionProjection>;
   threads: Array<ThreadProjection>;
   reviews: Array<ReviewProjection>;

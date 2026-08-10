@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use nit_types::comments::CommentRange;
-use nit_types::domain::{ChangeStatus, Decision, Side};
+use nit_types::domain::{ChangeId, ChangeStatus, Decision, Side};
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// RFC3339 timestamp for "now" (UTC).
@@ -376,7 +376,7 @@ pub fn update_repo_canonical_head(conn: &Connection, id: u64, canonical_head: &s
 pub struct ChangeRow {
     pub id: u64,
     pub repo_id: u64,
-    pub change_key: String,
+    pub change_key: ChangeId,
     /// The denormalized status cache; authoritative state is the fold.
     ///
     /// `None` before the change's first append.
@@ -388,7 +388,7 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
     Ok(ChangeRow {
         id: col_u64(row.get("id")?)?,
         repo_id: col_u64(row.get("repo_id")?)?,
-        change_key: row.get("change_key")?,
+        change_key: row.get::<_, String>("change_key")?.into(),
         status: row
             .get::<_, Option<String>>("status")?
             .map(|s| col_change_status(&s))
@@ -407,15 +407,15 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &str) -> Result<u64> {
+pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &ChangeId) -> Result<u64> {
     conn.execute(
         "INSERT INTO changes (repo_id, change_key, created_at) VALUES (?1, ?2, ?3)
          ON CONFLICT (repo_id, change_key) DO NOTHING",
-        params![i64::try_from(repo_id)?, change_key, now_rfc3339()],
+        params![i64::try_from(repo_id)?, change_key.as_str(), now_rfc3339()],
     )?;
     let id: i64 = conn.query_row(
         "SELECT id FROM changes WHERE repo_id = ?1 AND change_key = ?2",
-        params![i64::try_from(repo_id)?, change_key],
+        params![i64::try_from(repo_id)?, change_key.as_str()],
         |r| r.get(0),
     )?;
     Ok(col_u64(id)?)
@@ -428,11 +428,15 @@ pub fn upsert_change(conn: &Connection, repo_id: u64, change_key: &str) -> Resul
 /// # Errors
 ///
 /// On a database failure.
-pub fn change_id_by_key(conn: &Connection, repo_id: u64, change_key: &str) -> Result<Option<u64>> {
+pub fn change_id_by_key(
+    conn: &Connection,
+    repo_id: u64,
+    change_key: &ChangeId,
+) -> Result<Option<u64>> {
     let id: Option<i64> = conn
         .query_row(
             "SELECT id FROM changes WHERE repo_id = ?1 AND change_key = ?2",
-            params![i64::try_from(repo_id)?, change_key],
+            params![i64::try_from(repo_id)?, change_key.as_str()],
             |r| r.get(0),
         )
         .optional()?;
@@ -906,7 +910,7 @@ mod tests {
 
     fn change(conn: &Connection) -> u64 {
         let repo = create_repo(conn, "/r/.git", "main").expect("repo");
-        upsert_change(conn, repo.id, "I1").expect("change")
+        upsert_change(conn, repo.id, &"I1".into()).expect("change")
     }
 
     #[test]
@@ -935,14 +939,14 @@ mod tests {
     fn change_upsert_is_idempotent() {
         let conn = mem();
         let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
-        let a = upsert_change(&conn, repo.id, "Iabc").expect("create");
-        let again = upsert_change(&conn, repo.id, "Iabc").expect("re-upsert");
+        let a = upsert_change(&conn, repo.id, &"Iabc".into()).expect("create");
+        let again = upsert_change(&conn, repo.id, &"Iabc".into()).expect("re-upsert");
         assert_eq!(a, again);
-        let b = upsert_change(&conn, repo.id, "Idef").expect("create");
+        let b = upsert_change(&conn, repo.id, &"Idef".into()).expect("create");
         assert_ne!(a, b);
         assert_eq!(
             get_change(&conn, a).expect("get").expect("some").change_key,
-            "Iabc"
+            ChangeId::from("Iabc")
         );
     }
 
@@ -998,8 +1002,8 @@ mod tests {
     fn sequence_is_global_across_changes() {
         let conn = mem();
         let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
-        let a = upsert_change(&conn, repo.id, "Ia").expect("a");
-        let b = upsert_change(&conn, repo.id, "Ib").expect("b");
+        let a = upsert_change(&conn, repo.id, &"Ia".into()).expect("a");
+        let b = upsert_change(&conn, repo.id, &"Ib".into()).expect("b");
         let sa = append_log(&conn, a, 0, "comment", "{}", "t0").expect("a0");
         let sb = append_log(&conn, b, 0, "comment", "{}", "t1").expect("b0");
         let sa1 = append_log(&conn, a, 1, "comment", "{}", "t2").expect("a1");

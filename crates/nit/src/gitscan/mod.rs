@@ -17,6 +17,7 @@ use std::collections::HashMap;
 
 use git2::{Commit, Oid, Repository, Sort};
 
+use nit_types::domain::ChangeId;
 use nit_types::fold::subject_of;
 
 use crate::review::ChangeProjection;
@@ -35,7 +36,7 @@ pub fn short_sha(sha: &str) -> String {
 /// the first.
 #[derive(Debug, Clone)]
 pub struct WalkedCommit {
-    pub change_key: String,
+    pub change_key: ChangeId,
     pub commit_sha: String,
     pub parent_sha: String,
     pub message: String,
@@ -96,7 +97,7 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
     for (i, commit) in commits.iter().enumerate() {
         let sha = commit.id().to_string();
         walked.push(WalkedCommit {
-            change_key: keys[i].clone(),
+            change_key: keys[i].clone().into(),
             commit_sha: sha.clone(),
             parent_sha: prev.clone(),
             message: messages[i].clone(),
@@ -183,7 +184,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
     repo: &Repository,
     since: &str,
     head: &str,
-    open: &HashMap<String, &ChangeProjection, S>,
+    open: &HashMap<ChangeId, &ChangeProjection, S>,
 ) -> Vec<(u64, String)> {
     let (Ok(since), Ok(head)) = (Oid::from_str(since), Oid::from_str(head)) else {
         return Vec::new();
@@ -210,7 +211,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
         else {
             continue;
         };
-        let Some(change) = open.get(&key) else {
+        let Some(change) = open.get(&ChangeId::from(key.clone())) else {
             continue;
         };
         // First seen wins: the unsorted walk is newest-first, so a key
@@ -293,6 +294,7 @@ mod tests {
 
     use super::detect_merges;
     use crate::review::{ChangeProjection, RevisionProjection};
+    use nit_types::domain::ChangeId;
 
     /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
     /// tests need.
@@ -325,7 +327,7 @@ mod tests {
     }
 
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProjection {
-        let mut proj = ChangeProjection::new(id, 1, key.to_string());
+        let mut proj = ChangeProjection::new(id, 1, key.into());
         proj.revisions.push(RevisionProjection {
             number: 0,
             commit_sha: commit.to_string(),
@@ -345,7 +347,7 @@ mod tests {
         (dir, repo, root)
     }
 
-    fn open<'a>(changes: &[&'a ChangeProjection]) -> HashMap<String, &'a ChangeProjection> {
+    fn open<'a>(changes: &[&'a ChangeProjection]) -> HashMap<ChangeId, &'a ChangeProjection> {
         changes.iter().map(|c| (c.change_key.clone(), *c)).collect()
     }
 

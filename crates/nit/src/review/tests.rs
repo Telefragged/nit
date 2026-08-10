@@ -7,7 +7,7 @@ fn change_row() -> db::ChangeRow {
     db::ChangeRow {
         id: 1,
         repo_id: 1,
-        change_key: "Iabc".to_string(),
+        change_key: "Iabc".into(),
         status: None,
         created_at: "t0".to_string(),
     }

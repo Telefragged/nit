@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::ChangeId;
 use crate::domain::{ChainState, ChangeStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,7 +35,7 @@ pub struct PathEntry {
     pub change_id: u64,
     /// Position in THIS path (0-based).
     pub position: u64,
-    pub change_key: String,
+    pub change_key: ChangeId,
     /// The revision this path walks.
     pub revision: u64,
     /// Per `(change, this revision)`.

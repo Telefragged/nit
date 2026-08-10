@@ -55,7 +55,12 @@ struct ReplayInput {
 #[wasm_bindgen]
 pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
     let input: ReplayInput = serde_wasm_bindgen::from_value(input)?;
-    let proj = fold::replay(input.id, input.repo_id, input.change_key, input.entries);
+    let proj = fold::replay(
+        input.id,
+        input.repo_id,
+        input.change_key.into(),
+        input.entries,
+    );
     to_js(&proj)
 }
 

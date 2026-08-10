@@ -10,6 +10,7 @@ use std::time::Duration;
 use git2::Repository;
 use rusqlite::Connection;
 
+use nit_types::domain::ChangeId;
 use nit_types::domain::LifecycleAction;
 use nit_types::log::LogPayload;
 
@@ -106,7 +107,7 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
 }
 
 /// The sweep's working set -- looked up once per new commit.
-fn open_changes_by_key(view: &RepoView) -> HashMap<String, &ChangeProjection> {
+fn open_changes_by_key(view: &RepoView) -> HashMap<ChangeId, &ChangeProjection> {
     view.change_ids()
         .into_iter()
         .filter_map(|id| view.change(id))

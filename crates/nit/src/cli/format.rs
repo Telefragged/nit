@@ -10,6 +10,7 @@ use anyhow::{Result, bail};
 use nit_types::chains::Chain;
 use nit_types::changes::ChangeDetail;
 use nit_types::comments::{CommentRange, Thread};
+use nit_types::domain::ChangeId;
 use nit_types::log::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
@@ -175,8 +176,8 @@ pub(crate) fn aligned_row<const N: usize>(
     format!("{body}  {tail}")
 }
 
-pub(crate) fn short_key(key: &str) -> String {
-    key.chars().take(8).collect()
+pub(crate) fn short_key(key: &ChangeId) -> String {
+    key.as_str().chars().take(8).collect()
 }
 
 /// Confirms a posted comment.
@@ -499,7 +500,7 @@ mod tests {
         let member = |change_id, position, key: &str, status, revision, subject: &str| PathEntry {
             change_id,
             position,
-            change_key: key.to_string(),
+            change_key: key.into(),
             status,
             revision,
             subject: subject.to_string(),

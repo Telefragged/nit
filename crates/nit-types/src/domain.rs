@@ -92,11 +92,13 @@
 //! field for one of these enums is not a wire change.
 
 mod conversation;
+mod identity;
 mod log;
 mod rendering;
 mod verdict;
 
 pub use conversation::*;
+pub use identity::*;
 pub use log::*;
 pub use rendering::*;
 pub use verdict::*;
