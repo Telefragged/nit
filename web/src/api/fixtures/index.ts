@@ -246,14 +246,14 @@ function derivePath(tip: TipRecord): PathEntry[] {
  * chain state. */
 function chainState(path: PathEntry[]): ChainState {
   const live = path.filter((e) => e.status !== "abandoned");
-  if (live.length === 0) return "agents_turn";
+  if (live.length === 0) return "authors_turn";
   if (live.every((e) => e.status === "merged")) return "merged";
   if (
     live.some(
       (e) => e.status === "changes_requested" || e.status === "commented",
     )
   ) {
-    return "agents_turn";
+    return "authors_turn";
   }
   if (live.some((e) => e.status === "pending")) return "waiting_for_review";
   // The rest are approved (≥1) and/or merged, no pending — approved.

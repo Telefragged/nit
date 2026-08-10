@@ -166,7 +166,7 @@ impl From<Verdict> for ChangeStatus {
 #[serde(rename_all = "snake_case")]
 pub enum ChainState {
     Merged,
-    AgentsTurn,
+    AuthorsTurn,
     WaitingForReview,
     Approved,
 }
@@ -177,7 +177,7 @@ impl ChainState {
     pub fn as_str(self) -> &'static str {
         match self {
             ChainState::Merged => "merged",
-            ChainState::AgentsTurn => "agents_turn",
+            ChainState::AuthorsTurn => "authors_turn",
             ChainState::WaitingForReview => "waiting_for_review",
             ChainState::Approved => "approved",
         }

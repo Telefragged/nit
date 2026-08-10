@@ -105,7 +105,7 @@ pub struct LifecyclePayload {
 pub enum LogPayload {
     Revision(RevisionPayload),
     Review(ReviewPayload),
-    /// One agent comment (the `comment` kind), opening a thread or replying.
+    /// One author comment (the `comment` kind), opening a thread or replying.
     Comment(CommentInput),
     Lifecycle(LifecyclePayload),
 }

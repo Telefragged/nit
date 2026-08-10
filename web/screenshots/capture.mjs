@@ -268,7 +268,7 @@ const captures = [
     },
   },
   // Rebase drift contained: in the r0 → r1 interdiff, src/auth/store.rs
-  // carries the agent's real edit (green/red) beside grey, uncounted lines
+  // carries the author's real edit (green/red) beside grey, uncounted lines
   // a rebase pulled in — the file count is the real edit only.
   {
     name: "review-drift",
@@ -436,7 +436,7 @@ const captures = [
     path: "/changes/11?against=0",
     actions: expandAllFiles,
   },
-  // Markdown comment bodies: the RNG thread's agent reply, its fence
+  // Markdown comment bodies: the RNG thread's author reply, its fence
   // highlighted like the diff.
   {
     name: "review-markdown-comment",

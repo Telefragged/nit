@@ -1,6 +1,6 @@
 import type { ChangeStatus } from "../api/types";
 
-// Color discipline: amber = needs reviewer, blue = agent
+// Color discipline: amber = needs reviewer, blue = author
 // working, green = approved/ready, red = changes requested, gray = inert.
 
 export function NewerElsewhereBadge({

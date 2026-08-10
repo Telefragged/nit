@@ -72,7 +72,7 @@ keep streaming.
 
 `nit status` prints the chain `state`:
 
-- **`agents_turn`** — act now. For each change marked `changes_requested` /
+- **`authors_turn`** — act now. For each change marked `changes_requested` /
   `commented`:
   - code feedback → amend the fix into the commit it belongs to (see **Amend
     in place** below), then `nit push` — the rewritten commit lands as a new

@@ -1,5 +1,5 @@
 //! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside a
-//! fixture repo against a real server. The agent drives push / status /
+//! fixture repo against a real server. The author drives push / status /
 //! log / comment / reopen one-shot (the live followers `nit log --follow` /
 //! `--wait` live in `cli_wait.rs`).
 //!
@@ -23,7 +23,7 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
     g.branch("feat", c1);
-    g.repo.set_head("refs/heads/feat").unwrap(); // the agent's checkout
+    g.repo.set_head("refs/heads/feat").unwrap(); // the author's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
@@ -262,7 +262,7 @@ fn reopen_an_abandoned_change() {
     let (ok, _push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
 
-    // CLI abandon — a reviewer/agent judgment, distinct from the background
+    // CLI abandon — a reviewer or author judgment, distinct from the background
     // timer — targeted by the cwd's Change-Id.
     let (ok, detail, stderr) = nit(&server, &g, &["abandon", "--change-id", "Ia"]);
     assert!(ok, "{stderr}");

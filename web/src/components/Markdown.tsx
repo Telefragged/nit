@@ -44,7 +44,7 @@ const components: Components = {
 /**
  * A comment body rendered as markdown: GFM plus GitHub-style hard line
  * breaks, so pre-markdown bodies keep their line structure. Raw HTML stays
- * escaped (no rehype-raw) — bodies are agent-authored, i.e. untrusted.
+ * escaped (no rehype-raw) — bodies come from the author, i.e. untrusted.
  */
 function Markdown({ text }: { text: string }) {
   return (

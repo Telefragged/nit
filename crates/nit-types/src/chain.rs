@@ -215,11 +215,11 @@ impl RepoView {
 #[must_use]
 pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     if path.is_empty() {
-        return ChainState::AgentsTurn; // tip not in the index — no chain members, agent's turn by default
+        return ChainState::AuthorsTurn; // tip not in the index — no chain members, author's turn by default
     }
     // Abandonment is derivation-inert: an abandoned member is excluded from the
     // rollup entirely (no chain-level abandoned state). It shows as `abandoned`
-    // on its own path entry; the agent decides what to do with it.
+    // on its own path entry; the author decides what to do with it.
     let statuses: Vec<ChangeStatus> = path
         .iter()
         .map(|m| {
@@ -229,7 +229,7 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
         .filter(|s| *s != ChangeStatus::Abandoned)
         .collect();
     if statuses.is_empty() {
-        return ChainState::AgentsTurn;
+        return ChainState::AuthorsTurn;
     }
     if statuses.iter().all(|s| *s == ChangeStatus::Merged) {
         ChainState::Merged
@@ -237,7 +237,7 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
         .iter()
         .any(|s| matches!(s, ChangeStatus::ChangesRequested | ChangeStatus::Commented))
     {
-        ChainState::AgentsTurn
+        ChainState::AuthorsTurn
     } else if statuses.contains(&ChangeStatus::Pending) {
         ChainState::WaitingForReview
     } else {

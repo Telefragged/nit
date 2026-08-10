@@ -410,9 +410,9 @@ fn pure_rebase_carries_status_forward() {
 }
 
 // ---------------------------------------------------------------------------
-// Agent comments (never change review status)
+// Author comments (never change review status)
 
-/// The agent comment endpoint opens a thread / replies (`review_id` null) and never
+/// The author comment endpoint opens a thread / replies (`review_id` null) and never
 /// moves the change's review status.
 #[test]
 fn agent_comment_opens_thread_without_review_status() {
@@ -423,7 +423,7 @@ fn agent_comment_opens_thread_without_review_status() {
     let id = push_one(&server, &g, "feat", "Ix");
     let comments_url = server.url(&format!("/api/changes/{id}/comments"));
 
-    // A new agent thread (published immediately; review_id null → agent).
+    // A new author thread (published immediately; review_id null → author).
     let (st, thread) = http_post(
         &comments_url,
         &json!({"revision": 0, "file": "x.txt", "line": 1, "body": "chose x1 deliberately"}),
@@ -435,7 +435,7 @@ fn agent_comment_opens_thread_without_review_status() {
     assert_eq!(
         thread["comments"][0]["review_id"],
         Value::Null,
-        "agent comment has no review"
+        "author comment has no review"
     );
 
     let d = detail(&server, id);
@@ -462,14 +462,14 @@ fn agent_comment_opens_thread_without_review_status() {
     assert_eq!(comments.len(), 2);
     assert!(comments.iter().all(|c| c["review_id"].is_null()));
 
-    // An empty-body agent comment with no resolution is a 400.
+    // An empty-body author comment with no resolution is a 400.
     let (st, _) = http_post(&comments_url, &json!({"revision": 0, "body": ""}));
-    assert_eq!(st, 400, "empty agent comment rejected");
+    assert_eq!(st, 400, "empty author comment rejected");
     let (st, _) = http_post(&comments_url, &json!({"thread_id": 9999, "body": "hi"}));
     assert_eq!(st, 400, "reply to unknown thread rejected");
 }
 
-/// The reviewer engages an agent-initiated thread exactly like any other:
+/// The reviewer engages an author-initiated thread exactly like any other:
 /// reply and resolve through drafts, applied on publish.
 #[test]
 fn reviewer_replies_to_agent_thread() {

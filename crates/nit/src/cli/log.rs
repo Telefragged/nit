@@ -42,7 +42,7 @@ pub struct LogArgs {
     /// chain digest, then exit — the one-shot wait.
     #[arg(long, conflicts_with = "follow")]
     pub wait: bool,
-    /// Keep only the reviewer's activity: drop the agent's own entries
+    /// Keep only the reviewer's activity: drop the author's own entries
     /// (`revision`/`comment`) and the automatic `merged` lifecycle. A filter,
     /// so it composes with any mode — one-shot, `--wait`, or `--follow`.
     #[arg(long)]
@@ -98,7 +98,7 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// Prints the chain digest and the entries past the cursor, then exits. Each
 /// pass drains `(cursor, head]` from the log (the source of truth); otherwise
 /// it parks the websocket as a doorbell until any new entry lands. Rides out
-/// restarts. `reviewer_only` drops the agent's own entries, so the wait blocks
+/// restarts. `reviewer_only` drops the author's own entries, so the wait blocks
 /// until reviewer activity lands (its own echoes advance the cursor but don't
 /// wake it).
 ///
@@ -158,7 +158,7 @@ fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result
 ///
 /// Replays `(cursor, head]`, then relays each new entry as it lands, until
 /// stopped. Rides out restarts (reconnect re-reads the gap from the log).
-/// `reviewer_only` drops the agent's own entries (`revision`/`comment`).
+/// `reviewer_only` drops the author's own entries (`revision`/`comment`).
 ///
 /// # Errors
 ///
@@ -240,7 +240,7 @@ fn follow_cursor(spec: &str) -> Result<u64> {
 
 /// Whether `--reviewer-only` suppresses this log entry.
 ///
-/// It suppresses the agent's own echoes (`revision`/`comment`) and the
+/// It suppresses the author's own echoes (`revision`/`comment`) and the
 /// automatic `merged` lifecycle (written by the merge timer, not the
 /// reviewer). Reviewer verdicts and the reviewer-driven `abandoned`/`reopened`
 /// lifecycle always reach the monitor.

@@ -30,16 +30,16 @@
   margin-bottom: 3px;
 }
 
-.author {
+.byline {
   font-weight: 700;
   letter-spacing: 0.8px;
 }
 
-.author-reviewer {
+.byline-reviewer {
   color: var(--text-dim);
 }
 
-.author-agent {
+.byline-author {
   color: var(--blue);
 }
 

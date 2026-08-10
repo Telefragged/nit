@@ -8,7 +8,7 @@ description: The approve action for the nit repo — merge an approved chain ont
 nit derives `approved` (every live change approved) but leaves merging to each
 project. Here it's a fast-forward-only merge to `main` — no merge commits
 (golden rule 2), every commit green under `nix flake check` — automated by
-`scripts/merge.sh`. The agent that built the chain **drives it all the way to
+`scripts/merge.sh`. The author that built the chain **drives it all the way to
 `merged`**: `approved` is the cue to merge, never to hand off.
 
 ## Merge it

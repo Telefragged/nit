@@ -33,7 +33,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     assert_eq!(st, 200, "{res}");
     let a_id = member_id(&server, &res, "Ia");
 
-    // An agent comment on A (seq: A.comment) — written before B exists, so it
+    // An author comment on A (seq: A.comment) — written before B exists, so it
     // must sort before B's revision in the merged timeline.
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{a_id}/comments")),

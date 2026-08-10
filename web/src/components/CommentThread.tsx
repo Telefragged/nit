@@ -11,13 +11,11 @@ import Markdown from "./Markdown";
 /** A published comment, read-only: it has no id/state/resolved and is never
  * editable (only the reviewer's own drafts are). */
 function PublishedComment({ comment }: { comment: ThreadComment }) {
-  const author = comment.review_id !== null ? "reviewer" : "agent";
+  const role = comment.review_id !== null ? "reviewer" : "author";
   return (
     <div className="comment">
       <div className="comment-head">
-        <span className={`author author-${author}`}>
-          {author.toUpperCase()}
-        </span>
+        <span className={`byline byline-${role}`}>{role.toUpperCase()}</span>
         <span className="comment-time">{timeAgo(comment.created_at)}</span>
       </div>
       <div className="comment-body">
@@ -56,7 +54,7 @@ function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
   return (
     <div className="comment comment-draft">
       <div className="comment-head">
-        <span className="author author-reviewer">REVIEWER</span>
+        <span className="byline byline-reviewer">REVIEWER</span>
         <span className="badge badge-amber">DRAFT</span>
         <span className="comment-time">{timeAgo(draft.created_at)}</span>
         {!editing ? (
@@ -140,7 +138,7 @@ export default function CommentThread({
 
   // Reply / resolve / reopen all draft a reply that copies the thread's
   // whole anchor — including its revision, so the copied file/line/range stay
-  // the coordinates they were written in (the server's agent replies match).
+  // the coordinates they were written in (the server's author replies match).
   // A stored range thread carries both, but line and range are mutually
   // exclusive request anchors: send whichever one anchored the thread.
   const saveDraft = useMutation({

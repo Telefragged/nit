@@ -125,10 +125,10 @@
   background: var(--bg-inset);
 }
 
-/* Rebase drift: lines changed by the base moving, not the agent.
+/* Rebase drift: lines changed by the base moving, not the author.
    Blue for an added line and purple
    for a removed one, so the direction still reads while the hue keeps drift
-   apart from the agent's green/red edits, and dimmed, since it does not
+   apart from the author's green/red edits, and dimmed, since it does not
    count toward the diff. The triple class beats the .code.add / .code.del
    background above. */
 .code.add.drift {

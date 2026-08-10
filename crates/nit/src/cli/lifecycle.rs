@@ -46,7 +46,7 @@ pub fn reopen(args: ReopenArgs) -> Result<()> {
 
 /// Marks a change abandoned.
 ///
-/// A reviewer/agent judgment that it is dead (reversible by `nit reopen`).
+/// A reviewer or author judgment that it is dead (reversible by `nit reopen`).
 ///
 /// # Errors
 ///

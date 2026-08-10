@@ -30,7 +30,7 @@
 
   /* Rebase drift keeps a hue per direction (gerrit's rebased-add /
      rebased-remove highlights): blue for an added line, purple for a removed
-     one. Neither is green or red, so drift never reads as the agent's own
+     one. Neither is green or red, so drift never reads as the author's own
      edit, and each sits below its add/del counterpart above. */
   --drift-add-bg: rgb(88 166 255 / 9%);
   --drift-add-gutter: rgb(88 166 255 / 16%);

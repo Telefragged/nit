@@ -25,7 +25,7 @@ pub struct PushArgs {
 /// Idempotent. The repo must already be registered (`nit repo create`). The
 /// canonical branch comes from the registered repo, so no base is sent. Prints
 /// the resulting chain digest — every change the push registered, not just the
-/// tip — so the agent needs no follow-up read.
+/// tip — so the author needs no follow-up read.
 ///
 /// # Errors
 ///

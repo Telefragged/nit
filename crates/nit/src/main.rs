@@ -33,7 +33,7 @@ enum Cmd {
     Log(cli::LogArgs),
     /// Comment on a change (--change / --change-id): open a thread or reply (--thread)
     Comment(cli::CommentArgs),
-    /// Mark a change abandoned (a reviewer/agent judgment; reopen to revert)
+    /// Mark a change abandoned (a reviewer or author judgment; reopen to revert)
     Abandon(cli::AbandonArgs),
     /// Reopen an abandoned change so a new revision can be pushed
     Reopen(cli::ReopenArgs),

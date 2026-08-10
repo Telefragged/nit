@@ -21,7 +21,7 @@
 //            rename and a binary file.
 //     tip change 40  merged — only visible via ?status=all.
 //   repo 2 (quarry)
-//     tip change 20  agents_turn — a changes_requested change.
+//     tip change 20  authors_turn — a changes_requested change.
 //     tip change 30  approved — single approved change.
 //   repo 3 (orbit)  the B-in-two-chains example: one change
 //            (B = 51) reached by two tips at two revisions — tip C (53) walks
@@ -701,7 +701,7 @@ const change11: ChangeRecord = {
             },
           ],
         },
-        // A rebase landed in this file: the agent's real edit (lookup, line
+        // A rebase landed in this file: the author's real edit (lookup, line
         // 16) sits beside base movement (insert's signature, line 19) that
         // the rebase pulled in. The drift renders contained, in its own
         // blue/purple hues, and is excluded from the counts
@@ -911,7 +911,7 @@ const change40: ChangeRecord = {
   },
 };
 
-// repo 2 — quarry: fix/wal-checkpoint (tip change 20, agents_turn)
+// repo 2 — quarry: fix/wal-checkpoint (tip change 20, authors_turn)
 
 const c20r1 = sha(201);
 const parent20 = sha(900); // fork on main: the canonical HEAD

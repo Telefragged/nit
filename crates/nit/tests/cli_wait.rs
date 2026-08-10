@@ -23,7 +23,7 @@ fn push_head(server: &TestServer, g: &GitRepo) -> u64 {
 }
 
 /// `nit log --wait 0` wakes immediately on any existing activity past the cursor
-/// (here, the agent's own push revision), printing the digest and the entry.
+/// (here, the author's own push revision), printing the digest and the entry.
 #[test]
 fn wait_returns_existing_activity() {
     let g = GitRepo::new();
@@ -57,7 +57,7 @@ fn wait_blocks_then_wakes_on_a_review() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let change_id = push_head(&server, &g);
 
-    // The head seq after the push (the agent's revision entry).
+    // The head seq after the push (the author's revision entry).
     let (_, log) = http_get(&server.url(&format!("/api/chains/{change_id}/log")));
     let head_seq = log["entries"]
         .as_array()
@@ -97,6 +97,6 @@ fn wait_blocks_then_wakes_on_a_review() {
         out.contains("reviewer: request_changes"),
         "woke on the review: {out}"
     );
-    // The digest header reflects the chain flipping to the agent's turn.
-    assert!(out.contains("state=agents_turn"), "{out}");
+    // The digest header reflects the chain flipping to the author's turn.
+    assert!(out.contains("state=authors_turn"), "{out}");
 }

@@ -74,8 +74,8 @@ fn entry_summary(entry: &LogEntry) -> String {
             p.comments.len()
         ),
         LogPayload::Comment(c) => match c.thread_id {
-            Some(thread) => format!("agent commented on thread {thread} (change {change})"),
-            None => format!("agent opened a thread on change {change}"),
+            Some(thread) => format!("author commented on thread {thread} (change {change})"),
+            None => format!("author opened a thread on change {change}"),
         },
         LogPayload::Lifecycle(p) => format!("change {change} {}", p.action.as_str()),
     }
@@ -266,7 +266,7 @@ fn render_comment(c: &CommentInput) -> String {
     format!("{head}\n{}", indent(&c.body, 8))
 }
 
-/// The `thread N (location)` target of an agent `comment` entry.
+/// The `thread N (location)` target of an author `comment` entry.
 ///
 /// The location shows only when this entry opened the thread.
 fn comment_target(c: &CommentInput) -> Option<String> {
@@ -378,7 +378,7 @@ mod tests {
             "reviewer request_changes on change 7 r2 (2 comment(s))"
         );
         let opened = entry(LogPayload::Comment(comment()));
-        assert_eq!(entry_summary(&opened), "agent opened a thread on change 7");
+        assert_eq!(entry_summary(&opened), "author opened a thread on change 7");
         let life = entry(LogPayload::lifecycle(LifecycleAction::Merged, None, None));
         assert_eq!(entry_summary(&life), "change 7 merged");
     }
@@ -497,7 +497,7 @@ mod tests {
         let chain = Chain {
             tip_change_id: 2,
             repo_id: 1,
-            state: ChainState::AgentsTurn,
+            state: ChainState::AuthorsTurn,
             path: vec![
                 member(
                     1,
@@ -521,14 +521,14 @@ mod tests {
         // Columns padded to the widest cell (here `changes_requested`), no tabs.
         assert_eq!(
             chain_digest(&chain, &unresolved, None),
-            "state=agents_turn\n\
+            "state=authors_turn\n\
              0  I0123456  changes_requested  r2  3u  server: add health endpoint\n\
              1  Iabcdef0  approved           r1  0u  web: render the diff\n"
         );
         // The `--wait` form prefixes the header with the cursor.
         assert!(
             chain_digest(&chain, &unresolved, Some(14))
-                .starts_with("cursor=14 state=agents_turn\n")
+                .starts_with("cursor=14 state=authors_turn\n")
         );
     }
 }

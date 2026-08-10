@@ -119,8 +119,8 @@ pub struct ThreadProj {
 
 /// One message in a thread.
 ///
-/// `review_id` is the review that published it, or `None` for an agent's
-/// own note — which is what distinguishes reviewer from agent (the only
+/// `review_id` is the review that published it, or `None` for an author's
+/// own note — which is what distinguishes reviewer from author (the only
 /// consumer derives the label from it).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 // Shares the wire `ThreadComment` name but is a distinct type — only
@@ -757,7 +757,7 @@ mod tests {
             LogPayload::Comment(anchored("a.rs", 1, "why?")),
         ]);
         assert_eq!(c.threads.len(), 1);
-        // An agent note carries no review_id — that is what marks it agent-authored.
+        // An author note carries no review_id — that is what marks it author-written.
         assert_eq!(c.threads[0].comments[0].review_id, None);
     }
 

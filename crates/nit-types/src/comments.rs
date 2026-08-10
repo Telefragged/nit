@@ -47,9 +47,9 @@ pub struct Thread {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ThreadComment {
     pub body: String,
-    /// The review that published it; null for an agent comment.
+    /// The review that published it; null for an author comment.
     ///
-    /// The client derives reviewer-vs-agent from this — there is no
+    /// The client derives reviewer-vs-author from this — there is no
     /// separate `author`.
     pub review_id: Option<u64>,
     pub created_at: String,
@@ -115,7 +115,7 @@ pub struct EditDraft {
 
 /// `POST /api/changes/{id}/comments` request.
 ///
-/// The agent's single comment-posting path.
+/// The author's single comment-posting path.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewComment {
     #[serde(default)]

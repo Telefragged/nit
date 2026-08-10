@@ -35,7 +35,7 @@ function commentInput(
 }
 
 /** A change's records → its log, ascending by `idx`: every revision, then the
- * reviews and agent comments that opened and answered its threads, in time
+ * reviews and author comments that opened and answered its threads, in time
  * order, then a terminal lifecycle entry. */
 export function synthLog(
   change: ChangeRecord,
@@ -67,9 +67,9 @@ export function synthLog(
   }
 
   // Group each thread comment under the review that published it (one review
-  // entry carries all of its comments) or emit it as a standalone agent
+  // entry carries all of its comments) or emit it as a standalone author
   // comment. `sort` breaks created_at ties so a review opens a thread before
-  // an agent reply in the same instant.
+  // an author reply in the same instant.
   const events: { created_at: string; sort: number; payload: LogPayload }[] =
     [];
   const byReview = new Map<number, CommentInput[]>();

@@ -54,7 +54,7 @@ export type ChangeStatus =
  */
 export type ChainState =
   | "merged"
-  | "agents_turn"
+  | "authors_turn"
   | "waiting_for_review"
   | "approved";
 
@@ -372,9 +372,9 @@ export type Thread = {
 export type ThreadComment = {
   body: string;
   /**
-   * The review that published it; null for an agent comment.
+   * The review that published it; null for an author comment.
    *
-   * The client derives reviewer-vs-agent from this — there is no
+   * The client derives reviewer-vs-author from this — there is no
    * separate `author`.
    */
   review_id: number | null;
@@ -689,8 +689,8 @@ export type RevisionProj = {
 /**
  * One message in a thread.
  *
- * `review_id` is the review that published it, or `None` for an agent's
- * own note — which is what distinguishes reviewer from agent (the only
+ * `review_id` is the review that published it, or `None` for an author's
+ * own note — which is what distinguishes reviewer from author (the only
  * consumer derives the label from it).
  */
 export type ThreadCommentProj = {

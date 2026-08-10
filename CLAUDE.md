@@ -1,10 +1,10 @@
 # nit
 
-Commit-level code review for AI coding agents: agents register a chain, a
-human reviews each commit gerrit-style (draft line comments,
-approve/request changes), agents resume on feedback and answer by amending
-the reviewed commits in place — the required `Change-Id:` trailer carries
-identity across rewrites. Product spec: `nit.md`.
+Commit-level code review for AI coding agents: an author registers a
+chain, a human reviews each commit gerrit-style (draft line comments,
+approve/request changes), the author resumes on feedback and answers by
+amending the reviewed commits in place — the required `Change-Id:`
+trailer carries identity across rewrites. Product spec: `nit.md`.
 
 ## Golden rules
 

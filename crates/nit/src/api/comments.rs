@@ -1,4 +1,4 @@
-//! Agent endpoints: post a comment, and abandon/reopen a change.
+//! Author endpoints: post a comment, and abandon/reopen a change.
 
 use std::sync::Arc;
 
@@ -25,7 +25,7 @@ pub(super) async fn create_comment(
         let entry = change_or_404(&state, conn, id)?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
         if req.body.trim().is_empty() && !resolution_only {
-            return Err(Error::bad_request("an agent comment needs a body"));
+            return Err(Error::bad_request("an author comment needs a body"));
         }
         let comment = {
             let proj = entry.read();
@@ -114,7 +114,7 @@ fn set_lifecycle(
 
 /// `POST /api/changes/{id}/abandon` — marks a live change abandoned.
 ///
-/// `nit abandon`: a reviewer/agent judgment, never automatic. Optional
+/// `nit abandon`: a reviewer or author judgment, never automatic. Optional
 /// `message` records a reason. A no-op on an already-terminal change.
 pub(super) async fn abandon_change(
     State(state): State<Arc<AppState>>,
