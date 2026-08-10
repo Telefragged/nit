@@ -130,7 +130,7 @@ impl RepoView {
     ///
     /// Follows each revision's recorded `parent`, returning the path
     /// oldest-first. The walk stops at the branch: the recorded fork
-    /// (`parent_sha == base_sha`), or the first parent that has since
+    /// (`parent_sha == fork_sha`), or the first parent that has since
     /// merged — so a partially-merged stack derives to its open members
     /// alone. **Total**: an unresolved parent (below the merge-base, or a
     /// torn push) truncates the path, never errors.
@@ -151,7 +151,7 @@ impl RepoView {
             let Some(rev) = self.change(change_id).and_then(|c| c.revision(number)) else {
                 break;
             };
-            if rev.parent_sha == rev.base_sha || self.is_merged(&rev.parent_sha) {
+            if rev.parent_sha == rev.fork_sha || self.is_merged(&rev.parent_sha) {
                 break;
             }
             sha.clone_from(&rev.parent_sha);
@@ -317,7 +317,7 @@ mod tests {
             number,
             commit_sha: sha.to_string(),
             parent_sha: parent.to_string(),
-            base_sha: base.to_string(),
+            fork_sha: base.to_string(),
             message: format!("subject {sha}"),
             resets_status: true,
             created_at: "t0".to_string(),

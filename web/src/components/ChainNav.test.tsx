@@ -56,7 +56,7 @@ function detail(
       number: n,
       commit_sha: `sha${changeId}r${n}`,
       parent_sha: "",
-      base_sha: "",
+      fork_sha: "",
       message: "",
       created_at: "",
     })),

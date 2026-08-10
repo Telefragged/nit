@@ -362,7 +362,7 @@ mod tests {
         let rev = entry(LogPayload::Revision(RevisionPayload {
             commit_sha: "abcdef0123456789".to_string(),
             parent_sha: String::new(),
-            base_sha: String::new(),
+            fork_sha: String::new(),
             message: String::new(),
             resets_status: true,
         }));
@@ -465,7 +465,7 @@ mod tests {
                 LogPayload::Revision(RevisionPayload {
                     commit_sha: sha.to_string(),
                     parent_sha: String::new(),
-                    base_sha: String::new(),
+                    fork_sha: String::new(),
                     message: msg.to_string(),
                     resets_status: true,
                 }),

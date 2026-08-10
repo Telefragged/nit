@@ -176,6 +176,15 @@ const MIGRATIONS: &[&str] = &[
     // from and mergedness is decided against.
     "ALTER TABLE repos RENAME COLUMN base_ref TO canonical_ref;
      ALTER TABLE repos RENAME COLUMN base_head TO canonical_head;",
+    // v7: a revision records the commit it forked from, so the key naming
+    // it is `fork_sha`. Revision payloads are serialized `RevisionPayload`,
+    // and the key rename has to reach the rows already written or their
+    // fork point deserializes as empty.
+    "UPDATE log
+        SET payload = json_remove(
+              json_set(payload, '$.fork_sha', json_extract(payload, '$.base_sha')),
+              '$.base_sha')
+      WHERE kind = 'revision' AND json_extract(payload, '$.base_sha') IS NOT NULL;",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {

@@ -14,7 +14,7 @@ fn revision_entry() -> LogEntry {
         payload: LogPayload::Revision(RevisionPayload {
             commit_sha: "a".to_string(),
             parent_sha: "b".to_string(),
-            base_sha: "c".to_string(),
+            fork_sha: "c".to_string(),
             message: "m".to_string(),
             resets_status: true,
         }),
@@ -26,7 +26,7 @@ fn log_entry_flattens_to_an_adjacent_tag() {
     let json = serde_json::to_string(&revision_entry()).expect("serialize");
     assert_eq!(
         json,
-        r#"{"change_id":7,"idx":2,"seq":42,"created_at":"t","kind":"revision","payload":{"commit_sha":"a","parent_sha":"b","base_sha":"c","message":"m","resets_status":true}}"#
+        r#"{"change_id":7,"idx":2,"seq":42,"created_at":"t","kind":"revision","payload":{"commit_sha":"a","parent_sha":"b","fork_sha":"c","message":"m","resets_status":true}}"#
     );
 }
 
@@ -48,14 +48,14 @@ fn payload_serializes_as_the_bare_inner_struct() {
     let p = RevisionPayload {
         commit_sha: "a".to_string(),
         parent_sha: "b".to_string(),
-        base_sha: "c".to_string(),
+        fork_sha: "c".to_string(),
         message: "m".to_string(),
         resets_status: true,
     };
     let json = serde_json::to_string(&p).expect("serialize");
     assert_eq!(
         json,
-        r#"{"commit_sha":"a","parent_sha":"b","base_sha":"c","message":"m","resets_status":true}"#
+        r#"{"commit_sha":"a","parent_sha":"b","fork_sha":"c","message":"m","resets_status":true}"#
     );
 }
 

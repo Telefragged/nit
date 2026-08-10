@@ -344,7 +344,7 @@ mod tests {
             LogPayload::Revision(RevisionPayload {
                 commit_sha: String::new(),
                 parent_sha: String::new(),
-                base_sha: String::new(),
+                fork_sha: String::new(),
                 message: String::new(),
                 resets_status: true,
             })

@@ -330,7 +330,7 @@ mod tests {
             number: 0,
             commit_sha: commit.to_string(),
             parent_sha: base.to_string(),
-            base_sha: base.to_string(),
+            fork_sha: base.to_string(),
             message: keyed("subject", key),
             resets_status: true,
             created_at: "t0".to_string(),

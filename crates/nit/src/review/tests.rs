@@ -17,7 +17,7 @@ fn revision(sha: &str) -> LogPayload {
     LogPayload::Revision(RevisionPayload {
         commit_sha: sha.to_string(),
         parent_sha: "base".to_string(),
-        base_sha: "base".to_string(),
+        fork_sha: "base".to_string(),
         message: format!("subject {sha}\n\nChange-Id: Iabc\n"),
         resets_status: true,
     })

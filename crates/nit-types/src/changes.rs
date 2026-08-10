@@ -67,7 +67,7 @@ pub struct Revision {
     pub number: u64,
     pub commit_sha: String,
     pub parent_sha: String,
-    pub base_sha: String,
+    pub fork_sha: String,
     /// Full commit message.
     pub message: String,
     pub created_at: String,

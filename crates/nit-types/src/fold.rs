@@ -55,7 +55,7 @@ pub struct RevisionProj {
     pub number: u64,
     pub commit_sha: String,
     pub parent_sha: String,
-    pub base_sha: String,
+    pub fork_sha: String,
     pub message: String,
     /// `false` for a pure rebase — the revision inherits the prior status.
     pub resets_status: bool,
@@ -363,7 +363,7 @@ fn fold_revision(change: &mut ChangeProj, p: &RevisionPayload, now: &str) {
         number,
         commit_sha: p.commit_sha.clone(),
         parent_sha: p.parent_sha.clone(),
-        base_sha: p.base_sha.clone(),
+        fork_sha: p.fork_sha.clone(),
         message: p.message.clone(),
         resets_status: p.resets_status,
         created_at: now.to_string(),
@@ -453,7 +453,7 @@ pub fn revision_view(rev: &RevisionProj) -> Revision {
         number: rev.number,
         commit_sha: rev.commit_sha.clone(),
         parent_sha: rev.parent_sha.clone(),
-        base_sha: rev.base_sha.clone(),
+        fork_sha: rev.fork_sha.clone(),
         message: rev.message.clone(),
         created_at: rev.created_at.clone(),
     }
@@ -563,7 +563,7 @@ mod tests {
         LogPayload::Revision(RevisionPayload {
             commit_sha: sha.to_string(),
             parent_sha: parent.to_string(),
-            base_sha: base.to_string(),
+            fork_sha: base.to_string(),
             message: format!("subject {sha}\n\nChange-Id: Iabc\n"),
             resets_status: resets,
         })

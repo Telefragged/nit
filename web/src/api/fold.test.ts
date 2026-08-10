@@ -12,7 +12,7 @@ const revision: LogEntry = {
   payload: {
     commit_sha: "A",
     parent_sha: "base",
-    base_sha: "base",
+    fork_sha: "base",
     message: "subject\n\nChange-Id: I1\n",
     resets_status: true,
   },

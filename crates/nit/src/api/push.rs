@@ -101,7 +101,7 @@ pub(super) async fn push(
             let new = LogPayload::Revision(RevisionPayload {
                 commit_sha: wc.commit_sha.clone(),
                 parent_sha: wc.parent_sha.clone(),
-                base_sha: walk.fork_sha.clone(),
+                fork_sha: walk.fork_sha.clone(),
                 message: wc.message.clone(),
                 resets_status,
             });

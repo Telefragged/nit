@@ -45,7 +45,7 @@ describe("event-driven change page", () => {
       payload: {
         commit_sha: "c11r3",
         parent_sha: "c11r2",
-        base_sha: "base",
+        fork_sha: "base",
         message: "auth: rotate v3\n\nChange-Id: I9a41c7e2b3d4f5a6",
         resets_status: true,
       },

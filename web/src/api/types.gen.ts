@@ -296,7 +296,7 @@ export type Revision = {
   number: number;
   commit_sha: string;
   parent_sha: string;
-  base_sha: string;
+  fork_sha: string;
   /**
    * Full commit message.
    */
@@ -522,7 +522,7 @@ export type SubmitError = { change_id: number; message: string };
 export type RevisionPayload = {
   commit_sha: string;
   parent_sha: string;
-  base_sha: string;
+  fork_sha: string;
   message: string;
   /**
    * `false` only for a pure rebase (patch-id-equal, message unchanged).
@@ -677,7 +677,7 @@ export type RevisionProj = {
   number: number;
   commit_sha: string;
   parent_sha: string;
-  base_sha: string;
+  fork_sha: string;
   message: string;
   /**
    * `false` for a pure rebase — the revision inherits the prior status.

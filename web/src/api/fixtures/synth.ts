@@ -57,7 +57,7 @@ export function synthLog(
       payload: {
         commit_sha: r.commit_sha,
         parent_sha: r.parent_sha,
-        base_sha: r.base_sha,
+        fork_sha: r.fork_sha,
         message: r.message,
         // No pure-rebase fixtures: every revision resets status, matching the
         // mock's own per-revision status derivation.

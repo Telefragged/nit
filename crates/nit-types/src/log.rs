@@ -17,7 +17,7 @@ use crate::domain::{LifecycleAction, LogKind, Side, Verdict};
 pub struct RevisionPayload {
     pub commit_sha: String,
     pub parent_sha: String,
-    pub base_sha: String,
+    pub fork_sha: String,
     pub message: String,
     /// `false` only for a pure rebase (patch-id-equal, message unchanged).
     ///

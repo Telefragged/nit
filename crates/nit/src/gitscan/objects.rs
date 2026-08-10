@@ -46,7 +46,7 @@ pub fn sha_patch_id(repo: &Repository, sha: &str) -> Option<String> {
 /// Deleting these refs is deferred on purpose — nothing prunes them, even
 /// for merged/abandoned changes. Over-pinning is fail-safe; dropping a ref
 /// can orphan objects the sha-walk, a vs-parent diff of retained history,
-/// or the timer's `base_sha..canonical` walk still needs.
+/// or the timer's `fork_sha..canonical` walk still needs.
 #[must_use]
 pub fn keep_ref_name(change_id: u64, revision_number: u64) -> String {
     format!("refs/nit/keep/{change_id}/{revision_number}")

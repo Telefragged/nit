@@ -48,7 +48,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
         });
     }
 
-    // An open chain's root keeps its real fork (`base_sha`): the client draws a
+    // An open chain's root keeps its real fork (`fork_sha`): the client draws a
     // "behind" edge to it when it is a visible history node, or dangles it into
     // the "earlier history hidden" marker when the fork predates the window.
 
@@ -103,7 +103,7 @@ mod tests {
             number,
             commit_sha: sha.to_string(),
             parent_sha: parent.to_string(),
-            base_sha: base.to_string(),
+            fork_sha: base.to_string(),
             message: format!("subject {sha}"),
             resets_status: true,
             created_at: "t0".to_string(),
