@@ -10,7 +10,7 @@ important one — read it first.
 
 ## Meta-rule: a first draft errs by _adding_, so review by _removing_
 
-Almost every design correction reviews here have issued was the same move:
+Almost every design correction reviewers here have issued was the same move:
 **delete a moving part.** A column became no column. Two counters became one. A
 re-derivation became a stored value. A serialized field on a struct became a
 typed one. The reviewer's note was a one-liner every time ("there shouldn't be

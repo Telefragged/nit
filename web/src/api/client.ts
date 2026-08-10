@@ -1,6 +1,6 @@
 // The ONLY place fetch happens. Components go through these functions (via
 // react-query); when VITE_MOCK is set every call is answered by the
-// contract-true fixtures in fixtures.ts instead of the network.
+// contract-true fixtures in ./fixtures instead of the network.
 
 import type {
   BatchSubmitResult,
