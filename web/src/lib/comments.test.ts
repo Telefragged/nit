@@ -17,7 +17,7 @@ const anchor = (revision: number, side: "old" | "new", line: number | null) =>
 
 /** A published thread anchored on src/main.rs. */
 const thread = (over: Partial<Thread> & { id: number }): Thread => ({
-  change_id: 1,
+  change_number: 1,
   revision: 1,
   file: "src/main.rs",
   line: 1,
@@ -33,7 +33,7 @@ const thread = (over: Partial<Thread> & { id: number }): Thread => ({
 
 /** A reviewer draft on src/main.rs (a new thread unless `thread_id` is set). */
 const draft = (over: Partial<Draft> & { id: number }): Draft => ({
-  change_id: 1,
+  change_number: 1,
   thread_id: null,
   revision: 1,
   file: "src/main.rs",

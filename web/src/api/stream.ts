@@ -8,7 +8,7 @@ import type { ClientMessage, StreamMessage } from "./types";
 
 export interface StreamHandle {
   /** Subscribe to more changes; each yields a projection, then its live tail. */
-  add(changeIds: number[]): void;
+  add(changeNumbers: number[]): void;
   close(): void;
 }
 
@@ -75,8 +75,8 @@ function openSocketStream(
   connect();
 
   return {
-    add(changeIds) {
-      const fresh = changeIds.filter((id) => !wanted.has(id));
+    add(changeNumbers) {
+      const fresh = changeNumbers.filter((id) => !wanted.has(id));
       for (const id of fresh) wanted.add(id);
       subscribe(fresh);
     },
@@ -99,9 +99,9 @@ function openMockStream(onMessage: (msg: StreamMessage) => void): StreamHandle {
     if (queued.length) mock.add(queued.splice(0));
   });
   return {
-    add(changeIds) {
-      if (mock) mock.add(changeIds);
-      else queued.push(...changeIds);
+    add(changeNumbers) {
+      if (mock) mock.add(changeNumbers);
+      else queued.push(...changeNumbers);
     },
     close() {
       closed = true;

@@ -21,7 +21,7 @@ use super::{AppState, with_conn};
 /// `WS /api/stream?repo={id}` — the client-driven change stream.
 ///
 /// The `repo` query is accepted for symmetry and ignored; the server keys
-/// purely on the subscribed change ids.
+/// purely on the subscribed change numbers.
 pub(super) async fn stream(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
@@ -67,7 +67,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 // Close the socket so it reconnects and re-reads the gap from
                 // the log.
                 let Ok(entry) = item else { break };
-                let Some(&mark) = watermark.get(&entry.change_id) else {
+                let Some(&mark) = watermark.get(&entry.change_number) else {
                     continue;
                 };
                 if entry.position < mark {
@@ -96,20 +96,20 @@ async fn apply_client_msg(
                 .iter()
                 .filter_map(|(id, from)| Some((id.parse::<ChangeNumber>().ok()?, *from)))
                 .collect();
-            for (change_id, next, backlog) in read_backlogs(state, cursors).await {
-                watermark.insert(change_id, next);
+            for (change_number, next, backlog) in read_backlogs(state, cursors).await {
+                watermark.insert(change_number, next);
                 for e in backlog {
                     send(socket, &StreamMessage::Entry(e)).await?;
                 }
             }
         }
         ClientMessage::SubscribeProjection(ids) => {
-            for (change_id, proj) in read_projections(state, ids).await {
+            for (change_number, proj) in read_projections(state, ids).await {
                 // The projection's `entries_folded` is the high-water mark, so an
                 // append that lands after it rides the channel and is deduped
                 // there: the projection and its live tail neither gap nor
                 // double.
-                watermark.insert(change_id, proj.entries_folded);
+                watermark.insert(change_number, proj.entries_folded);
                 send(socket, &StreamMessage::Projection(proj)).await?;
             }
         }
@@ -138,19 +138,19 @@ async fn read_backlogs(
 ) -> Vec<(ChangeNumber, u64, Vec<LogEntry>)> {
     with_conn(state.pool(), move |conn| {
         let mut out = Vec::with_capacity(cursors.len());
-        for (change_id, from) in cursors {
+        for (change_number, from) in cursors {
             // Existence is a row read: cursor mode replays the log itself and
             // never touches the fold.
-            if db::get_change(conn, change_id)?.is_none() {
+            if db::get_change(conn, change_number)?.is_none() {
                 continue;
             }
-            let rows = db::log_entries(conn, change_id, from, None)?;
+            let rows = db::log_entries(conn, change_number, from, None)?;
             let entries = rows
                 .iter()
-                .map(|r| review::entry_from_row(change_id, r))
+                .map(|r| review::entry_from_row(change_number, r))
                 .collect::<anyhow::Result<Vec<_>>>()?;
             let next = entries.last().map_or(from, |e| e.position + 1);
-            out.push((change_id, next, entries));
+            out.push((change_number, next, entries));
         }
         Ok(out)
     })
@@ -170,9 +170,9 @@ async fn read_projections(
     let st = state.clone();
     with_conn(state.pool(), move |conn| {
         let mut out = Vec::with_capacity(ids.len());
-        for change_id in ids {
-            if let Some(entry) = st.change(conn, change_id)? {
-                out.push((change_id, entry.read().clone()));
+        for change_number in ids {
+            if let Some(entry) = st.change(conn, change_number)? {
+                out.push((change_number, entry.read().clone()));
             }
         }
         Ok(out)

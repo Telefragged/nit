@@ -18,6 +18,6 @@ pub struct BatchSubmitResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct SubmitError {
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     pub message: String,
 }

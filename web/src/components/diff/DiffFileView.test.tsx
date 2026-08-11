@@ -16,7 +16,7 @@ import DiffFileView from "./DiffFileView";
 afterEach(cleanup);
 
 const ctx: ReviewCtx = {
-  changeId: 1,
+  changeNumber: 1,
   selected: 2,
   against: 1,
   editingTarget: null,

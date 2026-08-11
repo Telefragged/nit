@@ -29,7 +29,7 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
     let (ok, push, stderr) = nit_register(&server, &g, "feat");
     assert!(ok, "{stderr}");
     // push prints the chain digest — a `state=` header and one member line
-    // (position change_key status rN Nu subject) — so no follow-up read.
+    // (position change_id status rN Nu subject) — so no follow-up read.
     let push = push.as_str().expect("push prints text");
     assert!(push.contains("state=waiting_for_review"), "{push}");
     assert!(
@@ -158,7 +158,7 @@ fn comment_opens_replies_resolves() {
     );
     assert!(reply.trim_end().ends_with("resolved"), "{reply}");
 
-    // `--change <numeric id>` targets the same change as `--change-id Ia`.
+    // `--change <number>` targets the same change as `--change-id Ia`.
     let (ok, by_num, stderr) = nit(
         &server,
         &g,
@@ -167,7 +167,7 @@ fn comment_opens_replies_resolves() {
             "--change",
             &change_num.to_string(),
             "-m",
-            "by numeric id",
+            "by number",
         ],
     );
     assert!(ok, "{stderr}");
@@ -290,7 +290,7 @@ fn reopen_an_abandoned_change() {
 
 /// Push fails when any commit lacks a `Change-Id` — the all-or-nothing walk rejects the branch.
 #[test]
-fn push_without_change_id_fails_with_a_helpful_message() {
+fn push_without_change_number_fails_with_a_helpful_message() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], "core: add a\n", &[("a.txt", "a\n")]);
     g.branch("feat", c1);

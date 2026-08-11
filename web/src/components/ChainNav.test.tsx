@@ -24,19 +24,19 @@ function must<T>(value: T | null | undefined, what: string): T {
 }
 
 function member(
-  changeId: number,
+  changeNumber: number,
   position: number,
   subject: string,
   status: ChangeStatus,
 ): PathEntry {
   return {
-    change_id: changeId,
+    change_number: changeNumber,
     position,
-    change_key: `I${changeId}`,
+    change_id: `I${changeNumber}`,
     subject,
     status,
     revision: 0,
-    commit_sha: `sha${changeId}`,
+    commit_sha: `sha${changeNumber}`,
   };
 }
 
@@ -44,17 +44,17 @@ function member(
  * count from here, not the path entry — path entries above carry neither,
  * so these assertions hold only because ChainNav sources from the projection. */
 function detail(
-  changeId: number,
+  changeNumber: number,
   latest: number,
   unresolved: number,
 ): ChangeDetail {
   return {
-    id: changeId,
+    id: changeNumber,
     repo_id: 1,
-    change_key: `I${changeId}`,
+    change_id: `I${changeNumber}`,
     revisions: Array.from({ length: latest + 1 }, (_, n) => ({
       number: n,
-      commit_sha: `sha${changeId}r${n}`,
+      commit_sha: `sha${changeNumber}r${n}`,
       parent_sha: "",
       fork_sha: "",
       message: "",
@@ -62,7 +62,7 @@ function detail(
     })),
     threads: Array.from({ length: unresolved }, (_, i) => ({
       id: i,
-      change_id: changeId,
+      change_number: changeNumber,
       revision: 0,
       file: null,
       line: null,
@@ -81,7 +81,7 @@ function detail(
 }
 
 const chain: Chain = {
-  tip_change_id: 12,
+  tip_change_number: 12,
   repo_id: 1,
   state: "waiting_for_review",
   path: [

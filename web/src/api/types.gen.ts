@@ -138,7 +138,7 @@ export type RepoList = { repos: Array<Repo> };
  * (`GET /api/chains/{id}`) are identical.
  */
 export type Chain = {
-  tip_change_id: ChangeNumber;
+  tip_change_number: ChangeNumber;
   repo_id: number;
   state: ChainState;
   /**
@@ -155,12 +155,12 @@ export type Chain = {
  * from `GET /api/changes/{id}` per member.
  */
 export type PathEntry = {
-  change_id: ChangeNumber;
+  change_number: ChangeNumber;
   /**
    * Position in THIS path (0-based).
    */
   position: number;
-  change_key: ChangeId;
+  change_id: ChangeId;
   /**
    * The revision this path walks.
    */
@@ -221,8 +221,8 @@ export type GraphNode = {
   /**
    * The backing change, or `None` for a bare git commit (merge / pre-nit).
    */
-  change_id: ChangeNumber | null;
-  change_key: ChangeId | null;
+  change_number: ChangeNumber | null;
+  change_id: ChangeId | null;
   /**
    * The pinned revision (open nodes); `None` off the open region.
    */
@@ -243,12 +243,12 @@ export type HistoryCommit = {
   subject: string;
   /**
    * The merged change this commit carries, matched by its `Change-Id:`
-   * trailer. Coupled with `change_key`: a commit whose trailer names no
+   * trailer. Coupled with `change_id`: a commit whose trailer names no
    * known change (a merge, a pre-nit commit, a foreign trailer) reports
    * both as `None`, never an orphan key.
    */
-  change_id: ChangeNumber | null;
-  change_key: ChangeId | null;
+  change_number: ChangeNumber | null;
+  change_id: ChangeId | null;
 };
 
 /**
@@ -285,7 +285,7 @@ export type ChangeList = { changes: Array<ChangeProjection> };
 export type ChangeDetail = {
   id: ChangeNumber;
   repo_id: number;
-  change_key: ChangeId;
+  change_id: ChangeId;
   /**
    * Ascending.
    */
@@ -370,7 +370,7 @@ export type Thread = {
    * Fold-assigned by creation order (not stored).
    */
   id: number;
-  change_id: ChangeNumber;
+  change_number: ChangeNumber;
   /**
    * The revision the thread is pinned to.
    */
@@ -409,7 +409,7 @@ export type ThreadComment = {
  */
 export type Draft = {
   id: number;
-  change_id: ChangeNumber;
+  change_number: ChangeNumber;
   thread_id: number | null;
   /**
    * The request's anchor revision; only a new thread uses it.
@@ -533,7 +533,7 @@ export type BatchSubmitResult = {
   errors: Array<SubmitError>;
 };
 
-export type SubmitError = { change_id: ChangeNumber; message: string };
+export type SubmitError = { change_number: ChangeNumber; message: string };
 
 /**
  * A `revision` entry: one new commit-sha observed for this change.
@@ -642,7 +642,7 @@ export type LogPayload =
  * discriminant and the `payload` body.
  */
 export type LogEntry = {
-  change_id: ChangeNumber;
+  change_number: ChangeNumber;
   position: number;
   sequence: number;
   created_at: string;
@@ -763,7 +763,7 @@ export type ReviewProjection = {
 export type ChangeProjection = {
   id: ChangeNumber;
   repo_id: number;
-  change_key: ChangeId;
+  change_id: ChangeId;
   revisions: Array<RevisionProjection>;
   threads: Array<ThreadProjection>;
   reviews: Array<ReviewProjection>;

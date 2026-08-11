@@ -22,12 +22,12 @@ export function useChangeStream(ids: number[]): void {
   const handle = useRef<StreamHandle | null>(null);
 
   const publish = useCallback(
-    (changeId: number) => {
-      const proj = projs.current.get(changeId);
+    (changeNumber: number) => {
+      const proj = projs.current.get(changeNumber);
       if (!proj) return;
       // The wasm projection returns empty drafts/decision — overlaid elsewhere.
       queryClient.setQueryData<ChangeDetail>(
-        ["change", changeId],
+        ["change", changeNumber],
         changeDetail(proj),
       );
     },
@@ -41,12 +41,12 @@ export function useChangeStream(ids: number[]): void {
         publish(msg.projection.id);
         return;
       }
-      const { change_id } = msg.entry;
-      const proj = projs.current.get(change_id);
+      const { change_number } = msg.entry;
+      const proj = projs.current.get(change_number);
       // A live entry only ever follows its change's projection.
       if (!proj) return;
-      projs.current.set(change_id, foldEntry(proj, msg.entry));
-      publish(change_id);
+      projs.current.set(change_number, foldEntry(proj, msg.entry));
+      publish(change_number);
     });
     handle.current = stream;
     return () => {

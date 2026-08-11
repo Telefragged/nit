@@ -211,7 +211,7 @@ impl LogPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LogEntry {
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     pub position: u64,
     pub sequence: u64,
     pub created_at: String,

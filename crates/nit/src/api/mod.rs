@@ -198,27 +198,27 @@ pub async fn serve_on_state(
 fn change_or_404(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
 ) -> Result<Arc<ChangeEntry>, Error> {
     state
-        .change(conn, change_id)?
-        .ok_or_else(|| Error::not_found(format!("change {change_id} not found")))
+        .change(conn, change_number)?
+        .ok_or_else(|| Error::not_found(format!("change {change_number} not found")))
 }
 
 /// The chain context a chain endpoint operates on.
 ///
 /// The repo's [`RepoView`], its id, and the tip sha the path through
-/// `change_id` walks at `revision`. Shared by `get_chain`, `chain_log`, and
+/// `change_number` walks at `revision`. Shared by `get_chain`, `chain_log`, and
 /// `submit_chain`.
 fn chain_context(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     revision: Option<RevisionNumber>,
 ) -> Result<(RepoView, u64, Sha), Error> {
-    let repo_id = change_or_404(state, conn, change_id)?.read().repo_id;
+    let repo_id = change_or_404(state, conn, change_number)?.read().repo_id;
     let view = state.repo_view(conn, repo_id)?;
-    let (_, tip_sha) = views::resolve_revision_tip(&view, change_id, revision)?;
+    let (_, tip_sha) = views::resolve_revision_tip(&view, change_number, revision)?;
     Ok((view, repo_id, tip_sha))
 }
 

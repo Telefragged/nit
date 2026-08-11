@@ -36,7 +36,7 @@ pub fn short_sha(sha: &Sha) -> String {
 /// the first.
 #[derive(Debug, Clone)]
 pub struct WalkedCommit {
-    pub change_key: ChangeId,
+    pub change_id: ChangeId,
     pub commit_sha: Sha,
     pub parent_sha: Sha,
     pub message: String,
@@ -90,14 +90,14 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
         .iter()
         .map(|c| short_sha(&Sha::from(c.id().to_string())))
         .collect();
-    let keys = identity::require_keys(&messages, &short_shas)?;
+    let change_ids = identity::require_change_ids(&messages, &short_shas)?;
 
     let mut walked = Vec::with_capacity(commits.len());
     let mut prev = Sha::from(fork.to_string());
     for (i, commit) in commits.iter().enumerate() {
         let sha = Sha::from(commit.id().to_string());
         walked.push(WalkedCommit {
-            change_key: keys[i].clone().into(),
+            change_id: change_ids[i].clone().into(),
             commit_sha: sha.clone(),
             parent_sha: prev.clone(),
             message: messages[i].clone(),
@@ -176,7 +176,7 @@ pub fn resolve_head(repo: &Repository, canonical_ref: &str) -> Option<Sha> {
 /// That window is the commits added since the last sweep: each open
 /// change whose `Change-Id` appears on a new single-parent commit, paired
 /// with the merged commit's sha. One walk covers every change; `open`
-/// maps `change_key →` the change. At most one merge per change.
+/// maps `change_id →` the change. At most one merge per change.
 ///
 /// A merge that *stripped* its Change-Id is not detected — nit's own approve
 /// action preserves the trailer through rebase + fast-forward, and chasing
@@ -357,7 +357,7 @@ mod tests {
     }
 
     fn open<'a>(changes: &[&'a ChangeProjection]) -> HashMap<ChangeId, &'a ChangeProjection> {
-        changes.iter().map(|c| (c.change_key.clone(), *c)).collect()
+        changes.iter().map(|c| (c.change_id.clone(), *c)).collect()
     }
 
     // The positive single-match path is covered by `stacked_prefix_detects_…`

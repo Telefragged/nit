@@ -8,7 +8,7 @@ fn change_row() -> db::ChangeRow {
     db::ChangeRow {
         id: ChangeNumber(1),
         repo_id: 1,
-        change_key: "Iabc".into(),
+        change_id: "Iabc".into(),
         status: None,
         created_at: "t0".to_string(),
     }

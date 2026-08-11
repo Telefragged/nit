@@ -193,6 +193,13 @@ const MIGRATIONS: &[&str] = &[
     // ordinal.
     "ALTER TABLE log RENAME COLUMN idx TO position;
      ALTER TABLE log RENAME COLUMN seq TO sequence;",
+    // v9: `change_id` is the `Change-Id` trailer the commit carries, so the
+    // column holding it takes that name; the rowid every other table joins
+    // on is the change's number.
+    "ALTER TABLE changes RENAME COLUMN change_key TO change_id;
+     ALTER TABLE log RENAME COLUMN change_id TO change_number;
+     ALTER TABLE draft_comments RENAME COLUMN change_id TO change_number;
+     ALTER TABLE draft_reviews RENAME COLUMN change_id TO change_number;",
 ];
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -373,13 +380,13 @@ pub fn update_repo_canonical_head(conn: &Connection, id: u64, canonical_head: &S
 }
 
 // ---------------------------------------------------------------------------
-// Changes (identity: a (repo, Change-Id) → stable id everything carries)
+// Changes (identity: a (repo, Change-Id) → the number everything carries)
 
 #[derive(Debug, Clone)]
 pub struct ChangeRow {
     pub id: ChangeNumber,
     pub repo_id: u64,
-    pub change_key: ChangeId,
+    pub change_id: ChangeId,
     /// The denormalized status cache; authoritative state is the fold.
     ///
     /// `None` before the change's first append.
@@ -391,7 +398,7 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
     Ok(ChangeRow {
         id: ChangeNumber(col_u64(row.get("id")?)?),
         repo_id: col_u64(row.get("repo_id")?)?,
-        change_key: row.get::<_, String>("change_key")?.into(),
+        change_id: row.get::<_, String>("change_id")?.into(),
         status: row
             .get::<_, Option<String>>("status")?
             .map(|s| col_change_status(&s))
@@ -400,10 +407,10 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
     })
 }
 
-/// Upserts a change by `(repo_id, change_key)`.
+/// Upserts a change by `(repo_id, change_id)`.
 ///
-/// Returns its stable id. The `UNIQUE` index makes this idempotent and
-/// self-serializing — two pushes first-seeing the same key race one
+/// Returns its number. The `UNIQUE` index makes this idempotent and
+/// self-serializing — two pushes first-seeing the same trailer race one
 /// `INSERT … ON CONFLICT DO NOTHING`, the loser falls back to the
 /// `SELECT`, and both read the same id.
 ///
@@ -413,37 +420,37 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
 pub fn upsert_change(
     conn: &Connection,
     repo_id: u64,
-    change_key: &ChangeId,
+    change_id: &ChangeId,
 ) -> Result<ChangeNumber> {
     conn.execute(
-        "INSERT INTO changes (repo_id, change_key, created_at) VALUES (?1, ?2, ?3)
-         ON CONFLICT (repo_id, change_key) DO NOTHING",
-        params![i64::try_from(repo_id)?, change_key.as_str(), now_rfc3339()],
+        "INSERT INTO changes (repo_id, change_id, created_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT (repo_id, change_id) DO NOTHING",
+        params![i64::try_from(repo_id)?, change_id.as_str(), now_rfc3339()],
     )?;
     let id: i64 = conn.query_row(
-        "SELECT id FROM changes WHERE repo_id = ?1 AND change_key = ?2",
-        params![i64::try_from(repo_id)?, change_key.as_str()],
+        "SELECT id FROM changes WHERE repo_id = ?1 AND change_id = ?2",
+        params![i64::try_from(repo_id)?, change_id.as_str()],
         |r| r.get(0),
     )?;
     Ok(ChangeNumber(col_u64(id)?))
 }
 
-/// Returns the change id a `Change-Id` key names in one repo, if any.
+/// Returns the number a `Change-Id` names in one repo, if any.
 ///
 /// The point-read behind history enrichment (`GET /api/history`).
 ///
 /// # Errors
 ///
 /// On a database failure.
-pub fn change_id_by_key(
+pub fn change_number_by_id(
     conn: &Connection,
     repo_id: u64,
-    change_key: &ChangeId,
+    change_id: &ChangeId,
 ) -> Result<Option<ChangeNumber>> {
     let id: Option<i64> = conn
         .query_row(
-            "SELECT id FROM changes WHERE repo_id = ?1 AND change_key = ?2",
-            params![i64::try_from(repo_id)?, change_key.as_str()],
+            "SELECT id FROM changes WHERE repo_id = ?1 AND change_id = ?2",
+            params![i64::try_from(repo_id)?, change_id.as_str()],
             |r| r.get(0),
         )
         .optional()?;
@@ -485,14 +492,14 @@ pub fn get_change(conn: &Connection, id: ChangeNumber) -> Result<Option<ChangeRo
     .map_err(Into::into)
 }
 
-/// One repo's change ids, id-ascending (creation order).
+/// One repo's change numbers, ascending (creation order).
 ///
 /// The enumeration a repo view derives its chains over.
 ///
 /// # Errors
 ///
 /// On a database failure.
-pub fn repo_change_ids(
+pub fn repo_change_numbers(
     conn: &Connection,
     repo_id: u64,
     statuses: &[ChangeStatus],
@@ -549,10 +556,10 @@ pub struct LogRow {
 /// # Errors
 ///
 /// On a database failure.
-pub fn log_head(conn: &Connection, change_id: ChangeNumber) -> Result<u64> {
+pub fn log_head(conn: &Connection, change_number: ChangeNumber) -> Result<u64> {
     let max: Option<i64> = conn.query_row(
-        "SELECT MAX(position) FROM log WHERE change_id = ?1",
-        params![i64::try_from(change_id.get())?],
+        "SELECT MAX(position) FROM log WHERE change_number = ?1",
+        params![i64::try_from(change_number.get())?],
         |r| r.get(0),
     )?;
     Ok(match max {
@@ -569,20 +576,20 @@ pub fn log_head(conn: &Connection, change_id: ChangeNumber) -> Result<u64> {
 ///
 /// # Errors
 ///
-/// On a database failure (including a `UNIQUE(change_id, position)` clash).
+/// On a database failure (including a `UNIQUE(change_number, position)` clash).
 pub fn append_log(
     conn: &Connection,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     position: u64,
     kind: &str,
     payload: &str,
     created_at: &str,
 ) -> Result<u64> {
     conn.execute(
-        "INSERT INTO log (change_id, position, kind, payload, created_at)
+        "INSERT INTO log (change_number, position, kind, payload, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
-            i64::try_from(change_id.get())?,
+            i64::try_from(change_number.get())?,
             i64::try_from(position)?,
             kind,
             payload,
@@ -611,27 +618,27 @@ fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
 /// On a database failure.
 pub fn log_entries(
     conn: &Connection,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     from: u64,
     to: Option<u64>,
 ) -> Result<Vec<LogRow>> {
-    let change_id = i64::try_from(change_id.get())?;
+    let change_number = i64::try_from(change_number.get())?;
     let from = i64::try_from(from)?;
     // Omit the upper bound entirely rather than fake one with a sentinel.
     let rows = match to {
         Some(to) => conn
             .prepare(
                 "SELECT sequence, position, kind, payload, created_at FROM log
-                 WHERE change_id = ?1 AND position >= ?2 AND position < ?3 ORDER BY position",
+                 WHERE change_number = ?1 AND position >= ?2 AND position < ?3 ORDER BY position",
             )?
-            .query_map(params![change_id, from, i64::try_from(to)?], map_log)?
+            .query_map(params![change_number, from, i64::try_from(to)?], map_log)?
             .collect::<rusqlite::Result<Vec<_>>>()?,
         None => conn
             .prepare(
                 "SELECT sequence, position, kind, payload, created_at FROM log
-                 WHERE change_id = ?1 AND position >= ?2 ORDER BY position",
+                 WHERE change_number = ?1 AND position >= ?2 ORDER BY position",
             )?
-            .query_map(params![change_id, from], map_log)?
+            .query_map(params![change_number, from], map_log)?
             .collect::<rusqlite::Result<Vec<_>>>()?,
     };
     Ok(rows)
@@ -643,7 +650,7 @@ pub fn log_entries(
 #[derive(Debug, Clone)]
 pub struct DraftRow {
     pub id: u64,
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     pub revision: RevisionNumber,
     /// The thread this draft replies to; `None` opens a new thread.
     pub thread_id: Option<u64>,
@@ -680,7 +687,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
     };
     Ok(DraftRow {
         id: col_u64(row.get("id")?)?,
-        change_id: ChangeNumber(col_u64(row.get("change_id")?)?),
+        change_number: ChangeNumber(col_u64(row.get("change_number")?)?),
         revision: RevisionNumber(col_u64(row.get("revision")?)?),
         thread_id: col_u64_opt(row.get("thread_id")?)?,
         file: row.get("file")?,
@@ -696,7 +703,7 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
 }
 
 pub struct NewDraft<'a> {
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     pub revision: RevisionNumber,
     pub thread_id: Option<u64>,
     pub file: Option<&'a str>,
@@ -730,12 +737,12 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
     let thread_id = d.thread_id.map(i64::try_from).transpose()?;
     let line = d.line.map(i64::try_from).transpose()?;
     conn.execute(
-        "INSERT INTO draft_comments (id, change_id, revision, thread_id, file, line, side,
+        "INSERT INTO draft_comments (id, change_number, revision, thread_id, file, line, side,
             range_start_line, range_start_char, range_end_line, range_end_char,
             line_text, body, resolved, created_at, updated_at)
          VALUES (?14, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?15, ?13, ?13)",
         params![
-            i64::try_from(d.change_id.get())?,
+            i64::try_from(d.change_number.get())?,
             i64::try_from(d.revision.get())?,
             thread_id,
             d.file,
@@ -815,10 +822,11 @@ pub fn delete_draft(conn: &Connection, id: u64) -> Result<()> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn drafts_for_change(conn: &Connection, change_id: ChangeNumber) -> Result<Vec<DraftRow>> {
-    let mut stmt = conn.prepare("SELECT * FROM draft_comments WHERE change_id = ?1 ORDER BY id")?;
+pub fn drafts_for_change(conn: &Connection, change_number: ChangeNumber) -> Result<Vec<DraftRow>> {
+    let mut stmt =
+        conn.prepare("SELECT * FROM draft_comments WHERE change_number = ?1 ORDER BY id")?;
     let rows = stmt
-        .query_map(params![i64::try_from(change_id.get())?], map_draft)?
+        .query_map(params![i64::try_from(change_number.get())?], map_draft)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
@@ -828,10 +836,10 @@ pub fn drafts_for_change(conn: &Connection, change_id: ChangeNumber) -> Result<V
 /// # Errors
 ///
 /// On a database failure.
-pub fn delete_drafts_for_change(conn: &Connection, change_id: ChangeNumber) -> Result<()> {
+pub fn delete_drafts_for_change(conn: &Connection, change_number: ChangeNumber) -> Result<()> {
     conn.execute(
-        "DELETE FROM draft_comments WHERE change_id = ?1",
-        params![i64::try_from(change_id.get())?],
+        "DELETE FROM draft_comments WHERE change_number = ?1",
+        params![i64::try_from(change_number.get())?],
     )?;
     Ok(())
 }
@@ -843,7 +851,7 @@ pub fn delete_drafts_for_change(conn: &Connection, change_id: ChangeNumber) -> R
 /// A reviewer's draft decision on a change.
 #[derive(Debug, Clone)]
 pub struct DraftReviewRow {
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     pub decision: Decision,
     /// Cover note (for a verdict) or reason (for `abandon`).
     pub message: String,
@@ -851,7 +859,7 @@ pub struct DraftReviewRow {
 
 fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
     Ok(DraftReviewRow {
-        change_id: ChangeNumber(col_u64(row.get("change_id")?)?),
+        change_number: ChangeNumber(col_u64(row.get("change_number")?)?),
         decision: col_enum(&row.get::<_, String>("decision")?)?,
         message: row.get("message")?,
     })
@@ -867,14 +875,18 @@ fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
 /// On a database failure.
 pub fn upsert_draft_review(
     conn: &Connection,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     decision: Decision,
     message: &str,
 ) -> Result<()> {
     conn.execute(
-        "INSERT INTO draft_reviews (change_id, decision, message) VALUES (?1, ?2, ?3)
-         ON CONFLICT (change_id) DO UPDATE SET decision = ?2, message = ?3",
-        params![i64::try_from(change_id.get())?, decision.as_str(), message],
+        "INSERT INTO draft_reviews (change_number, decision, message) VALUES (?1, ?2, ?3)
+         ON CONFLICT (change_number) DO UPDATE SET decision = ?2, message = ?3",
+        params![
+            i64::try_from(change_number.get())?,
+            decision.as_str(),
+            message
+        ],
     )?;
     Ok(())
 }
@@ -886,11 +898,11 @@ pub fn upsert_draft_review(
 /// On a database failure.
 pub fn get_draft_review(
     conn: &Connection,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
 ) -> Result<Option<DraftReviewRow>> {
     conn.query_row(
-        "SELECT * FROM draft_reviews WHERE change_id = ?1",
-        params![i64::try_from(change_id.get())?],
+        "SELECT * FROM draft_reviews WHERE change_number = ?1",
+        params![i64::try_from(change_number.get())?],
         map_draft_review,
     )
     .optional()
@@ -905,10 +917,10 @@ pub fn get_draft_review(
 /// # Errors
 ///
 /// On a database failure.
-pub fn delete_draft_review(conn: &Connection, change_id: ChangeNumber) -> Result<()> {
+pub fn delete_draft_review(conn: &Connection, change_number: ChangeNumber) -> Result<()> {
     conn.execute(
-        "DELETE FROM draft_reviews WHERE change_id = ?1",
-        params![i64::try_from(change_id.get())?],
+        "DELETE FROM draft_reviews WHERE change_number = ?1",
+        params![i64::try_from(change_number.get())?],
     )?;
     Ok(())
 }
@@ -951,6 +963,52 @@ mod tests {
         assert_eq!(found.canonical_head, Some(Sha::from("deadbeef")));
     }
 
+    /// v9 renames a change column on four tables; the rows written under
+    /// the old names have to come back under the new ones.
+    #[test]
+    fn v9_renames_the_change_columns_over_existing_rows() {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        // Stop at v8 and write rows the way that schema spells them.
+        for (i, sql) in MIGRATIONS.iter().enumerate().take(8) {
+            conn.execute_batch(&format!(
+                "BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;",
+                i + 1
+            ))
+            .expect("migrate to v8");
+        }
+        conn.execute_batch(
+            "INSERT INTO repos (id, git_dir, canonical_ref) VALUES (1, '/r/.git', 'main');
+             INSERT INTO changes (id, repo_id, change_key, created_at)
+                  VALUES (7, 1, 'Iabc', 't');
+             INSERT INTO log (change_id, position, kind, payload, created_at)
+                  VALUES (7, 0, 'revision', '{}', 't');
+             INSERT INTO draft_comments (change_id, revision, body, created_at, updated_at)
+                  VALUES (7, 0, 'note', 't', 't');
+             INSERT INTO draft_reviews (change_id, decision, message)
+                  VALUES (7, 'approve', '');",
+        )
+        .expect("v8-shaped rows");
+
+        migrate(&conn).expect("migrate the rest");
+
+        let change = get_change(&conn, ChangeNumber(7))
+            .expect("get")
+            .expect("still there");
+        assert_eq!(change.change_id, ChangeId::from("Iabc"));
+        let logged: i64 = conn
+            .query_row("SELECT change_number FROM log", [], |r| r.get(0))
+            .expect("log row");
+        assert_eq!(logged, 7);
+        for table in ["draft_comments", "draft_reviews"] {
+            let drafted: i64 = conn
+                .query_row(&format!("SELECT change_number FROM {table}"), [], |r| {
+                    r.get(0)
+                })
+                .unwrap_or_else(|e| panic!("{table} row: {e}"));
+            assert_eq!(drafted, 7);
+        }
+    }
+
     #[test]
     fn change_upsert_is_idempotent() {
         let conn = mem();
@@ -961,7 +1019,7 @@ mod tests {
         let b = upsert_change(&conn, repo.id, &"Idef".into()).expect("create");
         assert_ne!(a, b);
         assert_eq!(
-            get_change(&conn, a).expect("get").expect("some").change_key,
+            get_change(&conn, a).expect("get").expect("some").change_id,
             ChangeId::from("Iabc")
         );
     }
@@ -1035,7 +1093,7 @@ mod tests {
             &conn,
             7,
             &NewDraft {
-                change_id: c,
+                change_number: c,
                 revision: RevisionNumber(1),
                 thread_id: None,
                 file: Some("src/main.rs"),

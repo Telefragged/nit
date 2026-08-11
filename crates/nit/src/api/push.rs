@@ -19,7 +19,7 @@ use super::{canonical_git_dir, map_busy};
 /// Bridges push pre-flight into the append phase.
 struct Target {
     entry: Arc<ChangeEntry>,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
 }
 
 pub(super) async fn push(
@@ -56,9 +56,9 @@ pub(super) async fn push(
         // Pre-flight: reject abandoned-change pushes before writing any revisions.
         let mut targets = Vec::with_capacity(walk.commits.len());
         for wc in &walk.commits {
-            let change_id = db::upsert_change(conn, repo_row.id, &wc.change_key)?;
+            let change_number = db::upsert_change(conn, repo_row.id, &wc.change_id)?;
             let entry = state
-                .change(conn, change_id)?
+                .change(conn, change_number)?
                 .ok_or_else(|| Error::internal("change vanished after upsert"))?;
             let proj = entry.read();
             let moves = proj
@@ -67,7 +67,7 @@ pub(super) async fn push(
             if moves && matches!(proj.lifecycle, Lifecycle::Abandoned) {
                 return Err(Error::conflict(format!(
                     "change {} is abandoned — run `nit reopen` before pushing a new revision",
-                    wc.change_key
+                    wc.change_id
                 )));
             }
             // A Change-Id is never reused: without this gate a new revision
@@ -75,11 +75,14 @@ pub(super) async fn push(
             if moves && proj.is_merged() {
                 return Err(Error::conflict(format!(
                     "change {} is merged — new work needs its own Change-Id",
-                    wc.change_key
+                    wc.change_id
                 )));
             }
             drop(proj);
-            targets.push(Target { entry, change_id });
+            targets.push(Target {
+                entry,
+                change_number,
+            });
         }
 
         for (wc, t) in walk.commits.iter().zip(&targets) {
@@ -107,7 +110,8 @@ pub(super) async fn push(
                 message: wc.message.clone(),
                 resets_status,
             });
-            append_to_change(&state, conn, &t.entry, t.change_id, vec![new]).map_err(map_busy)?;
+            append_to_change(&state, conn, &t.entry, t.change_number, vec![new])
+                .map_err(map_busy)?;
             gitscan::maintain_keep_refs(&repo, &t.entry.read());
         }
 
@@ -117,8 +121,8 @@ pub(super) async fn push(
         let tip_change = {
             let proj = tip.entry.read();
             TipChange {
-                change_id: tip.change_id,
-                change_key: proj.change_key.clone(),
+                change_number: tip.change_number,
+                change_id: proj.change_id.clone(),
                 revision: proj
                     .latest_revision()
                     .map_or(RevisionNumber(0), |r| r.number),

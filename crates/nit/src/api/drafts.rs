@@ -52,7 +52,7 @@ pub(super) async fn create_draft(
             conn,
             draft_id,
             &db::NewDraft {
-                change_id: id,
+                change_number: id,
                 revision: req.revision,
                 thread_id,
                 file: req.file.as_deref(),
@@ -79,7 +79,7 @@ pub(super) async fn edit_draft(
         db::update_draft(conn, id, &req.body, req.resolved, &db::now_rfc3339())?;
         let updated = db::get_draft(conn, id)?
             .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
-        Ok(Json(views::draft_view(&updated, updated.change_id)))
+        Ok(Json(views::draft_view(&updated, updated.change_number)))
     })
     .await
 }

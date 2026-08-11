@@ -109,7 +109,8 @@ function GraphRow({
   const isHistory = node.section === "history";
   // The whole row navigates to the change; the subject stays a link so
   // cmd/middle-click still opens a tab (useRowNav ignores it).
-  const to = node.change_id !== null ? `/changes/${node.change_id}` : null;
+  const to =
+    node.change_number !== null ? `/changes/${node.change_number}` : null;
   const rowNav = useRowNav(to ?? "");
   const subject = to ? (
     <Link to={to} className="graph-subject">
@@ -158,7 +159,7 @@ export default function ChangeGraph({
   activity,
 }: {
   graph: RepoGraph;
-  /** Per-change activity, keyed by change id — the source for each node's
+  /** Per-change activity, keyed by change number — the source for each node's
    * badges. */
   activity: Map<number, NodeActivity>;
 }) {
@@ -227,8 +228,8 @@ export default function ChangeGraph({
             key={ln.node.commit_sha}
             ln={ln}
             act={
-              ln.node.change_id !== null
-                ? activity.get(ln.node.change_id)
+              ln.node.change_number !== null
+                ? activity.get(ln.node.change_number)
                 : undefined
             }
           />

@@ -144,7 +144,7 @@ pub struct CommentRange {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Draft {
     pub id: u64,
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     pub thread_id: Option<u64>,
     /// The request's anchor revision; only a new thread uses it.
     pub revision: RevisionNumber,

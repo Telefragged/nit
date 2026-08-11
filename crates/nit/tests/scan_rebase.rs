@@ -8,29 +8,29 @@ mod common;
 use common::{GitRepo, TestServer, http_get, member_id, msg, push, review};
 use serde_json::Value;
 
-fn change_detail(server: &TestServer, change_id: u64) -> Value {
-    let (st, v) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+fn change_detail(server: &TestServer, change_number: u64) -> Value {
+    let (st, v) = http_get(&server.url(&format!("/api/changes/{change_number}")));
     assert_eq!(st, 200, "{v}");
     v
 }
 
-fn path_status(server: &TestServer, tip_change_id: u64, change_key: &str) -> String {
-    let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip_change_id}")));
+fn path_status(server: &TestServer, tip_change_number: u64, change_id: &str) -> String {
+    let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip_change_number}")));
     assert_eq!(st, 200, "{chain}");
     chain["path"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|m| m["change_key"] == change_key)
-        .unwrap_or_else(|| panic!("no {change_key} in path: {chain}"))["status"]
+        .find(|m| m["change_id"] == change_id)
+        .unwrap_or_else(|| panic!("no {change_id} in path: {chain}"))["status"]
         .as_str()
         .unwrap()
         .to_string()
 }
 
 /// Approve a change at its live pinned revision.
-fn approve(server: &TestServer, change_id: u64) {
-    review(server, change_id, "approve", "lgtm");
+fn approve(server: &TestServer, change_number: u64) {
+    review(server, change_number, "approve", "lgtm");
 }
 
 /// A pure rebase (same patch-id + same message, new parent) appends a revision
@@ -122,15 +122,15 @@ fn re_push_of_an_unchanged_tip_is_idempotent() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    let change_id = member_id(&server, &pr, "Ic");
-    approve(&server, change_id);
+    let change_number = member_id(&server, &pr, "Ic");
+    approve(&server, change_number);
 
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(pr["tip_change"]["revision"], 0, "no new revision");
     assert_eq!(pr["tip_change"]["status"], "approved");
 
-    let detail = change_detail(&server, change_id);
+    let detail = change_detail(&server, change_number);
     assert_eq!(
         detail["revisions"].as_array().unwrap().len(),
         1,
@@ -150,10 +150,13 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    let change_id = member_id(&server, &pr, "Ix");
+    let change_number = member_id(&server, &pr, "Ix");
 
-    review(&server, change_id, "request_changes", "rename");
-    assert_eq!(path_status(&server, change_id, "Ix"), "changes_requested");
+    review(&server, change_number, "request_changes", "rename");
+    assert_eq!(
+        path_status(&server, change_number, "Ix"),
+        "changes_requested"
+    );
 
     let m1 = g.commit(&[g.root], "main moves\n", &[("m.txt", "m\n")]);
     g.branch("main", m1);
@@ -173,5 +176,5 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     assert_eq!(st, 200, "{pr}");
     assert_eq!(pr["tip_change"]["revision"], 2);
     assert_eq!(pr["tip_change"]["status"], "pending");
-    assert_eq!(path_status(&server, change_id, "Ix"), "pending");
+    assert_eq!(path_status(&server, change_number, "Ix"), "pending");
 }

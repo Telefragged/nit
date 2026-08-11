@@ -85,17 +85,17 @@ pub(super) async fn repo_history(
                 .map_err(Error::internal)?;
         let mut commits = Vec::with_capacity(walked.len());
         for c in walked {
-            let change_id = match &c.trailer {
-                Some(key) => db::change_id_by_key(conn, q.repo, &ChangeId::from(key.clone()))?,
+            let change_number = match &c.trailer {
+                Some(id) => db::change_number_by_id(conn, q.repo, &ChangeId::from(id.clone()))?,
                 None => None,
             };
             commits.push(HistoryCommit {
                 sha: c.sha,
                 parents: c.parents,
                 subject: c.subject,
-                change_id,
+                change_number,
                 // Coupled: a trailer naming no known change nulls both.
-                change_key: change_id.and(c.trailer.map(ChangeId::from)),
+                change_id: change_number.and(c.trailer.map(ChangeId::from)),
             });
         }
         Ok(Json(RepoHistory { commits, truncated }))
@@ -105,11 +105,11 @@ pub(super) async fn repo_history(
 
 pub(super) async fn get_chain(
     State(state): State<Arc<AppState>>,
-    AppPath(change_id): AppPath<ChangeNumber>,
+    AppPath(change_number): AppPath<ChangeNumber>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<Chain>, Error> {
     with_conn(state.pool(), move |conn| {
-        let (view, repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
+        let (view, repo_id, tip_sha) = chain_context(&state, conn, change_number, q.revision)?;
         Ok(Json(views::build_chain(&view, repo_id, &tip_sha)))
     })
     .await
@@ -118,16 +118,16 @@ pub(super) async fn get_chain(
 /// The aggregated chain log: every member's entries, sorted by global `sequence`.
 pub(super) async fn chain_log(
     State(state): State<Arc<AppState>>,
-    AppPath(change_id): AppPath<ChangeNumber>,
+    AppPath(change_number): AppPath<ChangeNumber>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<ChainLog>, Error> {
     with_conn(state.pool(), move |conn| {
-        let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
+        let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_number, q.revision)?;
         let path = view.path_from_tip(&tip_sha);
         let mut entries = Vec::new();
         for member in &path {
-            for row in db::log_entries(conn, member.change_id, 0, None)? {
-                entries.push(review::entry_from_row(member.change_id, &row)?);
+            for row in db::log_entries(conn, member.change_number, 0, None)? {
+                entries.push(review::entry_from_row(member.change_number, &row)?);
             }
         }
         entries.sort_by_key(|e| e.sequence);

@@ -30,7 +30,7 @@ pub struct LogArgs {
     /// single global `sequence` cursor to stream/drain from.
     #[arg(default_value = "..")]
     pub ranges: Vec<String>,
-    /// Chain to read, by its tip change id; overrides the cwd lookup.
+    /// Chain to read, by its tip change number; overrides the cwd lookup.
     #[arg(long)]
     pub chain: Option<ChangeNumber>,
     /// Print the terse one-line-per-entry digest instead of the full rendering.
@@ -67,15 +67,27 @@ pub fn log(args: LogArgs) -> Result<()> {
             bail!("--follow/--wait take a single starting sequence cursor (e.g. `0` or `..`)");
         };
         let cursor = follow_cursor(spec)?;
-        let change_id = resolve_chain(&client, args.chain, Retry::No)?;
+        let change_number = resolve_chain(&client, args.chain, Retry::No)?;
         return if args.wait {
-            wait(&client, change_id, cursor, args.oneline, args.reviewer_only)
+            wait(
+                &client,
+                change_number,
+                cursor,
+                args.oneline,
+                args.reviewer_only,
+            )
         } else {
-            follow(&client, change_id, cursor, args.oneline, args.reviewer_only)
+            follow(
+                &client,
+                change_number,
+                cursor,
+                args.oneline,
+                args.reviewer_only,
+            )
         };
     }
-    let change_id = resolve_chain(&client, args.chain, Retry::No)?;
-    let log: ChainLog = client.get(&format!("/api/chains/{change_id}/log"))?;
+    let change_number = resolve_chain(&client, args.chain, Retry::No)?;
+    let log: ChainLog = client.get(&format!("/api/chains/{change_number}/log"))?;
     let ranges = args
         .ranges
         .iter()
@@ -109,14 +121,14 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// When the server returns a malformed response or a fatal client error.
 fn wait(
     client: &Client,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     mut cursor: u64,
     oneline: bool,
     reviewer_only: bool,
 ) -> Result<()> {
     let retry = Retry::UntilUp;
     loop {
-        let log: ChainLog = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
+        let log: ChainLog = client.get_retry(&format!("/api/chains/{change_number}/log"), retry)?;
         let fresh: Vec<LogEntry> = log
             .entries
             .iter()
@@ -126,7 +138,7 @@ fn wait(
             .collect();
         cursor = max_seq(&log.entries).max(cursor);
         if !fresh.is_empty() {
-            let chain: Chain = client.get_retry(&format!("/api/chains/{change_id}"), retry)?;
+            let chain: Chain = client.get_retry(&format!("/api/chains/{change_number}"), retry)?;
             print_chain_digest(client, &chain, Some(cursor))?;
             println!("--- new since cursor ---");
             if oneline {
@@ -167,7 +179,7 @@ fn wait_for_entry(client: &Client, entries: &[LogEntry], retry: Retry) -> Result
 /// When a connect fails fatally or stdout can't be written.
 fn follow(
     client: &Client,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     mut cursor: u64,
     oneline: bool,
     reviewer_only: bool,
@@ -176,7 +188,7 @@ fn follow(
     loop {
         // Each connect refetches and replays past the cursor, so a reconnect
         // (server restart, overflow) re-reads whatever landed during the gap.
-        let log: ChainLog = client.get_retry(&format!("/api/chains/{change_id}/log"), retry)?;
+        let log: ChainLog = client.get_retry(&format!("/api/chains/{change_number}/log"), retry)?;
         for e in &log.entries {
             if e.sequence > cursor {
                 cursor = cursor.max(e.sequence);
@@ -217,7 +229,7 @@ fn heads(entries: &[LogEntry]) -> std::collections::HashMap<ChangeNumber, u64> {
     let mut heads: std::collections::HashMap<ChangeNumber, u64> = std::collections::HashMap::new();
     for e in entries {
         heads
-            .entry(e.change_id)
+            .entry(e.change_number)
             .and_modify(|h| *h = (*h).max(e.position + 1))
             .or_insert(e.position + 1);
     }
@@ -337,7 +349,7 @@ mod tests {
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         let muted = |payload| {
             muted_by_reviewer_only(&LogEntry {
-                change_id: ChangeNumber(1),
+                change_number: ChangeNumber(1),
                 position: 0,
                 sequence: 0,
                 created_at: String::new(),

@@ -17,18 +17,18 @@ use crate::domain::LogEntry;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum ClientMessage {
-    /// Cursor replay (the CLI follower): `change_id` → from-position.
+    /// Cursor replay (the CLI follower): `change_number` → from-position.
     ///
     /// The server replays each change's `[from, head)` backlog, then
     /// streams live. Integer map keys can't survive serde's tagged-enum
-    /// content buffering, so the ids are `String`.
+    /// content buffering, so the numbers are `String`.
     Subscribe(HashMap<String, u64>),
     /// Projection mode (the web change page).
     ///
-    /// For each change id the server folds a [`ChangeProjection`] projection and
+    /// For each change number the server folds a [`ChangeProjection`] projection and
     /// ships it, then attaches the live tail past the projection's
-    /// high-water mark. A `Vec` has no map keys, so the ids stay `u64`
-    /// (unlike `Subscribe`).
+    /// high-water mark. A `Vec` has no map keys, so the numbers stay
+    /// `u64` (unlike `Subscribe`).
     SubscribeProjection(Vec<ChangeNumber>),
 }
 

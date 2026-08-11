@@ -56,7 +56,7 @@ pub struct AppState {
     events_keepalive: InactiveReceiver<LogEntry>,
     /// Process-global allocator for draft ids.
     ///
-    /// Seeded past the `draft_comments` rows in use. Change ids are
+    /// Seeded past the `draft_comments` rows in use. Change numbers are
     /// `changes` rowids and review ids are log coordinates — neither is
     /// allocated here.
     next_id: AtomicU64,
@@ -288,25 +288,25 @@ impl AppState {
     pub fn change(
         &self,
         conn: &Connection,
-        change_id: ChangeNumber,
+        change_number: ChangeNumber,
     ) -> anyhow::Result<Option<Arc<ChangeEntry>>> {
         if let Some(existing) = self
             .changes
             .lock()
             .expect("change map poisoned")
-            .get(&change_id)
+            .get(&change_number)
             .cloned()
         {
             return Ok(Some(existing));
         }
-        let Some(row) = db::get_change(conn, change_id)? else {
+        let Some(row) = db::get_change(conn, change_number)? else {
             return Ok(None);
         };
         let rows = db::log_entries(conn, row.id, 0, None)?;
         let proj = review::replay_rows(&row, &rows)?;
         let entry = Arc::new(ChangeEntry::new(proj));
         let mut map = self.changes.lock().expect("change map poisoned");
-        Ok(Some(map.entry(change_id).or_insert(entry).clone()))
+        Ok(Some(map.entry(change_number).or_insert(entry).clone()))
     }
 
     /// Projects one repo's changes into a [`RepoView`].
@@ -340,7 +340,7 @@ impl AppState {
         statuses: &[ChangeStatus],
     ) -> anyhow::Result<Vec<ChangeProjection>> {
         let mut changes: Vec<ChangeProjection> = Vec::new();
-        for id in db::repo_change_ids(conn, repo_id, statuses)? {
+        for id in db::repo_change_numbers(conn, repo_id, statuses)? {
             if let Some(entry) = self.change(conn, id)? {
                 changes.push(entry.read().clone());
             }
@@ -380,10 +380,10 @@ pub fn append_to_change(
     state: &AppState,
     conn: &mut Connection,
     entry: &ChangeEntry,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     news: Vec<LogPayload>,
 ) -> anyhow::Result<Vec<LogEntry>> {
-    append_to_change_with(state, conn, entry, change_id, news, |_| Ok(()))
+    append_to_change_with(state, conn, entry, change_number, news, |_| Ok(()))
 }
 
 /// Appends entries to one change, with `pre_commit` in-transaction.
@@ -414,7 +414,7 @@ pub fn append_to_change_with(
     state: &AppState,
     conn: &mut Connection,
     entry: &ChangeEntry,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     news: Vec<LogPayload>,
     pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
 ) -> anyhow::Result<Vec<LogEntry>> {
@@ -432,7 +432,7 @@ pub fn append_to_change_with(
     // installed object is provably the one that validated (the fold ignores the
     // global `sequence`, so the clone equals what re-folding the committed rows
     // gives).
-    let start = db::log_head(conn, change_id)?;
+    let start = db::log_head(conn, change_number)?;
     let mut next = proj.clone();
     // The fold mints new-thread ids; the write lock makes that allocation
     // race-free against a concurrent shared-change push.
@@ -443,7 +443,7 @@ pub fn append_to_change_with(
             review::fold(
                 &mut next,
                 LogEntry {
-                    change_id,
+                    change_number,
                     sequence: 0,
                     position: start + u64::try_from(k).expect("batch fits u64"),
                     created_at: now.clone(),
@@ -460,7 +460,7 @@ pub fn append_to_change_with(
         let payload = review::payload_to_json(&e.payload)?;
         let sequence = db::append_log(
             &tx,
-            change_id,
+            change_number,
             e.position,
             e.payload.kind().as_str(),
             &payload,
@@ -470,7 +470,7 @@ pub fn append_to_change_with(
     }
     // Re-stamp the denormalized status from the validated projection, in the
     // same transaction as the appends.
-    db::update_change_status(&tx, change_id, next.current_status())?;
+    db::update_change_status(&tx, change_number, next.current_status())?;
     tx.commit()?;
 
     // Install the validated projection after the durable commit, and publish to

@@ -16,23 +16,23 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
     assert_eq!(
-        status_at(&server, change_id, Some(0)).as_deref(),
+        status_at(&server, change_number, Some(0)).as_deref(),
         Some("pending")
     );
 
     let (st, detail) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/abandon")),
+        &server.url(&format!("/api/changes/{change_number}/abandon")),
         &json!({"message": "superseded by another approach"}),
     );
     assert_eq!(st, 200, "{detail}");
     assert_eq!(
-        status_at(&server, change_id, Some(0)).as_deref(),
+        status_at(&server, change_number, Some(0)).as_deref(),
         Some("abandoned")
     );
 
-    let (_, log) = http_get(&server.url(&format!("/api/chains/{change_id}/log")));
+    let (_, log) = http_get(&server.url(&format!("/api/chains/{change_number}/log")));
     let abandoned = log["entries"]
         .as_array()
         .expect("entries")
@@ -46,23 +46,23 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
 
     // Idempotent: re-abandoning an already-abandoned change is a no-op.
     let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/abandon")),
+        &server.url(&format!("/api/changes/{change_number}/abandon")),
         &json!({}),
     );
     assert_eq!(st, 200);
     assert_eq!(
-        status_at(&server, change_id, Some(0)).as_deref(),
+        status_at(&server, change_number, Some(0)).as_deref(),
         Some("abandoned")
     );
 
     // Reopen clears it back to the retained (pending) status.
     let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reopen")),
+        &server.url(&format!("/api/changes/{change_number}/reopen")),
         &json!({}),
     );
     assert_eq!(st, 200);
     assert_eq!(
-        status_at(&server, change_id, Some(0)).as_deref(),
+        status_at(&server, change_number, Some(0)).as_deref(),
         Some("pending")
     );
 }

@@ -36,14 +36,14 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(st, 200, "{res}");
 
     let tip = &res["tip_change"];
-    assert_eq!(tip["change_key"], "I002");
+    assert_eq!(tip["change_id"], "I002");
     assert_eq!(tip["revision"], 0);
     assert_eq!(tip["status"], "pending");
 
     let chain = only_chain(&server);
     let path = chain["path"].as_array().unwrap();
     assert_eq!(path.len(), 2);
-    assert_eq!(path[0]["change_key"], "I001");
+    assert_eq!(path[0]["change_id"], "I001");
     assert_eq!(path[0]["position"], 0);
     assert_eq!(path[0]["revision"], 0);
     assert_eq!(path[0]["commit_sha"], c1.to_string());
@@ -52,7 +52,7 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
         None,
         "PathEntry has no parent_sha"
     );
-    assert_eq!(path[1]["change_key"], "I002");
+    assert_eq!(path[1]["change_id"], "I002");
     assert_eq!(path[1]["position"], 1);
     assert_eq!(path[1]["revision"], 0);
     assert_eq!(path[1]["commit_sha"], c2.to_string());
@@ -83,7 +83,7 @@ fn chains_lists_one_ordered_tip() {
     let path = chain["path"].as_array().unwrap();
     let keys: Vec<&str> = path
         .iter()
-        .map(|m| m["change_key"].as_str().unwrap())
+        .map(|m| m["change_id"].as_str().unwrap())
         .collect();
     assert_eq!(keys, vec!["I001", "I002", "I003"]);
     for (i, m) in path.iter().enumerate() {
@@ -128,12 +128,12 @@ fn extending_the_branch_adds_a_change() {
     g.branch("feat", c2);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    assert_eq!(res["tip_change"]["change_key"], "I002");
+    assert_eq!(res["tip_change"]["change_id"], "I002");
     assert_eq!(res["tip_change"]["revision"], 0);
 
     let path = only_chain(&server)["path"].as_array().unwrap().clone();
     assert_eq!(path.len(), 2);
-    assert_eq!(path[1]["change_key"], "I002");
+    assert_eq!(path[1]["change_id"], "I002");
     assert_eq!(path[1]["position"], 1);
 
     let id1 = member_id(&server, &res, "I001");
@@ -156,7 +156,7 @@ fn amend_opens_revision_one_on_the_change() {
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     assert_eq!(
-        res["tip_change"]["change_id"], id,
+        res["tip_change"]["change_number"], id,
         "same change across the amend"
     );
     assert_eq!(res["tip_change"]["revision"], 1);
@@ -211,7 +211,7 @@ fn already_merged_commit_rejects_the_push() {
 }
 
 #[test]
-fn missing_change_id_rejects_the_push() {
+fn missing_change_number_rejects_the_push() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], "no trailer here\n", &[("a.rs", "a\n")]);
     g.branch("feat", c1);
@@ -229,7 +229,7 @@ fn missing_change_id_rejects_the_push() {
 }
 
 #[test]
-fn duplicate_change_id_rejects_the_push() {
+fn duplicate_change_number_rejects_the_push() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "Idup"), &[("a.rs", "a\n")]);
     let c2 = g.commit(&[c1], &msg("two", "Idup"), &[("b.rs", "b\n")]);

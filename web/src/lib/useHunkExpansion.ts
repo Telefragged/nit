@@ -81,7 +81,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
     if (full) return Promise.resolve(full);
     if (fetching.current?.file !== file) {
       const lines = getFileLines(
-        ctx.changeId,
+        ctx.changeNumber,
         ctx.selected,
         file.path,
         ctx.against,

@@ -21,17 +21,17 @@ fn subscribe_replays_backlog_then_streams_live() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
 
-    let mut socket = ws_subscribe(&server, &[(change_id, 0)], READ);
+    let mut socket = ws_subscribe(&server, &[(change_number, 0)], READ);
     let backlog = ws_entry(&mut socket).expect("backlog revision entry");
-    assert_eq!(backlog["change_id"], change_id);
+    assert_eq!(backlog["change_number"], change_number);
     assert_eq!(backlog["position"], 0);
     assert_eq!(backlog["kind"], "revision");
 
     // review() drafts via a side-table write (no log entry), then submits —
     // that's why the `review` lands at position 1.
-    review(&server, change_id, "request_changes", "fix");
+    review(&server, change_number, "request_changes", "fix");
     let live = ws_entry(&mut socket).expect("live review entry");
     assert_eq!(live["kind"], "review");
     assert_eq!(live["position"], 1);
@@ -51,16 +51,16 @@ fn subscribe_projection_ships_it_then_streams_live() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
 
-    let mut socket = ws_subscribe_projection(&server, &[change_id], READ);
+    let mut socket = ws_subscribe_projection(&server, &[change_number], READ);
     let snap = ws_read(&mut socket).expect("projection frame")["projection"].clone();
-    assert_eq!(snap["id"], change_id);
+    assert_eq!(snap["id"], change_number);
     assert_eq!(snap["revisions"].as_array().expect("revisions").len(), 1);
     // One entry (the revision) is folded, so the live tail resumes at position 1.
     assert_eq!(snap["entries_folded"], 1);
 
-    review(&server, change_id, "approve", "lgtm");
+    review(&server, change_number, "approve", "lgtm");
     let live = ws_entry(&mut socket).expect("live review entry past the projection");
     assert_eq!(live["kind"], "review");
     assert_eq!(live["position"], 1);
@@ -74,14 +74,14 @@ fn subscribe_at_head_skips_backlog() {
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
 
     // The revision is at position 0, so head is position 1: no backlog replays.
-    let mut socket = ws_subscribe(&server, &[(change_id, 1)], Duration::from_millis(400));
+    let mut socket = ws_subscribe(&server, &[(change_number, 1)], Duration::from_millis(400));
     assert!(ws_read(&mut socket).is_none(), "no backlog at head");
 
     // Resubscribe is not needed — the live append arrives on this same socket.
-    review(&server, change_id, "approve", "lgtm");
+    review(&server, change_number, "approve", "lgtm");
     let live = ws_entry(&mut socket).expect("live entry after head subscribe");
     assert_eq!(live["kind"], "review");
     assert_eq!(live["position"], 1);
@@ -113,7 +113,7 @@ fn unsubscribed_changes_are_silent() {
     review(&server, two, "approve", "ok");
     review(&server, one, "approve", "ok");
     let frame = ws_entry(&mut socket).expect("review for one");
-    assert_eq!(frame["change_id"], one);
+    assert_eq!(frame["change_number"], one);
     assert_eq!(frame["kind"], "review");
     assert_eq!(frame["position"], 1);
 }

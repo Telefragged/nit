@@ -61,7 +61,7 @@ pub struct CommentArgs {
 /// When the server can't be reached or the arguments name no change.
 pub fn comment(args: CommentArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
-    let change_id = args.target.resolve(&client)?;
+    let change_number = args.target.resolve(&client)?;
     let resolved = if args.resolve {
         Some(true)
     } else if args.unresolve {
@@ -88,7 +88,7 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         body,
         resolved,
     };
-    let thread: Thread = client.post(&format!("/api/changes/{change_id}/comments"), &req)?;
+    let thread: Thread = client.post(&format!("/api/changes/{change_number}/comments"), &req)?;
     print_comment(&thread, replied);
     Ok(())
 }

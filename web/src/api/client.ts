@@ -67,12 +67,12 @@ export const getRepo = (id: number) => request<Repo>("GET", `/repos/${id}`);
 
 /** The derived chain through a change's tip. `revision` selects which
  * version of the change to root on (and hence the chain context). */
-export const getChain = (changeId: number, revision?: number) =>
+export const getChain = (changeNumber: number, revision?: number) =>
   request<Chain>(
     "GET",
     revision === undefined
-      ? `/chains/${changeId}`
-      : `/chains/${changeId}?revision=${revision}`,
+      ? `/chains/${changeNumber}`
+      : `/chains/${changeNumber}?revision=${revision}`,
   );
 
 /** A repo's changes as folded projections, narrowed to the statuses named —
@@ -93,19 +93,23 @@ export const getHistory = (repoId: number) =>
 export const getChangeDrafts = (id: number) =>
   request<ChangeDrafts>("GET", `/changes/${id}/drafts`);
 
-export const getDiff = (changeId: number, revision: number, against?: number) =>
+export const getDiff = (
+  changeNumber: number,
+  revision: number,
+  against?: number,
+) =>
   request<Diff>(
     "GET",
     against === undefined
-      ? `/changes/${changeId}/revisions/${revision}/diff`
-      : `/changes/${changeId}/revisions/${revision}/diff?against=${against}`,
+      ? `/changes/${changeNumber}/revisions/${revision}/diff`
+      : `/changes/${changeNumber}/revisions/${revision}/diff?against=${against}`,
   );
 
 /** File `path`'s full-context diff lines over the same trees as `getDiff`
  * (`against` selects the interdiff base), for revealing the unchanged runs
  * the shown hunks hide — drift and all. */
 export const getFileLines = (
-  changeId: number,
+  changeNumber: number,
   revision: number,
   path: string,
   against?: number,
@@ -113,14 +117,14 @@ export const getFileLines = (
   const q = `path=${encodeURIComponent(path)}`;
   return request<FileLines>(
     "GET",
-    `/changes/${changeId}/revisions/${revision}/lines?${
+    `/changes/${changeNumber}/revisions/${revision}/lines?${
       against === undefined ? q : `${q}&against=${against}`
     }`,
   );
 };
 
-export const createDraft = (changeId: number, draft: NewDraft) =>
-  request<Draft>("POST", `/changes/${changeId}/drafts`, draft);
+export const createDraft = (changeNumber: number, draft: NewDraft) =>
+  request<Draft>("POST", `/changes/${changeNumber}/drafts`, draft);
 
 export const updateDraft = (id: number, req: EditDraft) =>
   request<Draft>("PATCH", `/drafts/${id}`, req);
@@ -130,11 +134,11 @@ export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 // Reviewer decisions (drafted like comments, published per chain)
 
 /** Set (or overwrite) a change's draft decision. */
-export const setDraftDecision = (changeId: number, req: DraftDecision) =>
-  request<DraftDecision>("PUT", `/changes/${changeId}/decision`, req);
+export const setDraftDecision = (changeNumber: number, req: DraftDecision) =>
+  request<DraftDecision>("PUT", `/changes/${changeNumber}/decision`, req);
 
-export const clearDecision = (changeId: number) =>
-  request("DELETE", `/changes/${changeId}/decision`);
+export const clearDecision = (changeNumber: number) =>
+  request("DELETE", `/changes/${changeNumber}/decision`);
 
 /** Publish every member's draft decision for the chain rooted at `tipChangeId`.
  * `revision` picks the chain context (the tip's own), like getChain. */

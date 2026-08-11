@@ -50,7 +50,7 @@ let nextReviewId = 50;
 function drainComments(c: ChangeRecord): CommentInput[] {
   const comments: CommentInput[] = [];
   const changeDrafts = drafts
-    .filter((x) => x.change_id === c.id)
+    .filter((x) => x.change_number === c.id)
     .sort((a, b) => a.id - b.id);
   for (const d of changeDrafts) {
     if (d.thread_id !== null) {
@@ -113,7 +113,7 @@ function publishMember(
     c.terminal = undefined;
     emitLifecycle(c.id, now, "reopened");
   }
-  const hasComments = drafts.some((d) => d.change_id === c.id);
+  const hasComments = drafts.some((d) => d.change_number === c.id);
   const verdict: Verdict | null =
     decision === "approve" ||
     decision === "request_changes" ||
@@ -151,11 +151,11 @@ function publishMember(
 /** Append a `lifecycle` entry to a change's mock log so live followers see the
  * abandon/reopen the record mutation just made. */
 function emitLifecycle(
-  changeId: number,
+  changeNumber: number,
   now: string,
   action: "abandoned" | "reopened",
 ): void {
-  mockAppend(changeId, now, {
+  mockAppend(changeNumber, now, {
     kind: "lifecycle",
     payload: { action, message: null },
   });
@@ -201,8 +201,9 @@ function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
 function walkPath(
   tip: TipRecord,
 ): { change: ChangeRecord; revision: Revision }[] {
-  const tipChange = changes.find((c) => c.id === tip.tip_change_id);
-  if (!tipChange) throw new Error(`unknown tip change ${tip.tip_change_id}`);
+  const tipChange = changes.find((c) => c.id === tip.tip_change_number);
+  if (!tipChange)
+    throw new Error(`unknown tip change ${tip.tip_change_number}`);
   const tipRev =
     tipChange.revisions.find((r) => r.number === tip.revision) ??
     latestRevision(tipChange);
@@ -227,9 +228,9 @@ function pathEntry(
 ): PathEntry {
   const { change: c, revision } = member;
   return {
-    change_id: c.id,
+    change_number: c.id,
     position,
-    change_key: c.change_key,
+    change_id: c.change_id,
     revision: revision.number,
     status: statusAt(c, revision.number),
     subject: c.subject,
@@ -262,30 +263,32 @@ function chainState(path: PathEntry[]): ChainState {
 function chainView(tip: TipRecord): Chain {
   const path = derivePath(tip);
   return {
-    tip_change_id: tip.tip_change_id,
+    tip_change_number: tip.tip_change_number,
     repo_id: tip.repo_id,
     state: chainState(path),
     path,
   };
 }
 
-/** Resolve `GET /chains/{change_id}?revision=N` to a tip (mirrors the backend's
- * `tip_for`): a live tip whose path walks `changeId` at that revision, else the
+/** Resolve `GET /chains/{change_number}?revision=N` to a tip (mirrors the backend's
+ * `tip_for`): a live tip whose path walks `changeNumber` at that revision, else the
  * change as its own degenerate tip. So an INTERIOR change resolves to the tip
  * that extends through it (the full chain), not a 404. */
 function resolveTip(
-  changeId: number,
+  changeNumber: number,
   requested?: number,
 ): TipRecord | undefined {
-  const c = changes.find((x) => x.id === changeId);
+  const c = changes.find((x) => x.id === changeNumber);
   if (!c) return undefined;
   const revision = requested ?? latestRevision(c).number;
   for (const tip of tips) {
-    const member = derivePath(tip).find((e) => e.change_id === changeId);
+    const member = derivePath(tip).find(
+      (e) => e.change_number === changeNumber,
+    );
     if (member?.revision === revision) return tip;
   }
   return {
-    tip_change_id: changeId,
+    tip_change_number: changeNumber,
     repo_id: c.repo_id,
     revision,
     active: !c.terminal,
@@ -328,22 +331,20 @@ function listChanges(repoId: number | null, statuses: ChangeStatus[]) {
 }
 
 /** `GET /api/history`: the repo's synthetic canonical history, HEAD-first, a
- * fixed window deep. A node naming a landed change (`change_key`) is enriched
+ * fixed window deep. A node naming a landed change (`change_id`) is enriched
  * with it; any other commit reports both id and key null (coupled). */
 function repoHistory(repoId: number) {
   const repo = repos.find((r) => r.id === repoId) ?? notFound(`repo ${repoId}`);
   const commits = repo.history.slice(0, MERGED_WINDOW + 1).map((h) => {
-    const landed = h.change_key
-      ? changes.find(
-          (c) => c.repo_id === repoId && c.change_key === h.change_key,
-        )
+    const landed = h.change_id
+      ? changes.find((c) => c.repo_id === repoId && c.change_id === h.change_id)
       : undefined;
     return {
       sha: h.sha,
       parents: h.parents,
       subject: h.subject,
-      change_id: landed?.id ?? null,
-      change_key: landed?.change_key ?? null,
+      change_number: landed?.id ?? null,
+      change_id: landed?.change_id ?? null,
     };
   });
   return { commits, truncated: repo.history.length > MERGED_WINDOW + 1 };
@@ -365,7 +366,7 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
 /** The reviewer's overlay alone (`GET /changes/{id}/drafts`). */
 function changeDrafts(c: ChangeRecord) {
   return {
-    drafts: drafts.filter((x) => x.change_id === c.id).map(renderDraft),
+    drafts: drafts.filter((x) => x.change_number === c.id).map(renderDraft),
     draft_decision: draftReviews.get(c.id) ?? null,
   };
 }
@@ -480,7 +481,7 @@ export async function mockRequest(
   // an empty timeline so the endpoint exists.
   if ((m = /^\/chains\/(\d+)\/log$/.exec(p)) && method === "GET") {
     const id = Number(m[1]);
-    if (!tips.some((t) => t.tip_change_id === id))
+    if (!tips.some((t) => t.tip_change_number === id))
       return notFound(`chain ${id}`);
     return { entries: [] };
   }
@@ -501,15 +502,15 @@ export async function mockRequest(
     if (!tip) return notFound(`chain ${id}`);
     const now = new Date().toISOString();
     let submitted = 0;
-    const errors: { change_id: number; message: string }[] = [];
+    const errors: { change_number: number; message: string }[] = [];
     for (const member of derivePath(tip)) {
-      const draft = draftReviews.get(member.change_id);
+      const draft = draftReviews.get(member.change_number);
       if (!draft) continue; // no decision — leave the member's comment drafts
-      const c = changes.find((x) => x.id === member.change_id);
+      const c = changes.find((x) => x.id === member.change_number);
       if (!c) continue;
       const block = decisionBlock(c, draft.decision);
       if (block) {
-        errors.push({ change_id: c.id, message: block });
+        errors.push({ change_number: c.id, message: block });
         continue;
       }
       publishMember(c, draft.decision, draft.message, member.revision, now);
@@ -572,7 +573,7 @@ export async function mockRequest(
     const now = new Date().toISOString();
     const record: DraftRecord = {
       id: nextDraftId++,
-      change_id: c.id,
+      change_number: c.id,
       thread_id: req.thread_id ?? null,
       revision: req.revision,
       file: req.file ?? null,

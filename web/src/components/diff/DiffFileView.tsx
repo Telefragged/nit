@@ -272,7 +272,7 @@ export default function DiffFileView({
       // column is the selected revision; the old column is its parent
       // (base) or, in an interdiff, the FROM revision's own side.
       const anchor = draftAnchor(input.target.side, ctx.selected, ctx.against);
-      return createDraft(ctx.changeId, {
+      return createDraft(ctx.changeNumber, {
         revision: anchor.revision,
         file: input.target.file,
         side: anchor.side,
@@ -290,7 +290,7 @@ export default function DiffFileView({
       ctx.setEditorDirty(false);
       ctx.setEditingTarget(null);
       void queryClient.invalidateQueries({
-        queryKey: ["drafts", ctx.changeId],
+        queryKey: ["drafts", ctx.changeNumber],
       });
     },
   });
@@ -363,7 +363,7 @@ export default function DiffFileView({
     for (const t of inline.get(`${side}:${no}`) ?? []) {
       items.push(
         <div className="meta-item" key={`t-${side}-${threadKey(t)}`}>
-          <CommentThread thread={t} changeId={ctx.changeId} />
+          <CommentThread thread={t} changeNumber={ctx.changeNumber} />
         </div>,
       );
     }
@@ -559,7 +559,7 @@ export default function DiffFileView({
                     </span>
                     <Code text={t.line_text ?? "(file comment)"} lang={lang} />
                   </div>
-                  <CommentThread thread={t} changeId={ctx.changeId} />
+                  <CommentThread thread={t} changeNumber={ctx.changeNumber} />
                 </div>
               ))}
             </div>

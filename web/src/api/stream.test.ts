@@ -32,7 +32,7 @@ describe("openStream (mock mode)", () => {
     });
     expect(got).toHaveLength(before + 1);
     const last = got.at(-1);
-    expect(last && "entry" in last && last.entry.change_id).toBe(30);
+    expect(last && "entry" in last && last.entry.change_number).toBe(30);
 
     handle.close();
   });

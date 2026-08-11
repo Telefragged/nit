@@ -11,21 +11,21 @@ mod common;
 use common::*;
 use serde_json::{Value, json};
 
-fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_key: &str) -> u64 {
+fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_id: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
-    member_id(server, &res, change_key)
+    member_id(server, &res, change_id)
 }
 
-fn detail(server: &TestServer, change_id: u64) -> Value {
-    let (st, d) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+fn detail(server: &TestServer, change_number: u64) -> Value {
+    let (st, d) = http_get(&server.url(&format!("/api/changes/{change_number}")));
     assert_eq!(st, 200, "{d}");
     d
 }
 
-fn draft(server: &TestServer, change_id: u64, decision: &str, message: &str) {
+fn draft(server: &TestServer, change_number: u64, decision: &str, message: &str) {
     let (st, d) = http_put(
-        &server.url(&format!("/api/changes/{change_id}/decision")),
+        &server.url(&format!("/api/changes/{change_number}/decision")),
         &json!({"decision": decision, "message": message}),
     );
     assert_eq!(st, 200, "{d}");
@@ -42,13 +42,13 @@ fn submit_chain(server: &TestServer, tip: u64) -> Value {
 }
 
 /// The change's status at the revision its own chain pins.
-fn status_at(server: &TestServer, change_id: u64) -> String {
-    common::status_at(server, change_id, None).unwrap_or_else(|| "?".to_string())
+fn status_at(server: &TestServer, change_number: u64) -> String {
+    common::status_at(server, change_number, None).unwrap_or_else(|| "?".to_string())
 }
 
-fn draft_comment(server: &TestServer, change_id: u64, file: &str, line: u64, body: &str) {
+fn draft_comment(server: &TestServer, change_number: u64, file: &str, line: u64, body: &str) {
     let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/drafts")),
+        &server.url(&format!("/api/changes/{change_number}/drafts")),
         &json!({"revision": 0, "file": file, "line": line, "body": body}),
     );
     assert_eq!(st, 200);
@@ -271,7 +271,7 @@ fn batch_submit_skips_illegal_decision_keeps_row() {
     assert_eq!(out["submitted"], 0);
     let errors = out["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0]["change_id"], id);
+    assert_eq!(errors[0]["change_number"], id);
     assert!(errors[0]["message"].as_str().unwrap().contains("abandoned"));
     // The draft decision is kept so the reviewer can fix it.
     assert_eq!(detail(&server, id)["draft_decision"]["decision"], "approve");

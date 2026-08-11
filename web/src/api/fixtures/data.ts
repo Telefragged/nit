@@ -2,7 +2,7 @@
 // mutable shared store the server logic (./index) reads and mutates in place.
 // These records double as component-test fixtures.
 //
-// Chains are DERIVED, never stored: a tip is a (tip_change_id, repo) pair,
+// Chains are DERIVED, never stored: a tip is a (tip_change_number, repo) pair,
 // and its path is computed by walking the tip revision's parent_sha back to
 // the repo's base through the commit-sha → (change, revision) index (a
 // gerrit relation chain). A change's displayed status is the verdict of the
@@ -61,7 +61,7 @@ import type {
 // the derivation resolves the fork like production: repo 1 forks below the
 // window (the collapsed marker), repo 2 has an off-HEAD chain and a 2-behind
 // chain, repo 3 fans out at HEAD. Includes a merge commit and a landed
-// change's commit (change_key).
+// change's commit (change_id).
 
 const graphHistory: HistNode[] = [
   {
@@ -103,7 +103,7 @@ const deepHistory: HistNode[] = [
     sha: sha(905),
     subject: "build: drop unused openssl feature",
     parents: [sha(906)],
-    change_key: "I0d9c8b7a6f5e4321",
+    change_id: "I0d9c8b7a6f5e4321",
   },
   {
     sha: sha(906),
@@ -153,7 +153,7 @@ const msg10r1 =
 const change10: ChangeRecord = {
   id: 10,
   repo_id: 1,
-  change_key: "I9a41c7e2b3d4f5a6",
+  change_id: "I9a41c7e2b3d4f5a6",
   subject: "auth: add TokenStore schema and config plumbing",
   revisions: [
     {
@@ -261,7 +261,7 @@ const msg11r2 =
 const change11: ChangeRecord = {
   id: 11,
   repo_id: 1,
-  change_key: "I3f2d8a91c0b7e514",
+  change_id: "I3f2d8a91c0b7e514",
   subject: "auth: rotate refresh tokens on use",
   revisions: [
     {
@@ -752,7 +752,7 @@ const msg12r1 =
 const change12: ChangeRecord = {
   id: 12,
   repo_id: 1,
-  change_key: "I77b0e4f5a8123c9d",
+  change_id: "I77b0e4f5a8123c9d",
   subject: "auth: document rotation and ship flow diagram",
   revisions: [
     {
@@ -852,7 +852,7 @@ const msg40r1 =
 const change40: ChangeRecord = {
   id: 40,
   repo_id: 1,
-  change_key: "I0d9c8b7a6f5e4321",
+  change_id: "I0d9c8b7a6f5e4321",
   subject: "build: drop unused openssl feature",
   terminal: "merged",
   revisions: [
@@ -925,7 +925,7 @@ const msg20r1 =
 const change20: ChangeRecord = {
   id: 20,
   repo_id: 2,
-  change_key: "Ib8d3e6f1a4c75290",
+  change_id: "Ib8d3e6f1a4c75290",
   subject: "wal: checkpoint on idle, not on every commit",
   revisions: [
     {
@@ -1039,7 +1039,7 @@ const msg30r1 =
 const change30: ChangeRecord = {
   id: 30,
   repo_id: 2,
-  change_key: "Ie1f4a7b2c5d80936",
+  change_id: "Ie1f4a7b2c5d80936",
   subject: "ci: key caches on lockfile hash only",
   revisions: [
     {
@@ -1139,7 +1139,7 @@ const msgE =
 const changeA: ChangeRecord = {
   id: 50,
   repo_id: 3,
-  change_key: "Iaa11bb22cc33dd44",
+  change_id: "Iaa11bb22cc33dd44",
   subject: "orbit: extract the scheduler trait",
   revisions: [
     {
@@ -1172,7 +1172,7 @@ const changeA: ChangeRecord = {
 const changeD: ChangeRecord = {
   id: 52,
   repo_id: 3,
-  change_key: "Idd44cc33bb22aa11",
+  change_id: "Idd44cc33bb22aa11",
   subject: "orbit: add a deadline clock source",
   revisions: [
     {
@@ -1196,7 +1196,7 @@ const changeD: ChangeRecord = {
 const changeB: ChangeRecord = {
   id: 51,
   repo_id: 3,
-  change_key: "Ibb22cc33dd44ee55",
+  change_id: "Ibb22cc33dd44ee55",
   subject: "orbit: fair-share scheduler policy",
   revisions: [
     {
@@ -1234,7 +1234,7 @@ const changeB: ChangeRecord = {
 const changeC: ChangeRecord = {
   id: 53,
   repo_id: 3,
-  change_key: "Icc33dd44ee55ff66",
+  change_id: "Icc33dd44ee55ff66",
   subject: "orbit: wire the fair policy into the runtime",
   revisions: [
     {
@@ -1259,7 +1259,7 @@ const changeC: ChangeRecord = {
 const changeE: ChangeRecord = {
   id: 55,
   repo_id: 3,
-  change_key: "Iee55ff66aa11bb22",
+  change_id: "Iee55ff66aa11bb22",
   subject: "orbit: deadline policy on top of fair-share",
   revisions: [
     {
@@ -1297,38 +1297,38 @@ export const changes: ChangeRecord[] = [
 
 export const tips: TipRecord[] = [
   {
-    tip_change_id: 12,
+    tip_change_number: 12,
     repo_id: 1,
     revision: 0,
     active: true,
   },
   {
-    tip_change_id: 40,
+    tip_change_number: 40,
     repo_id: 1,
     revision: 0,
     active: false, // merged — only with ?status=all
   },
   {
-    tip_change_id: 20,
+    tip_change_number: 20,
     repo_id: 2,
     revision: 0,
     active: true,
   },
   {
-    tip_change_id: 30,
+    tip_change_number: 30,
     repo_id: 2,
     revision: 0,
     active: true,
   },
   // repo 3 — two tips through the shared change B (51)
   {
-    tip_change_id: 53,
+    tip_change_number: 53,
     repo_id: 3,
     revision: 0,
     active: true,
   },
   {
-    tip_change_id: 55,
+    tip_change_number: 55,
     repo_id: 3,
     revision: 0,
     active: true,
@@ -1344,7 +1344,7 @@ export const threads: ThreadRecord[] = [
   // Published alongside the approving review.
   {
     id: 70,
-    change_id: 10,
+    change_number: 10,
     revision: 0,
     file: null,
     line: null,
@@ -1364,7 +1364,7 @@ export const threads: ThreadRecord[] = [
   // Anchor survives the amend, line shifts.
   {
     id: 71,
-    change_id: 11,
+    change_number: 11,
     revision: 0,
     file: "src/auth/rotate.rs",
     line: 22,
@@ -1398,7 +1398,7 @@ export const threads: ThreadRecord[] = [
   },
   {
     id: 73,
-    change_id: 11,
+    change_number: 11,
     revision: 0,
     file: "src/auth/store.rs",
     line: 58,
@@ -1429,7 +1429,7 @@ export const threads: ThreadRecord[] = [
   // survives amend, shifting 22-23 → 30-31 with chars intact.
   {
     id: 79,
-    change_id: 11,
+    change_number: 11,
     revision: 0,
     file: "src/auth/rotate.rs",
     line: 23,
@@ -1453,7 +1453,7 @@ export const threads: ThreadRecord[] = [
   // left of the r0 → r1 interdiff.
   {
     id: 75,
-    change_id: 11,
+    change_number: 11,
     revision: 0,
     file: "src/auth/rotate.rs",
     line: 21,
@@ -1483,7 +1483,7 @@ export const threads: ThreadRecord[] = [
   // line survives unchanged (no shift needed).
   {
     id: 77,
-    change_id: 11,
+    change_number: 11,
     revision: 0,
     file: COMMIT_MSG_PATH,
     line: 5,
@@ -1513,7 +1513,7 @@ export const threads: ThreadRecord[] = [
   // Two threads from the request_changes review.
   {
     id: 80,
-    change_id: 20,
+    change_number: 20,
     revision: 0,
     file: "src/wal.rs",
     line: 94,
@@ -1532,7 +1532,7 @@ export const threads: ThreadRecord[] = [
   },
   {
     id: 81,
-    change_id: 20,
+    change_number: 20,
     revision: 0,
     file: "src/wal/backoff.rs",
     line: 3,
@@ -1553,7 +1553,7 @@ export const threads: ThreadRecord[] = [
   // (not a revision), so both chains see it.
   {
     id: 82,
-    change_id: 51,
+    change_number: 51,
     revision: 0,
     file: "src/sched/fair.rs",
     line: 2,
@@ -1580,7 +1580,7 @@ export const threads: ThreadRecord[] = [
 export const drafts: DraftRecord[] = [
   {
     id: 100,
-    change_id: 11,
+    change_number: 11,
     thread_id: null,
     revision: 1,
     file: "src/auth/rotate.rs",
@@ -1596,7 +1596,7 @@ export const drafts: DraftRecord[] = [
   },
   {
     id: 101,
-    change_id: 11,
+    change_number: 11,
     thread_id: null,
     revision: 1,
     file: "tests/rotation.rs",
@@ -1611,7 +1611,7 @@ export const drafts: DraftRecord[] = [
   },
   {
     id: 102,
-    change_id: 11,
+    change_number: 11,
     thread_id: null,
     revision: 1,
     file: "src/auth/rotate.rs",

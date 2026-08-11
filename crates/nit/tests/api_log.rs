@@ -1,4 +1,4 @@
-//! The aggregated chain log over real HTTP: `GET /api/chains/{change_id}/log`
+//! The aggregated chain log over real HTTP: `GET /api/chains/{change_number}/log`
 //! merges every member's entries, sorted by ascending global `sequence`.
 
 mod common;
@@ -63,7 +63,7 @@ fn chain_log_aggregates_members_in_seq_order() {
         .iter()
         .map(|e| {
             (
-                e["change_id"].as_u64().unwrap(),
+                e["change_number"].as_u64().unwrap(),
                 e["kind"].as_str().unwrap(),
             )
         })

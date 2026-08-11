@@ -16,7 +16,7 @@ use super::Sha;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Chain {
-    pub tip_change_id: ChangeNumber,
+    pub tip_change_number: ChangeNumber,
     pub repo_id: u64,
     pub state: ChainState,
     /// Oldest-first, base → tip.
@@ -31,10 +31,10 @@ pub struct Chain {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct PathEntry {
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     /// Position in THIS path (0-based).
     pub position: u64,
-    pub change_key: ChangeId,
+    pub change_id: ChangeId,
     /// The revision this path walks.
     pub revision: RevisionNumber,
     /// Per `(change, this revision)`.

@@ -9,7 +9,7 @@ use common::{GitRepo, TestServer, http_get, http_post, http_put, msg, nit, nit_b
 use serde_json::json;
 
 /// Registers the repo (a push needs one to exist), bare-pushes the cwd HEAD,
-/// and returns the chain's tip change id (the push prints text, so the id comes
+/// and returns the chain's tip change number (the push prints text, so it comes
 /// from the chain list).
 fn push_head(server: &TestServer, g: &GitRepo) -> u64 {
     let (ok, _, err) = nit(server, g, &["repo", "create", "--canonical-ref", "main"]);
@@ -17,9 +17,9 @@ fn push_head(server: &TestServer, g: &GitRepo) -> u64 {
     let (ok, _, err) = nit(server, g, &["push"]);
     assert!(ok, "push failed: {err}");
     let (_, chains) = http_get(&server.url("/api/chains"));
-    chains["chains"][0]["tip_change_id"]
+    chains["chains"][0]["tip_change_number"]
         .as_u64()
-        .expect("tip change id")
+        .expect("tip change number")
 }
 
 /// `nit log --wait 0` wakes immediately on any existing activity past the cursor
@@ -55,10 +55,10 @@ fn wait_blocks_then_wakes_on_a_review() {
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let change_id = push_head(&server, &g);
+    let change_number = push_head(&server, &g);
 
     // The head sequence after the push (the author's revision entry).
-    let (_, log) = http_get(&server.url(&format!("/api/chains/{change_id}/log")));
+    let (_, log) = http_get(&server.url(&format!("/api/chains/{change_number}/log")));
     let head_seq = log["entries"]
         .as_array()
         .unwrap()
@@ -71,8 +71,8 @@ fn wait_blocks_then_wakes_on_a_review() {
     // wait parks (owned URLs so the thread needs no borrow of `server`). The
     // the draft is a side-table write (no log entry); the submit appends the
     // `review` that wakes the parked wait.
-    let decision_url = server.url(&format!("/api/changes/{change_id}/decision"));
-    let submit_url = server.url(&format!("/api/chains/{change_id}/submit"));
+    let decision_url = server.url(&format!("/api/changes/{change_number}/decision"));
+    let submit_url = server.url(&format!("/api/chains/{change_number}/submit"));
     let reviewer = std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(400));
         let (st, _) = http_put(

@@ -25,7 +25,7 @@ pub fn change_id_trailer(message: &str) -> Option<String> {
     found
 }
 
-/// Change keys for the walked commits' messages, in walk order.
+/// The `Change-Id`s of the walked commits' messages, in walk order.
 ///
 /// Walk order is oldest first. Enforces the required-Change-Id contract:
 /// every commit carries a `Change-Id:` trailer, no two commits share one,
@@ -36,7 +36,10 @@ pub fn change_id_trailer(message: &str) -> Option<String> {
 /// # Errors
 ///
 /// The documented scan-failure message for the first violated rule.
-pub fn require_keys(messages: &[String], short_shas: &[String]) -> Result<Vec<String>, String> {
+pub fn require_change_ids(
+    messages: &[String],
+    short_shas: &[String],
+) -> Result<Vec<String>, String> {
     debug_assert_eq!(messages.len(), short_shas.len());
 
     let fixups: Vec<&str> = messages
@@ -128,42 +131,42 @@ mod tests {
     }
 
     #[test]
-    fn require_keys_happy_path() {
+    fn require_change_ids_happy_path() {
         let messages = msgs(&["a\n\nChange-Id: Iaaa\n", "b\n\nChange-Id: Ibbb\n"]);
         assert_eq!(
-            require_keys(&messages, &shas(2)),
+            require_change_ids(&messages, &shas(2)),
             Ok(vec!["Iaaa".to_string(), "Ibbb".to_string()])
         );
     }
 
     #[test]
-    fn require_keys_rejects_fixup_and_squash_commits() {
+    fn require_change_ids_rejects_fixup_and_squash_commits() {
         let messages = msgs(&[
             "a\n\nChange-Id: Iaaa\n",
             "fixup! a\n",
             "squash! a\n\nChange-Id: Ibbb\n",
         ]);
-        let err = require_keys(&messages, &shas(3)).expect_err("should be rejected");
+        let err = require_change_ids(&messages, &shas(3)).expect_err("should be rejected");
         assert!(err.contains("fixup!/squash!"), "{err}");
         assert!(err.contains("sha1") && err.contains("sha2"), "{err}");
     }
 
     #[test]
-    fn require_keys_rejects_missing_trailer() {
+    fn require_change_ids_rejects_missing_trailer() {
         let messages = msgs(&["a\n\nChange-Id: Iaaa\n", "no trailer\n"]);
-        let err = require_keys(&messages, &shas(2)).expect_err("should be rejected");
+        let err = require_change_ids(&messages, &shas(2)).expect_err("should be rejected");
         assert!(err.contains("without a Change-Id trailer"), "{err}");
         assert!(err.contains("sha1") && !err.contains("sha0"), "{err}");
     }
 
     #[test]
-    fn require_keys_rejects_duplicate_trailer() {
+    fn require_change_ids_rejects_duplicate_trailer() {
         let messages = msgs(&[
             "a\n\nChange-Id: Idup\n",
             "b\n\nChange-Id: Ibbb\n",
             "c\n\nChange-Id: Idup\n",
         ]);
-        let err = require_keys(&messages, &shas(3)).expect_err("should be rejected");
+        let err = require_change_ids(&messages, &shas(3)).expect_err("should be rejected");
         assert!(err.contains("duplicate Change-Id Idup"), "{err}");
         assert!(err.contains("sha0") && err.contains("sha2"), "{err}");
     }

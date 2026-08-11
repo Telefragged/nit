@@ -21,7 +21,7 @@ nit comment --change-id <Change-Id> --thread <thread-id> -F -
 ```
 
 Target a change by the `Change-Id:` trailer on the commit you're commenting on,
-with `--change-id <Change-Id>`. (`--change <id>` takes the numeric change id
+with `--change-id <Change-Id>`. (`--change <number>` takes the change number
 instead, for when a human hands you one.) A range is `START-END`, each endpoint
 `line:char` (e.g. `42:8-42:30`).
 

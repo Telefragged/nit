@@ -29,9 +29,9 @@ use super::Error;
 #[must_use]
 pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &Sha) -> Chain {
     let path = view.path_from_tip(tip_sha);
-    let tip_change_id = path.last().map_or(ChangeNumber(0), |m| m.change_id);
+    let tip_change_number = path.last().map_or(ChangeNumber(0), |m| m.change_number);
     Chain {
-        tip_change_id,
+        tip_change_number,
         repo_id,
         state: chain::derive_state(view, &path),
         path: path_entries(view, &path),
@@ -43,7 +43,7 @@ fn path_entries(view: &RepoView, path: &[PathMember]) -> Vec<PathEntry> {
     path.iter()
         .enumerate()
         .filter_map(|(position, m)| {
-            view.change(m.change_id)
+            view.change(m.change_number)
                 .map(|c| path_entry(c, m, u64::try_from(position).unwrap_or(u64::MAX)))
         })
         .collect()
@@ -52,9 +52,9 @@ fn path_entries(view: &RepoView, path: &[PathMember]) -> Vec<PathEntry> {
 fn path_entry(change: &ChangeProjection, member: &PathMember, position: u64) -> PathEntry {
     let revision = member.revision;
     PathEntry {
-        change_id: change.id,
+        change_number: change.id,
         position,
-        change_key: change.change_key.clone(),
+        change_id: change.change_id.clone(),
         revision,
         status: change.status_at(revision),
         subject: change.subject_at(revision),
@@ -69,17 +69,21 @@ fn path_entry(change: &ChangeProjection, member: &PathMember, position: u64) -> 
 /// an abandoned change resolves to a real chain, not only the degenerate
 /// fallback.
 #[must_use]
-pub fn tip_for(view: &RepoView, change_id: ChangeNumber, revision: RevisionNumber) -> Option<Sha> {
+pub fn tip_for(
+    view: &RepoView,
+    change_number: ChangeNumber,
+    revision: RevisionNumber,
+) -> Option<Sha> {
     for tip in view.enumerable_tips() {
         let path = view.path_from_tip(&tip);
         if path
             .iter()
-            .any(|m| m.change_id == change_id && m.revision == revision)
+            .any(|m| m.change_number == change_number && m.revision == revision)
         {
             return Some(tip);
         }
     }
-    view.change(change_id)
+    view.change(change_number)
         .and_then(|c| c.revision(revision))
         .map(|r| r.commit_sha.clone())
 }
@@ -95,25 +99,25 @@ pub fn tip_for(view: &RepoView, change_id: ChangeNumber, revision: RevisionNumbe
 /// no enclosing tip.
 pub fn resolve_revision_tip(
     view: &RepoView,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     requested: Option<RevisionNumber>,
 ) -> Result<(RevisionNumber, Sha), Error> {
     let revision = requested
         .or_else(|| {
-            view.change(change_id)
+            view.change(change_number)
                 .and_then(|c| c.latest_revision().map(|r| r.number))
         })
-        .ok_or_else(|| Error::not_found(format!("change {change_id} has no revisions")))?;
-    let tip_sha = tip_for(view, change_id, revision)
+        .ok_or_else(|| Error::not_found(format!("change {change_number} has no revisions")))?;
+    let tip_sha = tip_for(view, change_number, revision)
         .ok_or_else(|| Error::not_found(format!("revision {revision} not found")))?;
     Ok((revision, tip_sha))
 }
 
 #[must_use]
-pub fn draft_view(d: &db::DraftRow, change_id: ChangeNumber) -> Draft {
+pub fn draft_view(d: &db::DraftRow, change_number: ChangeNumber) -> Draft {
     Draft {
         id: d.id,
-        change_id,
+        change_number,
         thread_id: d.thread_id,
         revision: d.revision,
         file: d.file.clone(),
@@ -138,13 +142,13 @@ pub fn draft_view(d: &db::DraftRow, change_id: ChangeNumber) -> Draft {
 /// # Errors
 ///
 /// When reading drafts fails.
-pub fn change_overlay(conn: &Connection, change_id: ChangeNumber) -> Result<ChangeDrafts> {
+pub fn change_overlay(conn: &Connection, change_number: ChangeNumber) -> Result<ChangeDrafts> {
     Ok(ChangeDrafts {
-        drafts: db::drafts_for_change(conn, change_id)?
+        drafts: db::drafts_for_change(conn, change_number)?
             .iter()
-            .map(|d| draft_view(d, change_id))
+            .map(|d| draft_view(d, change_number))
             .collect(),
-        draft_decision: db::get_draft_review(conn, change_id)?.map(|r| DraftDecision {
+        draft_decision: db::get_draft_review(conn, change_number)?.map(|r| DraftDecision {
             decision: r.decision,
             message: r.message,
         }),

@@ -24,14 +24,14 @@ pub struct PushResult {
     ///
     /// Always present — a push that walks to nothing is rejected (409).
     /// Read the derived chain back with
-    /// `GET /api/chains/{tip_change.change_id}`.
+    /// `GET /api/chains/{tip_change.change_number}`.
     pub tip_change: TipChange,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TipChange {
-    pub change_id: ChangeNumber,
-    pub change_key: ChangeId,
+    pub change_number: ChangeNumber,
+    pub change_id: ChangeId,
     pub revision: RevisionNumber,
     pub status: ChangeStatus,
 }

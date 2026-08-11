@@ -29,9 +29,9 @@ use super::{ChainQuery, chain_context, change_or_404, map_busy};
 /// thread carries its anchor).
 fn drafts_to_comments(
     conn: &rusqlite::Connection,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
 ) -> anyhow::Result<Vec<CommentInput>> {
-    Ok(db::drafts_for_change(conn, change_id)?
+    Ok(db::drafts_for_change(conn, change_number)?
         .iter()
         .map(|d| CommentInput {
             thread_id: d.thread_id,
@@ -63,12 +63,12 @@ fn publish_member(
     conn: &mut rusqlite::Connection,
     state: &Arc<AppState>,
     entry: &ChangeEntry,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     decision: Decision,
     message: &str,
     revision: RevisionNumber,
 ) -> Result<(), Error> {
-    let comments = drafts_to_comments(conn, change_id)?;
+    let comments = drafts_to_comments(conn, change_number)?;
     let drained = !comments.is_empty();
     let verdict = decision
         .as_verdict()
@@ -101,11 +101,11 @@ fn publish_member(
         ));
     }
 
-    append_to_change_with(state, conn, entry, change_id, news, |tx| {
+    append_to_change_with(state, conn, entry, change_number, news, |tx| {
         if drained {
-            db::delete_drafts_for_change(tx, change_id)?;
+            db::delete_drafts_for_change(tx, change_number)?;
         }
-        db::delete_draft_review(tx, change_id)
+        db::delete_draft_review(tx, change_number)
     })
     .map_err(map_busy)?;
     Ok(())
@@ -154,25 +154,25 @@ pub(super) async fn clear_decision(
 /// re-submit finishes a torn batch without double-publishing.
 pub(super) async fn submit_chain(
     State(state): State<Arc<AppState>>,
-    AppPath(change_id): AppPath<ChangeNumber>,
+    AppPath(change_number): AppPath<ChangeNumber>,
     AppQuery(q): AppQuery<ChainQuery>,
 ) -> Result<Json<BatchSubmitResult>, Error> {
     with_conn(state.pool(), move |conn| {
-        let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_id, q.revision)?;
+        let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_number, q.revision)?;
 
         let mut submitted = 0u64;
         let mut errors = Vec::new();
         for member in view.path_from_tip(&tip_sha) {
-            let Some(draft) = db::get_draft_review(conn, member.change_id)? else {
+            let Some(draft) = db::get_draft_review(conn, member.change_number)? else {
                 continue; // leave its comment drafts
             };
-            let Some(member_entry) = state.change(conn, member.change_id)? else {
+            let Some(member_entry) = state.change(conn, member.change_number)? else {
                 continue;
             };
             let lifecycle = member_entry.read().lifecycle;
             if let Some(reason) = decision_block(lifecycle, draft.decision) {
                 errors.push(SubmitError {
-                    change_id: member.change_id,
+                    change_number: member.change_number,
                     message: reason.to_string(),
                 });
                 continue;
@@ -181,14 +181,14 @@ pub(super) async fn submit_chain(
                 conn,
                 &state,
                 &member_entry,
-                member.change_id,
+                member.change_number,
                 draft.decision,
                 &draft.message,
                 member.revision,
             ) {
                 Ok(()) => submitted += 1,
                 Err(e) => errors.push(SubmitError {
-                    change_id: member.change_id,
+                    change_number: member.change_number,
                     message: e.message,
                 }),
             }

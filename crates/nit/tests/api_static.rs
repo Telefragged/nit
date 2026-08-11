@@ -1,6 +1,6 @@
 //! Static UI serving: the built SPA outside /api, index.html fallback
 //! for client-side routes, API-only without a web dist. Client routes
-//! are change-id addressed (`/chains/{change_id}`, `/changes/{id}`).
+//! are change-id addressed (`/chains/{change_number}`, `/changes/{id}`).
 
 mod common;
 

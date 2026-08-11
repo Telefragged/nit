@@ -4,7 +4,7 @@ import { changeDetail, foldEntry, replayProjection } from "./fold";
 import type { LogEntry } from "./types";
 
 const revision: LogEntry = {
-  change_id: 1,
+  change_number: 1,
   position: 0,
   sequence: 0,
   created_at: "t0",
@@ -18,7 +18,7 @@ const revision: LogEntry = {
   },
 };
 const review: LogEntry = {
-  change_id: 1,
+  change_number: 1,
   position: 1,
   sequence: 1,
   created_at: "t1",
@@ -36,7 +36,7 @@ describe("the shared wasm fold", () => {
     const proj = replayProjection({
       id: 1,
       repo_id: 1,
-      change_key: "I1",
+      change_id: "I1",
       entries: [revision],
     });
     // entries_folded is the high-water mark (next position to fold), not a count.
@@ -57,7 +57,7 @@ describe("the shared wasm fold", () => {
     const projection = replayProjection({
       id: 1,
       repo_id: 1,
-      change_key: "I1",
+      change_id: "I1",
       entries: [revision],
     });
 

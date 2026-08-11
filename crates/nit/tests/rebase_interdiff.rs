@@ -599,11 +599,12 @@ fn vs_parent_diff_is_never_drift_processed() {
     assert_eq!(st, 200, "push r0: {p0}");
     let (st, p1) = push(&server, &g, "feat2", "main");
     assert_eq!(st, 200, "push r1: {p1}");
-    let change_id = member_id(&server, &p1, "Ifeat");
+    let change_number = member_id(&server, &p1, "Ifeat");
 
     // r1's vs-parent diff is the plain `parent1 → r1` tree diff: feat.rs added,
     // nothing else, no drift — its parent is the source of truth, not r0's.
-    let (st, diff) = http_get(&server.url(&format!("/api/changes/{change_id}/revisions/1/diff")));
+    let (st, diff) =
+        http_get(&server.url(&format!("/api/changes/{change_number}/revisions/1/diff")));
     assert_eq!(st, 200, "vs-parent diff: {diff}");
     let any_drift = diff["files"]
         .as_array()
@@ -656,7 +657,7 @@ fn http_interdiff_contains_a_pure_rebase() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, p0) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "push the stack: {p0}");
-    let change_id = member_id(&server, &p0, "Ifeat");
+    let change_number = member_id(&server, &p0, "Ifeat");
 
     // Amend C1 (its body moves) and rebase C2 onto it with the *same* delta and
     // message — a pure rebase of C2. Re-push: C1 gets revision 1 (a real edit),
@@ -677,7 +678,7 @@ fn http_interdiff_contains_a_pure_rebase() {
     let (st, p1) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "re-push: {p1}");
 
-    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_number}")));
     assert_eq!(st, 200, "change detail: {detail}");
     let revs = detail["revisions"].as_array().expect("revisions");
     assert_eq!(revs.len(), 2, "C2 has two revisions");
@@ -686,7 +687,7 @@ fn http_interdiff_contains_a_pure_rebase() {
     // The r0 → r1 interdiff: shared.rs is entirely drift (C1's amendment) and
     // drops out, so only the (unchanged) commit message remains.
     let (st, diff) = http_get(&server.url(&format!(
-        "/api/changes/{change_id}/revisions/1/diff?against=0"
+        "/api/changes/{change_number}/revisions/1/diff?against=0"
     )));
     assert_eq!(st, 200, "interdiff: {diff}");
     let paths: Vec<&str> = diff["files"]

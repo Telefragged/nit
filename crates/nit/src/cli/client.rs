@@ -165,7 +165,7 @@ impl Client {
         self.retry_loop(retry, || self.get_raw(path))
     }
 
-    /// `subs` maps `change_id` → from-position.
+    /// `subs` maps `change_number` → from-position.
     pub(crate) fn ws_connect(
         &self,
         subs: &std::collections::HashMap<ChangeNumber, u64>,

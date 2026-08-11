@@ -57,7 +57,9 @@ export default function Dashboard() {
   const activityIds = useMemo(
     () =>
       (graph?.nodes ?? []).flatMap((n) =>
-        n.section === "open" && n.change_id !== null ? [n.change_id] : [],
+        n.section === "open" && n.change_number !== null
+          ? [n.change_number]
+          : [],
       ),
     [graph],
   );

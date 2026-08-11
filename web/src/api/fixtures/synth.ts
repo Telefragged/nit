@@ -44,7 +44,7 @@ export function synthLog(
   const entries: LogEntry[] = [];
   const add = (created_at: string, payload: LogPayload) =>
     entries.push({
-      change_id: change.id,
+      change_number: change.id,
       position: entries.length,
       sequence: sequence++,
       created_at,

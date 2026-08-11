@@ -45,7 +45,7 @@ export default function ReviewBar({
   change: ChangeDetail;
   /** The selected revision's chain context, for the chain-wide submit. */
   chain: Chain | undefined;
-  /** Each chain member's draft decision (or null), keyed by change id —
+  /** Each chain member's draft decision (or null), keyed by change number —
    * the source for the chain-wide submit count. */
   memberDecisions: Map<number, Decision | null>;
   selectedRevision: number;
@@ -65,12 +65,12 @@ export default function ReviewBar({
   const drafts = change.drafts.length;
   const draftDecision = change.draft_decision;
   // This change's path member carries its displayed status (per (change, revision)).
-  const here = chain?.path.find((c) => c.change_id === change.id);
+  const here = chain?.path.find((c) => c.change_number === change.id);
   const abandoned = here?.status === "abandoned";
   // Chain members with a draft decision — what Submit publishes.
   const draftedInChain =
     chain?.path.filter(
-      (c) => (memberDecisions.get(c.change_id) ?? null) !== null,
+      (c) => (memberDecisions.get(c.change_number) ?? null) !== null,
     ).length ?? 0;
 
   const invalidate = () => {
@@ -111,7 +111,7 @@ export default function ReviewBar({
   const submit = useMutation({
     mutationFn: () => {
       if (!chain) throw new Error("no chain context to submit");
-      return submitChain(chain.tip_change_id, chain.path.at(-1)?.revision);
+      return submitChain(chain.tip_change_number, chain.path.at(-1)?.revision);
     },
     onSuccess: (result) => {
       invalidate();

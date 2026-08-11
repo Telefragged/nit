@@ -51,8 +51,8 @@ pub fn sha_patch_id(repo: &Repository, sha: &Sha) -> Option<String> {
 /// can orphan objects the sha-walk, a vs-parent diff of retained history,
 /// or the timer's `fork_sha..canonical` walk still needs.
 #[must_use]
-pub fn keep_ref_name(change_id: ChangeNumber, revision_number: RevisionNumber) -> String {
-    format!("refs/nit/keep/{change_id}/{revision_number}")
+pub fn keep_ref_name(change_number: ChangeNumber, revision_number: RevisionNumber) -> String {
+    format!("refs/nit/keep/{change_number}/{revision_number}")
 }
 
 /// Ensures the keep ref for a revision exists.
@@ -62,13 +62,13 @@ pub fn keep_ref_name(change_id: ChangeNumber, revision_number: RevisionNumber) -
 /// pruned) are logged, never fatal.
 pub fn ensure_keep_ref(
     repo: &Repository,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     number: RevisionNumber,
     commit_sha: &Sha,
 ) {
-    if let Err(err) = try_ensure_keep_ref(repo, change_id, number, commit_sha) {
+    if let Err(err) = try_ensure_keep_ref(repo, change_number, number, commit_sha) {
         tracing::warn!(
-            change_id = change_id.get(),
+            change_number = change_number.get(),
             revision = number.get(),
             "cannot maintain keep ref: {err:#}"
         );
@@ -77,11 +77,11 @@ pub fn ensure_keep_ref(
 
 fn try_ensure_keep_ref(
     repo: &Repository,
-    change_id: ChangeNumber,
+    change_number: ChangeNumber,
     number: RevisionNumber,
     commit_sha: &Sha,
 ) -> Result<()> {
-    let name = keep_ref_name(change_id, number);
+    let name = keep_ref_name(change_number, number);
     let oid = Oid::from_str(commit_sha.as_str())?;
     let current = repo.find_reference(&name).ok().and_then(|r| r.target());
     if current != Some(oid) {

@@ -42,7 +42,7 @@ fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
 struct ReplayInput {
     id: u64,
     repo_id: u64,
-    change_key: String,
+    change_id: String,
     entries: Vec<LogEntry>,
 }
 
@@ -60,7 +60,7 @@ pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
     let proj = fold::replay(
         ChangeNumber(input.id),
         input.repo_id,
-        input.change_key.into(),
+        input.change_id.into(),
         input.entries,
     );
     to_js(&proj)

@@ -24,7 +24,7 @@ use super::resolve::resolve_change;
 /// The shared `--change` / `--change-id` selector for change-scoped commands.
 #[derive(clap::Args)]
 pub struct ChangeTarget {
-    /// The change, by its numeric id.
+    /// The change, by its number.
     #[arg(
         long,
         conflicts_with = "change_id",
@@ -37,12 +37,12 @@ pub struct ChangeTarget {
 }
 
 impl ChangeTarget {
-    /// Resolves to a numeric change id, querying the server for a `Change-Id:`.
+    /// Resolves to a change number, querying the server for a `Change-Id:`.
     pub(crate) fn resolve(&self, client: &Client) -> Result<ChangeNumber> {
         match (self.change, self.change_id.as_deref()) {
-            (Some(id), _) => Ok(id),
-            (None, Some(key)) => resolve_change(client, key),
-            (None, None) => bail!("pass --change <id> or --change-id <Change-Id>"),
+            (Some(number), _) => Ok(number),
+            (None, Some(id)) => resolve_change(client, id),
+            (None, None) => bail!("pass --change <number> or --change-id <Change-Id>"),
         }
     }
 }
@@ -65,7 +65,7 @@ pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
 ///
 /// A CLI display concern; the server ships only the raw entry.
 fn entry_summary(entry: &LogEntry) -> String {
-    let change = entry.change_id;
+    let change = entry.change_number;
     match &entry.payload {
         LogPayload::Revision(p) => {
             format!("change {change} new revision {}", short_sha(&p.commit_sha))
@@ -87,7 +87,7 @@ fn entry_summary(entry: &LogEntry) -> String {
 /// Prints the chain digest with each member's open-thread count.
 ///
 /// A `state=` header (prefixed with `cursor=` when following) and one aligned
-/// line per member — `position change_key status rN Nu subject`. The chain path
+/// line per member — `position change_id status rN Nu subject`. The chain path
 /// carries only structure, so the counts are fetched from each member's change
 /// projection (`GET /api/changes/{id}`); the fold is in memory, so each is a
 /// cheap read.
@@ -109,13 +109,16 @@ pub(crate) fn print_chain_digest(
 fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<ChangeNumber, u64>> {
     let mut counts = HashMap::new();
     for member in &chain.path {
-        let detail: ChangeDetail = client.get(&format!("/api/changes/{}", member.change_id))?;
+        let detail: ChangeDetail = client.get(&format!("/api/changes/{}", member.change_number))?;
         let open = detail
             .threads
             .iter()
             .filter(|t| t.revision == member.revision && !t.resolved)
             .count();
-        counts.insert(member.change_id, u64::try_from(open).unwrap_or(u64::MAX));
+        counts.insert(
+            member.change_number,
+            u64::try_from(open).unwrap_or(u64::MAX),
+        );
     }
     Ok(counts)
 }
@@ -139,10 +142,13 @@ fn chain_digest(
         .map(|m| {
             [
                 m.position.to_string(),
-                short_key(&m.change_key),
+                short_change_id(&m.change_id),
                 m.status.as_str().to_string(),
                 format!("r{}", m.revision),
-                format!("{}u", unresolved.get(&m.change_id).copied().unwrap_or(0)),
+                format!(
+                    "{}u",
+                    unresolved.get(&m.change_number).copied().unwrap_or(0)
+                ),
             ]
         })
         .collect();
@@ -182,8 +188,8 @@ pub(crate) fn aligned_row<const N: usize>(
     format!("{body}  {tail}")
 }
 
-pub(crate) fn short_key(key: &ChangeId) -> String {
-    key.as_str().chars().take(8).collect()
+pub(crate) fn short_change_id(change_id: &ChangeId) -> String {
+    change_id.as_str().chars().take(8).collect()
 }
 
 /// Confirms a posted comment.
@@ -195,13 +201,13 @@ pub(crate) fn print_comment(thread: &Thread, replied: bool) {
     if replied {
         println!(
             "replied on thread {} (change {})  {state}",
-            thread.id, thread.change_id
+            thread.id, thread.change_number
         );
     } else {
         println!(
             "opened thread {} on change {}  {}  {state}",
             thread.id,
-            thread.change_id,
+            thread.change_number,
             anchor_str(thread.file.as_deref(), thread.line, thread.range.as_ref()),
         );
     }
@@ -214,7 +220,7 @@ pub(crate) fn print_comment(thread: &Thread, replied: bool) {
 /// only its thread — a reply's anchor lives on the thread's opening entry.
 pub(crate) fn render_entry(entry: &LogEntry) -> String {
     let sequence = entry.sequence;
-    let change = entry.change_id;
+    let change = entry.change_number;
     match &entry.payload {
         LogPayload::Revision(p) => format!(
             "sequence {sequence}  change {change}  revision {}  {}",
@@ -356,7 +362,7 @@ mod tests {
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         use nit_types::domain::{LifecycleAction, Verdict};
         let entry = |payload| LogEntry {
-            change_id: ChangeNumber(7),
+            change_number: ChangeNumber(7),
             position: 0,
             sequence: 0,
             created_at: String::new(),
@@ -405,8 +411,8 @@ mod tests {
         use nit_types::domain::CommentRange;
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         use nit_types::domain::{Side, Verdict};
-        let entry = |change_id, position, sequence, payload| LogEntry {
-            change_id,
+        let entry = |change_number, position, sequence, payload| LogEntry {
+            change_number,
             position,
             sequence,
             created_at: String::new(),
@@ -503,17 +509,19 @@ mod tests {
         use nit_types::domain::PathEntry;
         use nit_types::domain::{ChainState, ChangeStatus};
         let member =
-            |change_id, position, key: &str, status, revision: u64, subject: &str| PathEntry {
-                change_id,
-                position,
-                change_key: key.into(),
-                status,
-                revision: RevisionNumber(revision),
-                subject: subject.to_string(),
-                commit_sha: "".into(),
+            |change_number, position, change_id: &str, status, revision: u64, subject: &str| {
+                PathEntry {
+                    change_number,
+                    position,
+                    change_id: change_id.into(),
+                    status,
+                    revision: RevisionNumber(revision),
+                    subject: subject.to_string(),
+                    commit_sha: "".into(),
+                }
             };
         let chain = Chain {
-            tip_change_id: ChangeNumber(2),
+            tip_change_number: ChangeNumber(2),
             repo_id: 1,
             state: ChainState::AuthorsTurn,
             path: vec![

@@ -78,14 +78,14 @@ fn trailer_enrichment_couples_id_and_key() {
 
     let merged = &commits[0];
     assert_eq!(merged["sha"], topic.to_string());
-    assert_eq!(merged["change_key"], "Itopic", "merged change enriched");
-    assert!(merged["change_id"].is_u64(), "{merged}");
+    assert_eq!(merged["change_id"], "Itopic", "merged change enriched");
+    assert!(merged["change_number"].is_u64(), "{merged}");
 
     let foreign = &commits[1];
     assert_eq!(foreign["sha"], c1.to_string());
-    assert!(foreign["change_id"].is_null(), "{foreign}");
+    assert!(foreign["change_number"].is_null(), "{foreign}");
     assert!(
-        foreign["change_key"].is_null(),
+        foreign["change_id"].is_null(),
         "a foreign trailer nulls both: {foreign}"
     );
 }

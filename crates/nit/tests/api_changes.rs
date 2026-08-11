@@ -16,7 +16,7 @@ fn get_changes(server: &TestServer, query: &str) -> Vec<Value> {
 fn keys(changes: &[Value]) -> Vec<String> {
     let mut keys: Vec<String> = changes
         .iter()
-        .map(|c| c["change_key"].as_str().expect("change_key").to_string())
+        .map(|c| c["change_id"].as_str().expect("change_id").to_string())
         .collect();
     keys.sort();
     keys
@@ -50,7 +50,7 @@ fn status_filter_is_explicit_and_absent_means_all() {
 
     let ia = all
         .iter()
-        .find(|c| c["change_key"] == "Ia")
+        .find(|c| c["change_id"] == "Ia")
         .expect("Ia")
         .clone();
     review(&server, ia["id"].as_u64().expect("id"), "approve", "lgtm");

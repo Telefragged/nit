@@ -9,30 +9,30 @@ mod common;
 use common::*;
 use serde_json::{Value, json};
 /// For single-commit chains the tip change is the repo's first change.
-fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_key: &str) -> u64 {
+fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_id: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
-    member_id(server, &res, change_key)
+    member_id(server, &res, change_id)
 }
 
-fn drafts_url(server: &TestServer, change_id: u64) -> String {
-    server.url(&format!("/api/changes/{change_id}/drafts"))
+fn drafts_url(server: &TestServer, change_number: u64) -> String {
+    server.url(&format!("/api/changes/{change_number}/drafts"))
 }
 
-fn detail(server: &TestServer, change_id: u64) -> Value {
-    let (st, d) = http_get(&server.url(&format!("/api/changes/{change_id}")));
+fn detail(server: &TestServer, change_number: u64) -> Value {
+    let (st, d) = http_get(&server.url(&format!("/api/changes/{change_number}")));
     assert_eq!(st, 200, "{d}");
     d
 }
 
-fn thread_of(server: &TestServer, change_id: u64, thread_id: u64) -> Value {
-    detail(server, change_id)["threads"]
+fn thread_of(server: &TestServer, change_number: u64, thread_id: u64) -> Value {
+    detail(server, change_number)["threads"]
         .as_array()
         .unwrap()
         .iter()
         .find(|t| t["id"].as_u64() == Some(thread_id))
         .cloned()
-        .unwrap_or_else(|| panic!("thread {thread_id} not on change {change_id}"))
+        .unwrap_or_else(|| panic!("thread {thread_id} not on change {change_number}"))
 }
 
 /// A draft opens a new thread; submitting a review drains it into one review,
@@ -89,7 +89,7 @@ fn review_drains_drafts_and_sets_status() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|m| m["change_id"].as_u64() == Some(id))
+        .find(|m| m["change_number"].as_u64() == Some(id))
         .unwrap();
     assert_eq!(member["status"], "changes_requested");
 }
@@ -399,7 +399,7 @@ fn pure_rebase_carries_status_forward() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|m| m["change_id"].as_u64() == Some(id))
+        .find(|m| m["change_number"].as_u64() == Some(id))
         .unwrap();
     assert_eq!(member["revision"], 1);
     assert_eq!(
@@ -447,7 +447,7 @@ fn agent_comment_opens_thread_without_review_status() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|m| m["change_id"].as_u64() == Some(id))
+        .find(|m| m["change_number"].as_u64() == Some(id))
         .unwrap();
     assert_eq!(member["status"], "pending");
 

@@ -37,6 +37,6 @@ pub fn push(args: PushArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
     let body = PushRequest { git_dir, tip };
     let result: PushResult = client.post("/api/push", &body)?;
-    let chain: Chain = client.get(&format!("/api/chains/{}", result.tip_change.change_id))?;
+    let chain: Chain = client.get(&format!("/api/chains/{}", result.tip_change.change_number))?;
     print_chain_digest(&client, &chain, None)
 }

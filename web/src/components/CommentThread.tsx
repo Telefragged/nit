@@ -27,11 +27,17 @@ function PublishedComment({ comment }: { comment: ThreadComment }) {
 
 /** A pending draft: editable (Edit/Delete), with the DRAFT badge. An
  * empty-body reply draft carries a resolution only — render the intent. */
-function DraftComment({ draft, changeId }: { draft: Draft; changeId: number }) {
+function DraftComment({
+  draft,
+  changeNumber,
+}: {
+  draft: Draft;
+  changeNumber: number;
+}) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["drafts", changeId] });
+    queryClient.invalidateQueries({ queryKey: ["drafts", changeNumber] });
 
   const update = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
@@ -123,15 +129,15 @@ interface ThreadEditor {
  */
 export default function CommentThread({
   thread,
-  changeId,
+  changeNumber,
 }: {
   thread: UiThread;
-  changeId: number;
+  changeNumber: number;
 }) {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<ThreadEditor | null>(null);
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["drafts", changeId] });
+    queryClient.invalidateQueries({ queryKey: ["drafts", changeNumber] });
 
   const resolved = pendingResolved(thread);
   const pending = resolved !== thread.resolved;
@@ -143,7 +149,7 @@ export default function CommentThread({
   // exclusive request anchors: send whichever one anchored the thread.
   const saveDraft = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
-      createDraft(changeId, {
+      createDraft(changeNumber, {
         revision: thread.revision,
         ...(thread.file !== null ? { file: thread.file } : {}),
         side: thread.side,
@@ -173,7 +179,7 @@ export default function CommentThread({
         <PublishedComment key={i} comment={c} />
       ))}
       {thread.drafts.map((d) => (
-        <DraftComment key={d.id} draft={d} changeId={changeId} />
+        <DraftComment key={d.id} draft={d} changeNumber={changeNumber} />
       ))}
       {editor ? (
         <CommentEditor

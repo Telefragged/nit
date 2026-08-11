@@ -8,7 +8,7 @@ use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
 fn revision_entry() -> LogEntry {
     LogEntry {
-        change_id: ChangeNumber(7),
+        change_number: ChangeNumber(7),
         position: 2,
         sequence: 42,
         created_at: "t".to_string(),
@@ -27,7 +27,7 @@ fn log_entry_flattens_to_an_adjacent_tag() {
     let json = serde_json::to_string(&revision_entry()).expect("serialize");
     assert_eq!(
         json,
-        r#"{"change_id":7,"position":2,"sequence":42,"created_at":"t","kind":"revision","payload":{"commit_sha":"a","parent_sha":"b","fork_sha":"c","message":"m","resets_status":true}}"#
+        r#"{"change_number":7,"position":2,"sequence":42,"created_at":"t","kind":"revision","payload":{"commit_sha":"a","parent_sha":"b","fork_sha":"c","message":"m","resets_status":true}}"#
     );
 }
 
@@ -63,7 +63,7 @@ fn payload_serializes_as_the_bare_inner_struct() {
 #[test]
 fn lifecycle_skips_absent_fields_under_flatten() {
     let entry = LogEntry {
-        change_id: ChangeNumber(1),
+        change_number: ChangeNumber(1),
         position: 0,
         sequence: 0,
         created_at: "t".to_string(),
@@ -76,7 +76,7 @@ fn lifecycle_skips_absent_fields_under_flatten() {
     let json = serde_json::to_string(&entry).expect("serialize");
     assert_eq!(
         json,
-        r#"{"change_id":1,"position":0,"sequence":0,"created_at":"t","kind":"lifecycle","payload":{"action":"merged"}}"#
+        r#"{"change_number":1,"position":0,"sequence":0,"created_at":"t","kind":"lifecycle","payload":{"action":"merged"}}"#
     );
 }
 

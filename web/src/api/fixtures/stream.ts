@@ -18,7 +18,7 @@ for (const change of changes) {
     change.id,
     synthLog(
       change,
-      threads.filter((t) => t.change_id === change.id),
+      threads.filter((t) => t.change_number === change.id),
     ),
   );
 }
@@ -28,19 +28,19 @@ for (const change of changes) {
 let nextSeq = 1_000_000;
 
 /** A change's current synth log — the source the REST read folds (./index). */
-export function logFor(changeId: number): LogEntry[] {
-  return logs.get(changeId) ?? [];
+export function logFor(changeNumber: number): LogEntry[] {
+  return logs.get(changeNumber) ?? [];
 }
 
 /** A change's projection: its synth log folded to a ChangeProjection, the same shape the
  * server ships. */
-export function projection(changeId: number): ChangeProjection {
-  const c = changes.find((x) => x.id === changeId);
+export function projection(changeNumber: number): ChangeProjection {
+  const c = changes.find((x) => x.id === changeNumber);
   return replayProjection({
-    id: changeId,
+    id: changeNumber,
     repo_id: c?.repo_id ?? 0,
-    change_key: c?.change_key ?? "",
-    entries: logFor(changeId),
+    change_id: c?.change_id ?? "",
+    entries: logFor(changeNumber),
   });
 }
 
@@ -53,7 +53,7 @@ const subs = new Set<Sub>();
 
 export interface MockStream {
   /** Subscribe to more changes; each yields its projection, then its live tail. */
-  add(changeIds: number[]): void;
+  add(changeNumbers: number[]): void;
   close(): void;
 }
 
@@ -63,8 +63,8 @@ export function mockOpenStream(listener: Listener): MockStream {
   const sub: Sub = { ids: new Set(), listener };
   subs.add(sub);
   return {
-    add(changeIds) {
-      for (const id of changeIds) {
+    add(changeNumbers) {
+      for (const id of changeNumbers) {
         if (sub.ids.has(id)) continue;
         sub.ids.add(id);
         listener({ projection: projection(id) });
@@ -80,22 +80,22 @@ export function mockOpenStream(listener: Listener): MockStream {
  * to its subscribers — the fixtures' analog of the server's append broadcast.
  * Drives the mock's own mutations (submit/abandon) and test event injection. */
 export function mockAppend(
-  change_id: number,
+  change_number: number,
   created_at: string,
   payload: LogPayload,
 ): LogEntry {
-  const log = logFor(change_id);
+  const log = logFor(change_number);
   const entry: LogEntry = {
-    change_id,
+    change_number,
     position: log.length,
     sequence: nextSeq++,
     created_at,
     ...payload,
   };
   log.push(entry);
-  logs.set(change_id, log);
+  logs.set(change_number, log);
   for (const sub of subs) {
-    if (sub.ids.has(change_id)) sub.listener({ entry });
+    if (sub.ids.has(change_number)) sub.listener({ entry });
   }
   return entry;
 }

@@ -18,7 +18,7 @@ use crate::domain::ChangeProjection;
 /// One member of a derived path, pinned to the revision the walk selected.
 #[derive(Debug, Clone)]
 pub struct PathMember {
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     pub revision: RevisionNumber,
     pub commit_sha: Sha,
 }
@@ -29,7 +29,7 @@ pub struct PathMember {
 /// commit it parents onto.
 #[derive(Debug, Clone)]
 pub struct OpenNode {
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     pub revision: RevisionNumber,
     pub commit_sha: Sha,
     pub parent_sha: Sha,
@@ -37,7 +37,7 @@ pub struct OpenNode {
 
 /// A read-time view over one repo's changes.
 ///
-/// Owned projections plus the commit-sha → `(change_id, revision number)`
+/// Owned projections plus the commit-sha → `(change_number, revision number)`
 /// index built from them. All chain derivation is a pure function of
 /// this view, so it holds no locks and touches no git.
 pub struct RepoView {
@@ -72,7 +72,7 @@ impl RepoView {
     }
 
     #[must_use]
-    pub fn change_ids(&self) -> Vec<ChangeNumber> {
+    pub fn change_numbers(&self) -> Vec<ChangeNumber> {
         self.changes.keys().copied().collect()
     }
 
@@ -142,16 +142,16 @@ impl RepoView {
         let mut path = Vec::new();
         let mut sha = tip_sha.clone();
         let mut seen = HashSet::new();
-        while let Some(&(change_id, number)) = self.index.get(&sha) {
+        while let Some(&(change_number, number)) = self.index.get(&sha) {
             if !seen.insert(sha.clone()) {
                 break; // cycle guard against bad data
             }
             path.push(PathMember {
-                change_id,
+                change_number,
                 revision: number,
                 commit_sha: sha.clone(),
             });
-            let Some(revision) = self.change(change_id).and_then(|c| c.revision(number)) else {
+            let Some(revision) = self.change(change_number).and_then(|c| c.revision(number)) else {
                 break;
             };
             if revision.parent_sha == revision.fork_sha || self.is_merged(&revision.parent_sha) {
@@ -171,13 +171,15 @@ impl RepoView {
             .is_some_and(ChangeProjection::is_merged)
     }
 
-    /// A change by its `Change-Id` key.
+    /// A change by its `Change-Id`.
     ///
     /// The graph enriches a merged history commit from its commit-message
     /// trailer.
     #[must_use]
-    pub fn change_by_key(&self, key: &str) -> Option<&ChangeProjection> {
-        self.changes.values().find(|c| c.change_key.as_str() == key)
+    pub fn change_by_id(&self, change_id: &str) -> Option<&ChangeProjection> {
+        self.changes
+            .values()
+            .find(|c| c.change_id.as_str() == change_id)
     }
 
     /// The graph's **open region**: active tips walked back to their forks.
@@ -196,11 +198,11 @@ impl RepoView {
                     continue;
                 }
                 let parent_sha = self
-                    .change(m.change_id)
+                    .change(m.change_number)
                     .and_then(|c| c.revision(m.revision))
                     .map_or_else(|| Sha::from(""), |r| r.parent_sha.clone());
                 out.push(OpenNode {
-                    change_id: m.change_id,
+                    change_number: m.change_number,
                     revision: m.revision,
                     commit_sha: m.commit_sha,
                     parent_sha,
@@ -226,7 +228,7 @@ pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
     let statuses: Vec<ChangeStatus> = path
         .iter()
         .map(|m| {
-            view.change(m.change_id)
+            view.change(m.change_number)
                 .map_or(ChangeStatus::Pending, |c| c.status_at(m.revision))
         })
         .filter(|s| *s != ChangeStatus::Abandoned)
@@ -328,8 +330,8 @@ mod tests {
         }
     }
 
-    fn change(id: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(ChangeNumber(id), 1, key.into());
+    fn change(number: u64, change_id: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
+        let mut c = ChangeProjection::new(ChangeNumber(number), 1, change_id.into());
         c.revisions = revs;
         c
     }
@@ -355,7 +357,7 @@ mod tests {
         assert_eq!(
             c_path
                 .iter()
-                .map(|m| (m.change_id.get(), m.revision.get()))
+                .map(|m| (m.change_number.get(), m.revision.get()))
                 .collect::<Vec<_>>(),
             vec![(10, 0), (11, 0), (12, 0)]
         );
@@ -363,7 +365,7 @@ mod tests {
         assert_eq!(
             e_path
                 .iter()
-                .map(|m| (m.change_id.get(), m.revision.get()))
+                .map(|m| (m.change_number.get(), m.revision.get()))
                 .collect::<Vec<_>>(),
             vec![(13, 0), (11, 1), (14, 0)]
         );
@@ -382,7 +384,7 @@ mod tests {
         let path: Vec<u64> = view
             .path_from_tip(&"B".into())
             .iter()
-            .map(|m| m.change_id.get())
+            .map(|m| m.change_number.get())
             .collect();
         assert_eq!(
             path,
@@ -393,7 +395,7 @@ mod tests {
         let open: Vec<u64> = view
             .open_nodes()
             .iter()
-            .map(|n| n.change_id.get())
+            .map(|n| n.change_number.get())
             .collect();
         assert_eq!(open, vec![2]);
     }
@@ -433,7 +435,7 @@ mod tests {
         let b_nodes: Vec<u64> = view
             .open_nodes()
             .iter()
-            .filter(|n| n.change_id == ChangeNumber(11))
+            .filter(|n| n.change_number == ChangeNumber(11))
             .map(|n| n.revision.get())
             .collect();
         assert_eq!(b_nodes.len(), 2);

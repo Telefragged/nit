@@ -4,7 +4,7 @@
 //! git repo. They print concise text for the author to act on; all review
 //! logic lives server-side.
 //!
-//! A chain is addressed by its **tip change id**. `nit status`/`nit log`
+//! A chain is addressed by its **tip change number**. `nit status`/`nit log`
 //! resolve the cwd's tip change from local HEAD; `nit comment` targets a change
 //! directly. The live followers `nit log --follow`/`--wait` watch the cwd's
 //! chain over the websocket change stream.

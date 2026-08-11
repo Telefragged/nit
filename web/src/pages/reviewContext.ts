@@ -28,7 +28,7 @@ export const sameTarget = (a: DraftTarget, b: DraftTarget) =>
   sameRange(a.range, b.range);
 
 export interface ReviewCtx {
-  changeId: number;
+  changeNumber: number;
   /** The TO revision (right select) — the diff's new column. New-column
    * drafts anchor here, and comments place against this range. */
   selected: number;

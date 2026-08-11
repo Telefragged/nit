@@ -562,15 +562,15 @@ async function liveCaptures(baseUrl) {
   const { chains } = await res.json();
   const caps = [{ name: "live-dashboard", path: "/" }];
   for (const chain of chains) {
-    const tip = chain.tip_change_id;
+    const tip = chain.tip_change_number;
     caps.push({
       name: `live-chain-${tip}`,
       path: `/repos/${chain.repo_id}#chain-${tip}`,
     });
     for (const ch of chain.path.slice(0, 2)) {
       caps.push({
-        name: `live-change-${ch.change_id}`,
-        path: `/changes/${ch.change_id}`,
+        name: `live-change-${ch.change_number}`,
+        path: `/changes/${ch.change_number}`,
       });
     }
   }

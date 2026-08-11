@@ -31,7 +31,7 @@ pub struct ChangeList {
 pub struct ChangeDetail {
     pub id: ChangeNumber,
     pub repo_id: u64,
-    pub change_key: ChangeId,
+    pub change_id: ChangeId,
     /// Ascending.
     pub revisions: Vec<Revision>,
     /// Published threads, all revisions; anchors verbatim.

@@ -387,14 +387,14 @@ fn abandoned_chain_drops_out_of_active_chains() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
-    let change_id = member_id(&server, &res, "Iab1");
+    let change_number = member_id(&server, &res, "Iab1");
     let id = first_repo(&server);
     assert_eq!(active_chains(&server, id), 1);
 
     // Abandoned tips are excluded from active_chains (the dashboard hides them)
     // but stay enumerable as their own chain.
     let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/abandon")),
+        &server.url(&format!("/api/changes/{change_number}/abandon")),
         &json!({}),
     );
     assert_eq!(st, 200);

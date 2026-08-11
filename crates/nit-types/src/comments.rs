@@ -14,7 +14,7 @@ use crate::domain::Side;
 pub struct Thread {
     /// Fold-assigned by creation order (not stored).
     pub id: u64,
-    pub change_id: ChangeNumber,
+    pub change_number: ChangeNumber,
     /// The revision the thread is pinned to.
     pub revision: RevisionNumber,
     pub file: Option<String>,

@@ -19,11 +19,11 @@ pub struct HistoryCommit {
     pub parents: Vec<Sha>,
     pub subject: String,
     /// The merged change this commit carries, matched by its `Change-Id:`
-    /// trailer. Coupled with `change_key`: a commit whose trailer names no
+    /// trailer. Coupled with `change_id`: a commit whose trailer names no
     /// known change (a merge, a pre-nit commit, a foreign trailer) reports
     /// both as `None`, never an orphan key.
-    pub change_id: Option<ChangeNumber>,
-    pub change_key: Option<ChangeId>,
+    pub change_number: Option<ChangeNumber>,
+    pub change_id: Option<ChangeId>,
 }
 
 /// A window of the canonical ref's merged history (`GET /api/history`).
@@ -75,8 +75,8 @@ pub struct GraphNode {
     /// Parent commit-shas; an edge is drawn to each that is in the node set.
     pub parents: Vec<Sha>,
     /// The backing change, or `None` for a bare git commit (merge / pre-nit).
-    pub change_id: Option<ChangeNumber>,
-    pub change_key: Option<ChangeId>,
+    pub change_number: Option<ChangeNumber>,
+    pub change_id: Option<ChangeId>,
     /// The pinned revision (open nodes); `None` off the open region.
     pub revision: Option<RevisionNumber>,
 }

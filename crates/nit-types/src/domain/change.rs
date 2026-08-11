@@ -62,7 +62,7 @@ pub struct ReviewProjection {
 pub struct ChangeProjection {
     pub id: ChangeNumber,
     pub repo_id: u64,
-    pub change_key: ChangeId,
+    pub change_id: ChangeId,
     pub revisions: Vec<RevisionProjection>,
     pub threads: Vec<ThreadProjection>,
     pub reviews: Vec<ReviewProjection>,
@@ -100,11 +100,11 @@ pub fn subject_of(message: &str) -> String {
 impl ChangeProjection {
     /// The fold builds the rest from the log.
     #[must_use]
-    pub fn new(id: ChangeNumber, repo_id: u64, change_key: ChangeId) -> ChangeProjection {
+    pub fn new(id: ChangeNumber, repo_id: u64, change_id: ChangeId) -> ChangeProjection {
         ChangeProjection {
             id,
             repo_id,
-            change_key,
+            change_id,
             revisions: Vec::new(),
             threads: Vec::new(),
             reviews: Vec::new(),

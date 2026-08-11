@@ -94,9 +94,9 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
             let Ok(view) = state.repo_view(conn, repo_id) else {
                 continue;
             };
-            let open = open_changes_by_key(&view);
-            for (change_id, sha) in gitscan::detect_merges(&repo, since, &head, &open) {
-                record_landing(state, conn, change_id, sha);
+            let open = open_changes_by_id(&view);
+            for (change_number, sha) in gitscan::detect_merges(&repo, since, &head, &open) {
+                record_landing(state, conn, change_number, sha);
             }
         }
         // Record the baseline last: a crash before this re-scans the same delta
@@ -109,32 +109,32 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
 }
 
 /// The sweep's working set -- looked up once per new commit.
-fn open_changes_by_key(view: &RepoView) -> HashMap<ChangeId, &ChangeProjection> {
-    view.change_ids()
+fn open_changes_by_id(view: &RepoView) -> HashMap<ChangeId, &ChangeProjection> {
+    view.change_numbers()
         .into_iter()
         .filter_map(|id| view.change(id))
         .filter(|c| !c.is_terminal())
-        .map(|c| (c.change_key.clone(), c))
+        .map(|c| (c.change_id.clone(), c))
         .collect()
 }
 
 /// The merge sweep's only lifecycle write.
-fn record_landing(state: &AppState, conn: &mut Connection, change_id: ChangeNumber, sha: Sha) {
-    let entry = match state.change(conn, change_id) {
+fn record_landing(state: &AppState, conn: &mut Connection, change_number: ChangeNumber, sha: Sha) {
+    let entry = match state.change(conn, change_number) {
         Ok(Some(entry)) => entry,
         Ok(None) => return,
         Err(e) => {
             tracing::warn!(
-                change_id = change_id.get(),
+                change_number = change_number.get(),
                 "merged change failed to load: {e:#}"
             );
             return;
         }
     };
     let new = LogPayload::lifecycle(LifecycleAction::Merged, Some(sha), None);
-    if let Err(e) = append_to_change(state, conn, &entry, change_id, vec![new]) {
+    if let Err(e) = append_to_change(state, conn, &entry, change_number, vec![new]) {
         tracing::warn!(
-            change_id = change_id.get(),
+            change_number = change_number.get(),
             "lifecycle append failed: {e:#}"
         );
     }

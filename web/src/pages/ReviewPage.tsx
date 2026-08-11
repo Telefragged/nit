@@ -218,7 +218,7 @@ function ReviewsStrip({ change }: { change: ChangeDetail }) {
 
 export default function ReviewPage() {
   const { id } = useParams();
-  const changeId = Number(id);
+  const changeNumber = Number(id);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const revisionParam = searchParams.get("revision")
@@ -235,7 +235,7 @@ export default function ReviewPage() {
   const queryClient = useQueryClient();
 
   const publishedQ = useQuery<ChangeDetail>({
-    queryKey: ["change", changeId],
+    queryKey: ["change", changeNumber],
     queryFn: skipToken,
   });
   const published = publishedQ.data;
@@ -274,14 +274,14 @@ export default function ReviewPage() {
   // remounting) via the adjust-during-render idiom used for `shownChange`
   // below.
   const [pinnedRev, setPinnedRev] = useState<{
-    changeId: number;
+    changeNumber: number;
     revision: number;
   }>();
-  if (latest !== undefined && pinnedRev?.changeId !== changeId) {
-    setPinnedRev({ changeId, revision: latest.number });
+  if (latest !== undefined && pinnedRev?.changeNumber !== changeNumber) {
+    setPinnedRev({ changeNumber, revision: latest.number });
   }
   const defaultRev =
-    pinnedRev?.changeId === changeId ? pinnedRev.revision : undefined;
+    pinnedRev?.changeNumber === changeNumber ? pinnedRev.revision : undefined;
 
   const selectedRev =
     revisions.find((r) => r.number === (revisionParam ?? defaultRev)) ?? latest;
@@ -291,17 +291,17 @@ export default function ReviewPage() {
   // viewed revision — the path that pins `selected`. Fetched with the revision
   // so switching revisions re-roots onto that revision's chain.
   const chainQ = useQuery({
-    queryKey: ["chain", changeId, selected],
-    queryFn: published ? () => getChain(changeId, selected) : skipToken,
+    queryKey: ["chain", changeNumber, selected],
+    queryFn: published ? () => getChain(changeNumber, selected) : skipToken,
   });
-  const memberIds = (chainQ.data?.path ?? []).map((m) => m.change_id);
+  const memberIds = (chainQ.data?.path ?? []).map((m) => m.change_number);
 
   // Subscribe to the change and every chain member: each projection + live fold is
   // written into the ["change", id] cache the queries above read. The drafts
   // overlay rides a separate ["drafts", id] read; `change` composes the two.
-  useChangeStream([changeId, ...memberIds]);
-  const draftsMap = useDrafts([changeId, ...memberIds]);
-  const overlay = draftsMap.get(changeId);
+  useChangeStream([changeNumber, ...memberIds]);
+  const draftsMap = useDrafts([changeNumber, ...memberIds]);
+  const overlay = draftsMap.get(changeNumber);
   const change = useMemo(
     () =>
       published
@@ -361,12 +361,12 @@ export default function ReviewPage() {
   // outlives every way of replacing it (it is reused across /changes/:id).
   // Adjust-during-render, like `shownChange` below: a bubble hanging over
   // code it never described must not paint even once.
-  const diffKey = `${changeId}:${selected}:${String(against)}:${layout}`;
+  const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}`;
   if (selectionMiss && selectionMiss.diff !== diffKey) setSelectionMiss(null);
 
   const diffQ = useQuery({
-    queryKey: ["diff", changeId, selected, against ?? null],
-    queryFn: () => getDiff(changeId, selected, against),
+    queryKey: ["diff", changeNumber, selected, against ?? null],
+    queryFn: () => getDiff(changeNumber, selected, against),
     enabled: published !== undefined,
     retry: false,
   });
@@ -411,7 +411,7 @@ export default function ReviewPage() {
 
   const ctxValue: ReviewCtx = useMemo(
     () => ({
-      changeId,
+      changeNumber,
       selected,
       against,
       editingTarget,
@@ -437,7 +437,7 @@ export default function ReviewPage() {
         editorDirty.current = dirty;
       },
     }),
-    [changeId, selected, against, editingTarget],
+    [changeNumber, selected, against, editingTarget],
   );
 
   // The reviewer's view of every thread: published threads merged with their
@@ -461,10 +461,12 @@ export default function ReviewPage() {
 
   const createChangeComment = useMutation({
     mutationFn: (body: string) =>
-      createDraft(changeId, { revision: selected, body }),
+      createDraft(changeNumber, { revision: selected, body }),
     onSuccess: () => {
       setChangeCommentOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["drafts", changeId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["drafts", changeNumber],
+      });
     },
   });
 
@@ -486,10 +488,12 @@ export default function ReviewPage() {
         revealFile(next);
       } else if (e.key === "n" || e.key === "p") {
         if (!chainPath) return;
-        const position = chainPath.findIndex((c) => c.change_id === changeId);
+        const position = chainPath.findIndex(
+          (c) => c.change_number === changeNumber,
+        );
         if (position < 0) return;
         const next = chainPath[position + (e.key === "n" ? 1 : -1)];
-        if (next) void navigate(`/changes/${next.change_id}`);
+        if (next) void navigate(`/changes/${next.change_number}`);
       } else if (e.key === "c") {
         // Draft a comment on the selected diff text (gerrit's c) — or on
         // the caret's line when the selection is collapsed.
@@ -530,7 +534,7 @@ export default function ReviewPage() {
     activeFile,
     revealFile,
     chainPath,
-    changeId,
+    changeNumber,
     navigate,
     replyOpen,
     ctxValue,
@@ -641,7 +645,7 @@ export default function ReviewPage() {
   }, [threads, files, selected, against]);
 
   // The change's published projection arrives over the websocket (no fetch to
-  // error on); a bad change id surfaces when its chain REST read fails.
+  // error on); a bad change number surfaces when its chain REST read fails.
   if (chainQ.isError) {
     return (
       <main className="page">
@@ -663,7 +667,7 @@ export default function ReviewPage() {
   const repo = repoQ.data;
   // Position and displayed status for this change are on the path entry, not
   // on ChangeDetail.
-  const here = chain?.path.find((c) => c.change_id === change.id);
+  const here = chain?.path.find((c) => c.change_number === change.id);
   const allFilesExpanded = allExpanded(expanded, files);
 
   /** Collapsing the section that hosts the open inline CommentEditor
@@ -742,8 +746,8 @@ export default function ReviewPage() {
               {chain ? ` of ${chain.path.length}` : ""}
             </span>
             <span className="sep">·</span>
-            <span className="mono dim" title={change.change_key}>
-              {change.change_key.slice(0, 12)}
+            <span className="mono dim" title={change.change_id}>
+              {change.change_id.slice(0, 12)}
             </span>
           </div>
           <div className="subject-line">
@@ -821,7 +825,7 @@ export default function ReviewPage() {
           <aside className="review-sidebar">
             <ChainNav
               chain={chain}
-              currentId={changeId}
+              currentId={changeNumber}
               memberDetails={memberDetails}
             />
             <FileRail
@@ -870,7 +874,7 @@ export default function ReviewPage() {
                   <CommentThread
                     key={threadKey(t)}
                     thread={t}
-                    changeId={changeId}
+                    changeNumber={changeNumber}
                   />
                 ))}
                 {changeCommentOpen ? (
@@ -952,7 +956,7 @@ export default function ReviewPage() {
                             />
                           </div>
                         ) : null}
-                        <CommentThread thread={t} changeId={changeId} />
+                        <CommentThread thread={t} changeNumber={changeNumber} />
                       </div>
                     ))}
                   </div>

@@ -18,8 +18,8 @@ fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
 }
 
 /// Revision 0 of the tip change lives here after the first push.
-fn tip_change_id(push_result: &Value) -> u64 {
-    push_result["tip_change"]["change_id"]
+fn tip_change_number(push_result: &Value) -> u64 {
+    push_result["tip_change"]["change_number"]
         .as_u64()
         .expect("a tip change")
 }
@@ -77,7 +77,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
-    let id = tip_change_id(&pushed);
+    let id = tip_change_number(&pushed);
     assert_eq!(pushed["tip_change"]["revision"], 0, "first revision is 0");
 
     let (st, diff) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff")));
@@ -204,7 +204,7 @@ fn interdiff_against_earlier_revision() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
-    let id = tip_change_id(&pushed);
+    let id = tip_change_number(&pushed);
     assert_eq!(pushed["tip_change"]["revision"], 0);
 
     let c2 = g.commit(
@@ -277,7 +277,7 @@ fn missing_revision_is_404() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
-    let id = tip_change_id(&pushed);
+    let id = tip_change_number(&pushed);
 
     let (st, _) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff")));
     assert_eq!(st, 200);

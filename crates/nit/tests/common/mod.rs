@@ -316,17 +316,17 @@ pub fn push(server: &TestServer, repo: &GitRepo, tip: &str, base: &str) -> (u16,
 /// decision, then batch-submit the change's chain. The change is its own
 /// tip for a single-commit chain; for a multi-commit one only this change
 /// is drafted, so submit publishes just it. Returns the `BatchSubmitResult`.
-pub fn review(server: &TestServer, change_id: u64, verdict: &str, message: &str) -> Value {
+pub fn review(server: &TestServer, change_number: u64, verdict: &str, message: &str) -> Value {
     let (st, _) = http_put(
-        &server.url(&format!("/api/changes/{change_id}/decision")),
+        &server.url(&format!("/api/changes/{change_number}/decision")),
         &json!({"decision": verdict, "message": message}),
     );
-    assert_eq!(st, 200, "draft decision on change {change_id}");
+    assert_eq!(st, 200, "draft decision on change {change_number}");
     let (st, out) = http_post(
-        &server.url(&format!("/api/chains/{change_id}/submit")),
+        &server.url(&format!("/api/chains/{change_number}/submit")),
         &json!({}),
     );
-    assert_eq!(st, 200, "submit chain {change_id}: {out}");
+    assert_eq!(st, 200, "submit chain {change_number}: {out}");
     out
 }
 
@@ -334,16 +334,16 @@ pub fn review(server: &TestServer, change_id: u64, verdict: &str, message: &str)
 /// its own degenerate tip once terminal. `revision` pins a revision;
 /// `None` reads the one the chain's tip pins. `None` back means the chain
 /// did not resolve.
-pub fn status_at(server: &TestServer, change_id: u64, revision: Option<u64>) -> Option<String> {
+pub fn status_at(server: &TestServer, change_number: u64, revision: Option<u64>) -> Option<String> {
     let query = revision.map_or(String::new(), |r| format!("?revision={r}"));
-    let (st, chain) = http_get(&server.url(&format!("/api/chains/{change_id}{query}")));
+    let (st, chain) = http_get(&server.url(&format!("/api/chains/{change_number}{query}")));
     if st != 200 {
         return None;
     }
     chain["path"]
         .as_array()?
         .iter()
-        .find(|m| m["change_id"].as_u64() == Some(change_id))
+        .find(|m| m["change_number"].as_u64() == Some(change_number))
         .and_then(|m| m["status"].as_str().map(str::to_string))
 }
 
@@ -352,15 +352,15 @@ pub fn first_repo_id(server: &TestServer) -> u64 {
     repos["repos"][0]["id"].as_u64().expect("a repo")
 }
 
-/// Find a path member's `change_id` by its Change-Id. Accepts a `Chain`
+/// Find a path member's `change_number` by its Change-Id. Accepts a `Chain`
 /// (`value["path"]`) directly; for a `PushResult` (which names only the tip)
-/// it fetches the derived chain through `tip_change.change_id`.
-pub fn member_id(server: &TestServer, value: &Value, change_key: &str) -> u64 {
+/// it fetches the derived chain through `tip_change.change_number`.
+pub fn member_id(server: &TestServer, value: &Value, change_id: &str) -> u64 {
     let fetched;
     let path = if let Some(path) = value.get("path") {
         path
     } else {
-        let tip = value["tip_change"]["change_id"]
+        let tip = value["tip_change"]["change_number"]
             .as_u64()
             .expect("a Chain `path` or a PushResult `tip_change`");
         let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip}")));
@@ -371,13 +371,13 @@ pub fn member_id(server: &TestServer, value: &Value, change_key: &str) -> u64 {
     path.as_array()
         .expect("a path")
         .iter()
-        .find(|m| m["change_key"].as_str() == Some(change_key))
-        .and_then(|m| m["change_id"].as_u64())
-        .unwrap_or_else(|| panic!("no member {change_key} in path"))
+        .find(|m| m["change_id"].as_str() == Some(change_id))
+        .and_then(|m| m["change_number"].as_u64())
+        .unwrap_or_else(|| panic!("no member {change_id} in path"))
 }
 
-pub fn msg(subject: &str, change_id: &str) -> String {
-    format!("{subject}\n\nChange-Id: {change_id}\n")
+pub fn msg(subject: &str, change_number: &str) -> String {
+    format!("{subject}\n\nChange-Id: {change_number}\n")
 }
 
 /// Drive one lifecycle sweep synchronously, in-process, against the server's
@@ -405,7 +405,7 @@ fn ws_open(server: &TestServer, read_timeout: Duration) -> WsSock {
     socket
 }
 
-/// Cursor mode: `change_id` → `from-position` pairs; the server replays each
+/// Cursor mode: `change_number` → `from-position` pairs; the server replays each
 /// `[from, head)` backlog, then streams live.
 pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Duration) -> WsSock {
     let mut socket = ws_open(server, read_timeout);

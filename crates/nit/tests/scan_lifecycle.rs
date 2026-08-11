@@ -25,7 +25,7 @@ fn change_landed_on_main_becomes_merged() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
     assert_eq!(res["tip_change"]["revision"], 0);
     assert_eq!(res["tip_change"]["status"], "pending");
 
@@ -36,7 +36,7 @@ fn change_landed_on_main_becomes_merged() {
 
     sweep(&server);
     assert_eq!(
-        status_at(&server, change_id, Some(0)).as_deref(),
+        status_at(&server, change_number, Some(0)).as_deref(),
         Some("merged")
     );
 
@@ -62,7 +62,7 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let tip = res["tip_change"]["change_id"].as_u64().unwrap();
+    let tip = res["tip_change"]["change_number"].as_u64().unwrap();
     let ancestor = member_id(&server, &res, "I001");
     assert_eq!(tip, member_id(&server, &res, "I002"));
 
@@ -90,23 +90,23 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
         1,
         "the merged ancestor drops from the path: {active}"
     );
-    assert_eq!(path[0]["change_id"], tip);
+    assert_eq!(path[0]["change_number"], tip);
     assert_eq!(path[0]["status"], "pending");
     assert!(
-        path.iter().all(|m| m["change_id"] != ancestor),
+        path.iter().all(|m| m["change_number"] != ancestor),
         "the merged ancestor sits below the canonical ref now: {active}"
     );
 }
 
 /// ≡ `nit abandon`, asserting the overlay took.
-fn abandon(server: &TestServer, change_id: u64) {
+fn abandon(server: &TestServer, change_number: u64) {
     let (st, body) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/abandon")),
+        &server.url(&format!("/api/changes/{change_number}/abandon")),
         &json!({}),
     );
-    assert_eq!(st, 200, "abandon change {change_id}: {body}");
+    assert_eq!(st, 200, "abandon change {change_number}: {body}");
     assert_eq!(
-        status_at(server, change_id, Some(0)).as_deref(),
+        status_at(server, change_number, Some(0)).as_deref(),
         Some("abandoned")
     );
 }
@@ -120,7 +120,7 @@ fn branchless_change_stays_live_without_auto_abandon() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
 
     // Delete the only branch, then move main with an unrelated commit (a
     // foreign Change-Id, so no false merge) so the sweep does real work
@@ -131,7 +131,7 @@ fn branchless_change_stays_live_without_auto_abandon() {
     g.branch("main", other);
     sweep(&server);
     assert_eq!(
-        status_at(&server, change_id, Some(0)).as_deref(),
+        status_at(&server, change_number, Some(0)).as_deref(),
         Some("pending"),
         "a branch-less change stays live"
     );
@@ -146,20 +146,20 @@ fn reopen_clears_abandoned_to_retained_status() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
 
     // Approve, then abandon: the verdict is retained, masked by the overlay.
-    review(&server, change_id, "approve", "lgtm");
-    abandon(&server, change_id);
+    review(&server, change_number, "approve", "lgtm");
+    abandon(&server, change_number);
 
     let (st, detail) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reopen")),
+        &server.url(&format!("/api/changes/{change_number}/reopen")),
         &json!({}),
     );
     assert_eq!(st, 200, "{detail}");
-    assert_eq!(detail["id"], change_id);
+    assert_eq!(detail["id"], change_number);
     assert_eq!(
-        status_at(&server, change_id, Some(0)).as_deref(),
+        status_at(&server, change_number, Some(0)).as_deref(),
         Some("approved"),
         "reopen surfaces the retained verdict"
     );
@@ -197,9 +197,9 @@ fn push_to_abandoned_change_409s_until_reopened() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
 
-    abandon(&server, change_id);
+    abandon(&server, change_number);
     let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
     g.branch("feat", c1b);
 
@@ -208,7 +208,7 @@ fn push_to_abandoned_change_409s_until_reopened() {
     assert!(e["error"].as_str().unwrap().contains("abandoned"), "{e}");
 
     let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{change_id}/reopen")),
+        &server.url(&format!("/api/changes/{change_number}/reopen")),
         &json!({}),
     );
     assert_eq!(st, 200);
@@ -232,10 +232,10 @@ fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_id = member_id(&server, &res, "I001");
+    let change_number = member_id(&server, &res, "I001");
 
     // The branch still points at the same sha — abandon doesn't move it.
-    abandon(&server, change_id);
+    abandon(&server, change_number);
 
     // Re-pushing the same sha walks to nothing that moves, so the 409 guard
     // (which fires only on a moving revision) never trips — idempotent 200.

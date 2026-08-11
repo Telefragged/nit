@@ -25,8 +25,8 @@ function node(
     subject: `subject ${sha}`,
     status,
     parents,
-    change_id: section === "open" ? 1 : null,
-    change_key: section === "open" ? `I${sha}` : null,
+    change_number: section === "open" ? 1 : null,
+    change_id: section === "open" ? `I${sha}` : null,
     revision: section === "open" ? 0 : null,
   };
 }

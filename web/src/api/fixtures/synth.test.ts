@@ -13,12 +13,12 @@ describe("synthLog fidelity", () => {
 
   for (const change of changes) {
     it(`folds back to change ${change.id}'s published state`, () => {
-      const recThreads = threads.filter((t) => t.change_id === change.id);
+      const recThreads = threads.filter((t) => t.change_number === change.id);
       const folded = changeDetail(
         replayProjection({
           id: change.id,
           repo_id: change.repo_id,
-          change_key: change.change_key,
+          change_id: change.change_id,
           entries: synthLog(change, recThreads),
         }),
       );

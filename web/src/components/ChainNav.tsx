@@ -31,7 +31,7 @@ export default function ChainNav({
   const [open, setOpen] = useState(true);
   if (!chain) return null;
 
-  const current = chain.path.find((c) => c.change_id === currentId);
+  const current = chain.path.find((c) => c.change_number === currentId);
   const posLabel = `${current ? current.position + 1 : "—"}/${
     chain.path.length
   }`;
@@ -58,7 +58,7 @@ export default function ChainNav({
             // Per-change state from the member's own projection (revisions are
             // ascending, so the last is the latest revision); absent until the
             // fan-out resolves, in which case nothing extra renders.
-            const detail = memberDetails.get(c.change_id);
+            const detail = memberDetails.get(c.change_number);
             const latest = detail?.revisions.at(-1)?.number ?? c.revision;
             const unresolved = detail
               ? revisionActivity(detail.threads, detail.drafts, c.revision)
@@ -79,9 +79,9 @@ export default function ChainNav({
                 ) : null}
               </>
             );
-            return c.change_id === currentId ? (
+            return c.change_number === currentId ? (
               <div
-                key={c.change_id}
+                key={c.change_number}
                 className="chain-nav-row current"
                 aria-current="page"
                 title={`${title} (this change)`}
@@ -90,9 +90,9 @@ export default function ChainNav({
               </div>
             ) : (
               <Link
-                key={c.change_id}
+                key={c.change_number}
                 className="chain-nav-row"
-                to={`/changes/${c.change_id}`}
+                to={`/changes/${c.change_number}`}
                 title={title}
               >
                 {inner}

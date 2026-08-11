@@ -10,7 +10,7 @@ pub struct ChainList {
     pub chains: Vec<Chain>,
 }
 
-/// `GET /api/chains/{change_id}/log` response.
+/// `GET /api/chains/{change_number}/log` response.
 ///
 /// The aggregated chain log, merged across members and sorted by global
 /// `sequence`.

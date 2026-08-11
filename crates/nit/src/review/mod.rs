@@ -58,19 +58,19 @@ pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload>
 
 /// A stored log row → the wire [`LogEntry`] the fold consumes.
 ///
-/// The entry is what the server broadcasts too. The `change_id` is the
+/// The entry is what the server broadcasts too. The `change_number` is the
 /// caller's — a row knows only its own per-change coordinates.
 ///
 /// # Errors
 ///
 /// When the stored `kind` is unknown or the payload is not valid JSON.
-pub fn entry_from_row(change_id: ChangeNumber, row: &db::LogRow) -> Result<LogEntry> {
+pub fn entry_from_row(change_number: ChangeNumber, row: &db::LogRow) -> Result<LogEntry> {
     let kind: LogKind = row
         .kind
         .parse()
         .map_err(|e| anyhow!("log entry {}: {e}", row.position))?;
     Ok(LogEntry {
-        change_id,
+        change_number,
         position: row.position,
         sequence: row.sequence,
         created_at: row.created_at.clone(),
@@ -91,7 +91,7 @@ pub fn replay_rows(row: &db::ChangeRow, rows: &[db::LogRow]) -> Result<ChangePro
         .iter()
         .map(|r| entry_from_row(row.id, r))
         .collect::<Result<Vec<_>>>()?;
-    Ok(replay(row.id, row.repo_id, row.change_key.clone(), entries))
+    Ok(replay(row.id, row.repo_id, row.change_id.clone(), entries))
 }
 
 #[cfg(test)]

@@ -34,7 +34,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
         if shas.contains(node.commit_sha.as_str()) {
             continue; // already placed (an anchor/history sha)
         }
-        let Some(change) = view.change(node.change_id) else {
+        let Some(change) = view.change(node.change_number) else {
             continue;
         };
         nodes.push(GraphNode {
@@ -43,8 +43,8 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
             subject: change.subject_at(node.revision),
             status: change.status_at(node.revision),
             parents: vec![node.parent_sha],
-            change_id: Some(change.id),
-            change_key: Some(change.change_key.clone()),
+            change_number: Some(change.id),
+            change_id: Some(change.change_id.clone()),
             revision: Some(node.revision),
         });
     }
@@ -81,8 +81,8 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
                 subject: h.subject.clone(),
                 status: ChangeStatus::Merged,
                 parents: h.parents.clone(),
-                change_id: h.change_id,
-                change_key: h.change_key.clone(),
+                change_number: h.change_number,
+                change_id: h.change_id.clone(),
                 revision: None,
             }),
     );
@@ -112,8 +112,8 @@ mod tests {
         }
     }
 
-    fn change(id: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(ChangeNumber(id), 1, key.into());
+    fn change(number: u64, change_id: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
+        let mut c = ChangeProjection::new(ChangeNumber(number), 1, change_id.into());
         c.revisions = revs;
         c
     }
@@ -123,8 +123,8 @@ mod tests {
             sha: sha.into(),
             parents: parents.iter().map(|p| Sha::from(*p)).collect(),
             subject: format!("main {sha}"),
+            change_number: None,
             change_id: None,
-            change_key: None,
         }
     }
 
@@ -170,8 +170,8 @@ mod tests {
         let b = change(2, "Ib", vec![revision(0, "B", "A", "h")]);
         let view = RepoView::new(vec![a, b]);
         let merged = HistoryCommit {
-            change_id: Some(ChangeNumber(9)),
-            change_key: Some("Iland".into()),
+            change_number: Some(ChangeNumber(9)),
+            change_id: Some("Iland".into()),
             ..commit("g1", &["g2"])
         };
         let history = RepoHistory {
@@ -185,7 +185,7 @@ mod tests {
         // Children ascend: the tip B sits above its parent A, both above HEAD.
         assert_eq!(shas, vec!["B", "A", "h", "g1", "g2"]);
         let g1 = g.nodes.iter().find(|n| n.commit_sha == "g1").expect("g1");
-        assert_eq!(g1.change_id, Some(ChangeNumber(9)));
-        assert_eq!(g1.change_key.as_ref().map(ChangeId::as_str), Some("Iland"));
+        assert_eq!(g1.change_number, Some(ChangeNumber(9)));
+        assert_eq!(g1.change_id.as_ref().map(ChangeId::as_str), Some("Iland"));
     }
 }

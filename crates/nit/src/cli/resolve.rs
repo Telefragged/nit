@@ -1,7 +1,7 @@
 //! API id-resolution.
 //!
 //! Maps the cwd's repo + HEAD (or an explicit `--chain` / `Change-Id`) to the
-//! numeric ids the server's endpoints take.
+//! change numbers the server's endpoints take.
 
 use anyhow::{Result, anyhow};
 
@@ -13,7 +13,7 @@ use nit_types::repos::RepoList;
 use super::client::{Client, Retry};
 use super::git::{discover_repo, head_sha};
 
-/// Resolves the cwd's HEAD to its chain's tip change id.
+/// Resolves the cwd's HEAD to its chain's tip change number.
 ///
 /// `retry` covers only the network GETs (here and in `repo_id_for`); repo
 /// discovery and a failed lookup (unregistered repo, or no chain matching
@@ -27,7 +27,7 @@ pub(crate) fn resolve_tip_change(client: &Client, retry: Retry) -> Result<Change
     list.chains
         .iter()
         .find(|c| c.path.last().map(|m| m.commit_sha.as_str()) == Some(head.as_str()))
-        .map(|c| c.tip_change_id)
+        .map(|c| c.tip_change_number)
         .ok_or_else(|| anyhow!("HEAD is not registered with nit — run 'nit push' first"))
 }
 
@@ -42,15 +42,15 @@ pub(crate) fn resolve_chain(
     }
 }
 
-pub(crate) fn resolve_change(client: &Client, change_key: &str) -> Result<ChangeNumber> {
+pub(crate) fn resolve_change(client: &Client, change_id: &str) -> Result<ChangeNumber> {
     let tip = resolve_tip_change(client, Retry::No)?;
     let chain: Chain = client.get(&format!("/api/chains/{tip}"))?;
     chain
         .path
         .iter()
-        .find(|m| m.change_key.as_str() == change_key)
-        .map(|m| m.change_id)
-        .ok_or_else(|| anyhow!("no change with Change-Id {change_key:?} on this chain"))
+        .find(|m| m.change_id.as_str() == change_id)
+        .map(|m| m.change_number)
+        .ok_or_else(|| anyhow!("no change with Change-Id {change_id:?} on this chain"))
 }
 
 fn repo_id_for(client: &Client, git_dir: &str, retry: Retry) -> Result<u64> {

@@ -28,7 +28,7 @@ import type {
 export interface ReplayInput {
   id: number;
   repo_id: number;
-  change_key: string;
+  change_id: string;
   entries: LogEntry[];
 }
 

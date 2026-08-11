@@ -5,7 +5,7 @@ use anyhow::Result;
 use nit_types::changes::{AbandonRequest, ChangeDetail};
 
 use super::client::{Client, ServerOpt, server_url};
-use super::format::{ChangeTarget, short_key};
+use super::format::{ChangeTarget, short_change_id};
 
 #[derive(clap::Args)]
 pub struct ReopenArgs {
@@ -33,13 +33,13 @@ pub struct AbandonArgs {
 /// When the server can't be reached or the arguments name no change.
 pub fn reopen(args: ReopenArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
-    let change_id = args.target.resolve(&client)?;
+    let change_number = args.target.resolve(&client)?;
     // The server only reads the path id; no request body needed.
-    let detail: ChangeDetail = client.post(&format!("/api/changes/{change_id}/reopen"), &())?;
+    let detail: ChangeDetail = client.post(&format!("/api/changes/{change_number}/reopen"), &())?;
     println!(
         "change {} {} reopened",
         detail.id,
-        short_key(&detail.change_key)
+        short_change_id(&detail.change_id)
     );
     Ok(())
 }
@@ -53,15 +53,16 @@ pub fn reopen(args: ReopenArgs) -> Result<()> {
 /// When the server can't be reached or the arguments name no change.
 pub fn abandon(args: AbandonArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
-    let change_id = args.target.resolve(&client)?;
+    let change_number = args.target.resolve(&client)?;
     let body = AbandonRequest {
         message: args.message,
     };
-    let detail: ChangeDetail = client.post(&format!("/api/changes/{change_id}/abandon"), &body)?;
+    let detail: ChangeDetail =
+        client.post(&format!("/api/changes/{change_number}/abandon"), &body)?;
     println!(
         "change {} {} abandoned",
         detail.id,
-        short_key(&detail.change_key)
+        short_change_id(&detail.change_id)
     );
     Ok(())
 }

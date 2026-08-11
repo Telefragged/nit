@@ -13,7 +13,7 @@
 //!
 //! Fold-assigned ids: a review's id is its `review` entry's `position` — a log
 //! coordinate, reproduced by replay with nothing stored and nothing minted.
-//! The change id is the `changes` rowid, carried on the projection.
+//! The change number is the `changes` rowid, carried on the projection.
 //! Revision numbers (0-based) are minted **in the fold** by creation order — a
 //! pure function of the log, never stored. Thread ids are minted in the fold
 //! too: [`fold`] takes an entry by value and, via
@@ -173,10 +173,10 @@ fn open_thread(
 pub fn replay(
     id: ChangeNumber,
     repo_id: u64,
-    change_key: ChangeId,
+    change_id: ChangeId,
     entries: Vec<LogEntry>,
 ) -> ChangeProjection {
-    let mut change = ChangeProjection::new(id, repo_id, change_key);
+    let mut change = ChangeProjection::new(id, repo_id, change_id);
     for entry in entries {
         fold(&mut change, entry);
     }
@@ -210,7 +210,7 @@ pub fn review_view(review: &ReviewProjection) -> Review {
 }
 
 #[must_use]
-pub fn thread_view(t: &ThreadProjection, change_id: ChangeNumber) -> Thread {
+pub fn thread_view(t: &ThreadProjection, change_number: ChangeNumber) -> Thread {
     let (file, line, side, range, line_text) = match &t.anchor {
         Anchor::Change => (None, None, Side::New, None, None),
         Anchor::File { file } => (Some(file.clone()), None, Side::New, None, None),
@@ -230,7 +230,7 @@ pub fn thread_view(t: &ThreadProjection, change_id: ChangeNumber) -> Thread {
     };
     Thread {
         id: t.id,
-        change_id,
+        change_number,
         revision: t.revision,
         file,
         line,
@@ -263,7 +263,7 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
     ChangeDetail {
         id: change.id,
         repo_id: change.repo_id,
-        change_key: change.change_key.clone(),
+        change_id: change.change_id.clone(),
         revisions: change.revisions.iter().map(revision_view).collect(),
         threads: change
             .threads
@@ -289,7 +289,7 @@ mod tests {
 
     fn entry(position: u64, payload: LogPayload) -> LogEntry {
         LogEntry {
-            change_id: ChangeNumber(1),
+            change_number: ChangeNumber(1),
             sequence: position,
             position,
             created_at: format!("t{position}"),

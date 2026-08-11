@@ -23,7 +23,7 @@ interface AuthoredDiff {
 export interface ChangeRecord {
   id: number;
   repo_id: number;
-  change_key: string;
+  change_id: string;
   subject: string;
   /** A terminal change-wide status (merged/abandoned); overrides reviews. */
   terminal?: Extract<ChangeStatus, "merged" | "abandoned">;
@@ -36,7 +36,7 @@ export interface ChangeRecord {
 /** A tip commit: the head of one derived chain. The set of these is the only
  * thing the dashboard enumerates; the path is walked from `parent_sha`. */
 export interface TipRecord {
-  tip_change_id: number;
+  tip_change_number: number;
   repo_id: number;
   /** The revision of the tip change this tip pins. */
   revision: number;
@@ -59,7 +59,7 @@ export interface RepoRecord {
  * the mutable store shape behind the wire's Thread. */
 export interface ThreadRecord {
   id: number;
-  change_id: number;
+  change_number: number;
   revision: number;
   file: string | null;
   line: number | null;
@@ -77,7 +77,7 @@ export interface ThreadRecord {
  * reply to a published one (`thread_id` set). */
 export interface DraftRecord {
   id: number;
-  change_id: number;
+  change_number: number;
   thread_id: number | null;
   revision: number;
   file: string | null;
@@ -93,12 +93,12 @@ export interface DraftRecord {
 }
 
 /** A synthetic canonical-history node (the merged history below HEAD the mock
- * has no git to walk). `change_key` marks a landed change's commit — the graph
+ * has no git to walk). `change_id` marks a landed change's commit — the graph
  * enriches the node from the change it names, like the backend's trailer
  * match. */
 export interface HistNode {
   sha: string;
   subject: string;
   parents: string[];
-  change_key?: string;
+  change_id?: string;
 }
