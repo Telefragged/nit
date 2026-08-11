@@ -65,20 +65,18 @@ drops the hanging indent of a wrapped markdown list item.
 
 ## Screenshot harness (frontend checking for AI agents)
 
-Agents read PNGs, not browsers. Both modes write `screenshots/*.png` (repo
-root, gitignored); run one and `Read` them:
+Agents read PNGs, not browsers. The harness renders every UI state from
+fixtures with no backend, writing `screenshots/*.png` (repo root,
+gitignored); run it and `Read` them:
 
 ```sh
-# mock mode — every UI state from fixtures, no backend
 cd web && nix develop -c npm run screenshots
-# live mode — real nix-built server + UI (needs ./result from nix build)
-nix develop -c scripts/screenshots-live.sh
 ```
 
-Mock mode covers detailed states (drafts, 409s, interdiff); add a capture
-with every new page or state. The npm `@playwright/test` version must match
+It covers detailed states (drafts, 409s, interdiff); add a capture with
+every new page or state. The npm `@playwright/test` version must match
 `pkgs.playwright-driver` (the devShell sets `$PLAYWRIGHT_DRIVER_VERSION`) —
-the `web-screenshots` flake check runs mock mode in the sandbox and its
+the `web-screenshots` flake check runs it in the sandbox and its
 output _is_ the PNGs, so `nix build .#checks.<system>.web-screenshots` both
 catches a skew and gives you the gallery in `result/`.
 
@@ -94,7 +92,6 @@ catches a skew and gives you the gallery in `result/`.
   `getByTitle` never reach its rows: query
   `document.querySelector("file-tree-container").shadowRoot` for
   `[data-item-path="…"]`, and await its repaints (they land off-cycle).
-- End-to-end: `scripts/e2e.sh` drives the full loop against a fixture repo.
 - A fresh `.worktrees/*` checkout has no `web/node_modules`; run
   `cd web && nix develop -c npm ci` before any web check.
 
