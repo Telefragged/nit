@@ -55,10 +55,14 @@ by hand:
 - **Merge conflict** (rebasing onto a moved main) — resolve it,
   `git rebase --continue`, then `nit push` the resolution and re-run the
   script.
-- **`nix flake check` failed on a commit** — you're left on that commit. Fix
-  it, `git rebase --continue`, then re-run. A fix that changes the commit's
-  content is new work the reviewer hasn't seen: `nit push` it (expect another
-  review pass) rather than merging it silently.
+- **`nix flake check` failed** — the branch is left where it is, and the script
+  names every commit that failed with the log of its run, which holds every
+  check that failed on it. You have the whole chain's failures at once, so fix
+  them
+  in one pass, each amended into the commit it belongs to (the `nit:lifecycle`
+  skill, "Amend in place"), then re-run. A fix that changes a commit's content
+  is new work the reviewer hasn't seen: `nit push` it (expect another review
+  pass) rather than merging it silently.
 - **`main` moved during checks** — another chain merged first and the
   fast-forward is refused. Just re-run the script; it rebases onto the new main
   and retries.

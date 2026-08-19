@@ -9,9 +9,9 @@
 #
 # Usage: nix develop -c scripts/merge.sh     (from inside .worktrees/<slug>)
 #
-# Covers the no-conflict case. A rebase that stops on a merge conflict, or a
-# commit that fails the checks, hands you the repo mid-rebase to fix and
-# continue — see the `merge` skill.
+# Covers the no-conflict case. A rebase that stops on a merge conflict hands
+# you the repo mid-rebase to fix and continue; a failing check names every
+# commit that failed and leaves the branch where it is — see the `merge` skill.
 
 set -euo pipefail
 
@@ -32,14 +32,41 @@ if ! git merge-base --is-ancestor "$base" HEAD; then
   echo "branch rebased"
 fi
 
-# 2. Replay every commit through `nix flake check`. HEAD sits on top of $base
-#    now, so only a failing check — never a conflict — can stop this, and it
-#    leaves HEAD on the offending commit.
-if ! out=$(git rebase --exec 'nix flake check --keep-going' "$base" 2>&1); then
-  echo "$out" >&2
-  echo "you're now on commit $(git rev-parse --short HEAD) — fix it, 'git rebase --continue', then re-run this script ('git rebase --abort' to bail)" >&2
+# 2. Check every commit. HEAD sits on top of $base now, so each commit is a
+#    flake ref away and needs no checkout — they run concurrently, and a whole
+#    chain's failures come back from one run instead of one per re-run. Bounded
+#    because each check is a nix evaluation of its own, and a long chain would
+#    otherwise start one per commit at once. `--keep-going` so a commit's log
+#    holds every check that failed, not only the first.
+revs=$(git rev-list --reverse "$base..HEAD")
+# One directory per run, under the git dir rather than a worktree or $TMPDIR:
+# a failing run's logs outlive the shell that produced them, and a re-run
+# leaves the previous run's alongside instead of over.
+logs="$(git rev-parse --path-format=absolute --git-common-dir)/merge-checks/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$logs"
+for rev in $revs; do
+  while (($(jobs -rp | wc -l) >= ${NIT_MERGE_JOBS:-8})); do wait -n || true; done
+  (nix flake check --keep-going "git+file://$PWD?rev=$rev" >"$logs/$rev.log" 2>&1 &&
+    touch "$logs/$rev.ok") &
+done
+wait
+
+failed=()
+for rev in $revs; do
+  [ -e "$logs/$rev.ok" ] || failed+=("$rev")
+done
+
+if ((${#failed[@]})); then
+  echo "flake check failed on ${#failed[@]} of $(wc -w <<<"$revs") commits:" >&2
+  for rev in "${failed[@]}"; do
+    git log -1 --format='  %h %s' "$rev" >&2
+    echo "    $logs/$rev.log" >&2
+  done
+  echo >&2
+  echo "amend each fix into the commit above it, 'nit push', then re-run this script" >&2
   exit 1
 fi
+rm -rf "$logs"
 echo "flake check passed"
 
 # 3. Fast-forward $base in the primary worktree (where it's checked out — the
