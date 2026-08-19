@@ -53,7 +53,7 @@ fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff
     let (m, parent_m, n, parent_n) = (sha(m), sha(parent_m), sha(n), sha(parent_n));
     let tm = commit_tree(&g.repo, &m).expect("m tree resolves");
     let tn = commit_tree(&g.repo, &n).expect("n tree resolves");
-    let git = git_diff(&g.repo, &tm, &tn).expect("interdiff builds");
+    let git = git_diff(&g.repo, &tm, &tn, None).expect("interdiff builds");
     let plain = render(&g.repo, &git, 3, |_| true).expect("plain interdiff renders");
     let contained = contain(
         &g.repo,

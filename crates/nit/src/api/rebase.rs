@@ -49,7 +49,7 @@ use std::ops::Range;
 use std::path::Path;
 
 use anyhow::Result;
-use git2::{Oid, Repository, Tree};
+use git2::{Delta, Oid, Repository, Tree};
 use imara_diff::InternedInput;
 
 use nit_types::diff::{Diff, DiffFile, Line};
@@ -161,9 +161,14 @@ fn entry_oid(tree: &Tree, path: &str) -> Oid {
 /// Every path a tree diff touches, as `(name in old, name in new)`.
 ///
 /// The two differ exactly when rename detection paired a delete with an
-/// add.
-fn moves(repo: &Repository, old: &Tree, new: &Tree) -> Result<Vec<(String, String)>> {
-    let diff = diff::git_diff(repo, old, new)?;
+/// add. `paths` bounds the diff as [`diff::git_diff`] takes it.
+fn moves(
+    repo: &Repository,
+    old: &Tree,
+    new: &Tree,
+    paths: Option<&[String]>,
+) -> Result<Vec<(String, String)>> {
+    let diff = diff::git_diff(repo, old, new, paths)?;
     let name = |f: git2::DiffFile<'_>| f.path().map(|p| p.to_string_lossy().into_owned());
     Ok(diff
         .deltas()
@@ -255,8 +260,8 @@ pub fn contain(
     let from_parent = |pairs: Vec<(String, String)>| -> HashMap<String, String> {
         pairs.into_iter().map(|(old, new)| (new, old)).collect()
     };
-    let in_parent_m = from_parent(moves(repo, &parent_m, &tree_m)?);
-    let in_parent_n = from_parent(moves(repo, &parent_n, &tree_n)?);
+    let in_parent_m = from_parent(moves(repo, &parent_m, &tree_m, None)?);
+    let in_parent_n = from_parent(moves(repo, &parent_n, &tree_n, None)?);
     // Every name the change itself touched, on both sides of a rename it
     // made: the only files that can carry work of its own.
     let touched: BTreeSet<&str> = in_parent_m
@@ -264,7 +269,29 @@ pub fn contain(
         .chain(&in_parent_n)
         .flat_map(|(tree, parent)| [tree.as_str(), parent.as_str()])
         .collect();
-    let base: HashMap<String, String> = moves(repo, &parent_m, &parent_n)?.into_iter().collect();
+    if touched.is_empty() {
+        // The change holds no file at either revision, so the interdiff is
+        // the base's throughout and the base movement need not be read to
+        // say so — which an empty bound could not ask for anyway.
+        return Ok(Diff { files: Vec::new() });
+    }
+    // A superset of the names the walk below looks up: what the change
+    // touched, plus the far side of a rename the interdiff paired with one of
+    // them. What the bound leaves out is a file the base moved on its own,
+    // which no lookup asks about.
+    let mut bound: BTreeSet<String> = touched.iter().map(|&name| name.to_owned()).collect();
+    for delta in interdiff.deltas().filter(|d| d.status() == Delta::Renamed) {
+        if let Some(file) = diff::delta_file(&delta)
+            && let Some(old_path) = file.old_path
+            && (touched.contains(file.path.as_str()) || touched.contains(old_path.as_str()))
+        {
+            bound.extend([file.path, old_path]);
+        }
+    }
+    let bound: Vec<String> = bound.into_iter().collect();
+    let base: HashMap<String, String> = moves(repo, &parent_m, &parent_n, Some(&bound))?
+        .into_iter()
+        .collect();
 
     let mut files = Vec::new();
     for delta in interdiff.deltas() {

@@ -53,6 +53,11 @@ const RENAME_LIMIT: usize = 400;
 /// are identical, so a caller reading names off the deltas sees a
 /// renamed-and-edited file as an unrelated add and delete.
 ///
+/// `paths` bounds the diff to those names, matched literally. What falls
+/// outside is never walked and never offered to rename detection, so a
+/// rename is paired only when the bound holds both of its ends — and a bound
+/// with no names in it holds every path, as git reads an empty pathspec.
+///
 /// # Errors
 ///
 /// When git can't build the diff or run rename detection.
@@ -60,8 +65,16 @@ pub fn git_diff<'r>(
     repo: &'r Repository,
     old: &Tree<'_>,
     new: &Tree<'_>,
+    paths: Option<&[String]>,
 ) -> Result<git2::Diff<'r>> {
-    let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), None)?;
+    let mut opts = git2::DiffOptions::new();
+    if let Some(paths) = paths {
+        opts.disable_pathspec_match(true);
+        for path in paths {
+            opts.pathspec(path);
+        }
+    }
+    let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), Some(&mut opts))?;
     let candidates = |status| diff.deltas().filter(|d| d.status() == status).count();
     let over_limit = candidates(Delta::Added).max(candidates(Delta::Deleted)) > RENAME_LIMIT;
     let mut find = git2::DiffFindOptions::new();
@@ -475,14 +488,14 @@ mod tests {
     }
 
     fn shown(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
-        let diff = git_diff(repo, old, new).expect("diff builds");
+        let diff = git_diff(repo, old, new, None).expect("diff builds");
         render(repo, &diff, 3, |_| true).expect("diff renders")
     }
 
     /// One file's diff with every unchanged line kept as context — what the UI
     /// reveals from when expanding a hunk's surroundings.
     fn full(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
-        let diff = git_diff(repo, old, new).expect("diff builds");
+        let diff = git_diff(repo, old, new, None).expect("diff builds");
         render(repo, &diff, u32::MAX, |p| p == only).expect("diff renders")
     }
 

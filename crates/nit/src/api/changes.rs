@@ -179,7 +179,7 @@ fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff,
             .as_ref()
             .map_or(&revision.parent_sha, |a| &a.commit_sha),
     )?;
-    let git = diff::git_diff(&repo, &old_tree, &new_tree)?;
+    let git = diff::git_diff(&repo, &old_tree, &new_tree, None)?;
     let plain = || diff::render(&repo, &git, context, |path| only.is_none_or(|p| p == path));
 
     let Some(m) = revs
