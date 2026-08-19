@@ -1,6 +1,8 @@
 //! The bulk change read (`GET /api/changes`): the explicit `status` filter —
 //! repeatable, matched at each change's latest revision, and **absent means
-//! every change** (the API bakes in no default subset).
+//! every change** (the API bakes in no default subset). The filter reads a
+//! denormalized column that nothing rebuilds at startup, so these cases
+//! cover a restart.
 
 mod common;
 
@@ -71,4 +73,32 @@ fn unknown_repo_filters_to_empty() {
     assert_eq!(st, 200, "{res}");
 
     assert!(get_changes(&server, "?repo=999").is_empty());
+}
+
+#[test]
+fn a_status_filter_survives_a_restart() {
+    let g = GitRepo::new();
+    let a = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    g.branch("topic-a", a);
+    let b = g.commit(&[g.root], &msg("b: two", "Ib"), &[("b", "2\n")]);
+    g.branch("topic-b", b);
+    let db = g.dir.path().join("nit.sqlite3");
+
+    let repo_id = {
+        let server = TestServer::start(db.clone(), None);
+        let (st, res) = push(&server, &g, "topic-a", "main");
+        assert_eq!(st, 200, "{res}");
+        let (st, res) = push(&server, &g, "topic-b", "main");
+        assert_eq!(st, 200, "{res}");
+        let repo_id = first_repo_id(&server);
+        let ia = change_by_label(&server, repo_id, "Ia");
+        review(&server, ia["id"].as_u64().expect("id"), "approve", "lgtm");
+        repo_id
+    };
+
+    let server = TestServer::start(db, None);
+    let approved = get_changes(&server, &format!("?repo={repo_id}&status=approved"));
+    assert_eq!(change_ids(&approved), vec![change_id("Ia")]);
+    let pending = get_changes(&server, &format!("?repo={repo_id}&status=pending"));
+    assert_eq!(change_ids(&pending), vec![change_id("Ib")]);
 }

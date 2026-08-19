@@ -177,10 +177,8 @@ const MIGRATIONS: &[&str] = &[
     // status at its latest revision (`review::ChangeProjection::current_status`). The
     // fold of the change's log stays authoritative; this column exists so a
     // query can filter/scan changes by status without replaying every log.
-    // Re-stamped inside every append's transaction and reconciled against
-    // the fold on startup (rewritten only when it has drifted); NULL only
-    // for a change that has never appended (a torn push), until its next
-    // append or restart.
+    // The insert writes this and every append re-stamps it in its own
+    // transaction, so nothing reconciles it at run time.
     "ALTER TABLE changes ADD COLUMN status TEXT;",
     // v4: `base_ref` stores a git ref, not necessarily a local branch.
     "ALTER TABLE repos RENAME COLUMN base_branch TO base_ref;",
@@ -240,6 +238,12 @@ const MIGRATIONS: &[&str] = &[
     -- primary key, so this index carries change_number and covers the select.
     CREATE INDEX change_tags_by_value ON change_tags (key, value);
     ",
+    // v11: the last repair of the status cache. The insert writes the
+    // status and every append re-stamps it, so from here only an unmigrated
+    // database holds a row behind the fold. A change with no append folds to
+    // `pending`, and an earlier startup pass reconciled every row that has
+    // one.
+    "UPDATE changes SET status = 'pending' WHERE status IS NULL;",
 ];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
@@ -450,7 +454,8 @@ pub struct ChangeRow {
     pub change_id: ChangeId,
     /// The denormalized status cache; authoritative state is the fold.
     ///
-    /// `None` before the change's first append.
+    /// `None` only for a row that an older binary wrote, before the
+    /// insert filled the column.
     pub status: Option<ChangeStatus>,
     pub created_at: String,
 }
@@ -483,9 +488,15 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
 /// On a database failure.
 pub fn upsert_change(tx: &Transaction, repo_id: u64, change_id: &ChangeId) -> Result<ChangeNumber> {
     tx.execute(
-        "INSERT INTO changes (repo_id, change_id, created_at) VALUES (?1, ?2, ?3)
+        "INSERT INTO changes (repo_id, change_id, created_at, status)
+         VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT (repo_id, change_id) DO NOTHING",
-        params![i64::try_from(repo_id)?, change_id.as_str(), now_rfc3339()],
+        params![
+            i64::try_from(repo_id)?,
+            change_id.as_str(),
+            now_rfc3339(),
+            ChangeStatus::Pending.as_str()
+        ],
     )?;
     let id: i64 = tx.query_row(
         "SELECT id FROM changes WHERE repo_id = ?1 AND change_id = ?2",
@@ -564,21 +575,22 @@ pub struct ChangeFilter {
     pub tags: Vec<Tag>,
 }
 
-/// One repo's change numbers, ascending (creation order).
+/// One repo's change rows, ascending by number (creation order).
 ///
 /// A repo view derives its chains over this enumeration. The
 /// denormalized `status` column and `change_tags` answer it, so nothing
-/// resolves or replays a change that the filter excludes.
+/// resolves or replays a change that the filter excludes. Whole rows
+/// rather than numbers, so resolving one needs no second read.
 ///
 /// # Errors
 ///
 /// On a database failure.
-pub fn repo_change_numbers(
+pub fn repo_changes(
     conn: &Connection,
     repo_id: u64,
     filter: &ChangeFilter,
-) -> Result<Vec<ChangeNumber>> {
-    let mut sql = String::from("SELECT id FROM changes WHERE repo_id = ?1");
+) -> Result<Vec<ChangeRow>> {
+    let mut sql = String::from("SELECT * FROM changes WHERE repo_id = ?1");
     if !filter.statuses.is_empty() {
         sql.push_str(" AND status IN (");
         sql.push_str(&vec!["?"; filter.statuses.len()].join(", "));
@@ -602,23 +614,8 @@ pub fn repo_change_numbers(
         values.push(tag.value().to_string().into());
     }
     let mut stmt = conn.prepare(&sql)?;
-    let ids = stmt
-        .query_map(rusqlite::params_from_iter(values), |r| {
-            col_u64(r.get(0)?).map(ChangeNumber::new)
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(ids)
-}
-
-/// All change rows, id-ascending (creation order) — for replay on startup.
-///
-/// # Errors
-///
-/// On a database failure.
-pub fn all_changes(conn: &Connection) -> Result<Vec<ChangeRow>> {
-    let mut stmt = conn.prepare("SELECT * FROM changes ORDER BY id")?;
     let rows = stmt
-        .query_map([], map_change)?
+        .query_map(rusqlite::params_from_iter(values), map_change)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
@@ -1105,7 +1102,7 @@ mod tests {
     }
 
     fn matching_tags(conn: &Connection, repo_id: u64, tags: Vec<Tag>) -> Vec<ChangeNumber> {
-        repo_change_numbers(
+        repo_changes(
             conn,
             repo_id,
             &ChangeFilter {
@@ -1114,6 +1111,9 @@ mod tests {
             },
         )
         .expect("query")
+        .into_iter()
+        .map(|row| row.id)
+        .collect()
     }
 
     fn set_tags(conn: &mut Connection, number: ChangeNumber, pairs: &[(&str, &str)]) {
@@ -1144,7 +1144,7 @@ mod tests {
     }
 
     #[test]
-    fn repo_change_numbers_ands_every_requested_tag() {
+    fn repo_changes_and_every_requested_tag() {
         let mut conn = mem();
         let repo = repo(&mut conn, "/r/.git");
         let both = change_in(&mut conn, repo.id, "I1");
@@ -1312,12 +1312,12 @@ mod tests {
             )
             .expect("query status")
         };
-        // NULL until first stamped (a change that has never appended), and the
-        // typed row reads it back as None.
-        assert_eq!(status(&conn), None);
+        // The insert writes the status, so a change with no append still
+        // filters as what its empty fold says it is.
+        assert_eq!(status(&conn).as_deref(), Some("pending"));
         assert_eq!(
             get_change(&conn, c).expect("get").expect("row").status,
-            None
+            Some(ChangeStatus::Pending)
         );
         write(&mut conn, |tx| {
             update_change_status(tx, c, ChangeStatus::Approved)

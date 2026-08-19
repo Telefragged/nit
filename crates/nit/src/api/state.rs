@@ -4,11 +4,11 @@
 //! the per-change append primitive, the server-wide event channel, and the
 //! API error type.
 //!
-//! Each change's [`ChangeProjection`] is rebuilt by
-//! replaying its log on startup and kept current by [`append_to_change`],
-//! which appends to the DB log and folds in lock-step under the change's
-//! projection write lock. A chain owns no state — it is derived at read
-//! time from member folds (`nit_types::chain`).
+//! The first read of a change replays its log into a
+//! [`ChangeProjection`]. [`append_to_change`] then keeps that projection
+//! current: it appends to the DB log and folds in lock-step under the
+//! change's projection write lock. A chain owns no state, because a read
+//! derives it from member folds (`nit_types::chain`).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -117,55 +117,28 @@ impl ChangeEntry {
 impl AppState {
     /// Initializes the state from `db_path`.
     ///
+    /// Migrates the schema and caches the repo registry.
     /// Seeds the id allocator above every draft id in use to prevent reuse
     /// after restart.
     ///
     /// # Errors
     ///
-    /// When the pool can't be built, the schema migration fails, or a log fails
-    /// to replay.
+    /// When the pool fails to build, or the schema migration fails.
     pub async fn load(db_path: PathBuf) -> anyhow::Result<Arc<Self>> {
         let pool = db::pool(&db_path)?;
         let conn = pool
             .get()
             .await
             .map_err(|e| anyhow::anyhow!("database pool: {e}"))?;
-        let (changes, repos, max_id) = conn
+        let (repos, max_id) = conn
             .interact(|conn| -> anyhow::Result<_> {
                 db::migrate(conn)?;
                 let max_id = db::max_draft_id(conn)?;
-                // The replay takes no transaction: it is the most expensive
-                // thing startup does, and a write transaction spanning it would
-                // hold the database's one write lock against every other
-                // process for its whole duration — to conclude, on the usual
-                // restart, that nothing has drifted.
-                let mut changes = HashMap::new();
-                let mut restamp = Vec::new();
-                for row in db::all_changes(conn)? {
-                    let rows = db::log_entries(conn, row.id, 0, None)?;
-                    let proj = review::replay_rows(&row, &rows)?;
-                    // Reconcile the cached status, writing only when it has
-                    // drifted from the fold — an unchanged restart rewrites no
-                    // rows.
-                    let status = proj.current_status();
-                    if row.status != Some(status) {
-                        restamp.push((row.id, status));
-                    }
-                    changes.insert(row.id, Arc::new(ChangeEntry::new(proj)));
-                }
-                if !restamp.is_empty() {
-                    db::write(conn, |tx| {
-                        for &(id, status) in &restamp {
-                            db::update_change_status(tx, id, status)?;
-                        }
-                        Ok(())
-                    })?;
-                }
                 let repos: HashMap<u64, Arc<RepoState>> = db::all_repos(conn)?
                     .into_iter()
                     .map(|r| (r.id, Arc::new(RepoState::new(&r))))
                     .collect();
-                Ok((changes, repos, max_id))
+                Ok((repos, max_id))
             })
             .await
             .map_err(|e| anyhow::anyhow!("database init: {e}"))??;
@@ -178,7 +151,7 @@ impl AppState {
         Ok(Arc::new(AppState {
             pool,
             repos: StdMutex::new(repos),
-            changes: StdMutex::new(changes),
+            changes: StdMutex::new(HashMap::new()),
             events,
             events_keepalive: rx.deactivate(),
             next_id: AtomicU64::new(max_id + 1),
@@ -303,23 +276,35 @@ impl AppState {
         conn: &Connection,
         change_number: ChangeNumber,
     ) -> anyhow::Result<Option<Arc<ChangeEntry>>> {
-        if let Some(existing) = self
-            .changes
-            .lock()
-            .expect("change map poisoned")
-            .get(&change_number)
-            .cloned()
-        {
+        if let Some(existing) = self.cached(change_number) {
             return Ok(Some(existing));
         }
         let Some(row) = db::get_change(conn, change_number)? else {
             return Ok(None);
         };
-        let rows = db::log_entries(conn, row.id, 0, None)?;
-        let proj = review::replay_rows(&row, &rows)?;
-        let entry = Arc::new(ChangeEntry::new(proj));
-        let mut map = self.changes.lock().expect("change map poisoned");
-        Ok(Some(map.entry(change_number).or_insert(entry).clone()))
+        Ok(Some(self.resolve(conn, &row)?))
+    }
+
+    fn cached(&self, change_number: ChangeNumber) -> Option<Arc<ChangeEntry>> {
+        self.changes
+            .lock()
+            .expect("change map poisoned")
+            .get(&change_number)
+            .cloned()
+    }
+
+    /// Replays `row`'s log into the map, or returns what a concurrent
+    /// resolve of the same change already put there.
+    fn resolve(&self, conn: &Connection, row: &db::ChangeRow) -> anyhow::Result<Arc<ChangeEntry>> {
+        let entries = db::log_entries(conn, row.id, 0, None)?;
+        let entry = Arc::new(ChangeEntry::new(review::replay_rows(row, &entries)?));
+        Ok(self
+            .changes
+            .lock()
+            .expect("change map poisoned")
+            .entry(row.id)
+            .or_insert(entry)
+            .clone())
     }
 
     /// Projects one repo's changes into a [`RepoView`].
@@ -359,10 +344,12 @@ impl AppState {
         filter: &db::ChangeFilter,
     ) -> anyhow::Result<Vec<ChangeProjection>> {
         let mut changes: Vec<ChangeProjection> = Vec::new();
-        for id in db::repo_change_numbers(conn, repo_id, filter)? {
-            if let Some(entry) = self.change(conn, id)? {
-                changes.push(entry.read().clone());
-            }
+        for row in db::repo_changes(conn, repo_id, filter)? {
+            let entry = match self.cached(row.id) {
+                Some(entry) => entry,
+                None => self.resolve(conn, &row)?,
+            };
+            changes.push(entry.read().clone());
         }
         Ok(changes)
     }
