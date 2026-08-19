@@ -54,7 +54,8 @@ fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff
     let tm = commit_tree(&g.repo, &m).expect("m tree resolves");
     let tn = commit_tree(&g.repo, &n).expect("n tree resolves");
     let git = git_diff(&g.repo, &tm, &tn, None).expect("interdiff builds");
-    let plain = render(&g.repo, &git, 3, DiffMode::Raw, |_| true).expect("plain interdiff renders");
+    let plain =
+        render(&g.repo, &git, 3, DiffMode::Full, |_| true).expect("plain interdiff renders");
     let contained = contain(
         &g.repo,
         &git,
@@ -67,7 +68,7 @@ fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff
             parent: &parent_n,
         },
         3,
-        DiffMode::Raw,
+        DiffMode::Full,
         |_| true,
     )
     .expect("containment succeeds");

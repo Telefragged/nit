@@ -31,15 +31,15 @@ pub enum FileStatus {
 
 /// How much of a diff is rendered.
 ///
-/// `Raw` renders every line. `Outline` collapses every function body, so
-/// that only signatures, doc-comments, types and fields remain — the change
-/// read at the altitude of its API surface.
+/// `Full` renders every line the change touched. `Outline` collapses every
+/// function body, so that only signatures, doc-comments, types and fields
+/// remain — the change read at the altitude of its API surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum DiffMode {
     #[default]
-    Raw,
+    Full,
     Outline,
 }
 

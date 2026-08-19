@@ -77,7 +77,7 @@ pub(super) async fn get_change_drafts(
 #[derive(Deserialize)]
 pub(super) struct DiffQuery {
     against: Option<RevisionNumber>,
-    /// `raw` when the request is silent.
+    /// `full` when the request is silent.
     #[serde(default)]
     mode: DiffMode,
 }
@@ -135,7 +135,7 @@ pub(super) async fn revision_lines(
             path: q.path,
             old_path: q.old_path,
         };
-        let wire = contained_diff(&revs, u32::MAX, DiffMode::Raw, Some(&wanted))?;
+        let wire = contained_diff(&revs, u32::MAX, DiffMode::Full, Some(&wanted))?;
         let lines = wire
             .files
             .into_iter()

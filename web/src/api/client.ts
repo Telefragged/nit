@@ -99,11 +99,11 @@ export const getDiff = (
   changeNumber: number,
   revision: number,
   against?: number,
-  mode: DiffMode = "raw",
+  mode: DiffMode = "full",
 ) => {
   const q = new URLSearchParams();
   if (against !== undefined) q.set("against", String(against));
-  if (mode !== "raw") q.set("mode", mode);
+  if (mode !== "full") q.set("mode", mode);
   const query = q.size > 0 ? `?${q}` : "";
   return request<Diff>(
     "GET",

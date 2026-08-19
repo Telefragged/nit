@@ -259,7 +259,7 @@ export default function ReviewPage() {
     localStorage.getItem(LAYOUT_KEY) === "split" ? "split" : "unified",
   );
   const [mode, setMode] = useState<DiffMode>(() =>
-    localStorage.getItem(MODE_KEY) === "outline" ? "outline" : "raw",
+    localStorage.getItem(MODE_KEY) === "outline" ? "outline" : "full",
   );
   const chooseMode = useCallback((next: DiffMode) => {
     setMode(next);
@@ -539,7 +539,7 @@ export default function ReviewPage() {
         e.preventDefault();
         setReplyOpen(true);
       } else if (e.key === "0") {
-        chooseMode(mode === "outline" ? "raw" : "outline");
+        chooseMode(mode === "outline" ? "full" : "outline");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -822,13 +822,13 @@ export default function ReviewPage() {
             </span>
             <span className="seg">
               <button
-                className={mode === "raw" ? "active" : ""}
+                className={mode === "full" ? "active" : ""}
                 onClick={() => {
-                  chooseMode("raw");
+                  chooseMode("full");
                 }}
                 title="Every line the change touched (0)"
               >
-                Raw
+                Full
               </button>
               <button
                 className={mode === "outline" ? "active" : ""}

@@ -195,7 +195,7 @@ pub(super) fn render_delta(
 /// Under [`DiffMode::Outline`] both sides are collapsed before they are
 /// diffed, so the hunks describe the change to the file's outline and the
 /// counts measure it — a rewritten function body the signature survives is
-/// `+0 -0` here and its real size in [`DiffMode::Raw`]. `new_total` is the
+/// `+0 -0` here and its real size in [`DiffMode::Full`]. `new_total` is the
 /// whole file either way: it anchors EOF for the client's expansion, which
 /// reveals real lines.
 pub(super) fn fill_lines(
@@ -209,7 +209,7 @@ pub(super) fn fill_lines(
     file.binary = false;
     file.new_total = new.lines().count() as u64;
     file.hunks = match mode {
-        DiffMode::Raw => line_hunks(&InternedInput::new(&*old, &*new), context, &Lines::Every),
+        DiffMode::Full => line_hunks(&InternedInput::new(&*old, &*new), context, &Lines::Every),
         DiffMode::Outline => {
             let (before, old) = outline(&file.path, &old);
             let (after, new) = outline(&file.path, &new);
@@ -224,7 +224,7 @@ pub(super) fn fill_lines(
 
 /// Which of a file's lines reached the diff, and where they sit in it.
 ///
-/// A raw diff reads every line, so a line's index in it is its line in the
+/// A full diff reads every line, so a line's index in it is its line in the
 /// file. An outline diff reads only the lines its collapse kept, so the
 /// numbers it reports have to come back out of the file they were taken
 /// from — anything else would anchor a comment to a line that is not the
@@ -488,7 +488,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
         old.unwrap_or_default().as_bytes(),
         new.as_bytes(),
         3,
-        DiffMode::Raw,
+        DiffMode::Full,
     );
     if file.hunks.is_empty() && !new.is_empty() {
         let lines: Vec<Line> = new
@@ -598,14 +598,14 @@ mod tests {
 
     fn shown(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
-        render(repo, &diff, 3, DiffMode::Raw, |_| true).expect("diff renders")
+        render(repo, &diff, 3, DiffMode::Full, |_| true).expect("diff renders")
     }
 
     /// One file's diff with every unchanged line kept as context — what the UI
     /// reveals from when expanding a hunk's surroundings.
     fn whole(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
-        render(repo, &diff, u32::MAX, DiffMode::Raw, |p| p == only).expect("diff renders")
+        render(repo, &diff, u32::MAX, DiffMode::Full, |p| p == only).expect("diff renders")
     }
 
     fn outlined(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
@@ -632,8 +632,8 @@ mod tests {
         assert_eq!(file.path, "m.rs");
         assert_eq!(file.new_total, 4);
 
-        let raw = shown(&r.repo, &r.find(old), &r.find(new));
-        assert_eq!((raw.files[0].additions, raw.files[0].deletions), (1, 2));
+        let full = shown(&r.repo, &r.find(old), &r.find(new));
+        assert_eq!((full.files[0].additions, full.files[0].deletions), (1, 2));
     }
 
     #[test]
