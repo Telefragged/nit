@@ -11,6 +11,7 @@ import type {
   NewDraft,
   Diff,
   DiffFile,
+  DiffMode,
   Draft,
   FileLines,
   Repo,
@@ -98,13 +99,17 @@ export const getDiff = (
   changeNumber: number,
   revision: number,
   against?: number,
-) =>
-  request<Diff>(
+  mode: DiffMode = "raw",
+) => {
+  const q = new URLSearchParams();
+  if (against !== undefined) q.set("against", String(against));
+  if (mode !== "raw") q.set("mode", mode);
+  const query = q.size > 0 ? `?${q}` : "";
+  return request<Diff>(
     "GET",
-    against === undefined
-      ? `/changes/${changeNumber}/revisions/${revision}/diff`
-      : `/changes/${changeNumber}/revisions/${revision}/diff?against=${against}`,
+    `/changes/${changeNumber}/revisions/${revision}/diff${query}`,
   );
+};
 
 /** The file's full-context diff lines over the same trees as `getDiff`
  * (`against` selects the interdiff base), for revealing the unchanged runs

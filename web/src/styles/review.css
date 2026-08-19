@@ -149,6 +149,10 @@
   overflow: hidden;
 }
 
+.seg + .seg {
+  margin-left: 10px;
+}
+
 .seg button {
   border: none;
   border-radius: 0;
@@ -457,7 +461,7 @@
   color: var(--red);
 }
 
-.binary-note {
+.diff-note {
   padding: 18px 12px;
   color: var(--text-faint);
   font-size: 12px;

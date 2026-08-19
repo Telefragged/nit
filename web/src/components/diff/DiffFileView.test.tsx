@@ -184,3 +184,21 @@ describe("context-expand buttons", () => {
     ).toEqual([[["expand-all", "+10"]], [["expand-all", "+10"]]]);
   });
 });
+
+describe("a file whose outline is untouched", () => {
+  const clean: DiffFile = {
+    path: "src/body-only.rs",
+    status: "modified",
+    binary: false,
+    additions: 0,
+    deletions: 0,
+    new_total: 8,
+    hunks: [],
+  };
+
+  it("stays listed and says why it shows nothing", () => {
+    const { container } = renderFile("unified", clean);
+    expect(container.querySelector(".file-section")).not.toBeNull();
+    expect(container.textContent).toContain("No changed lines to show");
+  });
+});

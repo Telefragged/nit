@@ -21,7 +21,13 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { createDraft, getChain, getDiff, getRepo } from "../api/client";
-import type { ChangeDetail, Decision, Review, Revision } from "../api/types";
+import type {
+  ChangeDetail,
+  Decision,
+  DiffMode,
+  Review,
+  Revision,
+} from "../api/types";
 import { verdictStatus } from "../api/verdict";
 import { StatusChip } from "../components/badges";
 import ChainNav from "../components/ChainNav";
@@ -64,6 +70,8 @@ import { ReviewContext, sameTarget } from "./reviewContext";
 
 const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
+
+const MODE_KEY = "nit.diff-mode";
 
 /** Why `c` drafted nothing — each names the rule the selection broke and
  * the selection that satisfies it. */
@@ -250,6 +258,13 @@ export default function ReviewPage() {
   const [layout, setLayout] = useState<Layout>(() =>
     localStorage.getItem(LAYOUT_KEY) === "split" ? "split" : "unified",
   );
+  const [mode, setMode] = useState<DiffMode>(() =>
+    localStorage.getItem(MODE_KEY) === "outline" ? "outline" : "raw",
+  );
+  const chooseMode = useCallback((next: DiffMode) => {
+    setMode(next);
+    localStorage.setItem(MODE_KEY, next);
+  }, []);
   const [editingTarget, setEditingTarget] = useState<DraftTarget | null>(null);
   const editorDirty = useRef(false);
   const diffColumnRef = useRef<HTMLDivElement>(null);
@@ -361,12 +376,12 @@ export default function ReviewPage() {
   // outlives every way of replacing it (it is reused across /changes/:id).
   // Adjust-during-render, like `shownChange` below: a bubble hanging over
   // code it never described must not paint even once.
-  const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}`;
+  const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}:${mode}`;
   if (selectionMiss && selectionMiss.diff !== diffKey) setSelectionMiss(null);
 
   const diffQ = useQuery({
-    queryKey: ["diff", changeNumber, selected, against ?? null],
-    queryFn: () => getDiff(changeNumber, selected, against),
+    queryKey: ["diff", changeNumber, selected, against ?? null, mode],
+    queryFn: () => getDiff(changeNumber, selected, against, mode),
     enabled: published !== undefined,
     retry: false,
   });
@@ -523,6 +538,8 @@ export default function ReviewPage() {
         // the cover-message textarea the opening modal focuses.
         e.preventDefault();
         setReplyOpen(true);
+      } else if (e.key === "0") {
+        chooseMode(mode === "outline" ? "raw" : "outline");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -539,6 +556,8 @@ export default function ReviewPage() {
     replyOpen,
     ctxValue,
     diffKey,
+    mode,
+    chooseMode,
   ]);
 
   // Side-by-side selection paint: tag the diff column with the side the
@@ -798,7 +817,28 @@ export default function ReviewPage() {
             >
               <kbd>[</kbd>
               <kbd>]</kbd> files · <kbd>n</kbd>
-              <kbd>p</kbd> changes · <kbd>c</kbd> comment · <kbd>a</kbd> reply
+              <kbd>p</kbd> changes · <kbd>c</kbd> comment · <kbd>a</kbd> reply ·{" "}
+              <kbd>0</kbd> outline
+            </span>
+            <span className="seg">
+              <button
+                className={mode === "raw" ? "active" : ""}
+                onClick={() => {
+                  chooseMode("raw");
+                }}
+                title="Every line the change touched (0)"
+              >
+                Raw
+              </button>
+              <button
+                className={mode === "outline" ? "active" : ""}
+                onClick={() => {
+                  chooseMode("outline");
+                }}
+                title="Every function body collapsed, leaving signatures (0)"
+              >
+                Outline
+              </button>
             </span>
             <span className="seg">
               <button

@@ -123,8 +123,9 @@ const ExpandButton = ({
 );
 
 /** A separator over a gap of `more` lines the diff does not show, shown
- * only while the gap remains (a fully-revealed gap leaves the hunks
- * contiguous, so it vanishes).
+ * only while the gap
+ * remains (a fully-revealed gap leaves the hunks contiguous, so it
+ * vanishes).
  * When the file is expandable the gap's reveal buttons float over it: the
  * whole run, then a stepped button per
  * edge it can pull from — down from `hunk`'s predecessor, up from `hunk`
@@ -567,7 +568,9 @@ export default function DiffFileView({
           ) : null}
 
           {file.binary ? (
-            <div className="binary-note">Binary file — contents not shown</div>
+            <div className="diff-note">Binary file — contents not shown</div>
+          ) : hunks.length === 0 ? (
+            <div className="diff-note">No changed lines to show</div>
           ) : (
             <div
               className={`diff-grid ${
