@@ -13,17 +13,21 @@ use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
 /// interface and their bodiless signatures whole. A trait method with a
 /// default body is a definition like any other: its signature stays, its
 /// body goes.
-const RUST_PATTERNS: &str = "(function_item body: (block) @collapse)";
+const RUST_PATTERNS: &str = "(function_item body: (block) @delimited)";
 
 /// A definition bound to a name, whether it declares one or is assigned to
 /// one — the second form is how most of a React codebase is written.
 /// A callback passed inline is not a definition and keeps its body.
 const TYPESCRIPT_PATTERNS: &str = "
-    (function_declaration body: (statement_block) @collapse)
-    (method_definition body: (statement_block) @collapse)
-    (variable_declarator value: (arrow_function body: (statement_block) @collapse))
-    (variable_declarator value: (function_expression body: (statement_block) @collapse))
+    (function_declaration body: (statement_block) @delimited)
+    (method_definition body: (statement_block) @delimited)
+    (variable_declarator value: (arrow_function body: (statement_block) @delimited))
+    (variable_declarator value: (function_expression body: (statement_block) @delimited))
 ";
+
+/// A `def` at any depth, so a method reads like a free function. A `lambda`
+/// is not a definition and keeps its body, as an inline callback does.
+const PYTHON_PATTERNS: &str = "(function_definition body: (block) @bare)";
 
 /// The file's lines that its outline keeps, each with the 1-based number it
 /// holds in the file.
@@ -43,10 +47,13 @@ pub(super) fn outline<'a>(path: &str, text: &'a str) -> (Vec<u64>, Vec<&'a str>)
 
 /// Which of the file's lines sit inside a collapsed body, indexed from 0.
 ///
-/// A body's own first and last lines are not in it: the line the body opens
-/// on ends the signature, and the one it closes on carries the delimiter
-/// that shows the signature was for a definition. So a body has to span
-/// three lines before collapsing hides anything.
+/// A capture names how its body is written. A `@delimited` body's own first
+/// and last lines are not in it: the line it opens on ends the signature,
+/// and the one it closes on carries the delimiter that shows the signature
+/// was for a definition — so such a body has to span three lines before
+/// collapsing hides anything. A `@bare` body is marked by its indentation
+/// alone, so every line it covers goes, bar the one it shares with the
+/// signature that introduces it.
 ///
 /// All false when the language has no grammar or its parse fails.
 fn collapsed_lines(path: &str, text: &str) -> Vec<bool> {
@@ -65,10 +72,16 @@ fn collapsed_lines(path: &str, text: &str) -> Vec<bool> {
     let mut matches = cursor.matches(&grammar.query, tree.root_node(), text.as_bytes());
     while let Some(matched) = matches.next() {
         for body in matched.captures {
-            let (opens, closes) = (
-                body.node.start_position().row + 1,
-                body.node.end_position().row,
-            );
+            let (first, last) = (body.node.start_position().row, body.node.end_position().row);
+            let (opens, closes) = if grammar.query.capture_names()[body.index as usize] == "bare" {
+                let on_the_signature_line = body
+                    .node
+                    .parent()
+                    .is_some_and(|def| def.start_position().row == first);
+                (first + usize::from(on_the_signature_line), last + 1)
+            } else {
+                (first + 1, last)
+            };
             if opens < closes {
                 collapsed[opens..closes].fill(true);
             }
@@ -111,12 +124,16 @@ static TSX: LazyLock<Grammar> = LazyLock::new(|| {
     )
 });
 
+static PYTHON: LazyLock<Grammar> =
+    LazyLock::new(|| Grammar::new(tree_sitter_python::LANGUAGE.into(), PYTHON_PATTERNS));
+
 /// The grammar for the language `path` is written in.
 fn grammar(path: &str) -> Option<&'static Grammar> {
     match path.rsplit_once('.')?.1 {
         "rs" => Some(&RUST),
         "ts" | "mts" | "cts" => Some(&TYPESCRIPT),
         "tsx" => Some(&TSX),
+        "py" | "pyi" => Some(&PYTHON),
         _ => None,
     }
 }
@@ -136,7 +153,7 @@ mod tests {
 
     #[test]
     fn every_grammar_compiles_its_patterns() {
-        for grammar in [&RUST, &TYPESCRIPT, &TSX] {
+        for grammar in [&RUST, &TYPESCRIPT, &TSX, &PYTHON] {
             LazyLock::force(grammar);
         }
     }
@@ -199,6 +216,29 @@ items.filter((row) => {
     }
 
     #[test]
+    fn a_python_class_keeps_its_methods_and_loses_their_bodies() {
+        let text = "\
+class Chain:
+    \"\"\"A chain.\"\"\"
+
+    @property
+    def tip(self) -> str:
+        head = self.revs[-1]
+        return head.sha
+";
+        assert_eq!(
+            kept("m.py", text),
+            "1:class Chain:\n2:    \"\"\"A chain.\"\"\"\n3:\n4:    @property\n5:    def tip(self) -> str:"
+        );
+    }
+
+    #[test]
+    fn a_python_body_on_the_signature_line_hides_nothing() {
+        let text = "def nil(): pass\ndef one():\n    return 1\n";
+        assert_eq!(kept("m.py", text), "1:def nil(): pass\n2:def one():");
+    }
+
+    #[test]
     fn a_language_with_no_grammar_keeps_every_line() {
         let text = "a\nb\nc\n";
         assert_eq!(kept("m.hs", text), "1:a\n2:b\n3:c");
@@ -206,7 +246,7 @@ items.filter((row) => {
     }
 
     #[test]
-    fn a_body_on_the_signature_line_hides_nothing() {
+    fn a_rust_body_on_the_signature_line_hides_nothing() {
         let text = "fn nil() {}\nfn one() -> u8 {\n    1\n}\n";
         assert_eq!(kept("m.rs", text), "1:fn nil() {}\n2:fn one() -> u8 {\n4:}");
     }

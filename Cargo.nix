@@ -3400,6 +3400,10 @@ rec {
             packageId = "tree-sitter";
           }
           {
+            name = "tree-sitter-python";
+            packageId = "tree-sitter-python";
+          }
+          {
             name = "tree-sitter-rust";
             packageId = "tree-sitter-rust";
           }
@@ -6005,6 +6009,32 @@ rec {
         authors = [
           "Max Brunsfeld <maxbrunsfeld@gmail.com>"
           "Amaan Qureshi <amaanq12@gmail.com>"
+        ];
+
+      };
+      "tree-sitter-python" = rec {
+        crateName = "tree-sitter-python";
+        version = "0.25.0";
+        edition = "2021";
+        sha256 = "072anxf7f3wn2jzpa1c8fnnskhwjjkd4qvzlc2zl1rsjjv9mzy3b";
+        build = "bindings/rust/build.rs";
+        libName = "tree_sitter_python";
+        libPath = "bindings/rust/lib.rs";
+        authors = [
+          "Max Brunsfeld <maxbrunsfeld@gmail.com>"
+          "Amaan Qureshi <amaanq12@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "tree-sitter-language";
+            packageId = "tree-sitter-language";
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "cc";
+            packageId = "cc";
+          }
         ];
 
       };
