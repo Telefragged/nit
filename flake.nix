@@ -181,6 +181,14 @@
         else
           "";
 
+      # cargo loads every workspace member's manifest and rejects one that
+      # discovers no target, so a `src` holding only the crates a derivation
+      # builds hands the members it left out an empty stand-in lib.
+      stubMembers = nixpkgs.lib.concatMapStrings (member: ''
+        mkdir -p ${member}/src
+        : > ${member}/src/lib.rs
+      '');
+
       # The web's wire types, generated from nit-types: a native `cargo test`
       # (the `ts`-feature exporter) writes every web-facing type's ts-rs
       # declaration into one module, prettier-formatted like any source file. A
@@ -196,7 +204,9 @@
             fileset = nixpkgs.lib.fileset.unions [
               ./Cargo.toml
               ./Cargo.lock
-              ./crates
+              ./crates/nit-types
+              ./crates/nit/Cargo.toml
+              ./crates/nit-wasm/Cargo.toml
             ];
           };
           nativeBuildInputs = [
@@ -205,12 +215,17 @@
             pkgs.rustPlatform.cargoSetupHook
           ];
           cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-          buildPhase = ''
-            TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
-              cargo test --offline --features ts -p nit-types \
-              -- --exact export::write_wire_types
-            prettier --write types.gen.ts
-          '';
+          buildPhase =
+            stubMembers [
+              "crates/nit"
+              "crates/nit-wasm"
+            ]
+            + ''
+              TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
+                cargo test --offline --features ts -p nit-types \
+                -- --exact export::write_wire_types
+              prettier --write types.gen.ts
+            '';
           installPhase = "mv types.gen.ts $out";
           dontFixup = true;
         };
@@ -244,13 +259,7 @@
             pkgs.rustPlatform.cargoSetupHook
           ];
           cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-          buildPhase = ''
-            # cargo loads every workspace member's manifest and rejects one
-            # that discovers no target, so the sourceless member gets an
-            # empty stand-in lib.
-            mkdir -p crates/nit/src
-            : > crates/nit/src/lib.rs
-
+          buildPhase = stubMembers [ "crates/nit" ] + ''
             cargo build --offline --release --target wasm32-unknown-unknown -p nit-wasm
             wasm-bindgen target/wasm32-unknown-unknown/release/nit_wasm.wasm \
               --target bundler --out-dir pkg
