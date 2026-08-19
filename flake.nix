@@ -224,13 +224,18 @@
         pkgs:
         pkgs.stdenv.mkDerivation {
           name = "nit-wasm-pkg";
+          # Only nit-wasm and the nit-types it depends on: the server crate's
+          # sources are excluded so a server change leaves this derivation —
+          # and every web check that injects it — untouched.
           src = nixpkgs.lib.fileset.toSource {
             root = ./.;
             fileset = nixpkgs.lib.fileset.unions [
               ./Cargo.toml
               ./Cargo.lock
               ./rust-toolchain.toml
-              ./crates
+              ./crates/nit-types
+              ./crates/nit-wasm
+              ./crates/nit/Cargo.toml
             ];
           };
           nativeBuildInputs = [
@@ -240,6 +245,12 @@
           ];
           cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
           buildPhase = ''
+            # cargo loads every workspace member's manifest and rejects one
+            # that discovers no target, so the sourceless member gets an
+            # empty stand-in lib.
+            mkdir -p crates/nit/src
+            : > crates/nit/src/lib.rs
+
             cargo build --offline --release --target wasm32-unknown-unknown -p nit-wasm
             wasm-bindgen target/wasm32-unknown-unknown/release/nit_wasm.wasm \
               --target bundler --out-dir pkg
