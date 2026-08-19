@@ -15,6 +15,7 @@
 //! there are no read-time scans.
 
 pub mod diff;
+mod outline;
 pub mod rebase;
 pub mod state;
 pub mod views;

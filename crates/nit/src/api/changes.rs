@@ -11,6 +11,7 @@ use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList};
 use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
+use nit_types::domain::DiffMode;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
@@ -76,6 +77,9 @@ pub(super) async fn get_change_drafts(
 #[derive(Deserialize)]
 pub(super) struct DiffQuery {
     against: Option<RevisionNumber>,
+    /// `raw` when the request is silent.
+    #[serde(default)]
+    mode: DiffMode,
 }
 
 pub(super) async fn revision_diff(
@@ -86,7 +90,7 @@ pub(super) async fn revision_diff(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let revs = resolve_revs(&state, &entry, n, q.against)?;
-        let mut wire = contained_diff(&revs, 3, None)?;
+        let mut wire = contained_diff(&revs, 3, q.mode, None)?;
         // After tagging: the message is not a git delta, so it is never drift.
         wire.files.insert(
             0,
@@ -131,7 +135,7 @@ pub(super) async fn revision_lines(
             path: q.path,
             old_path: q.old_path,
         };
-        let wire = contained_diff(&revs, u32::MAX, Some(&wanted))?;
+        let wire = contained_diff(&revs, u32::MAX, DiffMode::Raw, Some(&wanted))?;
         let lines = wire
             .files
             .into_iter()
@@ -203,7 +207,12 @@ fn resolve_revs(
 ///
 /// A plain diff when the two revisions share a parent, and on analysis
 /// failure.
-fn contained_diff(revs: &Revs, context: u32, only: Option<&Wanted>) -> Result<Diff, Error> {
+fn contained_diff(
+    revs: &Revs,
+    context: u32,
+    mode: DiffMode,
+    only: Option<&Wanted>,
+) -> Result<Diff, Error> {
     let repo = open_repo(&revs.git_dir)?;
     let revision = &revs.revision;
     let new_tree = commit_tree(&repo, &revision.commit_sha)?;
@@ -216,7 +225,7 @@ fn contained_diff(revs: &Revs, context: u32, only: Option<&Wanted>) -> Result<Di
     let names = only.map(Wanted::names);
     let git = diff::git_diff(&repo, &old_tree, &new_tree, names.as_deref())?;
     let shown = |path: &str| only.is_none_or(|w| w.path == path);
-    let plain = || diff::render(&repo, &git, context, shown);
+    let plain = || diff::render(&repo, &git, context, mode, shown);
 
     let Some(m) = revs
         .against
@@ -225,7 +234,7 @@ fn contained_diff(revs: &Revs, context: u32, only: Option<&Wanted>) -> Result<Di
     else {
         return plain().map_err(Error::from);
     };
-    rebase::contain(&repo, &git, &at(m), &at(revision), context, shown)
+    rebase::contain(&repo, &git, &at(m), &at(revision), context, mode, shown)
         .or_else(|e| {
             tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
             plain()

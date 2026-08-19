@@ -12,7 +12,8 @@ pub struct Diff {
 
 /// A file's full-context diff lines.
 ///
-/// For expanding the unchanged runs the shown diff hides. Same `Line`
+/// For expanding the runs the shown diff hides — context beyond a hunk's
+/// reach, or a body an outline collapsed. Same `Line`
 /// shape as the diff, so revealed lines carry their drift exactly as the
 /// hunks do.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +37,7 @@ pub struct DiffFile {
     pub deletions: u64,
     /// New-side line count; 0 when deleted or binary.
     ///
-    /// The EOF anchor that lets the client reveal the unchanged run below
+    /// The EOF anchor that lets the client reveal the run below
     /// the last hunk, which no hunk bounds from beneath.
     pub new_total: u64,
     /// Empty when binary.

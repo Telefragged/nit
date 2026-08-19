@@ -19,7 +19,7 @@ use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, git_diff, render};
 use nit::api::rebase::{Rev, contain};
 use nit_types::diff::{Diff, DiffFile};
 use nit_types::domain::Sha;
-use nit_types::domain::{FileStatus, LineKind};
+use nit_types::domain::{DiffMode, FileStatus, LineKind};
 
 fn body<S: std::borrow::Borrow<str>>(lines: &[S]) -> Vec<u8> {
     let mut s = lines.join("\n");
@@ -54,7 +54,7 @@ fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff
     let tm = commit_tree(&g.repo, &m).expect("m tree resolves");
     let tn = commit_tree(&g.repo, &n).expect("n tree resolves");
     let git = git_diff(&g.repo, &tm, &tn, None).expect("interdiff builds");
-    let plain = render(&g.repo, &git, 3, |_| true).expect("plain interdiff renders");
+    let plain = render(&g.repo, &git, 3, DiffMode::Raw, |_| true).expect("plain interdiff renders");
     let contained = contain(
         &g.repo,
         &git,
@@ -67,6 +67,7 @@ fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff
             parent: &parent_n,
         },
         3,
+        DiffMode::Raw,
         |_| true,
     )
     .expect("containment succeeds");
