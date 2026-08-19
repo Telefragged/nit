@@ -52,7 +52,7 @@ use anyhow::Result;
 use git2::{Oid, Repository, Tree};
 use imara_diff::InternedInput;
 
-use nit_types::diff::{Diff, Line};
+use nit_types::diff::{Diff, DiffFile, Line};
 use nit_types::domain::LineKind;
 use nit_types::domain::Sha;
 
@@ -186,99 +186,68 @@ fn file_drift(bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> DriftRanges {
     drift_ranges(&pvp, &ovp, &nvp)
 }
 
-/// Whether any line of `edit` escapes the drift ranges.
-///
-/// One that does is an edit the change made itself, which the reviewer must
-/// still see.
-fn escapes_drift(edit: &Edit, old: &[Span], new: &[Span]) -> bool {
-    let free = |span: &Span, ranges: &[Span]| span.clone().any(|l| !drifted(ranges, l));
-    free(&edit.before, old) || free(&edit.after, new)
-}
-
 fn is_real_change(line: &Line) -> bool {
     matches!(line.kind, LineKind::Add | LineKind::Del) && !line.drift
 }
 
-/// Which of an interdiff's files are the change's, and where the base moved
-/// lines inside them.
+/// Marks the file's drifted lines, drops its fully-drift hunks and recounts
+/// what is left.
 ///
-/// Resolved before any file is rendered, so a file that is the base's alone
-/// costs neither a blob read nor a line diff.
-///
-/// Per analysed file: `None` — none of it is the change's, so don't render
-/// it at all; `Some(ranges)` — render it and tag these old/new lines. A file
-/// in neither state is absent and left plain: it carries no drift, or it is
-/// binary, or its parent names did not resolve.
-#[derive(Default)]
-pub struct Drift(HashMap<String, Option<DriftRanges>>);
-
-impl Drift {
-    /// Whether the render should build `path` at all.
-    #[must_use]
-    pub fn renders(&self, path: &str) -> bool {
-        !matches!(self.0.get(path), Some(None))
+/// Region selection follows the change's own real edits: a hunk the base
+/// alone explains is not a region of this file the reviewer is looking at.
+fn tag(file: &mut DiffFile, (old_ranges, new_ranges): &DriftRanges) {
+    // The wire numbers lines from 1; the spans index from 0.
+    let hit = |ranges: &[Span], n: Option<u64>| {
+        n.and_then(|n| u32::try_from(n).ok()?.checked_sub(1))
+            .is_some_and(|l| drifted(ranges, l))
+    };
+    for line in file.hunks.iter_mut().flat_map(|h| h.lines.iter_mut()) {
+        line.drift = match line.kind {
+            LineKind::Del => hit(old_ranges, line.old),
+            LineKind::Add => hit(new_ranges, line.new),
+            LineKind::Context => false,
+        };
     }
-
-    /// Marks each analysed file's drift lines in place.
-    ///
-    /// Drops its fully-drift hunks and recounts its non-drift totals.
-    /// Leaves every other file byte-identical, so a same-parent interdiff
-    /// is untouched.
-    pub fn tag(&self, diff: &mut Diff) {
-        for file in &mut diff.files {
-            let Some(Some((old_ranges, new_ranges))) = self.0.get(&file.path) else {
-                continue;
-            };
-            // The wire numbers lines from 1; the spans index from 0.
-            let hit = |ranges: &[Span], n: Option<u64>| {
-                n.and_then(|n| u32::try_from(n).ok()?.checked_sub(1))
-                    .is_some_and(|l| drifted(ranges, l))
-            };
-            for line in file.hunks.iter_mut().flat_map(|h| h.lines.iter_mut()) {
-                line.drift = match line.kind {
-                    LineKind::Del => hit(old_ranges, line.old),
-                    LineKind::Add => hit(new_ranges, line.new),
-                    LineKind::Context => false,
-                };
-            }
-            // Region selection follows the change's own real edits.
-            file.hunks.retain(|h| h.lines.iter().any(is_real_change));
-            (file.additions, file.deletions) = diff::stats(&file.hunks);
-        }
-    }
+    file.hunks.retain(|h| h.lines.iter().any(is_real_change));
+    (file.additions, file.deletions) = diff::stats(&file.hunks);
 }
 
-/// Resolves the drift of `interdiff` (`tree(m) → tree(n)`).
+/// The wire diff for `interdiff` (`tree(m) → tree(n)`) with its drift
+/// contained.
 ///
 /// The interdiff is built by the caller so its tree diff and rename
-/// detection are paid once. `only` bounds the analysis to a single file,
+/// detection are paid once. `only` bounds the walk to a single file,
 /// matching the render's own bound. The caller invokes this only when
 /// `parent(m) != parent(n)`.
 ///
-/// Two verdicts per file: whether it is the change's to show at all, and
-/// which of its lines the base moved. Best-effort — a file the change
-/// touched that is binary, or whose parent names the base movement does not
-/// connect, is left plain (the others are still contained). A returned error
-/// means nothing is tagged at all (the caller serves the plain interdiff).
+/// One pass, one verdict per file, each decided on the cheapest evidence
+/// that settles it: a file the base moved on its own is dropped by name
+/// alone, one the change left untouched at both revisions by its tree oids,
+/// and only what survives is read and diffed — once, for its drift ranges
+/// and its wire lines together. Best-effort — a file the change touched that
+/// is binary, or whose parent names the base movement does not connect, is
+/// rendered plain (the others are still contained). A returned error means
+/// nothing is contained at all (the caller serves the plain interdiff).
 ///
 /// # Errors
 ///
-/// When git cannot diff the two parents.
-pub fn analyze(
+/// When a tree won't resolve, git cannot diff two of them, or a blob cannot
+/// be read.
+pub fn contain(
     repo: &Repository,
     interdiff: &git2::Diff,
     m: &Rev,
     n: &Rev,
+    context: u32,
     only: Option<&str>,
-) -> Result<Drift> {
-    let mut drift = Drift::default();
+) -> Result<Diff> {
     let (Some(tree_m), Some(tree_n), Some(parent_m), Some(parent_n)) = (
         diff::commit_tree(repo, m.commit),
         diff::commit_tree(repo, n.commit),
         diff::commit_tree(repo, m.parent),
         diff::commit_tree(repo, n.parent),
     ) else {
-        return Ok(drift); // A tree won't resolve → leave the interdiff plain.
+        anyhow::bail!("a revision's tree is missing");
     };
 
     // Each side's names read backwards, tree → parent: the seam that finds a
@@ -297,20 +266,20 @@ pub fn analyze(
         .collect();
     let base: HashMap<String, String> = moves(repo, &parent_m, &parent_n)?.into_iter().collect();
 
+    let mut files = Vec::new();
     for delta in interdiff.deltas() {
-        let Some((_, path, old_path)) = diff::delta_file(&delta) else {
+        let Some(mut file) = diff::delta_file(&delta) else {
             continue;
         };
-        if only.is_some_and(|p| p != path) {
+        if only.is_some_and(|p| p != file.path) {
             continue;
         }
-        let name_m = old_path.as_deref().unwrap_or(&path);
-        let name_n = path.as_str();
+        let name_m = file.old_path.as_deref().unwrap_or(&file.path);
+        let name_n = file.path.as_str();
         // A file the change touched under neither name moved with the base
         // alone, so none of it is the change's to show (gerrit's
         // `isTouched`).
         if !touched.contains(name_m) && !touched.contains(name_n) {
-            drift.0.insert(path, None);
             continue;
         }
         let name_pm = in_parent_m.get(name_m).map_or(name_m, String::as_str);
@@ -320,11 +289,12 @@ pub fn analyze(
         // disagreed) is left plain: diffing unrelated parent blobs could
         // claim the change's real edits as drift.
         if base.get(name_pm).map(String::as_str) != Some(name_pn) {
+            files.push(diff::render_delta(repo, &delta, file, context)?);
             continue;
         }
         // Gerrit's implicitRename: a rename either side's delta produced is
         // the change's own and stays visible even when fully drifted.
-        let own_rename = old_path.is_some() && (name_pm != name_m || name_pn != name_n);
+        let own_rename = file.old_path.is_some() && (name_pm != name_m || name_pn != name_n);
         // The interdiff's own delta already carries the two tree(m)/tree(n) ids.
         let (oid_pm, oid_m) = (entry_oid(&parent_m, name_pm), delta.old_file().id());
         let (oid_pn, oid_n) = (entry_oid(&parent_n, name_pn), delta.new_file().id());
@@ -335,7 +305,6 @@ pub fn analyze(
         // nothing escapes them. Deciding it on tree oids alone keeps the
         // blobs unread.
         if oid_pm == oid_m && oid_pn == oid_n && !own_rename {
-            drift.0.insert(path, None);
             continue;
         }
         let blob = |name: &str, oid| diff::blob_bytes(repo, name, oid);
@@ -345,25 +314,27 @@ pub fn analyze(
             blob(name_pn, oid_pn)?,
             blob(name_n, oid_n)?,
         ) else {
-            continue; // Binary on some side — leave plain.
+            // Binary on some side.
+            files.push(diff::render_delta(repo, &delta, file, context)?);
+            continue;
         };
         let ranges = file_drift(&bpm, &bm, &bpn, &bn);
-        // The file's own m → n edits decide whether anything survives the base
-        // movement — the verdict the rendered lines would give, without
-        // rendering them. A rename of the change's own is kept regardless, so
-        // it need not be asked.
-        let keep = own_rename
-            || buffer_edits(&bm, &bn)
-                .iter()
-                .any(|e| escapes_drift(e, &ranges.0, &ranges.1));
-        drift.0.insert(path, keep.then_some(ranges));
+        diff::fill_lines(&mut file, &bm, &bn, context);
+        tag(&mut file, &ranges);
+        // What the tagging left standing is the verdict: a file with no real
+        // edit of the change's own is the base's work throughout. A rename
+        // the change made is its own work even when every line inside it
+        // drifted.
+        if own_rename || !file.hunks.is_empty() {
+            files.push(file);
+        }
     }
-    Ok(drift)
+    Ok(Diff { files })
 }
 
 /// A revision and the parent its diff is taken against.
 ///
-/// The pair `analyze` needs at each end of an interdiff, named so the two
+/// The pair [`contain`] needs at each end of an interdiff, named so the two
 /// cannot be swapped.
 pub struct Rev<'a> {
     pub commit: &'a Sha,

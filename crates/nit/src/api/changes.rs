@@ -163,14 +163,12 @@ fn resolve_revs(
 
 /// The wire diff for `revs` with rebase drift contained.
 ///
-/// `parent → commit` of the revision, or `tree(m) → tree(n)` when it
-/// names a counterpart to diff against. Resolve the drift first so a file
-/// the base movement fully explains is never rendered, then tag what
-/// survives — the order is the point, and owning it here is what keeps
+/// `parent → commit` of the revision, or `tree(m) → tree(n)` when it names
+/// a counterpart to diff against. Owning the choice here is what keeps
 /// `/diff` and `/lines` from having to agree on it separately.
 ///
 /// A plain diff when the two revisions share a parent, and on analysis
-/// failure — the drift is then empty, which renders and tags nothing.
+/// failure.
 fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff, Error> {
     let repo = open_repo(&revs.git_dir)?;
     let revision = &revs.revision;
@@ -182,23 +180,21 @@ fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff,
             .map_or(&revision.parent_sha, |a| &a.commit_sha),
     )?;
     let git = diff::git_diff(&repo, &old_tree, &new_tree)?;
+    let plain = || diff::render(&repo, &git, context, |path| only.is_none_or(|p| p == path));
 
-    let drift = match revs
+    let Some(m) = revs
         .against
         .as_ref()
         .filter(|a| a.parent_sha != revision.parent_sha)
-    {
-        None => rebase::Drift::default(),
-        Some(m) => rebase::analyze(&repo, &git, &at(m), &at(revision), only).unwrap_or_else(|e| {
-            tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
-            rebase::Drift::default()
-        }),
+    else {
+        return Ok(plain()?);
     };
-    let mut wire = diff::render(&repo, &git, context, |path| {
-        only.is_none_or(|p| p == path) && drift.renders(path)
-    })?;
-    drift.tag(&mut wire);
-    Ok(wire)
+    Ok(
+        rebase::contain(&repo, &git, &at(m), &at(revision), context, only).or_else(|e| {
+            tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
+            plain()
+        })?,
+    )
 }
 
 fn at(r: &RevisionProjection) -> rebase::Rev<'_> {

@@ -2,12 +2,12 @@
 //! property checked against real git.
 //!
 //! Most tests drive the diff machinery directly — an unfiltered `render` is
-//! the plain interdiff (what leaked the base movement before), `analyze` plus
-//! its `skip`/`tag` is the containment — over four commits standing in for
-//! parent(m)/m/parent(n)/n. `analyze` reads only the shas it is given, so the
+//! the plain interdiff (what leaked the base movement before), `contain` is
+//! the rebase-aware one — over four commits standing in for
+//! parent(m)/m/parent(n)/n. `contain` reads only the shas it is given, so the
 //! four commits need no real parent/child wiring; their *trees* are what
 //! matter. One end-to-end test exercises the HTTP handler so the wiring
-//! (threading parent(m), invoking the analysis) is covered too — built by
+//! (threading parent(m), invoking `contain`) is covered too — built by
 //! pushing a stack and amending an earlier change so a later one is rewritten
 //! by rebase only.
 
@@ -16,7 +16,7 @@ mod common;
 use common::*;
 use git2::Oid;
 use nit::api::diff::{COMMIT_MSG_PATH, commit_tree, git_diff, render};
-use nit::api::rebase::{Rev, analyze};
+use nit::api::rebase::{Rev, contain};
 use nit_types::diff::{Diff, DiffFile};
 use nit_types::domain::Sha;
 use nit_types::domain::{FileStatus, LineKind};
@@ -46,9 +46,8 @@ fn snapshot(g: &GitRepo, files: &[(&str, &[u8])]) -> Oid {
 }
 
 /// The plain interdiff `tree(m) → tree(n)` and the rebase-aware one, so a test
-/// can compare what leaked vs. what is contained. The second follows the
-/// endpoint exactly: analyse first, render only the files the drift leaves
-/// standing, then tag them.
+/// can compare what leaked vs. what is contained. The second is what the
+/// endpoint serves.
 fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff, Diff) {
     let sha = |o: Oid| Sha::from(o.to_string());
     let (m, parent_m, n, parent_n) = (sha(m), sha(parent_m), sha(n), sha(parent_n));
@@ -56,7 +55,7 @@ fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff
     let tn = commit_tree(&g.repo, &n).expect("n tree resolves");
     let git = git_diff(&g.repo, &tm, &tn).expect("interdiff builds");
     let plain = render(&g.repo, &git, 3, |_| true).expect("plain interdiff renders");
-    let drift = analyze(
+    let contained = contain(
         &g.repo,
         &git,
         &Rev {
@@ -67,13 +66,11 @@ fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff
             commit: &n,
             parent: &parent_n,
         },
+        3,
         None,
     )
-    .expect("drift analysis succeeds");
-    let mut tagged =
-        render(&g.repo, &git, 3, |p| drift.renders(p)).expect("contained interdiff renders");
-    drift.tag(&mut tagged);
-    (plain, tagged)
+    .expect("containment succeeds");
+    (plain, contained)
 }
 
 fn file<'a>(diff: &'a Diff, path: &str) -> Option<&'a DiffFile> {

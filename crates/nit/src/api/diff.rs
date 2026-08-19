@@ -44,9 +44,9 @@ const RENAME_LIMIT: usize = 400;
 ///
 /// The one definition of how nit pairs a delete with an add. Git supplies
 /// the deltas only; the lines inside each of them come from `line_hunks`.
-/// Built separately from [`render`] so a caller can resolve rebase drift
-/// ([`super::rebase::analyze`]) against the same deltas before deciding
-/// which are worth rendering.
+/// Built separately from [`render`] so a caller can walk the deltas itself
+/// and decide each one's fate before paying to render it
+/// ([`super::rebase::contain`]).
 ///
 /// Rename detection weakens on a large diff: past a ceiling on the adds or
 /// deletes it will score, a delete pairs with an add only when their blobs
@@ -85,13 +85,15 @@ pub(super) fn line_edits<T: AsRef<[u8]>>(input: &InternedInput<T>) -> Vec<imara_
     diff.hunks().collect()
 }
 
-/// A delta as the wire carries it.
+/// A delta's identity as the wire carries it, with no lines yet.
 ///
 /// Its status, the path it appears under (the new-side name, or the
 /// old-side one for a deletion) and the old-side name when a rename made
-/// the two differ. `None` for a status the wire never renders, so every
+/// the two differ. Binary until blobs prove otherwise — [`fill_lines`] is
+/// what proves it — so every unreadable or undiffable file lands in the one
+/// place that says so. `None` for a status the wire never renders, so every
 /// walk over the same deltas agrees on which exist.
-pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<(FileStatus, String, Option<String>)> {
+pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<DiffFile> {
     let status = delta_status(delta.status())?;
     let path = |f: git2::DiffFile| {
         f.path()
@@ -103,8 +105,16 @@ pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<(FileStatus, String,
     } else {
         path(delta.new_file())
     };
-    let old = (status == FileStatus::Renamed).then(|| path(delta.old_file()));
-    Some((status, wire, old))
+    Some(DiffFile {
+        path: wire,
+        old_path: (status == FileStatus::Renamed).then(|| path(delta.old_file())),
+        status,
+        binary: true,
+        additions: 0,
+        deletions: 0,
+        new_total: 0,
+        hunks: Vec::new(),
+    })
 }
 
 /// Renders `diff`'s deltas as the wire shape.
@@ -112,10 +122,9 @@ pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<(FileStatus, String,
 /// `context` unchanged lines around each change ([`u32::MAX`] for the
 /// full-context `/lines` source).
 ///
-/// `keep` decides which paths are worth rendering — the caller's chance to drop
-/// a file (the one it is viewing, or one it has already proved to be pure
-/// rebase drift) before its blobs are read and diffed, which is the whole point
-/// of taking it.
+/// `keep` decides which paths are worth rendering — the caller's chance to
+/// drop a file before its blobs are read and diffed, which is the whole
+/// point of taking it.
 ///
 /// # Errors
 ///
@@ -128,38 +137,50 @@ pub fn render(
 ) -> Result<Diff> {
     let mut files = Vec::new();
     for delta in diff.deltas() {
-        let Some((status, path, old_path)) = delta_file(&delta) else {
+        let Some(file) = delta_file(&delta) else {
             continue;
         };
-        if !keep(&path) {
+        if !keep(&file.path) {
             continue;
         }
-        // Binary until the blobs prove otherwise, so every unreadable or
-        // undiffable file lands in the one place that says so.
-        let mut file = DiffFile {
-            path,
-            old_path,
-            status,
-            binary: true,
-            additions: 0,
-            deletions: 0,
-            new_total: 0,
-            hunks: Vec::new(),
-        };
-        if let (Some(old), Some(new)) = (
-            blob_bytes(repo, &file.path, delta.old_file().id())?,
-            blob_bytes(repo, &file.path, delta.new_file().id())?,
-        ) {
-            let (old, new) = (String::from_utf8_lossy(&old), String::from_utf8_lossy(&new));
-            let input = InternedInput::new(&*old, &*new);
-            file.binary = false;
-            file.new_total = input.after.len() as u64;
-            file.hunks = line_hunks(&input, context);
-            (file.additions, file.deletions) = stats(&file.hunks);
-        }
-        files.push(file);
+        files.push(render_delta(repo, &delta, file, context)?);
     }
     Ok(Diff { files })
+}
+
+/// `file` with the lines of its delta, both blobs read under the wire path.
+///
+/// Takes the identity [`delta_file`] already resolved, so a caller that has
+/// decided on a delta does not resolve it twice.
+///
+/// # Errors
+///
+/// When git can't read a blob.
+pub(super) fn render_delta(
+    repo: &Repository,
+    delta: &git2::DiffDelta,
+    mut file: DiffFile,
+    context: u32,
+) -> Result<DiffFile> {
+    let old = blob_bytes(repo, &file.path, delta.old_file().id())?;
+    let new = blob_bytes(repo, &file.path, delta.new_file().id())?;
+    if let (Some(old), Some(new)) = (old, new) {
+        fill_lines(&mut file, &old, &new, context);
+    }
+    Ok(file)
+}
+
+/// Fills in the lines of a file's two sides, and the counts over them.
+///
+/// Proves the file is not binary, which is what [`delta_file`] assumed it
+/// was.
+pub(super) fn fill_lines(file: &mut DiffFile, old: &[u8], new: &[u8], context: u32) {
+    let (old, new) = (String::from_utf8_lossy(old), String::from_utf8_lossy(new));
+    let input = InternedInput::new(&*old, &*new);
+    file.binary = false;
+    file.new_total = input.after.len() as u64;
+    file.hunks = line_hunks(&input, context);
+    (file.additions, file.deletions) = stats(&file.hunks);
 }
 
 /// A blob's bytes, `None` when it is binary.
@@ -198,8 +219,8 @@ fn delta_status(delta: Delta) -> Option<FileStatus> {
 
 /// A file's wire counts.
 ///
-/// Drift lines are the base's work, not the change's, so they never count
-/// ([`super::rebase::Drift`] tags them after rendering).
+/// Drift lines are the base's work, not the change's, so they never count —
+/// which is why [`super::rebase::contain`] recounts a file it has tagged.
 pub(super) fn stats(hunks: &[Hunk]) -> (u64, u64) {
     let (mut additions, mut deletions) = (0, 0);
     for line in hunks.iter().flat_map(|h| &h.lines).filter(|l| !l.drift) {
@@ -334,17 +355,34 @@ fn wire_line(kind: LineKind, old: Option<usize>, new: Option<usize>, text: &str)
 /// commentable.
 #[must_use]
 pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
-    let input = InternedInput::new(old.unwrap_or_default(), new);
-    let mut hunks = line_hunks(&input, 3);
-    let (additions, deletions) = stats(&hunks);
-    if hunks.is_empty() && !new.is_empty() {
+    let mut file = DiffFile {
+        path: COMMIT_MSG_PATH.to_string(),
+        old_path: None,
+        status: if old.is_some() {
+            FileStatus::Modified
+        } else {
+            FileStatus::Added
+        },
+        binary: true,
+        additions: 0,
+        deletions: 0,
+        new_total: 0,
+        hunks: Vec::new(),
+    };
+    fill_lines(
+        &mut file,
+        old.unwrap_or_default().as_bytes(),
+        new.as_bytes(),
+        3,
+    );
+    if file.hunks.is_empty() && !new.is_empty() {
         let lines: Vec<Line> = new
             .lines()
             .enumerate()
             .map(|(i, text)| wire_line(LineKind::Context, Some(i), Some(i), text))
             .collect();
         let count = lines.len() as u64;
-        hunks.push(Hunk {
+        file.hunks.push(Hunk {
             old_start: 1,
             old_lines: count,
             new_start: 1,
@@ -353,20 +391,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
             lines,
         });
     }
-    DiffFile {
-        path: COMMIT_MSG_PATH.to_string(),
-        old_path: None,
-        status: if old.is_some() {
-            FileStatus::Modified
-        } else {
-            FileStatus::Added
-        },
-        binary: false,
-        additions,
-        deletions,
-        new_total: input.after.len() as u64,
-        hunks,
-    }
+    file
 }
 
 /// Line `line` (1-based) of `text`, `None` out of range.
