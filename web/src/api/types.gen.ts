@@ -106,6 +106,15 @@ export type FileStatus = "added" | "deleted" | "modified" | "renamed";
 export type LineKind = "context" | "add" | "del";
 
 /**
+ * How much of a diff is rendered.
+ *
+ * `Raw` renders every line. `Outline` collapses every function body, so
+ * that only signatures, doc-comments, types and fields remain — the change
+ * read at the altitude of its API surface.
+ */
+export type DiffMode = "raw" | "outline";
+
+/**
  * What a `lifecycle` log entry records about a change.
  *
  * The merge/abandon timer writes `merged`/`abandoned`; `nit reopen`

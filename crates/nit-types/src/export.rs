@@ -42,6 +42,7 @@ fn write_wire_types() {
         crate::domain::GraphSection,
         crate::domain::FileStatus,
         crate::domain::LineKind,
+        crate::domain::DiffMode,
         crate::domain::LifecycleAction,
         crate::repos::Repo,
         crate::repos::RepoList,
