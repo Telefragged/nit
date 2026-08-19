@@ -83,7 +83,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
       const lines = getFileLines(
         ctx.changeNumber,
         ctx.selected,
-        file.path,
+        file,
         ctx.against,
       ).then((r) => {
         if (fileRef.current !== file) return null;

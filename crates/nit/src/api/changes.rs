@@ -103,6 +103,13 @@ pub(super) async fn revision_diff(
 #[derive(Deserialize)]
 pub(super) struct LinesQuery {
     path: String,
+    /// The file's name on the old side, when a rename made the two differ —
+    /// what `/diff` reported as its `old_path`.
+    ///
+    /// Both names bound the tree diffs this request takes, and a rename is
+    /// paired only when the bound holds both of its ends: named by its new
+    /// side alone, a renamed file would come back as a whole-file add.
+    old_path: Option<String>,
     against: Option<RevisionNumber>,
 }
 
@@ -120,16 +127,40 @@ pub(super) async fn revision_lines(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let revs = resolve_revs(&state, &entry, n, q.against)?;
-        let wire = contained_diff(&revs, u32::MAX, Some(&q.path))?;
+        let wanted = Wanted {
+            path: q.path,
+            old_path: q.old_path,
+        };
+        let wire = contained_diff(&revs, u32::MAX, Some(&wanted))?;
         let lines = wire
             .files
             .into_iter()
-            .next()
+            .find(|f| f.path == wanted.path)
             .map(|f| f.hunks.into_iter().flat_map(|h| h.lines).collect())
             .unwrap_or_default();
         Ok(Json(FileLines { lines }))
     })
     .await
+}
+
+/// The one file an answer is about, under every name it goes by.
+///
+/// The two names are not interchangeable, and each bounds a different thing:
+/// both of them bound the tree diff, because a rename is paired only when
+/// the bound holds its two ends, while only `path` is worth rendering — an
+/// unpaired rename's other side would be read and diffed for nothing.
+struct Wanted {
+    path: String,
+    old_path: Option<String>,
+}
+
+impl Wanted {
+    /// The pathspec that bounds a tree diff to this file.
+    fn names(&self) -> Vec<String> {
+        std::iter::once(self.path.clone())
+            .chain(self.old_path.clone())
+            .collect()
+    }
 }
 
 /// A revision and an optional interdiff counterpart.
@@ -167,9 +198,12 @@ fn resolve_revs(
 /// a counterpart to diff against. Owning the choice here is what keeps
 /// `/diff` and `/lines` from having to agree on it separately.
 ///
+/// `only` narrows the answer to one file, and the git work with it: a
+/// single file's request never walks the whole interdiff.
+///
 /// A plain diff when the two revisions share a parent, and on analysis
 /// failure.
-fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff, Error> {
+fn contained_diff(revs: &Revs, context: u32, only: Option<&Wanted>) -> Result<Diff, Error> {
     let repo = open_repo(&revs.git_dir)?;
     let revision = &revs.revision;
     let new_tree = commit_tree(&repo, &revision.commit_sha)?;
@@ -179,22 +213,24 @@ fn contained_diff(revs: &Revs, context: u32, only: Option<&str>) -> Result<Diff,
             .as_ref()
             .map_or(&revision.parent_sha, |a| &a.commit_sha),
     )?;
-    let git = diff::git_diff(&repo, &old_tree, &new_tree, None)?;
-    let plain = || diff::render(&repo, &git, context, |path| only.is_none_or(|p| p == path));
+    let names = only.map(Wanted::names);
+    let git = diff::git_diff(&repo, &old_tree, &new_tree, names.as_deref())?;
+    let shown = |path: &str| only.is_none_or(|w| w.path == path);
+    let plain = || diff::render(&repo, &git, context, shown);
 
     let Some(m) = revs
         .against
         .as_ref()
         .filter(|a| a.parent_sha != revision.parent_sha)
     else {
-        return Ok(plain()?);
+        return plain().map_err(Error::from);
     };
-    Ok(
-        rebase::contain(&repo, &git, &at(m), &at(revision), context, only).or_else(|e| {
+    rebase::contain(&repo, &git, &at(m), &at(revision), context, shown)
+        .or_else(|e| {
             tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
             plain()
-        })?,
-    )
+        })
+        .map_err(Error::from)
 }
 
 fn at(r: &RevisionProjection) -> rebase::Rev<'_> {

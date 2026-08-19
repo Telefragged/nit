@@ -10,6 +10,7 @@ import type {
   ChangeStatus,
   NewDraft,
   Diff,
+  DiffFile,
   Draft,
   FileLines,
   Repo,
@@ -105,21 +106,24 @@ export const getDiff = (
       : `/changes/${changeNumber}/revisions/${revision}/diff?against=${against}`,
   );
 
-/** File `path`'s full-context diff lines over the same trees as `getDiff`
+/** The file's full-context diff lines over the same trees as `getDiff`
  * (`against` selects the interdiff base), for revealing the unchanged runs
- * the shown hunks hide — drift and all. */
+ * the shown hunks hide — drift and all.
+ *
+ * Pass the file itself, not just its path: the server bounds its tree diffs
+ * to both names, and only a bound holding both ends of a rename pairs it. */
 export const getFileLines = (
   changeNumber: number,
   revision: number,
-  path: string,
+  file: Pick<DiffFile, "path" | "old_path">,
   against?: number,
 ) => {
-  const q = `path=${encodeURIComponent(path)}`;
+  const q = new URLSearchParams({ path: file.path });
+  if (file.old_path !== undefined) q.set("old_path", file.old_path);
+  if (against !== undefined) q.set("against", String(against));
   return request<FileLines>(
     "GET",
-    `/changes/${changeNumber}/revisions/${revision}/lines?${
-      against === undefined ? q : `${q}&against=${against}`
-    }`,
+    `/changes/${changeNumber}/revisions/${revision}/lines?${q}`,
   );
 };
 

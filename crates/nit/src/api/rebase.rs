@@ -221,9 +221,9 @@ fn tag(file: &mut DiffFile, (old_ranges, new_ranges): &DriftRanges) {
 /// contained.
 ///
 /// The interdiff is built by the caller so its tree diff and rename
-/// detection are paid once. `only` bounds the walk to a single file,
-/// matching the render's own bound. The caller invokes this only when
-/// `parent(m) != parent(n)`.
+/// detection are paid once, and `keep` is the same one it would hand
+/// [`diff::render`] — the paths the request is about. The caller invokes
+/// this only when `parent(m) != parent(n)`.
 ///
 /// One pass, one verdict per file, each decided on the cheapest evidence
 /// that settles it: a file the base moved on its own is dropped by name
@@ -244,7 +244,7 @@ pub fn contain(
     m: &Rev,
     n: &Rev,
     context: u32,
-    only: Option<&str>,
+    keep: impl Fn(&str) -> bool,
 ) -> Result<Diff> {
     let (Some(tree_m), Some(tree_n), Some(parent_m), Some(parent_n)) = (
         diff::commit_tree(repo, m.commit),
@@ -298,7 +298,7 @@ pub fn contain(
         let Some(mut file) = diff::delta_file(&delta) else {
             continue;
         };
-        if only.is_some_and(|p| p != file.path) {
+        if !keep(&file.path) {
             continue;
         }
         let name_m = file.old_path.as_deref().unwrap_or(&file.path);

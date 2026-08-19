@@ -292,3 +292,61 @@ fn missing_revision_is_404() {
     let (st, _) = http_get(&server.url(&format!("/api/changes/{missing}/revisions/0/diff")));
     assert_eq!(st, 404);
 }
+
+/// `/lines` serves a renamed file's full text: the request names both sides,
+/// which is what lets the tree diff be bounded to it and still pair the
+/// rename.
+#[test]
+fn lines_of_a_renamed_file_need_both_of_its_names() {
+    let g = GitRepo::new();
+    let body = lines("l", 1..=40);
+    let base = g.commit_full(&[g.root], "base\n", &[("old.txt", body.as_bytes())], &[]);
+    g.branch("main", base);
+
+    let moved = body.replace("l40\n", "l40 edited\n");
+    let c1 = g.commit_full(
+        &[base],
+        &msg("rename it", "Irename01"),
+        &[("new.txt", moved.as_bytes())],
+        &["old.txt"],
+    );
+    g.branch("feat", c1);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, pushed) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{pushed}");
+    let id = tip_change_number(&pushed);
+
+    let renamed = by_path(
+        &http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff"))).1,
+        "new.txt",
+    );
+    assert_eq!(renamed["status"], "renamed");
+    assert_eq!(renamed["old_path"], "old.txt");
+
+    let both = server.url(&format!(
+        "/api/changes/{id}/revisions/0/lines?path=new.txt&old_path=old.txt"
+    ));
+    let (st, full) = http_get(&both);
+    assert_eq!(st, 200, "{full}");
+    let count = |v: &Value, kind: &str| {
+        v["lines"]
+            .as_array()
+            .expect("lines array")
+            .iter()
+            .filter(|l| l["kind"] == kind)
+            .count()
+    };
+    // The file's 39 untouched lines, plus the edited one on both sides.
+    assert_eq!(count(&full, "context"), 39);
+    assert_eq!((count(&full, "add"), count(&full, "del")), (1, 1));
+
+    // Without the old name the bound holds one end of the rename, so nothing
+    // pairs and the file reads as freshly added — which is what obliges a
+    // client to send back the `old_path` it was given.
+    let (st, one_sided) =
+        http_get(&server.url(&format!("/api/changes/{id}/revisions/0/lines?path=new.txt")));
+    assert_eq!(st, 200, "{one_sided}");
+    assert_eq!(count(&one_sided, "context"), 0);
+    assert_eq!(count(&one_sided, "add"), 40);
+}

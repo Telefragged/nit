@@ -67,7 +67,7 @@ fn interdiff(g: &GitRepo, m: Oid, parent_m: Oid, n: Oid, parent_n: Oid) -> (Diff
             parent: &parent_n,
         },
         3,
-        None,
+        |_| true,
     )
     .expect("containment succeeds");
     (plain, contained)
