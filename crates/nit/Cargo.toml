@@ -37,6 +37,7 @@ tower-http = { version = "0.6.11", features = ["fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.25"
+tree-sitter-nix = "0.3"
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"

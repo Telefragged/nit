@@ -29,6 +29,17 @@ const TYPESCRIPT_PATTERNS: &str = "
 /// is not a definition and keeps its body, as an inline callback does.
 const PYTHON_PATTERNS: &str = "(function_definition body: (block) @bare)";
 
+/// What a Nix file exposes is its attribute paths, so an attrset is
+/// structure and stays whole; a value built any other way is the body under
+/// a path. A call, a list and an indented string are the three that run
+/// long, and each carries its own brackets — so the path that opens one and
+/// the bracket that closes it survive.
+const NIX_PATTERNS: &str = "
+    (apply_expression) @delimited
+    (list_expression) @delimited
+    (indented_string_expression) @delimited
+";
+
 /// The file's lines that its outline keeps, each with the 1-based number it
 /// holds in the file.
 ///
@@ -127,6 +138,9 @@ static TSX: LazyLock<Grammar> = LazyLock::new(|| {
 static PYTHON: LazyLock<Grammar> =
     LazyLock::new(|| Grammar::new(tree_sitter_python::LANGUAGE.into(), PYTHON_PATTERNS));
 
+static NIX: LazyLock<Grammar> =
+    LazyLock::new(|| Grammar::new(tree_sitter_nix::LANGUAGE.into(), NIX_PATTERNS));
+
 /// The grammar for the language `path` is written in.
 fn grammar(path: &str) -> Option<&'static Grammar> {
     match path.rsplit_once('.')?.1 {
@@ -134,6 +148,7 @@ fn grammar(path: &str) -> Option<&'static Grammar> {
         "ts" | "mts" | "cts" => Some(&TYPESCRIPT),
         "tsx" => Some(&TSX),
         "py" | "pyi" => Some(&PYTHON),
+        "nix" => Some(&NIX),
         _ => None,
     }
 }
@@ -153,7 +168,7 @@ mod tests {
 
     #[test]
     fn every_grammar_compiles_its_patterns() {
-        for grammar in [&RUST, &TYPESCRIPT, &TSX, &PYTHON] {
+        for grammar in [&RUST, &TYPESCRIPT, &TSX, &PYTHON, &NIX] {
             LazyLock::force(grammar);
         }
     }
@@ -236,6 +251,39 @@ class Chain:
     fn a_python_body_on_the_signature_line_hides_nothing() {
         let text = "def nil(): pass\ndef one():\n    return 1\n";
         assert_eq!(kept("m.py", text), "1:def nil(): pass\n2:def one():");
+    }
+
+    #[test]
+    fn a_nix_path_stays_and_the_derivation_under_it_goes() {
+        let text = "\
+{
+  packages.default = pkgs.mkShell {
+    packages = [ pkgs.git ];
+  };
+}
+";
+        assert_eq!(
+            kept("m.nix", text),
+            "1:{\n2:  packages.default = pkgs.mkShell {\n4:  };\n5:}"
+        );
+    }
+
+    #[test]
+    fn a_nix_list_and_script_keep_their_brackets() {
+        let text = "\
+{
+  systems = [
+    \"x86_64-linux\"
+  ];
+  shellHook = ''
+    export NIT=1
+  '';
+}
+";
+        assert_eq!(
+            kept("m.nix", text),
+            "1:{\n2:  systems = [\n4:  ];\n5:  shellHook = ''\n7:  '';\n8:}"
+        );
     }
 
     #[test]
