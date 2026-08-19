@@ -111,9 +111,9 @@ export const getDiff = (
   );
 };
 
-/** The file's full-context diff lines over the same trees as `getDiff`
- * (`against` selects the interdiff base), for revealing the unchanged runs
- * the shown hunks hide — drift and all.
+/** The whole file as diff lines, over the same trees as `getDiff`
+ * (`against` selects the interdiff base), for revealing the runs the shown
+ * hunks hide — drift and all.
  *
  * Pass the file itself, not just its path: the server bounds its tree diffs
  * to both names, and only a bound holding both ends of a rename pairs it. */

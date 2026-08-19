@@ -391,10 +391,10 @@ function snapshotLineText(
   return null;
 }
 
-/** Reconstruct a file's full-context diff lines from its shown hunks,
+/** Reconstruct the whole file as diff lines from its shown hunks,
  * filling the gaps between, above, and below them with synthesized context.
  * The mock has no real file bodies, so this is what `/lines` returns. */
-function fullLines(file: AuthoredFile): Line[] {
+function wholeLines(file: AuthoredFile): Line[] {
   const out: Line[] = [];
   let oldN = 1;
   let newN = 1;
@@ -545,7 +545,7 @@ export async function mockRequest(
   }
 
   // Context expansion. The fixtures hold diffs, not whole files, so
-  // reconstruct the full-context lines from the
+  // reconstruct the whole file from the
   // shown hunks with synthesized context filling the gaps — enough for the
   // expand controls to reveal rows. (Real drift in a gap is the backend's
   // job; the mock just makes the interaction renderable.)
@@ -560,7 +560,7 @@ export async function mockRequest(
     const file = c.diffs[diffKey(revision, against)]?.files.find(
       (f) => f.path === path,
     );
-    return { lines: file ? fullLines(file) : [] };
+    return { lines: file ? wholeLines(file) : [] };
   }
 
   if ((m = /^\/changes\/(\d+)\/drafts$/.exec(p)) && method === "POST") {

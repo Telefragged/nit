@@ -7,7 +7,7 @@ import type { ReviewCtx } from "../pages/reviewContext";
 /** Lines revealed per click of a context-expand button. */
 export const EXPAND_STEP = 10;
 
-/** Context expansion: the file's full diff
+/** Context expansion: the whole file
  * is fetched once on the first expand, and the run hidden in each gap
  * is sliced from it and folded back into the bordering hunks as real Lines —
  * drift and all — so highlight/comment/placement and the drift tint flow
@@ -19,7 +19,7 @@ export const EXPAND_STEP = 10;
  * action, and `busyAt` to check a given end/separator's in-flight state. */
 export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
   const expandable = file.path !== COMMIT_MSG_PATH && file.status !== "deleted";
-  const [full, setFull] = useState<readonly Line[] | null>(null);
+  const [whole, setWhole] = useState<readonly Line[] | null>(null);
   const [down, setDown] = useState<ReadonlyMap<number, number>>(new Map());
   const [up, setUp] = useState<ReadonlyMap<number, number>>(new Map());
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
@@ -30,7 +30,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
   const [shownFile, setShownFile] = useState(file);
   if (shownFile !== file) {
     setShownFile(file);
-    setFull(null);
+    setWhole(null);
     setDown(new Map());
     setUp(new Map());
     setBusy(new Set());
@@ -41,7 +41,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
   useEffect(() => {
     fileRef.current = file;
   });
-  // The in-flight full-diff fetch, keyed by file so each end's button shares
+  // The in-flight whole-file fetch, keyed by file so each end's button shares
   // one request and a diff switch starts a fresh one.
   const fetching = useRef<{
     file: DiffFile;
@@ -49,18 +49,18 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
   } | null>(null);
 
   const hunks = useMemo(() => {
-    if (!full || (down.size === 0 && up.size === 0)) return file.hunks;
+    if (!whole || (down.size === 0 && up.size === 0)) return file.hunks;
     const oldN = (ls: Line[]) => ls.filter((l) => l.old !== undefined).length;
     const newN = (ls: Line[]) => ls.filter((l) => l.new !== undefined).length;
     return file.hunks.map((hunk, i) => {
       const upN = up.get(i) ?? 0;
-      const before = gapLines(full, file.hunks[i - 1], hunk);
+      const before = gapLines(whole, file.hunks[i - 1], hunk);
       const pre = upN > 0 ? before.slice(before.length - upN) : [];
       // `next` is undefined for the last hunk; its down-gap is the run to
       // EOF, which gapLines bounds by the file's end.
       const next = file.hunks[i + 1];
       const downN = down.get(i + 1) ?? 0;
-      const post = downN > 0 ? gapLines(full, hunk, next).slice(0, downN) : [];
+      const post = downN > 0 ? gapLines(whole, hunk, next).slice(0, downN) : [];
       if (pre.length === 0 && post.length === 0) return hunk;
       // A revealed line shifts each side's start/count only where it has a
       // number, so a drift del moves the old side without the new.
@@ -73,12 +73,12 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
         lines: [...pre, ...hunk.lines, ...post],
       };
     });
-  }, [file.hunks, full, down, up]);
+  }, [file.hunks, whole, down, up]);
 
-  /** The file's full-context diff, fetched once and shared across both ends
+  /** The whole file as diff lines, fetched once and shared across both ends
    * and every gap; `null` if the diff switched out from under the fetch. */
-  function loadFull(): Promise<readonly Line[] | null> {
-    if (full) return Promise.resolve(full);
+  function loadWhole(): Promise<readonly Line[] | null> {
+    if (whole) return Promise.resolve(whole);
     if (fetching.current?.file !== file) {
       const lines = getFileLines(
         ctx.changeNumber,
@@ -87,7 +87,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
         ctx.against,
       ).then((r) => {
         if (fileRef.current !== file) return null;
-        setFull(r.lines);
+        setWhole(r.lines);
         return r.lines;
       });
       fetching.current = { file, lines };
@@ -105,7 +105,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
     if (busy.has(key)) return;
     setBusy((b) => new Set(b).add(key));
     try {
-      const lines = await loadFull();
+      const lines = await loadWhole();
       if (!lines || fileRef.current !== file) return;
       const gap = gapLines(lines, file.hunks[sep - 1], file.hunks[sep]);
       const remaining = gap.length - (down.get(sep) ?? 0) - (up.get(sep) ?? 0);

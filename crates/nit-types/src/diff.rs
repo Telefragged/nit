@@ -10,7 +10,7 @@ pub struct Diff {
     pub files: Vec<DiffFile>,
 }
 
-/// A file's full-context diff lines.
+/// The whole file as diff lines.
 ///
 /// For expanding the runs the shown diff hides — context beyond a hunk's
 /// reach, or a body an outline collapsed. Same `Line`

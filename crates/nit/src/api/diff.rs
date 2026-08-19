@@ -135,7 +135,7 @@ pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<DiffFile> {
 /// Renders `diff`'s deltas as the wire shape.
 ///
 /// `context` unchanged lines around each change ([`u32::MAX`] for the
-/// full-context `/lines` source).
+/// whole-file `/lines` source).
 ///
 /// `keep` decides which paths are worth rendering — the caller's chance to
 /// drop a file before its blobs are read and diffed, which is the whole
@@ -603,7 +603,7 @@ mod tests {
 
     /// One file's diff with every unchanged line kept as context — what the UI
     /// reveals from when expanding a hunk's surroundings.
-    fn full(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
+    fn whole(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
         render(repo, &diff, u32::MAX, DiffMode::Raw, |p| p == only).expect("diff renders")
     }
@@ -1020,10 +1020,10 @@ mod tests {
     }
 
     #[test]
-    fn diff_trees_full_keeps_every_unchanged_line() {
+    fn the_whole_file_keeps_every_unchanged_line() {
         let r = Repo::new();
         let old = lines(1..=20);
-        // Edits far apart: the shown diff splits into two hunks, full context
+        // Edits far apart: the shown diff splits into two hunks, the whole file
         // keeps them in one run with every unchanged line present.
         let new = old
             .replace("line 3\n", "line three\n")
@@ -1034,9 +1034,9 @@ mod tests {
         let shown = shown(&r.repo, &r.find(t_old), &r.find(t_new));
         assert_eq!(shown.files[0].hunks.len(), 2); // a gap the UI would expand
 
-        let full = full(&r.repo, &r.find(t_old), &r.find(t_new), "a.txt");
-        assert_eq!(full.files.len(), 1); // bounded to the requested file
-        let f = &full.files[0];
+        let whole = whole(&r.repo, &r.find(t_old), &r.find(t_new), "a.txt");
+        assert_eq!(whole.files.len(), 1); // bounded to the requested file
+        let f = &whole.files[0];
         assert_eq!(f.hunks.len(), 1); // one run, no gap
         let lines = &f.hunks[0].lines;
         // 20 originals minus 2 replaced plus 2 replacements = 22 wire lines.

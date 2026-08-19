@@ -117,7 +117,7 @@ pub(super) struct LinesQuery {
     against: Option<RevisionNumber>,
 }
 
-/// File `path`'s full-context diff lines.
+/// The whole of file `path`, as diff lines.
 ///
 /// Lets the UI reveal the unchanged runs the shown diff hides. Built from
 /// the **same** `old → new` trees and drift tagging as [`revision_diff`],

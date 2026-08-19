@@ -213,14 +213,14 @@ export function skippedAfter(last: Hunk | undefined, newTotal: number): number {
   return Math.max(newTotal - (last.new_start + last.new_lines - 1), 0);
 }
 
-/** The full-context lines that fall in the gap between `prev` and `hunk` —
- * the hidden run a context-expand button reveals. `full` is the file's
- * full-context diff; a line belongs to the
+/** The lines that fall in the gap between `prev` and `hunk` — the hidden
+ * run a context-expand button reveals. `whole` is the whole file as diff
+ * lines; a line belongs to the
  * gap by its new number (`add`/`context`) or old number (`del`), so an
  * all-drift gap's del lines come along. An undefined `hunk` is the run below
  * the last hunk, bounded only by the file's end. Order is preserved. */
 export function gapLines(
-  full: readonly Line[],
+  whole: readonly Line[],
   prev: Hunk | undefined,
   hunk: Hunk | undefined,
 ): Line[] {
@@ -228,7 +228,7 @@ export function gapLines(
   const newLo = prev ? prev.new_start + prev.new_lines : 1;
   const oldHi = hunk ? hunk.old_start - 1 : Infinity;
   const newHi = hunk ? hunk.new_start - 1 : Infinity;
-  return full.filter((l) =>
+  return whole.filter((l) =>
     l.new !== undefined
       ? l.new >= newLo && l.new <= newHi
       : l.old !== undefined && l.old >= oldLo && l.old <= oldHi,
