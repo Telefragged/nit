@@ -30,6 +30,16 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Option<Tree<'r>> {
         .ok()
 }
 
+/// How many adds or deletes still get compared by content.
+///
+/// Past it a delete pairs with an add only when their blobs are identical.
+/// Scoring content pairs every add against every delete and reads each
+/// candidate blob to do it, so a diff that spans a moved base — thousands
+/// of files the base added and deleted — spends seconds pairing files no
+/// reviewer asked about. Jgit stops there too, at gerrit's
+/// `diff.renameLimit` default.
+const RENAME_LIMIT: usize = 400;
+
 /// The raw git diff `old → new`, with rename detection.
 ///
 /// The one definition of how nit pairs a delete with an add. Git supplies
@@ -37,6 +47,11 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Option<Tree<'r>> {
 /// Built separately from [`render`] so a caller can resolve rebase drift
 /// ([`super::rebase::analyze`]) against the same deltas before deciding
 /// which are worth rendering.
+///
+/// Rename detection weakens on a large diff: past a ceiling on the adds or
+/// deletes it will score, a delete pairs with an add only when their blobs
+/// are identical, so a caller reading names off the deltas sees a
+/// renamed-and-edited file as an unrelated add and delete.
 ///
 /// # Errors
 ///
@@ -47,8 +62,11 @@ pub fn git_diff<'r>(
     new: &Tree<'_>,
 ) -> Result<git2::Diff<'r>> {
     let mut diff = repo.diff_tree_to_tree(Some(old), Some(new), None)?;
+    let candidates = |status| diff.deltas().filter(|d| d.status() == status).count();
+    let over_limit = candidates(Delta::Added).max(candidates(Delta::Deleted)) > RENAME_LIMIT;
     let mut find = git2::DiffFindOptions::new();
     find.renames(true);
+    find.exact_match_only(over_limit);
     diff.find_similar(Some(&mut find))?;
     Ok(diff)
 }
@@ -593,6 +611,44 @@ mod tests {
         assert!(bin.binary);
         assert!(bin.hunks.is_empty());
         assert_eq!((bin.additions, bin.deletions), (0, 0));
+    }
+
+    #[test]
+    fn rename_scored_by_content_only_under_the_candidate_ceiling() {
+        let r = Repo::new();
+        let body = lines(1..=40);
+        let tweaked = body.replace("line 40\n", "line forty\n");
+        // The same renamed-and-edited file either side of the ceiling, among
+        // a crowd of unrelated adds and deletes. `candidates` is what the
+        // ceiling counts: the crowd on one side plus the moved file itself.
+        let renamed_status = |candidates: usize| {
+            let crowd = |prefix: &str| {
+                (0..candidates - 1)
+                    .map(|i| (format!("{prefix}-{i}.txt"), format!("{prefix} {i}\n")))
+                    .collect::<Vec<_>>()
+            };
+            let tree = |crowd: &[(String, String)], name: &str, body: &str| {
+                let mut files: Vec<(&str, &[u8])> = crowd
+                    .iter()
+                    .map(|(path, text)| (path.as_str(), text.as_bytes()))
+                    .collect();
+                files.push((name, body.as_bytes()));
+                r.find(r.tree(&files))
+            };
+            let old = tree(&crowd("gone"), "old_name.txt", &body);
+            let new = tree(&crowd("fresh"), "new_name.txt", &tweaked);
+            shown(&r.repo, &old, &new)
+                .files
+                .iter()
+                .find(|f| f.path == "new_name.txt")
+                .expect("the moved file is in the diff")
+                .status
+        };
+
+        assert_eq!(renamed_status(RENAME_LIMIT), FileStatus::Renamed);
+        // Past the ceiling the pair is left unpaired — the reviewer sees an
+        // add and a delete, as git's own `diff.renameLimit` leaves them.
+        assert_eq!(renamed_status(RENAME_LIMIT + 1), FileStatus::Added);
     }
 
     #[test]
