@@ -18,7 +18,16 @@
 //! is read under the file's name in its own tree, resolved through each
 //! side's rename detection, so base movement is contained even inside a
 //! file the change renamed, and a rename made wholly by the base is itself
-//! drift.
+//! drift. A rename the tree diff does not pair — past [`diff::git_diff`]'s
+//! ceiling only identical blobs pair — leaves that file's base movement
+//! unrecognised and shown as the change's work: extra churn, the safe
+//! direction.
+//!
+//! Which files the interdiff shows at all is decided the same way gerrit's
+//! `ModifiedFilesLoader` decides it: a file the change touched at neither
+//! revision moved with the base alone, and is dropped before anything reads
+//! it. Under a long rebase that is nearly the whole interdiff, so the line
+//! analysis below runs over the change's own handful of files.
 //!
 //! The projection (`project_clipped` / `drift_ranges`) is the bug-prone
 //! core gerrit shipped a false-negative in (2.15.0), and is unit-tested
@@ -35,7 +44,7 @@
 //!   did **not** touch (the common "also drop this line" case) is unaffected
 //!   and stays a real edit.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 use std::path::Path;
 
@@ -190,17 +199,15 @@ fn is_real_change(line: &Line) -> bool {
     matches!(line.kind, LineKind::Add | LineKind::Del) && !line.drift
 }
 
-/// An interdiff's rebase drift, from context-0 edit spans alone.
+/// Which of an interdiff's files are the change's, and where the base moved
+/// lines inside them.
 ///
-/// Resolved before any file is rendered. A file the base movement fully
-/// explains never costs a blob read or a line diff, which is why the
-/// analysis runs first: a rebase over a long base moves far more files than
-/// the change itself touches, and rendering them only to discard them is
-/// the bulk of the work.
+/// Resolved before any file is rendered, so a file that is the base's alone
+/// costs neither a blob read nor a line diff.
 ///
-/// Per analysed file: `None` — every edit is base movement, so don't render it
-/// at all; `Some(ranges)` — render it and tag these old/new lines. A file in
-/// neither state is absent and left plain: it carries no drift, or it is
+/// Per analysed file: `None` — none of it is the change's, so don't render
+/// it at all; `Some(ranges)` — render it and tag these old/new lines. A file
+/// in neither state is absent and left plain: it carries no drift, or it is
 /// binary, or its parent names did not resolve.
 #[derive(Default)]
 pub struct Drift(HashMap<String, Option<DriftRanges>>);
@@ -248,10 +255,11 @@ impl Drift {
 /// matching the render's own bound. The caller invokes this only when
 /// `parent(m) != parent(n)`.
 ///
-/// Best-effort and per-file: a file that is binary, whose blobs cannot be
-/// read, or whose parent names the base movement does not connect is left
-/// plain (the others are still contained). A returned error means nothing is
-/// tagged at all (the caller serves the plain interdiff).
+/// Two verdicts per file: whether it is the change's to show at all, and
+/// which of its lines the base moved. Best-effort — a file the change
+/// touched that is binary, or whose parent names the base movement does not
+/// connect, is left plain (the others are still contained). A returned error
+/// means nothing is tagged at all (the caller serves the plain interdiff).
 ///
 /// # Errors
 ///
@@ -273,10 +281,6 @@ pub fn analyze(
         return Ok(drift); // A tree won't resolve → leave the interdiff plain.
     };
 
-    let base: HashMap<String, String> = moves(repo, &parent_m, &parent_n)?.into_iter().collect();
-    if base.is_empty() {
-        return Ok(drift);
-    }
     // Each side's names read backwards, tree → parent: the seam that finds a
     // file under the name it was renamed away from.
     let from_parent = |pairs: Vec<(String, String)>| -> HashMap<String, String> {
@@ -284,6 +288,14 @@ pub fn analyze(
     };
     let in_parent_m = from_parent(moves(repo, &parent_m, &tree_m)?);
     let in_parent_n = from_parent(moves(repo, &parent_n, &tree_n)?);
+    // Every name the change itself touched, on both sides of a rename it
+    // made: the only files that can carry work of its own.
+    let touched: BTreeSet<&str> = in_parent_m
+        .iter()
+        .chain(&in_parent_n)
+        .flat_map(|(tree, parent)| [tree.as_str(), parent.as_str()])
+        .collect();
+    let base: HashMap<String, String> = moves(repo, &parent_m, &parent_n)?.into_iter().collect();
 
     for delta in interdiff.deltas() {
         let Some((_, path, old_path)) = diff::delta_file(&delta) else {
@@ -294,6 +306,13 @@ pub fn analyze(
         }
         let name_m = old_path.as_deref().unwrap_or(&path);
         let name_n = path.as_str();
+        // A file the change touched under neither name moved with the base
+        // alone, so none of it is the change's to show (gerrit's
+        // `isTouched`).
+        if !touched.contains(name_m) && !touched.contains(name_n) {
+            drift.0.insert(path, None);
+            continue;
+        }
         let name_pm = in_parent_m.get(name_m).map_or(name_m, String::as_str);
         let name_pn = in_parent_n.get(name_n).map_or(name_n, String::as_str);
         // The base movement must itself carry one parent name to the other.
@@ -313,9 +332,8 @@ pub fn analyze(
         // so every line of the interdiff is the base's. Diffing would only
         // rediscover that: with no delta of the change's own to project
         // through, the drift ranges come out equal to the base movement and
-        // nothing escapes them. This is the common case under a long rebase —
-        // hundreds of files moved by the base, none of them the change's — and
-        // deciding it on tree oids alone keeps their blobs unread.
+        // nothing escapes them. Deciding it on tree oids alone keeps the
+        // blobs unread.
         if oid_pm == oid_m && oid_pn == oid_n && !own_rename {
             drift.0.insert(path, None);
             continue;
