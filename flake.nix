@@ -473,7 +473,7 @@
             '';
           };
           types-drift = pkgs.runCommand "types-drift-check" { } ''
-            if ! diff -u ${self}/web/src/api/types.gen.ts ${wireTypesTs pkgs}; then
+            if ! diff -u ${./web/src/api/types.gen.ts} ${wireTypesTs pkgs}; then
               echo "web/src/api/types.gen.ts is stale — run: nix run .#gen-types" >&2
               exit 1
             fi
