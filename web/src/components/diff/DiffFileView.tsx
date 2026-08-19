@@ -122,8 +122,9 @@ const ExpandButton = ({
   </button>
 );
 
-/** A separator over a gap of `more` unchanged lines, shown only while the gap
- * remains (a fully-revealed gap leaves the hunks contiguous, so it vanishes).
+/** A separator over a gap of `more` lines the diff does not show, shown
+ * only while the gap remains (a fully-revealed gap leaves the hunks
+ * contiguous, so it vanishes).
  * When the file is expandable the gap's reveal buttons float over it: the
  * whole run, then a stepped button per
  * edge it can pull from — down from `hunk`'s predecessor, up from `hunk`
@@ -181,7 +182,7 @@ function HunkSeparator({
           ) : null}
         </div>
       ) : null}
-      <span className="hunk-skip">⋯ {more} unchanged lines</span>
+      <span className="hunk-skip">⋯ {more} lines</span>
       {hunk ? (
         <span className="hunk-header">
           @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},

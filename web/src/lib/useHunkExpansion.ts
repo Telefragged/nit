@@ -8,7 +8,7 @@ import type { ReviewCtx } from "../pages/reviewContext";
 export const EXPAND_STEP = 10;
 
 /** Context expansion: the file's full diff
- * is fetched once on the first expand, and the unchanged run hidden in each gap
+ * is fetched once on the first expand, and the run hidden in each gap
  * is sliced from it and folded back into the bordering hunks as real Lines —
  * drift and all — so highlight/comment/placement and the drift tint flow
  * through unchanged. The synthetic commit message and deletions have no diff to
