@@ -119,8 +119,8 @@ pub struct CommentInput {
     /// Anchor revision for a new thread.
     ///
     /// A draft's own revision — an interdiff old side pins to an earlier
-    /// revision. The API always stamps it; the fold falls back to the
-    /// change's latest only for a malformed payload.
+    /// revision. Always set on a recorded comment; the fold falls back to
+    /// the change's latest only for a malformed payload.
     #[serde(default)]
     pub revision: Option<RevisionNumber>,
     #[serde(default)]

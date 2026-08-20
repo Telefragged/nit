@@ -10,8 +10,8 @@ use super::RevisionNumber;
 
 /// Which tree of a revision a line comment is anchored to.
 ///
-/// `new` is the revision's commit tree, `old` its parent tree. Defaults
-/// to `new` where a request omits it.
+/// `new` is the revision's commit tree, `old` its parent tree. An
+/// unspecified side is `new`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -162,9 +162,6 @@ pub struct Draft {
 }
 
 /// A reviewer's draft decision plus its cover note/reason.
-///
-/// The body of a change detail's `draft_decision` and of the
-/// `PUT /api/changes/{id}/decision` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct DraftDecision {

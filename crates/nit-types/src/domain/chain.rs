@@ -10,9 +10,6 @@ use super::RevisionNumber;
 use super::Sha;
 
 /// A derived chain: a tip change's path plus its rolled-up state.
-///
-/// The list element (`GET /api/chains`) and the single-chain shape
-/// (`GET /api/chains/{id}`) are identical.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Chain {
@@ -26,8 +23,8 @@ pub struct Chain {
 /// One member of a derived path: structure only.
 ///
 /// Read at the revision the path pins. Per-change review state (counts,
-/// draft decision, the newest revision) is not here — a client reads it
-/// from `GET /api/changes/{id}` per member.
+/// draft decision, the newest revision) is not here — it belongs to the
+/// change itself.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct PathEntry {

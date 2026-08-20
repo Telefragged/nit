@@ -35,8 +35,8 @@ export type ChangeNumber = number;
 /**
  * Which tree of a revision a line comment is anchored to.
  *
- * `new` is the revision's commit tree, `old` its parent tree. Defaults
- * to `new` where a request omits it.
+ * `new` is the revision's commit tree, `old` its parent tree. An
+ * unspecified side is `new`.
  */
 export type Side = "old" | "new";
 
@@ -96,12 +96,12 @@ export type ChainState =
 export type GraphSection = "open" | "head" | "history";
 
 /**
- * `DiffFile.status` — how a file changed between the two diffed trees.
+ * How a file changed between the two diffed trees.
  */
 export type FileStatus = "added" | "deleted" | "modified" | "renamed";
 
 /**
- * `Line.kind` — a diff line's role.
+ * A diff line's role.
  */
 export type LineKind = "context" | "add" | "del";
 
@@ -142,9 +142,6 @@ export type RepoList = { repos: Array<Repo> };
 
 /**
  * A derived chain: a tip change's path plus its rolled-up state.
- *
- * The list element (`GET /api/chains`) and the single-chain shape
- * (`GET /api/chains/{id}`) are identical.
  */
 export type Chain = {
   tip_change_number: ChangeNumber;
@@ -160,8 +157,8 @@ export type Chain = {
  * One member of a derived path: structure only.
  *
  * Read at the revision the path pins. Per-change review state (counts,
- * draft decision, the newest revision) is not here — a client reads it
- * from `GET /api/changes/{id}` per member.
+ * draft decision, the newest revision) is not here — it belongs to the
+ * change itself.
  */
 export type PathEntry = {
   change_number: ChangeNumber;
@@ -349,9 +346,6 @@ export type Review = {
 
 /**
  * A reviewer's draft decision plus its cover note/reason.
- *
- * The body of a change detail's `draft_decision` and of the
- * `PUT /api/changes/{id}/decision` request.
  */
 export type DraftDecision = { decision: Decision; message: string };
 
@@ -594,8 +588,8 @@ export type CommentInput = {
    * Anchor revision for a new thread.
    *
    * A draft's own revision — an interdiff old side pins to an earlier
-   * revision. The API always stamps it; the fold falls back to the
-   * change's latest only for a malformed payload.
+   * revision. Always set on a recorded comment; the fold falls back to
+   * the change's latest only for a malformed payload.
    */
   revision: RevisionNumber | null;
   file: string | null;

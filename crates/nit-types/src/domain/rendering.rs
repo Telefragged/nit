@@ -18,7 +18,7 @@ pub enum GraphSection {
     History,
 }
 
-/// `DiffFile.status` — how a file changed between the two diffed trees.
+/// How a file changed between the two diffed trees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -43,7 +43,7 @@ pub enum DiffMode {
     Outline,
 }
 
-/// `Line.kind` — a diff line's role.
+/// A diff line's role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
