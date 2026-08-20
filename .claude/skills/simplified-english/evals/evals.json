@@ -1,0 +1,32 @@
+{
+  "skill_name": "simplified-english",
+  "evals": [
+    {
+      "id": 0,
+      "name": "commit-message-for-diff",
+      "prompt": "Here is the staged diff for the change I just finished (see diff.patch). Write the commit message for it. Subject line, then a body explaining why. Hard-wrap the body at 72 columns. Do not include trailers.",
+      "expected_output": "A commit message file. Subject under ~60 chars, body wrapped at 72 cols, one idea per sentence, active voice, no hedging, no restatement of the diff.",
+      "files": ["diff.patch"]
+    },
+    {
+      "id": 1,
+      "name": "nit-reply-to-review-thread",
+      "prompt": "A reviewer left this comment on my change, on the line where the sweep holds the state mutex across the whole fold:\n\n  \"Do we really need to hold the lock for the entire fold? Feels like it only protects the insert at the end. Also I'm not sure the eviction path can even run concurrently here.\"\n\nI checked: the lock only needs to cover the insert, the fold reads an owned snapshot, and the eviction path runs on the same single-threaded sweep task so it cannot overlap. I narrowed the lock to the insert. Write my reply to the thread. Save it to reply.md.",
+      "expected_output": "A short reply that answers in the first sentence, then gives the reason. No hedging, no preamble, no restating the reviewer's comment.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "docs-section-verification",
+      "prompt": "Write a new section for docs/dev.md called \"Verification\" that explains our gates to a new contributor. The facts: `cargo check` is the floor and must pass. `nix flake check` builds every crate, runs the whole test suite as crate2nix checks, and compiles every crate of ours under clippy with -D warnings. `nix build` alone is not enough because it skips tests. rustdoc also runs with -D warnings, so a broken intra-doc link fails `cargo doc` and nothing else catches it. The merge script runs `nix flake check` on every commit in a chain, not just the tip. Never pipe a verification command, because the pipeline reports the exit code of the last stage. Save it to verification.md.",
+      "expected_output": "A docs section. Topic sentence per paragraph, paragraphs at most six sentences, vertical list for the gate enumeration, imperative for instructions, no filler.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "chat-explanation-flaky-test",
+      "prompt": "One of our web tests fails maybe one run in ten in CI but never locally. It waits for a mocked fetch to resolve and then asserts on the rendered row. The mock has a simulated 50ms latency and the assertion uses testing-library's default 1000ms asyncUtilTimeout. CI runs the suite with 8 workers on a shared box. Explain to me what is going on and what to change. Reply in chat only, but also save your reply to answer.md so I have it.",
+      "expected_output": "A chat-style explanation. Answer first, cause second, fix third. Short paragraphs, one idea per sentence, no hedging or throat-clearing."
+    }
+  ]
+}

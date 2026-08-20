@@ -69,6 +69,12 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
     A shape a route needs stays with the route. Read it before naming
     anything; an identifier spells its term in full, and the exemptions
     are a closed set.
+12. **Every sentence we emit obeys `simplified-english`** — one idea
+    per sentence, 20 words for an instruction and 25 for a description,
+    six sentences per paragraph, active voice, no phrasal verbs. Load
+    the skill before writing chat output, a commit message, a comment or
+    doc-comment, a nit reply, a `docs/` page, or UI copy; `comment-style`
+    picks the fact's home, this one shapes the sentence.
 
 ## Layout
 
