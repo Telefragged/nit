@@ -45,8 +45,7 @@ impl std::fmt::Display for ChangeId {
 
 /// A git object name, in full: 40 hex characters.
 ///
-/// Clients truncate it for display; nothing but display uses the short
-/// form.
+/// Only display ever shortens it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

@@ -13,8 +13,7 @@ export type ChangeId = string;
 /**
  * A git object name, in full: 40 hex characters.
  *
- * Clients truncate it for display; nothing but display uses the short
- * form.
+ * Only display ever shortens it.
  */
 export type Sha = string;
 
@@ -48,9 +47,8 @@ export type Verdict = "approve" | "request_changes" | "comment";
 /**
  * A reviewer's **draft** decision on a change.
  *
- * The review modal's single set of choices, drafted in `draft_reviews`
- * and published on batch submit, where it translates back to a
- * [`Verdict`] or a [`LifecycleAction`] ([`Decision::as_verdict`],
+ * Publishing it translates back to a [`Verdict`] or a
+ * [`LifecycleAction`] ([`Decision::as_verdict`],
  * [`Decision::as_lifecycle`]).
  */
 export type Decision =
@@ -88,10 +86,7 @@ export type ChainState =
  * Which region of the change graph a node sits in.
  *
  * `open` ascends above the canonical HEAD, `head` is the HEAD anchor,
- * and `history` descends below it (merged commits, fading with depth).
- * The client styles a node by its `section` first (head → ring,
- * history → grey/fade), falling back to its `ChangeStatus` for open
- * nodes.
+ * and `history` descends below it: merged commits, oldest deepest.
  */
 export type GraphSection = "open" | "head" | "history";
 
@@ -715,8 +710,7 @@ export type RevisionProjection = {
  * One message in a thread.
  *
  * `review_id` is the review that published it, or `None` for an author's
- * own note — which is what distinguishes reviewer from author (the only
- * consumer derives the label from it).
+ * own note — which is what distinguishes reviewer from author.
  */
 export type ThreadCommentProjection = {
   body: string;
@@ -756,10 +750,9 @@ export type ReviewProjection = {
 /**
  * The fold of one change's log.
  *
- * Serializable so the server can ship it as the subscribe **projection**
- * and the browser can resume folding the live tail from it; the wire
- * form is opaque to the web, which only passes it back through the
- * shared WebAssembly fold.
+ * Serializable so a fold can be handed on and resumed against the live
+ * tail of the log instead of replayed from the start. The wire form is
+ * opaque: a projection is only ever produced and consumed by the fold.
  */
 export type ChangeProjection = {
   id: ChangeNumber;
@@ -776,9 +769,9 @@ export type ChangeProjection = {
   /**
    * Count of entries folded = the next unconsumed `position`.
    *
-   * A high-water mark, carried in the projection so the client resumes
-   * folding the live tail at the right boundary and the fold stays
-   * idempotent across the overlap.
+   * A high-water mark, carried in the projection so a resumed fold
+   * starts at the right boundary and stays idempotent across the
+   * overlap.
    */
   entries_folded: number;
 };

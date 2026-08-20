@@ -53,10 +53,9 @@ pub struct ReviewProjection {
 
 /// The fold of one change's log.
 ///
-/// Serializable so the server can ship it as the subscribe **projection**
-/// and the browser can resume folding the live tail from it; the wire
-/// form is opaque to the web, which only passes it back through the
-/// shared WebAssembly fold.
+/// Serializable so a fold can be handed on and resumed against the live
+/// tail of the log instead of replayed from the start. The wire form is
+/// opaque: a projection is only ever produced and consumed by the fold.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeProjection {
@@ -71,9 +70,9 @@ pub struct ChangeProjection {
     pub next_thread_id: u64,
     /// Count of entries folded = the next unconsumed `position`.
     ///
-    /// A high-water mark, carried in the projection so the client resumes
-    /// folding the live tail at the right boundary and the fold stays
-    /// idempotent across the overlap.
+    /// A high-water mark, carried in the projection so a resumed fold
+    /// starts at the right boundary and stays idempotent across the
+    /// overlap.
     pub entries_folded: u64,
 }
 

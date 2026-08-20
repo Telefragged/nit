@@ -28,9 +28,8 @@ impl Verdict {
 
 /// A reviewer's **draft** decision on a change.
 ///
-/// The review modal's single set of choices, drafted in `draft_reviews`
-/// and published on batch submit, where it translates back to a
-/// [`Verdict`] or a [`LifecycleAction`] ([`Decision::as_verdict`],
+/// Publishing it translates back to a [`Verdict`] or a
+/// [`LifecycleAction`] ([`Decision::as_verdict`],
 /// [`Decision::as_lifecycle`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

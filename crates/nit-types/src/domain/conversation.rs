@@ -106,11 +106,10 @@ pub struct ThreadProjection {
 /// One message in a thread.
 ///
 /// `review_id` is the review that published it, or `None` for an author's
-/// own note — which is what distinguishes reviewer from author (the only
-/// consumer derives the label from it).
+/// own note — which is what distinguishes reviewer from author.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-// Shares the wire `ThreadComment` name but is a distinct type — only
-// ever round-tripped through the wasm fold.
+// Renamed in the generated types: the published rendering already owns
+// the `ThreadComment` name.
 #[cfg_attr(
     feature = "ts",
     derive(ts_rs::TS),

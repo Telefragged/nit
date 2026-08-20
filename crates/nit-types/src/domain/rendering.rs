@@ -5,10 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Which region of the change graph a node sits in.
 ///
 /// `open` ascends above the canonical HEAD, `head` is the HEAD anchor,
-/// and `history` descends below it (merged commits, fading with depth).
-/// The client styles a node by its `section` first (head → ring,
-/// history → grey/fade), falling back to its `ChangeStatus` for open
-/// nodes.
+/// and `history` descends below it: merged commits, oldest deepest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
