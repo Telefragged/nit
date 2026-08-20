@@ -7,27 +7,42 @@ use std::sync::LazyLock;
 
 use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
 
-/// Captures the body of each **named** definition, and nothing else.
+/// Captures the body of each **named** definition, and each import.
 ///
 /// What no pattern captures survives, which is what leaves a trait, an
 /// interface and their bodiless signatures whole. A trait method with a
 /// default body is a definition like any other: its signature stays, its
 /// body goes.
-const RUST_PATTERNS: &str = "(function_item body: (block) @delimited)";
+///
+/// A `pub use` is not an import but a re-export, so the anchor before
+/// `use` keeps it: what a module hands on is its API surface.
+const RUST_PATTERNS: &str = "
+    (function_item body: (block) @delimited)
+    (use_declaration . \"use\") @whole
+";
 
 /// A definition bound to a name, whether it declares one or is assigned to
 /// one — the second form is how most of a React codebase is written.
 /// A callback passed inline is not a definition and keeps its body.
+///
+/// An `export ... from` is a re-export rather than an import, and parses as
+/// an export, so it survives with the rest of the API surface.
 const TYPESCRIPT_PATTERNS: &str = "
     (function_declaration body: (statement_block) @delimited)
     (method_definition body: (statement_block) @delimited)
     (variable_declarator value: (arrow_function body: (statement_block) @delimited))
     (variable_declarator value: (function_expression body: (statement_block) @delimited))
+    (import_statement) @whole
 ";
 
 /// A `def` at any depth, so a method reads like a free function. A `lambda`
 /// is not a definition and keeps its body, as an inline callback does.
-const PYTHON_PATTERNS: &str = "(function_definition body: (block) @bare)";
+const PYTHON_PATTERNS: &str = "
+    (function_definition body: (block) @bare)
+    (import_statement) @whole
+    (import_from_statement) @whole
+    (future_import_statement) @whole
+";
 
 /// What a Nix file exposes is its attribute paths, so an attrset is
 /// structure and stays whole; a value built any other way is the body under
@@ -56,15 +71,16 @@ pub(super) fn outline<'a>(path: &str, text: &'a str) -> (Vec<u64>, Vec<&'a str>)
         .unzip()
 }
 
-/// Which of the file's lines sit inside a collapsed body, indexed from 0.
+/// Which of the file's lines a collapse drops, indexed from 0.
 ///
-/// A capture names how its body is written. A `@delimited` body's own first
-/// and last lines are not in it: the line it opens on ends the signature,
-/// and the one it closes on carries the delimiter that shows the signature
-/// was for a definition — so such a body has to span three lines before
-/// collapsing hides anything. A `@bare` body is marked by its indentation
-/// alone, so every line it covers goes, bar the one it shares with the
-/// signature that introduces it.
+/// A capture names how much of the span it holds goes. A `@delimited`
+/// body's own first and last lines are not in it: the line it opens on ends
+/// the signature, and the one it closes on carries the delimiter that shows
+/// the signature was for a definition — so such a body has to span three
+/// lines before collapsing hides anything. A `@bare` body is marked by its
+/// indentation alone, so every line it covers goes, bar the one it shares
+/// with the signature that introduces it. A `@whole` span is not a body at
+/// all and nothing in it survives.
 ///
 /// All false when the language has no grammar or its parse fails.
 fn collapsed_lines(path: &str, text: &str) -> Vec<bool> {
@@ -82,16 +98,18 @@ fn collapsed_lines(path: &str, text: &str) -> Vec<bool> {
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&grammar.query, tree.root_node(), text.as_bytes());
     while let Some(matched) = matches.next() {
-        for body in matched.captures {
-            let (first, last) = (body.node.start_position().row, body.node.end_position().row);
-            let (opens, closes) = if grammar.query.capture_names()[body.index as usize] == "bare" {
-                let on_the_signature_line = body
-                    .node
-                    .parent()
-                    .is_some_and(|def| def.start_position().row == first);
-                (first + usize::from(on_the_signature_line), last + 1)
-            } else {
-                (first + 1, last)
+        for span in matched.captures {
+            let (first, last) = (span.node.start_position().row, span.node.end_position().row);
+            let (opens, closes) = match grammar.query.capture_names()[span.index as usize] {
+                "whole" => (first, last + 1),
+                "bare" => {
+                    let on_the_signature_line = span
+                        .node
+                        .parent()
+                        .is_some_and(|def| def.start_position().row == first);
+                    (first + usize::from(on_the_signature_line), last + 1)
+                }
+                _ => (first + 1, last),
             };
             if opens < closes {
                 collapsed[opens..closes].fill(true);
@@ -202,6 +220,50 @@ trait Tip {
             kept("m.rs", text),
             "1:trait Tip {\n2:    fn sha(&self) -> Sha;\n3:    fn short(&self) -> String {\n5:    }\n6:}"
         );
+    }
+
+    #[test]
+    fn rust_imports_go_and_re_exports_stay() {
+        let text = "\
+use std::sync::{
+    Arc, Mutex,
+};
+pub use crate::api::Diff;
+
+struct Rev;
+";
+        assert_eq!(
+            kept("m.rs", text),
+            "4:pub use crate::api::Diff;\n5:\n6:struct Rev;"
+        );
+    }
+
+    #[test]
+    fn typescript_imports_go_and_re_exports_stay() {
+        let text = "\
+import { render } from \"react\";
+export { Diff } from \"./diff\";
+const id = 1;
+";
+        assert_eq!(
+            kept("m.ts", text),
+            "2:export { Diff } from \"./diff\";\n3:const id = 1;"
+        );
+    }
+
+    #[test]
+    fn python_imports_go_however_they_are_written() {
+        let text = "\
+from __future__ import annotations
+import os
+from typing import (
+    Iterator,
+)
+
+class Chain:
+    pass
+";
+        assert_eq!(kept("m.py", text), "6:\n7:class Chain:\n8:    pass");
     }
 
     #[test]

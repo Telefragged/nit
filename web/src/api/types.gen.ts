@@ -103,8 +103,9 @@ export type LineKind = "context" | "add" | "del";
  * How much of a diff is rendered.
  *
  * `Full` renders every line the change touched. `Outline` collapses every
- * function body, so that only signatures, doc-comments, types and fields
- * remain — the change read at the altitude of its API surface.
+ * function body and drops every import, so that only signatures,
+ * doc-comments, types and fields remain — the change read at the altitude
+ * of its API surface.
  */
 export type DiffMode = "full" | "outline";
 
