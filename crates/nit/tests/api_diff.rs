@@ -1,7 +1,8 @@
 //! The diff endpoint: `/COMMIT_MSG` leads every response, real files
 //! carry exact add/del counts and hunk lines, binary files have empty
-//! hunks, and `?against` produces an interdiff whose `/COMMIT_MSG` is a
-//! real message diff. Revisions are minted by `push` — amend + re-push
+//! hunks, `?mode=outline` lists only the files with an outline to show, and
+//! `?against` produces an interdiff whose `/COMMIT_MSG` is a real message
+//! diff. Revisions are minted by `push` — amend + re-push
 //! gives revision 1.
 
 mod common;
@@ -268,6 +269,60 @@ fn interdiff_against_earlier_revision() {
 
 /// A revision that was never pushed is a 404 — vs-parent and as an interdiff
 /// endpoint alike.
+/// `?mode=outline` answers with the files whose outline changed, and with
+/// nothing else: only the signature survives, while the body-only edit,
+/// the rename and the binary file all go.
+#[test]
+fn an_outline_lists_only_the_files_it_has_something_to_say_about() {
+    let g = GitRepo::new();
+    let body_v1 = b"pub fn add(a: u8, b: u8) -> u8 {\n    a + b\n}\n";
+    let sig_v1 = b"pub fn tip(sha: Sha) -> Sha {\n    sha\n}\n";
+    let base = g.commit_full(
+        &[g.root],
+        "base files\n",
+        &[
+            ("body.rs", body_v1),
+            ("sig.rs", sig_v1),
+            ("moved.txt", b"moved\n"),
+            ("data.bin", b"\x00\x01\x02binary-one\n"),
+        ],
+        &[],
+    );
+    g.branch("main", base);
+
+    let c1 = g.commit_full(
+        &[base],
+        &msg("feat: outline", "Ioutline1"),
+        &[
+            (
+                "body.rs",
+                b"pub fn add(a: u8, b: u8) -> u8 {\n    let sum = a + b;\n    sum\n}\n",
+            ),
+            ("sig.rs", b"pub fn tip(sha: &Sha) -> Sha {\n    sha\n}\n"),
+            ("renamed.txt", b"moved\n"),
+            ("data.bin", b"\x00\x01\x02binary-two\n"),
+        ],
+        &["moved.txt"],
+    );
+    g.branch("feat", c1);
+
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, pushed) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{pushed}");
+    let id = tip_change_number(&pushed);
+
+    let (st, diff) =
+        http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff?mode=outline")));
+    assert_eq!(st, 200, "{diff}");
+    let paths: Vec<&str> = diff["files"]
+        .as_array()
+        .expect("files array")
+        .iter()
+        .map(|f| f["path"].as_str().expect("a path"))
+        .collect();
+    assert_eq!(paths, ["/COMMIT_MSG", "sig.rs"], "{diff}");
+}
+
 #[test]
 fn missing_revision_is_404() {
     let g = GitRepo::new();

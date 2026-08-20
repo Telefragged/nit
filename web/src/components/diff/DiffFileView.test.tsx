@@ -185,10 +185,11 @@ describe("context-expand buttons", () => {
   });
 });
 
-describe("a file whose outline is untouched", () => {
+describe("a file the change only renamed", () => {
   const clean: DiffFile = {
-    path: "src/body-only.rs",
-    status: "modified",
+    path: "src/renamed.rs",
+    old_path: "src/original.rs",
+    status: "renamed",
     binary: false,
     additions: 0,
     deletions: 0,

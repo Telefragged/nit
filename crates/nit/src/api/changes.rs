@@ -227,19 +227,26 @@ fn contained_diff(
     let shown = |path: &str| only.is_none_or(|w| w.path == path);
     let plain = || diff::render(&repo, &git, context, mode, shown);
 
-    let Some(m) = revs
+    let mut wire = match revs
         .against
         .as_ref()
         .filter(|a| a.parent_sha != revision.parent_sha)
-    else {
-        return plain().map_err(Error::from);
+    {
+        None => plain()?,
+        Some(m) => rebase::contain(&repo, &git, &at(m), &at(revision), context, mode, shown)
+            .or_else(|e| {
+                tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
+                plain()
+            })?,
     };
-    rebase::contain(&repo, &git, &at(m), &at(revision), context, mode, shown)
-        .or_else(|e| {
-            tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
-            plain()
-        })
-        .map_err(Error::from)
+    if mode == DiffMode::Outline {
+        // An outline answers with outlines, so a file that has none to show
+        // is not in it — whatever else its delta did. A change inside a
+        // body, a rename, a binary blob: each leaves a row saying nothing,
+        // which is the noise the mode exists to remove.
+        wire.files.retain(|file| !file.hunks.is_empty());
+    }
+    Ok(wire)
 }
 
 fn at(r: &RevisionProjection) -> rebase::Rev<'_> {
