@@ -63,12 +63,15 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
     amending code, comments, or commit messages, and at the start of
     every review pass. A `/simplify` or `/code-review` run additionally
     spawns the comment-audit agent that skill defines.
-11. **The domain model is `crates/nit-types/src/domain.rs`** — what a
-    term means is defined there once, on the type that carries it, and
-    that type lives there too; every component speaks that vocabulary.
-    A shape a route needs stays with the route. Read it before naming
-    anything; an identifier spells its term in full, and the exemptions
-    are a closed set.
+11. **The domain model is `crates/nit-types/src/domain.rs` — load the
+    `domain-modeling` skill before touching a type.** What a term means
+    is defined there once, on the type that carries it, and that type
+    lives there too; a shape a route needs stays with the route. How
+    those types are built — validation at construction, illegal states
+    made unspellable, the serde gate, how a term is named — lives in
+    `.claude/skills/domain-modeling/SKILL.md`. Read it before adding or
+    changing a type in `nit-types`, and at the start of every review
+    pass.
 12. **Every sentence we emit obeys `simplified-english`** — one idea
     per sentence, 20 words for an instruction and 25 for a description,
     six sentences per paragraph, active voice, no phrasal verbs. Load

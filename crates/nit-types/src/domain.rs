@@ -14,6 +14,10 @@
 //! falsify — a count, a route, a column, a status code, a behavior —
 //! belongs to the code it describes and never to a definition.
 //!
+//! How a type here is built — validation at construction, illegal
+//! states made unspellable, the serde gate, how a term is named — is
+//! the `domain-modeling` skill.
+//!
 //! # Who
 //!
 //! **Author** — the party that pushes changes and answers review.
@@ -90,29 +94,6 @@
 //!
 //! A reviewer chooses the first two. The last two are derived, and
 //! nobody sets them by hand.
-//!
-//! # Naming
-//!
-//! **Terms are spelled out.** An identifier carries a domain term in
-//! full, so that the term's definition is the only thing a reader needs
-//! to understand the name. The exemptions are a closed set — `id`,
-//! `sha`, `repo`, `git_dir` — and adding to it is a decision, not a
-//! convenience.
-//!
-//! **A closed set of values is an `enum`, never a `String`.**
-//! Every value that can only be one of a fixed list lives here as a serde
-//! enum whose `rename`/`rename_all` fixes its on-the-wire spelling, so the
-//! *same* type is the domain value, the JSON shape, and the parsed CLI
-//! input. The payoff is concrete: an exhaustive `match` instead of a
-//! `_ =>` fallthrough, no `as_str`/`from_str` round-tripping at the
-//! domain↔wire boundary, and — because `#[serde(deny_unknown…)]`-style
-//! rejection is automatic for enums — an unknown value is a clean
-//! deserialization error, not a string that flows deeper before
-//! something notices. New enumerated fields are added here and
-//! referenced from both sides; they are never `String`.
-//!
-//! Serde renamings pin the exact wire spellings, so swapping a `String`
-//! field for one of these enums is not a wire change.
 
 mod chain;
 mod change;
