@@ -566,9 +566,8 @@ export type ReviewPayload = {
 /**
  * A comment inside a `review` or `comment` payload.
  *
- * With `thread_id` unset it **opens a new thread** anchored by the
- * fields below; with it set it **replies** to that thread (the anchor is
- * ignored — the thread owns it).
+ * With `thread_id` unset it **opens a new thread** at its anchor; with
+ * it set it **replies** to that thread, which owns the anchor.
  */
 export type CommentInput = {
   /**
@@ -583,14 +582,11 @@ export type CommentInput = {
    * the change's latest only for a malformed payload.
    */
   revision: RevisionNumber | null;
-  file: string | null;
-  line: number | null;
   /**
-   * New-thread anchor side; `None` on a reply (the thread owns the anchor).
+   * Where a new thread is anchored; `None` on a reply, which takes the
+   * anchor its thread already holds.
    */
-  side?: Side | null;
-  range: CommentRange | null;
-  line_text: string | null;
+  anchor: Anchor | null;
   body: string;
   /**
    * Thread-resolution decision.

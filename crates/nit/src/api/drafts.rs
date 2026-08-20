@@ -14,7 +14,7 @@ use crate::db;
 
 use super::views;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
-use super::{change_or_404, snapshot_line_text, validate_anchor};
+use super::{anchor_of, change_or_404, snapshot_line_text};
 
 pub(super) async fn create_draft(
     State(state): State<Arc<AppState>>,
@@ -27,8 +27,7 @@ pub(super) async fn create_draft(
         let revision = proj
             .revision(req.revision)
             .ok_or_else(|| Error::bad_request(format!("revision {} not found", req.revision)))?;
-        let (side, line, range) =
-            validate_anchor(req.side, req.file.as_deref(), req.line, req.range)?;
+        let anchor = anchor_of(req.side, req.file.clone(), req.line, req.range)?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
         if req.body.trim().is_empty() && !resolution_only {
             return Err(Error::bad_request(
@@ -45,7 +44,7 @@ pub(super) async fn create_draft(
             None => None,
         };
         let git_dir = state.git_dir(proj.repo_id)?;
-        let line_text = snapshot_line_text(&git_dir, revision, req.file.as_deref(), line, side);
+        let line_text = snapshot_line_text(&git_dir, revision, &anchor);
         drop(proj);
         let draft_id = state.alloc_id();
         let row = db::insert_draft(
@@ -55,10 +54,10 @@ pub(super) async fn create_draft(
                 change_number: id,
                 revision: req.revision,
                 thread_id,
-                file: req.file.as_deref(),
-                line,
-                side,
-                range,
+                file: anchor.file(),
+                line: anchor.line(),
+                side: anchor.side(),
+                range: anchor.range(),
                 line_text: line_text.as_deref(),
                 body: &req.body,
                 resolved: req.resolved,

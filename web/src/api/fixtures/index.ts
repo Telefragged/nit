@@ -32,6 +32,7 @@ import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, projection } from "./stream";
 import { diffKey, newSideEnd } from "./builders";
 import { changes, draftReviews, drafts, repos, tips } from "./data";
+import { anchorOf } from "./store";
 import type {
   AuthoredFile,
   ChangeRecord,
@@ -58,11 +59,7 @@ function drainComments(c: ChangeRecord): CommentInput[] {
       comments.push({
         thread_id: d.thread_id,
         revision: null,
-        file: null,
-        line: null,
-        side: null,
-        range: null,
-        line_text: null,
+        anchor: null,
         body: d.body,
         resolved: d.resolved,
       });
@@ -70,11 +67,7 @@ function drainComments(c: ChangeRecord): CommentInput[] {
       comments.push({
         thread_id: nextThreadId++,
         revision: d.revision,
-        file: d.file,
-        line: d.line,
-        side: d.side,
-        range: d.range ?? null,
-        line_text: d.line_text,
+        anchor: anchorOf(d),
         body: d.body,
         resolved: d.resolved,
       });

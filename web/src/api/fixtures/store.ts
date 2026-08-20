@@ -3,6 +3,7 @@
 // (walked from parent_sha), not stored on the change.
 
 import type {
+  Anchor,
   ChangeStatus,
   CommentRange,
   Side,
@@ -71,6 +72,27 @@ export interface ThreadRecord {
   comments: ThreadComment[];
   created_at: string;
   updated_at: string;
+}
+
+/** The anchor a record's flat location fields describe. */
+export function anchorOf(r: {
+  file: string | null;
+  line: number | null;
+  side: Side;
+  range?: CommentRange | null;
+  line_text: string | null;
+}): Anchor {
+  if (r.file === null) return "change";
+  if (r.line === null) return { file: { file: r.file } };
+  return {
+    line: {
+      file: r.file,
+      side: r.side,
+      line: r.line,
+      line_text: r.line_text,
+      range: r.range ?? null,
+    },
+  };
 }
 
 /** A reviewer's unpublished comment: a new thread (`thread_id` null) or a

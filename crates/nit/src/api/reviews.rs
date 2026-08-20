@@ -12,7 +12,7 @@ use nit_types::decisions::{BatchSubmitResult, SubmitError};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::DraftDecision;
 use nit_types::domain::RevisionNumber;
-use nit_types::domain::{CommentInput, LogPayload, ReviewPayload};
+use nit_types::domain::{Anchor, CommentInput, LogPayload, ReviewPayload};
 use nit_types::domain::{Decision, LifecycleAction, Verdict};
 
 use crate::db;
@@ -36,15 +36,25 @@ fn drafts_to_comments(
         .map(|d| CommentInput {
             thread_id: d.thread_id,
             revision: Some(d.revision),
-            file: d.file.clone(),
-            line: d.line,
-            side: d.thread_id.is_none().then_some(d.side),
-            range: d.range,
-            line_text: d.line_text.clone(),
+            anchor: opening_anchor(d),
             body: d.body.clone(),
             resolved: d.resolved,
         })
         .collect())
+}
+
+/// The anchor a draft opens its thread at, and none for a reply.
+///
+/// The parts were checked when the draft was written, so a row that no
+/// longer parses can only be corruption, and it reads as change-level.
+fn opening_anchor(d: &db::DraftRow) -> Option<Anchor> {
+    if d.thread_id.is_some() {
+        return None;
+    }
+    let mut anchor =
+        Anchor::parse(d.file.clone(), Some(d.side), d.line, d.range).unwrap_or(Anchor::Change);
+    anchor.snapshot_line_text(d.line_text.clone());
+    Some(anchor)
 }
 
 /// Publishes one reviewer `decision` for a change.

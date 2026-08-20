@@ -43,9 +43,9 @@ use serde::Deserialize;
 
 use nit_types::changes::ChangeDetail;
 use nit_types::domain::ChangeNumber;
-use nit_types::domain::CommentRange;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
+use nit_types::domain::{Anchor, CommentRange};
 use nit_types::domain::{Sha, Side};
 use nit_types::health::Health;
 
@@ -269,43 +269,33 @@ fn change_detail_json(
     Ok(Json(views::build_change_detail(conn, &change)?))
 }
 
-/// Validates a new thread's anchor.
+/// The anchor a request names, checked against the route's own rule.
 ///
-/// `line` and `range` are mutually exclusive anchor kinds; a ranged thread
-/// anchors under the selection's last line. Returns the resolved
-/// `(side, line, range)`.
-fn validate_anchor(
+/// [`Anchor::parse`] owns what an anchor is. The synthetic commit-message
+/// file is the route's: it is rendered, not diffed, so it has no old side.
+fn anchor_of(
     side: Option<Side>,
-    file: Option<&str>,
+    file: Option<String>,
     line: Option<u64>,
     range: Option<CommentRange>,
-) -> Result<(Side, Option<u64>, Option<CommentRange>), Error> {
-    let side = side.unwrap_or_default();
-    if line.is_some() && range.is_some() {
-        return Err(Error::bad_request(
-            "line and range are mutually exclusive anchors — pass one",
-        ));
-    }
-    let line = line.or_else(|| range.as_ref().map(|r| r.end_line()));
-    if line.is_some() && file.is_none() {
-        return Err(Error::bad_request("a line anchor requires a file"));
-    }
-    if file == Some(diff::COMMIT_MSG_PATH) && side == Side::Old {
+) -> Result<Anchor, Error> {
+    let anchor =
+        Anchor::parse(file, side, line, range).map_err(|e| Error::bad_request(e.to_string()))?;
+    if anchor.file() == Some(diff::COMMIT_MSG_PATH) && anchor.side() == Side::Old {
         return Err(Error::bad_request(
             "/COMMIT_MSG has no old side — comment with side \"new\"",
         ));
     }
-    Ok((side, line, range))
+    Ok(anchor)
 }
 
 fn snapshot_line_text(
     git_dir: &str,
     revision: &RevisionProjection,
-    file: Option<&str>,
-    line: Option<u64>,
-    side: Side,
+    anchor: &Anchor,
 ) -> Option<String> {
-    match (file, line) {
+    let side = anchor.side();
+    match (anchor.file(), anchor.line()) {
         (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&revision.message, line),
         (Some(file), Some(line)) => {
             let sha = if side == Side::Old {

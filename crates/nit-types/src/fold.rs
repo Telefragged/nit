@@ -153,7 +153,7 @@ fn open_thread(
     change.threads.push(ThreadProjection {
         id,
         revision,
-        anchor: Anchor::from_input(c),
+        anchor: c.anchor.clone().unwrap_or(Anchor::Change),
         resolved: c.resolved.unwrap_or(false),
         comments: vec![ThreadComment {
             body: c.body.clone(),
@@ -323,11 +323,13 @@ mod tests {
         CommentInput {
             thread_id: None,
             revision: Some(RevisionNumber::new(0)),
-            file: Some(file.to_string()),
-            line: Some(line),
-            side: Some(Side::New),
-            range: None,
-            line_text: None,
+            anchor: Some(Anchor::Line {
+                file: file.to_string(),
+                side: Side::New,
+                line,
+                line_text: None,
+                range: None,
+            }),
             body: body.to_string(),
             resolved: None,
         }
@@ -337,11 +339,7 @@ mod tests {
         CommentInput {
             thread_id,
             revision: None,
-            file: None,
-            line: None,
-            side: None,
-            range: None,
-            line_text: None,
+            anchor: None,
             body: body.to_string(),
             resolved: None,
         }

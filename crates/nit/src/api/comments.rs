@@ -17,7 +17,7 @@ use nit_types::domain::Lifecycle;
 use crate::review;
 
 use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, with_conn};
-use super::{change_detail_json, change_or_404, map_busy, snapshot_line_text, validate_anchor};
+use super::{anchor_of, change_detail_json, change_or_404, map_busy, snapshot_line_text};
 
 pub(super) async fn create_comment(
     State(state): State<Arc<AppState>>,
@@ -39,17 +39,12 @@ pub(super) async fn create_comment(
                 CommentInput {
                     thread_id: Some(tid),
                     revision: None,
-                    file: None,
-                    line: None,
-                    side: None,
-                    range: None,
-                    line_text: None,
+                    anchor: None,
                     body: req.body.clone(),
                     resolved: req.resolved,
                 }
             } else {
-                let (side, line, range) =
-                    validate_anchor(req.side, req.file.as_deref(), req.line, req.range)?;
+                let mut anchor = anchor_of(req.side, req.file.clone(), req.line, req.range)?;
                 let number = match req.revision {
                     Some(r) => r,
                     None => {
@@ -64,16 +59,11 @@ pub(super) async fn create_comment(
                     .revision(number)
                     .ok_or_else(|| Error::bad_request(format!("revision {number} not found")))?;
                 let git_dir = state.git_dir(proj.repo_id)?;
-                let line_text =
-                    snapshot_line_text(&git_dir, revision, req.file.as_deref(), line, side);
+                anchor.snapshot_line_text(snapshot_line_text(&git_dir, revision, &anchor));
                 CommentInput {
                     thread_id: None,
                     revision: Some(number),
-                    file: req.file.clone(),
-                    line,
-                    side: Some(side),
-                    range,
-                    line_text,
+                    anchor: Some(anchor),
                     body: req.body.clone(),
                     resolved: req.resolved,
                 }

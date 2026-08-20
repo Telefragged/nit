@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::Anchor;
 use super::ChangeNumber;
 use super::CommentRange;
 use super::RevisionNumber;
@@ -101,10 +102,10 @@ pub struct ReviewPayload {
 
 /// A comment inside a `review` or `comment` payload.
 ///
-/// With `thread_id` unset it **opens a new thread** anchored by the
-/// fields below; with it set it **replies** to that thread (the anchor is
-/// ignored — the thread owns it).
+/// With `thread_id` unset it **opens a new thread** at its anchor; with
+/// it set it **replies** to that thread, which owns the anchor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "LoggedComment")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentInput {
     /// `None` opens a new thread; `Some` appends to that thread.
@@ -117,17 +118,10 @@ pub struct CommentInput {
     /// the change's latest only for a malformed payload.
     #[serde(default)]
     pub revision: Option<RevisionNumber>,
+    /// Where a new thread is anchored; `None` on a reply, which takes the
+    /// anchor its thread already holds.
     #[serde(default)]
-    pub file: Option<String>,
-    #[serde(default)]
-    pub line: Option<u64>,
-    /// New-thread anchor side; `None` on a reply (the thread owns the anchor).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub side: Option<Side>,
-    #[serde(default)]
-    pub range: Option<CommentRange>,
-    #[serde(default)]
-    pub line_text: Option<String>,
+    pub anchor: Option<Anchor>,
     pub body: String,
     /// Thread-resolution decision.
     ///
@@ -136,6 +130,57 @@ pub struct CommentInput {
     /// `body` carries only this.
     #[serde(default)]
     pub resolved: Option<bool>,
+}
+
+/// A comment as the log holds it, in either spelling.
+///
+/// The log is append-only, so entries written before a comment carried
+/// one [`Anchor`] keep the five loose fields it was spelled with. Reading
+/// resolves the two into the anchor, which is why nothing downstream has
+/// to know that a second spelling exists.
+#[derive(Deserialize)]
+struct LoggedComment {
+    #[serde(default)]
+    thread_id: Option<u64>,
+    #[serde(default)]
+    revision: Option<RevisionNumber>,
+    #[serde(default)]
+    anchor: Option<Anchor>,
+    #[serde(default)]
+    file: Option<String>,
+    #[serde(default)]
+    line: Option<u64>,
+    /// Set on an opening comment and unset on a reply, which is how the
+    /// older spelling marked which of the two an entry is.
+    #[serde(default)]
+    side: Option<Side>,
+    #[serde(default)]
+    line_text: Option<String>,
+    #[serde(default)]
+    range: Option<CommentRange>,
+    body: String,
+    #[serde(default)]
+    resolved: Option<bool>,
+}
+
+impl From<LoggedComment> for CommentInput {
+    fn from(c: LoggedComment) -> CommentInput {
+        let anchor = c.anchor.or_else(|| {
+            let side = c.side?;
+            // An entry passed the anchor rules when it was written, so the
+            // older spelling cannot break them on the way back in.
+            let mut anchor = Anchor::parse(c.file, Some(side), c.line, c.range).ok()?;
+            anchor.snapshot_line_text(c.line_text);
+            Some(anchor)
+        });
+        CommentInput {
+            thread_id: c.thread_id,
+            revision: c.revision,
+            anchor,
+            body: c.body,
+            resolved: c.resolved,
+        }
+    }
 }
 
 /// A `lifecycle` entry: a merge, an abandon, or a reopen.

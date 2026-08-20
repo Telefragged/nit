@@ -371,11 +371,7 @@ mod tests {
             LogPayload::Comment(CommentInput {
                 thread_id: None,
                 revision: None,
-                file: None,
-                line: None,
-                side: None,
-                range: None,
-                line_text: None,
+                anchor: None,
                 body: String::new(),
                 resolved: None,
             })

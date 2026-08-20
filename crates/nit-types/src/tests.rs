@@ -3,6 +3,7 @@
 //! feature (clap, ts) would otherwise mask.
 
 use crate::domain::ChangeNumber;
+use crate::domain::{Anchor, CommentInput};
 use crate::domain::{ChangeId, Sha};
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
@@ -139,4 +140,30 @@ fn client_msg_subscribe_is_externally_tagged() {
     let map = HashMap::from([("10".to_string(), 5u64)]);
     let json = serde_json::to_string(&ClientMessage::Subscribe(map)).expect("serialize");
     assert_eq!(json, r#"{"subscribe":{"10":5}}"#);
+}
+
+#[test]
+fn a_comment_logged_before_the_anchor_still_reads() {
+    // The five loose fields an entry was written with, and the reply that
+    // marked itself by leaving `side` unset.
+    let opening = r#"{"thread_id":1,"revision":0,"file":"a.rs","line":3,"side":"new",
+        "range":null,"line_text":"x","body":"look","resolved":null}"#;
+    let reply = r#"{"thread_id":1,"revision":null,"file":null,"line":null,"side":null,
+        "range":null,"line_text":null,"body":"ok","resolved":true}"#;
+
+    let opening: CommentInput = serde_json::from_str(opening).expect("deserialize");
+    assert_eq!(
+        opening.anchor,
+        Some(Anchor::Line {
+            file: "a.rs".to_string(),
+            side: Side::New,
+            line: 3,
+            line_text: Some("x".to_string()),
+            range: None,
+        })
+    );
+
+    let reply: CommentInput = serde_json::from_str(reply).expect("deserialize");
+    assert_eq!(reply.anchor, None);
+    assert_eq!(reply.resolved, Some(true));
 }

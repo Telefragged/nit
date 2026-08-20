@@ -4,7 +4,6 @@
 use serde::{Deserialize, Serialize};
 
 use super::ChangeNumber;
-use super::CommentInput;
 use super::Decision;
 use super::RevisionNumber;
 
@@ -51,7 +50,7 @@ impl std::str::FromStr for Side {
 ///
 /// Modeled so the invalid combinations the flat wire fields allow are
 /// unrepresentable.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Anchor {
@@ -70,21 +69,101 @@ pub enum Anchor {
 }
 
 impl Anchor {
-    /// The anchor a new thread is born with, taken from its opening comment.
-    #[must_use]
-    pub fn from_input(c: &CommentInput) -> Anchor {
-        match (&c.file, c.line) {
-            (Some(file), Some(line)) => Anchor::Line {
-                file: file.clone(),
-                side: c.side.unwrap_or_default(),
+    /// The anchor that a file, a line and a selection name together.
+    ///
+    /// A selection implies the line that it ends on, so a caller names
+    /// one or the other. A line names a place inside a file, so it needs
+    /// one. Nothing else is an anchor, and the absent file is the change
+    /// itself.
+    ///
+    /// # Errors
+    ///
+    /// [`AnchorError`], naming the rule the parts broke.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::Anchor;
+    ///
+    /// assert!(Anchor::parse(None, None, None, None).is_ok());
+    /// assert!(Anchor::parse(None, None, Some(3), None).is_err());
+    /// ```
+    pub fn parse(
+        file: Option<String>,
+        side: Option<Side>,
+        line: Option<u64>,
+        range: Option<CommentRange>,
+    ) -> Result<Anchor, AnchorError> {
+        if line.is_some() && range.is_some() {
+            return Err(AnchorError::LineAndRange);
+        }
+        let line = line.or_else(|| range.map(CommentRange::end_line));
+        match (file, line) {
+            (Some(file), Some(line)) => Ok(Anchor::Line {
+                file,
+                side: side.unwrap_or_default(),
                 line,
-                line_text: c.line_text.clone(),
-                range: c.range,
-            },
-            (Some(file), None) => Anchor::File { file: file.clone() },
-            (None, _) => Anchor::Change,
+                line_text: None,
+                range,
+            }),
+            (Some(file), None) => Ok(Anchor::File { file }),
+            (None, None) => Ok(Anchor::Change),
+            (None, Some(_)) => Err(AnchorError::LineWithoutFile),
         }
     }
+
+    /// The file the anchor names, if it names one.
+    #[must_use]
+    pub fn file(&self) -> Option<&str> {
+        match self {
+            Anchor::Change => None,
+            Anchor::File { file } | Anchor::Line { file, .. } => Some(file),
+        }
+    }
+
+    /// The line the anchor names, if it names one.
+    #[must_use]
+    pub fn line(&self) -> Option<u64> {
+        match self {
+            Anchor::Line { line, .. } => Some(*line),
+            _ => None,
+        }
+    }
+
+    /// The side a line anchor reads, and the default off a line.
+    #[must_use]
+    pub fn side(&self) -> Side {
+        match self {
+            Anchor::Line { side, .. } => *side,
+            _ => Side::default(),
+        }
+    }
+
+    /// The selection inside the line, if the anchor holds one.
+    #[must_use]
+    pub fn range(&self) -> Option<CommentRange> {
+        match self {
+            Anchor::Line { range, .. } => *range,
+            _ => None,
+        }
+    }
+
+    /// Records the text of the line, read from the revision the anchor
+    /// is pinned to.
+    pub fn snapshot_line_text(&mut self, text: Option<String>) {
+        if let Anchor::Line { line_text, .. } = self {
+            *line_text = text;
+        }
+    }
+}
+
+/// Why a file, a line and a selection are not an anchor.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum AnchorError {
+    #[error("line and range are mutually exclusive anchors — pass one")]
+    LineAndRange,
+    #[error("a line anchor requires a file")]
+    LineWithoutFile,
 }
 
 /// A located, resolvable conversation.
