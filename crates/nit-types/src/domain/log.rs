@@ -10,9 +10,6 @@ use super::Side;
 use super::Verdict;
 
 /// The kind of one log entry.
-///
-/// The fold dispatches on it; the db `log.kind` TEXT column stores its
-/// [`LogKind::as_str`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogKind {
@@ -23,7 +20,7 @@ pub enum LogKind {
 }
 
 impl LogKind {
-    /// The persisted/wire spelling (db↔domain boundary).
+    /// The wire spelling (mirrors the serde renaming).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -161,10 +158,8 @@ pub struct LifecyclePayload {
 
 /// A log entry's payload as a closed union tagged by `kind`.
 ///
-/// The server's fold holds it typed; flattened into [`LogEntry`] the
-/// adjacent tag produces the wire's `{…, "kind": …, "payload": …}`.
-/// Storage serializes the inner struct alone (the `kind` lives in its own
-/// column), via the boundary in `crate::review`.
+/// Flattened into [`LogEntry`], the adjacent tag produces the wire's
+/// `{…, "kind": …, "payload": …}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", content = "payload", rename_all = "snake_case")]

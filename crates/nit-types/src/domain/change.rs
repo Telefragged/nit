@@ -157,9 +157,7 @@ impl ChangeProjection {
     /// The change's current status.
     ///
     /// [`status_at`](Self::status_at) its latest revision (pending when it
-    /// has none). The denormalized `changes.status` column
-    /// (`crates/nit/src/db.rs`) caches this so a query can filter changes
-    /// without folding their logs.
+    /// has none).
     #[must_use]
     pub fn current_status(&self) -> ChangeStatus {
         self.status_at(

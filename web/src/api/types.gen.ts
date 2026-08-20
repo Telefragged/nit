@@ -355,8 +355,7 @@ export type DraftDecision = { decision: Decision; message: string };
  * 1-based lines on the comment's side, 0-based chars, `end_char`
  * exclusive, `end_line` = the comment's `line`. The JSON shape is these
  * four fields. They are domain coordinates (always non-negative), so the
- * shape is `u64`; the server's `SQLite` columns are signed, converted at
- * the db boundary like every other id.
+ * shape is `u64`.
  */
 export type CommentRange = {
   start_line: number;
@@ -627,10 +626,8 @@ export type LifecyclePayload = {
 /**
  * A log entry's payload as a closed union tagged by `kind`.
  *
- * The server's fold holds it typed; flattened into [`LogEntry`] the
- * adjacent tag produces the wire's `{…, "kind": …, "payload": …}`.
- * Storage serializes the inner struct alone (the `kind` lives in its own
- * column), via the boundary in `crate::review`.
+ * Flattened into [`LogEntry`], the adjacent tag produces the wire's
+ * `{…, "kind": …, "payload": …}`.
  */
 export type LogPayload =
   | { kind: "revision"; payload: RevisionPayload }

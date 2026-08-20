@@ -63,8 +63,7 @@ impl Decision {
         }
     }
 
-    /// The persisted/wire spelling — the `draft_reviews.decision` column value
-    /// (db↔domain boundary).
+    /// The wire spelling (mirrors the serde renaming).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -106,8 +105,7 @@ pub enum ChangeStatus {
 }
 
 impl ChangeStatus {
-    /// The persisted/wire spelling — the denormalized `changes.status` column
-    /// value (db↔domain boundary).
+    /// The wire spelling (mirrors the serde renaming).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {

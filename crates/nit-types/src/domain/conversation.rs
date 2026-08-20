@@ -23,8 +23,7 @@ pub enum Side {
 }
 
 impl Side {
-    /// The persisted/wire spelling — the `drafts.side` column value
-    /// (db↔domain boundary).
+    /// The wire spelling (mirrors the serde renaming).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -128,8 +127,7 @@ pub struct ThreadComment {
 /// 1-based lines on the comment's side, 0-based chars, `end_char`
 /// exclusive, `end_line` = the comment's `line`. The JSON shape is these
 /// four fields. They are domain coordinates (always non-negative), so the
-/// shape is `u64`; the server's `SQLite` columns are signed, converted at
-/// the db boundary like every other id.
+/// shape is `u64`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentRange {
