@@ -357,7 +357,7 @@ mod tests {
     use super::*;
     use nit_types::domain::RevisionNumber;
 
-    use nit_types::testing::sha;
+    use nit_types::testing::{change_id, sha};
 
     #[test]
     fn entry_summary_digests_each_kind() {
@@ -511,16 +511,14 @@ mod tests {
         use nit_types::domain::PathEntry;
         use nit_types::domain::{ChainState, ChangeStatus};
         let member =
-            |change_number, position, change_id: &str, status, revision: u64, subject: &str| {
-                PathEntry {
-                    change_number,
-                    position,
-                    change_id: change_id.into(),
-                    status,
-                    revision: RevisionNumber(revision),
-                    subject: subject.to_string(),
-                    commit_sha: sha(""),
-                }
+            |change_number, position, key: &str, status, revision: u64, subject: &str| PathEntry {
+                change_number,
+                position,
+                change_id: change_id(key),
+                status,
+                revision: RevisionNumber(revision),
+                subject: subject.to_string(),
+                commit_sha: sha(""),
             };
         let chain = Chain {
             tip_change_number: ChangeNumber(2),

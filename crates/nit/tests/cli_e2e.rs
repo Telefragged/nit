@@ -13,7 +13,7 @@ mod common;
 use std::io::Write;
 use std::process::Command;
 
-use common::{GitRepo, TestServer, msg, nit, nit_register};
+use common::{GitRepo, TestServer, change_id, msg, nit, nit_register};
 
 /// `nit push` prints the resulting chain digest and registers the chain;
 /// `nit status`/`nit log` then read the derived chain back, resolved from the
@@ -116,7 +116,7 @@ fn comment_opens_replies_resolves() {
         &[
             "comment",
             "--change-id",
-            "Ia",
+            &change_id("Ia"),
             "--file",
             "a.txt",
             "--line",
@@ -142,7 +142,7 @@ fn comment_opens_replies_resolves() {
         &[
             "comment",
             "--change-id",
-            "Ia",
+            &change_id("Ia"),
             "--thread",
             &thread_id.to_string(),
             "-m",
@@ -198,7 +198,7 @@ fn comment_body_from_file_and_stdin() {
         &[
             "comment",
             "--change-id",
-            "Ia",
+            &change_id("Ia"),
             "-F",
             body_path.to_str().unwrap(),
         ],
@@ -210,7 +210,7 @@ fn comment_body_from_file_and_stdin() {
     );
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(["comment", "--change-id", "Ia", "-F", "-"])
+        .args(["comment", "--change-id", &change_id("Ia"), "-F", "-"])
         .current_dir(g.workdir())
         .env("NIT_SERVER", &server.base)
         .stdin(std::process::Stdio::piped())
@@ -264,7 +264,7 @@ fn reopen_an_abandoned_change() {
 
     // CLI abandon — a reviewer or author judgment, distinct from the background
     // timer — targeted by the cwd's Change-Id.
-    let (ok, detail, stderr) = nit(&server, &g, &["abandon", "--change-id", "Ia"]);
+    let (ok, detail, stderr) = nit(&server, &g, &["abandon", "--change-id", &change_id("Ia")]);
     assert!(ok, "{stderr}");
     assert!(
         detail
@@ -273,7 +273,7 @@ fn reopen_an_abandoned_change() {
         "{detail}"
     );
 
-    let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change-id", "Ia"]);
+    let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change-id", &change_id("Ia")]);
     assert!(ok, "{stderr}");
     assert!(
         detail

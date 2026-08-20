@@ -4,22 +4,22 @@
 
 use std::collections::HashMap;
 
-use nit_types::domain::subject_of;
+use nit_types::domain::{ChangeId, subject_of};
 
-/// The message's `Change-Id:` trailer value, if it carries one.
+/// The change the message's `Change-Id:` trailer names, if it carries a
+/// well-formed one.
 ///
 /// When a message (incorrectly) carries several `Change-Id:` trailers,
 /// the last one wins.
 #[must_use]
-pub fn change_id_trailer(message: &str) -> Option<String> {
+pub fn change_id_trailer(message: &str) -> Option<ChangeId> {
     let trailers = git2::message_trailers_strs(message).ok()?;
     let mut found = None;
     for (key, value) in trailers.iter() {
-        if key.eq_ignore_ascii_case("Change-Id") {
-            let value = value.trim();
-            if !value.is_empty() {
-                found = Some(value.to_string());
-            }
+        if key.eq_ignore_ascii_case("Change-Id")
+            && let Ok(change_id) = ChangeId::new(value.trim())
+        {
+            found = Some(change_id);
         }
     }
     found
@@ -39,7 +39,7 @@ pub fn change_id_trailer(message: &str) -> Option<String> {
 pub fn require_change_ids(
     messages: &[String],
     short_shas: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<ChangeId>, String> {
     debug_assert_eq!(messages.len(), short_shas.len());
 
     let fixups: Vec<&str> = messages
@@ -69,7 +69,8 @@ pub fn require_change_ids(
     }
     if !missing.is_empty() {
         return Err(format!(
-            "commits without a Change-Id trailer ({}) — every commit needs one",
+            "commits without a well-formed Change-Id trailer ({}) — every \
+             commit needs one",
             missing.join(", ")
         ));
     }
@@ -89,37 +90,44 @@ pub fn require_change_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nit_types::testing::change_id;
 
     #[test]
     fn trailer_basic() {
-        let msg = "subject\n\nbody text\n\nChange-Id: I0123abcd\n";
-        assert_eq!(change_id_trailer(msg), Some("I0123abcd".into()));
+        let id = change_id("I0123abcd");
+        let msg = format!("subject\n\nbody text\n\nChange-Id: {id}\n");
+        assert_eq!(change_id_trailer(&msg), Some(id));
     }
 
     #[test]
     fn trailer_case_insensitive_key() {
-        let msg = "s\n\nchange-id: Iaaa\n";
-        assert_eq!(change_id_trailer(msg), Some("Iaaa".into()));
+        let id = change_id("Iaaa");
+        let msg = format!("s\n\nchange-id: {id}\n");
+        assert_eq!(change_id_trailer(&msg), Some(id));
     }
 
     #[test]
     fn trailer_among_others() {
-        let msg = "s\n\nbody\n\nSigned-off-by: A <a@b>\nChange-Id: Ixyz\nReviewed-by: B <b@c>\n";
-        assert_eq!(change_id_trailer(msg), Some("Ixyz".into()));
+        let id = change_id("Ixyz");
+        let msg =
+            format!("s\n\nbody\n\nSigned-off-by: A <a@b>\nChange-Id: {id}\nReviewed-by: B <b@c>\n");
+        assert_eq!(change_id_trailer(&msg), Some(id));
     }
 
     #[test]
     fn trailer_last_occurrence_wins() {
-        let msg = "s\n\nChange-Id: Ione\nChange-Id: Itwo\n";
-        assert_eq!(change_id_trailer(msg), Some("Itwo".into()));
+        let (one, two) = (change_id("Ione"), change_id("Itwo"));
+        let msg = format!("s\n\nChange-Id: {one}\nChange-Id: {two}\n");
+        assert_eq!(change_id_trailer(&msg), Some(two));
     }
 
     #[test]
     fn trailer_absent_or_not_a_trailer() {
         assert_eq!(change_id_trailer("subject only\n"), None);
         // In the body, not the trailer block.
-        let msg = "s\n\nChange-Id: Inope\n\nmore body, no trailers here";
-        assert_eq!(change_id_trailer(msg), None);
+        let nope = change_id("Inope");
+        let msg = format!("s\n\nChange-Id: {nope}\n\nmore body, no trailers here");
+        assert_eq!(change_id_trailer(&msg), None);
     }
 
     fn msgs(texts: &[&str]) -> Vec<String> {
@@ -132,19 +140,21 @@ mod tests {
 
     #[test]
     fn require_change_ids_happy_path() {
-        let messages = msgs(&["a\n\nChange-Id: Iaaa\n", "b\n\nChange-Id: Ibbb\n"]);
-        assert_eq!(
-            require_change_ids(&messages, &shas(2)),
-            Ok(vec!["Iaaa".to_string(), "Ibbb".to_string()])
-        );
+        let (a, b) = (change_id("Iaaa"), change_id("Ibbb"));
+        let messages = msgs(&[
+            &format!("a\n\nChange-Id: {a}\n"),
+            &format!("b\n\nChange-Id: {b}\n"),
+        ]);
+        assert_eq!(require_change_ids(&messages, &shas(2)), Ok(vec![a, b]));
     }
 
     #[test]
     fn require_change_ids_rejects_fixup_and_squash_commits() {
+        let (a, b) = (change_id("Iaaa"), change_id("Ibbb"));
         let messages = msgs(&[
-            "a\n\nChange-Id: Iaaa\n",
+            &format!("a\n\nChange-Id: {a}\n"),
             "fixup! a\n",
-            "squash! a\n\nChange-Id: Ibbb\n",
+            &format!("squash! a\n\nChange-Id: {b}\n"),
         ]);
         let err = require_change_ids(&messages, &shas(3)).expect_err("should be rejected");
         assert!(err.contains("fixup!/squash!"), "{err}");
@@ -153,21 +163,26 @@ mod tests {
 
     #[test]
     fn require_change_ids_rejects_missing_trailer() {
-        let messages = msgs(&["a\n\nChange-Id: Iaaa\n", "no trailer\n"]);
+        let a = change_id("Iaaa");
+        let messages = msgs(&[&format!("a\n\nChange-Id: {a}\n"), "no trailer\n"]);
         let err = require_change_ids(&messages, &shas(2)).expect_err("should be rejected");
-        assert!(err.contains("without a Change-Id trailer"), "{err}");
+        assert!(
+            err.contains("without a well-formed Change-Id trailer"),
+            "{err}"
+        );
         assert!(err.contains("sha1") && !err.contains("sha0"), "{err}");
     }
 
     #[test]
     fn require_change_ids_rejects_duplicate_trailer() {
+        let (dup, b) = (change_id("Idup"), change_id("Ibbb"));
         let messages = msgs(&[
-            "a\n\nChange-Id: Idup\n",
-            "b\n\nChange-Id: Ibbb\n",
-            "c\n\nChange-Id: Idup\n",
+            &format!("a\n\nChange-Id: {dup}\n"),
+            &format!("b\n\nChange-Id: {b}\n"),
+            &format!("c\n\nChange-Id: {dup}\n"),
         ]);
         let err = require_change_ids(&messages, &shas(3)).expect_err("should be rejected");
-        assert!(err.contains("duplicate Change-Id Idup"), "{err}");
+        assert!(err.contains(&format!("duplicate Change-Id {dup}")), "{err}");
         assert!(err.contains("sha0") && err.contains("sha2"), "{err}");
     }
 }

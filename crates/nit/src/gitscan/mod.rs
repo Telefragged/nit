@@ -104,7 +104,7 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
     for (i, commit) in commits.iter().enumerate() {
         let sha = sha_of(commit.id());
         walked.push(WalkedCommit {
-            change_id: change_ids[i].clone().into(),
+            change_id: change_ids[i].clone(),
             commit_sha: sha.clone(),
             parent_sha: prev.clone(),
             message: messages[i].clone(),
@@ -219,7 +219,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
         else {
             continue;
         };
-        let Some(change) = open.get(&ChangeId::from(key.clone())) else {
+        let Some(change) = open.get(&key) else {
             continue;
         };
         // First seen wins: the unsorted walk is newest-first, so a key
@@ -238,7 +238,7 @@ pub struct HistoryCommit {
     pub sha: Sha,
     pub parents: Vec<Sha>,
     pub subject: String,
-    pub trailer: Option<String>,
+    pub trailer: Option<ChangeId>,
 }
 
 /// Walks the canonical ref from its HEAD, newest-first.
@@ -304,6 +304,7 @@ mod tests {
     use super::{detect_merges, sha_of};
     use nit_types::domain::{ChangeId, ChangeNumber, Sha};
     use nit_types::domain::{ChangeProjection, RevisionProjection};
+    use nit_types::testing::change_id;
 
     /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
     /// tests need.
@@ -332,11 +333,11 @@ mod tests {
     }
 
     fn keyed(subject: &str, key: &str) -> String {
-        format!("{subject}\n\nChange-Id: {key}\n")
+        format!("{subject}\n\nChange-Id: {}\n", change_id(key))
     }
 
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProjection {
-        let mut proj = ChangeProjection::new(ChangeNumber(id), 1, key.into());
+        let mut proj = ChangeProjection::new(ChangeNumber(id), 1, change_id(key));
         proj.revisions.push(RevisionProjection {
             number: RevisionNumber(0),
             commit_sha: sha_of(commit),

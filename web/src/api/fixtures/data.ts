@@ -37,6 +37,7 @@ import type { Decision } from "../types";
 import {
   add,
   ago,
+  changeId,
   ctx,
   del,
   diffKey,
@@ -103,7 +104,7 @@ const deepHistory: HistNode[] = [
     sha: sha(905),
     subject: "build: drop unused openssl feature",
     parents: [sha(906)],
-    change_id: "I0d9c8b7a6f5e4321",
+    change_id: changeId("I0d9c8b7a6f5e4321"),
   },
   {
     sha: sha(906),
@@ -153,7 +154,7 @@ const msg10r1 =
 const change10: ChangeRecord = {
   id: 10,
   repo_id: 1,
-  change_id: "I9a41c7e2b3d4f5a6",
+  change_id: changeId("I9a41c7e2b3d4f5a6"),
   subject: "auth: add TokenStore schema and config plumbing",
   revisions: [
     {
@@ -261,7 +262,7 @@ const msg11r2 =
 const change11: ChangeRecord = {
   id: 11,
   repo_id: 1,
-  change_id: "I3f2d8a91c0b7e514",
+  change_id: changeId("I3f2d8a91c0b7e514"),
   subject: "auth: rotate refresh tokens on use",
   revisions: [
     {
@@ -752,7 +753,7 @@ const msg12r1 =
 const change12: ChangeRecord = {
   id: 12,
   repo_id: 1,
-  change_id: "I77b0e4f5a8123c9d",
+  change_id: changeId("I77b0e4f5a8123c9d"),
   subject: "auth: document rotation and ship flow diagram",
   revisions: [
     {
@@ -852,7 +853,7 @@ const msg40r1 =
 const change40: ChangeRecord = {
   id: 40,
   repo_id: 1,
-  change_id: "I0d9c8b7a6f5e4321",
+  change_id: changeId("I0d9c8b7a6f5e4321"),
   subject: "build: drop unused openssl feature",
   terminal: "merged",
   revisions: [
@@ -925,7 +926,7 @@ const msg20r1 =
 const change20: ChangeRecord = {
   id: 20,
   repo_id: 2,
-  change_id: "Ib8d3e6f1a4c75290",
+  change_id: changeId("Ib8d3e6f1a4c7529"),
   subject: "wal: checkpoint on idle, not on every commit",
   revisions: [
     {
@@ -1039,7 +1040,7 @@ const msg30r1 =
 const change30: ChangeRecord = {
   id: 30,
   repo_id: 2,
-  change_id: "Ie1f4a7b2c5d80936",
+  change_id: changeId("Ie1f4a7b2c5d80936"),
   subject: "ci: key caches on lockfile hash only",
   revisions: [
     {
@@ -1139,7 +1140,7 @@ const msgE =
 const changeA: ChangeRecord = {
   id: 50,
   repo_id: 3,
-  change_id: "Iaa11bb22cc33dd44",
+  change_id: changeId("Iaa11bb22cc33dd44"),
   subject: "orbit: extract the scheduler trait",
   revisions: [
     {
@@ -1172,7 +1173,7 @@ const changeA: ChangeRecord = {
 const changeD: ChangeRecord = {
   id: 52,
   repo_id: 3,
-  change_id: "Idd44cc33bb22aa11",
+  change_id: changeId("Idd44cc33bb22aa11"),
   subject: "orbit: add a deadline clock source",
   revisions: [
     {
@@ -1196,7 +1197,7 @@ const changeD: ChangeRecord = {
 const changeB: ChangeRecord = {
   id: 51,
   repo_id: 3,
-  change_id: "Ibb22cc33dd44ee55",
+  change_id: changeId("Ibb22cc33dd44ee55"),
   subject: "orbit: fair-share scheduler policy",
   revisions: [
     {
@@ -1234,7 +1235,7 @@ const changeB: ChangeRecord = {
 const changeC: ChangeRecord = {
   id: 53,
   repo_id: 3,
-  change_id: "Icc33dd44ee55ff66",
+  change_id: changeId("Icc33dd44ee55ff66"),
   subject: "orbit: wire the fair policy into the runtime",
   revisions: [
     {
@@ -1259,7 +1260,7 @@ const changeC: ChangeRecord = {
 const changeE: ChangeRecord = {
   id: 55,
   repo_id: 3,
-  change_id: "Iee55ff66aa11bb22",
+  change_id: changeId("Iee55ff66aa11bb22"),
   subject: "orbit: deadline policy on top of fair-share",
   revisions: [
     {

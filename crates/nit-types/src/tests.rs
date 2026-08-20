@@ -3,7 +3,7 @@
 //! feature (clap, ts) would otherwise mask.
 
 use crate::domain::ChangeNumber;
-use crate::domain::Sha;
+use crate::domain::{ChangeId, Sha};
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
@@ -12,6 +12,18 @@ use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 /// Fixtures name commits `A1`, `base`, or a hex prefix they assert on;
 /// git names them in 40 hex characters, and [`Sha`] holds them to it.
 pub(crate) fn sha(label: &str) -> Sha {
+    Sha::new(hex_expansion(label)).expect("a hex expansion of the label")
+}
+
+/// A distinct, well-formed change identity for `label`.
+pub(crate) fn change_id(label: &str) -> ChangeId {
+    let body = hex_expansion(label.strip_prefix('I').unwrap_or(label));
+    ChangeId::new(format!("I{body}")).expect("a hex expansion of the label")
+}
+
+/// `label` as 40 hex characters: itself when it is already hex, its bytes
+/// otherwise, zero-padded either way.
+fn hex_expansion(label: &str) -> String {
     let hex: String = if label.chars().all(|c| c.is_ascii_hexdigit()) {
         label.to_string()
     } else {
@@ -21,7 +33,7 @@ pub(crate) fn sha(label: &str) -> Sha {
             hex
         })
     };
-    Sha::new(&format!("{hex:0<40}")[..40]).expect("a hex expansion of the label")
+    format!("{hex:0<40}")[..40].to_string()
 }
 
 fn revision_entry() -> LogEntry {

@@ -410,7 +410,10 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
     Ok(ChangeRow {
         id: ChangeNumber(col_u64(row.get("id")?)?),
         repo_id: col_u64(row.get("repo_id")?)?,
-        change_id: row.get::<_, String>("change_id")?.into(),
+        change_id: stored(
+            ChangeId::new(row.get::<_, String>("change_id")?),
+            rusqlite::types::Type::Text,
+        )?,
         status: row
             .get::<_, Option<String>>("status")?
             .map(|s| col_change_status(&s))
@@ -940,7 +943,7 @@ pub fn delete_draft_review(conn: &Connection, change_number: ChangeNumber) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::testing::sha;
+    use nit_types::testing::{change_id, sha};
 
     fn mem() -> Connection {
         let conn = Connection::open_in_memory().expect("in-memory db");
@@ -951,7 +954,7 @@ mod tests {
 
     fn change(conn: &Connection) -> ChangeNumber {
         let repo = create_repo(conn, "/r/.git", "main").expect("repo");
-        upsert_change(conn, repo.id, &"I1".into()).expect("change")
+        upsert_change(conn, repo.id, &change_id("I1")).expect("change")
     }
 
     #[test]
@@ -989,17 +992,18 @@ mod tests {
             ))
             .expect("migrate to v8");
         }
-        conn.execute_batch(
+        let key = change_id("Iabc");
+        conn.execute_batch(&format!(
             "INSERT INTO repos (id, git_dir, canonical_ref) VALUES (1, '/r/.git', 'main');
              INSERT INTO changes (id, repo_id, change_key, created_at)
-                  VALUES (7, 1, 'Iabc', 't');
+                  VALUES (7, 1, '{key}', 't');
              INSERT INTO log (change_id, position, kind, payload, created_at)
-                  VALUES (7, 0, 'revision', '{}', 't');
+                  VALUES (7, 0, 'revision', '{{}}', 't');
              INSERT INTO draft_comments (change_id, revision, body, created_at, updated_at)
                   VALUES (7, 0, 'note', 't', 't');
              INSERT INTO draft_reviews (change_id, decision, message)
-                  VALUES (7, 'approve', '');",
-        )
+                  VALUES (7, 'approve', '');"
+        ))
         .expect("v8-shaped rows");
 
         migrate(&conn).expect("migrate the rest");
@@ -1007,7 +1011,7 @@ mod tests {
         let change = get_change(&conn, ChangeNumber(7))
             .expect("get")
             .expect("still there");
-        assert_eq!(change.change_id, ChangeId::from("Iabc"));
+        assert_eq!(change.change_id, key);
         let logged: i64 = conn
             .query_row("SELECT change_number FROM log", [], |r| r.get(0))
             .expect("log row");
@@ -1026,14 +1030,14 @@ mod tests {
     fn change_upsert_is_idempotent() {
         let conn = mem();
         let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
-        let a = upsert_change(&conn, repo.id, &"Iabc".into()).expect("create");
-        let again = upsert_change(&conn, repo.id, &"Iabc".into()).expect("re-upsert");
+        let a = upsert_change(&conn, repo.id, &change_id("Iabc")).expect("create");
+        let again = upsert_change(&conn, repo.id, &change_id("Iabc")).expect("re-upsert");
         assert_eq!(a, again);
-        let b = upsert_change(&conn, repo.id, &"Idef".into()).expect("create");
+        let b = upsert_change(&conn, repo.id, &change_id("Idef")).expect("create");
         assert_ne!(a, b);
         assert_eq!(
             get_change(&conn, a).expect("get").expect("some").change_id,
-            ChangeId::from("Iabc")
+            change_id("Iabc")
         );
     }
 
@@ -1089,8 +1093,8 @@ mod tests {
     fn sequence_is_global_across_changes() {
         let conn = mem();
         let repo = create_repo(&conn, "/r/.git", "main").expect("repo");
-        let a = upsert_change(&conn, repo.id, &"Ia".into()).expect("a");
-        let b = upsert_change(&conn, repo.id, &"Ib".into()).expect("b");
+        let a = upsert_change(&conn, repo.id, &change_id("Ia")).expect("a");
+        let b = upsert_change(&conn, repo.id, &change_id("Ib")).expect("b");
         let sa = append_log(&conn, a, 0, "comment", "{}", "t0").expect("a0");
         let sb = append_log(&conn, b, 0, "comment", "{}", "t1").expect("b0");
         let sa1 = append_log(&conn, a, 1, "comment", "{}", "t2").expect("a1");

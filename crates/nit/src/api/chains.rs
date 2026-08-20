@@ -10,7 +10,6 @@ use serde::Deserialize;
 use nit_types::chains::ChainList;
 use nit_types::chains::ChainLog;
 use nit_types::domain::Chain;
-use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::graph::{HistoryCommit, RepoHistory};
 
@@ -86,7 +85,7 @@ pub(super) async fn repo_history(
         let mut commits = Vec::with_capacity(walked.len());
         for c in walked {
             let change_number = match &c.trailer {
-                Some(id) => db::change_number_by_id(conn, q.repo, &ChangeId::from(id.clone()))?,
+                Some(id) => db::change_number_by_id(conn, q.repo, id)?,
                 None => None,
             };
             commits.push(HistoryCommit {
@@ -95,7 +94,7 @@ pub(super) async fn repo_history(
                 subject: c.subject,
                 change_number,
                 // Coupled: a trailer naming no known change nulls both.
-                change_id: change_number.and(c.trailer.map(ChangeId::from)),
+                change_id: change_number.and(c.trailer),
             });
         }
         Ok(Json(RepoHistory { commits, truncated }))

@@ -7,27 +7,70 @@ use serde::{Deserialize, Serialize};
 /// It is carried in the commit message and survives the rewrites review
 /// provokes, which is what binds a new revision to the change it revises;
 /// a commit sha does not.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[serde(try_from = "String")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct ChangeId(pub String);
+pub struct ChangeId(String);
 
 impl ChangeId {
+    /// A `Change-Id` trailer value: `I` followed by 40 hex characters.
+    ///
+    /// # Errors
+    ///
+    /// [`ChangeIdError`], naming the rule the input broke.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::ChangeId;
+    ///
+    /// assert!(ChangeId::new("I88362667d0327f71c84fecf3a09d042e2d4a1cba").is_ok());
+    /// assert!(ChangeId::new("my-feature").is_err());
+    /// ```
+    pub fn new(change_id: impl Into<String>) -> Result<ChangeId, ChangeIdError> {
+        let change_id = change_id.into();
+        let Some(hex) = change_id.strip_prefix('I') else {
+            return Err(ChangeIdError::Prefix);
+        };
+        if hex.len() != 40 {
+            return Err(ChangeIdError::Length(hex.len()));
+        }
+        if let Some(c) = hex.chars().find(|c| !c.is_ascii_hexdigit()) {
+            return Err(ChangeIdError::NotHex(c));
+        }
+        Ok(ChangeId(change_id))
+    }
+
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-impl From<String> for ChangeId {
-    fn from(s: String) -> ChangeId {
-        ChangeId(s)
+/// Why a string is not a [`ChangeId`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ChangeIdError {
+    #[error("a Change-Id starts with 'I'")]
+    Prefix,
+    #[error("a Change-Id holds 40 hex characters after its 'I', not {0}")]
+    Length(usize),
+    #[error("a Change-Id is hexadecimal after its 'I', and '{0}' is not")]
+    NotHex(char),
+}
+
+impl TryFrom<String> for ChangeId {
+    type Error = ChangeIdError;
+
+    fn try_from(change_id: String) -> Result<ChangeId, ChangeIdError> {
+        ChangeId::new(change_id)
     }
 }
 
-impl From<&str> for ChangeId {
-    fn from(s: &str) -> ChangeId {
-        ChangeId(s.to_string())
+// Serialized by hand rather than `#[serde(transparent)]`, which serde
+// refuses to combine with the `try_from` that gates the way in.
+impl Serialize for ChangeId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
     }
 }
 

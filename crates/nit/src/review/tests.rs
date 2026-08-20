@@ -3,13 +3,13 @@ use nit_types::domain::{ChangeStatus, Verdict};
 use nit_types::domain::{LogPayload, ReviewPayload, RevisionPayload};
 
 use super::*;
-use nit_types::testing::sha;
+use nit_types::testing::{change_id, sha};
 
 fn change_row() -> db::ChangeRow {
     db::ChangeRow {
         id: ChangeNumber(1),
         repo_id: 1,
-        change_id: "Iabc".into(),
+        change_id: change_id("Iabc"),
         status: None,
         created_at: "t0".to_string(),
     }
@@ -20,7 +20,7 @@ fn revision(name: &str) -> LogPayload {
         commit_sha: sha(name),
         parent_sha: sha("base"),
         fork_sha: sha("base"),
-        message: format!("subject {name}\n\nChange-Id: Iabc\n"),
+        message: format!("subject {name}\n\nChange-Id: {}\n", change_id("Iabc")),
         resets_status: true,
     })
 }

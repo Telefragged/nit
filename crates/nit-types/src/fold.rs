@@ -282,10 +282,10 @@ mod tests {
     use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
 
     use super::*;
-    use crate::tests::sha;
+    use crate::tests::{change_id, sha};
 
     fn empty() -> ChangeProjection {
-        ChangeProjection::new(ChangeNumber(1), 1, "Iabc".into())
+        ChangeProjection::new(ChangeNumber(1), 1, change_id("Iabc"))
     }
 
     fn entry(position: u64, payload: LogPayload) -> LogEntry {
@@ -304,7 +304,7 @@ mod tests {
             commit_sha: sha(name),
             parent_sha: sha(parent),
             fork_sha: sha(base),
-            message: format!("subject {name}\n\nChange-Id: Iabc\n"),
+            message: format!("subject {name}\n\nChange-Id: {}\n", change_id("Iabc")),
             resets_status: resets,
         })
     }
@@ -559,7 +559,7 @@ mod tests {
         let c = replay(
             ChangeNumber(1),
             1,
-            "Iabc".into(),
+            change_id("Iabc"),
             vec![
                 entry(0, revision("A", "base", "base", true)),
                 entry(1, review(0, Verdict::Approve)),

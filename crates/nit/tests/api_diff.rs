@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, msg, push};
+use common::{GitRepo, TestServer, change_id, http_get, msg, push};
 use serde_json::{Value, json};
 
 fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
@@ -100,7 +100,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
                 "lines": [
                     {"kind": "add", "new": 1, "text": "feat: diff"},
                     {"kind": "add", "new": 2, "text": ""},
-                    {"kind": "add", "new": 3, "text": "Change-Id: Idiff0001"},
+                    {"kind": "add", "new": 3, "text": format!("Change-Id: {}", change_id("Idiff0001"))},
                 ],
             }],
         })

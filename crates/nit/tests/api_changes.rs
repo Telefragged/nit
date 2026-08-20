@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, first_repo_id, http_get, msg, push, review};
+use common::{GitRepo, TestServer, change_id, first_repo_id, http_get, msg, push, review};
 use serde_json::Value;
 
 fn get_changes(server: &TestServer, query: &str) -> Vec<Value> {
@@ -41,7 +41,11 @@ fn status_filter_is_explicit_and_absent_means_all() {
     let repo_id = first_repo_id(&server);
 
     let all = get_changes(&server, &format!("?repo={repo_id}"));
-    assert_eq!(keys(&all), vec!["Ia", "Ib"], "no filter: every change");
+    assert_eq!(
+        keys(&all),
+        vec![change_id("Ia"), change_id("Ib")],
+        "no filter: every change"
+    );
     // The payload is the folded projection, not a summary shape.
     assert!(
         all.iter().all(|c| c["revisions"].is_array()),
@@ -50,20 +54,24 @@ fn status_filter_is_explicit_and_absent_means_all() {
 
     let ia = all
         .iter()
-        .find(|c| c["change_id"] == "Ia")
+        .find(|c| c["change_id"] == change_id("Ia"))
         .expect("Ia")
         .clone();
     review(&server, ia["id"].as_u64().expect("id"), "approve", "lgtm");
 
     let approved = get_changes(&server, &format!("?repo={repo_id}&status=approved"));
-    assert_eq!(keys(&approved), vec!["Ia"]);
+    assert_eq!(keys(&approved), vec![change_id("Ia")]);
     let pending = get_changes(&server, &format!("?repo={repo_id}&status=pending"));
-    assert_eq!(keys(&pending), vec!["Ib"]);
+    assert_eq!(keys(&pending), vec![change_id("Ib")]);
     let both = get_changes(
         &server,
         &format!("?repo={repo_id}&status=approved&status=pending"),
     );
-    assert_eq!(keys(&both), vec!["Ia", "Ib"], "repeated params union");
+    assert_eq!(
+        keys(&both),
+        vec![change_id("Ia"), change_id("Ib")],
+        "repeated params union"
+    );
     let merged = get_changes(&server, &format!("?repo={repo_id}&status=merged"));
     assert!(merged.is_empty(), "{merged:?}");
 }

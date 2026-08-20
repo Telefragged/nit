@@ -133,7 +133,7 @@ fn draft_anchor_validation() {
     let g = GitRepo::new();
     let c1 = g.commit(
         &[g.root],
-        "core: x\n\nbody line.\n\nChange-Id: Ix\n",
+        &msg("core: x\n\nbody line.", "Ix"),
         &[("x.txt", "x1\nx2\nx3\n")],
     );
     g.branch("feat", c1);

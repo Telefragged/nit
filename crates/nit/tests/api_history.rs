@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, first_repo_id, http_get, msg, push};
+use common::{GitRepo, TestServer, change_id, first_repo_id, http_get, msg, push};
 use nit::api::MERGED_WINDOW;
 use serde_json::Value;
 
@@ -78,7 +78,11 @@ fn trailer_enrichment_couples_id_and_key() {
 
     let merged = &commits[0];
     assert_eq!(merged["sha"], topic.to_string());
-    assert_eq!(merged["change_id"], "Itopic", "merged change enriched");
+    assert_eq!(
+        merged["change_id"],
+        change_id("Itopic"),
+        "merged change enriched"
+    );
     assert!(merged["change_number"].is_u64(), "{merged}");
 
     let foreign = &commits[1];

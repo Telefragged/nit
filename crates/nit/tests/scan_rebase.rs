@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, member_id, msg, push, review};
+use common::{GitRepo, TestServer, change_id, http_get, member_id, msg, push, review};
 use serde_json::Value;
 
 fn change_detail(server: &TestServer, change_number: u64) -> Value {
@@ -14,15 +14,16 @@ fn change_detail(server: &TestServer, change_number: u64) -> Value {
     v
 }
 
-fn path_status(server: &TestServer, tip_change_number: u64, change_id: &str) -> String {
+fn path_status(server: &TestServer, tip_change_number: u64, label: &str) -> String {
+    let key = change_id(label);
     let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip_change_number}")));
     assert_eq!(st, 200, "{chain}");
     chain["path"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|m| m["change_id"] == change_id)
-        .unwrap_or_else(|| panic!("no {change_id} in path: {chain}"))["status"]
+        .find(|m| m["change_id"] == key)
+        .unwrap_or_else(|| panic!("no {label} in path: {chain}"))["status"]
         .as_str()
         .unwrap()
         .to_string()

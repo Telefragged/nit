@@ -25,6 +25,11 @@ export function shaOf(label: string): string {
   return hexExpansion(label);
 }
 
+/** A distinct, well-formed `Change-Id` for `label`. */
+export function changeId(label: string): string {
+  return `I${hexExpansion(label.replace(/^I/, ""))}`;
+}
+
 /** `label` as 40 hex characters: itself when it is already hex, its bytes
  * otherwise, zero-padded either way. */
 function hexExpansion(label: string): string {

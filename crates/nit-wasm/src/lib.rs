@@ -12,6 +12,7 @@
 //! representation the web already holds — so the wire types are unchanged.
 
 use nit_types::chain::RepoView;
+use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::LogEntry;
@@ -42,7 +43,7 @@ fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
 struct ReplayInput {
     id: u64,
     repo_id: u64,
-    change_id: String,
+    change_id: ChangeId,
     entries: Vec<LogEntry>,
 }
 
@@ -60,7 +61,7 @@ pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
     let proj = fold::replay(
         ChangeNumber(input.id),
         input.repo_id,
-        input.change_id.into(),
+        input.change_id,
         input.entries,
     );
     to_js(&proj)

@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, member_id, msg, push};
+use common::{GitRepo, TestServer, change_id, http_get, member_id, msg, push};
 
 fn only_chain(server: &TestServer) -> serde_json::Value {
     let (st, list) = http_get(&server.url("/api/chains"));
@@ -36,14 +36,14 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(st, 200, "{res}");
 
     let tip = &res["tip_change"];
-    assert_eq!(tip["change_id"], "I002");
+    assert_eq!(tip["change_id"], change_id("I002"));
     assert_eq!(tip["revision"], 0);
     assert_eq!(tip["status"], "pending");
 
     let chain = only_chain(&server);
     let path = chain["path"].as_array().unwrap();
     assert_eq!(path.len(), 2);
-    assert_eq!(path[0]["change_id"], "I001");
+    assert_eq!(path[0]["change_id"], change_id("I001"));
     assert_eq!(path[0]["position"], 0);
     assert_eq!(path[0]["revision"], 0);
     assert_eq!(path[0]["commit_sha"], c1.to_string());
@@ -52,7 +52,7 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
         None,
         "PathEntry has no parent_sha"
     );
-    assert_eq!(path[1]["change_id"], "I002");
+    assert_eq!(path[1]["change_id"], change_id("I002"));
     assert_eq!(path[1]["position"], 1);
     assert_eq!(path[1]["revision"], 0);
     assert_eq!(path[1]["commit_sha"], c2.to_string());
@@ -85,7 +85,10 @@ fn chains_lists_one_ordered_tip() {
         .iter()
         .map(|m| m["change_id"].as_str().unwrap())
         .collect();
-    assert_eq!(keys, vec!["I001", "I002", "I003"]);
+    assert_eq!(
+        keys,
+        vec![change_id("I001"), change_id("I002"), change_id("I003")]
+    );
     for (i, m) in path.iter().enumerate() {
         assert_eq!(m["position"], i as u64, "0-based position");
         assert_eq!(m["revision"], 0);
@@ -128,12 +131,12 @@ fn extending_the_branch_adds_a_change() {
     g.branch("feat", c2);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    assert_eq!(res["tip_change"]["change_id"], "I002");
+    assert_eq!(res["tip_change"]["change_id"], change_id("I002"));
     assert_eq!(res["tip_change"]["revision"], 0);
 
     let path = only_chain(&server)["path"].as_array().unwrap().clone();
     assert_eq!(path.len(), 2);
-    assert_eq!(path[1]["change_id"], "I002");
+    assert_eq!(path[1]["change_id"], change_id("I002"));
     assert_eq!(path[1]["position"], 1);
 
     let id1 = member_id(&server, &res, "I001");
@@ -223,7 +226,7 @@ fn missing_change_number_rejects_the_push() {
         e["error"]
             .as_str()
             .unwrap()
-            .contains("without a Change-Id trailer"),
+            .contains("without a well-formed Change-Id trailer"),
         "{e}"
     );
 }
@@ -242,7 +245,7 @@ fn duplicate_change_number_rejects_the_push() {
         e["error"]
             .as_str()
             .unwrap()
-            .contains("duplicate Change-Id Idup"),
+            .contains(&format!("duplicate Change-Id {}", change_id("Idup"))),
         "{e}"
     );
     let (_, list) = http_get(&server.url("/api/chains"));

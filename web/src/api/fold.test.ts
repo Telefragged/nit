@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { changeDetail, foldEntry, replayProjection } from "./fold";
 import type { LogEntry } from "./types";
-import { shaOf as sha } from "./fixtures/builders";
+import { changeId, shaOf as sha } from "./fixtures/builders";
 
 const revision: LogEntry = {
   change_number: 1,
@@ -37,7 +37,7 @@ describe("the shared wasm fold", () => {
     const proj = replayProjection({
       id: 1,
       repo_id: 1,
-      change_id: "I1",
+      change_id: changeId("I1"),
       entries: [revision],
     });
     // entries_folded is the high-water mark (next position to fold), not a count.
@@ -58,7 +58,7 @@ describe("the shared wasm fold", () => {
     const projection = replayProjection({
       id: 1,
       repo_id: 1,
-      change_id: "I1",
+      change_id: changeId("I1"),
       entries: [revision],
     });
 

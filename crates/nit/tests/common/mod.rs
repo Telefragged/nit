@@ -355,7 +355,8 @@ pub fn first_repo_id(server: &TestServer) -> u64 {
 /// Find a path member's `change_number` by its Change-Id. Accepts a `Chain`
 /// (`value["path"]`) directly; for a `PushResult` (which names only the tip)
 /// it fetches the derived chain through `tip_change.change_number`.
-pub fn member_id(server: &TestServer, value: &Value, change_id: &str) -> u64 {
+pub fn member_id(server: &TestServer, value: &Value, label: &str) -> u64 {
+    let key = change_id(label);
     let fetched;
     let path = if let Some(path) = value.get("path") {
         path
@@ -371,13 +372,18 @@ pub fn member_id(server: &TestServer, value: &Value, change_id: &str) -> u64 {
     path.as_array()
         .expect("a path")
         .iter()
-        .find(|m| m["change_id"].as_str() == Some(change_id))
+        .find(|m| m["change_id"].as_str() == Some(key.as_str()))
         .and_then(|m| m["change_number"].as_u64())
-        .unwrap_or_else(|| panic!("no member {change_id} in path"))
+        .unwrap_or_else(|| panic!("no member {label} in path"))
 }
 
-pub fn msg(subject: &str, change_number: &str) -> String {
-    format!("{subject}\n\nChange-Id: {change_number}\n")
+pub fn msg(subject: &str, label: &str) -> String {
+    format!("{subject}\n\nChange-Id: {}\n", change_id(label))
+}
+
+/// A distinct, well-formed `Change-Id` for `label`, as the wire spells it.
+pub fn change_id(label: &str) -> String {
+    nit_types::testing::change_id(label).to_string()
 }
 
 /// Drive one lifecycle sweep synchronously, in-process, against the server's

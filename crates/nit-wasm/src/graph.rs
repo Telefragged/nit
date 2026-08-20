@@ -97,10 +97,10 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
 mod tests {
     use super::*;
     use nit_types::domain::Sha;
-    use nit_types::domain::{ChangeId, ChangeNumber, RevisionNumber};
+    use nit_types::domain::{ChangeNumber, RevisionNumber};
     use nit_types::domain::{ChangeProjection, RevisionProjection};
     use nit_types::graph::HistoryCommit;
-    use nit_types::testing::sha;
+    use nit_types::testing::{change_id, sha};
 
     fn revision(number: u64, name: &str, parent: &str, base: &str) -> RevisionProjection {
         RevisionProjection {
@@ -114,8 +114,8 @@ mod tests {
         }
     }
 
-    fn change(number: u64, change_id: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(ChangeNumber(number), 1, change_id.into());
+    fn change(number: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
+        let mut c = ChangeProjection::new(ChangeNumber(number), 1, change_id(key));
         c.revisions = revs;
         c
     }
@@ -173,7 +173,7 @@ mod tests {
         let view = RepoView::new(vec![a, b]);
         let merged = HistoryCommit {
             change_number: Some(ChangeNumber(9)),
-            change_id: Some("Iland".into()),
+            change_id: Some(change_id("Iland")),
             ..commit("g1", &["g2"])
         };
         let history = RepoHistory {
@@ -198,6 +198,6 @@ mod tests {
             .find(|n| n.commit_sha == sha("g1"))
             .expect("g1");
         assert_eq!(g1.change_number, Some(ChangeNumber(9)));
-        assert_eq!(g1.change_id.as_ref().map(ChangeId::as_str), Some("Iland"));
+        assert_eq!(g1.change_id, Some(change_id("Iland")));
     }
 }
