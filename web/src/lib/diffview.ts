@@ -1,7 +1,7 @@
 // Pure diff-presentation logic, kept out of components so it stays testable.
 
 import { prepareFileTreeInput } from "@pierre/trees";
-import type { CommentRange, DiffFile, Hunk, Line } from "../api/types";
+import type { CommentRange, DiffFile, Hunk, Line, Side } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
 import { intraline_marks } from "../wasm/nit_wasm";
 
@@ -197,40 +197,77 @@ export function rangeSliceOnLine(
   return window[0] < window[1] ? window : null;
 }
 
-export function skippedBefore(prev: Hunk | undefined, hunk: Hunk): number {
-  if (!prev) {
-    return Math.max(hunk.old_start - 1, hunk.new_start - 1, 0);
-  }
-  const oldSkip = hunk.old_start - (prev.old_start + prev.old_lines);
-  const newSkip = hunk.new_start - (prev.new_start + prev.new_lines);
-  return Math.max(oldSkip, newSkip, 0);
+/** The file lines a hunk holds on one side, as an inclusive `[first, last]`.
+ * A side carrying no lines names the line it sits after (git's `-N,0`), so
+ * its range comes back empty while both ends still bound the runs around
+ * it. */
+function span(hunk: Hunk, side: Side): [number, number] {
+  const start = side === "old" ? hunk.old_start : hunk.new_start;
+  const count = side === "old" ? hunk.old_lines : hunk.new_lines;
+  return count > 0 ? [start, start + count - 1] : [start + 1, start];
 }
 
-/** skippedBefore's counterpart. Unchanged context keeps a hunk's old and new
- * ends in lockstep, so the new side alone bounds the run to `newTotal`. */
+/** One side's `[lo, hi]` of the file lines hidden between `prev` and `hunk`,
+ * empty when `hi < lo`. An absent `prev` is the file's start, an absent
+ * `hunk` its end.
+ *
+ * A gap's two sides are measured apart because an outline diff pairs
+ * signatures straight across the bodies it collapsed, so a body the change
+ * rewrote leaves runs of different lengths under one gap. */
+function gapWindow(
+  prev: Hunk | undefined,
+  hunk: Hunk | undefined,
+  side: Side,
+): [number, number] {
+  return [
+    prev ? span(prev, side)[1] + 1 : 1,
+    hunk ? span(hunk, side)[0] - 1 : Infinity,
+  ];
+}
+
+/** How many lines the gap before `hunk` hides — the wider of its two
+ * sides. */
+export function skippedBefore(prev: Hunk | undefined, hunk: Hunk): number {
+  const hidden = (side: Side) => {
+    const [lo, hi] = gapWindow(prev, hunk, side);
+    return Math.max(hi - lo + 1, 0);
+  };
+  return Math.max(hidden("old"), hidden("new"));
+}
+
+/** skippedBefore's counterpart. `newTotal` is the only total the client is
+ * given, so the new side alone bounds the run below the last hunk. */
 export function skippedAfter(last: Hunk | undefined, newTotal: number): number {
   if (!last) return 0;
-  return Math.max(newTotal - (last.new_start + last.new_lines - 1), 0);
+  return Math.max(newTotal - span(last, "new")[1], 0);
 }
 
 /** The lines that fall in the gap between `prev` and `hunk` — the hidden
  * run a context-expand button reveals. `whole` is the whole file as diff
- * lines; a line belongs to the
- * gap by its new number (`add`/`context`) or old number (`del`), so an
- * all-drift gap's del lines come along. An undefined `hunk` is the run below
- * the last hunk, bounded only by the file's end. Order is preserved. */
+ * lines; an undefined `hunk` is the run below the last hunk, bounded only
+ * by the file's end. Order is preserved.
+ *
+ * A line lands in the gap by either of its numbers, and comes back carrying
+ * only the sides that landed: the whole file is diffed on its own terms, so
+ * where its pairing disagrees with the hunks' the same line reads as a del
+ * under one gap and an add under another. Revealing it whole would put it
+ * twice into a hunk that has room for it once. */
 export function gapLines(
   whole: readonly Line[],
   prev: Hunk | undefined,
   hunk: Hunk | undefined,
 ): Line[] {
-  const oldLo = prev ? prev.old_start + prev.old_lines : 1;
-  const newLo = prev ? prev.new_start + prev.new_lines : 1;
-  const oldHi = hunk ? hunk.old_start - 1 : Infinity;
-  const newHi = hunk ? hunk.new_start - 1 : Infinity;
-  return whole.filter((l) =>
-    l.new !== undefined
-      ? l.new >= newLo && l.new <= newHi
-      : l.old !== undefined && l.old >= oldLo && l.old <= oldHi,
-  );
+  const [oldLo, oldHi] = gapWindow(prev, hunk, "old");
+  const [newLo, newHi] = gapWindow(prev, hunk, "new");
+  const gap: Line[] = [];
+  for (const line of whole) {
+    const onOld =
+      line.old !== undefined && line.old >= oldLo && line.old <= oldHi;
+    const onNew =
+      line.new !== undefined && line.new >= newLo && line.new <= newHi;
+    if (onOld && onNew) gap.push(line);
+    else if (onOld) gap.push({ ...line, new: undefined, kind: "del" });
+    else if (onNew) gap.push({ ...line, old: undefined, kind: "add" });
+  }
+  return gap;
 }

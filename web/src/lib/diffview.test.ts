@@ -108,6 +108,10 @@ describe("skippedBefore", () => {
   it("is zero for adjacent hunks", () => {
     expect(skippedBefore(hunk(1, 3, 1, 3), hunk(4, 2, 4, 2))).toBe(0);
   });
+
+  it("counts up to the line a side carrying nothing sits after", () => {
+    expect(skippedBefore(hunk(1, 3, 1, 3), hunk(10, 0, 4, 2))).toBe(7);
+  });
 });
 
 describe("gapLines", () => {
@@ -139,6 +143,33 @@ describe("gapLines", () => {
     expect(gapLines(full, undefined, hunk(3, 3))).toEqual([
       ctx(1, 1),
       ctx(2, 2),
+    ]);
+  });
+
+  // An outline pairs the two `}` its collapse left adjacent, where the
+  // whole file pairs each `}` with its own body — so the body sits in the
+  // gap on the old side and below the last hunk on the new one.
+  const outlined: Line[] = [
+    ctx(1, 1, "fn a() {"),
+    add(2, "}"),
+    add(3, ""),
+    add(4, "fn b() {"),
+    ctx(2, 5, "    body"),
+    ctx(3, 6, "    more"),
+    ctx(4, 7, "}"),
+  ];
+  const signature = { ...hunk(1, 1), old_lines: 1, new_lines: 1 };
+  const braces = { ...hunk(4, 2), old_lines: 1, new_lines: 3 };
+
+  it("reveals a line on whichever side of it the gap holds", () => {
+    expect(gapLines(outlined, signature, braces)).toEqual([
+      del(2, "    body"),
+      del(3, "    more"),
+    ]);
+    expect(gapLines(outlined, braces, undefined)).toEqual([
+      add(5, "    body"),
+      add(6, "    more"),
+      add(7, "}"),
     ]);
   });
 });
