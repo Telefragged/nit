@@ -36,6 +36,35 @@ on that meaning instead of restating it. A definition holds only what a
 code change cannot falsify — never a count, a route, a column, a status
 code or a behavior, all of which belong to the code they describe.
 
+Definitions point inward. A term is defined against the other terms of
+the model, never by naming what consumes it: the route that serves it,
+the column that stores it, the client that draws it, the command that
+prints it. A named consumer makes the term read as though it existed for
+that consumer's sake, and dates the definition to one arrangement of the
+code. What belongs here is the property that made the consumer behave
+that way.
+
+<example type="outward — dated by its consumer">
+
+```rust
+/// Which region of the change graph a node sits in.
+///
+/// The client styles a node by its `section` first (head → ring,
+/// history → grey/fade), falling back to `ChangeStatus` for open nodes.
+```
+
+The styling moves with the UI, and the definition never says what the
+regions are. State the property the client acts on:
+
+```rust
+/// Which region of the change graph a node sits in.
+///
+/// `open` ascends above the canonical HEAD, `head` is the HEAD anchor,
+/// and `history` descends below it: merged commits, oldest deepest.
+```
+
+</example>
+
 The failure mode is leakage downward: review history into commit
 messages, change rationale into code comments, code narration
 everywhere. What a fact _is_ picks its home, not where you happen to be
@@ -228,6 +257,8 @@ The burden of proof is on removal — presume nothing, prove each flag:
 - **History / brag**: name what it references outside this version — the
   earlier code (git blame), the review exchange (nit thread) — or show
   the sentence is incoherent in a first-version reading.
+- **Outward** (definitions only): name the consumer it points at, and
+  give the property it should have stated instead.
 - A doc-comment restating the _what_ is **not** a finding; that is its
   job.
 - Unproven flags are dropped, the comment stays. Length or phrasing
@@ -243,8 +274,9 @@ proof: line 43 reads `.filter(|c| c.approved).collect()` — the same fact.
 action: delete
 </finding>
 
-`action` is one of `delete`, `move to commit message`, or `answer in nit
-thread` — pick between them with `<one_home_per_fact>`.
+`action` is one of `delete`, `rewrite inward`, `move to commit message`,
+or `answer in nit thread` — pick between them with
+`<one_home_per_fact>`.
 
 </comment_audit>
 
