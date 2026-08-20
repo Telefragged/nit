@@ -127,12 +127,9 @@ fn parse_comment_range(spec: &str) -> Result<CommentRange> {
     };
     let (start_line, start_char) = point(start)?;
     let (end_line, end_char) = point(end)?;
-    Ok(CommentRange {
-        start_line,
-        start_char,
-        end_line,
-        end_char,
-    })
+    Ok(CommentRange::new(
+        start_line, start_char, end_line, end_char,
+    )?)
 }
 
 #[cfg(test)]
@@ -143,12 +140,7 @@ mod tests {
     fn parse_comment_range_forms_and_rejections() {
         assert_eq!(
             parse_comment_range("12:4-14:7").expect("ok"),
-            CommentRange {
-                start_line: 12,
-                start_char: 4,
-                end_line: 14,
-                end_char: 7,
-            }
+            CommentRange::new(12, 4, 14, 7).expect("a forward range")
         );
         assert!(parse_comment_range("12:4").is_err());
         assert!(parse_comment_range("12-14").is_err());

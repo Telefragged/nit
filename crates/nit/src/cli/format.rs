@@ -326,7 +326,10 @@ fn anchor_str(file: Option<&str>, line: Option<u64>, range: Option<&CommentRange
     if let Some(r) = range {
         format!(
             "{file}:{}:{}-{}:{}",
-            r.start_line, r.start_char, r.end_line, r.end_char
+            r.start_line(),
+            r.start_char(),
+            r.end_line(),
+            r.end_char()
         )
     } else if let Some(line) = line {
         format!("{file}:{line}")
@@ -453,12 +456,7 @@ mod tests {
                         5,
                         Some("src/queue.rs"),
                         Some(42),
-                        Some(CommentRange {
-                            start_line: 42,
-                            start_char: 8,
-                            end_line: 42,
-                            end_char: 30,
-                        }),
+                        Some(CommentRange::new(42, 8, 42, 30).expect("a forward range")),
                         Some(true),
                         "Overflow on 32-bit.",
                     ),

@@ -286,14 +286,7 @@ fn validate_anchor(
             "line and range are mutually exclusive anchors — pass one",
         ));
     }
-    if let Some(r) = &range {
-        let forward =
-            r.start_line < r.end_line || (r.start_line == r.end_line && r.start_char < r.end_char);
-        if r.start_line < 1 || r.end_char < 1 || !forward {
-            return Err(Error::bad_request("range must be non-empty and forward"));
-        }
-    }
-    let line = line.or_else(|| range.as_ref().map(|r| r.end_line));
+    let line = line.or_else(|| range.as_ref().map(|r| r.end_line()));
     if line.is_some() && file.is_none() {
         return Err(Error::bad_request("a line anchor requires a file"));
     }

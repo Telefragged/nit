@@ -128,12 +128,103 @@ pub struct ThreadComment {
 /// four fields. They are domain coordinates (always non-negative), so the
 /// shape is `u64`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "Selection")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentRange {
-    pub start_line: u64,
-    pub start_char: u64,
-    pub end_line: u64,
-    pub end_char: u64,
+    start_line: u64,
+    start_char: u64,
+    end_line: u64,
+    end_char: u64,
+}
+
+impl CommentRange {
+    /// A selection over the reviewed side, in the coordinates above.
+    ///
+    /// # Errors
+    ///
+    /// [`CommentRangeError`], naming the rule the selection broke.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::CommentRange;
+    ///
+    /// assert!(CommentRange::new(1, 0, 1, 4).is_ok());
+    /// assert!(CommentRange::new(1, 4, 1, 4).is_err());
+    /// assert!(CommentRange::new(1, 0, 2, 0).is_err());
+    /// ```
+    pub fn new(
+        start_line: u64,
+        start_char: u64,
+        end_line: u64,
+        end_char: u64,
+    ) -> Result<CommentRange, CommentRangeError> {
+        if start_line < 1 {
+            return Err(CommentRangeError::LineBefore1);
+        }
+        let forward = start_line < end_line || (start_line == end_line && start_char < end_char);
+        if !forward {
+            return Err(CommentRangeError::Empty);
+        }
+        if end_char < 1 {
+            return Err(CommentRangeError::EndsBeforeItsAnchor);
+        }
+        Ok(CommentRange {
+            start_line,
+            start_char,
+            end_line,
+            end_char,
+        })
+    }
+
+    #[must_use]
+    pub fn start_line(self) -> u64 {
+        self.start_line
+    }
+
+    #[must_use]
+    pub fn start_char(self) -> u64 {
+        self.start_char
+    }
+
+    /// The line the range ends on, and the line a ranged thread anchors to.
+    #[must_use]
+    pub fn end_line(self) -> u64 {
+        self.end_line
+    }
+
+    #[must_use]
+    pub fn end_char(self) -> u64 {
+        self.end_char
+    }
+}
+
+/// Why four coordinates are not a [`CommentRange`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CommentRangeError {
+    #[error("a range starts on line 1 or later")]
+    LineBefore1,
+    #[error("a range runs forward and selects at least one character")]
+    Empty,
+    #[error("a range reaches at least one character into the line it anchors to")]
+    EndsBeforeItsAnchor,
+}
+
+/// The four coordinates as they cross the wire, before they are a range.
+#[derive(Deserialize)]
+struct Selection {
+    start_line: u64,
+    start_char: u64,
+    end_line: u64,
+    end_char: u64,
+}
+
+impl TryFrom<Selection> for CommentRange {
+    type Error = CommentRangeError;
+
+    fn try_from(s: Selection) -> Result<CommentRange, CommentRangeError> {
+        CommentRange::new(s.start_line, s.start_char, s.end_line, s.end_char)
+    }
 }
 
 /// A reviewer's unpublished comment.

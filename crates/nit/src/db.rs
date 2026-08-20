@@ -690,14 +690,15 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
         row.get::<_, Option<i64>>("range_end_line")?,
         row.get::<_, Option<i64>>("range_end_char")?,
     ) {
-        (Some(start_line), Some(start_char), Some(end_line), Some(end_char)) => {
-            Some(CommentRange {
-                start_line: col_u64(start_line)?,
-                start_char: col_u64(start_char)?,
-                end_line: col_u64(end_line)?,
-                end_char: col_u64(end_char)?,
-            })
-        }
+        (Some(start_line), Some(start_char), Some(end_line), Some(end_char)) => Some(stored(
+            CommentRange::new(
+                col_u64(start_line)?,
+                col_u64(start_char)?,
+                col_u64(end_line)?,
+                col_u64(end_char)?,
+            ),
+            rusqlite::types::Type::Integer,
+        )?),
         _ => None,
     };
     Ok(DraftRow {
@@ -742,10 +743,10 @@ pub struct NewDraft<'a> {
 pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
     let (rsl, rsc, rel, rec) = match d.range {
         Some(r) => (
-            Some(i64::try_from(r.start_line)?),
-            Some(i64::try_from(r.start_char)?),
-            Some(i64::try_from(r.end_line)?),
-            Some(i64::try_from(r.end_char)?),
+            Some(i64::try_from(r.start_line())?),
+            Some(i64::try_from(r.start_char())?),
+            Some(i64::try_from(r.end_line())?),
+            Some(i64::try_from(r.end_char())?),
         ),
         None => (None, None, None, None),
     };
