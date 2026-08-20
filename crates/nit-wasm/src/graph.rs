@@ -42,7 +42,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
             section: GraphSection::Open,
             subject: change.subject_at(node.revision),
             status: change.status_at(node.revision),
-            parents: vec![node.parent_sha],
+            parents: node.parent_sha.into_iter().collect(),
             change_number: Some(change.id),
             change_id: Some(change.change_id.clone()),
             revision: Some(node.revision),
@@ -96,17 +96,19 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nit_types::domain::Sha;
     use nit_types::domain::{ChangeId, ChangeNumber, RevisionNumber};
     use nit_types::domain::{ChangeProjection, RevisionProjection};
     use nit_types::graph::HistoryCommit;
+    use nit_types::testing::sha;
 
-    fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
+    fn revision(number: u64, name: &str, parent: &str, base: &str) -> RevisionProjection {
         RevisionProjection {
             number: RevisionNumber(number),
-            commit_sha: sha.into(),
-            parent_sha: parent.into(),
-            fork_sha: base.into(),
-            message: format!("subject {sha}"),
+            commit_sha: sha(name),
+            parent_sha: sha(parent),
+            fork_sha: sha(base),
+            message: format!("subject {name}"),
             resets_status: true,
             created_at: "t0".to_string(),
         }
@@ -118,11 +120,11 @@ mod tests {
         c
     }
 
-    fn commit(sha: &str, parents: &[&str]) -> HistoryCommit {
+    fn commit(name: &str, parents: &[&str]) -> HistoryCommit {
         HistoryCommit {
-            sha: sha.into(),
-            parents: parents.iter().map(|p| Sha::from(*p)).collect(),
-            subject: format!("main {sha}"),
+            sha: sha(name),
+            parents: parents.iter().map(|p| sha(p)).collect(),
+            subject: format!("main {name}"),
             change_number: None,
             change_id: None,
         }
@@ -142,11 +144,11 @@ mod tests {
         };
 
         let g = assemble(&view, &history);
-        let row = |sha: &str| {
+        let row = |name: &str| {
             g.nodes
                 .iter()
-                .position(|n| n.commit_sha == sha)
-                .unwrap_or_else(|| panic!("no node {sha}"))
+                .position(|n| n.commit_sha == sha(name))
+                .unwrap_or_else(|| panic!("no node {name}"))
         };
         assert_eq!(g.nodes[row("c3")].section, GraphSection::Head);
         assert_eq!(g.nodes[row("T")].section, GraphSection::Open);
@@ -157,7 +159,7 @@ mod tests {
         );
         assert_eq!(
             g.nodes[row("T")].parents,
-            vec![Sha::from("c1")],
+            vec![sha("c1")],
             "topic keeps its real fork base, never re-rooted onto HEAD"
         );
     }
@@ -181,10 +183,20 @@ mod tests {
 
         let g = assemble(&view, &history);
         assert!(g.history_truncated);
-        let shas: Vec<&str> = g.nodes.iter().map(|n| n.commit_sha.as_str()).collect();
+        let shas: Vec<&Sha> = g.nodes.iter().map(|n| &n.commit_sha).collect();
         // Children ascend: the tip B sits above its parent A, both above HEAD.
-        assert_eq!(shas, vec!["B", "A", "h", "g1", "g2"]);
-        let g1 = g.nodes.iter().find(|n| n.commit_sha == "g1").expect("g1");
+        assert_eq!(
+            shas,
+            ["B", "A", "h", "g1", "g2"]
+                .map(sha)
+                .iter()
+                .collect::<Vec<_>>()
+        );
+        let g1 = g
+            .nodes
+            .iter()
+            .find(|n| n.commit_sha == sha("g1"))
+            .expect("g1");
         assert_eq!(g1.change_number, Some(ChangeNumber(9)));
         assert_eq!(g1.change_id.as_ref().map(ChangeId::as_str), Some("Iland"));
     }

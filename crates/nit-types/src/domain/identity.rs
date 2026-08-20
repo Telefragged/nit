@@ -46,27 +46,65 @@ impl std::fmt::Display for ChangeId {
 /// A git object name, in full: 40 hex characters.
 ///
 /// Only display ever shortens it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[serde(try_from = "String")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct Sha(pub String);
+pub struct Sha(String);
 
 impl Sha {
+    /// The name of a git object, checked against git's own spelling of one.
+    ///
+    /// # Errors
+    ///
+    /// [`ShaError`], naming the rule the input broke.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::Sha;
+    ///
+    /// assert!(Sha::new("368a08a0d1d5f1e0a4a02b8fd8b3fbb1c5c3e1a9").is_ok());
+    /// assert!(Sha::new("368a08a0").is_err());
+    /// ```
+    pub fn new(sha: impl Into<String>) -> Result<Sha, ShaError> {
+        let sha = sha.into();
+        if sha.len() != 40 {
+            return Err(ShaError::Length(sha.len()));
+        }
+        if let Some(c) = sha.chars().find(|c| !c.is_ascii_hexdigit()) {
+            return Err(ShaError::NotHex(c));
+        }
+        Ok(Sha(sha))
+    }
+
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-impl From<String> for Sha {
-    fn from(s: String) -> Sha {
-        Sha(s)
+/// Why a string is not a [`Sha`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ShaError {
+    #[error("a git object name is 40 characters, not {0}")]
+    Length(usize),
+    #[error("a git object name is hexadecimal, and '{0}' is not")]
+    NotHex(char),
+}
+
+impl TryFrom<String> for Sha {
+    type Error = ShaError;
+
+    fn try_from(sha: String) -> Result<Sha, ShaError> {
+        Sha::new(sha)
     }
 }
 
-impl From<&str> for Sha {
-    fn from(s: &str) -> Sha {
-        Sha(s.to_string())
+// Serialized by hand rather than `#[serde(transparent)]`, which serde
+// refuses to combine with the `try_from` that gates the way in.
+impl Serialize for Sha {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
     }
 }
 

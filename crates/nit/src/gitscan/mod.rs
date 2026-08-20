@@ -24,6 +24,16 @@ use nit_types::domain::ChangeProjection;
 
 pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
 
+/// The name git knows an object by.
+///
+/// # Panics
+///
+/// Never: git spells an object name in 40 hex characters.
+#[must_use]
+pub fn sha_of(oid: Oid) -> Sha {
+    Sha::new(oid.to_string()).expect("git spells an object name as 40 hex characters")
+}
+
 /// A commit sha truncated to 12 chars — the canonical short form for display.
 #[must_use]
 pub fn short_sha(sha: &Sha) -> String {
@@ -86,16 +96,13 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
         .iter()
         .map(|c| String::from_utf8_lossy(c.message_bytes()).into_owned())
         .collect();
-    let short_shas: Vec<String> = commits
-        .iter()
-        .map(|c| short_sha(&Sha::from(c.id().to_string())))
-        .collect();
+    let short_shas: Vec<String> = commits.iter().map(|c| short_sha(&sha_of(c.id()))).collect();
     let change_ids = identity::require_change_ids(&messages, &short_shas)?;
 
     let mut walked = Vec::with_capacity(commits.len());
-    let mut prev = Sha::from(fork.to_string());
+    let mut prev = sha_of(fork);
     for (i, commit) in commits.iter().enumerate() {
-        let sha = Sha::from(commit.id().to_string());
+        let sha = sha_of(commit.id());
         walked.push(WalkedCommit {
             change_id: change_ids[i].clone().into(),
             commit_sha: sha.clone(),
@@ -105,7 +112,7 @@ pub fn walk_push(git_dir: &str, base: &str, tip: &str) -> Result<PushWalk, Strin
         prev = sha;
     }
     Ok(PushWalk {
-        fork_sha: Sha::from(fork.to_string()),
+        fork_sha: sha_of(fork),
         commits: walked,
     })
 }
@@ -166,9 +173,7 @@ pub fn pure_rebase(
 /// check).
 #[must_use]
 pub fn resolve_head(repo: &Repository, canonical_ref: &str) -> Option<Sha> {
-    Some(Sha::from(
-        resolve_commit(repo, canonical_ref).ok()?.to_string(),
-    ))
+    Some(sha_of(resolve_commit(repo, canonical_ref).ok()?))
 }
 
 /// Landings observed on the canonical ref in `since..head`.
@@ -219,9 +224,7 @@ pub fn detect_merges<S: std::hash::BuildHasher>(
         };
         // First seen wins: the unsorted walk is newest-first, so a key
         // appearing on several new commits records the newest merge.
-        landings
-            .entry(change.id)
-            .or_insert_with(|| Sha::from(oid.to_string()));
+        landings.entry(change.id).or_insert_with(|| sha_of(oid));
     }
     landings.into_iter().collect()
 }
@@ -275,11 +278,8 @@ pub fn canonical_history(
         let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
         let message = String::from_utf8_lossy(commit.message_bytes());
         out.push(HistoryCommit {
-            sha: oid.to_string().into(),
-            parents: commit
-                .parent_ids()
-                .map(|p| Sha::from(p.to_string()))
-                .collect(),
+            sha: sha_of(oid),
+            parents: commit.parent_ids().map(sha_of).collect(),
             subject: subject_of(&message),
             trailer: identity::change_id_trailer(&message),
         });
@@ -301,7 +301,7 @@ mod tests {
 
     use git2::{Oid, Repository, Signature};
 
-    use super::detect_merges;
+    use super::{detect_merges, sha_of};
     use nit_types::domain::{ChangeId, ChangeNumber, Sha};
     use nit_types::domain::{ChangeProjection, RevisionProjection};
 
@@ -339,9 +339,9 @@ mod tests {
         let mut proj = ChangeProjection::new(ChangeNumber(id), 1, key.into());
         proj.revisions.push(RevisionProjection {
             number: RevisionNumber(0),
-            commit_sha: commit.to_string().into(),
-            parent_sha: base.to_string().into(),
-            fork_sha: base.to_string().into(),
+            commit_sha: sha_of(commit),
+            parent_sha: sha_of(base),
+            fork_sha: sha_of(base),
             message: keyed("subject", key),
             resets_status: true,
             created_at: "t0".to_string(),
@@ -386,13 +386,8 @@ mod tests {
             &keyed("feat", "I001"),
             &[("a.txt", "a adapted\n")],
         );
-        let got = detect_merges(
-            &repo,
-            &Sha::from(root.to_string()),
-            &Sha::from(merged.to_string()),
-            &open(&[&change]),
-        );
-        assert_eq!(got, vec![(ChangeNumber(1), Sha::from(merged.to_string()))]);
+        let got = detect_merges(&repo, &sha_of(root), &sha_of(merged), &open(&[&change]));
+        assert_eq!(got, vec![(ChangeNumber(1), sha_of(merged))]);
     }
 
     #[test]
@@ -411,12 +406,7 @@ mod tests {
             "merged without a trailer\n",
             &[("a.txt", "a\n")],
         );
-        let got = detect_merges(
-            &repo,
-            &Sha::from(root.to_string()),
-            &Sha::from(merged.to_string()),
-            &open(&[&change]),
-        );
+        let got = detect_merges(&repo, &sha_of(root), &sha_of(merged), &open(&[&change]));
         assert_eq!(got, vec![]);
     }
 
@@ -441,18 +431,13 @@ mod tests {
             &keyed("b", "I002"),
             &[("b.txt", "b\n")],
         );
-        let mut got = detect_merges(
-            &repo,
-            &Sha::from(root.to_string()),
-            &Sha::from(landed_b.to_string()),
-            &open(&[&a, &b]),
-        );
+        let mut got = detect_merges(&repo, &sha_of(root), &sha_of(landed_b), &open(&[&a, &b]));
         got.sort_unstable();
         assert_eq!(
             got,
             vec![
-                (ChangeNumber(1), Sha::from(landed_a.to_string())),
-                (ChangeNumber(2), Sha::from(landed_b.to_string()))
+                (ChangeNumber(1), sha_of(landed_a)),
+                (ChangeNumber(2), sha_of(landed_b))
             ]
         );
     }
@@ -473,12 +458,7 @@ mod tests {
             &keyed("other", "I999"),
             &[("z.txt", "z\n")],
         );
-        let got = detect_merges(
-            &repo,
-            &Sha::from(root.to_string()),
-            &Sha::from(merged.to_string()),
-            &open(&[&change]),
-        );
+        let got = detect_merges(&repo, &sha_of(root), &sha_of(merged), &open(&[&change]));
         assert_eq!(got, vec![]);
     }
 
@@ -498,13 +478,8 @@ mod tests {
             &keyed("feat", "I001"),
             &[("a.txt", "a\n")],
         );
-        let absent = Sha::from("0".repeat(40));
-        let got = detect_merges(
-            &repo,
-            &absent,
-            &Sha::from(merged.to_string()),
-            &open(&[&change]),
-        );
+        let absent = Sha::new("0".repeat(40)).expect("40 zeroes name no object");
+        let got = detect_merges(&repo, &absent, &sha_of(merged), &open(&[&change]));
         assert_eq!(got, vec![]);
     }
 }

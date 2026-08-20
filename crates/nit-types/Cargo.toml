@@ -16,9 +16,13 @@ clap = ["dep:clap"]
 # turned on to derive the ts-rs TypeScript bindings — the `gen-types` app and
 # `types-drift` check in flake.nix generate web/src/api/types.gen.ts from them.
 ts = ["dep:ts-rs", "ts-rs/no-serde-warnings"]
+# Off by default; turned on by a crate that wants this one's fixture values
+# in its own tests, through a dev-dependency.
+testing = []
 
 [dependencies]
 serde = { workspace = true }
+thiserror = "2"
 clap = { version = "4", features = ["derive"], optional = true }
 ts-rs = { version = "12", optional = true }
 

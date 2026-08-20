@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { changeDetail, foldEntry, replayProjection } from "./fold";
 import type { LogEntry } from "./types";
+import { shaOf as sha } from "./fixtures/builders";
 
 const revision: LogEntry = {
   change_number: 1,
@@ -10,9 +11,9 @@ const revision: LogEntry = {
   created_at: "t0",
   kind: "revision",
   payload: {
-    commit_sha: "A",
-    parent_sha: "base",
-    fork_sha: "base",
+    commit_sha: sha("A"),
+    parent_sha: sha("base"),
+    fork_sha: sha("base"),
     message: "subject\n\nChange-Id: I1\n",
     resets_status: true,
   },

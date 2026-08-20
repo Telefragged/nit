@@ -314,6 +314,8 @@ mod tests {
     use super::*;
     use nit_types::domain::RevisionNumber;
 
+    use nit_types::testing::sha;
+
     #[test]
     fn log_range_forms_and_rejections() {
         let ok = |s: &str| LogRange::parse(s).expect("range should parse");
@@ -358,9 +360,9 @@ mod tests {
         };
         let revision = || {
             LogPayload::Revision(RevisionPayload {
-                commit_sha: "".into(),
-                parent_sha: "".into(),
-                fork_sha: "".into(),
+                commit_sha: sha(""),
+                parent_sha: sha(""),
+                fork_sha: sha(""),
                 message: String::new(),
                 resets_status: true,
             })

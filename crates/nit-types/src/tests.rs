@@ -3,8 +3,26 @@
 //! feature (clap, ts) would otherwise mask.
 
 use crate::domain::ChangeNumber;
+use crate::domain::Sha;
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
+
+/// A distinct, well-formed object name for `label`.
+///
+/// Fixtures name commits `A1`, `base`, or a hex prefix they assert on;
+/// git names them in 40 hex characters, and [`Sha`] holds them to it.
+pub(crate) fn sha(label: &str) -> Sha {
+    let hex: String = if label.chars().all(|c| c.is_ascii_hexdigit()) {
+        label.to_string()
+    } else {
+        label.bytes().fold(String::new(), |mut hex, b| {
+            use std::fmt::Write;
+            let _ = write!(hex, "{b:02x}");
+            hex
+        })
+    };
+    Sha::new(&format!("{hex:0<40}")[..40]).expect("a hex expansion of the label")
+}
 
 fn revision_entry() -> LogEntry {
     LogEntry {
@@ -13,9 +31,9 @@ fn revision_entry() -> LogEntry {
         sequence: 42,
         created_at: "t".to_string(),
         payload: LogPayload::Revision(RevisionPayload {
-            commit_sha: "a".into(),
-            parent_sha: "b".into(),
-            fork_sha: "c".into(),
+            commit_sha: sha("a"),
+            parent_sha: sha("b"),
+            fork_sha: sha("c"),
             message: "m".to_string(),
             resets_status: true,
         }),
@@ -27,7 +45,12 @@ fn log_entry_flattens_to_an_adjacent_tag() {
     let json = serde_json::to_string(&revision_entry()).expect("serialize");
     assert_eq!(
         json,
-        r#"{"change_number":7,"position":2,"sequence":42,"created_at":"t","kind":"revision","payload":{"commit_sha":"a","parent_sha":"b","fork_sha":"c","message":"m","resets_status":true}}"#
+        format!(
+            r#"{{"change_number":7,"position":2,"sequence":42,"created_at":"t","kind":"revision","payload":{{"commit_sha":"{}","parent_sha":"{}","fork_sha":"{}","message":"m","resets_status":true}}}}"#,
+            sha("a"),
+            sha("b"),
+            sha("c")
+        )
     );
 }
 
@@ -37,7 +60,7 @@ fn log_entry_round_trips() {
     let back: LogEntry = serde_json::from_str(&json).expect("deserialize");
     assert_eq!(back.sequence, 42);
     match back.payload {
-        LogPayload::Revision(p) => assert_eq!(p.commit_sha, "a"),
+        LogPayload::Revision(p) => assert_eq!(p.commit_sha, sha("a")),
         _ => panic!("expected a revision payload"),
     }
 }
@@ -47,16 +70,21 @@ fn payload_serializes_as_the_bare_inner_struct() {
     // The storage boundary serializes the inner struct alone (kind goes in its
     // own column) — never the adjacently-tagged LogPayload wrapper.
     let p = RevisionPayload {
-        commit_sha: "a".into(),
-        parent_sha: "b".into(),
-        fork_sha: "c".into(),
+        commit_sha: sha("a"),
+        parent_sha: sha("b"),
+        fork_sha: sha("c"),
         message: "m".to_string(),
         resets_status: true,
     };
     let json = serde_json::to_string(&p).expect("serialize");
     assert_eq!(
         json,
-        r#"{"commit_sha":"a","parent_sha":"b","fork_sha":"c","message":"m","resets_status":true}"#
+        format!(
+            r#"{{"commit_sha":"{}","parent_sha":"{}","fork_sha":"{}","message":"m","resets_status":true}}"#,
+            sha("a"),
+            sha("b"),
+            sha("c")
+        )
     );
 }
 

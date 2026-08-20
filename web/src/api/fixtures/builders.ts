@@ -17,6 +17,25 @@ export function sha(seed: number): string {
   return out;
 }
 
+/** A distinct, well-formed object name for `label`.
+ *
+ * The sibling `sha(seed)` mints one from a number. Tests that name a
+ * commit `A` or `c11r3` reach for this one. */
+export function shaOf(label: string): string {
+  return hexExpansion(label);
+}
+
+/** `label` as 40 hex characters: itself when it is already hex, its bytes
+ * otherwise, zero-padded either way. */
+function hexExpansion(label: string): string {
+  const hex = /^[0-9a-fA-F]*$/.test(label)
+    ? label
+    : Array.from(label, (c) =>
+        c.charCodeAt(0).toString(16).padStart(2, "0"),
+      ).join("");
+  return (hex + "0".repeat(40)).slice(0, 40);
+}
+
 export const ctx = (old: number, nw: number, text: string): Line => ({
   kind: "context",
   old,

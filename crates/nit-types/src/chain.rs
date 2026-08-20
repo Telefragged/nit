@@ -32,7 +32,8 @@ pub struct OpenNode {
     pub change_number: ChangeNumber,
     pub revision: RevisionNumber,
     pub commit_sha: Sha,
-    pub parent_sha: Sha,
+    /// `None` when the revision the node names is no longer held.
+    pub parent_sha: Option<Sha>,
 }
 
 /// A read-time view over one repo's changes.
@@ -200,7 +201,7 @@ impl RepoView {
                 let parent_sha = self
                     .change(m.change_number)
                     .and_then(|c| c.revision(m.revision))
-                    .map_or_else(|| Sha::from(""), |r| r.parent_sha.clone());
+                    .map(|r| r.parent_sha.clone());
                 out.push(OpenNode {
                     change_number: m.change_number,
                     revision: m.revision,
@@ -314,17 +315,18 @@ pub fn graph_row_order(nodes: &[(Sha, Vec<Sha>)]) -> Vec<Sha> {
 mod tests {
     use super::*;
     use crate::domain::Verdict;
+    use crate::tests::sha;
 
     use crate::domain::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
 
-    fn revision(number: u64, sha: &str, parent: &str, base: &str) -> RevisionProjection {
+    fn revision(number: u64, name: &str, parent: &str, base: &str) -> RevisionProjection {
         let number = RevisionNumber(number);
         RevisionProjection {
             number,
-            commit_sha: sha.into(),
-            parent_sha: parent.into(),
-            fork_sha: base.into(),
-            message: format!("subject {sha}"),
+            commit_sha: sha(name),
+            parent_sha: sha(parent),
+            fork_sha: sha(base),
+            message: format!("subject {name}"),
             resets_status: true,
             created_at: "t0".to_string(),
         }
@@ -351,9 +353,9 @@ mod tests {
         let ce = change(14, "Ie", vec![revision(0, "E", "Bp", "m")]);
         let view = RepoView::new(vec![ca, cb, cc, cd, ce]);
 
-        assert_eq!(view.tips(), vec![Sha::from("C"), Sha::from("E")]);
+        assert_eq!(view.tips(), vec![sha("C"), sha("E")]);
 
-        let c_path = view.path_from_tip(&"C".into());
+        let c_path = view.path_from_tip(&sha("C"));
         assert_eq!(
             c_path
                 .iter()
@@ -361,7 +363,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(10, 0), (11, 0), (12, 0)]
         );
-        let e_path = view.path_from_tip(&"E".into());
+        let e_path = view.path_from_tip(&sha("E"));
         assert_eq!(
             e_path
                 .iter()
@@ -382,7 +384,7 @@ mod tests {
         let view = RepoView::new(vec![a, b]);
 
         let path: Vec<u64> = view
-            .path_from_tip(&"B".into())
+            .path_from_tip(&sha("B"))
             .iter()
             .map(|m| m.change_number.get())
             .collect();
@@ -406,7 +408,7 @@ mod tests {
         let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
         let c = change(3, "Ic", vec![revision(0, "C", "B", "m")]);
         let view = RepoView::new(vec![a, b, c]);
-        assert_eq!(view.tips(), vec![Sha::from("C")]);
+        assert_eq!(view.tips(), vec![sha("C")]);
     }
 
     #[test]
@@ -431,7 +433,9 @@ mod tests {
             .map(|n| n.commit_sha.clone())
             .collect();
         shas.sort();
-        assert_eq!(shas, vec!["A", "B", "Bp", "C", "D", "E"]);
+        let mut want = vec![sha("A"), sha("B"), sha("Bp"), sha("C"), sha("D"), sha("E")];
+        want.sort();
+        assert_eq!(shas, want);
         let b_nodes: Vec<u64> = view
             .open_nodes()
             .iter()
@@ -447,20 +451,20 @@ mod tests {
         // The change-graph mock topology: two open tips (A1, A2) fanning from
         // A3 → A4 → HEAD, then merged history H → G1 → G2(merge of G3,G4) → G5.
         let pairs = vec![
-            (Sha::from("A1"), vec![Sha::from("A3")]),
-            (Sha::from("A2"), vec![Sha::from("A3")]),
-            (Sha::from("A3"), vec![Sha::from("A4")]),
-            (Sha::from("A4"), vec![Sha::from("H")]),
-            (Sha::from("H"), vec![Sha::from("G1")]),
-            (Sha::from("G1"), vec![Sha::from("G2")]),
-            (Sha::from("G2"), vec![Sha::from("G3"), Sha::from("G4")]),
-            (Sha::from("G3"), vec![Sha::from("G5")]),
-            (Sha::from("G4"), vec![Sha::from("G5")]),
-            (Sha::from("G5"), vec![]),
+            (sha("A1"), vec![sha("A3")]),
+            (sha("A2"), vec![sha("A3")]),
+            (sha("A3"), vec![sha("A4")]),
+            (sha("A4"), vec![sha("H")]),
+            (sha("H"), vec![sha("G1")]),
+            (sha("G1"), vec![sha("G2")]),
+            (sha("G2"), vec![sha("G3"), sha("G4")]),
+            (sha("G3"), vec![sha("G5")]),
+            (sha("G4"), vec![sha("G5")]),
+            (sha("G5"), vec![]),
         ];
         assert_eq!(
             graph_row_order(&pairs),
-            vec!["A1", "A2", "A3", "A4", "H", "G1", "G2", "G3", "G4", "G5"]
+            ["A1", "A2", "A3", "A4", "H", "G1", "G2", "G3", "G4", "G5"].map(sha)
         );
         // None < Some keeps the comparison honest if a sha is ever missing.
         let order = graph_row_order(&pairs);
@@ -484,7 +488,7 @@ mod tests {
         });
         let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
         let view = RepoView::new(vec![a, b]);
-        let path = view.path_from_tip(&"B".into());
+        let path = view.path_from_tip(&sha("B"));
         assert_eq!(derive_state(&view, &path), ChainState::WaitingForReview);
     }
 }

@@ -282,6 +282,7 @@ mod tests {
     use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
 
     use super::*;
+    use crate::tests::sha;
 
     fn empty() -> ChangeProjection {
         ChangeProjection::new(ChangeNumber(1), 1, "Iabc".into())
@@ -298,12 +299,12 @@ mod tests {
     }
 
     /// A `revision` payload; the fold mints its 0-based number.
-    fn revision(sha: &str, parent: &str, base: &str, resets: bool) -> LogPayload {
+    fn revision(name: &str, parent: &str, base: &str, resets: bool) -> LogPayload {
         LogPayload::Revision(RevisionPayload {
-            commit_sha: sha.into(),
-            parent_sha: parent.into(),
-            fork_sha: base.into(),
-            message: format!("subject {sha}\n\nChange-Id: Iabc\n"),
+            commit_sha: sha(name),
+            parent_sha: sha(parent),
+            fork_sha: sha(base),
+            message: format!("subject {name}\n\nChange-Id: Iabc\n"),
             resets_status: resets,
         })
     }
@@ -366,7 +367,10 @@ mod tests {
         assert_eq!(c.revisions.len(), 2);
         assert_eq!(c.revisions[0].number.get(), 0);
         assert_eq!(c.revisions[1].number.get(), 1);
-        assert_eq!(c.latest_revision().expect("a revision").commit_sha, "B");
+        assert_eq!(
+            c.latest_revision().expect("a revision").commit_sha,
+            sha("B")
+        );
     }
 
     #[test]
@@ -438,7 +442,7 @@ mod tests {
             revision("A", "base", "base", true),
             review(0, Verdict::Approve),
             revision("B", "base", "base", true),
-            LogPayload::lifecycle(LifecycleAction::Merged, Some("C".into()), None),
+            LogPayload::lifecycle(LifecycleAction::Merged, Some(sha("C")), None),
         ]);
         // Merged shows at the latest revision; older ones keep their own status.
         assert_eq!(c.status_at(RevisionNumber(1)), ChangeStatus::Merged);

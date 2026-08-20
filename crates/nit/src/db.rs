@@ -226,6 +226,17 @@ fn col_u64(v: i64) -> rusqlite::Result<u64> {
     u64::try_from(v).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, v))
 }
 
+/// A value parsed on the way out of the column that held it.
+///
+/// A stored value that no longer parses means external corruption,
+/// surfaced as a conversion error, never a panic.
+fn stored<T, E>(parsed: Result<T, E>, column: rusqlite::types::Type) -> rusqlite::Result<T>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    parsed.map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, column, Box::new(e)))
+}
+
 fn col_u64_opt(v: Option<i64>) -> rusqlite::Result<Option<u64>> {
     v.map(col_u64).transpose()
 }
@@ -282,7 +293,8 @@ fn map_repo(row: &rusqlite::Row) -> rusqlite::Result<RepoRow> {
         canonical_ref: row.get("canonical_ref")?,
         canonical_head: row
             .get::<_, Option<String>>("canonical_head")?
-            .map(Sha::from),
+            .map(|v| stored(Sha::new(v), rusqlite::types::Type::Text))
+            .transpose()?,
     })
 }
 
@@ -928,6 +940,7 @@ pub fn delete_draft_review(conn: &Connection, change_number: ChangeNumber) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nit_types::testing::sha;
 
     fn mem() -> Connection {
         let conn = Connection::open_in_memory().expect("in-memory db");
@@ -958,9 +971,9 @@ mod tests {
         let conn = mem();
         let a = create_repo(&conn, "/r/.git", "main").expect("create");
         assert_eq!(a.canonical_head, None, "no baseline until first observed");
-        update_repo_canonical_head(&conn, a.id, &"deadbeef".into()).expect("record");
+        update_repo_canonical_head(&conn, a.id, &sha("deadbeef")).expect("record");
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
-        assert_eq!(found.canonical_head, Some(Sha::from("deadbeef")));
+        assert_eq!(found.canonical_head, Some(sha("deadbeef")));
     }
 
     /// v9 renames a change column on four tables; the rows written under

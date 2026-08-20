@@ -9,6 +9,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { mockAppend } from "../api/fixtures/stream";
+import { shaOf as sha } from "../api/fixtures/builders";
 import ReviewPage from "./ReviewPage";
 
 afterEach(cleanup);
@@ -43,9 +44,9 @@ describe("event-driven change page", () => {
     mockAppend(11, "2026-06-28T00:00:00.000Z", {
       kind: "revision",
       payload: {
-        commit_sha: "c11r3",
-        parent_sha: "c11r2",
-        fork_sha: "base",
+        commit_sha: sha("c11r3"),
+        parent_sha: sha("c11r2"),
+        fork_sha: sha("base"),
         message: "auth: rotate v3\n\nChange-Id: I9a41c7e2b3d4f5a6",
         resets_status: true,
       },

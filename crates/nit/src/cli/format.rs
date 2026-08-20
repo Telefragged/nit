@@ -357,6 +357,8 @@ mod tests {
     use super::*;
     use nit_types::domain::RevisionNumber;
 
+    use nit_types::testing::sha;
+
     #[test]
     fn entry_summary_digests_each_kind() {
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
@@ -380,9 +382,9 @@ mod tests {
             resolved: None,
         };
         let revision = entry(LogPayload::Revision(RevisionPayload {
-            commit_sha: "abcdef0123456789".into(),
-            parent_sha: "".into(),
-            fork_sha: "".into(),
+            commit_sha: sha("abcdef0123456789"),
+            parent_sha: sha(""),
+            fork_sha: sha(""),
             message: String::new(),
             resets_status: true,
         }));
@@ -480,15 +482,15 @@ mod tests {
         );
 
         // A revision entry shows its short sha and subject — no minted number.
-        let revision = |position, sequence, sha: &str, msg: &str| {
+        let revision = |position, sequence, name: &str, msg: &str| {
             entry(
                 ChangeNumber(42),
                 position,
                 sequence,
                 LogPayload::Revision(RevisionPayload {
-                    commit_sha: sha.into(),
-                    parent_sha: "".into(),
-                    fork_sha: "".into(),
+                    commit_sha: sha(name),
+                    parent_sha: sha(""),
+                    fork_sha: sha(""),
                     message: msg.to_string(),
                     resets_status: true,
                 }),
@@ -517,7 +519,7 @@ mod tests {
                     status,
                     revision: RevisionNumber(revision),
                     subject: subject.to_string(),
-                    commit_sha: "".into(),
+                    commit_sha: sha(""),
                 }
             };
         let chain = Chain {

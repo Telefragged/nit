@@ -3428,6 +3428,11 @@ rec {
         ];
         devDependencies = [
           {
+            name = "nit-types";
+            packageId = "nit-types";
+            features = [ "testing" ];
+          }
+          {
             name = "tempfile";
             packageId = "tempfile";
           }
@@ -3453,6 +3458,10 @@ rec {
             features = [ "derive" ];
           }
           {
+            name = "thiserror";
+            packageId = "thiserror";
+          }
+          {
             name = "ts-rs";
             packageId = "ts-rs";
             optional = true;
@@ -3468,7 +3477,7 @@ rec {
           "clap" = [ "dep:clap" ];
           "ts" = [ "dep:ts-rs" "ts-rs/no-serde-warnings" ];
         };
-        resolvedDefaultFeatures = [ "clap" "ts" ];
+        resolvedDefaultFeatures = [ "clap" "testing" "ts" ];
       };
       "nit-wasm" = rec {
         crateName = "nit-wasm";
@@ -3498,6 +3507,13 @@ rec {
           {
             name = "wasm-bindgen";
             packageId = "wasm-bindgen";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "nit-types";
+            packageId = "nit-types";
+            features = [ "testing" ];
           }
         ];
 

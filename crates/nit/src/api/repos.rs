@@ -7,10 +7,10 @@ use axum::extract::State;
 use git2::Repository;
 use rusqlite::Connection;
 
-use nit_types::domain::Sha;
 use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
 
 use crate::db;
+use crate::gitscan;
 
 use super::canonical_git_dir;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
@@ -62,7 +62,7 @@ pub(super) async fn create_repo(
         // Seed the merge timer's baseline at the canonical ref's current HEAD, so the
         // first merge after registration shows up in a delta scan rather than
         // being swallowed as pre-tracking history.
-        db::update_repo_canonical_head(conn, row.id, &Sha::from(base_commit.id().to_string()))?;
+        db::update_repo_canonical_head(conn, row.id, &gitscan::sha_of(base_commit.id()))?;
         state.ensure_repo(&row);
         Ok(Json(repo_json(&state, conn, row)?))
     })
