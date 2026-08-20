@@ -364,7 +364,7 @@ mod tests {
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         use nit_types::domain::{LifecycleAction, Verdict};
         let entry = |payload| LogEntry {
-            change_number: ChangeNumber(7),
+            change_number: ChangeNumber::new(7),
             position: 0,
             sequence: 0,
             created_at: String::new(),
@@ -393,7 +393,7 @@ mod tests {
             "change 7 new revision abcdef012345"
         );
         let review = entry(LogPayload::Review(ReviewPayload {
-            revision: RevisionNumber(2),
+            revision: RevisionNumber::new(2),
             verdict: Verdict::RequestChanges,
             message: String::new(),
             comments: vec![comment(), comment()],
@@ -422,7 +422,7 @@ mod tests {
         };
         let opening = |tid, file: Option<&str>, line, range, resolved, body: &str| CommentInput {
             thread_id: Some(tid),
-            revision: Some(RevisionNumber(2)),
+            revision: Some(RevisionNumber::new(2)),
             file: file.map(String::from),
             line,
             side: Some(Side::New),
@@ -432,11 +432,11 @@ mod tests {
             resolved,
         };
         let review = entry(
-            ChangeNumber(42),
+            ChangeNumber::new(42),
             5,
             12,
             LogPayload::Review(ReviewPayload {
-                revision: RevisionNumber(2),
+                revision: RevisionNumber::new(2),
                 verdict: Verdict::RequestChanges,
                 message: "Cover one.\nCover two.".to_string(),
                 comments: vec![
@@ -484,7 +484,7 @@ mod tests {
         // A revision entry shows its short sha and subject — no minted number.
         let revision = |position, sequence, name: &str, msg: &str| {
             entry(
-                ChangeNumber(42),
+                ChangeNumber::new(42),
                 position,
                 sequence,
                 LogPayload::Revision(RevisionPayload {
@@ -516,17 +516,17 @@ mod tests {
                 position,
                 change_id: change_id(key),
                 status,
-                revision: RevisionNumber(revision),
+                revision: RevisionNumber::new(revision),
                 subject: subject.to_string(),
                 commit_sha: sha(""),
             };
         let chain = Chain {
-            tip_change_number: ChangeNumber(2),
+            tip_change_number: ChangeNumber::new(2),
             repo_id: 1,
             state: ChainState::AuthorsTurn,
             path: vec![
                 member(
-                    ChangeNumber(1),
+                    ChangeNumber::new(1),
                     0,
                     "I0123456789abc",
                     ChangeStatus::ChangesRequested,
@@ -534,7 +534,7 @@ mod tests {
                     "server: add health endpoint",
                 ),
                 member(
-                    ChangeNumber(2),
+                    ChangeNumber::new(2),
                     1,
                     "Iabcdef0123456",
                     ChangeStatus::Approved,
@@ -543,7 +543,7 @@ mod tests {
                 ),
             ],
         };
-        let unresolved = HashMap::from([(ChangeNumber(1), 3), (ChangeNumber(2), 0)]);
+        let unresolved = HashMap::from([(ChangeNumber::new(1), 3), (ChangeNumber::new(2), 0)]);
         // Columns padded to the widest cell (here `changes_requested`), no tabs.
         assert_eq!(
             chain_digest(&chain, &unresolved, None),

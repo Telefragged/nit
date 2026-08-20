@@ -337,9 +337,9 @@ mod tests {
     }
 
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProjection {
-        let mut proj = ChangeProjection::new(ChangeNumber(id), 1, change_id(key));
+        let mut proj = ChangeProjection::new(ChangeNumber::new(id), 1, change_id(key));
         proj.revisions.push(RevisionProjection {
-            number: RevisionNumber(0),
+            number: RevisionNumber::new(0),
             commit_sha: sha_of(commit),
             parent_sha: sha_of(base),
             fork_sha: sha_of(base),
@@ -388,7 +388,7 @@ mod tests {
             &[("a.txt", "a adapted\n")],
         );
         let got = detect_merges(&repo, &sha_of(root), &sha_of(merged), &open(&[&change]));
-        assert_eq!(got, vec![(ChangeNumber(1), sha_of(merged))]);
+        assert_eq!(got, vec![(ChangeNumber::new(1), sha_of(merged))]);
     }
 
     #[test]
@@ -437,8 +437,8 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                (ChangeNumber(1), sha_of(landed_a)),
-                (ChangeNumber(2), sha_of(landed_b))
+                (ChangeNumber::new(1), sha_of(landed_a)),
+                (ChangeNumber::new(2), sha_of(landed_b))
             ]
         );
     }

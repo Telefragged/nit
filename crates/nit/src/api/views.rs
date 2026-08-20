@@ -29,7 +29,9 @@ use super::Error;
 #[must_use]
 pub fn build_chain(view: &RepoView, repo_id: u64, tip_sha: &Sha) -> Chain {
     let path = view.path_from_tip(tip_sha);
-    let tip_change_number = path.last().map_or(ChangeNumber(0), |m| m.change_number);
+    let tip_change_number = path
+        .last()
+        .map_or(ChangeNumber::new(0), |m| m.change_number);
     Chain {
         tip_change_number,
         repo_id,

@@ -320,7 +320,7 @@ mod tests {
     use crate::domain::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
 
     fn revision(number: u64, name: &str, parent: &str, base: &str) -> RevisionProjection {
-        let number = RevisionNumber(number);
+        let number = RevisionNumber::new(number);
         RevisionProjection {
             number,
             commit_sha: sha(name),
@@ -333,7 +333,7 @@ mod tests {
     }
 
     fn change(number: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(ChangeNumber(number), 1, change_id(key));
+        let mut c = ChangeProjection::new(ChangeNumber::new(number), 1, change_id(key));
         c.revisions = revs;
         c
     }
@@ -439,7 +439,7 @@ mod tests {
         let b_nodes: Vec<u64> = view
             .open_nodes()
             .iter()
-            .filter(|n| n.change_number == ChangeNumber(11))
+            .filter(|n| n.change_number == ChangeNumber::new(11))
             .map(|n| n.revision.get())
             .collect();
         assert_eq!(b_nodes.len(), 2);
@@ -481,7 +481,7 @@ mod tests {
         let mut a = change(1, "Ia", vec![revision(0, "A", "m", "m")]);
         a.reviews.push(ReviewProjection {
             id: 100,
-            revision: RevisionNumber(0),
+            revision: RevisionNumber::new(0),
             verdict: Verdict::Approve,
             message: String::new(),
             created_at: "t1".to_string(),

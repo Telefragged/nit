@@ -38,7 +38,7 @@ fn hex_expansion(label: &str) -> String {
 
 fn revision_entry() -> LogEntry {
     LogEntry {
-        change_number: ChangeNumber(7),
+        change_number: ChangeNumber::new(7),
         position: 2,
         sequence: 42,
         created_at: "t".to_string(),
@@ -103,7 +103,7 @@ fn payload_serializes_as_the_bare_inner_struct() {
 #[test]
 fn lifecycle_skips_absent_fields_under_flatten() {
     let entry = LogEntry {
-        change_number: ChangeNumber(1),
+        change_number: ChangeNumber::new(1),
         position: 0,
         sequence: 0,
         created_at: "t".to_string(),

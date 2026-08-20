@@ -125,7 +125,7 @@ pub(super) async fn push(
                 change_id: proj.change_id.clone(),
                 revision: proj
                     .latest_revision()
-                    .map_or(RevisionNumber(0), |r| r.number),
+                    .map_or(RevisionNumber::new(0), |r| r.number),
                 status: proj.current_status(),
             }
         };

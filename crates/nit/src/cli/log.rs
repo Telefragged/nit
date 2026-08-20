@@ -351,7 +351,7 @@ mod tests {
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         let muted = |payload| {
             muted_by_reviewer_only(&LogEntry {
-                change_number: ChangeNumber(1),
+                change_number: ChangeNumber::new(1),
                 position: 0,
                 sequence: 0,
                 created_at: String::new(),
@@ -382,7 +382,7 @@ mod tests {
         };
         let review = || {
             LogPayload::Review(ReviewPayload {
-                revision: RevisionNumber(0),
+                revision: RevisionNumber::new(0),
                 verdict: Verdict::Comment,
                 message: String::new(),
                 comments: vec![],

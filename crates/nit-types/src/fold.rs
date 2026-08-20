@@ -83,7 +83,7 @@ pub fn fold(change: &mut ChangeProjection, mut entry: LogEntry) -> LogEntry {
 }
 
 fn fold_revision(change: &mut ChangeProjection, p: &RevisionPayload, now: &str) {
-    let number = RevisionNumber::from(
+    let number = RevisionNumber::new(
         u64::try_from(change.revisions.len()).expect("revision count fits u64"),
     );
     change.revisions.push(RevisionProjection {
@@ -148,7 +148,7 @@ fn open_thread(
     let revision = c.revision.unwrap_or_else(|| {
         change
             .latest_revision()
-            .map_or(RevisionNumber(0), |r| r.number)
+            .map_or(RevisionNumber::new(0), |r| r.number)
     });
     change.threads.push(ThreadProjection {
         id,
@@ -285,12 +285,12 @@ mod tests {
     use crate::tests::{change_id, sha};
 
     fn empty() -> ChangeProjection {
-        ChangeProjection::new(ChangeNumber(1), 1, change_id("Iabc"))
+        ChangeProjection::new(ChangeNumber::new(1), 1, change_id("Iabc"))
     }
 
     fn entry(position: u64, payload: LogPayload) -> LogEntry {
         LogEntry {
-            change_number: ChangeNumber(1),
+            change_number: ChangeNumber::new(1),
             sequence: position,
             position,
             created_at: format!("t{position}"),
@@ -310,7 +310,7 @@ mod tests {
     }
 
     fn review(revision: u64, verdict: Verdict) -> LogPayload {
-        let revision = RevisionNumber(revision);
+        let revision = RevisionNumber::new(revision);
         LogPayload::Review(ReviewPayload {
             revision,
             verdict,
@@ -322,7 +322,7 @@ mod tests {
     fn anchored(file: &str, line: u64, body: &str) -> CommentInput {
         CommentInput {
             thread_id: None,
-            revision: Some(RevisionNumber(0)),
+            revision: Some(RevisionNumber::new(0)),
             file: Some(file.to_string()),
             line: Some(line),
             side: Some(Side::New),
@@ -382,10 +382,10 @@ mod tests {
         ]);
         // The review landed on r0; r1 has no review yet and resets → pending.
         assert_eq!(
-            c.status_at(RevisionNumber(0)),
+            c.status_at(RevisionNumber::new(0)),
             ChangeStatus::ChangesRequested
         );
-        assert_eq!(c.status_at(RevisionNumber(1)), ChangeStatus::Pending);
+        assert_eq!(c.status_at(RevisionNumber::new(1)), ChangeStatus::Pending);
     }
 
     #[test]
@@ -396,8 +396,8 @@ mod tests {
             // r1 is a pure rebase (resets_status = false): inherits r0's approve.
             revision("B", "base2", "base2", false),
         ]);
-        assert_eq!(c.status_at(RevisionNumber(0)), ChangeStatus::Approved);
-        assert_eq!(c.status_at(RevisionNumber(1)), ChangeStatus::Approved);
+        assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
+        assert_eq!(c.status_at(RevisionNumber::new(1)), ChangeStatus::Approved);
     }
 
     #[test]
@@ -407,7 +407,7 @@ mod tests {
             review(0, Verdict::Approve),
             revision("B", "base", "base", true),
         ]);
-        assert_eq!(c.status_at(RevisionNumber(1)), ChangeStatus::Pending);
+        assert_eq!(c.status_at(RevisionNumber::new(1)), ChangeStatus::Pending);
     }
 
     #[test]
@@ -420,7 +420,7 @@ mod tests {
             review(0, Verdict::Approve),
             revision("B", "base", "base", true),
         ]);
-        assert_eq!(c.status_at(RevisionNumber(0)), ChangeStatus::Approved);
+        assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
         assert_eq!(c.current_status(), ChangeStatus::Pending);
         let c = folded(vec![
             revision("A", "base", "base", true),
@@ -445,8 +445,8 @@ mod tests {
             LogPayload::lifecycle(LifecycleAction::Merged, Some(sha("C")), None),
         ]);
         // Merged shows at the latest revision; older ones keep their own status.
-        assert_eq!(c.status_at(RevisionNumber(1)), ChangeStatus::Merged);
-        assert_eq!(c.status_at(RevisionNumber(0)), ChangeStatus::Approved);
+        assert_eq!(c.status_at(RevisionNumber::new(1)), ChangeStatus::Merged);
+        assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
         assert!(c.is_terminal());
     }
 
@@ -457,7 +457,7 @@ mod tests {
             review(0, Verdict::RequestChanges),
             LogPayload::lifecycle(LifecycleAction::Abandoned, None, None),
         ]);
-        assert_eq!(c.status_at(RevisionNumber(0)), ChangeStatus::Abandoned);
+        assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Abandoned);
         assert!(c.is_terminal());
         // Reopen restores the retained verdict status.
         fold(
@@ -469,7 +469,7 @@ mod tests {
         );
         assert!(!c.is_terminal());
         assert_eq!(
-            c.status_at(RevisionNumber(0)),
+            c.status_at(RevisionNumber::new(0)),
             ChangeStatus::ChangesRequested
         );
     }
@@ -479,13 +479,13 @@ mod tests {
         let c = folded(vec![
             revision("A", "base", "base", true),
             LogPayload::Review(ReviewPayload {
-                revision: RevisionNumber(0),
+                revision: RevisionNumber::new(0),
                 verdict: Verdict::Comment,
                 message: String::new(),
                 comments: vec![anchored("src/x.rs", 3, "look")],
             }),
             LogPayload::Review(ReviewPayload {
-                revision: RevisionNumber(0),
+                revision: RevisionNumber::new(0),
                 verdict: Verdict::Approve,
                 message: String::new(),
                 comments: vec![CommentInput {
@@ -557,7 +557,7 @@ mod tests {
     #[test]
     fn replay_folds_entries_in_order() {
         let c = replay(
-            ChangeNumber(1),
+            ChangeNumber::new(1),
             1,
             change_id("Iabc"),
             vec![
@@ -566,7 +566,7 @@ mod tests {
             ],
         );
         assert_eq!(c.revisions.len(), 1);
-        assert_eq!(c.status_at(RevisionNumber(0)), ChangeStatus::Approved);
+        assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
     }
 
     #[test]
@@ -579,7 +579,7 @@ mod tests {
         fold(&mut c, entry(1, review(0, Verdict::RequestChanges)));
         assert_eq!(c.reviews.len(), 1);
         assert_eq!(c.entries_folded, 2);
-        assert_eq!(c.status_at(RevisionNumber(0)), ChangeStatus::Approved);
+        assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
         fold(&mut c, entry(2, review(0, Verdict::RequestChanges)));
         assert_eq!(c.reviews.len(), 2);
         assert_eq!(c.entries_folded, 3);

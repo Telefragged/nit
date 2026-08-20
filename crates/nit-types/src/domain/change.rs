@@ -161,7 +161,7 @@ impl ChangeProjection {
     pub fn current_status(&self) -> ChangeStatus {
         self.status_at(
             self.latest_revision()
-                .map_or(RevisionNumber(0), |r| r.number),
+                .map_or(RevisionNumber::new(0), |r| r.number),
         )
     }
 

@@ -408,7 +408,7 @@ pub struct ChangeRow {
 
 fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
     Ok(ChangeRow {
-        id: ChangeNumber(col_u64(row.get("id")?)?),
+        id: ChangeNumber::new(col_u64(row.get("id")?)?),
         repo_id: col_u64(row.get("repo_id")?)?,
         change_id: stored(
             ChangeId::new(row.get::<_, String>("change_id")?),
@@ -447,7 +447,7 @@ pub fn upsert_change(
         params![i64::try_from(repo_id)?, change_id.as_str()],
         |r| r.get(0),
     )?;
-    Ok(ChangeNumber(col_u64(id)?))
+    Ok(ChangeNumber::new(col_u64(id)?))
 }
 
 /// Returns the number a `Change-Id` names in one repo, if any.
@@ -469,7 +469,7 @@ pub fn change_number_by_id(
             |r| r.get(0),
         )
         .optional()?;
-    Ok(col_u64_opt(id)?.map(ChangeNumber))
+    Ok(col_u64_opt(id)?.map(ChangeNumber::new))
 }
 
 /// Re-stamps a change's denormalized `status`.
@@ -533,7 +533,7 @@ pub fn repo_change_numbers(
     let mut stmt = conn.prepare(&sql)?;
     let ids = stmt
         .query_map(rusqlite::params_from_iter(values), |r| {
-            col_u64(r.get(0)?).map(ChangeNumber)
+            col_u64(r.get(0)?).map(ChangeNumber::new)
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(ids)
@@ -702,8 +702,8 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
     };
     Ok(DraftRow {
         id: col_u64(row.get("id")?)?,
-        change_number: ChangeNumber(col_u64(row.get("change_number")?)?),
-        revision: RevisionNumber(col_u64(row.get("revision")?)?),
+        change_number: ChangeNumber::new(col_u64(row.get("change_number")?)?),
+        revision: RevisionNumber::new(col_u64(row.get("revision")?)?),
         thread_id: col_u64_opt(row.get("thread_id")?)?,
         file: row.get("file")?,
         line: col_u64_opt(row.get("line")?)?,
@@ -874,7 +874,7 @@ pub struct DraftReviewRow {
 
 fn map_draft_review(row: &rusqlite::Row) -> rusqlite::Result<DraftReviewRow> {
     Ok(DraftReviewRow {
-        change_number: ChangeNumber(col_u64(row.get("change_number")?)?),
+        change_number: ChangeNumber::new(col_u64(row.get("change_number")?)?),
         decision: col_enum(&row.get::<_, String>("decision")?)?,
         message: row.get("message")?,
     })
@@ -1008,7 +1008,7 @@ mod tests {
 
         migrate(&conn).expect("migrate the rest");
 
-        let change = get_change(&conn, ChangeNumber(7))
+        let change = get_change(&conn, ChangeNumber::new(7))
             .expect("get")
             .expect("still there");
         assert_eq!(change.change_id, key);
@@ -1111,7 +1111,7 @@ mod tests {
             7,
             &NewDraft {
                 change_number: c,
-                revision: RevisionNumber(1),
+                revision: RevisionNumber::new(1),
                 thread_id: None,
                 file: Some("src/main.rs"),
                 line: Some(3),

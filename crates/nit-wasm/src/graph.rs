@@ -104,7 +104,7 @@ mod tests {
 
     fn revision(number: u64, name: &str, parent: &str, base: &str) -> RevisionProjection {
         RevisionProjection {
-            number: RevisionNumber(number),
+            number: RevisionNumber::new(number),
             commit_sha: sha(name),
             parent_sha: sha(parent),
             fork_sha: sha(base),
@@ -115,7 +115,7 @@ mod tests {
     }
 
     fn change(number: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(ChangeNumber(number), 1, change_id(key));
+        let mut c = ChangeProjection::new(ChangeNumber::new(number), 1, change_id(key));
         c.revisions = revs;
         c
     }
@@ -172,7 +172,7 @@ mod tests {
         let b = change(2, "Ib", vec![revision(0, "B", "A", "h")]);
         let view = RepoView::new(vec![a, b]);
         let merged = HistoryCommit {
-            change_number: Some(ChangeNumber(9)),
+            change_number: Some(ChangeNumber::new(9)),
             change_id: Some(change_id("Iland")),
             ..commit("g1", &["g2"])
         };
@@ -197,7 +197,7 @@ mod tests {
             .iter()
             .find(|n| n.commit_sha == sha("g1"))
             .expect("g1");
-        assert_eq!(g1.change_number, Some(ChangeNumber(9)));
+        assert_eq!(g1.change_number, Some(ChangeNumber::new(9)));
         assert_eq!(g1.change_id, Some(change_id("Iland")));
     }
 }
