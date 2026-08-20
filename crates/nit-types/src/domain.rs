@@ -107,8 +107,8 @@
 //! `_ =>` fallthrough, no `as_str`/`from_str` round-tripping at the
 //! domain↔wire boundary, and — because `#[serde(deny_unknown…)]`-style
 //! rejection is automatic for enums — an unknown value is a clean
-//! deserialization error (a 400 through `AppJson`), not a string that flows
-//! deeper before something notices. New enumerated fields are added here and
+//! deserialization error, not a string that flows deeper before
+//! something notices. New enumerated fields are added here and
 //! referenced from both sides; they are never `String`.
 //!
 //! Serde renamings pin the exact wire spellings, so swapping a `String`

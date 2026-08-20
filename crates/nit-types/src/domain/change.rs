@@ -76,7 +76,7 @@ pub struct ChangeProjection {
     pub entries_folded: u64,
 }
 
-/// Commit subject, matching git's `find_commit_subject` + `format_subject`.
+/// A commit message's subject: its leading paragraph, folded to one line.
 ///
 /// # Examples
 ///
@@ -175,9 +175,9 @@ impl ChangeProjection {
         if matches!(self.lifecycle, Lifecycle::Abandoned) {
             return ChangeStatus::Abandoned;
         }
-        // A merge may carry content matching no recorded revision (the
-        // approve action rebases before merging; the timer only records the
-        // merge by Change-Id), so the latest stands in for it.
+        // A merge may land content matching no recorded revision — it is
+        // recorded against the change, not a revision — so the latest
+        // stands in for it.
         if self.is_merged() && self.latest_revision().is_some_and(|r| r.number == revision) {
             return ChangeStatus::Merged;
         }

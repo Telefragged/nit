@@ -72,8 +72,7 @@ export type ChangeStatus =
 /**
  * A chain's derived, actionable state.
  *
- * Computed at read time from the path's members (the server's
- * `chain::derive_state`); it is informational on the wire, never stored.
+ * Derived at read time from the path's members, never stored.
  * Abandonment is derivation-inert — there is no abandoned chain state.
  */
 export type ChainState =
@@ -111,9 +110,6 @@ export type DiffMode = "full" | "outline";
 
 /**
  * What a `lifecycle` log entry records about a change.
- *
- * The merge/abandon timer writes `merged`/`abandoned`; `nit reopen`
- * writes `reopened`.
  */
 export type LifecycleAction = "merged" | "abandoned" | "reopened";
 
@@ -608,9 +604,8 @@ export type CommentInput = {
 /**
  * A `lifecycle` entry: a merge, an abandon, or a reopen.
  *
- * The merge timer (`merged`) and the `nit abandon` / `nit reopen`
- * actions. `commit_sha` is set only for `merged` — the merged commit on
- * the canonical ref; `message` is an optional reason on `abandoned`.
+ * `commit_sha` is set only for `merged` — the merged commit on the
+ * canonical ref; `message` is an optional reason on `abandoned`.
  */
 export type LifecyclePayload = {
   action: LifecycleAction;

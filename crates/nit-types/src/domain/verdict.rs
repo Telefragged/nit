@@ -15,7 +15,7 @@ pub enum Verdict {
 }
 
 impl Verdict {
-    /// The wire spelling (mirrors the serde renaming), for Value-free display.
+    /// The wire spelling (mirrors the serde renaming).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -138,7 +138,7 @@ impl From<Verdict> for ChangeStatus {
     /// The review status a verdict produces.
     ///
     /// It is the status before the lifecycle overlay (`merged`/`abandoned`)
-    /// the server's fold layers on top.
+    /// the fold layers on top.
     fn from(verdict: Verdict) -> ChangeStatus {
         match verdict {
             Verdict::Approve => ChangeStatus::Approved,
@@ -150,8 +150,7 @@ impl From<Verdict> for ChangeStatus {
 
 /// A chain's derived, actionable state.
 ///
-/// Computed at read time from the path's members (the server's
-/// `chain::derive_state`); it is informational on the wire, never stored.
+/// Derived at read time from the path's members, never stored.
 /// Abandonment is derivation-inert — there is no abandoned chain state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -164,7 +163,7 @@ pub enum ChainState {
 }
 
 impl ChainState {
-    /// The wire spelling, for Value-free display in the CLI.
+    /// The wire spelling (mirrors the serde renaming).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {

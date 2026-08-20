@@ -47,9 +47,6 @@ impl std::str::FromStr for LogKind {
 }
 
 /// What a `lifecycle` log entry records about a change.
-///
-/// The merge/abandon timer writes `merged`/`abandoned`; `nit reopen`
-/// writes `reopened`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -60,7 +57,7 @@ pub enum LifecycleAction {
 }
 
 impl LifecycleAction {
-    /// The wire spelling (mirrors the serde renaming), for Value-free display.
+    /// The wire spelling (mirrors the serde renaming).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -143,9 +140,8 @@ pub struct CommentInput {
 
 /// A `lifecycle` entry: a merge, an abandon, or a reopen.
 ///
-/// The merge timer (`merged`) and the `nit abandon` / `nit reopen`
-/// actions. `commit_sha` is set only for `merged` — the merged commit on
-/// the canonical ref; `message` is an optional reason on `abandoned`.
+/// `commit_sha` is set only for `merged` — the merged commit on the
+/// canonical ref; `message` is an optional reason on `abandoned`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LifecyclePayload {
@@ -183,7 +179,7 @@ impl LogPayload {
         }
     }
 
-    /// A `lifecycle` entry from its parts (the merge timer, abandon/reopen).
+    /// A `lifecycle` entry from its parts.
     #[must_use]
     pub fn lifecycle(
         action: LifecycleAction,
