@@ -216,6 +216,16 @@ impl Anchor {
         }
     }
 
+    /// The text of the line, as the revision the anchor is pinned to
+    /// held it.
+    #[must_use]
+    pub fn line_text(&self) -> Option<&str> {
+        match self {
+            Anchor::Line { line_text, .. } => line_text.as_deref(),
+            _ => None,
+        }
+    }
+
     /// Records the text of the line, read from the revision the anchor
     /// is pinned to.
     pub fn snapshot_line_text(&mut self, text: Option<String>) {

@@ -27,7 +27,7 @@ pub(super) async fn create_draft(
         let revision = proj
             .revision(req.revision)
             .ok_or_else(|| Error::bad_request(format!("revision {} not found", req.revision)))?;
-        let anchor = anchor_of(req.side, req.file.clone(), req.at)?;
+        let mut anchor = anchor_of(req.side, req.file.clone(), req.at)?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
         if req.body.trim().is_empty() && !resolution_only {
             return Err(Error::bad_request(
@@ -44,7 +44,7 @@ pub(super) async fn create_draft(
             None => None,
         };
         let git_dir = state.git_dir(proj.repo_id)?;
-        let line_text = snapshot_line_text(&git_dir, revision, &anchor);
+        anchor.snapshot_line_text(snapshot_line_text(&git_dir, revision, &anchor));
         drop(proj);
         let draft_id = state.alloc_id();
         let row = db::insert_draft(
@@ -54,11 +54,7 @@ pub(super) async fn create_draft(
                 change_number: id,
                 revision: req.revision,
                 thread_id,
-                file: anchor.file(),
-                line: super::hangs_under(&anchor),
-                side: anchor.side(),
-                range: anchor.range(),
-                line_text: line_text.as_deref(),
+                anchor: &anchor,
                 body: &req.body,
                 resolved: req.resolved,
             },

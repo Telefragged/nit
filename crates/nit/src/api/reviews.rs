@@ -11,9 +11,8 @@ use axum::http::StatusCode;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::DraftDecision;
-use nit_types::domain::LineAnchor;
 use nit_types::domain::RevisionNumber;
-use nit_types::domain::{Anchor, AnchorError, CommentInput, LogPayload, ReviewPayload};
+use nit_types::domain::{CommentInput, LogPayload, ReviewPayload};
 use nit_types::domain::{Decision, LifecycleAction, Verdict};
 
 use crate::db;
@@ -32,37 +31,17 @@ fn drafts_to_comments(
     conn: &rusqlite::Connection,
     change_number: ChangeNumber,
 ) -> anyhow::Result<Vec<CommentInput>> {
-    db::drafts_for_change(conn, change_number)?
+    Ok(db::drafts_for_change(conn, change_number)?
         .into_iter()
-        .map(|d| {
-            Ok(CommentInput {
-                thread_id: d.thread_id,
-                revision: Some(d.revision),
-                anchor: opening_anchor(&d)?,
-                body: d.body,
-                resolved: d.resolved,
-            })
+        .map(|d| CommentInput {
+            thread_id: d.thread_id,
+            revision: Some(d.revision),
+            // A reply takes the anchor its thread already holds.
+            anchor: d.thread_id.is_none().then_some(d.anchor),
+            body: d.body,
+            resolved: d.resolved,
         })
-        .collect()
-}
-
-/// The anchor a draft opens its thread at, and none for a reply.
-///
-/// # Errors
-///
-/// [`AnchorError`] when the stored parts are not an anchor. Those parts
-/// are corruption. The member's submit then fails and keeps its drafts.
-fn opening_anchor(d: &db::DraftRow) -> Result<Option<Anchor>, AnchorError> {
-    if d.thread_id.is_some() {
-        return Ok(None);
-    }
-    let at = d
-        .range
-        .map(LineAnchor::Selection)
-        .or(d.line.map(LineAnchor::Whole));
-    let mut anchor = Anchor::parse(d.file.clone(), Some(d.side), at)?;
-    anchor.snapshot_line_text(d.line_text.clone());
-    Ok(Some(anchor))
+        .collect())
 }
 
 /// Publishes one reviewer `decision` for a change.

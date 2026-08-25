@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use nit_types::domain::ChangeNumber;
-use nit_types::domain::CommentRange;
-use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha, Side};
+use nit_types::domain::{Anchor, CommentRange, LineAnchor};
+use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// RFC3339 timestamp for "now" (UTC).
@@ -669,11 +669,7 @@ pub struct DraftRow {
     pub revision: RevisionNumber,
     /// The thread this draft replies to; `None` opens a new thread.
     pub thread_id: Option<u64>,
-    pub file: Option<String>,
-    pub line: Option<u64>,
-    pub side: Side,
-    pub range: Option<CommentRange>,
-    pub line_text: Option<String>,
+    pub anchor: Anchor,
     pub body: String,
     /// Draft thread-resolution decision; `None` = none.
     ///
@@ -683,7 +679,15 @@ pub struct DraftRow {
     pub updated_at: String,
 }
 
-fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
+/// The anchor a draft row's location columns spell.
+///
+/// The four range columns win when they are set, because a selection
+/// carries the lines it covers. `line` then names a whole line, and no
+/// file at all is the change itself.
+fn col_anchor(row: &rusqlite::Row) -> rusqlite::Result<Anchor> {
+    let Some(file) = row.get::<_, Option<String>>("file")? else {
+        return Ok(Anchor::Change);
+    };
     let range = match (
         row.get::<_, Option<i64>>("range_start_line")?,
         row.get::<_, Option<i64>>("range_start_char")?,
@@ -701,16 +705,26 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
         )?),
         _ => None,
     };
+    let at = match (range, col_u64_opt(row.get("line")?)?) {
+        (Some(range), _) => LineAnchor::Selection(range),
+        (None, Some(line)) => LineAnchor::Whole(line),
+        (None, None) => return Ok(Anchor::File { file }),
+    };
+    Ok(Anchor::Line {
+        file,
+        side: col_enum(&row.get::<_, String>("side")?)?,
+        line_text: row.get("line_text")?,
+        at,
+    })
+}
+
+fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
     Ok(DraftRow {
         id: col_u64(row.get("id")?)?,
         change_number: ChangeNumber::new(col_u64(row.get("change_number")?)?),
         revision: RevisionNumber::new(col_u64(row.get("revision")?)?),
         thread_id: col_u64_opt(row.get("thread_id")?)?,
-        file: row.get("file")?,
-        line: col_u64_opt(row.get("line")?)?,
-        side: col_enum(&row.get::<_, String>("side")?)?,
-        range,
-        line_text: row.get("line_text")?,
+        anchor: col_anchor(row)?,
         body: row.get("body")?,
         resolved: row.get::<_, Option<i64>>("resolved")?.map(|v| v != 0),
         created_at: row.get("created_at")?,
@@ -722,11 +736,7 @@ pub struct NewDraft<'a> {
     pub change_number: ChangeNumber,
     pub revision: RevisionNumber,
     pub thread_id: Option<u64>,
-    pub file: Option<&'a str>,
-    pub line: Option<u64>,
-    pub side: Side,
-    pub range: Option<CommentRange>,
-    pub line_text: Option<&'a str>,
+    pub anchor: &'a Anchor,
     pub body: &'a str,
     pub resolved: Option<bool>,
 }
@@ -741,17 +751,24 @@ pub struct NewDraft<'a> {
 ///
 /// On a database failure.
 pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
-    let (rsl, rsc, rel, rec) = match d.range {
-        Some(r) => (
+    let thread_id = d.thread_id.map(i64::try_from).transpose()?;
+    let at = match d.anchor {
+        Anchor::Line { at, .. } => Some(*at),
+        _ => None,
+    };
+    let line = match at {
+        Some(LineAnchor::Whole(line)) => Some(i64::try_from(line)?),
+        _ => None,
+    };
+    let (rsl, rsc, rel, rec) = match at {
+        Some(LineAnchor::Selection(r)) => (
             Some(i64::try_from(r.start_line())?),
             Some(i64::try_from(r.start_char())?),
             Some(i64::try_from(r.end_line())?),
             Some(i64::try_from(r.end_char())?),
         ),
-        None => (None, None, None, None),
+        _ => (None, None, None, None),
     };
-    let thread_id = d.thread_id.map(i64::try_from).transpose()?;
-    let line = d.line.map(i64::try_from).transpose()?;
     conn.execute(
         "INSERT INTO draft_comments (id, change_number, revision, thread_id, file, line, side,
             range_start_line, range_start_char, range_end_line, range_end_char,
@@ -761,14 +778,14 @@ pub fn insert_draft(conn: &Connection, id: u64, d: &NewDraft, now: &str) -> Resu
             i64::try_from(d.change_number.get())?,
             i64::try_from(d.revision.get())?,
             thread_id,
-            d.file,
+            d.anchor.file(),
             line,
-            d.side.as_str(),
+            d.anchor.side().as_str(),
             rsl,
             rsc,
             rel,
             rec,
-            d.line_text,
+            d.anchor.line_text(),
             d.body,
             now,
             i64::try_from(id)?,
@@ -944,6 +961,7 @@ pub fn delete_draft_review(conn: &Connection, change_number: ChangeNumber) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nit_types::domain::{CommentRange, LineAnchor, Side};
     use nit_types::testing::{change_id, sha};
 
     fn mem() -> Connection {
@@ -978,6 +996,57 @@ mod tests {
         update_repo_canonical_head(&conn, a.id, &sha("deadbeef")).expect("record");
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
         assert_eq!(found.canonical_head, Some(sha("deadbeef")));
+    }
+
+    /// The location columns spell the three anchors, and each one has to
+    /// come back as the anchor it spells.
+    #[test]
+    fn draft_rows_read_back_as_their_anchors() {
+        let conn = mem();
+        let c = change(&conn);
+        let anchors = [
+            Anchor::Line {
+                file: "a.rs".to_string(),
+                side: Side::Old,
+                line_text: Some("x1".to_string()),
+                at: LineAnchor::Whole(3),
+            },
+            Anchor::Line {
+                file: "a.rs".to_string(),
+                side: Side::New,
+                line_text: Some("x2".to_string()),
+                at: LineAnchor::Selection(
+                    CommentRange::new(4, 1, 4, 6).expect("a forward selection"),
+                ),
+            },
+            Anchor::File {
+                file: "a.rs".to_string(),
+            },
+            Anchor::Change,
+        ];
+        for (id, anchor) in anchors.iter().enumerate() {
+            insert_draft(
+                &conn,
+                id as u64,
+                &NewDraft {
+                    change_number: c,
+                    revision: RevisionNumber::new(0),
+                    thread_id: None,
+                    anchor,
+                    body: "note",
+                    resolved: None,
+                },
+                "t0",
+            )
+            .expect("insert");
+        }
+
+        let read: Vec<Anchor> = drafts_for_change(&conn, c)
+            .expect("list")
+            .into_iter()
+            .map(|d| d.anchor)
+            .collect();
+        assert_eq!(read, anchors);
     }
 
     /// v9 renames a change column on four tables; the rows written under
@@ -1114,11 +1183,12 @@ mod tests {
                 change_number: c,
                 revision: RevisionNumber::new(1),
                 thread_id: None,
-                file: Some("src/main.rs"),
-                line: Some(3),
-                side: Side::New,
-                range: None,
-                line_text: Some("fn main"),
+                anchor: &Anchor::Line {
+                    file: "src/main.rs".to_string(),
+                    side: Side::New,
+                    line_text: Some("fn main".to_string()),
+                    at: LineAnchor::Whole(3),
+                },
                 body: "look",
                 resolved: None,
             },
