@@ -45,7 +45,7 @@ use nit_types::changes::ChangeDetail;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
-use nit_types::domain::{Anchor, CommentRange};
+use nit_types::domain::{Anchor, LineAnchor};
 use nit_types::domain::{Sha, Side};
 use nit_types::health::Health;
 
@@ -276,11 +276,9 @@ fn change_detail_json(
 fn anchor_of(
     side: Option<Side>,
     file: Option<String>,
-    line: Option<u64>,
-    range: Option<CommentRange>,
+    at: Option<LineAnchor>,
 ) -> Result<Anchor, Error> {
-    let anchor =
-        Anchor::parse(file, side, line, range).map_err(|e| Error::bad_request(e.to_string()))?;
+    let anchor = Anchor::parse(file, side, at).map_err(|e| Error::bad_request(e.to_string()))?;
     if anchor.file() == Some(diff::COMMIT_MSG_PATH) && anchor.side() == Side::Old {
         return Err(Error::bad_request(
             "/COMMIT_MSG has no old side — comment with side \"new\"",
@@ -289,13 +287,27 @@ fn anchor_of(
     Ok(anchor)
 }
 
+/// The line a thread with this anchor hangs under.
+///
+/// A whole-line anchor names that line itself. A selection hangs under
+/// the line it ends on.
+pub(super) fn hangs_under(anchor: &Anchor) -> Option<u64> {
+    match anchor {
+        Anchor::Line { at, .. } => Some(match at {
+            LineAnchor::Whole(line) => *line,
+            LineAnchor::Selection(range) => range.end_line(),
+        }),
+        _ => None,
+    }
+}
+
 fn snapshot_line_text(
     git_dir: &str,
     revision: &RevisionProjection,
     anchor: &Anchor,
 ) -> Option<String> {
     let side = anchor.side();
-    match (anchor.file(), anchor.line()) {
+    match (anchor.file(), hangs_under(anchor)) {
         (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&revision.message, line),
         (Some(file), Some(line)) => {
             let sha = if side == Side::Old {

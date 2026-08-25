@@ -562,7 +562,12 @@ export async function mockRequest(
     const side: Side = req.side ?? "new";
     // Like the server: a ranged draft anchors under the selection's last
     // line.
-    const line = req.line ?? req.range?.end_line ?? null;
+    const range = req.at && "selection" in req.at ? req.at.selection : null;
+    const line = req.at
+      ? "whole" in req.at
+        ? req.at.whole
+        : req.at.selection.end_line
+      : null;
     const now = new Date().toISOString();
     const record: DraftRecord = {
       id: nextDraftId++,
@@ -572,7 +577,7 @@ export async function mockRequest(
       file: req.file ?? null,
       line,
       side,
-      range: req.range ?? null,
+      range,
       line_text: snapshotLineText(
         c,
         req.revision,

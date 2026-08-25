@@ -11,6 +11,7 @@ use axum::http::StatusCode;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::DraftDecision;
+use nit_types::domain::LineAnchor;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::{Anchor, AnchorError, CommentInput, LogPayload, ReviewPayload};
 use nit_types::domain::{Decision, LifecycleAction, Verdict};
@@ -55,7 +56,11 @@ fn opening_anchor(d: &db::DraftRow) -> Result<Option<Anchor>, AnchorError> {
     if d.thread_id.is_some() {
         return Ok(None);
     }
-    let mut anchor = Anchor::parse(d.file.clone(), Some(d.side), d.line, d.range)?;
+    let at = d
+        .range
+        .map(LineAnchor::Selection)
+        .or(d.line.map(LineAnchor::Whole));
+    let mut anchor = Anchor::parse(d.file.clone(), Some(d.side), at)?;
     anchor.snapshot_line_text(d.line_text.clone());
     Ok(Some(anchor))
 }

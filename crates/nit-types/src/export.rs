@@ -85,6 +85,7 @@ fn write_wire_types() {
         // holds it opaque and only round-trips it through the wasm fold.
         crate::domain::Lifecycle,
         crate::domain::Anchor,
+        crate::domain::LineAnchor,
         crate::domain::RevisionProjection,
         crate::domain::ThreadComment,
         crate::domain::ThreadProjection,

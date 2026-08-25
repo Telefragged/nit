@@ -13,7 +13,7 @@ about — not scattered through the chat.
 
 ```sh
 # open a NEW thread, anchored to code:
-nit comment --change-id <Change-Id> --file <path> --line <n> [--range S-E] [--side new|old] -m "…"
+nit comment --change-id <Change-Id> --file <path> (--line <n> | --range S-E) [--side new|old] -m "…"
 # reply to an EXISTING thread (anchor flags ignored):
 nit comment --change-id <Change-Id> --thread <thread-id> [--resolve|--unresolve] -m "…"
 # body from stdin instead of -m (also: -F <path> for a file):
@@ -48,7 +48,7 @@ it is about.
 
 ```sh
 # RANGE — best: the exact characters
-nit comment --change-id <Change-Id> --file src/queue.rs --line 42 --range 42:8-42:30 \
+nit comment --change-id <Change-Id> --file src/queue.rs --range 42:8-42:30 \
   -m "Bounded channel over unbounded — backpressure matters more than never
       blocking the producer."
 # LINE — when the whole line is the point

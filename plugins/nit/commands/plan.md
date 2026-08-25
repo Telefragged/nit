@@ -62,7 +62,7 @@ it**: the step that makes the assumption, the trade-off line you're unsure of,
 the sentence naming the approach you'd swap. Leave each one unresolved.
 
 ```sh
-nit comment --change <id> --file plan/<name>.md --line 12 --range 12:1-12:48 \
+nit comment --change <id> --file plan/<name>.md --range 12:1-12:48 \
   -m "Assuming we keep the existing API shape here — confirm?"
 ```
 

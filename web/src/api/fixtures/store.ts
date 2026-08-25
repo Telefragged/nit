@@ -88,9 +88,8 @@ export function anchorOf(r: {
     line: {
       file: r.file,
       side: r.side,
-      line: r.line,
       line_text: r.line_text,
-      range: r.range ?? null,
+      at: r.range ? { selection: r.range } : { whole: r.line },
     },
   };
 }

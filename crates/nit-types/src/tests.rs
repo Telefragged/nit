@@ -3,7 +3,7 @@
 //! feature (clap, ts) would otherwise mask.
 
 use crate::domain::ChangeNumber;
-use crate::domain::{Anchor, CommentInput, CommentRange};
+use crate::domain::{Anchor, CommentInput, CommentRange, LineAnchor};
 use crate::domain::{ChangeId, Sha};
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
@@ -157,9 +157,8 @@ fn a_comment_logged_before_the_anchor_still_reads() {
         Some(Anchor::Line {
             file: "a.rs".to_string(),
             side: Side::New,
-            line: 3,
             line_text: Some("x".to_string()),
-            range: None,
+            at: LineAnchor::Whole(3),
         })
     );
 
@@ -175,5 +174,37 @@ fn a_comment_logged_before_the_anchor_still_reads() {
     assert_eq!(
         ranged.anchor.and_then(|a| a.range()),
         Some(CommentRange::new(3, 1, 3, 4).expect("a forward selection"))
+    );
+}
+
+#[test]
+fn an_anchor_logged_before_the_line_anchor_still_reads() {
+    // The spelling an entry was written with when a line anchor held its
+    // line and its range side by side.
+    let whole = r#"{"line":{"file":"a.rs","side":"new","line":3,
+        "line_text":"x","range":null}}"#;
+    let selection = r#"{"line":{"file":"a.rs","side":"old","line":4,
+        "line_text":"y","range":{"start_line":4,"start_char":1,"end_line":4,"end_char":6}}}"#;
+
+    let whole: Anchor = serde_json::from_str(whole).expect("deserialize");
+    assert_eq!(
+        whole,
+        Anchor::Line {
+            file: "a.rs".to_string(),
+            side: Side::New,
+            line_text: Some("x".to_string()),
+            at: LineAnchor::Whole(3),
+        }
+    );
+
+    let selection: Anchor = serde_json::from_str(selection).expect("deserialize");
+    assert_eq!(
+        selection,
+        Anchor::Line {
+            file: "a.rs".to_string(),
+            side: Side::Old,
+            line_text: Some("y".to_string()),
+            at: LineAnchor::Selection(CommentRange::new(4, 1, 4, 6).expect("a forward selection")),
+        }
     );
 }

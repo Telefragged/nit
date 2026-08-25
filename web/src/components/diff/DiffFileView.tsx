@@ -278,10 +278,9 @@ export default function DiffFileView({
         revision: anchor.revision,
         file: input.target.file,
         side: anchor.side,
-        // A range already names the line it ends on.
-        ...(input.target.range
-          ? { range: input.target.range }
-          : { line: input.target.line }),
+        at: input.target.range
+          ? { selection: input.target.range }
+          : { whole: input.target.line },
         body: input.body,
       });
     },

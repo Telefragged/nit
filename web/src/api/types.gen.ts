@@ -432,9 +432,12 @@ export type Draft = {
 export type NewDraft = {
   revision: RevisionNumber;
   file?: string;
-  line?: number;
   side?: Side;
-  range?: CommentRange;
+  /**
+   * Where in the file the thread hangs; absent for a whole-file or
+   * change-level anchor.
+   */
+  at?: LineAnchor;
   body: string;
   thread_id?: number;
   resolved?: boolean;
@@ -676,11 +679,18 @@ export type Anchor =
       line: {
         file: string;
         side: Side;
-        line: number;
         line_text: string | null;
-        range: CommentRange | null;
+        at: LineAnchor;
       };
     };
+
+/**
+ * Where inside a file a line anchor sits.
+ *
+ * A selection ends on the line it anchors to, so both spellings name
+ * exactly one line.
+ */
+export type LineAnchor = { whole: number } | { selection: CommentRange };
 
 export type RevisionProjection = {
   /**

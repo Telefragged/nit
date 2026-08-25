@@ -4,6 +4,7 @@ use anyhow::{Context, Result, anyhow};
 
 use nit_types::comments::{NewComment, Thread};
 use nit_types::domain::CommentRange;
+use nit_types::domain::LineAnchor;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Side;
 
@@ -23,7 +24,7 @@ pub struct CommentArgs {
     #[arg(long, conflicts_with = "thread")]
     pub file: Option<String>,
     /// New thread: line to anchor to (1-based).
-    #[arg(long, conflicts_with = "thread")]
+    #[arg(long, conflicts_with = "thread", requires = "file")]
     pub line: Option<u64>,
     /// New thread: side — `new` (default) or `old`.
     #[arg(long, conflicts_with = "thread", value_enum)]
@@ -31,7 +32,7 @@ pub struct CommentArgs {
     /// New thread: selected-text range `START-END`, each `line:char`;
     /// anchors the thread under END's line (mutually exclusive with
     /// `--line`).
-    #[arg(long, conflicts_with_all = ["thread", "line"])]
+    #[arg(long, conflicts_with_all = ["thread", "line"], requires = "file")]
     pub range: Option<String>,
     /// New thread: revision to anchor to (defaults to the change's latest).
     #[arg(long, conflicts_with = "thread")]
@@ -69,10 +70,10 @@ pub fn comment(args: CommentArgs) -> Result<()> {
     } else {
         None
     };
-    let range = args
-        .range
-        .map(|spec| parse_comment_range(&spec))
-        .transpose()?;
+    let at = match args.range {
+        Some(spec) => Some(LineAnchor::Selection(parse_comment_range(&spec)?)),
+        None => args.line.map(LineAnchor::Whole),
+    };
     let body = match args.message_file {
         Some(path) => read_body(&path)?,
         None => args.message.unwrap_or_default(),
@@ -82,9 +83,8 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         thread_id: args.thread,
         revision: args.revision,
         file: args.file,
-        line: args.line,
         side: args.side,
-        range,
+        at,
         body,
         resolved,
     };

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeNumber;
 use crate::domain::CommentRange;
+use crate::domain::LineAnchor;
 use crate::domain::RevisionNumber;
 use crate::domain::Side;
 
@@ -52,13 +53,12 @@ pub struct NewDraft {
     pub file: Option<String>,
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional))]
-    pub line: Option<u64>,
-    #[serde(default)]
-    #[cfg_attr(feature = "ts", ts(optional))]
     pub side: Option<Side>,
+    /// Where in the file the thread hangs; absent for a whole-file or
+    /// change-level anchor.
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional))]
-    pub range: Option<CommentRange>,
+    pub at: Option<LineAnchor>,
     pub body: String,
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional))]
@@ -90,11 +90,9 @@ pub struct NewComment {
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]
-    pub line: Option<u64>,
-    #[serde(default)]
     pub side: Option<Side>,
     #[serde(default)]
-    pub range: Option<CommentRange>,
+    pub at: Option<LineAnchor>,
     pub body: String,
     #[serde(default)]
     pub resolved: Option<bool>,

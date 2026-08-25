@@ -14,6 +14,7 @@ use nit_types::domain::Chain;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::CommentRange;
+use nit_types::domain::LineAnchor;
 use nit_types::domain::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
@@ -309,14 +310,22 @@ fn opening_anchor(c: &CommentInput) -> String {
 
 /// The label of an anchor a comment carries.
 fn anchor_label(anchor: &Anchor) -> String {
-    anchor_str(anchor.file(), anchor.line(), anchor.range())
+    // A selection prints in full, so only a whole-line anchor names a line.
+    let line = match anchor {
+        Anchor::Line {
+            at: LineAnchor::Whole(line),
+            ..
+        } => Some(*line),
+        _ => None,
+    };
+    anchor_str(anchor.file(), line, anchor.range())
 }
 
 /// The anchor label.
 ///
 /// `(change-level)`, `file`, `file:line`, or the full
-/// `file:start_line:start_char-end_line:end_char` for a range. Shared by
-/// the log renderer and the `nit comment` confirmation.
+/// `file:start_line:start_char-end_line:end_char` for a range. The log
+/// renderer and the `nit comment` confirmation both use it.
 fn anchor_str(file: Option<&str>, line: Option<u64>, range: Option<CommentRange>) -> String {
     let Some(file) = file else {
         return "(change-level)".to_string();
@@ -359,6 +368,7 @@ mod tests {
     use nit_types::domain::RevisionNumber;
 
     use nit_types::domain::CommentRange;
+    use nit_types::domain::LineAnchor;
     use nit_types::testing::{change_id, sha};
 
     #[test]
@@ -417,17 +427,15 @@ mod tests {
             created_at: String::new(),
             payload,
         };
-        let opening = |tid, file: Option<&str>, line: Option<u64>, range, resolved, body: &str| {
-            CommentInput {
-                thread_id: Some(tid),
-                revision: Some(RevisionNumber::new(2)),
-                anchor: Some(
-                    Anchor::parse(file.map(String::from), Some(Side::New), line, range)
-                        .expect("a fixture names one anchor"),
-                ),
-                body: body.to_string(),
-                resolved,
-            }
+        let opening = |tid, file: Option<&str>, at, resolved, body: &str| CommentInput {
+            thread_id: Some(tid),
+            revision: Some(RevisionNumber::new(2)),
+            anchor: Some(
+                Anchor::parse(file.map(String::from), Some(Side::New), at)
+                    .expect("a fixture names one anchor"),
+            ),
+            body: body.to_string(),
+            resolved,
         };
         let review = entry(
             ChangeNumber::new(42),
@@ -438,20 +446,20 @@ mod tests {
                 verdict: Verdict::RequestChanges,
                 message: "Cover one.\nCover two.".to_string(),
                 comments: vec![
-                    opening(3, None, None, None, None, "Change-level question?"),
+                    opening(3, None, None, None, "Change-level question?"),
                     opening(
                         4,
                         Some("src/queue.rs"),
-                        Some(42),
-                        None,
+                        Some(LineAnchor::Whole(42)),
                         None,
                         "Bounded channel.",
                     ),
                     opening(
                         5,
                         Some("src/queue.rs"),
-                        None,
-                        Some(CommentRange::new(42, 8, 42, 30).expect("a forward range")),
+                        Some(LineAnchor::Selection(
+                            CommentRange::new(42, 8, 42, 30).expect("a forward range"),
+                        )),
                         Some(true),
                         "Overflow on 32-bit.",
                     ),

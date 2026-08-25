@@ -35,8 +35,8 @@ use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::{
-    Anchor, ChangeProjection, Lifecycle, LifecycleAction, ReviewProjection, RevisionProjection,
-    Side, ThreadComment, ThreadProjection,
+    Anchor, ChangeProjection, Lifecycle, LifecycleAction, LineAnchor, ReviewProjection,
+    RevisionProjection, Side, ThreadComment, ThreadProjection,
 };
 use crate::domain::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
@@ -217,14 +217,17 @@ pub fn thread_view(t: &ThreadProjection, change_number: ChangeNumber) -> Thread 
         Anchor::Line {
             file,
             side,
-            line,
             line_text,
-            range,
+            at,
         } => (
             Some(file.clone()),
-            Some(*line),
+            // A selection hangs under the line it ends on.
+            Some(match at {
+                LineAnchor::Whole(line) => *line,
+                LineAnchor::Selection(range) => range.end_line(),
+            }),
             *side,
-            *range,
+            at.range(),
             line_text.clone(),
         ),
     };
@@ -279,7 +282,7 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
 #[cfg(test)]
 mod tests {
     use crate::domain::ReviewPayload;
-    use crate::domain::{ChangeStatus, LifecycleAction, Side, Verdict};
+    use crate::domain::{ChangeStatus, LifecycleAction, LineAnchor, Side, Verdict};
 
     use super::*;
     use crate::tests::{change_id, sha};
@@ -326,9 +329,8 @@ mod tests {
             anchor: Some(Anchor::Line {
                 file: file.to_string(),
                 side: Side::New,
-                line,
                 line_text: None,
-                range: None,
+                at: LineAnchor::Whole(line),
             }),
             body: body.to_string(),
             resolved: None,

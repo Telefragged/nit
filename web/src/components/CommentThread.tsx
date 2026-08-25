@@ -143,10 +143,8 @@ export default function CommentThread({
   const pending = resolved !== thread.resolved;
 
   // Reply / resolve / reopen all draft a reply that copies the thread's
-  // whole anchor — including its revision, so the copied file/line/range stay
-  // the coordinates they were written in (the server's author replies match).
-  // A stored range thread carries both, and its range already names the
-  // line, so send the range alone.
+  // whole anchor — including its revision, so the copied coordinates stay
+  // the ones it was written in (the server's author replies match).
   const saveDraft = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
       createDraft(changeNumber, {
@@ -154,9 +152,9 @@ export default function CommentThread({
         ...(thread.file !== null ? { file: thread.file } : {}),
         side: thread.side,
         ...(thread.range !== null
-          ? { range: thread.range }
+          ? { at: { selection: thread.range } }
           : thread.line !== null
-            ? { line: thread.line }
+            ? { at: { whole: thread.line } }
             : {}),
         body: vars.body,
         // Always a published thread here — the reply / resolve / reopen

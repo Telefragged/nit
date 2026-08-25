@@ -52,29 +52,110 @@ impl std::str::FromStr for Side {
 /// unrepresentable.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", from = "StoredAnchor")]
 pub enum Anchor {
     /// The change as a whole (no file).
     Change,
     /// A whole file (no line).
     File { file: String },
-    /// A line, optionally a sub-line `range` selection within it.
+    /// A place inside a file, on one side of the revision.
     Line {
         file: String,
         side: Side,
-        line: u64,
         line_text: Option<String>,
+        at: LineAnchor,
+    },
+}
+
+/// An anchor in either spelling, before it is an [`Anchor`].
+///
+/// The log is append-only, so an entry written before a line anchor held
+/// one `at` keeps the `line` and `range` it was written with. Reading
+/// resolves the two spellings into the same anchor.
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StoredAnchor {
+    Change,
+    File {
+        file: String,
+    },
+    Line {
+        file: String,
+        #[serde(default)]
+        side: Side,
+        #[serde(default)]
+        line_text: Option<String>,
+        #[serde(default)]
+        at: Option<LineAnchor>,
+        #[serde(default)]
+        line: Option<u64>,
+        #[serde(default)]
         range: Option<CommentRange>,
     },
+}
+
+impl From<StoredAnchor> for Anchor {
+    fn from(stored: StoredAnchor) -> Anchor {
+        match stored {
+            StoredAnchor::Change => Anchor::Change,
+            StoredAnchor::File { file } => Anchor::File { file },
+            StoredAnchor::Line {
+                file,
+                side,
+                line_text,
+                at,
+                line,
+                range,
+            } => {
+                // The older spelling held the selection in `range`, and the
+                // line it ends on in `line`.
+                let at = at
+                    .or_else(|| range.map(LineAnchor::Selection))
+                    .or_else(|| line.map(LineAnchor::Whole));
+                match at {
+                    Some(at) => Anchor::Line {
+                        file,
+                        side,
+                        line_text,
+                        at,
+                    },
+                    None => Anchor::File { file },
+                }
+            }
+        }
+    }
+}
+
+/// Where inside a file a line anchor sits.
+///
+/// A selection ends on the line it anchors to, so both spellings name
+/// exactly one line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum LineAnchor {
+    /// The whole line.
+    Whole(u64),
+    /// A run of characters inside the line.
+    Selection(CommentRange),
+}
+
+impl LineAnchor {
+    /// The selection inside the line, if it names one.
+    #[must_use]
+    pub fn range(self) -> Option<CommentRange> {
+        match self {
+            LineAnchor::Whole(_) => None,
+            LineAnchor::Selection(range) => Some(range),
+        }
+    }
 }
 
 impl Anchor {
     /// The anchor that a file, a line and a selection name together.
     ///
-    /// A selection ends on the line that it anchors to, so a caller
-    /// names either of the two, or both in agreement. A line names a
-    /// place inside a file, so it needs one. Nothing else is an anchor,
-    /// and the absent file is the change itself.
+    /// A line names a place inside a file, so it needs one. Nothing else
+    /// is an anchor, and the absent file is the change itself.
     ///
     /// # Errors
     ///
@@ -83,34 +164,24 @@ impl Anchor {
     /// # Examples
     ///
     /// ```rust
-    /// use nit_types::domain::{Anchor, CommentRange};
+    /// use nit_types::domain::{Anchor, LineAnchor};
     ///
-    /// let range = CommentRange::new(2, 0, 3, 4).expect("a forward selection");
-    /// assert!(Anchor::parse(None, None, None, None).is_ok());
-    /// assert!(Anchor::parse(None, None, Some(3), None).is_err());
-    /// let both = Anchor::parse(Some("a.rs".into()), None, Some(3), Some(range));
-    /// assert_eq!(both.expect("a line that agrees").range(), Some(range));
-    /// assert!(Anchor::parse(Some("a.rs".into()), None, Some(9), Some(range)).is_err());
+    /// let at = LineAnchor::Whole(3);
+    /// assert!(Anchor::parse(None, None, None).is_ok());
+    /// assert!(Anchor::parse(None, None, Some(at)).is_err());
+    /// assert!(Anchor::parse(Some("a.rs".into()), None, Some(at)).is_ok());
     /// ```
     pub fn parse(
         file: Option<String>,
         side: Option<Side>,
-        line: Option<u64>,
-        range: Option<CommentRange>,
+        at: Option<LineAnchor>,
     ) -> Result<Anchor, AnchorError> {
-        if let Some(range) = range
-            && line.is_some_and(|line| line != range.end_line())
-        {
-            return Err(AnchorError::LineOffItsRange);
-        }
-        let line = line.or_else(|| range.map(CommentRange::end_line));
-        match (file, line) {
-            (Some(file), Some(line)) => Ok(Anchor::Line {
+        match (file, at) {
+            (Some(file), Some(at)) => Ok(Anchor::Line {
                 file,
                 side: side.unwrap_or_default(),
-                line,
                 line_text: None,
-                range,
+                at,
             }),
             (Some(file), None) => Ok(Anchor::File { file }),
             (None, None) => Ok(Anchor::Change),
@@ -127,15 +198,6 @@ impl Anchor {
         }
     }
 
-    /// The line the anchor names, if it names one.
-    #[must_use]
-    pub fn line(&self) -> Option<u64> {
-        match self {
-            Anchor::Line { line, .. } => Some(*line),
-            _ => None,
-        }
-    }
-
     /// The side a line anchor reads, and the default off a line.
     #[must_use]
     pub fn side(&self) -> Side {
@@ -149,7 +211,7 @@ impl Anchor {
     #[must_use]
     pub fn range(&self) -> Option<CommentRange> {
         match self {
-            Anchor::Line { range, .. } => *range,
+            Anchor::Line { at, .. } => at.range(),
             _ => None,
         }
     }
@@ -166,8 +228,6 @@ impl Anchor {
 /// Why a file, a line and a selection are not an anchor.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AnchorError {
-    #[error("a line anchor and its range name different lines")]
-    LineOffItsRange,
     #[error("a line anchor requires a file")]
     LineWithoutFile,
 }
