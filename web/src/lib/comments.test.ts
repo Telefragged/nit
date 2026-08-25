@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Draft, Thread } from "../api/types";
+import type { Anchor, Draft, Thread } from "../api/types";
 import type { CommentAnchor, UiThread } from "./comments";
 import {
   assembleThreads,
@@ -12,18 +12,22 @@ import {
   threadCountByRevision,
 } from "./comments";
 
+/** A line anchor on src/main.rs, on the side and line given. */
+const lineAnchor = (side: "old" | "new", line: number): Anchor => ({
+  line: { file: "src/main.rs", side, at: { whole: line } },
+});
+
 const anchor = (revision: number, side: "old" | "new", line: number | null) =>
-  ({ revision, side, line }) satisfies CommentAnchor;
+  ({
+    revision,
+    anchor: line === null ? "change" : lineAnchor(side, line),
+  }) satisfies CommentAnchor;
 
 /** A published thread anchored on src/main.rs. */
 const thread = (over: Partial<Thread> & { id: number }): Thread => ({
   change_number: 1,
   revision: 1,
-  file: "src/main.rs",
-  line: 1,
-  side: "new",
-  range: null,
-  line_text: null,
+  anchor: lineAnchor("new", 1),
   resolved: false,
   comments: [],
   created_at: "2026-01-01T00:00:00Z",
@@ -36,11 +40,7 @@ const draft = (over: Partial<Draft> & { id: number }): Draft => ({
   change_number: 1,
   thread_id: null,
   revision: 1,
-  file: "src/main.rs",
-  line: 1,
-  side: "new",
-  range: null,
-  line_text: null,
+  anchor: lineAnchor("new", 1),
   body: "",
   resolved: false,
   created_at: "2026-01-01T00:00:00Z",
@@ -51,11 +51,7 @@ const draft = (over: Partial<Draft> & { id: number }): Draft => ({
 /** A UiThread built inline for the pending-state/count tests. */
 const ui = (over: Partial<UiThread> & { id: number | null }): UiThread => ({
   revision: 1,
-  file: "src/main.rs",
-  line: 1,
-  side: "new",
-  range: null,
-  line_text: null,
+  anchor: lineAnchor("new", 1),
   resolved: false,
   comments: [],
   drafts: [],
@@ -80,7 +76,7 @@ describe("assembleThreads", () => {
     expect(u?.comments).toEqual([]);
     expect(u?.drafts).toEqual([d]);
     // The anchor comes from the lone draft.
-    expect(u?.line).toBe(d.line);
+    expect(u?.anchor).toEqual(d.anchor);
   });
 
   it("sorts published and draft-only threads together by creation time", () => {
@@ -170,7 +166,7 @@ describe("draftAnchor", () => {
       for (const column of ["old", "new"] as const) {
         const stored = draftAnchor(column, selected, against);
         const placed = commentPlacement(
-          { ...stored, line: 12 },
+          { revision: stored.revision, anchor: lineAnchor(stored.side, 12) },
           selected,
           against,
         );

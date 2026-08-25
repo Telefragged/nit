@@ -47,9 +47,6 @@ impl std::str::FromStr for Side {
 }
 
 /// Where a thread is anchored within a revision.
-///
-/// Modeled so the invalid combinations the flat wire fields allow are
-/// unrepresentable.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case", from = "StoredAnchor")]
@@ -61,7 +58,11 @@ pub enum Anchor {
     /// A place inside a file, on one side of the revision.
     Line {
         file: String,
+        #[serde(default)]
         side: Side,
+        /// The server snapshots it. A request leaves it unset.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
         line_text: Option<String>,
         at: LineAnchor,
     },
@@ -140,17 +141,6 @@ pub enum LineAnchor {
     Selection(CommentRange),
 }
 
-impl LineAnchor {
-    /// The selection inside the line, if it names one.
-    #[must_use]
-    pub fn range(self) -> Option<CommentRange> {
-        match self {
-            LineAnchor::Whole(_) => None,
-            LineAnchor::Selection(range) => Some(range),
-        }
-    }
-}
-
 impl Anchor {
     /// The anchor that a file, a line and a selection name together.
     ///
@@ -204,15 +194,6 @@ impl Anchor {
         match self {
             Anchor::Line { side, .. } => *side,
             _ => Side::default(),
-        }
-    }
-
-    /// The selection inside the line, if the anchor holds one.
-    #[must_use]
-    pub fn range(&self) -> Option<CommentRange> {
-        match self {
-            Anchor::Line { at, .. } => at.range(),
-            _ => None,
         }
     }
 
@@ -391,11 +372,7 @@ pub struct Draft {
     pub thread_id: Option<u64>,
     /// The request's anchor revision; only a new thread uses it.
     pub revision: RevisionNumber,
-    pub file: Option<String>,
-    pub line: Option<u64>,
-    pub side: Side,
-    pub range: Option<CommentRange>,
-    pub line_text: Option<String>,
+    pub anchor: Anchor,
     /// May be empty for a resolution-only reply draft.
     pub body: String,
     /// The draft's thread-resolution decision (false when unset).

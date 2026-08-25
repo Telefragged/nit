@@ -8,17 +8,46 @@
 // side-effect-free, so the rules are unit-tested without a DOM.
 
 import type {
+  Anchor,
   CommentRange,
+  LineAnchor,
   Side,
   Draft,
   Thread,
   ThreadComment,
 } from "../api/types";
 
+/** The line anchor's payload, or null when the anchor names no line. */
+const lineOf = (a: Anchor) => (a === "change" || "file" in a ? null : a.line);
+
+/** The file an anchor names, or null for a change-level one. */
+export const anchorFile = (a: Anchor): string | null =>
+  a === "change" ? null : "file" in a ? a.file.file : a.line.file;
+
+/** Where in the file an anchor hangs, or null when it names no line. */
+export const anchorAt = (a: Anchor): LineAnchor | null => lineOf(a)?.at ?? null;
+
+/** The line a thread renders on: a selection hangs under the line it ends
+ * on, a whole-line anchor on its own line. */
+export const placementLine = (at: LineAnchor): number =>
+  "whole" in at ? at.whole : at.selection.end_line;
+
+/** The side a line anchor reads. Off a line, the side is `new`. */
+export const anchorSide = (a: Anchor): Side => lineOf(a)?.side ?? "new";
+
+/** The selection inside the line, if the anchor holds one. */
+export const anchorRange = (a: Anchor): CommentRange | null => {
+  const at = lineOf(a)?.at;
+  return at && "selection" in at ? at.selection : null;
+};
+
+/** The line's text as the anchored revision held it. */
+export const anchorLineText = (a: Anchor): string | null =>
+  lineOf(a)?.line_text ?? null;
+
 export interface CommentAnchor {
   revision: number;
-  side: Side;
-  line: number | null;
+  anchor: Anchor;
 }
 
 export interface Placement {
@@ -36,11 +65,7 @@ export interface Placement {
 export interface UiThread {
   id: number | null;
   revision: number;
-  file: string | null;
-  line: number | null;
-  side: Side;
-  range: CommentRange | null;
-  line_text: string | null;
+  anchor: Anchor;
   resolved: boolean;
   /** Published comments (chronological). */
   comments: ThreadComment[];
@@ -72,11 +97,7 @@ export function assembleThreads(
     .map((d) => ({
       id: null,
       revision: d.revision,
-      file: d.file,
-      line: d.line,
-      side: d.side,
-      range: d.range,
-      line_text: d.line_text,
+      anchor: d.anchor,
       resolved: false,
       comments: [],
       drafts: [d],
@@ -100,16 +121,19 @@ export function commentPlacement(
   selected: number,
   against: number | undefined,
 ): Placement | null {
-  if (c.line === null) return null;
-  if (c.revision === selected && c.side === "new") {
-    return { side: "new", line: c.line };
+  const at = anchorAt(c.anchor);
+  if (at === null) return null;
+  const line = placementLine(at);
+  const side = anchorSide(c.anchor);
+  if (c.revision === selected && side === "new") {
+    return { side: "new", line };
   }
   if (against === undefined) {
-    if (c.revision === selected && c.side === "old") {
-      return { side: "old", line: c.line };
+    if (c.revision === selected && side === "old") {
+      return { side: "old", line };
     }
-  } else if (c.revision === against && c.side === "new") {
-    return { side: "old", line: c.line };
+  } else if (c.revision === against && side === "new") {
+    return { side: "old", line };
   }
   return null;
 }

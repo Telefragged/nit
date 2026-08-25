@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Anchor } from "../types";
 
 import { changeDetail, replayProjection } from "../fold";
 import { changes, threads } from "./data";
@@ -32,14 +33,12 @@ describe("synthLog fidelity", () => {
 
       const shape = (t: {
         id: number;
-        file: string | null;
-        line: number | null;
+        anchor: Anchor;
         resolved: boolean;
         comments: { body: string; review_id: number | null }[];
       }) => ({
         id: t.id,
-        file: t.file,
-        line: t.line,
+        anchor: t.anchor,
         resolved: t.resolved,
         comments: t.comments.map((c) => [c.body, c.review_id]),
       });

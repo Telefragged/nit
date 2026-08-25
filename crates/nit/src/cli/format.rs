@@ -13,7 +13,6 @@ use nit_types::domain::Anchor;
 use nit_types::domain::Chain;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
-use nit_types::domain::CommentRange;
 use nit_types::domain::LineAnchor;
 use nit_types::domain::{CommentInput, LogEntry, LogPayload};
 
@@ -210,7 +209,7 @@ pub(crate) fn print_comment(thread: &Thread, replied: bool) {
             "opened thread {} on change {}  {}  {state}",
             thread.id,
             thread.change_number,
-            anchor_str(thread.file.as_deref(), thread.line, thread.range),
+            anchor_label(&thread.anchor),
         );
     }
 }
@@ -308,40 +307,31 @@ fn opening_anchor(c: &CommentInput) -> String {
     }
 }
 
-/// The label of an anchor a comment carries.
-fn anchor_label(anchor: &Anchor) -> String {
-    // A selection prints in full, so only a whole-line anchor names a line.
-    let line = match anchor {
-        Anchor::Line {
-            at: LineAnchor::Whole(line),
-            ..
-        } => Some(*line),
-        _ => None,
-    };
-    anchor_str(anchor.file(), line, anchor.range())
-}
-
 /// The anchor label.
 ///
 /// `(change-level)`, `file`, `file:line`, or the full
-/// `file:start_line:start_char-end_line:end_char` for a range. The log
+/// `file:start_line:start_char-end_line:end_char` for a selection. The log
 /// renderer and the `nit comment` confirmation both use it.
-fn anchor_str(file: Option<&str>, line: Option<u64>, range: Option<CommentRange>) -> String {
-    let Some(file) = file else {
-        return "(change-level)".to_string();
-    };
-    if let Some(r) = range {
-        format!(
+fn anchor_label(anchor: &Anchor) -> String {
+    match anchor {
+        Anchor::Change => "(change-level)".to_string(),
+        Anchor::File { file } => file.clone(),
+        Anchor::Line {
+            file,
+            at: LineAnchor::Whole(line),
+            ..
+        } => format!("{file}:{line}"),
+        Anchor::Line {
+            file,
+            at: LineAnchor::Selection(r),
+            ..
+        } => format!(
             "{file}:{}:{}-{}:{}",
             r.start_line(),
             r.start_char(),
             r.end_line(),
             r.end_char()
-        )
-    } else if let Some(line) = line {
-        format!("{file}:{line}")
-    } else {
-        file.to_string()
+        ),
     }
 }
 

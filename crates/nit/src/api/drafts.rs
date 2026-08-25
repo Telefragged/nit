@@ -27,7 +27,7 @@ pub(super) async fn create_draft(
         let revision = proj
             .revision(req.revision)
             .ok_or_else(|| Error::bad_request(format!("revision {} not found", req.revision)))?;
-        let mut anchor = anchor_of(req.side, req.file.clone(), req.at)?;
+        let mut anchor = anchor_of(req.anchor.clone())?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
         if req.body.trim().is_empty() && !resolution_only {
             return Err(Error::bad_request(
@@ -60,7 +60,7 @@ pub(super) async fn create_draft(
             },
             &db::now_rfc3339(),
         )?;
-        Ok(Json(views::draft_view(&row, id)))
+        Ok(Json(views::draft_view(&row)))
     })
     .await
 }
@@ -74,7 +74,7 @@ pub(super) async fn edit_draft(
         db::update_draft(conn, id, &req.body, req.resolved, &db::now_rfc3339())?;
         let updated = db::get_draft(conn, id)?
             .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
-        Ok(Json(views::draft_view(&updated, updated.change_number)))
+        Ok(Json(views::draft_view(&updated)))
     })
     .await
 }

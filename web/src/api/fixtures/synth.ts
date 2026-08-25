@@ -7,7 +7,6 @@
 // their reviews by where this places them.
 
 import type { CommentInput, LogEntry, LogPayload } from "../types";
-import { anchorOf } from "./store";
 import type { ChangeRecord, ThreadRecord } from "./store";
 
 // Monotonic across all changes — the global `sequence` ordering of the real log.
@@ -25,7 +24,7 @@ function commentInput(
   return {
     thread_id: thread.id,
     revision: open ? thread.revision : null,
-    anchor: open ? anchorOf(thread) : null,
+    anchor: open ? thread.anchor : null,
     body,
     resolved: last ? thread.resolved : null,
   };

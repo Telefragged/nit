@@ -10,15 +10,14 @@
 
 import { ApiError } from "../client";
 import type {
+  Anchor,
   Chain,
   ChainState,
   ChangeDetail,
   ChangeStatus,
   CommentInput,
-  Side,
   NewDraft,
   Decision,
-  Draft,
   Line,
   PathEntry,
   Repo,
@@ -27,12 +26,12 @@ import type {
   DraftDecision,
   Verdict,
 } from "../types";
+import { placementLine } from "../../lib/comments";
 import { verdictStatus } from "../verdict";
 import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, projection } from "./stream";
 import { diffKey, newSideEnd } from "./builders";
 import { changes, draftReviews, drafts, repos, tips } from "./data";
-import { anchorOf } from "./store";
 import type {
   AuthoredFile,
   ChangeRecord,
@@ -67,7 +66,7 @@ function drainComments(c: ChangeRecord): CommentInput[] {
       comments.push({
         thread_id: nextThreadId++,
         revision: d.revision,
-        anchor: anchorOf(d),
+        anchor: d.anchor,
         body: d.body,
         resolved: d.resolved,
       });
@@ -343,11 +342,6 @@ function repoHistory(repoId: number) {
   return { commits, truncated: repo.history.length > MERGED_WINDOW + 1 };
 }
 
-/** Anchors are served verbatim; the client places them by diff range. */
-function renderDraft(d: DraftRecord): Draft {
-  return { ...d, range: d.range ?? null };
-}
-
 // The published view (revisions/threads/reviews) folds the change's single
 // synth log — the same source the websocket projection folds — so a mutation that
 // appends to the log shows up identically over REST and the stream. The
@@ -359,7 +353,7 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
 /** The reviewer's overlay alone (`GET /changes/{id}/drafts`). */
 function changeDrafts(c: ChangeRecord) {
   return {
-    drafts: drafts.filter((x) => x.change_number === c.id).map(renderDraft),
+    drafts: drafts.filter((x) => x.change_number === c.id),
     draft_decision: draftReviews.get(c.id) ?? null,
   };
 }
@@ -368,20 +362,16 @@ function changeDrafts(c: ChangeRecord) {
 function snapshotLineText(
   c: ChangeRecord,
   revision: number,
-  file: string | undefined,
-  line: number | undefined,
-  side: Side,
-): string | null {
-  if (!file || line === undefined) return null;
+  anchor: Anchor,
+): Anchor {
+  if (anchor === "change" || "file" in anchor) return anchor;
+  const { file, side } = anchor.line;
+  const line = placementLine(anchor.line.at);
   const diff = c.diffs[diffKey(revision)];
   const f = diff?.files.find((x) => x.path === file || x.old_path === file);
-  if (!f) return null;
-  for (const hunk of f.hunks) {
-    for (const l of hunk.lines) {
-      if (side === "new" ? l.new === line : l.old === line) return l.text;
-    }
-  }
-  return null;
+  const lines = f?.hunks.flatMap((hunk) => hunk.lines) ?? [];
+  const hit = lines.find((l) => (side === "new" ? l.new : l.old) === line);
+  return { line: { ...anchor.line, line_text: hit?.text } };
 }
 
 /** Reconstruct the whole file as diff lines from its shown hunks,
@@ -559,39 +549,20 @@ export async function mockRequest(
   if ((m = /^\/changes\/(\d+)\/drafts$/.exec(p)) && method === "POST") {
     const c = getChange(Number(m[1]));
     const req = body as NewDraft;
-    const side: Side = req.side ?? "new";
-    // Like the server: a ranged draft anchors under the selection's last
-    // line.
-    const range = req.at && "selection" in req.at ? req.at.selection : null;
-    const line = req.at
-      ? "whole" in req.at
-        ? req.at.whole
-        : req.at.selection.end_line
-      : null;
     const now = new Date().toISOString();
     const record: DraftRecord = {
       id: nextDraftId++,
       change_number: c.id,
       thread_id: req.thread_id ?? null,
       revision: req.revision,
-      file: req.file ?? null,
-      line,
-      side,
-      range,
-      line_text: snapshotLineText(
-        c,
-        req.revision,
-        req.file,
-        line ?? undefined,
-        side,
-      ),
+      anchor: snapshotLineText(c, req.revision, req.anchor ?? "change"),
       body: req.body,
       resolved: req.resolved ?? false,
       created_at: now,
       updated_at: now,
     };
     drafts.push(record);
-    return renderDraft(record);
+    return record;
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "PATCH") {
@@ -602,7 +573,7 @@ export async function mockRequest(
     d.body = req.body;
     if (req.resolved !== undefined) d.resolved = req.resolved;
     d.updated_at = new Date().toISOString();
-    return renderDraft(d);
+    return d;
   }
 
   if ((m = /^\/drafts\/(\d+)$/.exec(p)) && method === "DELETE") {

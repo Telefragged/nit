@@ -44,7 +44,7 @@ pub(super) async fn create_comment(
                     resolved: req.resolved,
                 }
             } else {
-                let mut anchor = anchor_of(req.side, req.file.clone(), req.at)?;
+                let mut anchor = anchor_of(req.anchor.clone())?;
                 let number = match req.revision {
                     Some(r) => r,
                     None => {

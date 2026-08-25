@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, anyhow};
 
 use nit_types::comments::{NewComment, Thread};
+use nit_types::domain::Anchor;
 use nit_types::domain::CommentRange;
 use nit_types::domain::LineAnchor;
 use nit_types::domain::RevisionNumber;
@@ -82,9 +83,7 @@ pub fn comment(args: CommentArgs) -> Result<()> {
     let req = NewComment {
         thread_id: args.thread,
         revision: args.revision,
-        file: args.file,
-        side: args.side,
-        at,
+        anchor: Some(Anchor::parse(args.file, args.side, at)?),
         body,
         resolved,
     };

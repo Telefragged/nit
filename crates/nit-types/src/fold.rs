@@ -35,8 +35,8 @@ use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::{
-    Anchor, ChangeProjection, Lifecycle, LifecycleAction, LineAnchor, ReviewProjection,
-    RevisionProjection, Side, ThreadComment, ThreadProjection,
+    Anchor, ChangeProjection, Lifecycle, LifecycleAction, ReviewProjection, RevisionProjection,
+    ThreadComment, ThreadProjection,
 };
 use crate::domain::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 
@@ -211,35 +211,11 @@ pub fn review_view(review: &ReviewProjection) -> Review {
 
 #[must_use]
 pub fn thread_view(t: &ThreadProjection, change_number: ChangeNumber) -> Thread {
-    let (file, line, side, range, line_text) = match &t.anchor {
-        Anchor::Change => (None, None, Side::New, None, None),
-        Anchor::File { file } => (Some(file.clone()), None, Side::New, None, None),
-        Anchor::Line {
-            file,
-            side,
-            line_text,
-            at,
-        } => (
-            Some(file.clone()),
-            // A selection hangs under the line it ends on.
-            Some(match at {
-                LineAnchor::Whole(line) => *line,
-                LineAnchor::Selection(range) => range.end_line(),
-            }),
-            *side,
-            at.range(),
-            line_text.clone(),
-        ),
-    };
     Thread {
         id: t.id,
         change_number,
         revision: t.revision,
-        file,
-        line,
-        side,
-        range,
-        line_text,
+        anchor: t.anchor.clone(),
         resolved: t.resolved,
         comments: t.comments.iter().map(thread_comment_view).collect(),
         created_at: t.created_at.clone(),

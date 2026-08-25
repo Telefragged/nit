@@ -3,11 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::Anchor;
 use crate::domain::ChangeNumber;
-use crate::domain::CommentRange;
-use crate::domain::LineAnchor;
 use crate::domain::RevisionNumber;
-use crate::domain::Side;
 
 /// A published comment thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,12 +16,8 @@ pub struct Thread {
     pub change_number: ChangeNumber,
     /// The revision the thread is pinned to.
     pub revision: RevisionNumber,
-    pub file: Option<String>,
-    pub line: Option<u64>,
-    pub side: Side,
-    /// Null: whole-line thread.
-    pub range: Option<CommentRange>,
-    pub line_text: Option<String>,
+    /// Where the thread hangs, as its opening comment named it.
+    pub anchor: Anchor,
     pub resolved: bool,
     pub comments: Vec<ThreadComment>,
     pub created_at: String,
@@ -48,17 +42,10 @@ pub struct ThreadComment {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct NewDraft {
     pub revision: RevisionNumber,
+    /// Where a new thread hangs. A reply keeps the anchor it copies.
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional))]
-    pub file: Option<String>,
-    #[serde(default)]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub side: Option<Side>,
-    /// Where in the file the thread hangs; absent for a whole-file or
-    /// change-level anchor.
-    #[serde(default)]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub at: Option<LineAnchor>,
+    pub anchor: Option<Anchor>,
     pub body: String,
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional))]
@@ -88,11 +75,7 @@ pub struct NewComment {
     #[serde(default)]
     pub revision: Option<RevisionNumber>,
     #[serde(default)]
-    pub file: Option<String>,
-    #[serde(default)]
-    pub side: Option<Side>,
-    #[serde(default)]
-    pub at: Option<LineAnchor>,
+    pub anchor: Option<Anchor>,
     pub body: String,
     #[serde(default)]
     pub resolved: Option<bool>,

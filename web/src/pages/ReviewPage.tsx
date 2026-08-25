@@ -45,9 +45,13 @@ import {
   toggle,
 } from "../lib/collapse";
 import {
+  anchorAt,
+  anchorFile,
+  anchorLineText,
   assembleThreads,
   commentCountLabel,
   commentPlacement,
+  placementLine,
   pendingUnresolvedCount,
   threadCountByRevision,
   threadKey,
@@ -649,13 +653,15 @@ export default function ReviewPage() {
   const threadsByFile = useMemo(() => {
     const map = new Map<string, UiThread[]>();
     for (const t of threads) {
-      if (t.file === null) continue;
-      if (t.line !== null && commentPlacement(t, selected, against) === null)
+      const path = anchorFile(t.anchor);
+      if (path === null) continue;
+      if (
+        anchorAt(t.anchor) !== null &&
+        commentPlacement(t, selected, against) === null
+      )
         continue;
-      const file = files.find(
-        (f) => f.path === t.file || f.old_path === t.file,
-      );
-      const key = file ? file.path : t.file;
+      const file = files.find((f) => f.path === path || f.old_path === path);
+      const key = file ? file.path : path;
       const list = map.get(key) ?? [];
       list.push(t);
       map.set(key, list);
@@ -704,7 +710,9 @@ export default function ReviewPage() {
     setEditingTarget(null);
     return true;
   };
-  const changeLevelThreads = threads.filter((t) => t.file === null);
+  const changeLevelThreads = threads.filter(
+    (t) => anchorFile(t.anchor) === null,
+  );
   const orphanFileThreads = [...threadsByFile.entries()].filter(
     ([path]) => !files.some((f) => f.path === path),
   );
@@ -981,24 +989,32 @@ export default function ReviewPage() {
                     <div className="leftover-path mono">
                       {displayPath(path)}
                     </div>
-                    {fileThreads.map((t) => (
-                      <div className="outdated-item" key={threadKey(t)}>
-                        {t.line_text ? (
-                          <div className="line-excerpt">
-                            <span className="excerpt-line">
-                              r{t.revision}
-                              {t.line !== null ? `:${t.line}` : ""}
-                            </span>
-                            <span
-                              dangerouslySetInnerHTML={{
-                                __html: highlight(t.line_text, null),
-                              }}
-                            />
-                          </div>
-                        ) : null}
-                        <CommentThread thread={t} changeNumber={changeNumber} />
-                      </div>
-                    ))}
+                    {fileThreads.map((t) => {
+                      const lineText = anchorLineText(t.anchor);
+                      const at = anchorAt(t.anchor);
+                      const line = at && placementLine(at);
+                      return (
+                        <div className="outdated-item" key={threadKey(t)}>
+                          {lineText ? (
+                            <div className="line-excerpt">
+                              <span className="excerpt-line">
+                                r{t.revision}
+                                {line !== null ? `:${line}` : ""}
+                              </span>
+                              <span
+                                dangerouslySetInnerHTML={{
+                                  __html: highlight(lineText, null),
+                                }}
+                              />
+                            </div>
+                          ) : null}
+                          <CommentThread
+                            thread={t}
+                            changeNumber={changeNumber}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
               </section>

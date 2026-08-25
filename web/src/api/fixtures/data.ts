@@ -1347,10 +1347,7 @@ export const threads: ThreadRecord[] = [
     id: 70,
     change_number: 10,
     revision: 0,
-    file: null,
-    line: null,
-    side: "new",
-    line_text: null,
+    anchor: "change",
     resolved: true,
     comments: [
       {
@@ -1367,10 +1364,14 @@ export const threads: ThreadRecord[] = [
     id: 71,
     change_number: 11,
     revision: 0,
-    file: "src/auth/rotate.rs",
-    line: 22,
-    side: "new",
-    line_text: "        let fresh = Token::generate(&mut self.rng.lock());",
+    anchor: {
+      line: {
+        file: "src/auth/rotate.rs",
+        side: "new",
+        line_text: "        let fresh = Token::generate(&mut self.rng.lock());",
+        at: { whole: 22 },
+      },
+    },
     resolved: true,
     comments: [
       {
@@ -1401,10 +1402,14 @@ export const threads: ThreadRecord[] = [
     id: 73,
     change_number: 11,
     revision: 0,
-    file: "src/auth/store.rs",
-    line: 58,
-    side: "new",
-    line_text: "        let conn = self.pool.clone().get();",
+    anchor: {
+      line: {
+        file: "src/auth/store.rs",
+        side: "new",
+        line_text: "        let conn = self.pool.clone().get();",
+        at: { whole: 58 },
+      },
+    },
     resolved: false,
     comments: [
       {
@@ -1432,11 +1437,21 @@ export const threads: ThreadRecord[] = [
     id: 79,
     change_number: 11,
     revision: 0,
-    file: "src/auth/rotate.rs",
-    line: 23,
-    side: "new",
-    range: { start_line: 22, start_char: 8, end_line: 23, end_char: 50 },
-    line_text: "        self.store.mark_rotated(entry.id, &fresh);",
+    anchor: {
+      line: {
+        file: "src/auth/rotate.rs",
+        side: "new",
+        line_text: "        self.store.mark_rotated(entry.id, &fresh);",
+        at: {
+          selection: {
+            start_line: 22,
+            start_char: 8,
+            end_line: 23,
+            end_char: 50,
+          },
+        },
+      },
+    },
     resolved: false,
     comments: [
       {
@@ -1456,10 +1471,14 @@ export const threads: ThreadRecord[] = [
     id: 75,
     change_number: 11,
     revision: 0,
-    file: "src/auth/rotate.rs",
-    line: 21,
-    side: "new",
-    line_text: "        let entry = self.store.lookup(presented).unwrap();",
+    anchor: {
+      line: {
+        file: "src/auth/rotate.rs",
+        side: "new",
+        line_text: "        let entry = self.store.lookup(presented).unwrap();",
+        at: { whole: 21 },
+      },
+    },
     resolved: true,
     comments: [
       {
@@ -1486,11 +1505,21 @@ export const threads: ThreadRecord[] = [
     id: 77,
     change_number: 11,
     revision: 0,
-    file: COMMIT_MSG_PATH,
-    line: 5,
-    side: "new",
-    range: { start_line: 5, start_char: 7, end_line: 5, end_char: 40 },
-    line_text: "moment the legitimate client refreshes.",
+    anchor: {
+      line: {
+        file: COMMIT_MSG_PATH,
+        side: "new",
+        line_text: "moment the legitimate client refreshes.",
+        at: {
+          selection: {
+            start_line: 5,
+            start_char: 7,
+            end_line: 5,
+            end_char: 40,
+          },
+        },
+      },
+    },
     resolved: true,
     comments: [
       {
@@ -1516,10 +1545,14 @@ export const threads: ThreadRecord[] = [
     id: 80,
     change_number: 20,
     revision: 0,
-    file: "src/wal.rs",
-    line: 94,
-    side: "new",
-    line_text: "        if self.backlog_bytes() < CHECKPOINT_BACKLOG {",
+    anchor: {
+      line: {
+        file: "src/wal.rs",
+        side: "new",
+        line_text: "        if self.backlog_bytes() < CHECKPOINT_BACKLOG {",
+        at: { whole: 94 },
+      },
+    },
     resolved: false,
     comments: [
       {
@@ -1535,10 +1568,14 @@ export const threads: ThreadRecord[] = [
     id: 81,
     change_number: 20,
     revision: 0,
-    file: "src/wal/backoff.rs",
-    line: 3,
-    side: "old",
-    line_text: "pub fn jitter(base: Duration) -> Duration {",
+    anchor: {
+      line: {
+        file: "src/wal/backoff.rs",
+        side: "old",
+        line_text: "pub fn jitter(base: Duration) -> Duration {",
+        at: { whole: 3 },
+      },
+    },
     resolved: false,
     comments: [
       {
@@ -1556,10 +1593,14 @@ export const threads: ThreadRecord[] = [
     id: 82,
     change_number: 51,
     revision: 0,
-    file: "src/sched/fair.rs",
-    line: 2,
-    side: "new",
-    line_text: "// fair-share v0",
+    anchor: {
+      line: {
+        file: "src/sched/fair.rs",
+        side: "new",
+        line_text: "// fair-share v0",
+        at: { whole: 2 },
+      },
+    },
     resolved: false,
     comments: [
       {
@@ -1584,11 +1625,15 @@ export const drafts: DraftRecord[] = [
     change_number: 11,
     thread_id: null,
     revision: 1,
-    file: "src/auth/rotate.rs",
-    line: 26,
-    side: "new",
-    line_text:
-      "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
+    anchor: {
+      line: {
+        file: "src/auth/rotate.rs",
+        side: "new",
+        line_text:
+          "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
+        at: { whole: 26 },
+      },
+    },
     body: "Put the RFC section in the error message too — operators grep for it.",
     resolved: false,
     created_at: ago(30),
@@ -1600,10 +1645,14 @@ export const drafts: DraftRecord[] = [
     change_number: 11,
     thread_id: null,
     revision: 1,
-    file: "tests/rotation.rs",
-    line: 13,
-    side: "new",
-    line_text: "    let _ = rotator.rotate(&seeded).unwrap();",
+    anchor: {
+      line: {
+        file: "tests/rotation.rs",
+        side: "new",
+        line_text: "    let _ = rotator.rotate(&seeded).unwrap();",
+        at: { whole: 13 },
+      },
+    },
     body: "Also assert the family row is revoked — this only checks the error value.",
     resolved: false,
     created_at: ago(25),
@@ -1615,10 +1664,14 @@ export const drafts: DraftRecord[] = [
     change_number: 11,
     thread_id: null,
     revision: 1,
-    file: "src/auth/rotate.rs",
-    line: 20,
-    side: "old",
-    line_text: "    pub fn rotate(&self, presented: &str) -> Token {",
+    anchor: {
+      line: {
+        file: "src/auth/rotate.rs",
+        side: "old",
+        line_text: "    pub fn rotate(&self, presented: &str) -> Token {",
+        at: { whole: 20 },
+      },
+    },
     body:
       "The old signature returned Token directly; every caller now has to " +
       "handle the Result — make sure none silently unwraps it.",

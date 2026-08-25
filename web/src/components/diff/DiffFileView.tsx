@@ -14,6 +14,10 @@ import {
   type Side,
 } from "../../api/types";
 import {
+  anchorAt,
+  anchorLineText,
+  anchorRange,
+  anchorSide,
   commentCountLabel,
   commentPlacement,
   draftAnchor,
@@ -252,7 +256,7 @@ export default function DiffFileView({
   const topThreads: UiThread[] = [];
   const inline = new Map<string, UiThread[]>();
   for (const t of threads) {
-    if (t.line === null) {
+    if (anchorAt(t.anchor) === null) {
       topThreads.push(t);
       continue;
     }
@@ -276,11 +280,15 @@ export default function DiffFileView({
       const anchor = draftAnchor(input.target.side, ctx.selected, ctx.against);
       return createDraft(ctx.changeNumber, {
         revision: anchor.revision,
-        file: input.target.file,
-        side: anchor.side,
-        at: input.target.range
-          ? { selection: input.target.range }
-          : { whole: input.target.line },
+        anchor: {
+          line: {
+            file: input.target.file,
+            side: anchor.side,
+            at: input.target.range
+              ? { selection: input.target.range }
+              : { whole: input.target.line },
+          },
+        },
         body: input.body,
       });
     },
@@ -327,9 +335,10 @@ export default function DiffFileView({
       active: boolean;
     }[] = [];
     for (const t of threads) {
-      if (!t.range) continue;
+      const range = anchorRange(t.anchor);
+      if (!range) continue;
       const p = commentPlacement(t, ctx.selected, ctx.against);
-      if (p) paints.push({ side: p.side, range: t.range, active: false });
+      if (p) paints.push({ side: p.side, range, active: false });
     }
     const et = ctx.editingTarget;
     if (et?.range && et.file === file.path) {
@@ -553,11 +562,14 @@ export default function DiffFileView({
                       {/* Label the column it renders under (placement side),
                           not the raw stored side — an interdiff-left thread
                           is stored "new" on the FROM revision. */}
-                      {t.line !== null
-                        ? ` · ${commentPlacement(t, ctx.selected, ctx.against)?.side ?? t.side}`
+                      {anchorAt(t.anchor) !== null
+                        ? ` · ${commentPlacement(t, ctx.selected, ctx.against)?.side ?? anchorSide(t.anchor)}`
                         : ""}
                     </span>
-                    <Code text={t.line_text ?? "(file comment)"} lang={lang} />
+                    <Code
+                      text={anchorLineText(t.anchor) ?? "(file comment)"}
+                      lang={lang}
+                    />
                   </div>
                   <CommentThread thread={t} changeNumber={ctx.changeNumber} />
                 </div>

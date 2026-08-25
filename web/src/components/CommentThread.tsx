@@ -142,20 +142,13 @@ export default function CommentThread({
   const resolved = pendingResolved(thread);
   const pending = resolved !== thread.resolved;
 
-  // Reply / resolve / reopen all draft a reply that copies the thread's
-  // whole anchor — including its revision, so the copied coordinates stay
-  // the ones it was written in (the server's author replies match).
+  // A reply reuses the thread's anchor and revision. Its coordinates then
+  // match the thread's own, like the server's author replies.
   const saveDraft = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
       createDraft(changeNumber, {
         revision: thread.revision,
-        ...(thread.file !== null ? { file: thread.file } : {}),
-        side: thread.side,
-        ...(thread.range !== null
-          ? { at: { selection: thread.range } }
-          : thread.line !== null
-            ? { at: { whole: thread.line } }
-            : {}),
+        anchor: thread.anchor,
         body: vars.body,
         // Always a published thread here — the reply / resolve / reopen
         // actions render only when `thread.id !== null` (the !isDraftThread

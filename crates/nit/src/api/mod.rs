@@ -271,14 +271,10 @@ fn change_detail_json(
 
 /// The anchor a request names, checked against the route's own rule.
 ///
-/// [`Anchor::parse`] owns what an anchor is. The synthetic commit-message
-/// file is the route's: it is rendered, not diffed, so it has no old side.
-fn anchor_of(
-    side: Option<Side>,
-    file: Option<String>,
-    at: Option<LineAnchor>,
-) -> Result<Anchor, Error> {
-    let anchor = Anchor::parse(file, side, at).map_err(|e| Error::bad_request(e.to_string()))?;
+/// The synthetic commit-message file is the route's own rule. The server
+/// renders that file and never diffs it, so it has no old side.
+fn anchor_of(anchor: Option<Anchor>) -> Result<Anchor, Error> {
+    let anchor = anchor.unwrap_or(Anchor::Change);
     if anchor.file() == Some(diff::COMMIT_MSG_PATH) && anchor.side() == Side::Old {
         return Err(Error::bad_request(
             "/COMMIT_MSG has no old side — comment with side \"new\"",

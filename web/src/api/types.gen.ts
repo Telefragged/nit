@@ -369,14 +369,10 @@ export type Thread = {
    * The revision the thread is pinned to.
    */
   revision: RevisionNumber;
-  file: string | null;
-  line: number | null;
-  side: Side;
   /**
-   * Null: whole-line thread.
+   * Where the thread hangs, as its opening comment named it.
    */
-  range: CommentRange | null;
-  line_text: string | null;
+  anchor: Anchor;
   resolved: boolean;
   comments: Array<ThreadComment>;
   created_at: string;
@@ -409,11 +405,7 @@ export type Draft = {
    * The request's anchor revision; only a new thread uses it.
    */
   revision: RevisionNumber;
-  file: string | null;
-  line: number | null;
-  side: Side;
-  range: CommentRange | null;
-  line_text: string | null;
+  anchor: Anchor;
   /**
    * May be empty for a resolution-only reply draft.
    */
@@ -431,13 +423,10 @@ export type Draft = {
  */
 export type NewDraft = {
   revision: RevisionNumber;
-  file?: string;
-  side?: Side;
   /**
-   * Where in the file the thread hangs; absent for a whole-file or
-   * change-level anchor.
+   * Where a new thread hangs. A reply keeps the anchor it copies.
    */
-  at?: LineAnchor;
+  anchor?: Anchor;
   body: string;
   thread_id?: number;
   resolved?: boolean;
@@ -668,9 +657,6 @@ export type Lifecycle = "active" | "merged" | "abandoned";
 
 /**
  * Where a thread is anchored within a revision.
- *
- * Modeled so the invalid combinations the flat wire fields allow are
- * unrepresentable.
  */
 export type Anchor =
   | "change"
@@ -679,7 +665,10 @@ export type Anchor =
       line: {
         file: string;
         side: Side;
-        line_text: string | null;
+        /**
+         * The server snapshots it. A request leaves it unset.
+         */
+        line_text?: string;
         at: LineAnchor;
       };
     };

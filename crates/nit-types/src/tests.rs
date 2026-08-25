@@ -171,9 +171,15 @@ fn a_comment_logged_before_the_anchor_still_reads() {
         "range":{"start_line":3,"start_char":1,"end_line":3,"end_char":4},
         "line_text":"x","body":"this","resolved":null}"#;
     let ranged: CommentInput = serde_json::from_str(ranged).expect("deserialize");
+    let at = match ranged.anchor {
+        Some(Anchor::Line { at, .. }) => Some(at),
+        _ => None,
+    };
     assert_eq!(
-        ranged.anchor.and_then(|a| a.range()),
-        Some(CommentRange::new(3, 1, 3, 4).expect("a forward selection"))
+        at,
+        Some(LineAnchor::Selection(
+            CommentRange::new(3, 1, 3, 4).expect("a forward selection")
+        ))
     );
 }
 

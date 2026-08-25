@@ -116,17 +116,13 @@ pub fn resolve_revision_tip(
 }
 
 #[must_use]
-pub fn draft_view(d: &db::DraftRow, change_number: ChangeNumber) -> Draft {
+pub fn draft_view(d: &db::DraftRow) -> Draft {
     Draft {
         id: d.id,
-        change_number,
+        change_number: d.change_number,
         thread_id: d.thread_id,
         revision: d.revision,
-        file: d.anchor.file().map(str::to_string),
-        line: super::hangs_under(&d.anchor),
-        side: d.anchor.side(),
-        range: d.anchor.range(),
-        line_text: d.anchor.line_text().map(str::to_string),
+        anchor: d.anchor.clone(),
         body: d.body.clone(),
         resolved: d.resolved.unwrap_or(false),
         created_at: d.created_at.clone(),
@@ -148,7 +144,7 @@ pub fn change_overlay(conn: &Connection, change_number: ChangeNumber) -> Result<
     Ok(ChangeDrafts {
         drafts: db::drafts_for_change(conn, change_number)?
             .iter()
-            .map(|d| draft_view(d, change_number))
+            .map(draft_view)
             .collect(),
         draft_decision: db::get_draft_review(conn, change_number)?.map(|r| DraftDecision {
             decision: r.decision,

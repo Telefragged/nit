@@ -5,8 +5,6 @@
 import type {
   Anchor,
   ChangeStatus,
-  CommentRange,
-  Side,
   DiffFile,
   Review,
   Revision,
@@ -62,36 +60,11 @@ export interface ThreadRecord {
   id: number;
   change_number: number;
   revision: number;
-  file: string | null;
-  line: number | null;
-  side: Side;
-  /** Selected-text anchor; most fixture threads are whole-line. */
-  range?: CommentRange | null;
-  line_text: string | null;
+  anchor: Anchor;
   resolved: boolean;
   comments: ThreadComment[];
   created_at: string;
   updated_at: string;
-}
-
-/** The anchor a record's flat location fields describe. */
-export function anchorOf(r: {
-  file: string | null;
-  line: number | null;
-  side: Side;
-  range?: CommentRange | null;
-  line_text: string | null;
-}): Anchor {
-  if (r.file === null) return "change";
-  if (r.line === null) return { file: { file: r.file } };
-  return {
-    line: {
-      file: r.file,
-      side: r.side,
-      line_text: r.line_text,
-      at: r.range ? { selection: r.range } : { whole: r.line },
-    },
-  };
 }
 
 /** A reviewer's unpublished comment: a new thread (`thread_id` null) or a
@@ -101,11 +74,7 @@ export interface DraftRecord {
   change_number: number;
   thread_id: number | null;
   revision: number;
-  file: string | null;
-  line: number | null;
-  side: Side;
-  range?: CommentRange | null;
-  line_text: string | null;
+  anchor: Anchor;
   body: string;
   /** The draft's thread-resolution decision. */
   resolved: boolean;
