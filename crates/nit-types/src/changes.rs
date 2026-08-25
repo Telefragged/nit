@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::comments::Thread;
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
 use crate::domain::ChangeProjection;
@@ -10,6 +9,7 @@ use crate::domain::Draft;
 use crate::domain::DraftDecision;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
+use crate::domain::ThreadProjection;
 use crate::domain::Verdict;
 
 /// The `GET /api/changes` response: matching changes as folded projections.
@@ -37,7 +37,7 @@ pub struct ChangeDetail {
     /// Published threads, all revisions; anchors verbatim.
     ///
     /// The client places them by diff range.
-    pub threads: Vec<Thread>,
+    pub threads: Vec<ThreadProjection>,
     /// All revisions.
     pub drafts: Vec<Draft>,
     pub reviews: Vec<Review>,

@@ -2,12 +2,13 @@
 
 use anyhow::{Context, Result, anyhow};
 
-use nit_types::comments::{NewComment, Thread};
+use nit_types::comments::NewComment;
 use nit_types::domain::Anchor;
 use nit_types::domain::CommentRange;
 use nit_types::domain::LineAnchor;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Side;
+use nit_types::domain::ThreadProjection;
 
 use super::client::{Client, ServerOpt, server_url};
 use super::format::{ChangeTarget, print_comment};
@@ -87,8 +88,9 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         body,
         resolved,
     };
-    let thread: Thread = client.post(&format!("/api/changes/{change_number}/comments"), &req)?;
-    print_comment(&thread, replied);
+    let thread: ThreadProjection =
+        client.post(&format!("/api/changes/{change_number}/comments"), &req)?;
+    print_comment(&thread, change_number, replied);
     Ok(())
 }
 

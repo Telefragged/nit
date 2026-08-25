@@ -7,14 +7,13 @@ use axum::extract::State;
 use rusqlite::Connection;
 
 use nit_types::changes::{AbandonRequest, ChangeDetail};
-use nit_types::comments::{NewComment, Thread};
+use nit_types::comments::NewComment;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
+use nit_types::domain::ThreadProjection;
 use nit_types::domain::{CommentInput, LogPayload};
 
 use nit_types::domain::Lifecycle;
-
-use crate::review;
 
 use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{anchor_of, change_detail_json, change_or_404, map_busy, snapshot_line_text};
@@ -23,7 +22,7 @@ pub(super) async fn create_comment(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
     AppJson(req): AppJson<NewComment>,
-) -> Result<Json<Thread>, Error> {
+) -> Result<Json<ThreadProjection>, Error> {
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
@@ -81,7 +80,7 @@ pub(super) async fn create_comment(
         let thread = proj
             .thread(thread_id)
             .ok_or_else(|| Error::internal("thread vanished after fold"))?;
-        Ok(Json(review::thread_view(thread, id)))
+        Ok(Json(thread.clone()))
     })
     .await
 }

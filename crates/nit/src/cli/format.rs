@@ -8,12 +8,12 @@ use std::collections::HashMap;
 use anyhow::{Result, bail};
 
 use nit_types::changes::ChangeDetail;
-use nit_types::comments::Thread;
 use nit_types::domain::Anchor;
 use nit_types::domain::Chain;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LineAnchor;
+use nit_types::domain::ThreadProjection;
 use nit_types::domain::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
@@ -197,18 +197,17 @@ pub(crate) fn short_change_id(change_id: &ChangeId) -> String {
 ///
 /// `opened thread N on change M  <anchor>  <state>` for a new thread, or
 /// `replied on thread N (change M)  <state>` for a reply.
-pub(crate) fn print_comment(thread: &Thread, replied: bool) {
+pub(crate) fn print_comment(thread: &ThreadProjection, change_number: ChangeNumber, replied: bool) {
     let state = if thread.resolved { "resolved" } else { "open" };
     if replied {
         println!(
-            "replied on thread {} (change {})  {state}",
-            thread.id, thread.change_number
+            "replied on thread {} (change {change_number})  {state}",
+            thread.id
         );
     } else {
         println!(
-            "opened thread {} on change {}  {}  {state}",
+            "opened thread {} on change {change_number}  {}  {state}",
             thread.id,
-            thread.change_number,
             anchor_label(&thread.anchor),
         );
     }

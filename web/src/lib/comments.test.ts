@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Anchor, Draft, Thread } from "../api/types";
+import type { Anchor, Draft, ThreadProjection } from "../api/types";
 import type { CommentAnchor, UiThread } from "./comments";
 import {
   assembleThreads,
@@ -24,8 +24,9 @@ const anchor = (revision: number, side: "old" | "new", line: number | null) =>
   }) satisfies CommentAnchor;
 
 /** A published thread anchored on src/main.rs. */
-const thread = (over: Partial<Thread> & { id: number }): Thread => ({
-  change_number: 1,
+const thread = (
+  over: Partial<ThreadProjection> & { id: number },
+): ThreadProjection => ({
   revision: 1,
   anchor: lineAnchor("new", 1),
   resolved: false,

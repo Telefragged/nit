@@ -30,7 +30,6 @@
 //! arm/projection overlap is idempotent, never doubled.
 
 use crate::changes::{ChangeDetail, Review, Revision};
-use crate::comments::Thread;
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
@@ -209,28 +208,6 @@ pub fn review_view(review: &ReviewProjection) -> Review {
     }
 }
 
-#[must_use]
-pub fn thread_view(t: &ThreadProjection, change_number: ChangeNumber) -> Thread {
-    Thread {
-        id: t.id,
-        change_number,
-        revision: t.revision,
-        anchor: t.anchor.clone(),
-        resolved: t.resolved,
-        comments: t.comments.iter().map(thread_comment_view).collect(),
-        created_at: t.created_at.clone(),
-        updated_at: t.updated_at.clone(),
-    }
-}
-
-fn thread_comment_view(c: &ThreadComment) -> crate::comments::ThreadComment {
-    crate::comments::ThreadComment {
-        body: c.body.clone(),
-        review_id: c.review_id,
-        created_at: c.created_at.clone(),
-    }
-}
-
 /// The published projection of a change as the wire [`ChangeDetail`].
 ///
 /// Minus the reviewer's drafts and draft decision: mutable scratch
@@ -244,11 +221,7 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
         repo_id: change.repo_id,
         change_id: change.change_id.clone(),
         revisions: change.revisions.iter().map(revision_view).collect(),
-        threads: change
-            .threads
-            .iter()
-            .map(|t| thread_view(t, change.id))
-            .collect(),
+        threads: change.threads.clone(),
         drafts: Vec::new(),
         reviews: change.reviews.iter().map(review_view).collect(),
         draft_decision: None,

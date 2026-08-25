@@ -1,41 +1,9 @@
-//! The comment endpoints' shapes: a published thread and the requests
-//! that write one.
+//! The requests that write a comment.
 
 use serde::{Deserialize, Serialize};
 
 use crate::domain::Anchor;
-use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
-
-/// A published comment thread.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct Thread {
-    /// Fold-assigned by creation order (not stored).
-    pub id: u64,
-    pub change_number: ChangeNumber,
-    /// The revision the thread is pinned to.
-    pub revision: RevisionNumber,
-    /// Where the thread hangs, as its opening comment named it.
-    pub anchor: Anchor,
-    pub resolved: bool,
-    pub comments: Vec<ThreadComment>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-/// One message in a [`Thread`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct ThreadComment {
-    pub body: String,
-    /// The review that published it; null for an author comment.
-    ///
-    /// The client derives reviewer-vs-author from this — there is no
-    /// separate `author`.
-    pub review_id: Option<u64>,
-    pub created_at: String,
-}
 
 /// `POST /api/changes/{id}/drafts` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]

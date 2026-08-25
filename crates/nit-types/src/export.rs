@@ -59,8 +59,6 @@ fn write_wire_types() {
         crate::changes::Review,
         crate::domain::DraftDecision,
         crate::domain::CommentRange,
-        crate::comments::Thread,
-        crate::comments::ThreadComment,
         crate::domain::Draft,
         crate::comments::NewDraft,
         crate::comments::EditDraft,

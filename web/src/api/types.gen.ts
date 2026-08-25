@@ -293,7 +293,7 @@ export type ChangeDetail = {
    *
    * The client places them by diff range.
    */
-  threads: Array<Thread>;
+  threads: Array<ThreadProjection>;
   /**
    * All revisions.
    */
@@ -354,44 +354,6 @@ export type CommentRange = {
   start_char: number;
   end_line: number;
   end_char: number;
-};
-
-/**
- * A published comment thread.
- */
-export type Thread = {
-  /**
-   * Fold-assigned by creation order (not stored).
-   */
-  id: number;
-  change_number: ChangeNumber;
-  /**
-   * The revision the thread is pinned to.
-   */
-  revision: RevisionNumber;
-  /**
-   * Where the thread hangs, as its opening comment named it.
-   */
-  anchor: Anchor;
-  resolved: boolean;
-  comments: Array<ThreadComment>;
-  created_at: string;
-  updated_at: string;
-};
-
-/**
- * One message in a [`Thread`].
- */
-export type ThreadComment = {
-  body: string;
-  /**
-   * The review that published it; null for an author comment.
-   *
-   * The client derives reviewer-vs-author from this — there is no
-   * separate `author`.
-   */
-  review_id: number | null;
-  created_at: string;
 };
 
 /**
@@ -703,7 +665,7 @@ export type RevisionProjection = {
  * `review_id` is the review that published it, or `None` for an author's
  * own note — which is what distinguishes reviewer from author.
  */
-export type ThreadCommentProjection = {
+export type ThreadComment = {
   body: string;
   review_id: number | null;
   created_at: string;
@@ -720,7 +682,7 @@ export type ThreadProjection = {
   revision: RevisionNumber;
   anchor: Anchor;
   resolved: boolean;
-  comments: Array<ThreadCommentProjection>;
+  comments: Array<ThreadComment>;
   created_at: string;
   updated_at: string;
 };

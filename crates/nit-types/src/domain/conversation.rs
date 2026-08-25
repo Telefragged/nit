@@ -244,13 +244,7 @@ pub struct ThreadProjection {
 /// `review_id` is the review that published it, or `None` for an author's
 /// own note — which is what distinguishes reviewer from author.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-// Renamed in the generated types: the published rendering already owns
-// the `ThreadComment` name.
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(rename = "ThreadCommentProjection")
-)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ThreadComment {
     pub body: String,
     pub review_id: Option<u64>,

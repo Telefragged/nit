@@ -13,7 +13,7 @@ import type {
   LineAnchor,
   Side,
   Draft,
-  Thread,
+  ThreadProjection,
   ThreadComment,
 } from "../api/types";
 
@@ -83,7 +83,7 @@ export interface UiThread {
  * by creation time, oldest first.
  */
 export function assembleThreads(
-  threads: readonly Thread[],
+  threads: readonly ThreadProjection[],
   drafts: readonly Draft[],
 ): UiThread[] {
   const byCreated = (a: { created_at: string }, b: { created_at: string }) =>
