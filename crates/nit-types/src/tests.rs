@@ -3,7 +3,7 @@
 //! feature (clap, ts) would otherwise mask.
 
 use crate::domain::ChangeNumber;
-use crate::domain::{Anchor, CommentInput};
+use crate::domain::{Anchor, CommentInput, CommentRange};
 use crate::domain::{ChangeId, Sha};
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
@@ -166,4 +166,14 @@ fn a_comment_logged_before_the_anchor_still_reads() {
     let reply: CommentInput = serde_json::from_str(reply).expect("deserialize");
     assert_eq!(reply.anchor, None);
     assert_eq!(reply.resolved, Some(true));
+
+    // An older entry spelled a selection as the range plus its end line.
+    let ranged = r#"{"thread_id":2,"revision":0,"file":"a.rs","line":3,"side":"new",
+        "range":{"start_line":3,"start_char":1,"end_line":3,"end_char":4},
+        "line_text":"x","body":"this","resolved":null}"#;
+    let ranged: CommentInput = serde_json::from_str(ranged).expect("deserialize");
+    assert_eq!(
+        ranged.anchor.and_then(|a| a.range()),
+        Some(CommentRange::new(3, 1, 3, 4).expect("a forward selection"))
+    );
 }

@@ -12,7 +12,7 @@ use nit_types::decisions::{BatchSubmitResult, SubmitError};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::DraftDecision;
 use nit_types::domain::RevisionNumber;
-use nit_types::domain::{Anchor, CommentInput, LogPayload, ReviewPayload};
+use nit_types::domain::{Anchor, AnchorError, CommentInput, LogPayload, ReviewPayload};
 use nit_types::domain::{Decision, LifecycleAction, Verdict};
 
 use crate::db;
@@ -31,30 +31,33 @@ fn drafts_to_comments(
     conn: &rusqlite::Connection,
     change_number: ChangeNumber,
 ) -> anyhow::Result<Vec<CommentInput>> {
-    Ok(db::drafts_for_change(conn, change_number)?
-        .iter()
-        .map(|d| CommentInput {
-            thread_id: d.thread_id,
-            revision: Some(d.revision),
-            anchor: opening_anchor(d),
-            body: d.body.clone(),
-            resolved: d.resolved,
+    db::drafts_for_change(conn, change_number)?
+        .into_iter()
+        .map(|d| {
+            Ok(CommentInput {
+                thread_id: d.thread_id,
+                revision: Some(d.revision),
+                anchor: opening_anchor(&d)?,
+                body: d.body,
+                resolved: d.resolved,
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// The anchor a draft opens its thread at, and none for a reply.
 ///
-/// The parts were checked when the draft was written, so a row that no
-/// longer parses can only be corruption, and it reads as change-level.
-fn opening_anchor(d: &db::DraftRow) -> Option<Anchor> {
+/// # Errors
+///
+/// [`AnchorError`] when the stored parts are not an anchor. Those parts
+/// are corruption. The member's submit then fails and keeps its drafts.
+fn opening_anchor(d: &db::DraftRow) -> Result<Option<Anchor>, AnchorError> {
     if d.thread_id.is_some() {
-        return None;
+        return Ok(None);
     }
-    let mut anchor =
-        Anchor::parse(d.file.clone(), Some(d.side), d.line, d.range).unwrap_or(Anchor::Change);
+    let mut anchor = Anchor::parse(d.file.clone(), Some(d.side), d.line, d.range)?;
     anchor.snapshot_line_text(d.line_text.clone());
-    Some(anchor)
+    Ok(Some(anchor))
 }
 
 /// Publishes one reviewer `decision` for a change.

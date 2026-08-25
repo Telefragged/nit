@@ -126,6 +126,41 @@ fn reply_draft_appends_to_thread() {
     assert!(comments.iter().all(|c| !c["review_id"].is_null()));
 }
 
+/// A ranged draft publishes as a ranged thread.
+#[test]
+fn ranged_draft_publishes_with_its_range() {
+    let g = GitRepo::new();
+    let c1 = g.commit(
+        &[g.root],
+        &msg("core: add a", "Ia"),
+        &[("a.txt", "a1\na2\na3\n")],
+    );
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let id = push_one(&server, &g, "feat", "Ia");
+
+    let range = json!({"start_line": 2, "start_char": 0, "end_line": 2, "end_char": 2});
+    let (st, d) = http_post(
+        &drafts_url(&server, id),
+        &json!({"revision": 0, "file": "a.txt", "body": "this selection", "range": range}),
+    );
+    assert_eq!(st, 200, "{d}");
+
+    let out = review(&server, id, "comment", "");
+    assert_eq!(out["submitted"], 1, "{out}");
+
+    let threads = detail(&server, id)["threads"].clone();
+    assert_eq!(threads.as_array().unwrap().len(), 1, "{threads}");
+    let t = &threads[0];
+    assert_eq!(t["range"], range, "{t}");
+    assert_eq!(t["file"], "a.txt");
+    assert_eq!(
+        t["line"], 2,
+        "the thread anchors under the range's end line"
+    );
+    assert_eq!(t["line_text"], "a2");
+}
+
 /// A well-formed range round-trips verbatim; the malformed-anchor 400s
 /// and the `/COMMIT_MSG` old-side 400 are all rejected.
 #[test]
@@ -158,9 +193,9 @@ fn draft_anchor_validation() {
     // The 400s of the server's anchor validation.
     let range_400s: &[(Value, &str)] = &[
         (
-            json!({"revision": 0, "file": "x.txt", "line": 1, "body": "x",
+            json!({"revision": 0, "file": "x.txt", "line": 3, "body": "x",
                    "range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 1}}),
-            "line and range together",
+            "a line that contradicts its range",
         ),
         (
             json!({"revision": 0, "body": "x",

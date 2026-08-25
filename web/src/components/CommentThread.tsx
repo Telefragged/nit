@@ -145,8 +145,8 @@ export default function CommentThread({
   // Reply / resolve / reopen all draft a reply that copies the thread's
   // whole anchor — including its revision, so the copied file/line/range stay
   // the coordinates they were written in (the server's author replies match).
-  // A stored range thread carries both, but line and range are mutually
-  // exclusive request anchors: send whichever one anchored the thread.
+  // A stored range thread carries both, and its range already names the
+  // line, so send the range alone.
   const saveDraft = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
       createDraft(changeNumber, {

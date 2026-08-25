@@ -167,8 +167,9 @@ impl From<LoggedComment> for CommentInput {
     fn from(c: LoggedComment) -> CommentInput {
         let anchor = c.anchor.or_else(|| {
             let side = c.side?;
-            // An entry passed the anchor rules when it was written, so the
-            // older spelling cannot break them on the way back in.
+            // A stored entry that the anchor rules reject reads as
+            // change-level. A hard failure would leave the whole change
+            // unfoldable.
             let mut anchor = Anchor::parse(c.file, Some(side), c.line, c.range).ok()?;
             anchor.snapshot_line_text(c.line_text);
             Some(anchor)

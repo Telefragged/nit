@@ -71,10 +71,10 @@ pub enum Anchor {
 impl Anchor {
     /// The anchor that a file, a line and a selection name together.
     ///
-    /// A selection implies the line that it ends on, so a caller names
-    /// one or the other. A line names a place inside a file, so it needs
-    /// one. Nothing else is an anchor, and the absent file is the change
-    /// itself.
+    /// A selection ends on the line that it anchors to, so a caller
+    /// names either of the two, or both in agreement. A line names a
+    /// place inside a file, so it needs one. Nothing else is an anchor,
+    /// and the absent file is the change itself.
     ///
     /// # Errors
     ///
@@ -83,10 +83,14 @@ impl Anchor {
     /// # Examples
     ///
     /// ```rust
-    /// use nit_types::domain::Anchor;
+    /// use nit_types::domain::{Anchor, CommentRange};
     ///
+    /// let range = CommentRange::new(2, 0, 3, 4).expect("a forward selection");
     /// assert!(Anchor::parse(None, None, None, None).is_ok());
     /// assert!(Anchor::parse(None, None, Some(3), None).is_err());
+    /// let both = Anchor::parse(Some("a.rs".into()), None, Some(3), Some(range));
+    /// assert_eq!(both.expect("a line that agrees").range(), Some(range));
+    /// assert!(Anchor::parse(Some("a.rs".into()), None, Some(9), Some(range)).is_err());
     /// ```
     pub fn parse(
         file: Option<String>,
@@ -94,8 +98,10 @@ impl Anchor {
         line: Option<u64>,
         range: Option<CommentRange>,
     ) -> Result<Anchor, AnchorError> {
-        if line.is_some() && range.is_some() {
-            return Err(AnchorError::LineAndRange);
+        if let Some(range) = range
+            && line.is_some_and(|line| line != range.end_line())
+        {
+            return Err(AnchorError::LineOffItsRange);
         }
         let line = line.or_else(|| range.map(CommentRange::end_line));
         match (file, line) {
@@ -160,8 +166,8 @@ impl Anchor {
 /// Why a file, a line and a selection are not an anchor.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AnchorError {
-    #[error("line and range are mutually exclusive anchors — pass one")]
-    LineAndRange,
+    #[error("a line anchor and its range name different lines")]
+    LineOffItsRange,
     #[error("a line anchor requires a file")]
     LineWithoutFile,
 }

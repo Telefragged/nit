@@ -278,8 +278,7 @@ export default function DiffFileView({
         revision: anchor.revision,
         file: input.target.file,
         side: anchor.side,
-        // line and range are mutually exclusive anchors — a range
-        // anchors under its own end line.
+        // A range already names the line it ends on.
         ...(input.target.range
           ? { range: input.target.range }
           : { line: input.target.line }),
