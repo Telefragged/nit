@@ -185,18 +185,19 @@ export function selectionTarget(
   if (cells.length === 1) {
     startChar = Math.min(startChar, endChar);
     if (startChar === endChar) {
-      return { file: path, side, line };
+      return { file: path, side, at: { whole: line } };
     }
   }
   return {
     file: path,
     side,
-    line,
-    range: {
-      start_line: startLine,
-      start_char: startChar,
-      end_line: line,
-      end_char: endChar,
+    at: {
+      selection: {
+        start_line: startLine,
+        start_char: startChar,
+        end_line: line,
+        end_char: endChar,
+      },
     },
   };
 }

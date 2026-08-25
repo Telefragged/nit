@@ -93,8 +93,9 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(rangeOf(t, 2, t, 7))).toEqual({
       file: "src/a.rs",
       side: "new",
-      line: 13,
-      range: { start_line: 13, start_char: 2, end_line: 13, end_char: 7 },
+      at: {
+        selection: { start_line: 13, start_char: 2, end_line: 13, end_char: 7 },
+      },
     });
   });
 
@@ -104,8 +105,9 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "new",
-      line: 13,
-      range: { start_line: 12, start_char: 6, end_line: 13, end_char: 5 },
+      at: {
+        selection: { start_line: 12, start_char: 6, end_line: 13, end_char: 5 },
+      },
     });
   });
 
@@ -117,8 +119,9 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "old",
-      line: 12,
-      range: { start_line: 11, start_char: 0, end_line: 12, end_char: 4 },
+      at: {
+        selection: { start_line: 11, start_char: 0, end_line: 12, end_char: 4 },
+      },
     });
   });
 
@@ -135,12 +138,13 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "new",
-      line: 13,
-      range: {
-        start_line: 13,
-        start_char: 0,
-        end_line: 13,
-        end_char: "added line one".length,
+      at: {
+        selection: {
+          start_line: 13,
+          start_char: 0,
+          end_line: 13,
+          end_char: "added line one".length,
+        },
       },
     });
   });
@@ -151,7 +155,7 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(rangeOf(t, 3, t, 3))).toEqual({
       file: "src/a.rs",
       side: "new",
-      line: 14,
+      at: { whole: 14 },
     });
   });
 
@@ -164,8 +168,9 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "new",
-      line: 13,
-      range: { start_line: 13, start_char: 0, end_line: 13, end_char: 5 },
+      at: {
+        selection: { start_line: 13, start_char: 0, end_line: 13, end_char: 5 },
+      },
     });
   });
 
@@ -201,12 +206,13 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "new",
-      line: 13,
-      range: {
-        start_line: 13,
-        start_char: 0,
-        end_line: 13,
-        end_char: "added line one".length,
+      at: {
+        selection: {
+          start_line: 13,
+          start_char: 0,
+          end_line: 13,
+          end_char: "added line one".length,
+        },
       },
     });
   });
@@ -217,7 +223,7 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(rangeOf(t, 0, t, 1))).toEqual({
       file: "src/a.rs",
       side: "new",
-      line: 14,
+      at: { whole: 14 },
     });
   });
 });
@@ -278,8 +284,9 @@ describe("selectionTarget, split layout", () => {
     expect(selectionTarget(r)).toEqual({
       file: "src/b.rs",
       side: "new",
-      line: 32,
-      range: { start_line: 30, start_char: 2, end_line: 32, end_char: 5 },
+      at: {
+        selection: { start_line: 30, start_char: 2, end_line: 32, end_char: 5 },
+      },
     });
   });
 
@@ -289,8 +296,9 @@ describe("selectionTarget, split layout", () => {
     expect(selectionTarget(r)).toEqual({
       file: "src/b.rs",
       side: "old",
-      line: 21,
-      range: { start_line: 20, start_char: 1, end_line: 21, end_char: 4 },
+      at: {
+        selection: { start_line: 20, start_char: 1, end_line: 21, end_char: 4 },
+      },
     });
   });
 

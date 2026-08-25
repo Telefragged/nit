@@ -69,7 +69,7 @@ import { timeAgo } from "../lib/time";
 import { useChangeStream } from "../lib/useChangeStream";
 import { useDrafts } from "../lib/useDrafts";
 import { ErrorPanel } from "./NotFound";
-import type { DraftTarget, ReviewCtx } from "./reviewContext";
+import { targetLine, type DraftTarget, type ReviewCtx } from "./reviewContext";
 import { ReviewContext, sameTarget } from "./reviewContext";
 
 const LAYOUT_KEY = "nit.diff-layout";
@@ -447,7 +447,7 @@ export default function ReviewPage() {
           cur !== null &&
           t.file === cur.file &&
           t.side === cur.side &&
-          t.line === cur.line;
+          targetLine(t) === targetLine(cur);
         if (!sameCell && !confirmDiscard(editorDirty.current)) return false;
         setEditingTarget(t);
         return true;

@@ -38,7 +38,11 @@ import {
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
 import { selectionAnchorSide } from "../../lib/selection";
 import { EXPAND_STEP, useHunkExpansion } from "../../lib/useHunkExpansion";
-import type { DraftTarget } from "../../pages/reviewContext";
+import {
+  targetLine,
+  targetRange,
+  type DraftTarget,
+} from "../../pages/reviewContext";
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
@@ -94,7 +98,7 @@ function Code({
 }
 
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
-  a.file === file && a.side === side && a.line === line;
+  a.file === file && a.side === side && targetLine(a) === line;
 
 /** Class suffix marking a rebase-drift line, so its gutter and code cell
  * render contained. */
@@ -284,9 +288,7 @@ export default function DiffFileView({
           line: {
             file: input.target.file,
             side: anchor.side,
-            at: input.target.range
-              ? { selection: input.target.range }
-              : { whole: input.target.line },
+            at: input.target.at,
           },
         },
         body: input.body,
@@ -341,8 +343,9 @@ export default function DiffFileView({
       if (p) paints.push({ side: p.side, range, active: false });
     }
     const et = ctx.editingTarget;
-    if (et?.range && et.file === file.path) {
-      paints.push({ side: et.side, range: et.range, active: true });
+    const selected = et && targetRange(et);
+    if (selected && et.file === file.path) {
+      paints.push({ side: et.side, range: selected, active: true });
     }
     return paints;
   }, [threads, ctx.editingTarget, ctx.selected, ctx.against, file.path]);

@@ -1,31 +1,35 @@
 import { createContext, useContext } from "react";
-import type { CommentRange, Side } from "../api/types";
+import type { LineAnchor, Side } from "../api/types";
+import { placementLine } from "../lib/comments";
 
 /** Anchor of the draft editor currently open in the diff. */
 export interface DraftTarget {
   file: string;
   side: Side;
-  /** The range's end line when a range is set. */
-  line: number;
-  /** Selected-text anchor. */
-  range?: CommentRange;
+  /** The whole line, or the selection inside it. */
+  at: LineAnchor;
 }
 
-const sameRange = (a?: CommentRange, b?: CommentRange) =>
-  a === undefined || b === undefined
-    ? a === b
-    : a.start_line === b.start_line &&
-      a.start_char === b.start_char &&
-      a.end_line === b.end_line &&
-      a.end_char === b.end_char;
+/** The line a target hangs under. A selection ends on that line. */
+export const targetLine = (t: DraftTarget) => placementLine(t.at);
 
-/** Whole-anchor equality — a same-line target with a different range is a
- * different target (the editor must re-anchor). */
+/** The selection a target holds, if it holds one. */
+export const targetRange = (t: DraftTarget) =>
+  "selection" in t.at ? t.at.selection : null;
+
+const sameAt = (a: LineAnchor, b: LineAnchor) =>
+  "whole" in a
+    ? "whole" in b && a.whole === b.whole
+    : "selection" in b &&
+      a.selection.start_line === b.selection.start_line &&
+      a.selection.start_char === b.selection.start_char &&
+      a.selection.end_line === b.selection.end_line &&
+      a.selection.end_char === b.selection.end_char;
+
+/** Whole-anchor equality. A same-line target with a different selection
+ * is a different target, so the editor re-anchors. */
 export const sameTarget = (a: DraftTarget, b: DraftTarget) =>
-  a.file === b.file &&
-  a.side === b.side &&
-  a.line === b.line &&
-  sameRange(a.range, b.range);
+  a.file === b.file && a.side === b.side && sameAt(a.at, b.at);
 
 export interface ReviewCtx {
   changeNumber: number;
