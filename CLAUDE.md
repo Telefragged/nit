@@ -73,9 +73,10 @@ trailer carries identity across rewrites. Product spec: `nit.md`.
     changing a type in `nit-types`, and at the start of every review
     pass.
 12. **Every sentence we emit obeys `simplified-english`** — one idea
-    per sentence, 20 words for an instruction and 25 for a description,
-    six sentences per paragraph, active voice, no phrasal verbs. Load
-    the skill before writing chat output, a commit message, a comment or
+    per sentence, one reading per sentence, plain words, active voice,
+    six sentences per paragraph. There is no word limit; a metaphor or a
+    word with four meanings fails even when it is short. Load the skill
+    before writing chat output, a commit message, a comment or
     doc-comment, a nit reply, a `docs/` page, or UI copy; `comment-style`
     picks the fact's home, this one shapes the sentence.
 

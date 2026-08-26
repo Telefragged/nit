@@ -1,10 +1,9 @@
 ---
 name: simplified-english
 description: >
-  One idea per sentence, 20 words for an instruction and 25 for a
-  description, six sentences per paragraph, active voice. Load before
-  writing any user-facing prose: chat, commits, comments, nit replies,
-  docs, UI copy. From ASD-STE100.
+  One idea per sentence, one reading per sentence, active voice, six
+  sentences per paragraph. Load before writing any user-facing prose:
+  chat, commits, comments, nit replies, docs, UI copy. From ASD-STE100.
 ---
 
 # Simplified English
@@ -19,38 +18,45 @@ home a fact belongs in and whether to write it at all, and
 the surviving sentence is built, so apply it last.
 
 Quoted output, log lines, error text and identifiers are reproduced
-exactly. Never rewrite them to fit a cap.
+exactly. Never rewrite them.
 
-<caps>
+<what_a_good_sentence_is>
 
-Limits, not targets. A sentence under the cap that carries two ideas
-still fails.
+Write for a reader who is tired, or who reads English as a second
+language. Three things decide whether a sentence works for them.
 
-| Unit                                          | Limit       | STE |
-| --------------------------------------------- | ----------- | --- |
-| A sentence that tells someone to do something | 20 words    | 5.1 |
-| A sentence that describes something           | 25 words    | 6.3 |
-| Any sentence                                  | 1 idea      | 4.1 |
-| An instruction                                | 1 action\*  | 5.2 |
-| A paragraph                                   | 1 topic     | 6.5 |
-| A paragraph                                   | 6 sentences | 6.6 |
-| A multi-word noun                             | 3 words     | 2.1 |
+1. **It carries one idea.** The next idea starts the next sentence.
+2. **It has one reading.** A reader who knows every word arrives at the
+   meaning you meant. They never have to choose between two.
+3. **Every word in it is plain.** Prefer the word that has one meaning
+   here over the word that has four.
+
+There is no word limit. A long sentence that passes all three is fine,
+and a six-word sentence that carries two ideas is not. Length is a
+symptom, never the measure.
+
+| Unit              | Limit       | STE |
+| ----------------- | ----------- | --- |
+| Any sentence      | 1 idea      | 4.1 |
+| An instruction    | 1 action\*  | 5.2 |
+| A paragraph       | 1 topic     | 6.5 |
+| A paragraph       | 6 sentences | 6.6 |
+| A multi-word noun | 3 words     | 2.1 |
 
 \* Unless the actions happen at once: "Remove and discard the seal."
 
-Counting (STE 8.4 thru 8.7). Each of these is **one word**: a number or
-a number with its unit; an abbreviation, alphanumeric identifier or
-proper noun; any text inside parentheses, however long; a hyphenated
-word; and here also any code span or path. A colon opening a vertical
-list ends the sentence, and each item counts on its own.
+**Draft the plain sentence first.** Plainness is how you compose, not a
+pass you make over a fluent draft. A figure of speech is shorter than
+the literal statement, so it wins whenever you judge by length. The
+reader then has to recover the meaning you compressed.
 
-</caps>
+</what_a_good_sentence_is>
 
 <budget>
 
-The caps shape a sentence. They do not stop a reply from running long,
-and a reply built from short sentences can still ramble. So the whole
-answer has a budget too, set by the channel.
+The rules above shape a sentence. They do not stop a reply from running
+long, and a reply built from short sentences can still ramble. So the
+whole answer has a budget too, set by the channel.
 
 | Channel              | Budget                                |
 | -------------------- | ------------------------------------- |
@@ -144,6 +150,28 @@ probably a race._
 _Make sure the worktree is clean_ → _Make sure that the worktree is
 clean._
 
+**No metaphor and no personification.** Do not give a feeling or an
+intention to a thing. Such a sentence reads as fluent and names no
+actor. Name the actor and the action instead.
+_The wording asks nothing of the reader_ → _The reader does not have to
+decide which meaning applies._
+_The guard buys you a cheap read_ → _The guard skips the replay._
+
+**The word with one meaning here** (1.5 in spirit). A common word can be
+plain and still ambiguous: `sense`, `state`, `handle`, `address`,
+`issue`. Pick the one that a reader cannot take two ways.
+_The reader does not have to choose a sense_ → _The reader does not have
+to choose a meaning._
+
+**No lexical causative.** English lets some intransitive verbs take an
+object and mean "make it happen": `fail`, `run`, `drop`, `land`. The
+reader then has to tell that meaning from the ordinary transitive one,
+and `fail` has both.
+_so a bad value fails the push_ → _so a bad value causes the push to
+fail_
+Better still, drop the causation: _a bad value drops here, and the push
+still succeeds._
+
 **No phrasal verbs** (9.3). A verb plus a preposition takes a meaning
 neither part has, and the abstract reading is rarely the one you want.
 _The sweep picks up the revision and the cache gets blown away_ → _The
@@ -216,23 +244,28 @@ idea. That is its own sentence.
 
 The rules above, stated as the symptom to catch in your own draft.
 
-| Symptom                                                 | Rule   |
-| ------------------------------------------------------- | ------ |
-| A sentence you re-read to find the subject              | 4.1    |
-| "and", "which" or "while" joining two independent facts | 4.1    |
-| Hedging — "it's worth noting", "arguably", "somewhat"   | 4.1    |
-| "In order to", "the fact that", "at this point in time" | 3.7    |
-| "was updated", "is handled", "gets called"              | 3.6    |
-| A parenthesis carrying a whole second thought           | 8.3    |
-| A seventh sentence in a paragraph                       | 6.6    |
-| The same step phrased two ways in one document          | 9.4    |
-| An answer arriving after the reasoning                  | 6.4    |
-| A section answering a question nobody asked             | budget |
-| Headings in a two-paragraph chat reply                  | budget |
-| A closing paragraph that says the reply again           | budget |
+| Symptom                                                  | Rule   |
+| -------------------------------------------------------- | ------ |
+| A sentence you re-read to find the subject               | 4.1    |
+| "and", "which" or "while" joining two independent facts  | 4.1    |
+| Hedging — "it's worth noting", "arguably", "somewhat"    | 4.1    |
+| "In order to", "the fact that", "at this point in time"  | 3.7    |
+| "was updated", "is handled", "gets called"               | 3.6    |
+| A parenthesis carrying a whole second thought            | 8.3    |
+| A seventh sentence in a paragraph                        | 6.6    |
+| The same step phrased two ways in one document           | 9.4    |
+| An answer arriving after the reasoning                   | 6.4    |
+| A section answering a question nobody asked              | budget |
+| Headings in a two-paragraph chat reply                   | budget |
+| A closing paragraph that says the reply again            | budget |
+| A thing that wants, asks, demands, buys or knows         | 4.1    |
+| A word you would have to explain — "sense", "state"      | 1.5    |
+| An intransitive verb taking an object — "fails the push" | 9.3    |
+| A phrasing you chose because it was shorter              | draft  |
 
 Check a draft in this order: cut what has no home (`comment-style`),
-split what carries two ideas, then count.
+split what carries two ideas, then replace every word and figure that
+has a second reading.
 
 </failure_modes>
 
@@ -244,7 +277,10 @@ dictionary in Part 2. Rules 1.7 thru 1.11, 1.13 and 1.14 concern
 technical nouns and fold into `<structure>` and the domain model.
 
 Where STE and this repo disagree, this repo wins. American spelling
-(1.14) holds. The 72-column wrap on commit messages is a separate rule,
-unaffected by the word caps here.
+(1.14) holds. STE 5.1 and 6.3 cap a sentence at 20 and 25 words; this
+repo drops both, because a number measures the symptom and not the
+fault, and because chasing it rewards a compressed figure of speech over
+a plain statement. The 72-column wrap on commit messages is a separate
+rule, and it survives.
 
 </provenance>
