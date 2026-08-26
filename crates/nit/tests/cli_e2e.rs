@@ -13,7 +13,9 @@ mod common;
 use std::io::Write;
 use std::process::Command;
 
-use common::{GitRepo, TestServer, change_id, msg, nit, nit_register};
+use common::{
+    GitRepo, TestServer, change_id, change_tags, first_repo_id, msg, nit, nit_env, nit_register,
+};
 
 /// `nit push` prints the resulting chain digest and registers the chain;
 /// `nit status`/`nit log` then read the derived chain back, resolved from the
@@ -378,4 +380,50 @@ fn push_resolves_detached_head() {
     let (ok, push, stderr) = nit(&server, &g, &["push"]);
     assert!(ok, "detached HEAD resolves: {stderr}");
     assert!(push.as_str().is_some_and(|d| d.contains("Ia")), "{push}");
+}
+
+/// `nit push` tags what it observes about the checkout: the branch,
+/// the worktree, and the harness session. It adds whatever `--tag` names.
+/// An explicit rev drops `branch`.
+#[test]
+fn push_tags_derived_and_explicit_values() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (ok, _, stderr) = nit(&server, &g, &["repo", "create", "--canonical-ref", "main"]);
+    assert!(ok, "repo create: {stderr}");
+    let (ok, _, stderr) = nit_env(
+        &server,
+        &g,
+        &["push", "--tag", "feature=epic-saga"],
+        &[("CLAUDE_CODE_SESSION_ID", "sess-1")],
+    );
+    assert!(ok, "{stderr}");
+
+    let repo_id = first_repo_id(&server);
+    let workdir = std::fs::canonicalize(g.workdir()).expect("canonical workdir");
+    let tags = change_tags(&server, repo_id, "Ia");
+    assert_eq!(tags["branch"], "feat");
+    assert_eq!(tags["worktree"], workdir.to_str().expect("utf-8 workdir"));
+    assert_eq!(tags["session-id"], "sess-1");
+    assert_eq!(tags["feature"], "epic-saga");
+
+    // An explicit rev names the same commit, but implies no ref.
+    let c2 = g.commit(&[c1], &msg("core: add b", "Ib"), &[("b.txt", "b\n")]);
+    g.branch("feat", c2);
+    let (ok, _, stderr) = nit(&server, &g, &["push", "feat"]);
+    assert!(ok, "{stderr}");
+    let tags = change_tags(&server, repo_id, "Ib");
+    assert!(
+        tags.get("branch").is_none(),
+        "no branch for an explicit rev: {tags}"
+    );
+    assert_eq!(tags["worktree"], workdir.to_str().expect("utf-8 workdir"));
+    assert!(
+        tags.get("session-id").is_none(),
+        "the harness clears the ambient session id: {tags}"
+    );
 }

@@ -29,6 +29,19 @@ nit wait             # block until the reviewer acts; prints feedback JSON
 # all approved → merge; chain disappears
 ```
 
+A push tags the changes it registers with the branch, the worktree and the
+harness session it ran from, so changes can be correlated afterwards.
+`--tag` adds your own, and any key you don't name keeps the value the
+change already carries:
+
+```sh
+nit push --tag feature=epic-saga
+```
+
+`GET /api/changes?repo={id}&tag=feature=epic-saga` selects on them
+(repeatable, exact key and value, every one must match), and
+`GET /api/tags?repo={id}` lists the keys and values in use.
+
 With a cooperative monitor, tail instead of blocking on `nit wait`:
 
 ```sh

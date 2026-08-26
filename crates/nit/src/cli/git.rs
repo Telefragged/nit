@@ -1,7 +1,7 @@
 //! Local git helpers.
 //!
-//! Discover the cwd's repo, resolve its `git-common-dir`, read HEAD, and
-//! resolve an explicit revision to a full commit sha.
+//! Discover the cwd's repo, resolve its `git-common-dir` and worktree, read
+//! HEAD, and resolve an explicit revision to a full commit sha.
 
 use std::path::Path;
 
@@ -25,6 +25,29 @@ fn git_common_dir(repo: &Repository) -> Result<String> {
     dir.into_os_string()
         .into_string()
         .map_err(|_| anyhow!("git dir is not valid UTF-8"))
+}
+
+/// The repo's checkout directory, canonicalized.
+///
+/// `None` for a bare repo, or a path that won't canonicalize or isn't UTF-8.
+/// Distinct from the git-common-dir, which a linked worktree shares with the
+/// main checkout.
+pub(crate) fn canonical_workdir(repo: &Repository) -> Option<String> {
+    let dir = std::fs::canonicalize(repo.workdir()?).ok()?;
+    dir.into_os_string().into_string().ok()
+}
+
+/// The branch HEAD points at.
+///
+/// `None` on a detached HEAD, an unborn branch, or when the head state can't
+/// be read — every case where no branch name describes the checkout.
+pub(crate) fn head_branch(repo: &Repository) -> Option<String> {
+    // A detached HEAD resolves to a reference named `HEAD`, which is not a
+    // branch, and an unborn one resolves to nothing at all.
+    let head = repo.head().ok()?;
+    head.is_branch()
+        .then(|| head.shorthand())?
+        .map(str::to_string)
 }
 
 pub(crate) fn discover_repo() -> Result<(String, Repository)> {

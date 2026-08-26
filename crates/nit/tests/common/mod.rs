@@ -230,12 +230,38 @@ impl Drop for TestServer {
 /// Run the real `nit` binary (`CARGO_BIN_EXE`) from inside `repo` against
 /// `server`: (exit ok, parsed stdout JSON, stderr).
 pub fn nit(server: &TestServer, repo: &GitRepo, args: &[&str]) -> (bool, Value, String) {
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(args)
-        .current_dir(repo.workdir())
-        .env("NIT_SERVER", &server.base)
+    nit_env(server, repo, args, &[])
+}
+
+/// [`nit`] with `envs` set on the child.
+///
+/// The harness clears `CLAUDE_CODE_SESSION_ID` first, because `nit push`
+/// derives a `session-id` tag from it. A test run under Claude Code would
+/// otherwise see a tag set that depends on who ran it.
+pub fn nit_env(
+    server: &TestServer,
+    repo: &GitRepo,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> (bool, Value, String) {
+    let out = nit_command(server, repo, args)
+        .envs(envs.iter().copied())
         .output()
         .expect("running nit");
+    parsed_output(&out)
+}
+
+/// The `nit` child every helper runs, configured but not spawned.
+fn nit_command(server: &TestServer, repo: &GitRepo, args: &[&str]) -> std::process::Command {
+    let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_nit"));
+    cmd.args(args)
+        .current_dir(repo.workdir())
+        .env("NIT_SERVER", &server.base)
+        .env_remove("CLAUDE_CODE_SESSION_ID");
+    cmd
+}
+
+fn parsed_output(out: &std::process::Output) -> (bool, Value, String) {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     // Text-output commands (status/push/comment/…) aren't JSON; keep their raw
@@ -529,10 +555,7 @@ pub fn nit_bounded(
     args: &[&str],
     deadline: Duration,
 ) -> (bool, Value, String) {
-    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(args)
-        .current_dir(repo.workdir())
-        .env("NIT_SERVER", &server.base)
+    let mut child = nit_command(server, repo, args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -541,13 +564,7 @@ pub fn nit_bounded(
     loop {
         if child.try_wait().expect("try_wait").is_some() {
             let out = child.wait_with_output().expect("output");
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
-            // Text-output commands (status/push/comment/…) aren't JSON; keep their raw
-            // stdout as a string so a test can assert on the rendered lines.
-            let value = serde_json::from_str(stdout.trim())
-                .unwrap_or_else(|_| Value::String(stdout.trim().to_string()));
-            return (out.status.success(), value, stderr);
+            return parsed_output(&out);
         }
         if start.elapsed() >= deadline {
             let _ = child.kill();
