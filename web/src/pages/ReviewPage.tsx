@@ -14,12 +14,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { createDraft, getChain, getDiff, getRepo } from "../api/client";
 import type {
   ChangeDetail,
@@ -68,6 +63,7 @@ import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
 import { useChangeStream } from "../lib/useChangeStream";
 import { useDrafts } from "../lib/useDrafts";
+import { useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
 import { targetLine, type DraftTarget, type ReviewCtx } from "./reviewContext";
 import { ReviewContext, sameTarget } from "./reviewContext";
@@ -231,7 +227,7 @@ function ReviewsStrip({ change }: { change: ChangeDetail }) {
 export default function ReviewPage() {
   const { id } = useParams();
   const changeNumber = Number(id);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, updateParams] = useUrlParams();
 
   const revisionParam = searchParams.get("revision")
     ? Number(searchParams.get("revision"))
@@ -340,16 +336,9 @@ export default function ReviewPage() {
   // `defaultRev`, so nothing moves regardless of when the effect flushes.
   useEffect(() => {
     if (revisionParam === undefined && defaultRev !== undefined) {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set("revision", String(defaultRev));
-          return next;
-        },
-        { replace: true },
-      );
+      updateParams({ revision: String(defaultRev) });
     }
-  }, [revisionParam, defaultRev, setSearchParams]);
+  }, [revisionParam, defaultRev, updateParams]);
 
   // Each chain member's published projection comes from the ["change", id]
   // cache the stream keeps live (ChainNav reads each member's
@@ -716,15 +705,6 @@ export default function ReviewPage() {
   const orphanFileThreads = [...threadsByFile.entries()].filter(
     ([path]) => !files.some((f) => f.path === path),
   );
-
-  const updateParams = (patch: Record<string, string | null>) => {
-    const next = new URLSearchParams(searchParams);
-    for (const [k, v] of Object.entries(patch)) {
-      if (v === null) next.delete(k);
-      else next.set(k, v);
-    }
-    setSearchParams(next, { replace: true });
-  };
 
   // Diff range dropdowns. Left writes ?against ("base" | "1".."N-1").
   // Right writes ?revision; a still-valid numeric base is preserved (the

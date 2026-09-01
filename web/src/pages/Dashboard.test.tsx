@@ -67,4 +67,14 @@ describe("repo dashboard change graph", () => {
       beta.compareDocumentPosition(alpha) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
+
+  it("keeps only the changes carrying the value the URL names", async () => {
+    renderDashboard(4, "?group=session&value=beta");
+    await screen.findByText("lumen: evict cached manifests by age");
+    expect(screen.getByLabelText("Only")).toHaveProperty("value", "beta");
+    expect(screen.queryByText("lumen: parse the manifest lazily")).toBeNull();
+    // The filter excluded the stacked change's parent: a break mark cuts
+    // its edge to the fork.
+    expect(document.querySelector(".graph-break")).not.toBeNull();
+  });
 });

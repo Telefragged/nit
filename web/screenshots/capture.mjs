@@ -82,6 +82,13 @@ const captures = [
   // Repo 4 grouped by `session`: each session's changes run together, a
   // labelled gap above each run.
   { name: "change-graph-grouped", path: "/repos/4?group=session" },
+  // Repo 4 narrowed to `session=beta`: the filter excludes the parent of the
+  // change stacked on alpha's tip, so that change breaks to its fork. Beta's
+  // own chain stays whole.
+  {
+    name: "change-graph-filtered",
+    path: "/repos/4?group=session&value=beta",
+  },
   // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
   { name: "review-interdiff", path: "/changes/11?against=0" },
   // Long review cover message expanded via the "more" toggle. Viewport-only

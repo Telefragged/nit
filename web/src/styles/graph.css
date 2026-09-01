@@ -70,10 +70,11 @@
   color: var(--text-faint);
 }
 
-/* The selector row above the graph. */
+/* The selector row above the graph: two equal columns spanning the graph's
+   width, so a long tag value has room before the ellipsis truncates it. */
 .graph-toolbar {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 10px;
   font-size: 12px;
@@ -83,7 +84,21 @@
 .graph-toolbar label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.graph-toolbar select {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.graph-toolbar select:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* Clickable rows highlight on hover (like the repo list), the rest stay flat. */

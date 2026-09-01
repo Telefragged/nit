@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { getChanges, getHistory, getRepo, getTags } from "../api/client";
 import { repoGraph } from "../api/fold";
 import type { ChangeStatus } from "../api/types";
 import ChangeGraph, { type NodeActivity } from "../components/ChangeGraph";
 import { repoPath } from "../lib/repo";
 import { useDrafts } from "../lib/useDrafts";
+import { useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
 
 /** Every status but `merged`: the open region derives from active tips, but a
@@ -20,22 +21,24 @@ const GRAPH_STATUSES: ChangeStatus[] = [
   "abandoned",
 ];
 
+/** `list`, plus `choice` when the list lacks it. */
+const pinned = (list: string[], choice: string | null): string[] =>
+  choice === null || list.includes(choice) ? list : [...list, choice];
+
 /** A repo's review dashboard: one change graph centered on the canonical
  * ref — open changes ascending above the HEAD anchor, merged
  * history descending below it — assembled in the browser (api/fold) from the
  * repo's unmerged change folds and its canonical history. `?group=<key>`
- * groups the open changes by that tag key. */
+ * groups the open changes by that tag key. `?value=<value>` then keeps
+ * only the changes that carry that value. */
 export default function Dashboard() {
   const { repoId } = useParams();
   const id = Number(repoId);
-  const [params, setParams] = useSearchParams();
+  const [params, updateParams] = useUrlParams();
   const groupBy = params.get("group");
-  const setGroupBy = (key: string) => {
-    const next = new URLSearchParams(params);
-    if (key === "") next.delete("group");
-    else next.set("group", key);
-    setParams(next, { replace: true });
-  };
+  const value = groupBy === null ? null : params.get("value");
+  const tag =
+    groupBy !== null && value !== null ? `${groupBy}=${value}` : undefined;
 
   // The repo's path (its name) is fixed for the page's lifetime, so fetch it
   // once by id — only the changes/history reads refetch as things land.
@@ -44,24 +47,13 @@ export default function Dashboard() {
     queryFn: () => getRepo(id),
   });
   const changesQuery = useQuery({
-    queryKey: ["repo-changes", id],
-    queryFn: () => getChanges(id, GRAPH_STATUSES),
+    queryKey: ["repo-changes", id, tag ?? null],
+    queryFn: () => getChanges(id, GRAPH_STATUSES, tag),
   });
   const historyQuery = useQuery({
     queryKey: ["history", id],
     queryFn: () => getHistory(id),
   });
-  // The keys the selector offers: those an unmerged change carries now,
-  // plus the one the URL names, so a stale link still shows its choice.
-  const tagsQuery = useQuery({
-    queryKey: ["repo-tags", id],
-    queryFn: () => getTags(id, GRAPH_STATUSES),
-  });
-  const groupKeys = useMemo(() => {
-    const keys = Object.keys(tagsQuery.data?.tags ?? {});
-    if (groupBy !== null && !keys.includes(groupBy)) keys.push(groupBy);
-    return keys;
-  }, [tagsQuery.data, groupBy]);
   const graph = useMemo(
     () =>
       changesQuery.data && historyQuery.data
@@ -69,6 +61,16 @@ export default function Dashboard() {
         : undefined,
     [changesQuery.data, historyQuery.data, groupBy],
   );
+  // The selectors offer what an unmerged change carries now, plus the
+  // URL's own choice. The selectors then still show the choice of a stale
+  // link.
+  const tagsQuery = useQuery({
+    queryKey: ["repo-tags", id],
+    queryFn: () => getTags(id, GRAPH_STATUSES),
+  });
+  const tags = tagsQuery.data?.tags ?? {};
+  const groupKeys = pinned(Object.keys(tags), groupBy);
+  const values = groupBy === null ? [] : pinned(tags[groupBy] ?? [], value);
 
   // Each open node's activity badges read straight off the fold the bulk
   // read already delivered. Only the reviewer's drafts and draft decision
@@ -118,27 +120,46 @@ export default function Dashboard() {
         ) : null}
         .
       </p>
-      {groupKeys.length > 0 && (
-        <div className="graph-toolbar">
-          <label>
-            Group by
-            <select
-              className="revision-select"
-              value={groupBy ?? ""}
-              onChange={(e) => {
-                setGroupBy(e.target.value);
-              }}
-            >
-              <option value="">none</option>
-              {groupKeys.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
+      <div className="graph-toolbar">
+        <label>
+          Group by
+          <select
+            className="revision-select"
+            value={groupBy ?? ""}
+            onChange={(e) => {
+              // A value belongs to its key.
+              updateParams({ group: e.target.value || null, value: null });
+            }}
+          >
+            <option value="">none</option>
+            {groupKeys.map((key) => (
+              <option key={key} value={key}>
+                {key}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Only
+          <select
+            className="revision-select"
+            value={value ?? ""}
+            disabled={groupBy === null}
+            onChange={(e) => {
+              updateParams({ value: e.target.value || null });
+            }}
+          >
+            <option value="">
+              {groupBy === null ? "" : `every ${groupBy}`}
+            </option>
+            {values.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {error ? (
         <ErrorPanel error={error} />
       ) : graph === undefined ? (

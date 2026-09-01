@@ -81,10 +81,21 @@ export const getChain = (changeNumber: number, revision?: number) =>
 const statusQuery = (statuses: ChangeStatus[]) =>
   statuses.map((s) => `&status=${s}`).join("");
 
-/** A repo's changes as folded projections, narrowed to the statuses named —
- * the filter is explicit and repeatable; the API serves no default subset. */
-export const getChanges = (repoId: number, statuses: ChangeStatus[]) =>
-  request<ChangeList>("GET", `/changes?repo=${repoId}${statusQuery(statuses)}`);
+/** A repo's changes as folded projections, narrowed to the statuses named,
+ * and to the changes carrying `tag` (`key=value`) when one is given. The
+ * status filter is explicit and repeatable. The API serves no default
+ * subset. */
+export const getChanges = (
+  repoId: number,
+  statuses: ChangeStatus[],
+  tag?: string,
+) =>
+  request<ChangeList>(
+    "GET",
+    `/changes?repo=${repoId}${statusQuery(statuses)}${
+      tag === undefined ? "" : `&tag=${encodeURIComponent(tag)}`
+    }`,
+  );
 
 /** The tags the repo's changes at `statuses` carry now, grouped by key. */
 export const getTags = (repoId: number, statuses: ChangeStatus[]) =>

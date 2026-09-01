@@ -307,34 +307,40 @@ function repoList(): Repo[] {
 /** The fixed merged-history window (mirrors the backend's MERGED_WINDOW). */
 const MERGED_WINDOW = 5;
 
-/** `GET /api/changes`: folded projections of the repo's changes matching the
- * explicit `status` filters (none means all), each folded from its synth log
- * through the shared wasm fold — the same source the websocket projections. */
-function listChanges(repoId: number | null, statuses: ChangeStatus[]) {
+/** `GET /api/changes`: folded projections of the repo's changes. A change
+ * matches when it is at one of the explicit `status` filters (none means
+ * all) and carries every `tag` (`key=value`, split at the first `=`). Each
+ * one is folded from its synth log through the shared wasm fold — the same
+ * source the websocket projections. */
+function listChanges(
+  repoId: number | null,
+  statuses: ChangeStatus[],
+  tags: string[],
+) {
+  const wanted = tags.map((t) => {
+    const at = t.indexOf("=");
+    return [t.slice(0, at), t.slice(at + 1)] as const;
+  });
   return {
     changes: changes
       .filter(
         (c) =>
           (repoId === null || c.repo_id === repoId) &&
           (statuses.length === 0 ||
-            statuses.includes(statusAt(c, latestRevision(c).number))),
+            statuses.includes(statusAt(c, latestRevision(c).number))) &&
+          wanted.every(([key, value]) => c.tags?.[key] === value),
       )
       .map((c) => projection(c.id)),
   };
 }
 
 /** `GET /api/tags`: the tags the repo's changes at `statuses` (none means
- * all) carry, each key with its sorted distinct values. */
+ * all) carry, each key with its sorted distinct values. The same read as
+ * `GET /api/changes` picks the changes, so the two routes agree. */
 function listTags(repoId: number, statuses: ChangeStatus[]): TagList {
   const tags: Record<string, string[]> = {};
-  for (const c of changes) {
-    if (c.repo_id !== repoId) continue;
-    if (
-      statuses.length > 0 &&
-      !statuses.includes(statusAt(c, latestRevision(c).number))
-    )
-      continue;
-    for (const [key, value] of Object.entries(c.tags ?? {})) {
+  for (const p of listChanges(repoId, statuses, []).changes) {
+    for (const [key, value] of Object.entries(p.tags ?? {})) {
       const values = (tags[key] ??= []);
       if (!values.includes(value)) values.push(value);
     }
@@ -467,6 +473,7 @@ export async function mockRequest(
     return listChanges(
       repo === null ? null : Number(repo),
       q.getAll("status") as ChangeStatus[],
+      q.getAll("tag"),
     );
   }
 
