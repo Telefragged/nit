@@ -51,7 +51,7 @@ pub(super) async fn list_changes(
     with_conn(state.pool(), move |conn| {
         let filter = db::ChangeFilter {
             statuses: q.status,
-            tags: q.tag,
+            tags: q.tag.into_iter().collect(),
         };
         let mut changes = Vec::new();
         for repo_id in state.repo_ids_matching(q.repo) {

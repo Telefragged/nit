@@ -23,9 +23,9 @@ use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use std::fmt::Write as _;
 
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::Tags;
 use nit_types::domain::{Anchor, CommentRange, LineAnchor};
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
-use nit_types::domain::{Tag, Tags};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
 /// RFC3339 timestamp for "now" (UTC).
@@ -565,16 +565,38 @@ pub fn get_change(conn: &Connection, id: ChangeNumber) -> Result<Option<ChangeRo
     .map_err(Into::into)
 }
 
-/// Which of a repo's changes a list read admits.
+/// Which of a repo's changes a read matches.
 ///
 /// Every field narrows and an empty field does not, so the default
-/// admits the whole repo.
+/// matches the whole repo.
 #[derive(Debug, Default, Clone)]
 pub struct ChangeFilter {
     /// Matched against the change's status at its latest revision.
     pub statuses: Vec<ChangeStatus>,
-    /// Each must be present, verbatim key and value.
-    pub tags: Vec<Tag>,
+    /// A change must have every one of these, same key and same value. A
+    /// map, because a filter has one value per key.
+    pub tags: Tags,
+}
+
+impl ChangeFilter {
+    /// The SQL `AND` clauses that apply this filter to a `changes` row,
+    /// and the values to bind to them, in order.
+    ///
+    /// The clauses name `id` and `status` without a table prefix, because
+    /// no other table in these queries has either column.
+    fn clauses(&self) -> (String, Vec<rusqlite::types::Value>) {
+        let mut sql = String::new();
+        let mut values: Vec<rusqlite::types::Value> = Vec::new();
+        push_status_filter(&mut sql, &mut values, "status", &self.statuses);
+        for (key, value) in self.tags.iter() {
+            sql.push_str(
+                " AND id IN (SELECT change_number FROM change_tags WHERE key = ? AND value = ?)",
+            );
+            values.push(key.to_string().into());
+            values.push(value.to_string().into());
+        }
+        (sql, values)
+    }
 }
 
 /// One repo's change rows, ascending by number (creation order).
@@ -592,19 +614,10 @@ pub fn repo_changes(
     repo_id: u64,
     filter: &ChangeFilter,
 ) -> Result<Vec<ChangeRow>> {
-    let mut sql = String::from("SELECT * FROM changes WHERE repo_id = ?1");
+    let (clauses, bound) = filter.clauses();
+    let sql = format!("SELECT * FROM changes WHERE repo_id = ?1{clauses} ORDER BY id");
     let mut values: Vec<rusqlite::types::Value> = vec![i64::try_from(repo_id)?.into()];
-    push_status_filter(&mut sql, &mut values, "status", &filter.statuses);
-    for _ in &filter.tags {
-        sql.push_str(
-            " AND id IN (SELECT change_number FROM change_tags WHERE key = ? AND value = ?)",
-        );
-    }
-    sql.push_str(" ORDER BY id");
-    for tag in &filter.tags {
-        values.push(tag.key().to_string().into());
-        values.push(tag.value().to_string().into());
-    }
+    values.extend(bound);
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
         .query_map(rusqlite::params_from_iter(values), map_change)?
@@ -758,6 +771,44 @@ fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
         payload: row.get("payload")?,
         created_at: row.get("created_at")?,
     })
+}
+
+/// The entries with `after < sequence < before` of every change the
+/// filter matches, ascending by `sequence`, each with its change number.
+///
+/// A `None` bound means no bound on that side.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn log_between(
+    conn: &Connection,
+    repo_id: u64,
+    filter: &ChangeFilter,
+    after: Option<u64>,
+    before: Option<u64>,
+) -> Result<Vec<(ChangeNumber, LogRow)>> {
+    let (clauses, bound) = filter.clauses();
+    let sql = format!(
+        "SELECT change_number, sequence, position, kind, payload, created_at FROM log
+         WHERE (?1 IS NULL OR sequence > ?1) AND (?2 IS NULL OR sequence < ?2)
+           AND change_number IN (SELECT id FROM changes WHERE repo_id = ?3{clauses})
+         ORDER BY sequence"
+    );
+    let mut values: Vec<rusqlite::types::Value> = vec![
+        after.map(i64::try_from).transpose()?.into(),
+        before.map(i64::try_from).transpose()?.into(),
+        i64::try_from(repo_id)?.into(),
+    ];
+    values.extend(bound);
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(values), |row| {
+            let change_number = ChangeNumber::new(col_u64(row.get("change_number")?)?);
+            Ok((change_number, map_log(row)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
 
 /// One change's entries in `[from, to)`, position-ascending.
@@ -1100,7 +1151,7 @@ pub fn delete_draft_review(tx: &Transaction, change_number: ChangeNumber) -> Res
 mod tests {
     use super::*;
     use nit_types::domain::{CommentRange, LineAnchor, Side};
-    use nit_types::testing::{change_id, sha, tag, tags};
+    use nit_types::testing::{change_id, sha, tags};
 
     fn mem() -> Connection {
         let mut conn = Connection::open_in_memory().expect("in-memory db");
@@ -1122,12 +1173,12 @@ mod tests {
         write(conn, |tx| upsert_change(tx, repo_id, &change_id(label))).expect("change")
     }
 
-    fn matching_tags(conn: &Connection, repo_id: u64, tags: Vec<Tag>) -> Vec<ChangeNumber> {
+    fn matching_tags(conn: &Connection, repo_id: u64, pairs: &[(&str, &str)]) -> Vec<ChangeNumber> {
         repo_changes(
             conn,
             repo_id,
             &ChangeFilter {
-                tags,
+                tags: tags(pairs),
                 ..ChangeFilter::default()
             },
         )
@@ -1149,17 +1200,17 @@ mod tests {
         set_tags(&mut conn, id, &[("branch", "track/a"), ("feature", "epic")]);
         set_tags(&mut conn, id, &[("branch", "track/b")]);
 
-        let matching = |t: Tag| matching_tags(&conn, repo.id, vec![t]);
-        assert_eq!(matching(tag("branch", "track/b")), vec![id]);
-        assert!(matching(tag("branch", "track/a")).is_empty());
+        let matching = |pair| matching_tags(&conn, repo.id, &[pair]);
+        assert_eq!(matching(("branch", "track/b")), vec![id]);
+        assert!(matching(("branch", "track/a")).is_empty());
         assert!(
-            matching(tag("feature", "epic")).is_empty(),
+            matching(("feature", "epic")).is_empty(),
             "a key the second write left out is gone, not carried"
         );
 
         set_tags(&mut conn, id, &[]);
         assert!(
-            matching_tags(&conn, repo.id, vec![tag("branch", "track/b")]).is_empty(),
+            matching_tags(&conn, repo.id, &[("branch", "track/b")]).is_empty(),
             "clearing the set leaves the change matching nothing"
         );
     }
@@ -1177,14 +1228,64 @@ mod tests {
         );
         set_tags(&mut conn, one, &[("branch", "track/a")]);
 
-        let matching = |tags| matching_tags(&conn, repo.id, tags);
-        assert_eq!(matching(vec![]), vec![both, one]);
-        assert_eq!(matching(vec![tag("branch", "track/a")]), vec![both, one]);
+        let matching = |pairs| matching_tags(&conn, repo.id, pairs);
+        assert_eq!(matching(&[]), vec![both, one]);
+        assert_eq!(matching(&[("branch", "track/a")]), vec![both, one]);
         assert_eq!(
-            matching(vec![tag("branch", "track/a"), tag("feature", "epic")]),
+            matching(&[("branch", "track/a"), ("feature", "epic")]),
             vec![both]
         );
-        assert!(matching(vec![tag("feature", "other")]).is_empty());
+        assert!(matching(&[("feature", "other")]).is_empty());
+    }
+
+    #[test]
+    fn log_after_reads_the_matched_changes_in_sequence_order() {
+        let mut conn = mem();
+        let repo = repo(&mut conn, "/r/.git");
+        let tagged = change_in(&mut conn, repo.id, "I1");
+        let other = change_in(&mut conn, repo.id, "I2");
+        set_tags(&mut conn, tagged, &[("branch", "track/a")]);
+        let append = |conn: &mut Connection, number, position| {
+            write(conn, |tx| {
+                append_log(tx, number, position, "revision", "{}", "t")
+            })
+            .expect("append")
+        };
+        let first = append(&mut conn, tagged, 0);
+        append(&mut conn, other, 0);
+        let third = append(&mut conn, tagged, 1);
+
+        let filter = ChangeFilter {
+            tags: tags(&[("branch", "track/a")]),
+            ..ChangeFilter::default()
+        };
+        let read = |after, before| {
+            log_between(&conn, repo.id, &filter, after, before)
+                .expect("read")
+                .into_iter()
+                .map(|(number, row)| (number, row.sequence))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(read(None, None), vec![(tagged, first), (tagged, third)]);
+        assert_eq!(
+            read(Some(first), None),
+            vec![(tagged, third)],
+            "`after` is exclusive"
+        );
+        assert_eq!(
+            read(None, Some(third)),
+            vec![(tagged, first)],
+            "`before` is exclusive"
+        );
+        assert!(read(Some(third), None).is_empty());
+
+        let whole_repo = ChangeFilter::default();
+        assert_eq!(
+            log_between(&conn, repo.id, &whole_repo, None, None)
+                .expect("read")
+                .len(),
+            3
+        );
     }
 
     #[test]
