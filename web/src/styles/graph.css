@@ -40,18 +40,50 @@
   z-index: 1;
 }
 
-.graph-row {
+.graph-row,
+.graph-gap {
   display: grid;
   grid-template-columns: var(--graph-cols);
   align-items: center;
   gap: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.graph-row {
   height: var(--row-h);
   padding: 0 18px 0 0;
-  border-bottom: 1px solid var(--border);
 }
 
 .graph-row:last-child {
   border-bottom: none;
+}
+
+/* The gap above a row that starts a run of a group: a raised band carrying
+   the group's value, so each run reads as one block. */
+.graph-gap {
+  height: var(--gap-h);
+  background: var(--bg-raised);
+}
+
+.graph-gap-label {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* The selector row above the graph. */
+.graph-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.graph-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Clickable rows highlight on hover (like the repo list), the rest stay flat. */

@@ -86,16 +86,29 @@ pub fn fold_entry(proj: JsValue, entry: JsValue) -> Result<JsValue, JsValue> {
 /// Assembles the repo's change graph from the two primitive reads.
 ///
 /// The reads are the change folds (`GET /api/changes`) and the canonical
-/// history (`GET /api/history`).
+/// history (`GET /api/history`). `group_by` names the tag key to group
+/// the open region on.
 ///
 /// # Errors
 ///
 /// When either argument fails to parse or the graph fails to serialize.
 #[wasm_bindgen]
-pub fn repo_graph(changes: JsValue, history: JsValue) -> Result<JsValue, JsValue> {
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "wasm-bindgen exports take owned values"
+)]
+pub fn repo_graph(
+    changes: JsValue,
+    history: JsValue,
+    group_by: Option<String>,
+) -> Result<JsValue, JsValue> {
     let changes: Vec<ChangeProjection> = serde_wasm_bindgen::from_value(changes)?;
     let history: RepoHistory = serde_wasm_bindgen::from_value(history)?;
-    to_js(&graph::assemble(&RepoView::new(changes), &history))
+    to_js(&graph::assemble(
+        &RepoView::new(changes),
+        &history,
+        group_by.as_deref(),
+    ))
 }
 
 /// Marks the characters that changed inside a diff's replacement blocks.

@@ -15,7 +15,9 @@
 // change whose parent is missing from the graph attaches to its fork
 // instead, and a break mark cuts that edge: the commits between the two are
 // not shown. The dash and the mark are independent, so a fork below the
-// window with hidden commits above it gets both.
+// window with hidden commits above it gets both. A grouped graph opens a
+// gap between two rows whose group differs, so each run of a group reads as
+// one block.
 
 import type { GraphNode, RepoGraph } from "../api/types";
 
@@ -36,6 +38,8 @@ export const LAYOUT_B = {
   /** Per-row opacity falloff for merged history. */
   fadeStep: 0.13,
   fadeFloor: 0.3,
+  /** The gap above a row that starts a new group. */
+  gapH: 24,
 };
 
 export interface LaidNode {
@@ -51,6 +55,9 @@ export interface LaidNode {
   /** Rows below the HEAD anchor (0 off the history region) — drives the fade. */
   depth: number;
   opacity: number;
+  /** The row starts a run of a group. The row above it belongs to a
+   * different group, or the row is the first row. */
+  gapAbove: boolean;
 }
 
 type EdgeKind = "open" | "history" | "behind";
@@ -76,9 +83,11 @@ export interface GraphLayout {
   edges: LaidEdge[];
   /** Full rail width (the GRAPH column), so the SVG can size itself. */
   railWidth: number;
-  /** Full rail height = rows × rowH (includes the collapsed-history row). */
+  /** Full rail height: every row, gap and the collapsed-history row. */
   height: number;
   rowH: number;
+  /** The gap above a row that starts a run of a group. */
+  gapH: number;
   /** Row of the HEAD anchor, or -1 when the graph has no head. */
   anchorRow: number;
   /** The "earlier history hidden" marker when the window is truncated: the
@@ -219,9 +228,25 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
     for (const r of br.rows) lane[r] = placed + 1;
   }
 
+  // Row tops. The first row of a run gets a gap above it, so every run
+  // carries its label. Rows past the last node (the collapsed marker)
+  // follow at the plain row pitch.
+  const gapAbove: boolean[] = nodes.map((nd, i) =>
+    i === 0 ? nd.group !== null : nodes[i - 1]?.group !== nd.group,
+  );
+  const rowTop: number[] = [];
+  let bottom = 0;
+  nodes.forEach((_, i) => {
+    if (gapAbove[i]) bottom += LAYOUT_B.gapH;
+    rowTop.push(bottom);
+    bottom += LAYOUT_B.rowH;
+  });
+  const top = (r: number): number =>
+    rowTop[r] ?? bottom + (r - n) * LAYOUT_B.rowH;
+
   const laneAt = (i: number): number => lane[i] ?? 0;
   const cx = (l: number): number => LAYOUT_B.railPadL + l * LAYOUT_B.laneGap;
-  const cy = (r: number): number => r * LAYOUT_B.rowH + LAYOUT_B.rowH / 2;
+  const cy = (r: number): number => top(r) + LAYOUT_B.rowH / 2;
   const fade = (depth: number): number =>
     Math.max(LAYOUT_B.fadeFloor, 1 - depth * LAYOUT_B.fadeStep);
   const maxLane = lane.reduce((m, l) => Math.max(m, l), 0);
@@ -249,6 +274,7 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
       isMerge,
       depth,
       opacity: nd.section === "history" ? fade(depth) : 1,
+      gapAbove: gapAbove[i] ?? false,
     };
   });
 
@@ -271,7 +297,6 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
           opacity: fade((canonicalBottom?.depth ?? 0) + 1),
         }
       : null;
-  const totalRows = markerRow >= 0 ? n + 1 : n;
 
   const edges: LaidEdge[] = [];
   laidNodes.forEach((ln, i) => {
@@ -348,8 +373,9 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
     edges,
     railWidth:
       LAYOUT_B.railPadL + maxLane * LAYOUT_B.laneGap + LAYOUT_B.railPadR,
-    height: totalRows * LAYOUT_B.rowH,
+    height: bottom + (markerRow >= 0 ? LAYOUT_B.rowH : 0),
     rowH: LAYOUT_B.rowH,
+    gapH: LAYOUT_B.gapH,
     anchorRow,
     collapsed,
   };

@@ -30,9 +30,9 @@ function commentInput(
   };
 }
 
-/** A change's records → its log, ascending by `position`: every revision, then the
- * reviews and author comments that opened and answered its threads, in time
- * order, then a terminal lifecycle entry. */
+/** A change's records → its log, ascending by `position`: every revision, its
+ * tags, then the reviews and author comments that opened and answered its
+ * threads, in time order, then a terminal lifecycle entry. */
 export function synthLog(
   change: ChangeRecord,
   threads: ThreadRecord[],
@@ -59,6 +59,13 @@ export function synthLog(
         // mock's own per-revision status derivation.
         resets_status: true,
       },
+    });
+  }
+  if (change.tags) {
+    const tip = change.revisions[change.revisions.length - 1];
+    add(tip?.created_at ?? "", {
+      kind: "tags",
+      payload: { tags: change.tags },
     });
   }
 

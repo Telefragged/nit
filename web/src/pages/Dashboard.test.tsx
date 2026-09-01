@@ -13,13 +13,13 @@ import Dashboard from "./Dashboard";
 
 afterEach(cleanup);
 
-function renderDashboard(repo = 1) {
+function renderDashboard(repo = 1, search = "") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/repos/${repo}`]}>
+      <MemoryRouter initialEntries={[`/repos/${repo}${search}`]}>
         <Routes>
           <Route path="/repos/:repoId" element={<Dashboard />} />
         </Routes>
@@ -49,5 +49,22 @@ describe("repo dashboard change graph", () => {
     const row = subject.closest(".graph-row");
     if (!(row instanceof HTMLElement)) throw new Error("no row for change 12");
     expect(await within(row).findByText("✎ request_changes")).toBeTruthy();
+  });
+
+  it("groups by the tag key the URL names, labelling each run", async () => {
+    renderDashboard(4, "?group=session");
+    const alpha = await screen.findByText("alpha", {
+      selector: ".graph-gap-label",
+    });
+    const beta = screen.getByText("beta", { selector: ".graph-gap-label" });
+    expect(screen.getByLabelText("Group by")).toHaveProperty(
+      "value",
+      "session",
+    );
+    // Beta's run sits above alpha's run. The change stacked on alpha's tip
+    // is the first row of beta's run.
+    expect(
+      beta.compareDocumentPosition(alpha) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

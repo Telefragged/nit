@@ -175,6 +175,17 @@ function GraphRow({
   );
 }
 
+/** The gap above a row that starts a run of a group, labelled with the
+ * group's value when the row has one. */
+function GroupGap({ group }: { group: string | null }) {
+  return (
+    <div className="graph-gap">
+      <div className="graph-cell-rail" aria-hidden="true" />
+      <div className="graph-gap-label mono">{group ?? ""}</div>
+    </div>
+  );
+}
+
 export default function ChangeGraph({
   graph,
   activity,
@@ -190,6 +201,7 @@ export default function ChangeGraph({
     height: layout.height,
     "--rail-w": `${layout.railWidth}px`,
     "--row-h": `${layout.rowH}px`,
+    "--gap-h": `${layout.gapH}px`,
     "--graph-cols": cols,
   } as CSSProperties;
   const collapsed = layout.collapsed;
@@ -243,15 +255,17 @@ export default function ChangeGraph({
           )}
         </svg>
         {layout.nodes.map((ln) => (
-          <GraphRow
-            key={ln.node.commit_sha}
-            ln={ln}
-            act={
-              ln.node.change_number !== null
-                ? activity.get(ln.node.change_number)
-                : undefined
-            }
-          />
+          <Fragment key={ln.node.commit_sha}>
+            {ln.gapAbove && <GroupGap group={ln.node.group} />}
+            <GraphRow
+              ln={ln}
+              act={
+                ln.node.change_number !== null
+                  ? activity.get(ln.node.change_number)
+                  : undefined
+              }
+            />
+          </Fragment>
         ))}
         {collapsed && (
           <div

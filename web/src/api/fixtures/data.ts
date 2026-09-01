@@ -28,9 +28,11 @@
 //            B at rev0, tip E (55) walks B at rev1. B's rev0 member shows the
 //            newer-elsewhere badge (a newer revision lives on E's chain);
 //            ChangeDetail.chains lists both tips.
-//   repo 4 (lumen)  a change whose parent nit never registered (a torn
-//            push): the graph attaches it to its fork with a break edge,
-//            beside a chain that reaches HEAD whole.
+//   repo 4 (lumen)  two sessions' chains off HEAD, tagged `session`, one
+//            session's change stacked on the other's tip, and a change whose
+//            parent nit never registered (a torn push): the graph attaches
+//            it to its fork with a break edge. Grouping by `session` runs
+//            each session's changes together.
 //
 // Every stored diff leads with the synthetic /COMMIT_MSG file, like the
 // real server.
@@ -1288,10 +1290,11 @@ const changeE: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// repo 4 — lumen: a torn push
+// repo 4 — lumen: two sessions and a torn push
 //
-//   m → F(60) → G(61)         a whole chain to HEAD
-//   m → (unregistered) → T(62)   T's parent is no revision nit holds
+//   m → F(60) → G(61) → R(65)      session alpha, then beta's R on top
+//   m → P(63) → Q(64)              session beta
+//   m → (unregistered) → T(62)     beta; T's parent is no revision nit holds
 //
 // T forks from m like F does. Its parent sha names nothing in the repo, so
 // the graph cannot draw the commit between them. A break edge attaches T
@@ -1302,6 +1305,9 @@ const cF = sha(601);
 const cG = sha(610);
 const cTorn = sha(620);
 const cUnregistered = sha(629);
+const cP = sha(630);
+const cQ = sha(640);
+const cR = sha(650);
 
 const msgF =
   "lumen: parse the manifest lazily\n\n" +
@@ -1313,12 +1319,20 @@ const msgG =
 const msgT =
   "lumen: report a manifest cycle by path\n\n" +
   "Change-Id: It0033cc44dd55ee66";
+const msgP =
+  "lumen: stream large blobs to disk\n\n" + "Change-Id: Ip0044dd55ee66ff77";
+const msgQ =
+  "lumen: verify a streamed blob's digest\n\n" +
+  "Change-Id: Iq0055ee66ff778899";
+const msgR =
+  "lumen: evict cached manifests by age\n\n" + "Change-Id: Ir0066ff77889900aa";
 
 const changeF: ChangeRecord = {
   id: 60,
   repo_id: 4,
   change_id: changeId("If0011aa22bb33cc44"),
   subject: "lumen: parse the manifest lazily",
+  tags: { session: "alpha" },
   revisions: [
     {
       number: 0,
@@ -1340,6 +1354,7 @@ const changeG: ChangeRecord = {
   repo_id: 4,
   change_id: changeId("Ig0022bb33cc44dd55"),
   subject: "lumen: cache parsed manifests across runs",
+  tags: { session: "alpha" },
   revisions: [
     {
       number: 0,
@@ -1361,6 +1376,7 @@ const changeTorn: ChangeRecord = {
   repo_id: 4,
   change_id: changeId("It0033cc44dd55ee66"),
   subject: "lumen: report a manifest cycle by path",
+  tags: { session: "beta" },
   revisions: [
     {
       number: 0,
@@ -1374,6 +1390,72 @@ const changeTorn: ChangeRecord = {
   reviews: [],
   diffs: {
     [diffKey(0)]: trivialDiff(msgT, "src/cycle.rs", "pub fn report() {}"),
+  },
+};
+
+const changeP: ChangeRecord = {
+  id: 63,
+  repo_id: 4,
+  change_id: changeId("Ip0044dd55ee66ff77"),
+  subject: "lumen: stream large blobs to disk",
+  tags: { session: "beta" },
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cP,
+      parent_sha: mLumen,
+      fork_sha: mLumen,
+      message: msgP,
+      created_at: ago(150),
+    },
+  ],
+  reviews: [],
+  diffs: {
+    [diffKey(0)]: trivialDiff(msgP, "src/blob.rs", "pub fn stream() {}"),
+  },
+};
+
+const changeQ: ChangeRecord = {
+  id: 64,
+  repo_id: 4,
+  change_id: changeId("Iq0055ee66ff778899"),
+  subject: "lumen: verify a streamed blob's digest",
+  tags: { session: "beta" },
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cQ,
+      parent_sha: cP,
+      fork_sha: mLumen,
+      message: msgQ,
+      created_at: ago(120),
+    },
+  ],
+  reviews: [],
+  diffs: {
+    [diffKey(0)]: trivialDiff(msgQ, "src/blob.rs", "pub fn verify() {}"),
+  },
+};
+
+const changeR: ChangeRecord = {
+  id: 65,
+  repo_id: 4,
+  change_id: changeId("Ir0066ff77889900aa"),
+  subject: "lumen: evict cached manifests by age",
+  tags: { session: "beta" },
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cR,
+      parent_sha: cG,
+      fork_sha: mLumen,
+      message: msgR,
+      created_at: ago(30),
+    },
+  ],
+  reviews: [],
+  diffs: {
+    [diffKey(0)]: trivialDiff(msgR, "src/cache.rs", "pub fn evict() {}"),
   },
 };
 
@@ -1396,6 +1478,9 @@ export const changes: ChangeRecord[] = [
   changeF,
   changeG,
   changeTorn,
+  changeP,
+  changeQ,
+  changeR,
 ];
 
 export const tips: TipRecord[] = [
@@ -1436,9 +1521,15 @@ export const tips: TipRecord[] = [
     revision: 0,
     active: true,
   },
-  // repo 4 — the whole chain and the torn one
+  // repo 4 — beta on alpha's tip, beta's own chain, and the torn one
   {
-    tip_change_number: 61,
+    tip_change_number: 65,
+    repo_id: 4,
+    revision: 0,
+    active: true,
+  },
+  {
+    tip_change_number: 64,
     repo_id: 4,
     revision: 0,
     active: true,

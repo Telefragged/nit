@@ -24,6 +24,7 @@ import type {
   Review,
   Revision,
   DraftDecision,
+  TagList,
   Verdict,
 } from "../types";
 import { placementLine } from "../../lib/comments";
@@ -322,6 +323,30 @@ function listChanges(repoId: number | null, statuses: ChangeStatus[]) {
   };
 }
 
+/** `GET /api/tags`: the tags the repo's changes at `statuses` (none means
+ * all) carry, each key with its sorted distinct values. */
+function listTags(repoId: number, statuses: ChangeStatus[]): TagList {
+  const tags: Record<string, string[]> = {};
+  for (const c of changes) {
+    if (c.repo_id !== repoId) continue;
+    if (
+      statuses.length > 0 &&
+      !statuses.includes(statusAt(c, latestRevision(c).number))
+    )
+      continue;
+    for (const [key, value] of Object.entries(c.tags ?? {})) {
+      const values = (tags[key] ??= []);
+      if (!values.includes(value)) values.push(value);
+    }
+  }
+  for (const values of Object.values(tags)) values.sort();
+  return {
+    tags: Object.fromEntries(
+      Object.entries(tags).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  };
+}
+
 /** `GET /api/history`: the repo's synthetic canonical history, HEAD-first, a
  * fixed window deep. A node naming a landed change (`change_id`) is enriched
  * with it; any other commit reports both id and key null (coupled). */
@@ -447,6 +472,13 @@ export async function mockRequest(
 
   if (method === "GET" && p === "/history") {
     return repoHistory(Number(q.get("repo")));
+  }
+
+  if (method === "GET" && p === "/tags") {
+    return listTags(
+      Number(q.get("repo")),
+      q.getAll("status") as ChangeStatus[],
+    );
   }
 
   if (method === "GET" && p === "/chains") {

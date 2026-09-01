@@ -26,6 +26,8 @@ export interface ChangeRecord {
   subject: string;
   /** A terminal change-wide status (merged/abandoned); overrides reviews. */
   terminal?: Extract<ChangeStatus, "merged" | "abandoned">;
+  /** The tags one `tags` entry put on the change, after its revisions. */
+  tags?: Record<string, string>;
   revisions: Revision[];
   reviews: Review[];
   /** Keyed by diffKey(revision, against). */

@@ -186,6 +186,10 @@ export type PathEntry = {
  * Not a response body — the browser assembles it (`crates/nit-wasm`) from
  * the two primitive reads, `GET /api/changes` and `GET /api/history`; the
  * shape lives here because it crosses the wasm↔JS boundary.
+ *
+ * The caller may group the graph by one tag key. Open nodes that carry
+ * the same value for that key then sit in one run of rows. Each node
+ * reports its own value as `group`.
  */
 export type RepoGraph = {
   /**
@@ -197,7 +201,10 @@ export type RepoGraph = {
   /**
    * Row order, top → bottom: open (top) → head → history (bottom).
    *
-   * A topological order in which every node precedes its parents.
+   * A topological order in which every node precedes its parents. In a
+   * grouped graph, nodes of one group are adjacent wherever that order
+   * allows. A node of another group interrupts a run only when the
+   * topological order puts it between two nodes of that run.
    */
   nodes: Array<GraphNode>;
 };
@@ -242,6 +249,12 @@ export type GraphNode = {
    * nodes); `None` off the open region.
    */
   fork_sha: Sha | null;
+  /**
+   * The value the change carries for the grouping key (open nodes of
+   * a grouped graph); `None` for a change without the key, and off the
+   * open region.
+   */
+  group: string | null;
 };
 
 /**

@@ -29,6 +29,7 @@ function node(
     change_id: section === "open" ? `I${sha}` : null,
     revision: section === "open" ? 0 : null,
     fork_sha: section === "open" ? "H" : null,
+    group: null,
   };
 }
 
@@ -227,6 +228,35 @@ describe("layoutGraph break (hidden parent)", () => {
     expect(edge(g, "K", "collapsed").mark).not.toBeNull();
     expect(edge(g, "B", "collapsed").kind).toBe("behind");
     expect(edge(g, "B", "collapsed").mark).toBeNull();
+  });
+});
+
+describe("layoutGraph groups", () => {
+  it("opens a gap above each row whose group differs from the row above", () => {
+    const g = layoutGraph({
+      history_truncated: true,
+      nodes: [
+        { ...node("A", "open", "pending", ["H"]), group: "1" },
+        { ...node("B", "open", "pending", ["H"]), group: "1" },
+        { ...node("C", "open", "pending", ["H"]), group: "2" },
+        node("H", "head", "merged", ["G1"]),
+        node("G1", "history", "merged", ["old"]),
+      ],
+    });
+    expect(g.nodes.map((ln) => ln.gapAbove)).toEqual([
+      true,
+      false,
+      true,
+      true,
+      false,
+    ]);
+    const { rowH, gapH } = LAYOUT_B;
+    expect(find(g, "B").cy).toBe(rowH + gapH + rowH / 2);
+    expect(find(g, "C").cy).toBe(2 * rowH + 2 * gapH + rowH / 2);
+    expect(find(g, "H").cy).toBe(3 * rowH + 3 * gapH + rowH / 2);
+    // The marker row follows the last row at the plain pitch.
+    expect(g.collapsed?.cy).toBe(5 * rowH + 3 * gapH + rowH / 2);
+    expect(g.height).toBe(6 * rowH + 3 * gapH);
   });
 });
 

@@ -19,6 +19,7 @@ import type {
   RepoList,
   DraftDecision,
   EditDraft,
+  TagList,
 } from "./types";
 
 export class ApiError extends Error {
@@ -77,13 +78,17 @@ export const getChain = (changeNumber: number, revision?: number) =>
       : `/chains/${changeNumber}?revision=${revision}`,
   );
 
+const statusQuery = (statuses: ChangeStatus[]) =>
+  statuses.map((s) => `&status=${s}`).join("");
+
 /** A repo's changes as folded projections, narrowed to the statuses named —
  * the filter is explicit and repeatable; the API serves no default subset. */
 export const getChanges = (repoId: number, statuses: ChangeStatus[]) =>
-  request<ChangeList>(
-    "GET",
-    `/changes?repo=${repoId}${statuses.map((s) => `&status=${s}`).join("")}`,
-  );
+  request<ChangeList>("GET", `/changes?repo=${repoId}${statusQuery(statuses)}`);
+
+/** The tags the repo's changes at `statuses` carry now, grouped by key. */
+export const getTags = (repoId: number, statuses: ChangeStatus[]) =>
+  request<TagList>("GET", `/tags?repo=${repoId}${statusQuery(statuses)}`);
 
 /** A window of the repo's canonical ref below its HEAD; the window is
  * fixed server-side. */

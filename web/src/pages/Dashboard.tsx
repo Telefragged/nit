@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
-import { getChanges, getHistory, getRepo } from "../api/client";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { getChanges, getHistory, getRepo, getTags } from "../api/client";
 import { repoGraph } from "../api/fold";
 import type { ChangeStatus } from "../api/types";
 import ChangeGraph, { type NodeActivity } from "../components/ChangeGraph";
@@ -23,10 +23,19 @@ const GRAPH_STATUSES: ChangeStatus[] = [
 /** A repo's review dashboard: one change graph centered on the canonical
  * ref — open changes ascending above the HEAD anchor, merged
  * history descending below it — assembled in the browser (api/fold) from the
- * repo's unmerged change folds and its canonical history. */
+ * repo's unmerged change folds and its canonical history. `?group=<key>`
+ * groups the open changes by that tag key. */
 export default function Dashboard() {
   const { repoId } = useParams();
   const id = Number(repoId);
+  const [params, setParams] = useSearchParams();
+  const groupBy = params.get("group");
+  const setGroupBy = (key: string) => {
+    const next = new URLSearchParams(params);
+    if (key === "") next.delete("group");
+    else next.set("group", key);
+    setParams(next, { replace: true });
+  };
 
   // The repo's path (its name) is fixed for the page's lifetime, so fetch it
   // once by id — only the changes/history reads refetch as things land.
@@ -42,12 +51,23 @@ export default function Dashboard() {
     queryKey: ["history", id],
     queryFn: () => getHistory(id),
   });
+  // The keys the selector offers: those an unmerged change carries now,
+  // plus the one the URL names, so a stale link still shows its choice.
+  const tagsQuery = useQuery({
+    queryKey: ["repo-tags", id],
+    queryFn: () => getTags(id, GRAPH_STATUSES),
+  });
+  const groupKeys = useMemo(() => {
+    const keys = Object.keys(tagsQuery.data?.tags ?? {});
+    if (groupBy !== null && !keys.includes(groupBy)) keys.push(groupBy);
+    return keys;
+  }, [tagsQuery.data, groupBy]);
   const graph = useMemo(
     () =>
       changesQuery.data && historyQuery.data
-        ? repoGraph(changesQuery.data.changes, historyQuery.data)
+        ? repoGraph(changesQuery.data.changes, historyQuery.data, groupBy)
         : undefined,
-    [changesQuery.data, historyQuery.data],
+    [changesQuery.data, historyQuery.data, groupBy],
   );
 
   // Each open node's activity badges read straight off the fold the bulk
@@ -98,6 +118,27 @@ export default function Dashboard() {
         ) : null}
         .
       </p>
+      {groupKeys.length > 0 && (
+        <div className="graph-toolbar">
+          <label>
+            Group by
+            <select
+              className="revision-select"
+              value={groupBy ?? ""}
+              onChange={(e) => {
+                setGroupBy(e.target.value);
+              }}
+            >
+              <option value="">none</option>
+              {groupKeys.map((key) => (
+                <option key={key} value={key}>
+                  {key}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
       {error ? (
         <ErrorPanel error={error} />
       ) : graph === undefined ? (

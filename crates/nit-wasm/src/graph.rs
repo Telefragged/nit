@@ -24,8 +24,11 @@ use nit_types::graph::{GraphNode, RepoGraph, RepoHistory};
 /// single global topo would let HEAD — a tip when nothing is built on it —
 /// float to the top, which is wrong whenever the whole chain forks behind
 /// HEAD.
+///
+/// `group_by` names the tag key to group the open region on. [`RepoGraph`]
+/// states the order that a grouped graph guarantees.
 #[must_use]
-pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
+pub fn assemble(view: &RepoView, history: &RepoHistory, group_by: Option<&str>) -> RepoGraph {
     let mut nodes: Vec<GraphNode> = Vec::new();
     let shas: HashSet<&str> = history.commits.iter().map(|h| h.sha.as_str()).collect();
 
@@ -37,6 +40,9 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
         let Some(change) = view.change(node.change_number) else {
             continue;
         };
+        let group = group_by
+            .and_then(|key| change.tags.get(key))
+            .map(str::to_string);
         nodes.push(GraphNode {
             commit_sha: node.commit_sha,
             section: GraphSection::Open,
@@ -47,6 +53,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
             change_id: Some(change.change_id.clone()),
             revision: Some(node.revision),
             fork_sha: node.fork_sha,
+            group,
         });
     }
 
@@ -58,7 +65,15 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
         .iter()
         .map(|n| (n.commit_sha.clone(), n.parents.clone()))
         .collect();
-    let pos: HashMap<Sha, usize> = chain::graph_row_order(&pairs)
+    let mut order = chain::graph_row_order(&pairs);
+    if group_by.is_some() {
+        let groups: HashMap<&Sha, Option<&str>> = nodes
+            .iter()
+            .map(|n| (&n.commit_sha, n.group.as_deref()))
+            .collect();
+        order = grouped_order(&order, &pairs, &groups);
+    }
+    let pos: HashMap<Sha, usize> = order
         .into_iter()
         .enumerate()
         .map(|(i, sha)| (sha, i))
@@ -86,6 +101,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
                 change_id: h.change_id.clone(),
                 revision: None,
                 fork_sha: None,
+                group: None,
             }),
     );
 
@@ -93,6 +109,58 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
         history_truncated: history.truncated,
         nodes,
     }
+}
+
+/// Reorders a topological `order` so that each group's nodes sit together.
+///
+/// A group is the set of nodes with one value in `groups`. A group ranks
+/// by its first node in `order`. The result stays topological: this
+/// function places a node only after it places every child of that node.
+/// It continues the current group while that group has such a node.
+/// Otherwise it starts the lowest-ranked group that has one, so a group
+/// splits only where a node of another group sits between two of its own.
+fn grouped_order(
+    order: &[Sha],
+    pairs: &[(Sha, Vec<Sha>)],
+    groups: &HashMap<&Sha, Option<&str>>,
+) -> Vec<Sha> {
+    let mut children: HashMap<&Sha, Vec<&Sha>> = HashMap::new();
+    for (sha, parents) in pairs {
+        for parent in parents {
+            children.entry(parent).or_default().push(sha);
+        }
+    }
+    let mut rank_of: HashMap<Option<&str>, usize> = HashMap::new();
+    for sha in order {
+        let next = rank_of.len();
+        rank_of.entry(groups[sha]).or_insert(next);
+    }
+    let rank = |sha: &Sha| rank_of[&groups[sha]];
+
+    let mut placed: HashSet<&Sha> = HashSet::new();
+    let mut out: Vec<Sha> = Vec::with_capacity(order.len());
+    let mut current = None;
+    while out.len() < order.len() {
+        let ready = |sha: &&Sha| {
+            !placed.contains(sha)
+                && children
+                    .get(sha)
+                    .is_none_or(|kids| kids.iter().all(|kid| placed.contains(kid)))
+        };
+        // The first minimum wins, so the current group's earliest ready node
+        // comes before any other group's.
+        let next = order
+            .iter()
+            .filter(ready)
+            .min_by_key(|sha| (Some(rank(sha)) != current, rank(sha)));
+        let Some(next) = next else {
+            break; // cycle guard against bad data
+        };
+        current = Some(rank(next));
+        placed.insert(next);
+        out.push(next.clone());
+    }
+    out
 }
 
 #[cfg(test)]
@@ -145,7 +213,7 @@ mod tests {
             truncated: false,
         };
 
-        let g = assemble(&view, &history);
+        let g = assemble(&view, &history, None);
         let row = |name: &str| {
             g.nodes
                 .iter()
@@ -185,7 +253,7 @@ mod tests {
             truncated: true,
         };
 
-        let g = assemble(&view, &history);
+        let g = assemble(&view, &history, None);
         assert!(g.history_truncated);
         let shas: Vec<&Sha> = g.nodes.iter().map(|n| &n.commit_sha).collect();
         // Children ascend: the tip B sits above its parent A, both above HEAD.
@@ -203,5 +271,65 @@ mod tests {
             .expect("g1");
         assert_eq!(g1.change_number, Some(ChangeNumber::new(9)));
         assert_eq!(g1.change_id, Some(change_id("Iland")));
+    }
+
+    fn tagged(mut change: ChangeProjection, key: &str, value: &str) -> ChangeProjection {
+        change.tags = nit_types::testing::tags(&[(key, value)]);
+        change
+    }
+
+    // Two chains off HEAD, each one session, and a second-session change
+    // on top of the first. Ungrouped, the topological order interleaves
+    // the sessions by rank. Grouped, each session is one run: the change
+    // stacked across sessions does not split its own group's run.
+    #[test]
+    fn grouping_runs_each_tag_value_together() {
+        let p1 = tagged(
+            change(1, "Ip1", vec![revision(0, "P1", "h", "h")]),
+            "s",
+            "1",
+        );
+        let p2 = tagged(
+            change(2, "Ip2", vec![revision(0, "P2", "P1", "h")]),
+            "s",
+            "1",
+        );
+        let q = tagged(change(3, "Iq", vec![revision(0, "Q", "P2", "h")]), "s", "2");
+        let r1 = tagged(
+            change(4, "Ir1", vec![revision(0, "R1", "h", "h")]),
+            "s",
+            "2",
+        );
+        let r2 = tagged(
+            change(5, "Ir2", vec![revision(0, "R2", "R1", "h")]),
+            "s",
+            "2",
+        );
+        let view = RepoView::new(vec![p1, p2, q, r1, r2]);
+        let history = RepoHistory {
+            commits: vec![commit("h", &[])],
+            truncated: false,
+        };
+        let shas = |g: &RepoGraph| {
+            g.nodes
+                .iter()
+                .map(|n| n.commit_sha.clone())
+                .collect::<Vec<_>>()
+        };
+
+        let plain = assemble(&view, &history, None);
+        assert_eq!(shas(&plain), ["Q", "R2", "P2", "R1", "P1", "h"].map(sha));
+
+        let grouped = assemble(&view, &history, Some("s"));
+        assert_eq!(shas(&grouped), ["Q", "R2", "R1", "P2", "P1", "h"].map(sha));
+        let groups: Vec<Option<&str>> = grouped.nodes.iter().map(|n| n.group.as_deref()).collect();
+        assert_eq!(
+            groups,
+            [Some("2"), Some("2"), Some("2"), Some("1"), Some("1"), None]
+        );
+
+        let other = assemble(&view, &history, Some("absent"));
+        assert_eq!(shas(&other), shas(&plain));
+        assert!(other.nodes.iter().all(|n| n.group.is_none()));
     }
 }

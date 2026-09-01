@@ -55,10 +55,12 @@ export function changeDetail(proj: ChangeProjection): ChangeDetail {
 }
 
 /** Assemble the repo's change graph from its change folds
- * (`GET /api/changes`) and canonical history (`GET /api/history`). */
+ * (`GET /api/changes`) and canonical history (`GET /api/history`),
+ * grouped by the tag key `groupBy` when one is given. */
 export function repoGraph(
   changes: ChangeProjection[],
   history: RepoHistory,
+  groupBy: string | null,
 ): RepoGraph {
-  return repo_graph(changes, history) as RepoGraph;
+  return repo_graph(changes, history, groupBy ?? undefined) as RepoGraph;
 }

@@ -76,8 +76,12 @@ const captures = [
   // once, with the lane splitting above it.
   { name: "change-graph-fanout", path: "/repos/3" },
   // Repo 4: a change whose parent nit never registered. A break mark cuts
-  // its edge to the fork, beside a whole chain's solid edges.
+  // its edge to the fork. Two sessions' chains sit beside it, with
+  // interleaved rows.
   { name: "change-graph-break", path: "/repos/4" },
+  // Repo 4 grouped by `session`: each session's changes run together, a
+  // labelled gap above each run.
+  { name: "change-graph-grouped", path: "/repos/4?group=session" },
   // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
   { name: "review-interdiff", path: "/changes/11?against=0" },
   // Long review cover message expanded via the "more" toggle. Viewport-only
