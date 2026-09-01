@@ -516,6 +516,25 @@ pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Dura
     socket
 }
 
+/// Tag mode: the server first sends the stored entries past `after` of
+/// every change in `repo_id` that has `tags`, then each new entry of a
+/// change that has them.
+pub fn ws_subscribe_tagged(
+    server: &TestServer,
+    repo_id: u64,
+    tags: &Value,
+    after: u64,
+    read_timeout: Duration,
+) -> WsSock {
+    let mut socket = ws_open(server, read_timeout);
+    let sub = json!({ "subscribe_tagged": { "repo": repo_id, "tags": tags, "after": after } })
+        .to_string();
+    socket
+        .send(tungstenite::Message::Text(sub.into()))
+        .expect("subscribe_tagged");
+    socket
+}
+
 /// Projection mode: the server folds a `ChangeProjection` per id, then
 /// attaches each change's live tail.
 pub fn ws_subscribe_projection(server: &TestServer, ids: &[u64], read_timeout: Duration) -> WsSock {

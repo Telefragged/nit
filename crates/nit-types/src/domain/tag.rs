@@ -38,6 +38,31 @@ impl Tags {
         self.0.get(key).map(String::as_str)
     }
 
+    /// Whether this set contains every tag in `wanted`, same key and same
+    /// value.
+    ///
+    /// Every set contains an empty `wanted`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::{Tag, Tags};
+    ///
+    /// let tags = |pairs: &[(&str, &str)]| -> Tags {
+    ///     pairs.iter().map(|(k, v)| Tag::new(*k, *v).unwrap()).collect()
+    /// };
+    /// let set = tags(&[("branch", "feat"), ("session-id", "s1")]);
+    /// assert!(set.carries_all(&tags(&[("branch", "feat")])));
+    /// assert!(!set.carries_all(&tags(&[("branch", "main")])));
+    /// assert!(!set.carries_all(&tags(&[("feature", "epic")])));
+    /// ```
+    #[must_use]
+    pub fn carries_all(&self, wanted: &Tags) -> bool {
+        wanted
+            .iter()
+            .all(|(key, value)| self.get(key) == Some(value))
+    }
+
     /// How many keys the set holds.
     #[must_use]
     pub fn len(&self) -> usize {

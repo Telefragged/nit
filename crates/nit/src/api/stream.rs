@@ -1,4 +1,5 @@
-//! Events (WS `/api/stream`): the client-driven per-change change stream.
+//! Events (WS `/api/stream`): the client-driven change stream, by change
+//! or by tag.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,6 +10,7 @@ use axum::response::IntoResponse;
 
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LogEntry;
+use nit_types::domain::Tags;
 use nit_types::events::{ClientMessage, StreamMessage};
 
 use crate::db;
@@ -16,6 +18,7 @@ use nit_types::domain::ChangeProjection;
 
 use crate::review;
 
+use super::state::Published;
 use super::{AppState, with_conn};
 
 /// `WS /api/stream?repo={id}` — the client-driven change stream.
@@ -29,18 +32,82 @@ pub(super) async fn stream(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
+/// What one socket follows.
+///
+/// `watermark` maps each subscribed change to the next position the socket
+/// sends. `tagged` is the socket's one tag subscription.
+#[derive(Default)]
+struct Following {
+    watermark: HashMap<ChangeNumber, u64>,
+    tagged: Option<TagWatch>,
+}
+
+/// The tag subscription: every change in `repo` that has `tags`.
+struct TagWatch {
+    repo: u64,
+    tags: Tags,
+    /// The highest sequence the socket has sent for this subscription. The
+    /// socket sends only entries above it, so it never sends one twice.
+    after: u64,
+}
+
+impl Following {
+    /// Sends the change's new entries from `position` on.
+    fn follow_change(&mut self, change_number: ChangeNumber, position: u64) {
+        self.watermark.insert(change_number, position);
+    }
+
+    /// Sends the new entries of every change in `repo` that has `tags`,
+    /// with `sequence > after`. Replaces an earlier tag subscription.
+    fn follow_tags(&mut self, repo: u64, tags: Tags, after: u64) {
+        self.tagged = Some(TagWatch { repo, tags, after });
+    }
+
+    /// Whether the socket sends this new entry.
+    ///
+    /// Both checks always run, because the tag check must update its
+    /// `after` even when the change subscription already sends the entry.
+    fn forwards(&mut self, published: &Published) -> bool {
+        let entry = &published.entry;
+        let by_change = self
+            .watermark
+            .get(&entry.change_number)
+            .is_some_and(|&mark| entry.position >= mark);
+        let by_tags = self
+            .tagged
+            .as_mut()
+            .is_some_and(|watch| watch.forwards(published));
+        by_change | by_tags
+    }
+}
+
+impl TagWatch {
+    /// Whether this subscription sends the entry. If so, moves `after` up
+    /// to it.
+    fn forwards(&mut self, published: &Published) -> bool {
+        let entry = &published.entry;
+        let forwarded = entry.sequence > self.after
+            && self.repo == published.repo_id
+            && published.tags.carries_all(&self.tags);
+        if forwarded {
+            self.after = entry.sequence;
+        }
+        forwarded
+    }
+}
+
 /// Drives one follower's socket.
 ///
 /// It holds one receiver on the server's event channel for its whole life,
 /// so every subscribe is armed before it reads its backlog (a `[from, head)`
-/// replay, or a `ChangeProjection`) and the arm/read overlap is deduped
-/// by a position watermark, never gapped. `watermark` is also the subscription
-/// set: an entry is forwarded only for a change the client asked for. An
-/// overflowed receiver closes the socket — the client reconnects and
-/// re-reads the log.
+/// replay, a `ChangeProjection`, or the log past a sequence). An entry
+/// written during that read arrives twice, once in the read and once on
+/// the channel, and the watermark drops the second copy. An overflowed
+/// receiver closes the socket — the client reconnects and re-reads the
+/// log.
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let mut events = state.subscribe();
-    let mut watermark: HashMap<ChangeNumber, u64> = HashMap::new();
+    let mut following = Following::default();
     let mut shutdown = state.shutdown_watch();
     loop {
         tokio::select! {
@@ -51,7 +118,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                         let Ok(client) = serde_json::from_str::<ClientMessage>(&text) else {
                             continue;
                         };
-                        if apply_client_msg(&mut socket, &state, &mut watermark, client)
+                        if apply_client_msg(&mut socket, &state, &mut following, client)
                             .await
                             .is_err()
                         {
@@ -66,14 +133,11 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 // Overflow (or a closed channel): this follower fell behind.
                 // Close the socket so it reconnects and re-reads the gap from
                 // the log.
-                let Ok(entry) = item else { break };
-                let Some(&mark) = watermark.get(&entry.change_number) else {
-                    continue;
-                };
-                if entry.position < mark {
+                let Ok(published) = item else { break };
+                if !following.forwards(&published) {
                     continue;
                 }
-                if send(&mut socket, &StreamMessage::Entry(entry)).await.is_err() {
+                if send(&mut socket, &StreamMessage::Entry(published.entry)).await.is_err() {
                     break;
                 }
             }
@@ -87,7 +151,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 async fn apply_client_msg(
     socket: &mut WebSocket,
     state: &Arc<AppState>,
-    watermark: &mut HashMap<ChangeNumber, u64>,
+    following: &mut Following,
     client: ClientMessage,
 ) -> Result<(), ()> {
     match client {
@@ -97,7 +161,7 @@ async fn apply_client_msg(
                 .filter_map(|(id, from)| Some((id.parse::<ChangeNumber>().ok()?, *from)))
                 .collect();
             for (change_number, next, backlog) in read_backlogs(state, cursors).await {
-                watermark.insert(change_number, next);
+                following.follow_change(change_number, next);
                 for e in backlog {
                     send(socket, &StreamMessage::Entry(e)).await?;
                 }
@@ -109,8 +173,16 @@ async fn apply_client_msg(
                 // append that lands after it rides the channel and is deduped
                 // there: the projection and its live tail neither gap nor
                 // double.
-                watermark.insert(change_number, proj.entries_folded);
+                following.follow_change(change_number, proj.entries_folded);
                 send(socket, &StreamMessage::Projection(proj)).await?;
+            }
+        }
+        ClientMessage::SubscribeTagged { repo, tags, after } => {
+            let backlog = read_log_after(state, repo, tags.clone(), after).await;
+            let after = backlog.last().map_or(after, |e| e.sequence);
+            following.follow_tags(repo, tags, after);
+            for e in backlog {
+                send(socket, &StreamMessage::Entry(e)).await?;
             }
         }
     }
@@ -153,6 +225,29 @@ async fn read_backlogs(
             out.push((change_number, next, entries));
         }
         Ok(out)
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// The stored entries with `sequence > after` of every change in `repo`
+/// that has `tags`.
+///
+/// Empty when the read fails. The client then gets no replay, and it reads
+/// the log again the next time an entry arrives.
+async fn read_log_after(state: &Arc<AppState>, repo: u64, tags: Tags, after: u64) -> Vec<LogEntry> {
+    with_conn(state.pool(), move |conn| {
+        let filter = db::ChangeFilter {
+            tags,
+            ..db::ChangeFilter::default()
+        };
+        Ok(review::entries_between(
+            conn,
+            repo,
+            &filter,
+            Some(after),
+            None,
+        )?)
     })
     .await
     .unwrap_or_default()

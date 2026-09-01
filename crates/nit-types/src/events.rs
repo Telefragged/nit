@@ -1,6 +1,6 @@
 //! Websocket messages over `WS /api/stream`.
 //!
-//! The client picks one of two subscribe modes; the server answers with
+//! The client picks one of three subscribe modes; the server answers with
 //! [`StreamMessage`] frames — a `ChangeProjection` (projection mode) and/or
 //! live log entries.
 
@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::ChangeNumber;
 use crate::domain::ChangeProjection;
 use crate::domain::LogEntry;
+use crate::domain::Tags;
 
 /// A client → server websocket message. Externally tagged, `snake_case`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,21 @@ pub enum ClientMessage {
     /// high-water mark. A `Vec` has no map keys, so the numbers stay
     /// `u64` (unlike `Subscribe`).
     SubscribeProjection(Vec<ChangeNumber>),
+    /// Tag mode (the CLI follower): every change in `repo` that has `tags`.
+    ///
+    /// First the server sends every stored entry with `sequence > after`
+    /// whose change has the tags. Then it sends each new entry whose change
+    /// has the tags at the moment the entry is written. A change without
+    /// the tags gets them from a `tags` entry. The server sends that entry
+    /// and every later one, but not the earlier ones, so a client that
+    /// needs the earlier ones reads `GET /api/log`. A socket holds one tag
+    /// subscription. A second one replaces the first.
+    SubscribeTagged {
+        repo: u64,
+        tags: Tags,
+        /// Send entries with a `sequence` greater than this.
+        after: u64,
+    },
 }
 
 /// A server → client websocket message. Externally tagged, `snake_case`.

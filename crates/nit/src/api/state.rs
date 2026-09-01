@@ -24,6 +24,7 @@ use rusqlite::Connection;
 use tokio::sync::watch;
 
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::Tags;
 use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::error::ApiError;
 
@@ -48,11 +49,11 @@ pub struct AppState {
     /// Every appended entry, for every change.
     ///
     /// One channel keeps following orthogonal to a change's residency and
-    /// lifecycle, and is the seam for the filters that don't exist yet (by
-    /// repo, by branch, by session).
-    events: Sender<LogEntry>,
+    /// lifecycle. A follower filters on the repo and tags sent with each
+    /// entry.
+    events: Sender<Published>,
     /// A parked receiver so the channel never closes for lack of followers.
-    events_keepalive: InactiveReceiver<LogEntry>,
+    events_keepalive: InactiveReceiver<Published>,
     /// Process-global allocator for draft ids.
     ///
     /// Seeded past the `draft_comments` rows in use. Change numbers are
@@ -89,6 +90,19 @@ impl RepoState {
     pub fn git_dir(&self) -> String {
         self.git_dir.read().expect("git_dir lock poisoned").clone()
     }
+}
+
+/// One appended entry, as the event channel sends it to followers.
+///
+/// `repo_id` and `tags` are the change's values right after this entry was
+/// folded. They travel with the entry so a follower can filter without
+/// reading the change, because reading the change takes a lock that an
+/// appender holds across a database commit.
+#[derive(Debug, Clone)]
+pub struct Published {
+    pub entry: LogEntry,
+    pub repo_id: u64,
+    pub tags: Tags,
 }
 
 /// Per-change coordination.
@@ -163,7 +177,7 @@ impl AppState {
     ///
     /// Best-effort: with none, the channel is inactive and the message is
     /// dropped (it is durable in the log).
-    pub fn publish(&self, msg: LogEntry) {
+    pub fn publish(&self, msg: Published) {
         let _ = self.events.try_broadcast(msg);
     }
 
@@ -172,7 +186,7 @@ impl AppState {
     /// It sees only entries published after this call, so arming it
     /// **before** reading a backlog leaves no gap for an append to slip
     /// through.
-    pub fn subscribe(&self) -> Receiver<LogEntry> {
+    pub fn subscribe(&self) -> Receiver<Published> {
         self.events_keepalive.activate_cloned()
     }
 
@@ -496,7 +510,11 @@ pub fn append_to_change_with(
     // memory, never on I/O.
     *proj = next;
     for e in &applied {
-        state.publish(e.clone());
+        state.publish(Published {
+            entry: e.clone(),
+            repo_id: proj.repo_id,
+            tags: proj.tags.clone(),
+        });
     }
     drop(proj);
     Ok(applied)

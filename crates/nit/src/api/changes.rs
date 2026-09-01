@@ -139,7 +139,7 @@ pub(super) async fn tag_change(
         let entry = change_or_404(&state, conn, id)?;
         let moves = {
             let proj = entry.read();
-            req.tags.iter().any(|(k, v)| proj.tags.get(k) != Some(v))
+            !proj.tags.carries_all(&req.tags)
         };
         if moves {
             let new = LogPayload::Tags(TagsPayload { tags: req.tags });

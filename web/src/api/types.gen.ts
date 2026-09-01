@@ -670,7 +670,17 @@ export type LogEntry = {
  */
 export type ClientMessage =
   | { subscribe: { [key in string]: number } }
-  | { subscribe_projection: Array<ChangeNumber> };
+  | { subscribe_projection: Array<ChangeNumber> }
+  | {
+      subscribe_tagged: {
+        repo: number;
+        tags: Tags;
+        /**
+         * Send entries with a `sequence` greater than this.
+         */
+        after: number;
+      };
+    };
 
 /**
  * A server → client websocket message. Externally tagged, `snake_case`.
