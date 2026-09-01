@@ -46,15 +46,13 @@ nit log --follow --reviewer-only 0
 `Bash` task (which only notifies you when a command _exits_) would silently
 swallow the stream. The Monitor tool turns each relayed line into a
 notification you act on. Leave the monitor's stderr alone — never redirect it
-into stdout with `2>&1`. Run it from the worktree so it resolves the cwd's tip
-from HEAD — no id to look up. `--reviewer-only` mutes your own echoes; each
-relayed review carries its cover message and every comment with its file and
-line, so you act on it directly. `0` streams from the start (resume after a
-restart by passing the last sequence you saw).
-
-The monitor resolves the tip once, when it starts, so after you stack a new
-commit on top, re-run it to pick up the new tip — resuming from the last sequence
-you consumed (not `0`) so you don't replay what you've already handled.
+into stdout with `2>&1`. Run it from the worktree. It prints the entries of
+every change your session pushed. A commit you add or reorder later
+belongs to the session too, so one monitor per session is enough.
+`--reviewer-only` hides your own entries. Each review it prints
+includes the cover message and every comment with its file and line, so
+you act on it directly. `0` starts from the first entry (after a restart,
+pass the last sequence you saw instead).
 
 Each relayed line is a doorbell: read the full picture with `nit status`, and
 use `nit log` for entry detail. Its positional argument selects by global `sequence`
@@ -62,29 +60,31 @@ use `nit log` for entry detail. Its positional argument selects by global `seque
 entry whose sequence is `N`:
 
 ```sh
-nit log N..   # every entry from sequence N on (resolves the cwd's chain)
+nit log N..   # every entry from sequence N on (your session's changes)
 ```
 
 `..` (the default) reads everything. Act on all of it, then let the monitor
 keep streaming.
 
-## Acting on state
+## Acting on status
 
-`nit status` prints the chain `state`:
+`nit status` prints one line per change in your session — its number, its
+`Change-Id`, its status at its latest revision, and its unresolved threads.
+Read the statuses together:
 
-- **`authors_turn`** — act now. For each change marked `changes_requested` /
-  `commented`:
+- **any `changes_requested` / `commented`** — act now. For each such change:
   - code feedback → amend the fix into the commit it belongs to (see **Amend
     in place** below), then `nit push` — the rewritten commit lands as a new
     revision and the reviewer reads it as an interdiff. Then reply on the
     thread and resolve it (the `comment` skill).
   - a question → answer it on its thread (the `comment` skill).
-- **`waiting_for_review`** — the ball is with the reviewer; keep the monitor
-  running.
-- **`approved`** — the cue to land, not to hand off. Land it per this project's
-  approve action (your project config records it) and drive it through to
-  `merged` yourself — don't stop to ask.
-- **`merged` / `abandoned`** — the chain is closed. Stop the monitor.
+- **every change `pending`, or a mix with `approved`** — the ball is with the
+  reviewer; keep the monitor running.
+- **every change `approved`** — the cue to land, not to hand off. Land it per
+  this project's approve action (your project config records it) and drive
+  it through to `merged` yourself — don't stop to ask.
+- **every change `merged` / `abandoned`** — the work is closed. Stop the
+  monitor.
 
 Never submit a review verdict yourself — that is the human's side. Your surface
 is push / status / log / comment.
