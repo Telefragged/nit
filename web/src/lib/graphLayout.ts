@@ -11,7 +11,11 @@
 // history descends below it. An open change attaches to its base with a solid
 // edge whenever that base is a visible node (HEAD or a merged commit still in
 // the window); only a base older than the window — no node to anchor to —
-// dangles a dashed "behind" edge into the collapsed-history marker.
+// dangles a dashed "behind" edge into the collapsed-history marker. An open
+// change whose parent is missing from the graph attaches to its fork
+// instead, and a break mark cuts that edge: the commits between the two are
+// not shown. The dash and the mark are independent, so a fork below the
+// window with hidden commits above it gets both.
 
 import type { GraphNode, RepoGraph } from "../api/types";
 
@@ -56,6 +60,10 @@ export interface LaidEdge {
   /** SVG path `d` from child (top) to parent (bottom). */
   d: string;
   kind: EdgeKind;
+  /** Where the break mark sits when commits are hidden between the edge's
+   * ends: on the edge's vertical run, at the boundary below the child's
+   * row. Null otherwise. */
+  mark: { x: number; y: number } | null;
   /** The branch lane the edge belongs to (the child's lane) — drives its
    * color, so a whole branch carries one color (gleisbau-style). Ignored for
    * `history` edges, which are always grey. */
@@ -94,21 +102,37 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
   const rowOf = new Map<string, number>();
   nodes.forEach((nd, i) => rowOf.set(nd.commit_sha, i));
 
-  // In-set (drawable) parents; childRows is the inverse.
+  // In-set (drawable) parents, and the fork row a break attaches to.
+  // childRows is the inverse of both, so a break child takes part in the
+  // lane walk like any other.
   const parentRows: number[][] = nodes.map((nd) =>
     nd.parents
       .map((p) => rowOf.get(p))
       .filter((r): r is number => r !== undefined),
   );
+  const broken: boolean[] = nodes.map(
+    (nd, i) =>
+      nd.section === "open" &&
+      parentRows[i]?.length === 0 &&
+      nd.fork_sha !== null &&
+      nd.parents.length > 0 &&
+      !nd.parents.includes(nd.fork_sha),
+  );
+  const breakRow: number[] = nodes.map((nd, i) =>
+    broken[i] ? (rowOf.get(nd.fork_sha ?? "") ?? -1) : -1,
+  );
   const childRows: number[][] = nodes.map(() => []);
   parentRows.forEach((ps, i) => {
     for (const p of ps) childRows[p]?.push(i);
+    const br = breakRow[i] ?? -1;
+    if (br >= 0) childRows[br]?.push(i);
   });
   for (const cs of childRows) cs.sort((a, b) => a - b);
 
   const parentsAt = (i: number): number[] => parentRows[i] ?? [];
   const childrenAt = (i: number): number[] => childRows[i] ?? [];
-  const firstParent = (i: number): number => parentsAt(i)[0] ?? -1;
+  const firstParent = (i: number): number =>
+    parentsAt(i)[0] ?? breakRow[i] ?? -1;
 
   const lane = new Array<number>(n).fill(0);
   const anchorRow = nodes.findIndex((nd) => nd.section === "head");
@@ -270,21 +294,33 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
         key: `${ln.node.commit_sha}>${p.node.commit_sha}`,
         d: edgePath(ln.cx, ln.cy, p.cx, p.cy),
         kind,
+        mark: null,
         lane: ln.lane,
         opacity,
       });
     }
-    // A deep-behind fork: base older than the window, so no in-set parent.
-    if (
-      ln.node.section === "open" &&
-      inSet.length === 0 &&
-      ln.node.parents.length > 0 &&
-      collapsed
-    ) {
+    if (ln.node.section !== "open" || inSet.length > 0) return;
+    const isBroken = broken[i] ?? false;
+    const mark = { x: ln.cx, y: ln.cy + LAYOUT_B.rowH / 2 };
+    const fork = laidNodes[breakRow[i] ?? -1];
+    if (fork !== undefined) {
+      // Hidden commits between the change and its visible fork.
+      edges.push({
+        key: `${ln.node.commit_sha}>${fork.node.commit_sha}`,
+        d: edgePath(ln.cx, ln.cy, fork.cx, fork.cy),
+        kind: "open",
+        mark,
+        lane: ln.lane,
+        opacity: 1,
+      });
+    } else if (ln.node.parents.length > 0 && collapsed) {
+      // The fork is older than the window: a dangle to the marker, marked
+      // when commits are hidden above the fork too.
       edges.push({
         key: `${ln.node.commit_sha}>collapsed`,
         d: edgePath(ln.cx, ln.cy, collapsed.cx, collapsed.cy),
         kind: "behind",
+        mark: isBroken ? mark : null,
         lane: ln.lane,
         opacity: 1,
       });
@@ -301,6 +337,7 @@ export function layoutGraph(graph: RepoGraph): GraphLayout {
         collapsed.cy,
       ),
       kind: "history",
+      mark: null,
       lane: 0,
       opacity: collapsed.opacity,
     });

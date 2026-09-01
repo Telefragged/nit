@@ -60,7 +60,10 @@ pub struct RepoGraph {
 /// One node of the change graph, keyed by its `commit_sha`.
 ///
 /// Edges are its `parents` (an edge is drawn to each that is in the node
-/// set; `len > 1` is a merge).
+/// set; `len > 1` is a merge). An open node whose parent is not in the
+/// set attaches to its `fork_sha` instead. The commits between the two
+/// are not in the graph. When the parent is the fork, the base is older
+/// than the displayed window, and nothing is missing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct GraphNode {
@@ -79,4 +82,7 @@ pub struct GraphNode {
     pub change_id: Option<ChangeId>,
     /// The pinned revision (open nodes); `None` off the open region.
     pub revision: Option<RevisionNumber>,
+    /// Where the pinned revision forks from the canonical ref (open
+    /// nodes); `None` off the open region.
+    pub fork_sha: Option<Sha>,
 }

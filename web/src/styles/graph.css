@@ -144,6 +144,19 @@ a.graph-subject:hover {
   stroke-dasharray: 5 4;
 }
 
+/* Commits hidden between a change and its fork: a mark cuts the edge just
+   below the change. The gap stroke paints the row background over the
+   edge, like a node's fill. */
+.graph-break path {
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.graph-break .graph-break-gap {
+  stroke: var(--graph-node-bg);
+  stroke-width: 4;
+}
+
 .graph-node {
   fill: var(--graph-node-bg);
   stroke-width: 2;

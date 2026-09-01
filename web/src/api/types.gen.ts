@@ -206,7 +206,10 @@ export type RepoGraph = {
  * One node of the change graph, keyed by its `commit_sha`.
  *
  * Edges are its `parents` (an edge is drawn to each that is in the node
- * set; `len > 1` is a merge).
+ * set; `len > 1` is a merge). An open node whose parent is not in the
+ * set attaches to its `fork_sha` instead. The commits between the two
+ * are not in the graph. When the parent is the fork, the base is older
+ * than the displayed window, and nothing is missing.
  */
 export type GraphNode = {
   /**
@@ -234,6 +237,11 @@ export type GraphNode = {
    * The pinned revision (open nodes); `None` off the open region.
    */
   revision: RevisionNumber | null;
+  /**
+   * Where the pinned revision forks from the canonical ref (open
+   * nodes); `None` off the open region.
+   */
+  fork_sha: Sha | null;
 };
 
 /**

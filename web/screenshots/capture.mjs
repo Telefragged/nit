@@ -75,6 +75,9 @@ const captures = [
   // Repo 3: the B-in-two-chains fan-out — a change shared by two tips appears
   // once, with the lane splitting above it.
   { name: "change-graph-fanout", path: "/repos/3" },
+  // Repo 4: a change whose parent nit never registered. A break mark cuts
+  // its edge to the fork, beside a whole chain's solid edges.
+  { name: "change-graph-break", path: "/repos/4" },
   // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
   { name: "review-interdiff", path: "/changes/11?against=0" },
   // Long review cover message expanded via the "more" toggle. Viewport-only

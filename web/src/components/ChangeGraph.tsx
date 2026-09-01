@@ -1,4 +1,4 @@
-import { type CSSProperties, useMemo } from "react";
+import { type CSSProperties, Fragment, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type {
   Decision,
@@ -20,9 +20,30 @@ const LANE_COLORS = 6;
 function edgeClass(e: LaidEdge): string {
   if (e.kind === "history") return "graph-edge edge-history";
   const lane = `lane-${((e.lane % LANE_COLORS) + LANE_COLORS) % LANE_COLORS}`;
-  return e.kind === "behind"
-    ? `graph-edge edge-behind ${lane}`
-    : `graph-edge ${lane}`;
+  return e.kind === "open"
+    ? `graph-edge ${lane}`
+    : `graph-edge edge-${e.kind} ${lane}`;
+}
+
+/** The mark that cuts a break edge: a short gap in the line, crossed by two
+ * slanted strokes in the edge's color. */
+function BreakMark({
+  x,
+  y,
+  className,
+}: {
+  x: number;
+  y: number;
+  className: string;
+}) {
+  return (
+    <g className={`graph-break ${className}`}>
+      <path className="graph-break-gap" d={`M ${x} ${y - 5} L ${x} ${y + 5}`} />
+      <path
+        d={`M ${x - 6} ${y - 1} L ${x + 6} ${y - 5} M ${x - 6} ${y + 5} L ${x + 6} ${y + 1}`}
+      />
+    </g>
+  );
 }
 
 // The change graph, centered on the canonical ref: one DAG over it,
@@ -190,12 +211,10 @@ export default function ChangeGraph({
           aria-hidden="true"
         >
           {layout.edges.map((e) => (
-            <path
-              key={e.key}
-              className={edgeClass(e)}
-              d={e.d}
-              opacity={e.opacity}
-            />
+            <Fragment key={e.key}>
+              <path className={edgeClass(e)} d={e.d} opacity={e.opacity} />
+              {e.mark && <BreakMark {...e.mark} className={edgeClass(e)} />}
+            </Fragment>
           ))}
           {layout.nodes.map((ln) => (
             <g key={ln.node.commit_sha} opacity={ln.opacity}>

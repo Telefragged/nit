@@ -28,6 +28,7 @@ function node(
     change_number: section === "open" ? 1 : null,
     change_id: section === "open" ? `I${sha}` : null,
     revision: section === "open" ? 0 : null,
+    fork_sha: section === "open" ? "H" : null,
   };
 }
 
@@ -157,7 +158,8 @@ describe("layoutGraph behind-HEAD base (below window)", () => {
     const g = layoutGraph({
       history_truncated: true,
       nodes: [
-        node("X", "open", "pending", ["DEEP"]), // DEEP is below the window
+        // DEEP is below the window, and it is X's fork: nothing is hidden.
+        { ...node("X", "open", "pending", ["DEEP"]), fork_sha: "DEEP" },
         node("H", "head", "merged", ["G1"]),
         node("G1", "history", "merged", ["G2"]),
         node("G2", "history", "merged", ["DEEP"]),
@@ -178,6 +180,53 @@ describe("layoutGraph behind-HEAD base (below window)", () => {
     expect(edge(g, "canonical", "collapsed").opacity).toBeCloseTo(
       g.collapsed?.opacity ?? 0,
     );
+  });
+});
+
+describe("layoutGraph break (hidden parent)", () => {
+  // K's parent "hidden" is no node, and it is not K's fork H either: the
+  // commits between K and H are missing from the graph.
+  function graph(truncated: boolean): RepoGraph {
+    return {
+      history_truncated: truncated,
+      nodes: [
+        node("K", "open", "pending", ["hidden"]),
+        node("A", "open", "pending", ["H"]),
+        node("H", "head", "merged", ["G1"]),
+        node("G1", "history", "merged", []),
+      ],
+    };
+  }
+
+  it("attaches to the visible fork with a solid, marked edge", () => {
+    const g = layoutGraph(graph(false));
+    const e = edge(g, "K", "H");
+    expect(e.kind).toBe("open");
+    expect(e.mark).toEqual({
+      x: find(g, "K").cx,
+      y: find(g, "K").cy + LAYOUT_B.rowH / 2,
+    });
+    expect(edge(g, "A", "H").mark).toBeNull();
+    // The break child joins the lane walk: K is HEAD's primary child.
+    expect(laneOf(g, "K")).toBe(0);
+    expect(laneOf(g, "A")).toBe(1);
+  });
+
+  it("marks the behind edge when the fork is below the window", () => {
+    const below: RepoGraph = {
+      history_truncated: true,
+      nodes: [
+        { ...node("K", "open", "pending", ["hidden"]), fork_sha: "old" },
+        { ...node("B", "open", "pending", ["old"]), fork_sha: "old" },
+        node("H", "head", "merged", ["G1"]),
+        node("G1", "history", "merged", ["old"]),
+      ],
+    };
+    const g = layoutGraph(below);
+    expect(edge(g, "K", "collapsed").kind).toBe("behind");
+    expect(edge(g, "K", "collapsed").mark).not.toBeNull();
+    expect(edge(g, "B", "collapsed").kind).toBe("behind");
+    expect(edge(g, "B", "collapsed").mark).toBeNull();
   });
 });
 

@@ -34,6 +34,8 @@ pub struct OpenNode {
     pub commit_sha: Sha,
     /// `None` when the revision the node names is no longer held.
     pub parent_sha: Option<Sha>,
+    /// Where that revision forks from the canonical ref; `None` as above.
+    pub fork_sha: Option<Sha>,
 }
 
 /// A read-time view over one repo's changes.
@@ -198,15 +200,15 @@ impl RepoView {
                 if !seen.insert(m.commit_sha.clone()) {
                     continue;
                 }
-                let parent_sha = self
+                let revision = self
                     .change(m.change_number)
-                    .and_then(|c| c.revision(m.revision))
-                    .map(|r| r.parent_sha.clone());
+                    .and_then(|c| c.revision(m.revision));
                 out.push(OpenNode {
                     change_number: m.change_number,
                     revision: m.revision,
                     commit_sha: m.commit_sha,
-                    parent_sha,
+                    parent_sha: revision.map(|r| r.parent_sha.clone()),
+                    fork_sha: revision.map(|r| r.fork_sha.clone()),
                 });
             }
         }

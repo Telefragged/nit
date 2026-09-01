@@ -46,6 +46,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
             change_number: Some(change.id),
             change_id: Some(change.change_id.clone()),
             revision: Some(node.revision),
+            fork_sha: node.fork_sha,
         });
     }
 
@@ -84,6 +85,7 @@ pub fn assemble(view: &RepoView, history: &RepoHistory) -> RepoGraph {
                 change_number: h.change_number,
                 change_id: h.change_id.clone(),
                 revision: None,
+                fork_sha: None,
             }),
     );
 
@@ -162,6 +164,8 @@ mod tests {
             vec![sha("c1")],
             "topic keeps its real fork base, never re-rooted onto HEAD"
         );
+        assert_eq!(g.nodes[row("T")].fork_sha, Some(sha("c1")));
+        assert_eq!(g.nodes[row("c3")].fork_sha, None);
     }
 
     // The enriched history rides through untouched, an anchor-sha open node
