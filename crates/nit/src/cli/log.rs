@@ -6,12 +6,12 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 
-use nit_types::chains::ChainLog;
 use nit_types::domain::Chain;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
 use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::events::StreamMessage;
+use nit_types::log::Log;
 
 use super::client::{Client, Retry, ServerOpt, next_text, server_url};
 use super::format::{print_chain_digest, print_entries, print_oneline_entries, render_entry};
@@ -87,7 +87,7 @@ pub fn log(args: LogArgs) -> Result<()> {
         };
     }
     let change_number = resolve_chain(&client, args.chain, Retry::No)?;
-    let log: ChainLog = client.get(&format!("/api/chains/{change_number}/log"))?;
+    let log: Log = client.get(&format!("/api/chains/{change_number}/log"))?;
     let ranges = args
         .ranges
         .iter()
@@ -128,7 +128,7 @@ fn wait(
 ) -> Result<()> {
     let retry = Retry::UntilUp;
     loop {
-        let log: ChainLog = client.get_retry(&format!("/api/chains/{change_number}/log"), retry)?;
+        let log: Log = client.get_retry(&format!("/api/chains/{change_number}/log"), retry)?;
         let fresh: Vec<LogEntry> = log
             .entries
             .iter()
@@ -188,7 +188,7 @@ fn follow(
     loop {
         // Each connect refetches and replays past the cursor, so a reconnect
         // (server restart, overflow) re-reads whatever landed during the gap.
-        let log: ChainLog = client.get_retry(&format!("/api/chains/{change_number}/log"), retry)?;
+        let log: Log = client.get_retry(&format!("/api/chains/{change_number}/log"), retry)?;
         for e in &log.entries {
             if e.sequence > cursor {
                 cursor = cursor.max(e.sequence);

@@ -58,6 +58,27 @@ pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload>
     })
 }
 
+/// The entries with `after < sequence < before` of every change in `repo`
+/// the filter matches, ascending by `sequence`, as wire entries.
+///
+/// A `None` bound means no bound on that side.
+///
+/// # Errors
+///
+/// On a database failure, or a stored row that is not an entry.
+pub fn entries_between(
+    conn: &rusqlite::Connection,
+    repo_id: u64,
+    filter: &db::ChangeFilter,
+    after: Option<u64>,
+    before: Option<u64>,
+) -> Result<Vec<LogEntry>> {
+    db::log_between(conn, repo_id, filter, after, before)?
+        .iter()
+        .map(|(change_number, row)| entry_from_row(*change_number, row))
+        .collect()
+}
+
 /// A stored log row → the wire [`LogEntry`] the fold consumes.
 ///
 /// The entry is what the server broadcasts too. The `change_number` is the

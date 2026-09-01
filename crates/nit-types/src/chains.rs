@@ -1,20 +1,10 @@
-//! The chain endpoints' response bodies.
+//! The chain list's response body.
 
 use serde::{Deserialize, Serialize};
 
 use crate::domain::Chain;
-use crate::domain::LogEntry;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainList {
     pub chains: Vec<Chain>,
-}
-
-/// `GET /api/chains/{change_number}/log` response.
-///
-/// The aggregated chain log, merged across members and sorted by global
-/// `sequence`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainLog {
-    pub entries: Vec<LogEntry>,
 }

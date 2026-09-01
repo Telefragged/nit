@@ -8,10 +8,10 @@ use git2::Repository;
 use serde::Deserialize;
 
 use nit_types::chains::ChainList;
-use nit_types::chains::ChainLog;
 use nit_types::domain::Chain;
 use nit_types::domain::ChangeNumber;
 use nit_types::graph::{HistoryCommit, RepoHistory};
+use nit_types::log::Log;
 
 use crate::db;
 use crate::gitscan;
@@ -119,7 +119,7 @@ pub(super) async fn chain_log(
     State(state): State<Arc<AppState>>,
     AppPath(change_number): AppPath<ChangeNumber>,
     AppQuery(q): AppQuery<ChainQuery>,
-) -> Result<Json<ChainLog>, Error> {
+) -> Result<Json<Log>, Error> {
     with_conn(state.pool(), move |conn| {
         let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_number, q.revision)?;
         let path = view.path_from_tip(&tip_sha);
@@ -130,7 +130,7 @@ pub(super) async fn chain_log(
             }
         }
         entries.sort_by_key(|e| e.sequence);
-        Ok(Json(ChainLog { entries }))
+        Ok(Json(Log { entries }))
     })
     .await
 }

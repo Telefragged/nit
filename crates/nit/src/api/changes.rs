@@ -1,4 +1,5 @@
-//! Change endpoints: the change detail and the revision diff (incl. interdiff).
+//! Change endpoints: the change list and log, the change detail, its tags,
+//! and the revision diff (incl. interdiff).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -19,8 +20,10 @@ use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
 use nit_types::domain::Tag;
 use nit_types::domain::{LogPayload, TagsPayload};
+use nit_types::log::Log;
 
 use crate::db;
+use crate::review;
 
 use super::diff;
 use super::rebase;
@@ -58,6 +61,37 @@ pub(super) async fn list_changes(
             changes.extend(state.repo_changes(conn, repo_id, &filter)?);
         }
         Ok(Json(ChangeList { changes }))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(super) struct LogQuery {
+    repo: u64,
+    #[serde(default)]
+    status: Vec<ChangeStatus>,
+    #[serde(default)]
+    tag: Vec<Tag>,
+    after: Option<u64>,
+    before: Option<u64>,
+}
+
+/// Serves `GET /api/log`: the entries of the changes a filter matches.
+///
+/// `nit_types::log::Log` documents the query. This reads the log rows
+/// directly and never looks the repo up, so an unknown repo returns an
+/// empty log, not a 404.
+pub(super) async fn list_log(
+    State(state): State<Arc<AppState>>,
+    AppQuery(q): AppQuery<LogQuery>,
+) -> Result<Json<Log>, Error> {
+    with_conn(state.pool(), move |conn| {
+        let filter = db::ChangeFilter {
+            statuses: q.status,
+            tags: q.tag.into_iter().collect(),
+        };
+        let entries = review::entries_between(conn, q.repo, &filter, q.after, q.before)?;
+        Ok(Json(Log { entries }))
     })
     .await
 }
