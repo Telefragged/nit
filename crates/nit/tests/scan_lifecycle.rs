@@ -11,7 +11,7 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, first_repo_id, http_get, http_post, member_id, msg, push, review,
+    GitRepo, TestServer, abandon, first_repo_id, http_get, http_post, member_id, msg, push, review,
     status_at, sweep,
 };
 use serde_json::json;
@@ -95,19 +95,6 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     assert!(
         path.iter().all(|m| m["change_number"] != ancestor),
         "the merged ancestor sits below the canonical ref now: {active}"
-    );
-}
-
-/// ≡ `nit abandon`, asserting the overlay took.
-fn abandon(server: &TestServer, change_number: u64) {
-    let (st, body) = http_post(
-        &server.url(&format!("/api/changes/{change_number}/abandon")),
-        &json!({}),
-    );
-    assert_eq!(st, 200, "abandon change {change_number}: {body}");
-    assert_eq!(
-        status_at(server, change_number, Some(0)).as_deref(),
-        Some("abandoned")
     );
 }
 

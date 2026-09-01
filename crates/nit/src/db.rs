@@ -20,6 +20,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
+use std::fmt::Write as _;
+
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::{Anchor, CommentRange, LineAnchor};
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
@@ -591,24 +593,14 @@ pub fn repo_changes(
     filter: &ChangeFilter,
 ) -> Result<Vec<ChangeRow>> {
     let mut sql = String::from("SELECT * FROM changes WHERE repo_id = ?1");
-    if !filter.statuses.is_empty() {
-        sql.push_str(" AND status IN (");
-        sql.push_str(&vec!["?"; filter.statuses.len()].join(", "));
-        sql.push(')');
-    }
+    let mut values: Vec<rusqlite::types::Value> = vec![i64::try_from(repo_id)?.into()];
+    push_status_filter(&mut sql, &mut values, "status", &filter.statuses);
     for _ in &filter.tags {
         sql.push_str(
             " AND id IN (SELECT change_number FROM change_tags WHERE key = ? AND value = ?)",
         );
     }
     sql.push_str(" ORDER BY id");
-    let mut values: Vec<rusqlite::types::Value> = vec![i64::try_from(repo_id)?.into()];
-    values.extend(
-        filter
-            .statuses
-            .iter()
-            .map(|s| s.as_str().to_string().into()),
-    );
     for tag in &filter.tags {
         values.push(tag.key().to_string().into());
         values.push(tag.value().to_string().into());
@@ -618,6 +610,26 @@ pub fn repo_changes(
         .query_map(rusqlite::params_from_iter(values), map_change)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
+}
+
+/// Appends `AND <column> IN (?, …)` and its bindings for `statuses`.
+///
+/// An empty list appends nothing, so it does not narrow.
+fn push_status_filter(
+    sql: &mut String,
+    values: &mut Vec<rusqlite::types::Value>,
+    column: &str,
+    statuses: &[ChangeStatus],
+) {
+    if statuses.is_empty() {
+        return;
+    }
+    let _ = write!(
+        sql,
+        " AND {column} IN ({})",
+        vec!["?"; statuses.len()].join(", ")
+    );
+    values.extend(statuses.iter().map(|s| s.as_str().to_string().into()));
 }
 
 // ---------------------------------------------------------------------------
@@ -647,22 +659,31 @@ pub fn set_change_tags(tx: &Transaction, number: ChangeNumber, tags: &Tags) -> R
 
 /// The distinct `key`, `value` pairs in use across one repo's changes.
 ///
-/// The stored rows alone answer this, so nothing resolves or replays a
-/// change. The pairs come back ascending, key first.
+/// `statuses` narrows to the changes at those statuses. An empty list
+/// does not narrow. The stored rows alone answer this, so nothing
+/// resolves or replays a change. The pairs come back ascending, key
+/// first.
 ///
 /// # Errors
 ///
 /// On a database failure.
-pub fn repo_tags(conn: &Connection, repo_id: u64) -> Result<Vec<(String, String)>> {
+pub fn repo_tags(
+    conn: &Connection,
+    repo_id: u64,
+    statuses: &[ChangeStatus],
+) -> Result<Vec<(String, String)>> {
     // An `EXISTS` semi-join reads `change_tags_by_value` in its own
     // `(key, value)` order, so the distinct pairs need no sort. A plain
     // join instead probes once per change and sorts what it collects.
-    let mut stmt = conn.prepare(
+    let mut sql = String::from(
         "SELECT DISTINCT t.key, t.value FROM change_tags t
-         WHERE EXISTS (SELECT 1 FROM changes c WHERE c.id = t.change_number AND c.repo_id = ?1)
-         ORDER BY t.key, t.value",
-    )?;
-    let rows = stmt.query_map(params![i64::try_from(repo_id)?], |r| {
+         WHERE EXISTS (SELECT 1 FROM changes c WHERE c.id = t.change_number AND c.repo_id = ?1",
+    );
+    let mut values: Vec<rusqlite::types::Value> = vec![i64::try_from(repo_id)?.into()];
+    push_status_filter(&mut sql, &mut values, "c.status", statuses);
+    sql.push_str(") ORDER BY t.key, t.value");
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(values), |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
     })?;
     rows.map(|row| Ok(row?)).collect()

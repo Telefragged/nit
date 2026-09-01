@@ -574,3 +574,16 @@ pub fn nit_bounded(
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+/// ≡ `nit abandon`, asserting the overlay took.
+pub fn abandon(server: &TestServer, change_number: u64) {
+    let (st, body) = http_post(
+        &server.url(&format!("/api/changes/{change_number}/abandon")),
+        &json!({}),
+    );
+    assert_eq!(st, 200, "abandon change {change_number}: {body}");
+    assert_eq!(
+        status_at(server, change_number, Some(0)).as_deref(),
+        Some("abandoned")
+    );
+}

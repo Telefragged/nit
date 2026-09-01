@@ -65,6 +65,10 @@ pub(super) async fn list_changes(
 #[derive(Deserialize)]
 pub(super) struct ListTagsQuery {
     repo: u64,
+    /// Repeated (`?status=pending&status=commented`); empty means every
+    /// change, like the change read.
+    #[serde(default)]
+    status: Vec<ChangeStatus>,
 }
 
 /// Serves `GET /api/tags`: the repo's tags in use, grouped by key.
@@ -79,7 +83,7 @@ pub(super) async fn list_tags(
 ) -> Result<Json<TagList>, Error> {
     with_conn(state.pool(), move |conn| {
         let mut tags: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for (key, value) in db::repo_tags(conn, q.repo)? {
+        for (key, value) in db::repo_tags(conn, q.repo, &q.status)? {
             tags.entry(key).or_default().push(value);
         }
         Ok(Json(TagList { tags }))

@@ -114,8 +114,10 @@ pub struct AbandonRequest {
 /// `GET /api/tags` response: every tag in use across one repo's changes.
 ///
 /// Each change contributes the tags it carries now, so a value a later
-/// `tags` entry replaced does not appear. Terminal changes contribute
-/// too. To exclude them, narrow with `?status=` on the change read.
+/// `tags` entry replaced does not appear. `status` is repeatable
+/// (`?status={s}&status={s}`) and admits only the changes at those
+/// statuses, as on the change read. Without it, terminal changes
+/// contribute too.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct TagList {

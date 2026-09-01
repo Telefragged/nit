@@ -5,8 +5,8 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, a_change, change_id, change_ids, change_tags, first_repo_id, get_changes,
-    http_get, msg, push, tag_change,
+    GitRepo, TestServer, a_change, abandon, change_id, change_ids, change_tags, first_repo_id,
+    get_changes, http_get, msg, push, tag_change,
 };
 use serde_json::{Value, json};
 
@@ -170,6 +170,31 @@ fn repo_tags_group_every_value_under_its_key() {
         body["tags"],
         json!({"session-id": ["s1"], "track": ["docs", "perf"]})
     );
+}
+
+#[test]
+fn repo_tags_narrow_by_status() {
+    let g = GitRepo::new();
+    let a = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    g.branch("topic-a", a);
+    let b = g.commit(&[g.root], &msg("b: two", "Ib"), &[("b", "2\n")]);
+    g.branch("topic-b", b);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    tagged(&server, &g, "topic-a", &json!({"track": "perf"}));
+    abandon(
+        &server,
+        tagged(&server, &g, "topic-b", &json!({"track": "docs"})),
+    );
+    let repo_id = first_repo_id(&server);
+
+    let (st, body) = http_get(&server.url(&format!(
+        "/api/tags?repo={repo_id}&status=pending&status=approved"
+    )));
+    assert_eq!(st, 200, "{body}");
+    assert_eq!(body["tags"], json!({"track": ["perf"]}));
+    let (_, body) = http_get(&server.url(&format!("/api/tags?repo={repo_id}")));
+    assert_eq!(body["tags"], json!({"track": ["docs", "perf"]}));
 }
 
 // An unknown repo narrows to nothing rather than returning 404, which
