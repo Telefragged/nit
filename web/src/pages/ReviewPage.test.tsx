@@ -239,6 +239,23 @@ describe("expansion across diff-range navigation", () => {
   });
 });
 
+describe("chain navigation", () => {
+  it("n takes the next change in the chain, shift+n the previous", async () => {
+    renderReview();
+    await diffLoaded("src/auth/store.rs");
+
+    fireEvent.keyDown(window, { key: "n" });
+    await diffLoaded("docs/auth-rotation.md");
+
+    fireEvent.keyDown(window, { key: "N", shiftKey: true });
+    await diffLoaded("src/auth/store.rs");
+
+    // CapsLock delivers `N` too, so only the held shift may step back.
+    fireEvent.keyDown(window, { key: "N" });
+    await diffLoaded("docs/auth-rotation.md");
+  });
+});
+
 // `c` on a selection that no comment range can express explains itself in a
 // bubble by the selection. The reviewer's next move is to select again, so
 // the bubble outlives the keystroke and dies with the selection it answers.

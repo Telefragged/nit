@@ -57,7 +57,7 @@ import { displayPath, fileDomId, treeOrder } from "../lib/diffview";
 import { highlight } from "../lib/highlight";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt } from "../lib/scrollspy";
-import { isShortcutKey } from "../lib/shortcutKey";
+import { shortcutKey } from "../lib/shortcutKey";
 import type { SelectionMiss } from "../lib/selection";
 import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
@@ -479,30 +479,31 @@ export default function ReviewPage() {
   });
 
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
-  // expanded, then scrolled), n / p next/previous change, c comments on
-  // the selected diff text, a opens the reply modal. All inert while the
+  // expanded, then scrolled), n / shift+n next/previous change, c comments
+  // on the selected diff text, a opens the reply modal. All inert while the
   // modal is open — it is a showModal() dialog, so it owns the keyboard
   // (Escape arrives as its cancel event) and the page behind it is inert.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (replyOpen || !isShortcutKey(e)) return;
-      if (e.key === "[" || e.key === "]") {
+      if (replyOpen) return;
+      const key = shortcutKey(e);
+      if (key === "[" || key === "]") {
         if (fileCount === 0) return;
-        const cur = activeFile ?? (e.key === "]" ? -1 : fileCount);
+        const cur = activeFile ?? (key === "]" ? -1 : fileCount);
         const next = Math.min(
           fileCount - 1,
-          Math.max(0, cur + (e.key === "]" ? 1 : -1)),
+          Math.max(0, cur + (key === "]" ? 1 : -1)),
         );
         revealFile(next);
-      } else if (e.key === "n" || e.key === "p") {
+      } else if (key === "n" || key === "shift+n") {
         if (!chainPath) return;
         const position = chainPath.findIndex(
           (c) => c.change_number === changeNumber,
         );
         if (position < 0) return;
-        const next = chainPath[position + (e.key === "n" ? 1 : -1)];
+        const next = chainPath[position + (key === "n" ? 1 : -1)];
         if (next) void navigate(`/changes/${next.change_number}`);
-      } else if (e.key === "c") {
+      } else if (key === "c") {
         // Draft a comment on the selected diff text (gerrit's c) — or on
         // the caret's line when the selection is collapsed.
         const sel = document.getSelection();
@@ -526,12 +527,12 @@ export default function ReviewPage() {
         // The editor renders its own range highlight; the DOM selection
         // would just shout over it. Keep it on a declined discard.
         if (ctxValue.setEditingTarget(result)) sel.removeAllRanges();
-      } else if (e.key === "a") {
+      } else if (key === "a") {
         // preventDefault, or the keystroke's own text insertion lands in
         // the cover-message textarea the opening modal focuses.
         e.preventDefault();
         setReplyOpen(true);
-      } else if (e.key === "0") {
+      } else if (key === "0") {
         chooseMode(mode === "outline" ? "full" : "outline");
       }
     };
@@ -801,12 +802,12 @@ export default function ReviewPage() {
             </button>
             <span
               className="kbd-hint"
-              title="Keyboard: [ and ] switch files, n and p switch changes, c comments on the selected diff text, a opens the reply dialog"
+              title="Keyboard: [ and ] switch files, n and shift+n switch changes, c comments on the selected diff text, a opens the reply dialog"
             >
               <kbd>[</kbd>
               <kbd>]</kbd> files · <kbd>n</kbd>
-              <kbd>p</kbd> changes · <kbd>c</kbd> comment · <kbd>a</kbd> reply ·{" "}
-              <kbd>0</kbd> outline
+              <kbd>shift+n</kbd> changes · <kbd>c</kbd> comment · <kbd>a</kbd>{" "}
+              reply · <kbd>0</kbd> outline
             </span>
             <span className="seg">
               <button

@@ -4,7 +4,7 @@ import { clearDecision, setDraftDecision, submitChain } from "../api/client";
 import type { Chain, ChangeDetail, Decision } from "../api/types";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
-import { isShortcutKey } from "../lib/shortcutKey";
+import { shortcutKey } from "../lib/shortcutKey";
 
 /** Human label for a draft decision (the bar chip + the modal's current state). */
 const DECISION_LABEL: Record<Decision, string> = {
@@ -153,11 +153,10 @@ export default function ReviewBar({
   }, [replyOpen]);
 
   // Keyboard twin of the Submit button — same `canSubmit` gate;
-  // `isShortcutKey` mutes modifiers and typing.
+  // `shortcutKey` mutes modifier chords and typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (replyOpen || !isShortcutKey(e)) return;
-      if (e.key !== "s" || !canSubmit) return;
+      if (replyOpen || shortcutKey(e) !== "s" || !canSubmit) return;
       submit.mutate();
     };
     window.addEventListener("keydown", onKey);
