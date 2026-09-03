@@ -6,7 +6,13 @@
 // "✎ request_changes" once that fetch resolves.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import Dashboard from "./Dashboard";
@@ -81,5 +87,41 @@ describe("repo dashboard change graph", () => {
   it("offers the tag keys the repo's changes carry", async () => {
     renderDashboard(4);
     expect(await screen.findByRole("option", { name: "session" })).toBeTruthy();
+  });
+
+  it("restores the last grouping and clears the filter", async () => {
+    localStorage.setItem("nit.graph-group.4", "session");
+    renderDashboard(4, "?value=beta");
+
+    await screen.findByText("alpha", { selector: ".graph-gap-label" });
+    expect(screen.getByLabelText("Group by")).toHaveProperty(
+      "value",
+      "session",
+    );
+    expect(screen.getByLabelText("Only")).toHaveProperty("value", "");
+  });
+
+  it("groups by the URL's key, not the remembered one", async () => {
+    localStorage.setItem("nit.graph-group.4", "session");
+    renderDashboard(4, "?group=none-such");
+
+    await screen.findByText("lumen: parse the manifest lazily");
+    expect(screen.getByLabelText("Group by")).toHaveProperty(
+      "value",
+      "none-such",
+    );
+  });
+
+  it("remembers the grouping per repo", async () => {
+    renderDashboard(4);
+    // The selector offers `session` once the repo's tags arrive.
+    await screen.findByRole("option", { name: "session" });
+    fireEvent.change(screen.getByLabelText("Group by"), {
+      target: { value: "session" },
+    });
+
+    await screen.findByText("alpha", { selector: ".graph-gap-label" });
+    expect(localStorage.getItem("nit.graph-group.4")).toBe("session");
+    expect(localStorage.getItem("nit.graph-group.1")).toBeNull();
   });
 });

@@ -8,7 +8,15 @@
 // the happy path: the assertion still resolves the instant the element
 // appears.
 import { configure } from "@testing-library/react";
+import { afterEach } from "vitest";
 
 export const ASYNC_TIMEOUT_MS = 10_000;
 
 configure({ asyncUtilTimeout: ASYNC_TIMEOUT_MS });
+
+// Each test opens with an empty browser store. A page that remembers a view
+// choice — the diff mode, the change graph's grouping — would otherwise
+// carry the choice of one test into the next.
+afterEach(() => {
+  localStorage.clear();
+});

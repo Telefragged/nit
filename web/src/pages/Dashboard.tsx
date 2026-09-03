@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getChanges, getHistory, getRepo, getTags } from "../api/client";
 import { repoGraph } from "../api/fold";
@@ -30,7 +30,11 @@ const pinned = (list: string[], choice: string | null): string[] =>
  * history descending below it — assembled in the browser (api/fold) from the
  * repo's unmerged change folds and its canonical history. `?group=<key>`
  * groups the open changes by that tag key. `?value=<value>` then keeps
- * only the changes that carry that value. */
+ * only the changes that carry that value.
+ *
+ * The page restores the grouping the reviewer chose last when the URL
+ * names none. It never restores the filter: the filter hides changes, so
+ * the reviewer asks for it each time. */
 export default function Dashboard() {
   const { repoId } = useParams();
   const id = Number(repoId);
@@ -39,6 +43,24 @@ export default function Dashboard() {
   const value = groupBy === null ? null : params.get("value");
   const tag =
     groupBy !== null && value !== null ? `${groupBy}=${value}` : undefined;
+
+  // A tag key belongs to one repo, so the browser stores one key per repo.
+  // The empty string is the reviewer's own choice of no grouping, which is
+  // why an empty memory restores nothing.
+  const storageKey = `nit.graph-group.${id}`;
+  const chooseGroup = useCallback(
+    (key: string | null) => {
+      localStorage.setItem(storageKey, key ?? "");
+      // A value belongs to its key.
+      updateParams({ group: key, value: null });
+    },
+    [storageKey, updateParams],
+  );
+  useEffect(() => {
+    if (groupBy !== null) return;
+    const remembered = localStorage.getItem(storageKey);
+    if (remembered) chooseGroup(remembered);
+  }, [groupBy, storageKey, chooseGroup]);
 
   // The repo's path (its name) is fixed for the page's lifetime, so fetch it
   // once by id — only the changes/history reads refetch as things land.
@@ -127,8 +149,7 @@ export default function Dashboard() {
             className="revision-select"
             value={groupBy ?? ""}
             onChange={(e) => {
-              // A value belongs to its key.
-              updateParams({ group: e.target.value || null, value: null });
+              chooseGroup(e.target.value || null);
             }}
           >
             <option value="">none</option>
