@@ -287,7 +287,8 @@ export type HistoryCommit = {
  */
 export type RepoHistory = {
   /**
-   * HEAD-first; each commit's `parents` carry the edges.
+   * HEAD-first, and every commit precedes its parents. Each commit's
+   * `parents` carry the edges.
    */
   commits: Array<HistoryCommit>;
   /**

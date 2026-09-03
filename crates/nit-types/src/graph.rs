@@ -33,7 +33,8 @@ pub struct HistoryCommit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RepoHistory {
-    /// HEAD-first; each commit's `parents` carry the edges.
+    /// HEAD-first, and every commit precedes its parents. Each commit's
+    /// `parents` carry the edges.
     pub commits: Vec<HistoryCommit>,
     /// The branch has more merged commits below the window.
     pub truncated: bool,

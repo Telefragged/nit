@@ -17,6 +17,7 @@ use std::collections::HashMap;
 
 use git2::{Commit, Oid, Repository, Sort};
 
+use nit_types::chain;
 use nit_types::domain::subject_of;
 use nit_types::domain::{ChangeId, ChangeNumber, Sha};
 
@@ -243,13 +244,14 @@ pub struct HistoryCommit {
 
 /// Walks the canonical ref from its HEAD, newest-first.
 ///
-/// The HEAD commit (the graph anchor) followed by up to `window` ancestor
-/// commits — the merged history that descends below HEAD. Topological, so
-/// every commit precedes its parents; a merge keeps both parents (the
-/// client draws edges only to the parents inside the window). The
-/// returned bool is `truncated`: the branch has at least one more merged
-/// commit below the window (the client shows an "earlier history hidden"
-/// marker and dangles deep forks to it).
+/// The HEAD commit (the graph anchor) followed by up to `window`
+/// ancestor commits, the merged history that descends below HEAD. The
+/// window holds the newest of those ancestors by commit date. The order
+/// is topological, so every commit precedes its parents. A merge keeps
+/// both parents, and the client draws edges only to the parents inside
+/// the window. The returned bool is `truncated`: the branch has at
+/// least one more merged commit below the window (the client shows an
+/// "earlier history hidden" marker and dangles deep forks to it).
 ///
 /// # Errors
 ///
@@ -260,10 +262,11 @@ pub fn canonical_history(
     window: u64,
 ) -> Result<(Vec<HistoryCommit>, bool), String> {
     let head = resolve_commit(repo, canonical_ref)?;
+    // Any explicit libgit2 sort mode walks the whole reachable graph
+    // before it yields the first commit. The default walk holds its
+    // pending commits in date order, and it stops where this loop stops.
     let mut walk = repo.revwalk().map_err(|e| e.to_string())?;
     walk.push(head).map_err(|e| e.to_string())?;
-    walk.set_sorting(Sort::TOPOLOGICAL)
-        .map_err(|e| e.to_string())?;
     let take = usize::try_from(window)
         .unwrap_or(usize::MAX)
         .saturating_add(1);
@@ -284,6 +287,19 @@ pub fn canonical_history(
             trailer: identity::change_id_trailer(&message),
         });
     }
+    // The walk orders by date, so a commit dated before its own parent
+    // arrives after that parent. The client places the rows in the order
+    // they arrive, and a parent above its child draws that edge upward.
+    let nodes: Vec<(Sha, Vec<Sha>)> = out
+        .iter()
+        .map(|c| (c.sha.clone(), c.parents.clone()))
+        .collect();
+    let row: HashMap<Sha, usize> = chain::graph_row_order(&nodes)
+        .into_iter()
+        .enumerate()
+        .map(|(i, sha)| (sha, i))
+        .collect();
+    out.sort_by_key(|c| row[&c.sha]);
     Ok((out, truncated))
 }
 
@@ -301,22 +317,26 @@ mod tests {
 
     use git2::{Oid, Repository, Signature};
 
-    use super::{detect_merges, sha_of};
+    use super::{canonical_history, detect_merges, sha_of};
     use nit_types::domain::{ChangeId, ChangeNumber, Sha};
     use nit_types::domain::{ChangeProjection, RevisionProjection};
     use nit_types::testing::change_id;
 
-    /// Flat paths only — a `TreeBuilder` seeded from the parent is all these
-    /// tests need.
+    /// Flat paths only. A `TreeBuilder` seeded from the first parent is
+    /// all these tests need.
     fn commit(
         repo: &Repository,
-        parent: Option<Oid>,
+        parents: &[Oid],
+        seconds: i64,
         message: &str,
         files: &[(&str, &str)],
     ) -> Oid {
-        let parent_commit = parent.map(|p| repo.find_commit(p).expect("find parent"));
-        let base_tree = parent_commit
-            .as_ref()
+        let parent_commits: Vec<git2::Commit> = parents
+            .iter()
+            .map(|p| repo.find_commit(*p).expect("find parent"))
+            .collect();
+        let base_tree = parent_commits
+            .first()
             .map(|c| c.tree().expect("parent tree"));
         let mut builder = repo.treebuilder(base_tree.as_ref()).expect("treebuilder");
         for (path, content) in files {
@@ -326,9 +346,9 @@ mod tests {
         let tree = repo
             .find_tree(builder.write().expect("write tree"))
             .expect("find tree");
-        let sig = Signature::new("t", "t@e", &git2::Time::new(0, 0)).expect("signature");
-        let parents: Vec<&git2::Commit> = parent_commit.iter().collect();
-        repo.commit(None, &sig, &sig, message, &tree, &parents)
+        let sig = Signature::new("t", "t@e", &git2::Time::new(seconds, 0)).expect("signature");
+        let parent_refs: Vec<&git2::Commit> = parent_commits.iter().collect();
+        repo.commit(None, &sig, &sig, message, &tree, &parent_refs)
             .expect("commit")
     }
 
@@ -353,7 +373,7 @@ mod tests {
     fn repo() -> (tempfile::TempDir, Repository, Oid) {
         let dir = tempfile::tempdir().expect("tempdir");
         let repo = Repository::init(dir.path()).expect("init repo");
-        let root = commit(&repo, None, "init\n", &[("README", "hello\n")]);
+        let root = commit(&repo, &[], 0, "init\n", &[("README", "hello\n")]);
         (dir, repo, root)
     }
 
@@ -376,14 +396,16 @@ mod tests {
         let (_dir, repo, root) = repo();
         let feat = commit(
             &repo,
-            Some(root),
+            &[root],
+            0,
             &keyed("feat", "I001"),
             &[("a.txt", "a\n")],
         );
         let change = change_proj(1, "I001", feat, root);
         let merged = commit(
             &repo,
-            Some(root),
+            &[root],
+            0,
             &keyed("feat", "I001"),
             &[("a.txt", "a adapted\n")],
         );
@@ -392,18 +414,36 @@ mod tests {
     }
 
     #[test]
+    fn a_fork_point_comes_after_both_its_children() {
+        let (_dir, repo, root) = repo();
+        let fork = commit(&repo, &[root], 300, "fork point\n", &[]);
+        let old = commit(&repo, &[fork], 100, "old child\n", &[]);
+        let new = commit(&repo, &[fork], 500, "new child\n", &[]);
+        let tip = commit(&repo, &[new, old], 900, "tip\n", &[]);
+
+        let (walked, _) = canonical_history(&repo, sha_of(tip).as_str(), 5).expect("history");
+        let subjects: Vec<&str> = walked.iter().map(|c| c.subject.as_str()).collect();
+        assert_eq!(
+            subjects,
+            ["tip", "new child", "old child", "fork point", "init"]
+        );
+    }
+
+    #[test]
     fn keyless_landing_is_not_detected() {
         let (_dir, repo, root) = repo();
         let feat = commit(
             &repo,
-            Some(root),
+            &[root],
+            0,
             &keyed("feat", "I001"),
             &[("a.txt", "a\n")],
         );
         let change = change_proj(1, "I001", feat, root);
         let merged = commit(
             &repo,
-            Some(root),
+            &[root],
+            0,
             "merged without a trailer\n",
             &[("a.txt", "a\n")],
         );
@@ -416,19 +456,21 @@ mod tests {
     #[test]
     fn stacked_prefix_detects_each_member() {
         let (_dir, repo, root) = repo();
-        let a_feat = commit(&repo, Some(root), &keyed("a", "I001"), &[("a.txt", "a\n")]);
+        let a_feat = commit(&repo, &[root], 0, &keyed("a", "I001"), &[("a.txt", "a\n")]);
         let b_feat = commit(
             &repo,
-            Some(a_feat),
+            &[a_feat],
+            0,
             &keyed("b", "I002"),
             &[("b.txt", "b\n")],
         );
         let a = change_proj(1, "I001", a_feat, root);
         let b = change_proj(2, "I002", b_feat, a_feat);
-        let landed_a = commit(&repo, Some(root), &keyed("a", "I001"), &[("a.txt", "a\n")]);
+        let landed_a = commit(&repo, &[root], 0, &keyed("a", "I001"), &[("a.txt", "a\n")]);
         let landed_b = commit(
             &repo,
-            Some(landed_a),
+            &[landed_a],
+            0,
             &keyed("b", "I002"),
             &[("b.txt", "b\n")],
         );
@@ -448,14 +490,16 @@ mod tests {
         let (_dir, repo, root) = repo();
         let feat = commit(
             &repo,
-            Some(root),
+            &[root],
+            0,
             &keyed("feat", "I001"),
             &[("a.txt", "a\n")],
         );
         let change = change_proj(1, "I001", feat, root);
         let merged = commit(
             &repo,
-            Some(root),
+            &[root],
+            0,
             &keyed("other", "I999"),
             &[("z.txt", "z\n")],
         );
@@ -468,14 +512,16 @@ mod tests {
         let (_dir, repo, root) = repo();
         let feat = commit(
             &repo,
-            Some(root),
+            &[root],
+            0,
             &keyed("feat", "I001"),
             &[("a.txt", "a\n")],
         );
         let change = change_proj(1, "I001", feat, root);
         let merged = commit(
             &repo,
-            Some(root),
+            &[root],
+            0,
             &keyed("feat", "I001"),
             &[("a.txt", "a\n")],
         );
