@@ -77,4 +77,9 @@ describe("repo dashboard change graph", () => {
     // its edge to the fork.
     expect(document.querySelector(".graph-break")).not.toBeNull();
   });
+
+  it("offers the tag keys the repo's changes carry", async () => {
+    renderDashboard(4);
+    expect(await screen.findByRole("option", { name: "session" })).toBeTruthy();
+  });
 });

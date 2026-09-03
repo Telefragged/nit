@@ -29,9 +29,14 @@ mod intraline;
 ///
 /// `serialize_missing_as_null` keeps `Option::None` as JS `null` (the
 /// default is `undefined`), which the web's `=== null` checks and the
-/// `… | null` wire types depend on.
+/// `… | null` wire types depend on. `serialize_maps_as_objects` gives a
+/// map the shape the server's JSON gives it (`Tags` is the one that
+/// crosses), so a value the fold built and a value the REST routes
+/// returned read the same way.
 fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
-    let serializer = serde_wasm_bindgen::Serializer::new().serialize_missing_as_null(true);
+    let serializer = serde_wasm_bindgen::Serializer::new()
+        .serialize_missing_as_null(true)
+        .serialize_maps_as_objects(true);
     Ok(value.serialize(&serializer)?)
 }
 
