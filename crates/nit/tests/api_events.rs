@@ -22,7 +22,7 @@ fn subscribe_replays_backlog_then_streams_live() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&server, &res, "I001");
+    let change_number = member_id(&res, "I001");
 
     let mut socket = ws_subscribe(&server, &[(change_number, 0)], READ);
     let backlog = ws_entry(&mut socket).expect("backlog revision entry");
@@ -52,7 +52,7 @@ fn subscribe_projection_ships_it_then_streams_live() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&server, &res, "I001");
+    let change_number = member_id(&res, "I001");
 
     let mut socket = ws_subscribe_projection(&server, &[change_number], READ);
     let snap = ws_read(&mut socket).expect("projection frame")["projection"].clone();
@@ -75,7 +75,7 @@ fn subscribe_at_head_skips_backlog() {
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main");
-    let change_number = member_id(&server, &res, "I001");
+    let change_number = member_id(&res, "I001");
 
     // The revision is at position 0, so head is position 1: no backlog replays.
     let mut socket = ws_subscribe(&server, &[(change_number, 1)], Duration::from_millis(400));
@@ -101,9 +101,9 @@ fn subscribe_tagged_follows_the_changes_that_carry_the_tags() {
     g.branch("other", b);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main");
-    let one = member_id(&server, &res, "I001");
+    let one = member_id(&res, "I001");
     let (_, res) = push(&server, &g, "other", "main");
-    let two = member_id(&server, &res, "I002");
+    let two = member_id(&res, "I002");
     let (st, res) = tag_change(&server, one, &json!({"branch": "feat"}));
     assert_eq!(st, 200, "{res}");
     let repo_id = first_repo_id(&server);
@@ -164,8 +164,8 @@ fn unsubscribed_changes_are_silent() {
     g.branch("feat", c2);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main");
-    let one = member_id(&server, &res, "I001");
-    let two = member_id(&server, &res, "I002");
+    let one = member_id(&res, "I001");
+    let two = member_id(&res, "I002");
 
     // Subscribe only to change one; reading its backlog revision is the sync
     // point that puts the subscription in place before any review broadcasts.

@@ -6,7 +6,7 @@ use git2::Repository;
 
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::{LogPayload, RevisionPayload};
-use nit_types::push::{PushRequest, PushResult, TipChange};
+use nit_types::push::{PushRequest, PushResult, PushedChange};
 
 use crate::db;
 use crate::gitscan;
@@ -152,19 +152,22 @@ pub(super) async fn push(
             gitscan::maintain_keep_refs(&repo, &t.entry.read());
         }
 
-        let tip = targets
-            .last()
-            .expect("the empty-walk guard guarantees at least one target");
-        let tip_change = {
-            let proj = tip.entry.read();
-            TipChange {
-                change_number: tip.change_number,
-                change_id: proj.change_id.clone(),
-                revision: proj.latest_revision_number(),
-                status: proj.current_status(),
-            }
-        };
-        Ok(Json(PushResult { tip_change }))
+        let changes = targets
+            .iter()
+            .map(|t| {
+                let proj = t.entry.read();
+                PushedChange {
+                    change_number: t.change_number,
+                    change_id: proj.change_id.clone(),
+                    revision: proj.latest_revision_number(),
+                    status: proj.current_status(),
+                }
+            })
+            .collect();
+        Ok(Json(PushResult {
+            repo: repo_row.id,
+            changes,
+        }))
     })
     .await
 }

@@ -12,7 +12,7 @@ mod common;
 
 use common::{
     GitRepo, TestServer, abandon, first_repo_id, http_get, http_post, member_id, msg, push, review,
-    status_at, sweep,
+    status_at, sweep, tip_change,
 };
 use serde_json::json;
 
@@ -25,9 +25,9 @@ fn change_landed_on_main_becomes_merged() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&server, &res, "I001");
-    assert_eq!(res["tip_change"]["revision"], 0);
-    assert_eq!(res["tip_change"]["status"], "pending");
+    let change_number = member_id(&res, "I001");
+    assert_eq!(tip_change(&res)["revision"], 0);
+    assert_eq!(tip_change(&res)["status"], "pending");
 
     // Land the same change on the canonical ref: the timer recognises
     // its Change-Id.
@@ -62,9 +62,9 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let tip = res["tip_change"]["change_number"].as_u64().unwrap();
-    let ancestor = member_id(&server, &res, "I001");
-    assert_eq!(tip, member_id(&server, &res, "I002"));
+    let tip = tip_change(&res)["change_number"].as_u64().unwrap();
+    let ancestor = member_id(&res, "I001");
+    assert_eq!(tip, member_id(&res, "I002"));
 
     // Land only the ancestor (I001) on main — the tip (I002) stays unlanded.
     let merged = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
@@ -107,7 +107,7 @@ fn branchless_change_stays_live_without_auto_abandon() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&server, &res, "I001");
+    let change_number = member_id(&res, "I001");
 
     // Delete the only branch, then move main with an unrelated commit (a
     // foreign Change-Id, so no false merge) so the sweep does real work
@@ -133,7 +133,7 @@ fn reopen_clears_abandoned_to_retained_status() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&server, &res, "I001");
+    let change_number = member_id(&res, "I001");
 
     // Approve, then abandon: the verdict is retained, masked by the overlay.
     review(&server, change_number, "approve", "lgtm");
@@ -184,7 +184,7 @@ fn push_to_abandoned_change_409s_until_reopened() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&server, &res, "I001");
+    let change_number = member_id(&res, "I001");
 
     abandon(&server, change_number);
     let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
@@ -201,9 +201,10 @@ fn push_to_abandoned_change_409s_until_reopened() {
     assert_eq!(st, 200);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    assert_eq!(res["tip_change"]["revision"], 1, "the new revision merged");
+    assert_eq!(tip_change(&res)["revision"], 1, "the new revision merged");
     assert_eq!(
-        res["tip_change"]["status"], "pending",
+        tip_change(&res)["status"],
+        "pending",
         "a content change resets status"
     );
 }
@@ -219,7 +220,7 @@ fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&server, &res, "I001");
+    let change_number = member_id(&res, "I001");
 
     // The branch still points at the same sha — abandon doesn't move it.
     abandon(&server, change_number);
@@ -228,5 +229,5 @@ fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     // (which fires only on a moving revision) never trips — idempotent 200.
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    assert_eq!(res["tip_change"]["revision"], 0, "no new revision recorded");
+    assert_eq!(tip_change(&res)["revision"], 0, "no new revision recorded");
 }

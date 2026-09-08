@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, change_id, http_get, msg, push};
+use common::{GitRepo, TestServer, change_id, http_get, msg, push, tip_change};
 use serde_json::{Value, json};
 
 fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
@@ -20,7 +20,7 @@ fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
 
 /// Revision 0 of the tip change lives here after the first push.
 fn tip_change_number(push_result: &Value) -> u64 {
-    push_result["tip_change"]["change_number"]
+    tip_change(push_result)["change_number"]
         .as_u64()
         .expect("a tip change")
 }
@@ -79,7 +79,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
     let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
     let id = tip_change_number(&pushed);
-    assert_eq!(pushed["tip_change"]["revision"], 0, "first revision is 0");
+    assert_eq!(tip_change(&pushed)["revision"], 0, "first revision is 0");
 
     let (st, diff) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff")));
     assert_eq!(st, 200, "{diff}");
@@ -206,7 +206,7 @@ fn interdiff_against_earlier_revision() {
     let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
     let id = tip_change_number(&pushed);
-    assert_eq!(pushed["tip_change"]["revision"], 0);
+    assert_eq!(tip_change(&pushed)["revision"], 0);
 
     let c2 = g.commit(
         &[base],
@@ -216,10 +216,7 @@ fn interdiff_against_earlier_revision() {
     g.branch("feat", c2);
     let (st, pushed) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pushed}");
-    assert_eq!(
-        pushed["tip_change"]["revision"], 1,
-        "amend mints revision 1"
-    );
+    assert_eq!(tip_change(&pushed)["revision"], 1, "amend mints revision 1");
 
     let (st, diff) =
         http_get(&server.url(&format!("/api/changes/{id}/revisions/1/diff?against=0")));

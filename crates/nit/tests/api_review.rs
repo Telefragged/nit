@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_id: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
-    member_id(server, &res, change_id)
+    member_id(&res, change_id)
 }
 
 fn drafts_url(server: &TestServer, change_number: u64) -> String {

@@ -20,16 +20,17 @@ pub struct PushRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushResult {
-    /// The pushed tip change, at the revision this push gave it.
+    /// The repo the push registered the changes in.
+    pub repo: u64,
+    /// Every change the push walked, base first, the tip last.
     ///
-    /// Always present — a push that walks to nothing is rejected (409).
-    /// Read the derived chain back with
-    /// `GET /api/chains/{tip_change.change_number}`.
-    pub tip_change: TipChange,
+    /// Never empty: a push that walks to nothing is rejected (409).
+    pub changes: Vec<PushedChange>,
 }
 
+/// One change a push walked, at the revision the push left it at.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TipChange {
+pub struct PushedChange {
     pub change_number: ChangeNumber,
     pub change_id: ChangeId,
     pub revision: RevisionNumber,

@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_id: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
-    member_id(server, &res, change_id)
+    member_id(&res, change_id)
 }
 
 fn detail(server: &TestServer, change_number: u64) -> Value {
@@ -309,8 +309,8 @@ fn batch_submit_publishes_every_member() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let id_a = member_id(&server, &res, "Ia");
-    let id_b = member_id(&server, &res, "Ib");
+    let id_a = member_id(&res, "Ia");
+    let id_b = member_id(&res, "Ib");
 
     draft(&server, id_a, "approve", "a lgtm");
     draft(&server, id_b, "request_changes", "b needs work");

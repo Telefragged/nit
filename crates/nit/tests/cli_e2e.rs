@@ -16,7 +16,7 @@ use common::{
     GitRepo, TestServer, change_id, change_tags, first_repo_id, msg, nit, nit_env, nit_register,
 };
 
-/// `nit push` prints the resulting chain digest and registers the chain;
+/// `nit push` registers the changes it walks and prints their digest;
 /// `nit status`/`nit log` then read the change back by the worktree it was
 /// pushed from.
 #[test]
@@ -29,10 +29,10 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
 
     let (ok, push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
-    // push prints the chain digest — a `state=` header and one member line
-    // (position change_id status rN Nu subject) — so no follow-up read.
+    // push prints the digest of the changes that have its tags, one line
+    // each (number change_id status rN Nu subject), so no follow-up read.
     let push = push.as_str().expect("push prints text");
-    assert!(push.contains("state=waiting_for_review"), "{push}");
+    assert!(push.contains("tag branch=feat"), "{push}");
     assert!(
         push.contains("Ia") && push.contains("pending") && push.contains("r0"),
         "{push}"

@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, change_id, http_get, member_id, msg, push, review};
+use common::{GitRepo, TestServer, change_id, http_get, member_id, msg, push, review, tip_change};
 use serde_json::Value;
 
 fn change_detail(server: &TestServer, change_number: u64) -> Value {
@@ -49,9 +49,10 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    let tip_id = member_id(&server, &pr, "Ib");
+    let tip_id = member_id(&pr, "Ib");
     assert_eq!(
-        pr["tip_change"]["revision"], 0,
+        tip_change(&pr)["revision"],
+        0,
         "first revision is revision 0"
     );
 
@@ -67,18 +68,16 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(
-        pr["tip_change"]["revision"], 1,
+        tip_change(&pr)["revision"],
+        1,
         "a pure rebase appends revision 1"
     );
     assert_eq!(
-        pr["tip_change"]["status"], "approved",
+        tip_change(&pr)["status"],
+        "approved",
         "the approval carries forward across a pure rebase"
     );
-    assert_eq!(
-        member_id(&server, &pr, "Ib"),
-        tip_id,
-        "same change identity"
-    );
+    assert_eq!(member_id(&pr, "Ib"), tip_id, "same change identity");
 
     let detail = change_detail(&server, tip_id);
     let revs = detail["revisions"].as_array().unwrap();
@@ -99,11 +98,13 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
     assert_eq!(
-        pr["tip_change"]["revision"], 2,
+        tip_change(&pr)["revision"],
+        2,
         "the reword appends revision 2"
     );
     assert_eq!(
-        pr["tip_change"]["status"], "pending",
+        tip_change(&pr)["status"],
+        "pending",
         "a reword resets the displayed status"
     );
 
@@ -123,13 +124,13 @@ fn re_push_of_an_unchanged_tip_is_idempotent() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    let change_number = member_id(&server, &pr, "Ic");
+    let change_number = member_id(&pr, "Ic");
     approve(&server, change_number);
 
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    assert_eq!(pr["tip_change"]["revision"], 0, "no new revision");
-    assert_eq!(pr["tip_change"]["status"], "approved");
+    assert_eq!(tip_change(&pr)["revision"], 0, "no new revision");
+    assert_eq!(tip_change(&pr)["status"], "approved");
 
     let detail = change_detail(&server, change_number);
     assert_eq!(
@@ -151,7 +152,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    let change_number = member_id(&server, &pr, "Ix");
+    let change_number = member_id(&pr, "Ix");
 
     review(&server, change_number, "request_changes", "rename");
     assert_eq!(
@@ -165,9 +166,10 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     g.branch("feat", c1r);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    assert_eq!(pr["tip_change"]["revision"], 1);
+    assert_eq!(tip_change(&pr)["revision"], 1);
     assert_eq!(
-        pr["tip_change"]["status"], "changes_requested",
+        tip_change(&pr)["status"],
+        "changes_requested",
         "request_changes carries forward across a pure rebase"
     );
 
@@ -175,7 +177,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     g.branch("feat", c1w);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    assert_eq!(pr["tip_change"]["revision"], 2);
-    assert_eq!(pr["tip_change"]["status"], "pending");
+    assert_eq!(tip_change(&pr)["revision"], 2);
+    assert_eq!(tip_change(&pr)["status"], "pending");
     assert_eq!(path_status(&server, change_number, "Ix"), "pending");
 }

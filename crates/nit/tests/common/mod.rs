@@ -362,9 +362,17 @@ pub fn tag_change(server: &TestServer, change_number: u64, tags: &Value) -> (u16
 pub fn a_change(server: &TestServer, repo: &GitRepo, tip: &str) -> u64 {
     let (st, res) = push(server, repo, tip, "main");
     assert_eq!(st, 200, "{res}");
-    res["tip_change"]["change_number"]
+    tip_change(&res)["change_number"]
         .as_u64()
         .expect("tip change number")
+}
+
+/// The tip of a `PushResult`: the last change the push walked.
+pub fn tip_change(res: &Value) -> &Value {
+    res["changes"]
+        .as_array()
+        .and_then(|changes| changes.last())
+        .expect("a PushResult `changes`")
 }
 
 /// Registers the repo, then posts `body` to `/api/push`.
@@ -450,25 +458,15 @@ pub fn first_repo_id(server: &TestServer) -> u64 {
     repos["repos"][0]["id"].as_u64().expect("a repo")
 }
 
-/// Find a path member's `change_number` by its Change-Id. Accepts a `Chain`
-/// (`value["path"]`) directly; for a `PushResult` (which names only the tip)
-/// it fetches the derived chain through `tip_change.change_number`.
-pub fn member_id(server: &TestServer, value: &Value, label: &str) -> u64 {
+/// Find a change's `change_number` by its Change-Id, in a `Chain`
+/// (`value["path"]`) or a `PushResult` (`value["changes"]`).
+pub fn member_id(value: &Value, label: &str) -> u64 {
     let key = change_id(label);
-    let fetched;
-    let path = if let Some(path) = value.get("path") {
-        path
-    } else {
-        let tip = value["tip_change"]["change_number"]
-            .as_u64()
-            .expect("a Chain `path` or a PushResult `tip_change`");
-        let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip}")));
-        assert_eq!(st, 200, "{chain}");
-        fetched = chain;
-        &fetched["path"]
-    };
-    path.as_array()
-        .expect("a path")
+    value
+        .get("path")
+        .or_else(|| value.get("changes"))
+        .and_then(Value::as_array)
+        .expect("a Chain `path` or a PushResult `changes`")
         .iter()
         .find(|m| m["change_id"].as_str() == Some(key.as_str()))
         .and_then(|m| m["change_number"].as_u64())

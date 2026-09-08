@@ -177,6 +177,15 @@ impl ChangeProjection {
         self.status_at(self.latest_revision_number())
     }
 
+    /// How many threads on `revision` are unresolved.
+    #[must_use]
+    pub fn unresolved_at(&self, revision: RevisionNumber) -> usize {
+        self.threads
+            .iter()
+            .filter(|t| t.revision == revision && !t.resolved)
+            .count()
+    }
+
     /// The displayed status at a pinned revision.
     ///
     /// The lifecycle overlay (`abandoned` change-wide, `merged` at the

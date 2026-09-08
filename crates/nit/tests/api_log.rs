@@ -34,7 +34,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     // This push contributes the A.revision entry.
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let a_id = member_id(&server, &res, "Ia");
+    let a_id = member_id(&res, "Ia");
 
     // An author comment on A (sequence: A.comment) — written before B exists, so it
     // must sort before B's revision in the merged timeline.
@@ -49,7 +49,7 @@ fn chain_log_aggregates_members_in_seq_order() {
     g.branch("feat", b);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let b_id = member_id(&server, &res, "Ib");
+    let b_id = member_id(&res, "Ib");
     assert_ne!(a_id, b_id);
 
     let (st, log) = http_get(&server.url(&format!("/api/chains/{b_id}/log")));
@@ -110,7 +110,7 @@ fn log_by_tag_reads_the_matched_changes_past_a_cursor() {
 
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let a_id = member_id(&server, &res, "Ia");
+    let a_id = member_id(&res, "Ia");
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{a_id}/comments")),
         &json!({"revision": 0, "body": "note on A"}),

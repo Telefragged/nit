@@ -1,25 +1,18 @@
 //! Display helpers shared by 2+ commands.
 //!
-//! One-line digests of log entries, chains and tag selections, plus the
+//! One-line digests of log entries and tag selections, plus the
 //! `--change` / `--change-id` selector flattened into every change-scoped
 //! Args struct.
 
-use std::collections::HashMap;
-
 use anyhow::{Result, bail};
 
-use nit_types::changes::ChangeDetail;
 use nit_types::domain::Anchor;
-use nit_types::domain::Chain;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
-use nit_types::domain::ChangeStatus;
 use nit_types::domain::LineAnchor;
-use nit_types::domain::RevisionNumber;
 use nit_types::domain::Tags;
 use nit_types::domain::ThreadProjection;
-use nit_types::domain::unresolved_at;
 use nit_types::domain::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
@@ -92,62 +85,6 @@ fn entry_summary(entry: &LogEntry) -> String {
     }
 }
 
-/// Prints the chain digest with each member's open-thread count.
-///
-/// A `state=` header (prefixed with `cursor=` when following) and one aligned
-/// line per member — `position change_id status rN Nu subject`. The chain path
-/// carries only structure, so the counts are fetched from each member's change
-/// projection (`GET /api/changes/{id}`); the fold is in memory, so each is a
-/// cheap read.
-///
-/// # Errors
-///
-/// When a member's change projection can't be fetched.
-pub(crate) fn print_chain_digest(
-    client: &Client,
-    chain: &Chain,
-    cursor: Option<u64>,
-) -> Result<()> {
-    let unresolved = member_unresolved(client, chain)?;
-    print!("{}", chain_digest(chain, &unresolved, cursor));
-    Ok(())
-}
-
-/// Unresolved-thread count per member, scoped to the revision the path pins.
-fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<ChangeNumber, usize>> {
-    let mut counts = HashMap::new();
-    for member in &chain.path {
-        let detail: ChangeDetail = client.get(&format!("/api/changes/{}", member.change_number))?;
-        counts.insert(
-            member.change_number,
-            unresolved_at(&detail.threads, member.revision),
-        );
-    }
-    Ok(counts)
-}
-
-fn chain_digest(
-    chain: &Chain,
-    unresolved: &HashMap<ChangeNumber, usize>,
-    cursor: Option<u64>,
-) -> String {
-    let header = match cursor {
-        Some(sequence) => format!("cursor={sequence} state={}", chain.state.as_str()),
-        None => format!("state={}", chain.state.as_str()),
-    };
-    let rows = chain.path.iter().map(|m| {
-        let row = digest_row(
-            m.position,
-            &m.change_id,
-            m.status,
-            m.revision,
-            unresolved.get(&m.change_number).copied().unwrap_or(0),
-        );
-        (row, m.subject.clone())
-    });
-    digest(&[header], rows)
-}
-
 /// The digest of the changes a tag selects.
 ///
 /// Prints a `cursor=` line when the caller gives a cursor, then one
@@ -161,52 +98,31 @@ pub(crate) fn tagged_digest(
     changes: &[ChangeProjection],
     cursor: Option<u64>,
 ) -> String {
+    use std::fmt::Write;
     let headers: Vec<String> = cursor
         .map(|sequence| format!("cursor={sequence}"))
         .into_iter()
         .chain(tags.spelled().map(|tag| format!("tag {tag}")))
         .collect();
-    let rows = changes.iter().map(|c| {
-        let revision = c.latest_revision_number();
-        let row = digest_row(
-            c.id.get(),
-            &c.change_id,
-            c.current_status(),
-            revision,
-            unresolved_at(&c.threads, revision),
-        );
-        (row, c.subject_at(revision))
-    });
-    digest(&headers, rows)
-}
-
-/// The fixed cells of one digest line.
-fn digest_row(
-    first: u64,
-    change_id: &ChangeId,
-    status: ChangeStatus,
-    revision: RevisionNumber,
-    unresolved: usize,
-) -> [String; 5] {
-    [
-        first.to_string(),
-        short_change_id(change_id),
-        status.as_str().to_string(),
-        format!("r{revision}"),
-        format!("{unresolved}u"),
-    ]
-}
-
-/// Prints the header lines, then one aligned line per row, each ending
-/// with its subject.
-fn digest(headers: &[String], rows: impl Iterator<Item = ([String; 5], String)>) -> String {
-    use std::fmt::Write;
+    let (cells, subjects): (Vec<[String; 5]>, Vec<String>) = changes
+        .iter()
+        .map(|c| {
+            let revision = c.latest_revision_number();
+            let cells = [
+                c.id.to_string(),
+                short_change_id(&c.change_id),
+                c.current_status().as_str().to_string(),
+                format!("r{revision}"),
+                format!("{}u", c.unresolved_at(revision)),
+            ];
+            (cells, c.subject_at(revision))
+        })
+        .unzip();
     let inf = "write to String is infallible";
     let mut out = String::new();
     for header in headers {
         writeln!(out, "{header}").expect(inf);
     }
-    let (cells, subjects): (Vec<[String; 5]>, Vec<String>) = rows.unzip();
     let widths = column_widths(&cells);
     for (cols, subject) in cells.iter().zip(&subjects) {
         writeln!(out, "{}", aligned_row(cols, widths, subject)).expect(inf);
@@ -228,7 +144,7 @@ pub(crate) fn column_widths<const N: usize>(rows: &[[String; N]]) -> [usize; N] 
 /// One aligned row: the fixed cells, then the free-form `tail` field.
 ///
 /// Each fixed cell is padded to its column width and two-space separated.
-/// Shared by the chain digest and the repo list.
+/// Shared by the change digest and the repo list.
 pub(crate) fn aligned_row<const N: usize>(
     cells: &[String; N],
     widths: [usize; N],
@@ -616,58 +532,6 @@ mod tests {
         assert!(
             tagged_digest(&tags(&[("branch", "track/a")]), &changes, Some(14))
                 .starts_with("cursor=14\ntag branch=track/a\n")
-        );
-    }
-
-    #[test]
-    fn chain_digest_aligns_columns_and_headers() {
-        use nit_types::domain::PathEntry;
-        use nit_types::domain::{ChainState, ChangeStatus};
-        let member =
-            |change_number, position, key: &str, status, revision: u64, subject: &str| PathEntry {
-                change_number,
-                position,
-                change_id: change_id(key),
-                status,
-                revision: RevisionNumber::new(revision),
-                subject: subject.to_string(),
-                commit_sha: sha(""),
-            };
-        let chain = Chain {
-            tip_change_number: ChangeNumber::new(2),
-            repo_id: 1,
-            state: ChainState::AuthorsTurn,
-            path: vec![
-                member(
-                    ChangeNumber::new(1),
-                    0,
-                    "I0123456789abc",
-                    ChangeStatus::ChangesRequested,
-                    2,
-                    "server: add health endpoint",
-                ),
-                member(
-                    ChangeNumber::new(2),
-                    1,
-                    "Iabcdef0123456",
-                    ChangeStatus::Approved,
-                    1,
-                    "web: render the diff",
-                ),
-            ],
-        };
-        let unresolved = HashMap::from([(ChangeNumber::new(1), 3), (ChangeNumber::new(2), 0)]);
-        // Columns padded to the widest cell (here `changes_requested`), no tabs.
-        assert_eq!(
-            chain_digest(&chain, &unresolved, None),
-            "state=authors_turn\n\
-             0  I0123456  changes_requested  r2  3u  server: add health endpoint\n\
-             1  Iabcdef0  approved           r1  0u  web: render the diff\n"
-        );
-        // The `--wait` form prefixes the header with the cursor.
-        assert!(
-            chain_digest(&chain, &unresolved, Some(14))
-                .starts_with("cursor=14 state=authors_turn\n")
         );
     }
 }
