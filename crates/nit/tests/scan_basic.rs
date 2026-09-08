@@ -1,19 +1,17 @@
 //! Push basics over real HTTP: an N-commit branch becomes N changes each
-//! at revision 0, the derived chain lists exactly one tip with its path
-//! ordered base→tip, a no-op re-push is idempotent, extending the branch
-//! adds a change, an amend opens revision 1, and every structural fault
-//! rejects the whole push with a 400.
+//! at revision 0, listed base first, a no-op re-push is idempotent,
+//! extending the branch adds a change, an amend opens revision 1, and
+//! every structural fault rejects the whole push with a 400.
 
 mod common;
 
 use common::{GitRepo, TestServer, change_id, http_get, member_id, msg, push, tip_change};
 
-fn only_chain(server: &TestServer) -> serde_json::Value {
-    let (st, list) = http_get(&server.url("/api/chains"));
+/// Every change the server holds, ascending by change number.
+fn all_changes(server: &TestServer) -> Vec<serde_json::Value> {
+    let (st, list) = http_get(&server.url("/api/changes"));
     assert_eq!(st, 200, "{list}");
-    let chains = list["chains"].as_array().unwrap();
-    assert_eq!(chains.len(), 1, "exactly one tip: {list}");
-    chains[0].clone()
+    list["changes"].as_array().unwrap().clone()
 }
 
 #[test]
@@ -40,22 +38,16 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(tip["revision"], 0);
     assert_eq!(tip["status"], "pending");
 
-    let chain = only_chain(&server);
-    let path = chain["path"].as_array().unwrap();
-    assert_eq!(path.len(), 2);
-    assert_eq!(path[0]["change_id"], change_id("I001"));
-    assert_eq!(path[0]["position"], 0);
-    assert_eq!(path[0]["revision"], 0);
-    assert_eq!(path[0]["commit_sha"], c1.to_string());
-    assert_eq!(
-        path[0]["parent_sha"].as_str(),
-        None,
-        "PathEntry has no parent_sha"
-    );
-    assert_eq!(path[1]["change_id"], change_id("I002"));
-    assert_eq!(path[1]["position"], 1);
-    assert_eq!(path[1]["revision"], 0);
-    assert_eq!(path[1]["commit_sha"], c2.to_string());
+    let pushed = res["changes"].as_array().unwrap();
+    assert_eq!(pushed.len(), 2, "base first, tip last: {res}");
+    assert_eq!(pushed[0]["change_id"], change_id("I001"));
+    assert_eq!(pushed[0]["revision"], 0);
+    assert_eq!(pushed[1]["change_id"], change_id("I002"));
+    assert_eq!(pushed[1]["revision"], 0);
+    let changes = all_changes(&server);
+    assert_eq!(changes.len(), 2);
+    assert_eq!(changes[0]["revisions"][0]["commit_sha"], c1.to_string());
+    assert_eq!(changes[1]["revisions"][0]["commit_sha"], c2.to_string());
 
     let id1 = member_id(&res, "I001");
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
@@ -67,21 +59,22 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(revs[0]["parent_sha"], g.root.to_string());
 }
 
+/// Change numbers are minted base first, so the change list holds a
+/// pushed branch in its commit order.
 #[test]
-fn chains_lists_one_ordered_tip() {
+fn changes_are_numbered_base_first() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
     let c3 = g.commit(&[c2], &msg("three", "I003"), &[("c.rs", "c\n")]);
     g.branch("feat", c3);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = push(&server, &g, "feat", "main");
+    let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
 
-    let chain = only_chain(&server);
-    assert_eq!(chain["state"], "waiting_for_review");
-    let path = chain["path"].as_array().unwrap();
-    let keys: Vec<&str> = path
+    let keys: Vec<&str> = res["changes"]
+        .as_array()
+        .unwrap()
         .iter()
         .map(|m| m["change_id"].as_str().unwrap())
         .collect();
@@ -89,12 +82,13 @@ fn chains_lists_one_ordered_tip() {
         keys,
         vec![change_id("I001"), change_id("I002"), change_id("I003")]
     );
-    for (i, m) in path.iter().enumerate() {
-        assert_eq!(m["position"], i as u64, "0-based position");
-        assert_eq!(m["revision"], 0);
-        assert_eq!(m["status"], "pending");
+    let changes = all_changes(&server);
+    for (i, c) in changes.iter().enumerate() {
+        assert_eq!(c["change_id"].as_str(), Some(keys[i]));
+        assert_eq!(c["revisions"].as_array().unwrap().len(), 1);
+        assert_eq!(c["lifecycle"], "active");
     }
-    assert_eq!(path[2]["commit_sha"], c3.to_string());
+    assert_eq!(changes[2]["revisions"][0]["commit_sha"], c3.to_string());
 }
 
 #[test]
@@ -105,7 +99,7 @@ fn no_op_repush_is_idempotent() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
-    let id = member_id(&only_chain(&server), "I001");
+    let id = all_changes(&server)[0]["id"].as_u64().unwrap();
 
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
@@ -134,10 +128,9 @@ fn extending_the_branch_adds_a_change() {
     assert_eq!(tip_change(&res)["change_id"], change_id("I002"));
     assert_eq!(tip_change(&res)["revision"], 0);
 
-    let path = only_chain(&server)["path"].as_array().unwrap().clone();
-    assert_eq!(path.len(), 2);
-    assert_eq!(path[1]["change_id"], change_id("I002"));
-    assert_eq!(path[1]["position"], 1);
+    let changes = all_changes(&server);
+    assert_eq!(changes.len(), 2);
+    assert_eq!(changes[1]["change_id"], change_id("I002"));
 
     let id1 = member_id(&res, "I001");
     let (_, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
@@ -188,8 +181,7 @@ fn merge_commit_rejects_the_push() {
         "{e}"
     );
     // All-or-nothing: c1 alone would push fine, but the merge commit voids it too.
-    let (_, list) = http_get(&server.url("/api/chains"));
-    assert!(list["chains"].as_array().unwrap().is_empty(), "{list}");
+    assert!(all_changes(&server).is_empty());
 }
 
 #[test]
@@ -210,8 +202,7 @@ fn already_merged_commit_rejects_the_push() {
         "{e}"
     );
     // All-or-nothing: the already-merged push records no changes either.
-    let (_, list) = http_get(&server.url("/api/chains"));
-    assert!(list["chains"].as_array().unwrap().is_empty(), "{list}");
+    assert!(all_changes(&server).is_empty());
 }
 
 #[test]
@@ -249,11 +240,7 @@ fn duplicate_change_number_rejects_the_push() {
             .contains(&format!("duplicate Change-Id {}", change_id("Idup"))),
         "{e}"
     );
-    let (_, list) = http_get(&server.url("/api/chains"));
-    assert!(
-        list["chains"].as_array().unwrap().is_empty(),
-        "nothing recorded: {list}"
-    );
+    assert!(all_changes(&server).is_empty(), "nothing recorded");
 }
 
 #[test]

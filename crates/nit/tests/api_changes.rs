@@ -11,7 +11,7 @@ use common::{
     push, review,
 };
 
-// Two single-change chains, one reviewed: no filter returns both full
+// Two changes, one reviewed: no filter returns both full
 // projections, a status filter selects by each change's latest-revision
 // status, and repeated params union.
 #[test]
@@ -61,8 +61,7 @@ fn status_filter_is_explicit_and_absent_means_all() {
     assert!(merged.is_empty(), "{merged:?}");
 }
 
-// An unknown repo matches nothing — an empty list, not a 404 (exactly as
-// `/api/chains`).
+// An unknown repo matches nothing — an empty list, not a 404.
 #[test]
 fn unknown_repo_filters_to_empty() {
     let g = GitRepo::new();

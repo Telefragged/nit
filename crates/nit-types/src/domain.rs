@@ -31,13 +31,10 @@
 //!
 //! **Revision** — one version of a change.
 //!
-//! **Chain** — a change and the changes stacked on it, walked from the
-//! tip back to the canonical ref.
-//!
 //! **Tag** — a `key: value` label set on a change. A `tags` entry
 //! stands on its own, so a key keeps its value until a later entry names
 //! it again and labelling costs no revision. Tags correlate changes that
-//! share no chain.
+//! git ancestry does not.
 //!
 //! # The conversation
 //!
@@ -68,14 +65,14 @@
 //! **Repo** — a git repository nit reviews for, identified by its
 //! git-common-dir.
 //!
-//! **Canonical ref** — the one ref a repo tracks. It is the base a chain
+//! **Canonical ref** — the one ref a repo tracks. It is the base a push
 //! forks from and the yardstick for whether a change has merged.
 //!
 //! **Fork point** — the commit on the canonical ref that a revision was
 //! pushed against.
 //!
-//! **Tip** — the newest change of a chain, and the commit a push walks
-//! back from.
+//! **Tip** — a change's latest revision that no revision records as its
+//! parent, and the commit a push walks back from.
 //!
 //! # How current state is arrived at
 //!
@@ -95,12 +92,10 @@
 //!   not yet published. A superset of the verdicts, because abandoning
 //!   is chosen in the same breath as approving.
 //! - [`ChangeStatus`] — where one change stands, at one revision.
-//! - [`ChainState`] — whose turn it is on a chain.
 //!
 //! A reviewer chooses the first two. The last two are derived, and
 //! nobody sets them by hand.
 
-mod chain;
 mod change;
 mod conversation;
 mod identity;
@@ -109,7 +104,6 @@ mod rendering;
 mod tag;
 mod verdict;
 
-pub use chain::*;
 pub use change::*;
 pub use conversation::*;
 pub use identity::*;

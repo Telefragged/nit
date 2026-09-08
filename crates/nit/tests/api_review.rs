@@ -1,6 +1,6 @@
 //! The drafts + comments + review flow over HTTP. A change owns its
 //! threads/drafts/reviews; comment drafts are reviewer-private until a draft
-//! decision's chain submit (`common::review`) drains them into one log entry,
+//! decision's submit (`common::review`) drains them into one log entry,
 //! sets the per-(change, revision) status to the verdict, and applies each
 //! thread's draft resolution in draft order.
 
@@ -8,7 +8,6 @@ mod common;
 
 use common::*;
 use serde_json::{Value, json};
-/// For single-commit chains the tip change is the repo's first change.
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_id: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
@@ -83,15 +82,11 @@ fn review_drains_drafts_and_sets_status() {
     assert_eq!(post["reviews"][0]["revision"], 0);
     assert_eq!(post["reviews"][0]["verdict"], "request_changes");
     assert_eq!(post["reviews"][0]["message"], "a few nits");
-    // The review verdict is reflected as member status on the chain path view.
-    let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
-    let member = chain["path"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["change_number"].as_u64() == Some(id))
-        .unwrap();
-    assert_eq!(member["status"], "changes_requested");
+    // The review verdict is the change's status.
+    assert_eq!(
+        status_at(&server, id, None).as_deref(),
+        Some("changes_requested")
+    );
 }
 
 /// Reply drafts inherit the thread's anchor; a second review publishes the reply.
@@ -423,16 +418,9 @@ fn pure_rebase_carries_status_forward() {
         "a rebase appends a revision"
     );
     // The pure rebase keeps the approve at revision 1 (status carried forward).
-    let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
-    let member = chain["path"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["change_number"].as_u64() == Some(id))
-        .unwrap();
-    assert_eq!(member["revision"], 1);
     assert_eq!(
-        member["status"], "approved",
+        status_at(&server, id, Some(1)).as_deref(),
+        Some("approved"),
         "a pure rebase preserves the verdict"
     );
 }
@@ -471,14 +459,7 @@ fn agent_comment_opens_thread_without_review_status() {
         d["reviews"].as_array().unwrap().is_empty(),
         "no review created"
     );
-    let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}")));
-    let member = chain["path"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["change_number"].as_u64() == Some(id))
-        .unwrap();
-    assert_eq!(member["status"], "pending");
+    assert_eq!(status_at(&server, id, None).as_deref(), Some("pending"));
 
     // A reply on the same thread (anchor fields ignored — the thread owns it).
     let (st, replied) = http_post(

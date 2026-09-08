@@ -40,7 +40,7 @@ fn active_chains(server: &TestServer, id: u64) -> u64 {
 }
 
 #[test]
-fn repos_list_shape_canonical_ref_and_scoped_chains() {
+fn repos_list_shape_canonical_ref_and_scoped_changes() {
     // Two distinct repos (distinct git dirs); the second carries two chains —
     // `feat` and `topic` both fork straight off `main`, so each is its own
     // live tip in the parent DAG, not one stacked on the other.
@@ -59,7 +59,6 @@ fn repos_list_shape_canonical_ref_and_scoped_chains() {
     // The `push` helper registers each repo first (base `main`), then pushes.
     let (st, _) = push(&server, &a, "feat", "main");
     assert_eq!(st, 200);
-    // Two independent tips off main → two live chains in repo b.
     let (st, _) = push(&server, &b, "feat", "main");
     assert_eq!(st, 200);
     let (st, _) = push(&server, &b, "topic", "main");
@@ -87,19 +86,22 @@ fn repos_list_shape_canonical_ref_and_scoped_chains() {
     assert_eq!(active_chains(&server, id_a), 1);
     assert_eq!(active_chains(&server, id_b), 2, "two independent tips");
 
-    // GET /api/chains?repo=: scoped to one repo's tips only.
-    let (st, scoped_b) = http_get(&server.url(&format!("/api/chains?repo={id_b}")));
+    // GET /api/changes?repo=: scoped to one repo's changes only.
+    let (st, scoped_b) = http_get(&server.url(&format!("/api/changes?repo={id_b}")));
     assert_eq!(st, 200);
-    let b_chains = scoped_b["chains"].as_array().unwrap();
-    assert_eq!(b_chains.len(), 2, "{scoped_b}");
+    assert_eq!(
+        scoped_b["changes"].as_array().unwrap().len(),
+        2,
+        "{scoped_b}"
+    );
 
-    let (st, scoped_a) = http_get(&server.url(&format!("/api/chains?repo={id_a}")));
+    let (st, scoped_a) = http_get(&server.url(&format!("/api/changes?repo={id_a}")));
     assert_eq!(st, 200);
-    assert_eq!(scoped_a["chains"].as_array().unwrap().len(), 1);
+    assert_eq!(scoped_a["changes"].as_array().unwrap().len(), 1);
 
-    let (st, none) = http_get(&server.url("/api/chains?repo=9999"));
+    let (st, none) = http_get(&server.url("/api/changes?repo=9999"));
     assert_eq!(st, 200);
-    assert!(none["chains"].as_array().unwrap().is_empty());
+    assert!(none["changes"].as_array().unwrap().is_empty());
 }
 
 #[test]

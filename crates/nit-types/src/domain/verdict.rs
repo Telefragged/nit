@@ -147,30 +147,3 @@ impl From<Verdict> for ChangeStatus {
         }
     }
 }
-
-/// A chain's derived, actionable state.
-///
-/// Derived at read time from the path's members, never stored.
-/// Abandonment is derivation-inert — there is no abandoned chain state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[serde(rename_all = "snake_case")]
-pub enum ChainState {
-    Merged,
-    AuthorsTurn,
-    WaitingForReview,
-    Approved,
-}
-
-impl ChainState {
-    /// The wire spelling (mirrors the serde renaming).
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ChainState::Merged => "merged",
-            ChainState::AuthorsTurn => "authors_turn",
-            ChainState::WaitingForReview => "waiting_for_review",
-            ChainState::Approved => "approved",
-        }
-    }
-}

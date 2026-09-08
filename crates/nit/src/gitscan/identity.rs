@@ -53,7 +53,7 @@ pub fn require_change_ids(
         .collect();
     if !fixups.is_empty() {
         return Err(format!(
-            "chain contains fixup!/squash! commits ({}) — squash them into \
+            "the push contains fixup!/squash! commits ({}) — squash them into \
              their targets before pushing",
             fixups.join(", ")
         ));

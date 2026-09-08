@@ -23,7 +23,8 @@ use nit_types::domain::{ChangeId, ChangeNumber, Sha};
 
 use nit_types::domain::ChangeProjection;
 
-pub const MERGE_COMMIT_ERROR: &str = "chain contains merge commits — rebase onto the base instead";
+pub const MERGE_COMMIT_ERROR: &str =
+    "the push contains merge commits — rebase onto the base instead";
 
 /// The name git knows an object by.
 ///
@@ -134,7 +135,7 @@ fn walk_linear(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>
         match commit.parent_count() {
             0 => {
                 return Err(
-                    "chain contains a root commit — the base must be an ancestor of the branch"
+                    "the push contains a root commit — the base must be an ancestor of the branch"
                         .to_string(),
                 );
             }

@@ -4,14 +4,13 @@
 //! golden rule 4).
 //!
 //! - [`diff`] — diff JSON rendering and line-text snapshots.
-//! - [`views`] — the per-change folds + chain derivation → wire shapes.
+//! - [`views`] — the per-change folds + drafts → wire shapes.
 //! - [`state`] — the in-memory fold, the append primitive, errors.
 //!
 //! All rusqlite/git2 work runs off the async runtime; database work goes
 //! through a pooled connection ([`state::with_conn`]). Every appender to one
 //! change serializes through its projection write lock and folds in lock-step.
-//! A chain owns nothing — it is derived at read time. Merged/abandoned
-//! detection runs in a background timer (`timer::run_lifecycle_timer`);
+//! Merged/abandoned detection runs in a background timer (`timer::run_lifecycle_timer`);
 //! there are no read-time scans.
 
 pub mod diff;
@@ -20,10 +19,10 @@ pub mod rebase;
 pub mod state;
 pub mod views;
 
-mod chains;
 mod changes;
 mod comments;
 mod drafts;
+mod history;
 mod push;
 mod repos;
 mod reviews;
@@ -39,17 +38,13 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, patch, post, put};
 use git2::Repository;
-use serde::Deserialize;
 
 use nit_types::changes::ChangeDetail;
 use nit_types::domain::ChangeNumber;
-use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
+use nit_types::domain::Side;
 use nit_types::domain::{Anchor, LineAnchor};
-use nit_types::domain::{Sha, Side};
 use nit_types::health::Health;
-
-use nit_types::chain::RepoView;
 
 pub use state::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change,
@@ -74,9 +69,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/changes", get(changes::list_changes))
         .route("/api/tags", get(changes::list_tags))
         .route("/api/log", get(changes::list_log))
-        .route("/api/history", get(chains::repo_history))
-        .route("/api/chains", get(chains::list_chains))
-        .route("/api/chains/{id}", get(chains::get_chain))
+        .route("/api/history", get(history::repo_history))
         .route("/api/changes/{id}", get(changes::get_change_detail))
         .route(
             "/api/changes/{id}/revisions/{n}/diff",
@@ -208,22 +201,6 @@ fn change_or_404(
         .ok_or_else(|| Error::not_found(format!("change {change_number} not found")))
 }
 
-/// The chain context a chain endpoint operates on.
-///
-/// The repo's [`RepoView`], its id, and the tip sha the path through
-/// `change_number` walks at `revision`.
-fn chain_context(
-    state: &Arc<AppState>,
-    conn: &rusqlite::Connection,
-    change_number: ChangeNumber,
-    revision: Option<RevisionNumber>,
-) -> Result<(RepoView, u64, Sha), Error> {
-    let repo_id = change_or_404(state, conn, change_number)?.read().repo_id;
-    let view = state.repo_view(conn, repo_id)?;
-    let (_, tip_sha) = views::resolve_revision_tip(&view, change_number, revision)?;
-    Ok((view, repo_id, tip_sha))
-}
-
 fn canonical_git_dir(raw: &str) -> Result<String, Error> {
     Ok(std::fs::canonicalize(raw)
         .map_err(|e| Error::bad_request(format!("cannot resolve git dir {raw}: {e}")))?
@@ -252,11 +229,6 @@ async fn health() -> Json<Health> {
 /// A fixed depth, not a client knob. `pub` so the HTTP truncation test can
 /// build exactly this many commits.
 pub const MERGED_WINDOW: u64 = 5;
-
-#[derive(Deserialize)]
-struct ChainQuery {
-    revision: Option<RevisionNumber>,
-}
 
 /// Builds the `ChangeDetail` from one change's fold.
 ///

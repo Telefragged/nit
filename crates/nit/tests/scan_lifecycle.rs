@@ -40,16 +40,14 @@ fn change_landed_on_main_becomes_merged() {
         Some("merged")
     );
 
-    // A fully-merged chain drops off the active dashboard but stays reachable
-    // by id (and under ?status=all).
     let repo = first_repo_id(&server);
-    let (_, active) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=active")));
+    let (_, pending) = http_get(&server.url(&format!("/api/changes?repo={repo}&status=pending")));
     assert!(
-        active["chains"].as_array().unwrap().is_empty(),
-        "merged chain left the active list: {active}"
+        pending["changes"].as_array().unwrap().is_empty(),
+        "the merged change left the pending list: {pending}"
     );
-    let (_, all) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=all")));
-    assert_eq!(all["chains"][0]["state"], "merged");
+    let (_, merged) = http_get(&server.url(&format!("/api/changes?repo={repo}&status=merged")));
+    assert_eq!(merged["changes"][0]["id"], change_number);
 }
 
 #[test]
@@ -76,26 +74,6 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
         Some("merged")
     );
     assert_eq!(status_at(&server, tip, Some(0)).as_deref(), Some("pending"));
-
-    // One live member keeps the partially-merged stack on the active list, but
-    // the walk stops at the canonical ref: the ancestor has merged, so it
-    // drops out of the path — only the open tip remains.
-    let repo = first_repo_id(&server);
-    let (_, active) = http_get(&server.url(&format!("/api/chains?repo={repo}&status=active")));
-    let chains = active["chains"].as_array().unwrap();
-    assert_eq!(chains.len(), 1, "stack stays visible: {active}");
-    let path = chains[0]["path"].as_array().unwrap();
-    assert_eq!(
-        path.len(),
-        1,
-        "the merged ancestor drops from the path: {active}"
-    );
-    assert_eq!(path[0]["change_number"], tip);
-    assert_eq!(path[0]["status"], "pending");
-    assert!(
-        path.iter().all(|m| m["change_number"] != ancestor),
-        "the merged ancestor sits below the canonical ref now: {active}"
-    );
 }
 
 #[test]

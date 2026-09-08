@@ -572,21 +572,14 @@ const captures = [
  * stay covered by mock mode — live mode verifies real backend data renders.
  */
 async function liveCaptures(baseUrl) {
-  const res = await fetch(`${baseUrl}/api/chains`);
-  const { chains } = await res.json();
+  const res = await fetch(`${baseUrl}/api/changes`);
+  const { changes } = await res.json();
   const caps = [{ name: "live-dashboard", path: "/" }];
-  for (const chain of chains) {
-    const tip = chain.tip_change_number;
-    caps.push({
-      name: `live-chain-${tip}`,
-      path: `/repos/${chain.repo_id}#chain-${tip}`,
-    });
-    for (const ch of chain.path.slice(0, 2)) {
-      caps.push({
-        name: `live-change-${ch.change_number}`,
-        path: `/changes/${ch.change_number}`,
-      });
-    }
+  for (const repoId of new Set(changes.map((c) => c.repo_id))) {
+    caps.push({ name: `live-repo-${repoId}`, path: `/repos/${repoId}` });
+  }
+  for (const c of changes.slice(0, 4)) {
+    caps.push({ name: `live-change-${c.id}`, path: `/changes/${c.id}` });
   }
   return caps;
 }

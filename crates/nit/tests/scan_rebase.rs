@@ -1,11 +1,11 @@
 //! Pure-rebase vs reword semantics through `POST /api/push`: a patch-id-equal,
 //! same-message commit on a new parent appends a revision but carries the
 //! reviewed status forward; changing the message resets the change to pending.
-//! Asserted through `GET /api/changes/{id}` and the derived chain path.
+//! Asserted through `GET /api/changes/{id}`.
 
 mod common;
 
-use common::{GitRepo, TestServer, change_id, http_get, member_id, msg, push, review, tip_change};
+use common::{GitRepo, TestServer, http_get, member_id, msg, push, review, status_at, tip_change};
 use serde_json::Value;
 
 fn change_detail(server: &TestServer, change_number: u64) -> Value {
@@ -14,29 +14,19 @@ fn change_detail(server: &TestServer, change_number: u64) -> Value {
     v
 }
 
-fn path_status(server: &TestServer, tip_change_number: u64, label: &str) -> String {
-    let key = change_id(label);
-    let (st, chain) = http_get(&server.url(&format!("/api/chains/{tip_change_number}")));
-    assert_eq!(st, 200, "{chain}");
-    chain["path"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["change_id"] == key)
-        .unwrap_or_else(|| panic!("no {label} in path: {chain}"))["status"]
-        .as_str()
-        .unwrap()
-        .to_string()
+/// The change's status at its latest revision.
+fn latest_status(server: &TestServer, change_number: u64) -> String {
+    status_at(server, change_number, None).expect("a change with revisions")
 }
 
-/// Approve a change at its live pinned revision.
+/// Approve a change at its latest revision.
 fn approve(server: &TestServer, change_number: u64) {
     review(server, change_number, "approve", "lgtm");
 }
 
 /// A pure rebase (same patch-id + same message, new parent) appends a revision
-/// but the displayed status at the pinned revision carries the approval
-/// forward; a reword (message changed) resets that change to pending.
+/// but the status at the latest revision carries the approval forward; a
+/// reword (message changed) resets that change to pending.
 #[test]
 fn pure_rebase_carries_status_forward_then_reword_resets() {
     let g = GitRepo::new();
@@ -57,7 +47,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     );
 
     approve(&server, tip_id);
-    assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
+    assert_eq!(latest_status(&server, tip_id), "approved");
 
     let m1 = g.commit(&[g.root], "main: unrelated\n", &[("m.txt", "m\n")]);
     g.branch("main", m1);
@@ -89,7 +79,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
         detail["reviews"][0]["revision"], 0,
         "the verdict stays anchored to revision 0"
     );
-    assert_eq!(path_status(&server, tip_id, "Ib"), "approved");
+    assert_eq!(latest_status(&server, tip_id), "approved");
 
     // A reword changes reviewable content, so it resets to pending — a new
     // revision the reviewer hasn't seen.
@@ -110,7 +100,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
 
     let detail = change_detail(&server, tip_id);
     assert_eq!(detail["revisions"].as_array().unwrap().len(), 3);
-    assert_eq!(path_status(&server, tip_id, "Ib"), "pending");
+    assert_eq!(latest_status(&server, tip_id), "pending");
 }
 
 /// A re-push where nothing moved is idempotent: no new revision, and the
@@ -155,10 +145,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     let change_number = member_id(&pr, "Ix");
 
     review(&server, change_number, "request_changes", "rename");
-    assert_eq!(
-        path_status(&server, change_number, "Ix"),
-        "changes_requested"
-    );
+    assert_eq!(latest_status(&server, change_number), "changes_requested");
 
     let m1 = g.commit(&[g.root], "main moves\n", &[("m.txt", "m\n")]);
     g.branch("main", m1);
@@ -179,5 +166,5 @@ fn pure_rebase_carries_request_changes_reword_resets() {
     assert_eq!(st, 200, "{pr}");
     assert_eq!(tip_change(&pr)["revision"], 2);
     assert_eq!(tip_change(&pr)["status"], "pending");
-    assert_eq!(path_status(&server, change_number, "Ix"), "pending");
+    assert_eq!(latest_status(&server, change_number), "pending");
 }

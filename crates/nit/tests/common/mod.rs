@@ -1,7 +1,6 @@
 //! Shared integration-test harness: a tiny real git repo (built with git2, no
 //! worktree needed) and a real `nit::api` server on port 0, with blocking HTTP
-//! helpers. A chain is derived, never registered — tests drive `POST /api/push`
-//! and read the on-demand chain endpoints.
+//! helpers. Tests drive `POST /api/push` and read the change endpoints.
 //!
 //! Each integration-test binary compiles its own copy, so helpers unused by one
 //! binary are fine.
@@ -475,19 +474,16 @@ pub fn repo_log(server: &TestServer) -> Vec<Value> {
     log["entries"].as_array().expect("entries").clone()
 }
 
-/// Find a change's `change_number` by its Change-Id, in a `Chain`
-/// (`value["path"]`) or a `PushResult` (`value["changes"]`).
+/// Find a change's number by its Change-Id in a `PushResult`.
 pub fn member_id(value: &Value, label: &str) -> u64 {
     let key = change_id(label);
-    value
-        .get("path")
-        .or_else(|| value.get("changes"))
-        .and_then(Value::as_array)
-        .expect("a Chain `path` or a PushResult `changes`")
+    value["changes"]
+        .as_array()
+        .expect("a PushResult `changes`")
         .iter()
         .find(|m| m["change_id"].as_str() == Some(key.as_str()))
         .and_then(|m| m["change_number"].as_u64())
-        .unwrap_or_else(|| panic!("no member {label} in path"))
+        .unwrap_or_else(|| panic!("no change {label} in the push result"))
 }
 
 pub fn msg(subject: &str, label: &str) -> String {

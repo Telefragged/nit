@@ -70,18 +70,6 @@ export type ChangeStatus =
   | "abandoned";
 
 /**
- * A chain's derived, actionable state.
- *
- * Derived at read time from the path's members, never stored.
- * Abandonment is derivation-inert — there is no abandoned chain state.
- */
-export type ChainState =
-  | "merged"
-  | "authors_turn"
-  | "waiting_for_review"
-  | "approved";
-
-/**
  * Which region of the change graph a node sits in.
  *
  * `open` ascends above the canonical HEAD, `head` is the HEAD anchor,
@@ -142,45 +130,6 @@ export type Repo = {
 };
 
 export type RepoList = { repos: Array<Repo> };
-
-/**
- * A derived chain: a tip change's path plus its rolled-up state.
- */
-export type Chain = {
-  tip_change_number: ChangeNumber;
-  repo_id: number;
-  state: ChainState;
-  /**
-   * Oldest-first, base → tip.
-   */
-  path: Array<PathEntry>;
-};
-
-/**
- * One member of a derived path: structure only.
- *
- * Read at the revision the path pins. Per-change review state (counts,
- * draft decision, the newest revision) is not here — it belongs to the
- * change itself.
- */
-export type PathEntry = {
-  change_number: ChangeNumber;
-  /**
-   * Position in THIS path (0-based).
-   */
-  position: number;
-  change_id: ChangeId;
-  /**
-   * The revision this path walks.
-   */
-  revision: RevisionNumber;
-  /**
-   * Per `(change, this revision)`.
-   */
-  status: ChangeStatus;
-  subject: string;
-  commit_sha: Sha;
-};
 
 /**
  * One repo's change graph: a commit-sha-keyed DAG over the canonical ref.

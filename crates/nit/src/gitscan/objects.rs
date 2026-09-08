@@ -43,8 +43,8 @@ pub fn sha_patch_id(repo: &Repository, sha: &Sha) -> Option<String> {
 
 /// Ref name pinning one revision's git objects against `git gc`.
 ///
-/// Keyed on the change (a chain is not stored), so a commit a
-/// prefix-merged ancestor still walks through keeps its objects.
+/// Keyed on the change, so a commit a prefix-merged ancestor still walks
+/// through keeps its objects.
 ///
 /// Deleting these refs is deferred on purpose — nothing prunes them, even
 /// for merged/abandoned changes. Over-pinning is fail-safe; dropping a ref

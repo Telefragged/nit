@@ -5,21 +5,18 @@
 //
 // The canned data and the mutable store live in ./data; the pure builders in
 // ./builders; the record shapes in ./store. This file is just the
-// derivations (status, counts, chain state, path), the publish helpers, and
+// derivations (status, counts), the publish helpers, and
 // the route dispatcher — the one public export, `mockRequest`.
 
 import { ApiError } from "../client";
 import type {
   Anchor,
-  Chain,
-  ChainState,
   ChangeDetail,
   ChangeStatus,
   CommentInput,
   NewDraft,
   Decision,
   Line,
-  PathEntry,
   Repo,
   Review,
   DraftDecision,
@@ -37,7 +34,6 @@ import type {
   AuthoredRevision,
   ChangeRecord,
   DraftRecord,
-  TipRecord,
 } from "./store";
 
 let nextDraftId = 200;
@@ -155,18 +151,7 @@ function emitLifecycle(
 }
 
 // ---------------------------------------------------------------------------
-// Derivations (status, counts, chain state, path) so mutations stay consistent
-
-/** The commit-sha → (change, revision) index — the basis for the SHA-walk
- * that derives every chain path. */
-const shaIndex = new Map<
-  string,
-  { change: ChangeRecord; revision: AuthoredRevision }
->();
-for (const c of changes) {
-  for (const r of c.revisions)
-    shaIndex.set(r.commit_sha, { change: c, revision: r });
-}
+// Derivations (status, counts) so mutations stay consistent
 
 const latestRevision = (c: ChangeRecord): AuthoredRevision => {
   const r = c.revisions[c.revisions.length - 1];
@@ -185,107 +170,6 @@ function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
     .at(-1);
   if (!review) return "pending";
   return verdictStatus[review.verdict];
-}
-
-/** Walk a tip back to base through parent_sha, oldest-first (base → tip).
- * Each member pins the revision the tip walked through (the sha in the
- * index); the walk stops at a parent_sha that is no change (the merge-base
- * on the canonical ref). */
-function walkPath(
-  tip: TipRecord,
-): { change: ChangeRecord; revision: AuthoredRevision }[] {
-  const tipChange = changes.find((c) => c.id === tip.tip_change_number);
-  if (!tipChange)
-    throw new Error(`unknown tip change ${tip.tip_change_number}`);
-  const tipRev =
-    tipChange.revisions.find((r) => r.number === tip.revision) ??
-    latestRevision(tipChange);
-  const out: { change: ChangeRecord; revision: AuthoredRevision }[] = [
-    { change: tipChange, revision: tipRev },
-  ];
-  let parent = tipRev.parent_sha;
-  for (
-    let member = shaIndex.get(parent);
-    member !== undefined;
-    member = shaIndex.get(parent)
-  ) {
-    out.push(member);
-    parent = member.revision.parent_sha;
-  }
-  return out.reverse();
-}
-
-function pathEntry(
-  member: { change: ChangeRecord; revision: AuthoredRevision },
-  position: number,
-): PathEntry {
-  const { change: c, revision } = member;
-  return {
-    change_number: c.id,
-    position,
-    change_id: c.change_id,
-    revision: revision.number,
-    status: statusAt(c, revision.number),
-    subject: c.subject,
-    commit_sha: revision.commit_sha,
-  };
-}
-
-function derivePath(tip: TipRecord): PathEntry[] {
-  return walkPath(tip).map((m, i) => pathEntry(m, i));
-}
-
-/** Mirrors the server's chain-state rollup: abandoned members are dropped
- * before it. */
-function chainState(path: PathEntry[]): ChainState {
-  const live = path.filter((e) => e.status !== "abandoned");
-  if (live.length === 0) return "authors_turn";
-  if (live.every((e) => e.status === "merged")) return "merged";
-  if (
-    live.some(
-      (e) => e.status === "changes_requested" || e.status === "commented",
-    )
-  ) {
-    return "authors_turn";
-  }
-  if (live.some((e) => e.status === "pending")) return "waiting_for_review";
-  // The rest are approved (≥1) and/or merged, no pending — approved.
-  return "approved";
-}
-
-function chainView(tip: TipRecord): Chain {
-  const path = derivePath(tip);
-  return {
-    tip_change_number: tip.tip_change_number,
-    repo_id: tip.repo_id,
-    state: chainState(path),
-    path,
-  };
-}
-
-/** Resolve `GET /chains/{change_number}?revision=N` to a tip (mirrors the backend's
- * `tip_for`): a live tip whose path walks `changeNumber` at that revision, else the
- * change as its own degenerate tip. So an INTERIOR change resolves to the tip
- * that extends through it (the full chain), not a 404. */
-function resolveTip(
-  changeNumber: number,
-  requested?: number,
-): TipRecord | undefined {
-  const c = changes.find((x) => x.id === changeNumber);
-  if (!c) return undefined;
-  const revision = requested ?? latestRevision(c).number;
-  for (const tip of tips) {
-    const member = derivePath(tip).find(
-      (e) => e.change_number === changeNumber,
-    );
-    if (member?.revision === revision) return tip;
-  }
-  return {
-    tip_change_number: changeNumber,
-    repo_id: c.repo_id,
-    revision,
-    active: !c.terminal,
-  };
 }
 
 /** Derive the repo registry (`GET /api/repos`). `active_chains`
@@ -486,25 +370,6 @@ export async function mockRequest(
       Number(q.get("repo")),
       q.getAll("status") as ChangeStatus[],
     );
-  }
-
-  if (method === "GET" && p === "/chains") {
-    const status = q.get("status") ?? "active";
-    const repo = q.get("repo");
-    const listed = tips.filter(
-      (t) =>
-        (status === "all" || t.active) &&
-        (repo === null || t.repo_id === Number(repo)),
-    );
-    return { chains: listed.map(chainView) };
-  }
-
-  if ((m = /^\/chains\/(\d+)$/.exec(p)) && method === "GET") {
-    const id = Number(m[1]);
-    const revision = q.has("revision") ? Number(q.get("revision")) : undefined;
-    const tip = resolveTip(id, revision);
-    if (!tip) return notFound(`chain ${id}`);
-    return chainView(tip);
   }
 
   // Batch submit: every draft decision the change query picks, each at the

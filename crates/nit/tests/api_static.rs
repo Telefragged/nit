@@ -1,6 +1,6 @@
 //! Static UI serving: the built SPA outside /api, index.html fallback
 //! for client-side routes, API-only without a web dist. Client routes
-//! are change-id addressed (`/chains/{change_number}`, `/changes/{id}`).
+//! are id addressed (`/repos/{id}`, `/changes/{id}`).
 
 mod common;
 
@@ -23,7 +23,7 @@ fn serves_spa_with_index_fallback() {
     assert_eq!(st, 200);
     assert_eq!(body.as_str().unwrap(), "console.log('nit')");
 
-    for route in ["/", "/chains/12", "/changes/10"] {
+    for route in ["/", "/repos/1", "/changes/10"] {
         let (st, body) = http_get(&server.url(route));
         assert_eq!(st, 200, "{route}");
         assert_eq!(body.as_str().unwrap(), "<html>nit-spa</html>", "{route}");
@@ -35,7 +35,7 @@ fn serves_spa_with_index_fallback() {
     assert_eq!(health["status"], "ok");
     assert_eq!(health["version"], nit::VERSION);
     // An unknown change is a JSON 404, never the SPA.
-    let (st, e) = http_get(&server.url("/api/chains/12"));
+    let (st, e) = http_get(&server.url("/api/changes/12"));
     assert_eq!(st, 404);
     assert!(e["error"].is_string());
 }
@@ -50,7 +50,7 @@ fn runs_api_only_without_web_dist() {
     assert_eq!(health["status"], "ok");
 
     // No SPA → client routes are a bare 404 (no index.html to fall back to).
-    let (st, _) = http_get(&server.url("/chains/12"));
+    let (st, _) = http_get(&server.url("/changes/12"));
     assert_eq!(st, 404);
 }
 
@@ -72,7 +72,7 @@ fn api_errors_are_json_everywhere() {
         assert!(body["error"].is_string(), "{path}: {body}");
     }
 
-    let (st, body) = http_get(&server.url("/api/chains/abc"));
+    let (st, body) = http_get(&server.url("/api/changes/abc"));
     assert_eq!(st, 400, "{body}");
     assert!(body["error"].is_string(), "{body}");
 

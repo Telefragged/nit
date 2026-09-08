@@ -2,7 +2,7 @@
 
 Commit-level code review for AI coding agents.
 
-An author registers a chain; you review each commit gerrit-style — draft
+An author pushes a stack of commits; you review each one gerrit-style — draft
 line comments, approve or request changes; the author resumes on your
 feedback, amends the reviewed commit in place and pushes again — the
 `Change-Id:` trailer keeps its identity, the rewrite becomes a new

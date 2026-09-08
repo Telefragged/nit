@@ -11,7 +11,6 @@ use std::collections::{HashMap, HashSet};
 use crate::domain::ChangeNumber;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
-use crate::domain::{ChainState, ChangeStatus};
 
 use crate::domain::ChangeProjection;
 
@@ -216,43 +215,6 @@ impl RepoView {
     }
 }
 
-/// Derived chain state over a path's members.
-///
-/// Each member is taken at its pinned revision. A pure function of the
-/// members' displayed status.
-#[must_use]
-pub fn derive_state(view: &RepoView, path: &[PathMember]) -> ChainState {
-    if path.is_empty() {
-        return ChainState::AuthorsTurn; // tip not in the index — no chain members, author's turn by default
-    }
-    // Abandonment is derivation-inert: an abandoned member is excluded from the
-    // rollup entirely (no chain-level abandoned state). It shows as `abandoned`
-    // on its own path entry; the author decides what to do with it.
-    let statuses: Vec<ChangeStatus> = path
-        .iter()
-        .map(|m| {
-            view.change(m.change_number)
-                .map_or(ChangeStatus::Pending, |c| c.status_at(m.revision))
-        })
-        .filter(|s| *s != ChangeStatus::Abandoned)
-        .collect();
-    if statuses.is_empty() {
-        return ChainState::AuthorsTurn;
-    }
-    if statuses.iter().all(|s| *s == ChangeStatus::Merged) {
-        ChainState::Merged
-    } else if statuses
-        .iter()
-        .any(|s| matches!(s, ChangeStatus::ChangesRequested | ChangeStatus::Commented))
-    {
-        ChainState::AuthorsTurn
-    } else if statuses.contains(&ChangeStatus::Pending) {
-        ChainState::WaitingForReview
-    } else {
-        ChainState::Approved
-    }
-}
-
 /// Row order for the change graph: every node precedes its parents.
 ///
 /// A topological order — children ascend, parents descend, so the
@@ -316,8 +278,7 @@ pub fn graph_row_order(nodes: &[(Sha, Vec<Sha>)]) -> Vec<Sha> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::Verdict;
-    use crate::domain::{ChangeProjection, Lifecycle, ReviewProjection, RevisionProjection};
+    use crate::domain::{ChangeProjection, Lifecycle, RevisionProjection};
     use crate::testing::{change_id, sha};
 
     fn revision(number: u64, name: &str, parent: &str, base: &str) -> RevisionProjection {
@@ -475,21 +436,5 @@ mod tests {
                 assert!(pos(child) < pos(p), "{child} should precede parent {p}");
             }
         }
-    }
-
-    #[test]
-    fn state_is_derived_from_members() {
-        let mut a = change(1, "Ia", vec![revision(0, "A", "m", "m")]);
-        a.reviews.push(ReviewProjection {
-            id: 100,
-            revision: RevisionNumber::new(0),
-            verdict: Verdict::Approve,
-            message: String::new(),
-            created_at: "t1".to_string(),
-        });
-        let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
-        let view = RepoView::new(vec![a, b]);
-        let path = view.path_from_tip(&sha("B"));
-        assert_eq!(derive_state(&view, &path), ChainState::WaitingForReview);
     }
 }
