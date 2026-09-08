@@ -1,17 +1,17 @@
-// Contract-true canned data: the change/tip/thread/draft records and the
+// Contract-true canned data: the change/thread/draft records and the
 // mutable shared store the server logic (./index) reads and mutates in place.
 // These records double as component-test fixtures.
 //
-// Chains are DERIVED, never stored: a tip is a (tip_change_number, repo) pair,
-// and its path is computed by walking the tip revision's parent_sha back to
-// the repo's base through the commit-sha → (change, revision) index (a
-// gerrit relation chain). A change's displayed status is the verdict of the
-// latest review at that revision, else pending (terminal merged/abandoned
-// win).
+// The graph walks each revision's parent_sha back to the repo's base
+// through the commit-sha → (change, revision) index. A change's displayed
+// status is the verdict of the latest review at that revision, else
+// pending (terminal merged/abandoned win). Each change carries a
+// `session-id` and a `branch` tag; the review page lists the changes that
+// share one.
 //
 // Coverage on purpose:
 //   repo 1 (acme-runtime)
-//     tip change 12  waiting_for_review — 3 changes; change 11 has 2
+//     changes 10–12  one session, 3 changes; change 11 has 2
 //            revisions (amended in place, interdiff available), a resolved
 //            thread, an unresolved thread, a thread on a line r1 rewrote
 //            (all pinned to r0, so they land on the left of the r0 → r1
@@ -19,16 +19,15 @@
 //            message (/COMMIT_MSG) and a reworded r1 message so the
 //            interdiff carries a real message diff; change 12's diff has a
 //            rename and a binary file.
-//     tip change 40  merged — only visible via ?status=all.
+//     change 40      merged, and untagged — the review page's selector is
+//            disabled on it.
 //   repo 2 (quarry)
-//     tip change 20  authors_turn — a changes_requested change.
-//     tip change 30  approved — single approved change.
-//   repo 3 (orbit)  the B-in-two-chains example: one change
-//            (B = 51) reached by two tips at two revisions — tip C (53) walks
-//            B at rev0, tip E (55) walks B at rev1. B's rev0 member shows the
-//            newer-elsewhere badge (a newer revision lives on E's chain);
-//            ChangeDetail.chains lists both tips.
-//   repo 4 (lumen)  two sessions' chains off HEAD, tagged `session-id`, one
+//     change 20      a changes_requested change.
+//     change 30      a single approved change.
+//   repo 3 (orbit)  one change (B = 51) reached by two tips at two
+//            revisions — tip C (53) walks B at rev0, tip E (55) walks B at
+//            rev1 — so the graph shows B twice.
+//   repo 4 (lumen)  two sessions' stacks off HEAD, tagged `session-id`, one
 //            session's change stacked on the other's tip, and a change whose
 //            parent nit never registered (a torn push): the graph attaches
 //            it to its fork with a break edge. Grouping by `session-id` runs
@@ -57,7 +56,6 @@ import type {
   HistNode,
   RepoRecord,
   ThreadRecord,
-  TipRecord,
 } from "./store";
 
 // ---------------------------------------------------------------------------
@@ -1113,13 +1111,13 @@ const change30: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// repo 3 — orbit: the B-in-two-chains example
+// repo 3 — orbit: one change under two tips
 //
 //   push 1:  m → A(50) → B(51) → C(53)      Change-Ids Ia, Ib, Ic
 //   push 2:  m → D(52) → B′(51) → E(55)     Change-Ids Id, Ib, Ie
 //
 // B is one change (51) with two revisions: rev0 parent=A, rev1 parent=D.
-// Two tips, two chains: chains/53 walks B at rev0, chains/55 walks B at rev1.
+// Two tips: C (53) walks B at rev0, E (55) walks B at rev1.
 // Threads/reviews on B are shared (they belong to the change), each anchored
 // to the revision it was written against, so this scenario exercises
 // rev0 / rev1 display directly.
@@ -1210,8 +1208,7 @@ const changeD: ChangeRecord = {
 };
 
 // B: two revisions. rev0 (parent A) is approved; rev1 (parent D) is pending.
-// From C's chain B sits at rev0, older than its latest revision rev1 (the
-// newer-elsewhere badge); from E's chain B sits at rev1.
+// Under tip C the graph shows B at rev0, under tip E at rev1.
 const changeB: ChangeRecord = {
   id: 51,
   repo_id: 3,
@@ -1470,8 +1467,6 @@ const changeR: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
-// The change set and the tip set (the only things the dashboard enumerates;
-// every chain path is derived from parent_sha — see `walkPath`).
 
 export const changes: ChangeRecord[] = [
   change10,
@@ -1491,65 +1486,6 @@ export const changes: ChangeRecord[] = [
   changeP,
   changeQ,
   changeR,
-];
-
-export const tips: TipRecord[] = [
-  {
-    tip_change_number: 12,
-    repo_id: 1,
-    revision: 0,
-    active: true,
-  },
-  {
-    tip_change_number: 40,
-    repo_id: 1,
-    revision: 0,
-    active: false, // merged — only with ?status=all
-  },
-  {
-    tip_change_number: 20,
-    repo_id: 2,
-    revision: 0,
-    active: true,
-  },
-  {
-    tip_change_number: 30,
-    repo_id: 2,
-    revision: 0,
-    active: true,
-  },
-  // repo 3 — two tips through the shared change B (51)
-  {
-    tip_change_number: 53,
-    repo_id: 3,
-    revision: 0,
-    active: true,
-  },
-  {
-    tip_change_number: 55,
-    repo_id: 3,
-    revision: 0,
-    active: true,
-  },
-  // repo 4 — beta on alpha's tip, beta's own chain, and the torn one
-  {
-    tip_change_number: 65,
-    repo_id: 4,
-    revision: 0,
-    active: true,
-  },
-  {
-    tip_change_number: 64,
-    repo_id: 4,
-    revision: 0,
-    active: true,
-  },
-  {
-    tip_change_number: 62,
-    repo_id: 4,
-    revision: 0,
-    active: true,
-  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1803,8 +1739,8 @@ export const threads: ThreadRecord[] = [
     created_at: ago(3 * 60),
     updated_at: ago(3 * 60),
   },
-  // Shared thread that revision C's chain also walks: it belongs to the change
-  // (not a revision), so both chains see it.
+  // Shared thread: it belongs to the change (not a revision), so both of
+  // B's revisions see it.
   {
     id: 82,
     change_number: 51,
@@ -1897,8 +1833,8 @@ export const drafts: DraftRecord[] = [
   },
 ];
 
-// Reviewer decision drafts: one draft decision per change, published on
-// chain batch submit — the mock of the server's draft_reviews side table.
+// Reviewer decision drafts: one draft decision per change, published by
+// the batch submit — the mock of the server's draft_reviews side table.
 // Seed one so the dashboard drawer's submit button + draft-state pill and
 // the change-page draft chip render.
 export const draftReviews = new Map<

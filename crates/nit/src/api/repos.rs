@@ -15,13 +15,12 @@ use crate::gitscan;
 use super::canonical_git_dir;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
 
-fn repo_json(state: &AppState, conn: &Connection, row: db::RepoRow) -> Result<Repo, Error> {
-    let tips = state.repo_view(conn, row.id)?.tips().len();
+fn repo_json(conn: &Connection, row: db::RepoRow) -> Result<Repo, Error> {
     Ok(Repo {
         id: row.id,
         git_dir: row.git_dir,
         canonical_ref: row.canonical_ref,
-        active_chains: u64::try_from(tips).unwrap_or(u64::MAX),
+        open_changes: db::count_changes(conn, row.id, &db::ChangeFilter::open())?,
     })
 }
 
@@ -69,26 +68,26 @@ pub(super) async fn create_repo(
             Ok(row)
         })?;
         state.ensure_repo(&row);
-        Ok(Json(repo_json(&state, conn, row)?))
+        Ok(Json(repo_json(conn, row)?))
     })
     .await
 }
 
-/// Lists every registered repo with its live-tip count (derived, never stored).
+/// Lists every registered repo with its open-change count (derived, never stored).
 pub(super) async fn list_repos(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<RepoList>, Error> {
     with_conn(state.pool(), move |conn| {
         let repos = db::all_repos(conn)?
             .into_iter()
-            .map(|r| repo_json(&state, conn, r))
+            .map(|r| repo_json(conn, r))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Json(RepoList { repos }))
     })
     .await
 }
 
-/// One repo by id; live-tip count derived, never stored (404 if unknown).
+/// One repo by id; open-change count derived, never stored (404 if unknown).
 pub(super) async fn get_repo(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
@@ -96,7 +95,7 @@ pub(super) async fn get_repo(
     with_conn(state.pool(), move |conn| {
         let row = db::get_repo(conn, repo_id)?
             .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;
-        Ok(Json(repo_json(&state, conn, row)?))
+        Ok(Json(repo_json(conn, row)?))
     })
     .await
 }
@@ -133,7 +132,7 @@ pub(super) async fn relocate_repo(
             canonical_head: existing.canonical_head,
         };
         state.ensure_repo(&row);
-        Ok(Json(repo_json(&state, conn, row)?))
+        Ok(Json(repo_json(conn, row)?))
     })
     .await
 }

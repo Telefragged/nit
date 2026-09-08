@@ -581,6 +581,18 @@ pub struct ChangeFilter {
 }
 
 impl ChangeFilter {
+    /// The changes whose status is not terminal.
+    #[must_use]
+    pub fn open() -> ChangeFilter {
+        ChangeFilter {
+            statuses: ChangeStatus::ALL
+                .into_iter()
+                .filter(|s| !s.is_terminal())
+                .collect(),
+            ..ChangeFilter::default()
+        }
+    }
+
     /// The SQL `AND` clauses that apply this filter to a `changes` row,
     /// and the values to bind to them, in order.
     ///
@@ -605,10 +617,23 @@ impl ChangeFilter {
     }
 }
 
+/// How many of one repo's changes a filter matches.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn count_changes(conn: &Connection, repo_id: u64, filter: &ChangeFilter) -> Result<u64> {
+    let (clauses, bound) = filter.clauses();
+    let sql = format!("SELECT COUNT(*) FROM changes WHERE repo_id = ?1{clauses}");
+    let mut values: Vec<rusqlite::types::Value> = vec![i64::try_from(repo_id)?.into()];
+    values.extend(bound);
+    let count: i64 = conn.query_row(&sql, rusqlite::params_from_iter(values), |r| r.get(0))?;
+    Ok(u64::try_from(count)?)
+}
+
 /// One repo's change rows, ascending by number (creation order).
 ///
-/// A repo view derives its chains over this enumeration. The
-/// denormalized `status` column and `change_tags` answer it, so nothing
+/// The denormalized `status` column and `change_tags` answer it, so nothing
 /// resolves or replays a change that the filter excludes. Whole rows
 /// rather than numbers, so resolving one needs no second read.
 ///

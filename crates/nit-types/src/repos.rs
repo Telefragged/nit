@@ -10,8 +10,9 @@ pub struct Repo {
     pub git_dir: String,
     /// The one canonical ref; mergedness tracks it.
     pub canonical_ref: String,
-    /// Live tip count (derived from the tip set, never stored).
-    pub active_chains: u64,
+    /// How many changes are neither merged nor abandoned (derived, never
+    /// stored).
+    pub open_changes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

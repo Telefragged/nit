@@ -2,9 +2,7 @@
 //!
 //! The log is append-only. [`fold`] applies one wire [`LogEntry`] to a
 //! [`ChangeProjection`]; [`replay`] rebuilds a change's projection from its
-//! entries; [`change_detail`] publishes one as the wire view. A chain is
-//! never folded — it is composed at read time from member projections
-//! (`crate::chain`).
+//! entries; [`change_detail`] publishes one as the wire view.
 //!
 //! Pure over `nit_types` alone: no database, no storage serialization, no event
 //! publishing. The server's db/storage adapters (`crate::review`) feed it wire

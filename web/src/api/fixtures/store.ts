@@ -1,6 +1,5 @@
 // Mutable store shapes for the mock fixture layer. A change owns its
-// revisions, reviews and diffs; chain membership and position are derived
-// (walked from parent_sha), not stored on the change.
+// revisions, reviews and diffs.
 
 import type {
   Anchor,
@@ -38,18 +37,6 @@ export interface ChangeRecord {
   reviews: Review[];
   /** Keyed by diffKey(revision, against). */
   diffs: Record<string, AuthoredDiff>;
-}
-
-/** A tip commit: the head of one derived chain. The set of these is the only
- * thing the dashboard enumerates; the path is walked from `parent_sha`. */
-export interface TipRecord {
-  tip_change_number: number;
-  repo_id: number;
-  /** The revision of the tip change this tip pins. */
-  revision: number;
-  /** Terminal tips (every member merged/abandoned) — off the dashboard's
-   * default `active` view. */
-  active: boolean;
 }
 
 /** A repo registry entry. */

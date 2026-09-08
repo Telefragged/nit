@@ -28,7 +28,7 @@ import { verdictStatus } from "../verdict";
 import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, projection } from "./stream";
 import { diffKey, sideEnd } from "./builders";
-import { changes, draftReviews, drafts, repos, tips } from "./data";
+import { changes, draftReviews, drafts, repos } from "./data";
 import type {
   AuthoredFile,
   AuthoredRevision,
@@ -172,14 +172,15 @@ function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
   return verdictStatus[review.verdict];
 }
 
-/** Derive the repo registry (`GET /api/repos`). `active_chains`
- * is the live tip count for the repo. */
+/** Derive the repo registry (`GET /api/repos`). `open_changes` counts the
+ * repo's changes that are neither merged nor abandoned. */
 function repoList(): Repo[] {
   return repos.map((r) => ({
     id: r.id,
     git_dir: r.git_dir,
     canonical_ref: r.canonical_ref,
-    active_chains: tips.filter((t) => t.repo_id === r.id && t.active).length,
+    open_changes: changes.filter((c) => c.repo_id === r.id && !c.terminal)
+      .length,
   }));
 }
 

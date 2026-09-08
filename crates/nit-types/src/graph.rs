@@ -1,5 +1,7 @@
 //! The change graph, centered on the canonical ref.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ChangeId;
@@ -97,4 +99,100 @@ pub struct GraphNode {
     /// a grouped graph); `None` for a change without the key, and off the
     /// open region.
     pub group: Option<String>,
+}
+
+/// Row order for the change graph: every node precedes its parents.
+///
+/// A topological order — children ascend, parents descend, so the
+/// canonical HEAD sits between its open descendants and its merged
+/// ancestors. `nodes` is `(commit_sha, in-set parent shas)` in a stable
+/// input order; the returned shas are top → bottom.
+///
+/// A node's rank is `0` for a tip, else `1 + max(child rank)`; nodes sort by
+/// `(rank, input order)`. Rank places every parent strictly below its
+/// children and groups a fan-out's branches adjacently; the input-order
+/// tie-break keeps it deterministic.
+#[must_use]
+pub fn row_order(nodes: &[(Sha, Vec<Sha>)]) -> Vec<Sha> {
+    fn rank(
+        i: usize,
+        children: &[Vec<usize>],
+        memo: &mut [Option<u64>],
+        on_stack: &mut [bool],
+    ) -> u64 {
+        if let Some(r) = memo[i] {
+            return r;
+        }
+        if on_stack[i] {
+            return 0; // cycle guard against bad data
+        }
+        on_stack[i] = true;
+        let r = children[i]
+            .iter()
+            .map(|&c| rank(c, children, memo, on_stack))
+            .max()
+            .map_or(0, |m| m + 1);
+        on_stack[i] = false;
+        memo[i] = Some(r);
+        r
+    }
+
+    let index: HashMap<&Sha, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, (sha, _))| (sha, i))
+        .collect();
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
+    for (i, (_, parents)) in nodes.iter().enumerate() {
+        for p in parents {
+            if let Some(&pi) = index.get(p) {
+                children[pi].push(i);
+            }
+        }
+    }
+
+    let mut memo = vec![None; nodes.len()];
+    let mut on_stack = vec![false; nodes.len()];
+    let ranks: Vec<u64> = (0..nodes.len())
+        .map(|i| rank(i, &children, &mut memo, &mut on_stack))
+        .collect();
+    let mut order: Vec<usize> = (0..nodes.len()).collect();
+    order.sort_by_key(|&i| (ranks[i], i));
+    order.into_iter().map(|i| nodes[i].0.clone()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::sha;
+
+    #[test]
+    fn row_order_is_topological_children_before_parents() {
+        // The change-graph mock topology: two open tips (A1, A2) fanning from
+        // A3 → A4 → HEAD, then merged history H → G1 → G2(merge of G3,G4) → G5.
+        let pairs = vec![
+            (sha("A1"), vec![sha("A3")]),
+            (sha("A2"), vec![sha("A3")]),
+            (sha("A3"), vec![sha("A4")]),
+            (sha("A4"), vec![sha("H")]),
+            (sha("H"), vec![sha("G1")]),
+            (sha("G1"), vec![sha("G2")]),
+            (sha("G2"), vec![sha("G3"), sha("G4")]),
+            (sha("G3"), vec![sha("G5")]),
+            (sha("G4"), vec![sha("G5")]),
+            (sha("G5"), vec![]),
+        ];
+        assert_eq!(
+            row_order(&pairs),
+            ["A1", "A2", "A3", "A4", "H", "G1", "G2", "G3", "G4", "G5"].map(sha)
+        );
+        // None < Some keeps the comparison honest if a sha is ever missing.
+        let order = row_order(&pairs);
+        let pos = |s: &Sha| order.iter().position(|x| x == s);
+        for (child, parents) in &pairs {
+            for p in parents {
+                assert!(pos(child) < pos(p), "{child} should precede parent {p}");
+            }
+        }
+    }
 }

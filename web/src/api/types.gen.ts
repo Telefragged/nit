@@ -124,9 +124,10 @@ export type Repo = {
    */
   canonical_ref: string;
   /**
-   * Live tip count (derived from the tip set, never stored).
+   * How many changes are neither merged nor abandoned (derived, never
+   * stored).
    */
-  active_chains: number;
+  open_changes: number;
 };
 
 export type RepoList = { repos: Array<Repo> };

@@ -17,8 +17,8 @@ function RepoRow({ repo }: { repo: Repo }) {
         <div className="repo">canonical ref {repo.canonical_ref}</div>
       </td>
       <td className="count-cell">
-        {repo.active_chains} active{" "}
-        {repo.active_chains === 1 ? "chain" : "chains"}
+        {repo.open_changes} open{" "}
+        {repo.open_changes === 1 ? "change" : "changes"}
       </td>
     </tr>
   );
@@ -52,7 +52,7 @@ export default function RepoList() {
     <main className="page">
       <h1 className="mono">Repositories</h1>
       <p className="subtitle">
-        Registered repositories — open one to review its chains.
+        Registered repositories — open one to review its changes.
       </p>
       {query.isError ? (
         <ErrorPanel error={query.error} />
@@ -61,7 +61,7 @@ export default function RepoList() {
           <thead>
             <tr>
               <th>Repository</th>
-              <th style={{ width: 140 }}>Chains</th>
+              <th style={{ width: 140 }}>Changes</th>
             </tr>
           </thead>
           <tbody>

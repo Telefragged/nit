@@ -7,8 +7,7 @@
 //! The first read of a change replays its log into a
 //! [`ChangeProjection`]. [`append_to_change`] then keeps that projection
 //! current: it appends to the DB log and folds in lock-step under the
-//! change's projection write lock. A chain owns no state, because a read
-//! derives it from member folds (`nit_types::chain`).
+//! change's projection write lock.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -32,7 +31,6 @@ use crate::db;
 use nit_types::domain::ChangeProjection;
 
 use crate::review;
-use nit_types::chain::RepoView;
 
 /// Live-event buffer.
 ///
@@ -321,30 +319,10 @@ impl AppState {
             .clone())
     }
 
-    /// Projects one repo's changes into a [`RepoView`].
-    ///
-    /// Every change is cloned out from under its lock, and the view is what
-    /// chain derivation reads. The `changes` table is the enumeration, so
-    /// the view covers the repo whatever the map holds; every member
-    /// resolves through [`AppState::change`].
-    ///
-    /// # Errors
-    ///
-    /// When the DB read or a replay fails.
-    pub fn repo_view(&self, conn: &Connection, repo_id: u64) -> anyhow::Result<RepoView> {
-        // Unfiltered by construction. Chain derivation walks each tip's
-        // `parent_sha` back to the base, and a partial set breaks that walk.
-        Ok(RepoView::new(self.repo_changes(
-            conn,
-            repo_id,
-            &db::ChangeFilter::default(),
-        )?))
-    }
-
     /// Returns one repo's change folds as owned projections.
     ///
-    /// The gather behind [`repo_view`](Self::repo_view) and the bulk
-    /// `GET /api/changes` read. `filter` narrows in the database (the
+    /// The gather behind the bulk `GET /api/changes` read. `filter`
+    /// narrows in the database (the
     /// denormalized `changes.status` column and `change_tags`), so nothing
     /// resolves, replays or clones a change outside it.
     ///

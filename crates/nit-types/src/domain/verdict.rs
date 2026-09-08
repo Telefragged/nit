@@ -104,6 +104,28 @@ pub enum ChangeStatus {
 }
 
 impl ChangeStatus {
+    /// Every status.
+    pub const ALL: [ChangeStatus; 6] = [
+        ChangeStatus::Pending,
+        ChangeStatus::Approved,
+        ChangeStatus::ChangesRequested,
+        ChangeStatus::Commented,
+        ChangeStatus::Merged,
+        ChangeStatus::Abandoned,
+    ];
+
+    /// Whether the status ends the change's review: merged or abandoned.
+    #[must_use]
+    pub fn is_terminal(self) -> bool {
+        match self {
+            ChangeStatus::Merged | ChangeStatus::Abandoned => true,
+            ChangeStatus::Pending
+            | ChangeStatus::Approved
+            | ChangeStatus::ChangesRequested
+            | ChangeStatus::Commented => false,
+        }
+    }
+
     /// The wire spelling (mirrors the serde renaming).
     #[must_use]
     pub fn as_str(self) -> &'static str {

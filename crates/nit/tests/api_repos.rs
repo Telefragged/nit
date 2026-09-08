@@ -2,9 +2,10 @@
 //! `nit repo create` (`POST /api/repos`), pinning its one canonical
 //! `canonical_ref`; its identity is the git-common-dir, and a push into an
 //! unregistered repo is a 404. `GET /api/repos` lists each repo with
-//! its live-tip `active_chains` count, which excludes a fully merged/abandoned
-//! chain (decided only by the background timer). `GET /api/chains?repo={id}`
-//! scopes the chain list to one repo, and `PATCH /api/repos/{id}`
+//! its `open_changes` count, which excludes a merged or abandoned change
+//! (merged is decided only by the background timer).
+//! `GET /api/changes?repo={id}` scopes the change list to one repo, and
+//! `PATCH /api/repos/{id}`
 //! (≡ `nit repo move`) repoints a repo after a disk move (404 unknown, 400
 //! unresolvable, 409 collision).
 
@@ -25,7 +26,7 @@ fn git_dir_of(root: &std::path::Path) -> String {
         .to_string()
 }
 
-fn active_chains(server: &TestServer, id: u64) -> u64 {
+fn open_changes(server: &TestServer, id: u64) -> u64 {
     let (st, list) = http_get(&server.url("/api/repos"));
     assert_eq!(st, 200, "{list}");
     list["repos"]
@@ -34,16 +35,13 @@ fn active_chains(server: &TestServer, id: u64) -> u64 {
         .iter()
         .find(|r| r["id"].as_u64() == Some(id))
         .unwrap_or_else(|| panic!("repo {id} missing from {list}"))
-        .get("active_chains")
+        .get("open_changes")
         .and_then(serde_json::Value::as_u64)
-        .unwrap_or_else(|| panic!("no active_chains on repo {id}"))
+        .unwrap_or_else(|| panic!("no open_changes on repo {id}"))
 }
 
 #[test]
 fn repos_list_shape_canonical_ref_and_scoped_changes() {
-    // Two distinct repos (distinct git dirs); the second carries two chains —
-    // `feat` and `topic` both fork straight off `main`, so each is its own
-    // live tip in the parent DAG, not one stacked on the other.
     let a = GitRepo::new();
     let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
     a.branch("feat", a1);
@@ -83,8 +81,8 @@ fn repos_list_shape_canonical_ref_and_scoped_changes() {
 
     assert_eq!(repo_a["canonical_ref"], "main");
     assert_eq!(repo_b["canonical_ref"], "main");
-    assert_eq!(active_chains(&server, id_a), 1);
-    assert_eq!(active_chains(&server, id_b), 2, "two independent tips");
+    assert_eq!(open_changes(&server, id_a), 1);
+    assert_eq!(open_changes(&server, id_b), 2, "two changes");
 
     // GET /api/changes?repo=: scoped to one repo's changes only.
     let (st, scoped_b) = http_get(&server.url(&format!("/api/changes?repo={id_b}")));
@@ -145,12 +143,12 @@ fn create_repo_registers_and_pins_base() {
     g.branch("trunk", g.root);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // no push yet — active_chains starts at 0.
+    // no push yet — open_changes starts at 0.
     let (st, repo) = create_repo(&server, &g, "main");
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
     assert_eq!(repo["canonical_ref"], "main");
-    assert_eq!(repo["active_chains"].as_u64(), Some(0));
+    assert_eq!(repo["open_changes"].as_u64(), Some(0));
     let id = first_repo(&server);
 
     // Re-registering is a 409 even when it names a different base — create means
@@ -319,7 +317,7 @@ fn get_repo_by_id_endpoint() {
     assert_eq!(repo["id"].as_u64(), Some(repo_id));
     assert_eq!(repo["git_dir"].as_str().unwrap(), a.git_dir());
     assert_eq!(repo["canonical_ref"], "main");
-    assert_eq!(repo["active_chains"].as_u64(), Some(1));
+    assert_eq!(repo["open_changes"].as_u64(), Some(1));
 
     let (st, _) = http_get(&server.url("/api/repos/9999"));
     assert_eq!(st, 404);
@@ -362,7 +360,7 @@ fn nit_repo_move_cli() {
 }
 
 #[test]
-fn merged_chain_drops_out_of_active_chains() {
+fn merged_change_drops_out_of_open_changes() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Im1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
@@ -371,17 +369,21 @@ fn merged_chain_drops_out_of_active_chains() {
     let (st, _) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
     let id = first_repo(&server);
-    assert_eq!(active_chains(&server, id), 1, "one live tip after the push");
+    assert_eq!(
+        open_changes(&server, id),
+        1,
+        "one open change after the push"
+    );
 
     // The sweep detects the Change-Id on `main` and marks the change merged,
-    // so the chain leaves the live-tip set.
+    // so it leaves the open set.
     g.branch("main", c1);
     sweep(&server);
-    assert_eq!(active_chains(&server, id), 0);
+    assert_eq!(open_changes(&server, id), 0);
 }
 
 #[test]
-fn abandoned_chain_drops_out_of_active_chains() {
+fn abandoned_change_drops_out_of_open_changes() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", "Iab1"), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
@@ -391,16 +393,15 @@ fn abandoned_chain_drops_out_of_active_chains() {
     assert_eq!(st, 200);
     let change_number = member_id(&res, "Iab1");
     let id = first_repo(&server);
-    assert_eq!(active_chains(&server, id), 1);
+    assert_eq!(open_changes(&server, id), 1);
 
-    // Abandoned tips are excluded from active_chains (the dashboard hides them)
-    // but stay enumerable as their own chain.
+    // An abandoned change is excluded from open_changes (the dashboard hides it).
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_number}/abandon")),
         &json!({}),
     );
     assert_eq!(st, 200);
-    assert_eq!(active_chains(&server, id), 0);
+    assert_eq!(open_changes(&server, id), 0);
 }
 
 /// The only registered repo's id.

@@ -17,9 +17,9 @@ use std::collections::HashMap;
 
 use git2::{Commit, Oid, Repository, Sort};
 
-use nit_types::chain;
 use nit_types::domain::subject_of;
 use nit_types::domain::{ChangeId, ChangeNumber, Sha};
+use nit_types::graph;
 
 use nit_types::domain::ChangeProjection;
 
@@ -295,7 +295,7 @@ pub fn canonical_history(
         .iter()
         .map(|c| (c.sha.clone(), c.parents.clone()))
         .collect();
-    let row: HashMap<Sha, usize> = chain::graph_row_order(&nodes)
+    let row: HashMap<Sha, usize> = graph::row_order(&nodes)
         .into_iter()
         .enumerate()
         .map(|(i, sha)| (sha, i))

@@ -232,7 +232,7 @@ pub const MERGED_WINDOW: u64 = 5;
 
 /// Builds the `ChangeDetail` from one change's fold.
 ///
-/// A pure single-change read, no repo view. The shared tail of the three
+/// A pure single-change read. The shared tail of the three
 /// change-detail handlers.
 fn change_detail_json(
     conn: &rusqlite::Connection,

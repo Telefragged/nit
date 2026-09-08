@@ -11,7 +11,6 @@
 //! with no JSON text in between. `u64` rides as a JS `number` — the same
 //! representation the web already holds — so the wire types are unchanged.
 
-use nit_types::chain::RepoView;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
@@ -109,11 +108,7 @@ pub fn repo_graph(
 ) -> Result<JsValue, JsValue> {
     let changes: Vec<ChangeProjection> = serde_wasm_bindgen::from_value(changes)?;
     let history: RepoHistory = serde_wasm_bindgen::from_value(history)?;
-    to_js(&graph::assemble(
-        &RepoView::new(changes),
-        &history,
-        group_by.as_deref(),
-    ))
+    to_js(&graph::assemble(&changes, &history, group_by.as_deref()))
 }
 
 /// Marks the characters that changed inside a diff's replacement blocks.

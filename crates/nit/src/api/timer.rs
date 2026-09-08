@@ -18,7 +18,6 @@ use nit_types::domain::Sha;
 
 use crate::db;
 use crate::gitscan;
-use nit_types::chain::RepoView;
 use nit_types::domain::ChangeProjection;
 
 use super::{AppState, append_to_change, with_conn};
@@ -91,10 +90,12 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         // First observation has no baseline -- no landings are detected;
         // landings that predate tracking are not this timer's concern.
         if let Some(since) = &recorded {
-            let Ok(view) = state.repo_view(conn, repo_id) else {
+            let Ok(changes) = state.repo_changes(conn, repo_id, &db::ChangeFilter::open()) else {
                 continue;
             };
-            let open = open_changes_by_id(&view);
+            // The sweep's working set -- looked up once per new commit.
+            let open: HashMap<ChangeId, &ChangeProjection> =
+                changes.iter().map(|c| (c.change_id.clone(), c)).collect();
             for (change_number, sha) in gitscan::detect_merges(&repo, since, &head, &open) {
                 record_landing(state, conn, change_number, sha);
             }
@@ -108,16 +109,6 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
             tracing::warn!(repo_id, "recording base head failed: {e:#}");
         }
     }
-}
-
-/// The sweep's working set -- looked up once per new commit.
-fn open_changes_by_id(view: &RepoView) -> HashMap<ChangeId, &ChangeProjection> {
-    view.change_numbers()
-        .into_iter()
-        .filter_map(|id| view.change(id))
-        .filter(|c| !c.is_terminal())
-        .map(|c| (c.change_id.clone(), c))
-        .collect()
 }
 
 /// The merge sweep's only lifecycle write.

@@ -143,8 +143,7 @@ impl ChangeProjection {
     /// Whether the change has **merged** onto the canonical ref.
     ///
     /// Distinct from `is_terminal`: an abandoned change is terminal but
-    /// not merged, and stays an enumerable member/tip of its chains
-    /// (abandonment is membership-inert).
+    /// not merged.
     #[must_use]
     pub fn is_merged(&self) -> bool {
         matches!(self.lifecycle, Lifecycle::Merged)

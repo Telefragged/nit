@@ -62,7 +62,7 @@ pub fn repo(args: RepoArgs) -> Result<()> {
     }
 }
 
-/// One aligned line per repo: `id  git_dir  canonical_ref  N active`.
+/// One aligned line per repo: `id  git_dir  canonical_ref  N open`.
 fn print_repos(list: &RepoList) {
     let rows: Vec<[String; 3]> = list
         .repos
@@ -73,7 +73,7 @@ fn print_repos(list: &RepoList) {
     for (r, cols) in list.repos.iter().zip(&rows) {
         println!(
             "{}",
-            aligned_row(cols, widths, &format!("{} active", r.active_chains))
+            aligned_row(cols, widths, &format!("{} open", r.open_changes))
         );
     }
 }
