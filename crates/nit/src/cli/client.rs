@@ -7,7 +7,7 @@
 
 use anyhow::{Result, anyhow};
 use nit_types::error::ApiError;
-use nit_types::events::ClientMessage;
+use nit_types::events::Subscription;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -166,7 +166,7 @@ impl Client {
 
     /// Opens the change stream and sends `subscribe` on it, retrying while
     /// the server is unreachable.
-    pub(crate) fn ws_connect(&self, subscribe: &ClientMessage) -> Result<WsConn> {
+    pub(crate) fn ws_connect(&self, subscribe: &Subscription) -> Result<WsConn> {
         let url = format!("{}/api/stream", self.base.replacen("http", "ws", 1));
         let sub = serde_json::to_string(subscribe)?;
         self.retry_loop(Retry::UntilUp, || Self::try_ws(&url, &sub))

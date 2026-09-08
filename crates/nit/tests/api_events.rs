@@ -1,5 +1,4 @@
-//! `WS /api/stream`: the projection watermark, the tag subscription, and
-//! live streaming.
+//! `WS /api/stream`: the subscription's opening frames and live streaming.
 
 mod common;
 
@@ -7,16 +6,24 @@ use std::time::Duration;
 
 use common::{
     GitRepo, TestServer, first_repo_id, member_id, msg, push, review, tag_change, ws_entry,
-    ws_read, ws_subscribe_projection, ws_subscribe_tagged,
+    ws_read, ws_subscribe,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 
 const READ: Duration = Duration::from_secs(3);
 
-/// Projection mode ships the folded `ChangeProjection` (its `entries_folded` the
-/// high-water mark), then attaches the live tail past it.
+/// The next frame's `projection`, which must be the next frame.
+fn ws_projection(socket: &mut common::WsSock) -> Value {
+    let frame = ws_read(socket).expect("a frame");
+    assert!(frame["projection"].is_object(), "not a projection: {frame}");
+    frame["projection"].clone()
+}
+
+/// Without a cursor, a subscription ships the picked change's projection
+/// (its `entries_folded` the high-water mark), then only its live entries.
+/// A change number alone picks the change, whatever its repo.
 #[test]
-fn subscribe_projection_ships_it_then_streams_live() {
+fn subscribe_ships_the_projection_then_streams_live() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -25,8 +32,9 @@ fn subscribe_projection_ships_it_then_streams_live() {
     assert_eq!(st, 200, "{res}");
     let change_number = member_id(&res, "I001");
 
-    let mut socket = ws_subscribe_projection(&server, &[change_number], READ);
-    let snap = ws_read(&mut socket).expect("projection frame")["projection"].clone();
+    let query = json!({ "change": change_number });
+    let mut socket = ws_subscribe(&server, &query, None, READ);
+    let snap = ws_projection(&mut socket);
     assert_eq!(snap["id"], change_number);
     assert_eq!(snap["revisions"].as_array().expect("revisions").len(), 1);
     // One entry (the revision) is folded, so the live tail resumes at position 1.
@@ -38,12 +46,13 @@ fn subscribe_projection_ships_it_then_streams_live() {
     assert_eq!(live["position"], 1);
 }
 
-/// A tag subscription first sends the tagged change's stored entries past
-/// the cursor. Then it sends the change's new entries, and not another
-/// change's. When a `tags` entry gives another change the tag, it sends
-/// that entry and that change's later entries.
+/// A tag subscription first sends the tagged change's projection and, with
+/// a cursor, its stored entries past the cursor. Then it sends the change's
+/// new entries, and not another change's. When a `tags` entry gives
+/// another change the tag, it sends that change's projection, the entry,
+/// and that change's later entries.
 #[test]
-fn subscribe_tagged_follows_the_changes_that_carry_the_tags() {
+fn subscribe_by_tag_follows_the_changes_that_carry_the_tags() {
     let g = GitRepo::new();
     let a = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", a);
@@ -57,10 +66,13 @@ fn subscribe_tagged_follows_the_changes_that_carry_the_tags() {
     let (st, res) = tag_change(&server, one, &json!({"branch": "feat"}));
     assert_eq!(st, 200, "{res}");
     let repo_id = first_repo_id(&server);
+    let query = json!({ "repo": repo_id, "tag": ["branch=feat"] });
 
-    // The stored entries: the tagged change's revision and tags entries. The
-    // revision is included even though it was written before the tag.
-    let mut socket = ws_subscribe_tagged(&server, repo_id, &json!({"branch": "feat"}), 0, READ);
+    // The stored entries: the tagged change's revision and tags entries,
+    // behind its projection. The revision is included even though it was
+    // written before the tag.
+    let mut socket = ws_subscribe(&server, &query, Some(0), READ);
+    assert_eq!(ws_projection(&mut socket)["id"], one);
     let revision = ws_entry(&mut socket).expect("backlog revision");
     assert_eq!(
         (
@@ -72,7 +84,7 @@ fn subscribe_tagged_follows_the_changes_that_carry_the_tags() {
     let tags = ws_entry(&mut socket).expect("backlog tags");
     assert_eq!(tags["kind"], "tags");
 
-    // Same check as `unsubscribed_changes_are_silent`: the untagged change's
+    // Same check as `unpicked_changes_are_silent`: the untagged change's
     // review is published first, so if the server sent it, it would arrive
     // before the tagged change's review.
     review(&server, two, "approve", "ok");
@@ -83,6 +95,9 @@ fn subscribe_tagged_follows_the_changes_that_carry_the_tags() {
 
     let (st, res) = tag_change(&server, two, &json!({"branch": "feat"}));
     assert_eq!(st, 200, "{res}");
+    let met = ws_projection(&mut socket);
+    assert_eq!(met["id"], two, "the socket meets two at its tags entry");
+    assert_eq!(met["entries_folded"], 3, "the projection already holds it");
     let joined = ws_entry(&mut socket).expect("the tags entry that adds two");
     assert_eq!(
         (joined["change_number"].as_u64(), joined["kind"].as_str()),
@@ -93,21 +108,24 @@ fn subscribe_tagged_follows_the_changes_that_carry_the_tags() {
     assert_eq!(live["change_number"], two);
     assert_eq!(live["kind"], "review");
 
-    // `after` is exclusive, so a subscription at the last sequence gets no
-    // stored entries.
+    // Without a cursor, the subscription announces both picked changes and
+    // sends no stored entry.
+    let mut fresh = ws_subscribe(&server, &query, None, Duration::from_millis(400));
+    assert_eq!(ws_projection(&mut fresh)["id"], one);
+    assert_eq!(ws_projection(&mut fresh)["id"], two);
+    assert!(ws_read(&mut fresh).is_none(), "no stored entries");
+
+    // `after` is exclusive, so a subscription at the last sequence gets the
+    // projections and no stored entry.
     let head = live["sequence"].as_u64().expect("sequence");
-    let mut parked = ws_subscribe_tagged(
-        &server,
-        repo_id,
-        &json!({"branch": "feat"}),
-        head,
-        Duration::from_millis(400),
-    );
+    let mut parked = ws_subscribe(&server, &query, Some(head), Duration::from_millis(400));
+    assert_eq!(ws_projection(&mut parked)["id"], one);
+    assert_eq!(ws_projection(&mut parked)["id"], two);
     assert!(ws_read(&mut parked).is_none(), "no backlog at head");
 }
 
 #[test]
-fn unsubscribed_changes_are_silent() {
+fn unpicked_changes_are_silent() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
@@ -116,14 +134,16 @@ fn unsubscribed_changes_are_silent() {
     let (_, res) = push(&server, &g, "feat", "main");
     let one = member_id(&res, "I001");
     let two = member_id(&res, "I002");
+    let repo_id = first_repo_id(&server);
 
     // Subscribe only to change one; reading its projection is the sync
     // point that puts the subscription in place before any review broadcasts.
-    let mut socket = ws_subscribe_projection(&server, &[one], READ);
-    assert!(ws_read(&mut socket).is_some_and(|f| f["projection"].is_object()));
+    let query = json!({ "repo": repo_id, "change_id": common::change_id("I001") });
+    let mut socket = ws_subscribe(&server, &query, None, READ);
+    assert_eq!(ws_projection(&mut socket)["id"], one);
 
-    // Review change two (unsubscribed) then change one (subscribed). The next
-    // frame must be change one's review: two's review is broadcast first, so a
+    // Review change two (unpicked) then change one (picked). The next frame
+    // must be change one's review: two's review is broadcast first, so a
     // leak would arrive ahead of one's. A deterministic silence fence, with no
     // read-timeout wait.
     review(&server, two, "approve", "ok");

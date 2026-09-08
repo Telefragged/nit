@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { StreamMessage } from "../types";
+import { changeId } from "./builders";
 import { mockAppend, mockOpenStream } from "./stream";
 
 describe("mock stream", () => {
@@ -8,7 +9,10 @@ describe("mock stream", () => {
     const got: StreamMessage[] = [];
     const handle = mockOpenStream((m) => got.push(m));
 
-    handle.add([11]); // change 11: revisions + a review + threads
+    // Change 11 alone: revisions + a review + threads.
+    handle.subscribe({
+      query: { repo: 1, change_id: changeId("I3f2d8a91c0b7e514") },
+    });
     expect(got).toHaveLength(1);
     const snap = got[0];
     expect(snap && "projection" in snap && snap.projection.id).toBe(11);
@@ -33,12 +37,13 @@ describe("mock stream", () => {
     expect(got).toHaveLength(2);
   });
 
-  it("only projects subscribed changes", () => {
+  it("projects every change the query picks, and no other", () => {
     const got: StreamMessage[] = [];
     const handle = mockOpenStream((m) => got.push(m));
-    handle.add([20]);
-    expect(got).toHaveLength(1);
-    expect(got[0] && "projection" in got[0] && got[0].projection.id).toBe(20);
+    handle.subscribe({ query: { repo: 1, tag: ["session-id=auth-rotation"] } });
+    expect(got.map((m) => ("projection" in m ? m.projection.id : -1))).toEqual([
+      10, 11, 12,
+    ]);
     handle.close();
   });
 });

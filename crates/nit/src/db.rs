@@ -24,6 +24,7 @@ use std::fmt::Write as _;
 
 use nit_types::changes::ChangeQuery;
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::ChangeProjection;
 use nit_types::domain::Tags;
 use nit_types::domain::{Anchor, CommentRange, LineAnchor};
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
@@ -577,6 +578,8 @@ pub struct ChangeFilter {
     /// A change must have every one of these, same key and same value. A
     /// map, because a filter has one value per key.
     pub tags: Tags,
+    /// The change with this number.
+    pub change: Option<ChangeNumber>,
     /// The change with this `Change-Id`. At most one per repo.
     pub change_id: Option<ChangeId>,
 }
@@ -587,6 +590,7 @@ impl From<ChangeQuery> for ChangeFilter {
         ChangeFilter {
             statuses: query.status,
             tags: query.tag.into_iter().collect(),
+            change: query.change,
             change_id: query.change_id,
         }
     }
@@ -605,6 +609,19 @@ impl ChangeFilter {
         }
     }
 
+    /// Whether the filter matches a change: the rule `clauses` spells for
+    /// SQL, for a reader that holds the projection and not the row.
+    #[must_use]
+    pub fn matches(&self, change: &ChangeProjection) -> bool {
+        (self.statuses.is_empty() || self.statuses.contains(&change.current_status()))
+            && change.tags.carries_all(&self.tags)
+            && self.change.is_none_or(|n| n == change.id)
+            && self
+                .change_id
+                .as_ref()
+                .is_none_or(|c| *c == change.change_id)
+    }
+
     /// The SQL `AND` clauses that apply this filter to a `changes` row,
     /// and the values to bind to them, in order.
     ///
@@ -614,6 +631,10 @@ impl ChangeFilter {
         let mut sql = String::new();
         let mut values: Vec<rusqlite::types::Value> = Vec::new();
         push_status_filter(&mut sql, &mut values, "status", &self.statuses);
+        if let Some(change) = self.change {
+            sql.push_str(" AND id = ?");
+            values.push(i64::try_from(change.get()).unwrap_or(i64::MAX).into());
+        }
         if let Some(change_id) = &self.change_id {
             sql.push_str(" AND change_id = ?");
             values.push(change_id.as_str().to_string().into());

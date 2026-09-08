@@ -26,9 +26,10 @@ use crate::domain::Verdict;
 /// **latest revision** (terminal states win). `tag` is repeatable too
 /// (`?tag=key=value&tag=key=value`); each one matches the change's tags,
 /// verbatim key and value, and every one given must match. There is no
-/// prefix, wildcard, or key-only form. `change_id` picks the change with
-/// that `Change-Id`. Filters compose, so a tag match admits merged and
-/// abandoned changes like any other; narrow with `status` to exclude them.
+/// prefix, wildcard, or key-only form. `change` picks the change with that
+/// number, `change_id` the one with that `Change-Id`. Filters compose, so
+/// a tag match admits merged and abandoned changes like any other; narrow
+/// with `status` to exclude them.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeQuery {
@@ -43,13 +44,16 @@ pub struct ChangeQuery {
     pub tag: Vec<Tag>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
+    pub change: Option<ChangeNumber>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub change_id: Option<ChangeId>,
 }
 
 /// The `GET /api/changes` response: the changes a [`ChangeQuery`] picks,
 /// as folded projections.
 ///
-/// The same shape the websocket ships in projection mode.
+/// The same shape the websocket ships as a `projection` frame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeList {

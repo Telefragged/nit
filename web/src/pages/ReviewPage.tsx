@@ -15,18 +15,13 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  createDraft,
-  getChangeDrafts,
-  getChanges,
-  getDiff,
-  getRepo,
-} from "../api/client";
+import { createDraft, getChangeDrafts, getDiff, getRepo } from "../api/client";
 import type {
   ChangeDetail,
   DiffMode,
   Review,
   Revision,
+  Subscription,
   Tags,
 } from "../api/types";
 import { verdictStatus } from "../api/verdict";
@@ -260,9 +255,8 @@ export default function ReviewPage() {
   // The change page is event-driven: the published projection (revisions,
   // threads, reviews) is folded from the change-event websocket into the
   // ["change", id] cache by `useChangeStream` (below). This query only reads
-  // that cache (skipToken — never fetches). The listed changes, the diff, the
-  // repo, and the reviewer's drafts/draft decision are not in the log, so they
-  // stay REST; `change` composes the published projection with the drafts
+  // that cache (skipToken — never fetches). The diff, the repo, and the
+  // reviewer's drafts/draft decision are not in the log, so they stay REST; `change` composes the published projection with the drafts
   // overlay (`useDrafts`).
   const queryClient = useQueryClient();
 
@@ -341,26 +335,21 @@ export default function ReviewPage() {
   const selectedTag = selectTag(tags, preferredKey);
   const tag =
     selectedTag === null ? undefined : `${selectedTag[0]}=${selectedTag[1]}`;
-  const membersQ = useQuery({
-    queryKey: ["changes", published?.repo_id, tag],
-    queryFn:
-      published && tag !== undefined
-        ? () => getChanges({ repo: published.repo_id, tag: [tag] })
-        : skipToken,
-  });
-  // The listed change numbers, ascending; the stream below supplies each
-  // one's detail.
-  const memberIds = useMemo(
-    () => (membersQ.data?.changes ?? []).map((c) => c.id).sort((a, b) => a - b),
-    [membersQ.data],
+  // This change alone, by number, until its projection names its tags;
+  // then every change that shares the selected one. Each projection + live
+  // fold is written into the ["change", id] cache the queries above read.
+  const subscription: Subscription = {
+    query:
+      published === undefined || tag === undefined
+        ? { change: changeNumber }
+        : { repo: published.repo_id, tag: [tag] },
+  };
+  const memberIds = useChangeStream(subscription);
+  // This change stays in the drafts read while a new subscription refills
+  // the picked set, so its overlay never blinks out.
+  const draftsMap = useDrafts(
+    memberIds.includes(changeNumber) ? memberIds : [changeNumber, ...memberIds],
   );
-
-  // Subscribe to the change and every listed member: each projection + live
-  // fold is written into the ["change", id] cache the queries above read. The
-  // drafts overlay rides a separate ["drafts", id] read; `change` composes
-  // the two.
-  useChangeStream([changeNumber, ...memberIds]);
-  const draftsMap = useDrafts([changeNumber, ...memberIds]);
   // The same read useDrafts makes for this change, for its error: an
   // unknown change number surfaces here, because the websocket says nothing.
   const draftsQ = useQuery({
@@ -770,7 +759,7 @@ export default function ReviewPage() {
   }, [threads, files, selected, against]);
 
   // The change's published projection arrives over the websocket (no fetch to
-  // error on); a bad change number surfaces when its drafts REST read fails.
+  // error on); a bad change number surfaces when its drafts read fails.
   if (draftsQ.isError) {
     return (
       <main className="page">

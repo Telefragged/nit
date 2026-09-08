@@ -253,7 +253,7 @@ export type RepoHistory = {
  * The `GET /api/changes` response: the changes a [`ChangeQuery`] picks,
  * as folded projections.
  *
- * The same shape the websocket ships in projection mode.
+ * The same shape the websocket ships as a `projection` frame.
  */
 export type ChangeList = { changes: Array<ChangeProjection> };
 
@@ -267,9 +267,10 @@ export type ChangeList = { changes: Array<ChangeProjection> };
  * **latest revision** (terminal states win). `tag` is repeatable too
  * (`?tag=key=value&tag=key=value`); each one matches the change's tags,
  * verbatim key and value, and every one given must match. There is no
- * prefix, wildcard, or key-only form. `change_id` picks the change with
- * that `Change-Id`. Filters compose, so a tag match admits merged and
- * abandoned changes like any other; narrow with `status` to exclude them.
+ * prefix, wildcard, or key-only form. `change` picks the change with that
+ * number, `change_id` the one with that `Change-Id`. Filters compose, so
+ * a tag match admits merged and abandoned changes like any other; narrow
+ * with `status` to exclude them.
  */
 export type ChangeQuery = {
   repo?: number;
@@ -278,6 +279,7 @@ export type ChangeQuery = {
    * A malformed pair fails the query deserialization.
    */
   tag?: Array<string>;
+  change?: ChangeNumber;
   change_id?: ChangeId;
 };
 
@@ -654,20 +656,24 @@ export type LogEntry = {
 );
 
 /**
- * A client → server websocket message. Externally tagged, `snake_case`.
+ * A client → server websocket message: what the socket follows.
+ *
+ * The server first sends the [`ChangeProjection`] of every change
+ * `query` picks now, then the stored entries with `sequence > after`
+ * when `after` is given, then each new entry of a picked change. For a
+ * new entry, `status` is the change's status right after it. A change
+ * the socket meets for the first time, one that gets the tags from a
+ * `tags` entry, arrives as its projection and then the entry.
+ *
+ * A socket holds one subscription. A second one replaces the first.
  */
-export type ClientMessage =
-  | { subscribe_projection: Array<ChangeNumber> }
-  | {
-      subscribe_tagged: {
-        repo: number;
-        tags: Tags;
-        /**
-         * Send entries with a `sequence` greater than this.
-         */
-        after: number;
-      };
-    };
+export type Subscription = {
+  query: ChangeQuery;
+  /**
+   * Send the stored entries with a `sequence` greater than this.
+   */
+  after?: number;
+};
 
 /**
  * A server → client websocket message. Externally tagged, `snake_case`.

@@ -45,8 +45,17 @@ impl Selection {
         Ok(log.entries)
     }
 
-    /// The query string that selects the changes: a [`ChangeQuery`], plus
-    /// `after` when given.
+    /// The query that picks the selected changes.
+    pub(crate) fn change_query(&self) -> ChangeQuery {
+        ChangeQuery {
+            repo: Some(self.repo),
+            tag: self.tags.to_vec(),
+            ..ChangeQuery::default()
+        }
+    }
+
+    /// The query string that selects the changes: the [`ChangeQuery`],
+    /// plus `after` when given.
     ///
     /// Each value is percent-encoded, because a tag value may contain a
     /// space or an ampersand.
@@ -59,11 +68,7 @@ impl Selection {
             after: Option<u64>,
         }
         let query = Query {
-            changes: ChangeQuery {
-                repo: Some(self.repo),
-                tag: self.tags.to_vec(),
-                ..ChangeQuery::default()
-            },
+            changes: self.change_query(),
             after,
         };
         serde_html_form::to_string(&query).expect("a query of numbers and strings serializes")

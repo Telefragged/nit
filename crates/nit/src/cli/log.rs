@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow, bail};
 
 use nit_types::domain::LifecycleAction;
 use nit_types::domain::{LogEntry, LogPayload};
-use nit_types::events::{ClientMessage, StreamMessage};
+use nit_types::events::{StreamMessage, Subscription};
 
 use super::client::{Client, Retry, ServerOpt, next_text, server_url};
 use super::format::{print_entries, print_oneline_entries};
@@ -137,10 +137,9 @@ impl Follower<'_> {
             }
             // The socket sends only entries past the cursor, and the caller
             // has printed everything up to it.
-            let subscription = ClientMessage::SubscribeTagged {
-                repo: self.selection.repo,
-                tags: self.selection.tags.clone(),
-                after: self.cursor,
+            let subscription = Subscription {
+                query: self.selection.change_query(),
+                after: Some(self.cursor),
             };
             let mut socket = self.client.ws_connect(&subscription)?;
             while let Some(text) = next_text(&mut socket) {

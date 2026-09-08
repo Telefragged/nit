@@ -37,13 +37,9 @@ pub(super) async fn list_changes(
     AppQuery(q): AppQuery<ChangeQuery>,
 ) -> Result<Json<ChangeList>, Error> {
     with_conn(state.pool(), move |conn| {
-        let repo_ids = state.repo_ids_matching(q.repo);
-        let filter = db::ChangeFilter::from(q);
-        let mut changes = Vec::new();
-        for repo_id in repo_ids {
-            changes.extend(state.repo_changes(conn, repo_id, &filter)?);
-        }
-        Ok(Json(ChangeList { changes }))
+        Ok(Json(ChangeList {
+            changes: state.changes_matching(conn, q)?,
+        }))
     })
     .await
 }
@@ -72,7 +68,7 @@ pub(super) async fn list_log(
         let filter = db::ChangeFilter {
             statuses: q.status,
             tags: q.tag.into_iter().collect(),
-            change_id: None,
+            ..db::ChangeFilter::default()
         };
         let entries = review::entries_between(conn, q.repo, &filter, q.after, q.before)?;
         Ok(Json(Log { entries }))

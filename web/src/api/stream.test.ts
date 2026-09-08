@@ -11,8 +11,9 @@ describe("openStream (mock mode)", () => {
     const handle = openStream((m) => {
       got.push(m);
     });
-    // add() is called before the lazy mock import resolves — it must queue.
-    handle.add([30]);
+    // subscribe() is called before the lazy mock import resolves — it must
+    // queue. Change 30 is the only change under its session.
+    handle.subscribe({ query: { repo: 2, tag: ["session-id=ci-cache"] } });
 
     // vi.waitFor keeps its own 1000ms default — testing-library's config
     // doesn't reach it, so size it for load the same way (src/test-setup).

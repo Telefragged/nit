@@ -78,7 +78,7 @@ fn write_wire_types() {
         crate::domain::LifecyclePayload,
         crate::domain::LogPayload,
         crate::domain::LogEntry,
-        crate::events::ClientMessage,
+        crate::events::Subscription,
         crate::events::StreamMessage,
         // The folded projection the server ships over the stream; the web
         // holds it opaque and only round-trips it through the wasm fold.

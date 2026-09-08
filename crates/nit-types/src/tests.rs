@@ -122,11 +122,23 @@ fn side_round_trips_without_clap() {
 }
 
 #[test]
-fn client_msg_subscribe_is_externally_tagged() {
-    use crate::events::ClientMessage;
-    let msg = ClientMessage::SubscribeProjection(vec![ChangeNumber::new(10)]);
+fn subscription_spells_its_query_like_the_change_list() {
+    use crate::changes::ChangeQuery;
+    use crate::domain::Tag;
+    use crate::events::Subscription;
+    let msg = Subscription {
+        query: ChangeQuery {
+            repo: Some(1),
+            tag: vec![Tag::new("branch", "feat").expect("a tag")],
+            ..ChangeQuery::default()
+        },
+        after: Some(3),
+    };
     let json = serde_json::to_string(&msg).expect("serialize");
-    assert_eq!(json, r#"{"subscribe_projection":[10]}"#);
+    assert_eq!(
+        json,
+        r#"{"query":{"repo":1,"tag":["branch=feat"]},"after":3}"#
+    );
 }
 
 #[test]

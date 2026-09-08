@@ -12,6 +12,7 @@ import { ApiError } from "../client";
 import type {
   Anchor,
   ChangeDetail,
+  ChangeQuery,
   ChangeStatus,
   CommentInput,
   NewDraft,
@@ -24,9 +25,8 @@ import type {
   Verdict,
 } from "../types";
 import { placementLine } from "../../lib/comments";
-import { verdictStatus } from "../verdict";
 import { changeDetail as foldDetail } from "../fold";
-import { mockAppend, projection } from "./stream";
+import { mockAppend, picks, projection } from "./stream";
 import { diffKey, sideEnd } from "./builders";
 import { changes, draftReviews, drafts, repos } from "./data";
 import type {
@@ -159,19 +159,6 @@ const latestRevision = (c: ChangeRecord): AuthoredRevision => {
   return r;
 };
 
-/** A change's displayed status at a given revision: terminal wins; else
- * the verdict of the latest review at that revision, falling back to
- * pending. */
-function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
-  if (c.terminal) return c.terminal;
-  const review = c.reviews
-    .filter((r) => r.revision === revision)
-    .sort((a, b) => a.id - b.id)
-    .at(-1);
-  if (!review) return "pending";
-  return verdictStatus[review.verdict];
-}
-
 /** Derive the repo registry (`GET /api/repos`). `open_changes` counts the
  * repo's changes that are neither merged nor abandoned. */
 function repoList(): Repo[] {
@@ -192,29 +179,13 @@ function repoList(): Repo[] {
 /** The fixed merged-history window (mirrors the backend's MERGED_WINDOW). */
 const MERGED_WINDOW = 5;
 
-/** `GET /api/changes`: folded projections of the repo's changes. A change
- * matches when it is at one of the explicit `status` filters (none means
- * all) and carries every `tag` (`key=value`, split at the first `=`). Each
- * one is folded from its synth log through the shared wasm fold — the same
- * source the websocket projections. */
-function listChanges(
-  repoId: number | null,
-  statuses: ChangeStatus[],
-  tags: string[],
-) {
-  const wanted = tags.map((t) => {
-    const at = t.indexOf("=");
-    return [t.slice(0, at), t.slice(at + 1)] as const;
-  });
+/** `GET /api/changes`: the folded projections of the changes `query` picks,
+ * each folded from its synth log through the shared wasm fold — the same
+ * source as the websocket projections. */
+function listChanges(query: ChangeQuery) {
   return {
     changes: changes
-      .filter(
-        (c) =>
-          (repoId === null || c.repo_id === repoId) &&
-          (statuses.length === 0 ||
-            statuses.includes(statusAt(c, latestRevision(c).number))) &&
-          wanted.every(([key, value]) => c.tags?.[key] === value),
-      )
+      .filter((c) => picks(query, c))
       .map((c) => projection(c.id)),
   };
 }
@@ -224,7 +195,7 @@ function listChanges(
  * `GET /api/changes` picks the changes, so the two routes agree. */
 function listTags(repoId: number, statuses: ChangeStatus[]): TagList {
   const tags: Record<string, string[]> = {};
-  for (const p of listChanges(repoId, statuses, []).changes) {
+  for (const p of listChanges({ repo: repoId, status: statuses }).changes) {
     for (const [key, value] of Object.entries(p.tags ?? {})) {
       const values = (tags[key] ??= []);
       if (!values.includes(value)) values.push(value);
@@ -321,6 +292,19 @@ function wholeLines(file: AuthoredFile): Line[] {
   return out;
 }
 
+/** A change query read back from its query string. */
+function changeQuery(q: URLSearchParams): ChangeQuery {
+  const repo = q.get("repo");
+  const change = q.get("change");
+  return {
+    repo: repo === null ? undefined : Number(repo),
+    status: q.getAll("status") as ChangeStatus[],
+    tag: q.getAll("tag"),
+    change: change === null ? undefined : Number(change),
+    change_id: q.get("change_id") ?? undefined,
+  };
+}
+
 const notFound = (what: string): never => {
   throw new ApiError(404, `${what} not found`);
 };
@@ -354,12 +338,7 @@ export async function mockRequest(
   }
 
   if (method === "GET" && p === "/changes") {
-    const repo = q.get("repo");
-    return listChanges(
-      repo === null ? null : Number(repo),
-      q.getAll("status") as ChangeStatus[],
-      q.getAll("tag"),
-    );
+    return listChanges(changeQuery(q));
   }
 
   if (method === "GET" && p === "/history") {
@@ -376,12 +355,7 @@ export async function mockRequest(
   // Batch submit: every draft decision the change query picks, each at the
   // change's latest revision.
   if (method === "POST" && p === "/submit") {
-    const repo = q.get("repo");
-    const picked = listChanges(
-      repo === null ? null : Number(repo),
-      q.getAll("status") as ChangeStatus[],
-      q.getAll("tag"),
-    ).changes;
+    const picked = listChanges(changeQuery(q)).changes;
     const now = new Date().toISOString();
     let submitted = 0;
     const errors: { change_number: number; message: string }[] = [];

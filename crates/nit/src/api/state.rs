@@ -22,8 +22,8 @@ use deadpool_sqlite::Pool;
 use rusqlite::Connection;
 use tokio::sync::watch;
 
+use nit_types::changes::ChangeQuery;
 use nit_types::domain::ChangeNumber;
-use nit_types::domain::Tags;
 use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::error::ApiError;
 
@@ -92,15 +92,14 @@ impl RepoState {
 
 /// One appended entry, as the event channel sends it to followers.
 ///
-/// `repo_id` and `tags` are the change's values right after this entry was
-/// folded. They travel with the entry so a follower can filter without
+/// `change` is the projection right after this entry was folded. It
+/// travels with the entry so a follower can filter and announce without
 /// reading the change, because reading the change takes a lock that an
 /// appender holds across a database commit.
 #[derive(Debug, Clone)]
 pub struct Published {
     pub entry: LogEntry,
-    pub repo_id: u64,
-    pub tags: Tags,
+    pub change: Arc<ChangeProjection>,
 }
 
 /// Per-change coordination.
@@ -319,6 +318,26 @@ impl AppState {
             .clone())
     }
 
+    /// Returns the folds of the changes a query picks, as owned
+    /// projections, ascending by change number within each repo.
+    ///
+    /// # Errors
+    ///
+    /// When enumerating or replaying a change fails.
+    pub fn changes_matching(
+        &self,
+        conn: &Connection,
+        query: ChangeQuery,
+    ) -> anyhow::Result<Vec<ChangeProjection>> {
+        let repo_ids = self.repo_ids_matching(query.repo);
+        let filter = db::ChangeFilter::from(query);
+        let mut changes = Vec::new();
+        for repo_id in repo_ids {
+            changes.extend(self.repo_changes(conn, repo_id, &filter)?);
+        }
+        Ok(changes)
+    }
+
     /// Returns one repo's change folds as owned projections.
     ///
     /// The gather behind the bulk `GET /api/changes` read. `filter`
@@ -487,11 +506,11 @@ pub fn append_to_change_with(
     // channel drops its oldest slot — so this stalls a reader of this change on
     // memory, never on I/O.
     *proj = next;
+    let change = Arc::new(proj.clone());
     for e in &applied {
         state.publish(Published {
             entry: e.clone(),
-            repo_id: proj.repo_id,
-            tags: proj.tags.clone(),
+            change: Arc::clone(&change),
         });
     }
     drop(proj);
