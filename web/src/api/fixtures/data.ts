@@ -28,10 +28,10 @@
 //            B at rev0, tip E (55) walks B at rev1. B's rev0 member shows the
 //            newer-elsewhere badge (a newer revision lives on E's chain);
 //            ChangeDetail.chains lists both tips.
-//   repo 4 (lumen)  two sessions' chains off HEAD, tagged `session`, one
+//   repo 4 (lumen)  two sessions' chains off HEAD, tagged `session-id`, one
 //            session's change stacked on the other's tip, and a change whose
 //            parent nit never registered (a torn push): the graph attaches
-//            it to its fork with a break edge. Grouping by `session` runs
+//            it to its fork with a break edge. Grouping by `session-id` runs
 //            each session's changes together.
 //
 // Every stored diff leads with the synthetic /COMMIT_MSG file, like the
@@ -63,10 +63,10 @@ import type {
 // ---------------------------------------------------------------------------
 // Canonical histories (served by GET /api/history). The merged history below
 // HEAD is synthetic — the mock has no git to walk, like the backend reads
-// from git. Every chain root's parent/base below is a real history sha, so
+// from git. Every stack root's parent/base below is a real history sha, so
 // the derivation resolves the fork like production: repo 1 forks below the
-// window (the collapsed marker), repo 2 has an off-HEAD chain and a 2-behind
-// chain, repo 3 fans out at HEAD. Includes a merge commit and a landed
+// window (the collapsed marker), repo 2 has an off-HEAD stack and a 2-behind
+// stack, repo 3 fans out at HEAD. Includes a merge commit and a landed
 // change's commit (change_id).
 
 const graphHistory: HistNode[] = [
@@ -99,7 +99,7 @@ const graphHistory: HistNode[] = [
 ];
 
 // A deeper history (repo 1): its root sits below a 5-commit window, so the
-// window truncates and a chain can fork below it.
+// window truncates and a stack can fork below it.
 const deepHistory: HistNode[] = [
   ...graphHistory.slice(0, 5),
   {
@@ -167,6 +167,7 @@ const change10: ChangeRecord = {
   repo_id: 1,
   change_id: changeId("I9a41c7e2b3d4f5a6"),
   subject: "auth: add TokenStore schema and config plumbing",
+  tags: { "session-id": "auth-rotation", branch: "feat/auth-rotation" },
   revisions: [
     {
       number: 0,
@@ -179,7 +180,7 @@ const change10: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 1,
+      id: 2,
       revision: 0,
       verdict: "approve",
       message:
@@ -275,6 +276,7 @@ const change11: ChangeRecord = {
   repo_id: 1,
   change_id: changeId("I3f2d8a91c0b7e514"),
   subject: "auth: rotate refresh tokens on use",
+  tags: { "session-id": "auth-rotation", branch: "feat/auth-rotation" },
   revisions: [
     {
       number: 0,
@@ -297,7 +299,7 @@ const change11: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 2,
+      id: 3,
       revision: 0,
       verdict: "request_changes",
       message:
@@ -766,6 +768,7 @@ const change12: ChangeRecord = {
   repo_id: 1,
   change_id: changeId("I77b0e4f5a8123c9d"),
   subject: "auth: document rotation and ship flow diagram",
+  tags: { "session-id": "auth-rotation", branch: "feat/auth-rotation" },
   revisions: [
     {
       number: 0,
@@ -939,6 +942,7 @@ const change20: ChangeRecord = {
   repo_id: 2,
   change_id: changeId("Ib8d3e6f1a4c7529"),
   subject: "wal: checkpoint on idle, not on every commit",
+  tags: { "session-id": "wal-checkpoint", branch: "feat/wal-checkpoint" },
   revisions: [
     {
       number: 0,
@@ -951,7 +955,7 @@ const change20: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 1,
+      id: 2,
       revision: 0,
       verdict: "request_changes",
       message:
@@ -1053,6 +1057,7 @@ const change30: ChangeRecord = {
   repo_id: 2,
   change_id: changeId("Ie1f4a7b2c5d80936"),
   subject: "ci: key caches on lockfile hash only",
+  tags: { "session-id": "ci-cache", branch: "feat/ci-cache" },
   revisions: [
     {
       number: 0,
@@ -1065,7 +1070,7 @@ const change30: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 1,
+      id: 2,
       revision: 0,
       verdict: "approve",
       message: "Nice catch.",
@@ -1153,6 +1158,7 @@ const changeA: ChangeRecord = {
   repo_id: 3,
   change_id: changeId("Iaa11bb22cc33dd44"),
   subject: "orbit: extract the scheduler trait",
+  tags: { "session-id": "orbit-fair", branch: "feat/orbit-fair" },
   revisions: [
     {
       number: 0,
@@ -1165,7 +1171,7 @@ const changeA: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 1,
+      id: 2,
       revision: 0,
       verdict: "approve",
       message: "Clean extraction.",
@@ -1186,6 +1192,7 @@ const changeD: ChangeRecord = {
   repo_id: 3,
   change_id: changeId("Idd44cc33bb22aa11"),
   subject: "orbit: add a deadline clock source",
+  tags: { "session-id": "orbit-deadline", branch: "feat/orbit-deadline" },
   revisions: [
     {
       number: 0,
@@ -1210,6 +1217,7 @@ const changeB: ChangeRecord = {
   repo_id: 3,
   change_id: changeId("Ibb22cc33dd44ee55"),
   subject: "orbit: fair-share scheduler policy",
+  tags: { "session-id": "orbit-fair", branch: "feat/orbit-fair" },
   revisions: [
     {
       number: 0,
@@ -1230,7 +1238,7 @@ const changeB: ChangeRecord = {
   ],
   reviews: [
     {
-      id: 2,
+      id: 3,
       revision: 0,
       verdict: "approve",
       message: "Weighting looks right; LGTM on this revision.",
@@ -1248,6 +1256,7 @@ const changeC: ChangeRecord = {
   repo_id: 3,
   change_id: changeId("Icc33dd44ee55ff66"),
   subject: "orbit: wire the fair policy into the runtime",
+  tags: { "session-id": "orbit-fair", branch: "feat/orbit-fair" },
   revisions: [
     {
       number: 0,
@@ -1273,6 +1282,7 @@ const changeE: ChangeRecord = {
   repo_id: 3,
   change_id: changeId("Iee55ff66aa11bb22"),
   subject: "orbit: deadline policy on top of fair-share",
+  tags: { "session-id": "orbit-deadline", branch: "feat/orbit-deadline" },
   revisions: [
     {
       number: 0,
@@ -1332,7 +1342,7 @@ const changeF: ChangeRecord = {
   repo_id: 4,
   change_id: changeId("If0011aa22bb33cc44"),
   subject: "lumen: parse the manifest lazily",
-  tags: { session: "alpha" },
+  tags: { "session-id": "alpha" },
   revisions: [
     {
       number: 0,
@@ -1354,7 +1364,7 @@ const changeG: ChangeRecord = {
   repo_id: 4,
   change_id: changeId("Ig0022bb33cc44dd55"),
   subject: "lumen: cache parsed manifests across runs",
-  tags: { session: "alpha" },
+  tags: { "session-id": "alpha" },
   revisions: [
     {
       number: 0,
@@ -1376,7 +1386,7 @@ const changeTorn: ChangeRecord = {
   repo_id: 4,
   change_id: changeId("It0033cc44dd55ee66"),
   subject: "lumen: report a manifest cycle by path",
-  tags: { session: "beta" },
+  tags: { "session-id": "beta" },
   revisions: [
     {
       number: 0,
@@ -1398,7 +1408,7 @@ const changeP: ChangeRecord = {
   repo_id: 4,
   change_id: changeId("Ip0044dd55ee66ff77"),
   subject: "lumen: stream large blobs to disk",
-  tags: { session: "beta" },
+  tags: { "session-id": "beta" },
   revisions: [
     {
       number: 0,
@@ -1420,7 +1430,7 @@ const changeQ: ChangeRecord = {
   repo_id: 4,
   change_id: changeId("Iq0055ee66ff778899"),
   subject: "lumen: verify a streamed blob's digest",
-  tags: { session: "beta" },
+  tags: { "session-id": "beta" },
   revisions: [
     {
       number: 0,
@@ -1442,7 +1452,7 @@ const changeR: ChangeRecord = {
   repo_id: 4,
   change_id: changeId("Ir0066ff77889900aa"),
   subject: "lumen: evict cached manifests by age",
-  tags: { session: "beta" },
+  tags: { "session-id": "beta" },
   revisions: [
     {
       number: 0,
@@ -1558,7 +1568,7 @@ export const threads: ThreadRecord[] = [
     comments: [
       {
         body: "Consider a partial index on revoked=0 if the table grows; not blocking.",
-        review_id: 1,
+        review_id: 2,
         created_at: ago(22 * 60),
       },
     ],
@@ -1584,7 +1594,7 @@ export const threads: ThreadRecord[] = [
         body:
           "Locking the RNG mutex inside rotate() serializes every refresh — " +
           "worth a thread-local RNG?",
-        review_id: 2,
+        review_id: 3,
         created_at: ago(21 * 60),
       },
       // The review-markdown-comment scenario captures this body rendered.
@@ -1622,7 +1632,7 @@ export const threads: ThreadRecord[] = [
         body:
           "Why clone the pool for a second connection? lookup() and " +
           "mark_rotated() on different connections lose the transaction.",
-        review_id: 2,
+        review_id: 3,
         created_at: ago(21 * 60),
       },
       {
@@ -1664,7 +1674,7 @@ export const threads: ThreadRecord[] = [
         body:
           "Generate-then-mark isn't atomic: a crash between these two " +
           "statements hands out a token the store never recorded.",
-        review_id: 2,
+        review_id: 3,
         created_at: ago(21 * 60),
       },
     ],
@@ -1691,7 +1701,7 @@ export const threads: ThreadRecord[] = [
         body:
           "This unwrap is a production panic on any unknown token — return a " +
           "typed error and map it to 401 at the edge.",
-        review_id: 2,
+        review_id: 3,
         created_at: ago(21 * 60),
       },
       {
@@ -1732,7 +1742,7 @@ export const threads: ThreadRecord[] = [
         body:
           "The body never says what happens on token *reuse* — state the " +
           "family-revocation behavior here; it's the headline of this change.",
-        review_id: 2,
+        review_id: 3,
         created_at: ago(21 * 60),
       },
       {
@@ -1763,7 +1773,7 @@ export const threads: ThreadRecord[] = [
     comments: [
       {
         body: "Hard-coded 4MiB will thrash small deployments — read it from Config.",
-        review_id: 1,
+        review_id: 2,
         created_at: ago(3 * 60),
       },
     ],
@@ -1786,7 +1796,7 @@ export const threads: ThreadRecord[] = [
     comments: [
       {
         body: "compactor.rs still calls jitter(); this won't build.",
-        review_id: 1,
+        review_id: 2,
         created_at: ago(3 * 60),
       },
     ],
@@ -1813,7 +1823,7 @@ export const threads: ThreadRecord[] = [
         body:
           "Recent-share window: is it EWMA or a fixed ring? Spell it out — it " +
           "decides how fast a task recovers priority.",
-        review_id: 2,
+        review_id: 3,
         created_at: ago(5 * 60),
       },
     ],

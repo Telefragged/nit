@@ -65,29 +65,29 @@ const captures = [
   // The repo dashboard: one change graph centered on main — open
   // changes ascending above the HEAD anchor, merged history descending and
   // fading below it. Repo 2 = quarry: two separate
-  // chains — one off HEAD, one forked two commits behind (the dashed "behind"
+  // stacks — one off HEAD, one forked two commits behind (the dashed "behind"
   // edge) — over a history window that includes a merge commit.
   { name: "dashboard", path: "/repos/2" },
-  // Repo 1: a chain whose base is older than the shown window — its lineage
+  // Repo 1: a stack whose base is older than the shown window — its lineage
   // dangles into the "earlier history hidden" marker the canonical ref descends into.
   // The Activity column carries change 11's drafts and change 12's decision.
   { name: "change-graph-earlier", path: "/repos/1" },
-  // Repo 3: the B-in-two-chains fan-out — a change shared by two tips appears
-  // once, with the lane splitting above it.
+  // Repo 3: one change under two tips appears once, with the lane splitting
+  // above it.
   { name: "change-graph-fanout", path: "/repos/3" },
   // Repo 4: a change whose parent nit never registered. A break mark cuts
-  // its edge to the fork. Two sessions' chains sit beside it, with
+  // its edge to the fork. Two sessions' stacks sit beside it, with
   // interleaved rows.
   { name: "change-graph-break", path: "/repos/4" },
-  // Repo 4 grouped by `session`: each session's changes run together, a
+  // Repo 4 grouped by `session-id`: each session's changes run together, a
   // labelled gap above each run.
-  { name: "change-graph-grouped", path: "/repos/4?group=session" },
-  // Repo 4 narrowed to `session=beta`: the filter excludes the parent of the
+  { name: "change-graph-grouped", path: "/repos/4?group=session-id" },
+  // Repo 4 narrowed to `session-id=beta`: the filter excludes the parent of the
   // change stacked on alpha's tip, so that change breaks to its fork. Beta's
-  // own chain stays whole.
+  // own stack stays whole.
   {
     name: "change-graph-filtered",
-    path: "/repos/4?group=session&value=beta",
+    path: "/repos/4?group=session-id&value=beta",
   },
   // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
   { name: "review-interdiff", path: "/changes/11?against=0" },
@@ -102,21 +102,21 @@ const captures = [
       await page.waitForTimeout(100);
     },
   },
-  // Chain nav expanded (default): the chain's changes stacked under the
-  // file list in the sidebar, the current change highlighted.
+  // Tag nav expanded (default): the changes sharing the selected tag
+  // stacked above the file list in the sidebar, the current one highlighted.
   {
-    name: "review-chain-nav",
+    name: "review-tag-nav",
     path: "/changes/11?against=base",
     fullPage: false,
   },
-  // Chain nav collapsed: the disclosure header alone, the file list above
-  // reclaiming the freed height.
+  // Tag nav collapsed: the header alone, the file list below reclaiming
+  // the freed height.
   {
-    name: "review-chain-collapsed",
+    name: "review-tag-collapsed",
     path: "/changes/11?against=base",
     fullPage: false,
     actions: async (page) => {
-      await page.locator(".chain-nav-title").click();
+      await page.locator(".tag-nav-toggle").click();
       await page.waitForTimeout(100);
     },
   },

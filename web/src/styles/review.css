@@ -171,7 +171,7 @@
   font-weight: 600;
 }
 
-/* layout: sidebar (chain nav + file list) + diff column */
+/* layout: sidebar (tag nav + file list) + diff column */
 
 .review-layout {
   display: flex;
@@ -180,8 +180,8 @@
   gap: 14px;
 }
 
-/* The sidebar is the one sticky, height-bounded column; the chain nav and
-   the file tree stack inside it and split that height. The chain nav leads
+/* The sidebar is the one sticky, height-bounded column; the tag nav and
+   the file tree stack inside it and split that height. The tag nav leads
    at a fixed position (so its rows don't jump when you switch changes) and
    caps its own list; the tree takes what's left below and scrolls — so
    neither can push the other off-screen. */
@@ -255,13 +255,14 @@
   font-weight: 400;
 }
 
-/* chain nav — the chain's changes stacked above the file list (ChainNav.tsx).
-   It leads the sidebar so its rows hold a fixed position as you switch
-   changes; the file list below absorbs the per-change reflow. The disclosure
-   header collapses the list to give the files below more room; the list caps
-   its own height and scrolls, so a long chain can't crowd the files out.
-   Rows echo the file rail's metrics so the two read as one column. */
-.chain-nav {
+/* tag nav — the changes that share a tag, stacked above the file list
+   (TagNav.tsx). It leads the sidebar so its rows hold a fixed position as
+   you switch changes; the file list below absorbs the per-change reflow.
+   The disclosure collapses the list to give the files below more room; the
+   list caps its own height and scrolls, so a long list can't crowd the
+   files out. Rows echo the file rail's metrics so the two read as one
+   column. */
+.tag-nav {
   flex: none;
   padding-bottom: 4px;
   margin-bottom: 8px;
@@ -270,40 +271,44 @@
   flex-direction: column;
 }
 
-.chain-nav-title {
+.tag-nav-title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   padding: 2px 8px 6px;
-  background: none;
-  border: none;
   font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
   color: var(--text-faint);
 }
 
-.chain-nav-title:hover:not(:disabled) {
+.tag-nav-toggle {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.tag-nav-toggle:hover:not(:disabled) {
   background: none;
   color: var(--text-dim);
 }
 
-.chain-nav-title .fchevron {
-  font-size: 9px;
+.tag-nav-title .revision-select {
+  flex: 1;
+  min-width: 0;
 }
 
-.chain-nav-pos {
+.tag-nav-pos {
   margin-left: auto;
   letter-spacing: 0;
 }
 
-.chain-nav-list {
+.tag-nav-list {
   max-height: 33vh;
   overflow-y: auto;
 }
 
-.chain-nav-row {
+.tag-nav-row {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -313,31 +318,31 @@
   color: var(--text-dim);
 }
 
-.chain-nav-row:hover {
+.tag-nav-row:hover {
   background: var(--bg-hover);
   color: var(--text);
   text-decoration: none;
 }
 
-.chain-nav-row.current {
+.tag-nav-row.current {
   background: var(--blue-dim);
   color: var(--text);
 }
 
-.chain-nav-row .pos {
+.tag-nav-row .pos {
   width: 12px;
   flex: none;
   text-align: right;
 }
 
-.chain-nav-row .subj {
+.tag-nav-row .subj {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chain-nav-row .unresolved-count {
+.tag-nav-row .unresolved-count {
   flex: none;
   font-size: 10.5px;
   color: var(--amber);

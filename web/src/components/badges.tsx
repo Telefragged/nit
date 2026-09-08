@@ -3,23 +3,6 @@ import type { ChangeStatus } from "../api/types";
 // Color discipline: amber = needs reviewer, blue = author
 // working, green = approved/ready, red = changes requested, gray = inert.
 
-export function NewerElsewhereBadge({
-  revision,
-  latest,
-}: {
-  revision: number;
-  latest: number;
-}) {
-  return (
-    <span
-      className="badge badge-gray"
-      title={`A newer revision (r${latest}) of this change lives on another chain; this chain pins r${revision}`}
-    >
-      NEWER ELSEWHERE
-    </span>
-  );
-}
-
 const STATUS_LABEL: Record<ChangeStatus, string> = {
   pending: "PENDING",
   approved: "APPROVED",

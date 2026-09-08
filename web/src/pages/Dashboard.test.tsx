@@ -58,14 +58,14 @@ describe("repo dashboard change graph", () => {
   });
 
   it("groups by the tag key the URL names, labelling each run", async () => {
-    renderDashboard(4, "?group=session");
+    renderDashboard(4, "?group=session-id");
     const alpha = await screen.findByText("alpha", {
       selector: ".graph-gap-label",
     });
     const beta = screen.getByText("beta", { selector: ".graph-gap-label" });
     expect(screen.getByLabelText("Group by")).toHaveProperty(
       "value",
-      "session",
+      "session-id",
     );
     // Beta's run sits above alpha's run. The change stacked on alpha's tip
     // is the first row of beta's run.
@@ -75,7 +75,7 @@ describe("repo dashboard change graph", () => {
   });
 
   it("keeps only the changes carrying the value the URL names", async () => {
-    renderDashboard(4, "?group=session&value=beta");
+    renderDashboard(4, "?group=session-id&value=beta");
     await screen.findByText("lumen: evict cached manifests by age");
     expect(screen.getByLabelText("Only")).toHaveProperty("value", "beta");
     expect(screen.queryByText("lumen: parse the manifest lazily")).toBeNull();
@@ -86,23 +86,25 @@ describe("repo dashboard change graph", () => {
 
   it("offers the tag keys the repo's changes carry", async () => {
     renderDashboard(4);
-    expect(await screen.findByRole("option", { name: "session" })).toBeTruthy();
+    expect(
+      await screen.findByRole("option", { name: "session-id" }),
+    ).toBeTruthy();
   });
 
   it("restores the last grouping and clears the filter", async () => {
-    localStorage.setItem("nit.graph-group.4", "session");
+    localStorage.setItem("nit.graph-group.4", "session-id");
     renderDashboard(4, "?value=beta");
 
     await screen.findByText("alpha", { selector: ".graph-gap-label" });
     expect(screen.getByLabelText("Group by")).toHaveProperty(
       "value",
-      "session",
+      "session-id",
     );
     expect(screen.getByLabelText("Only")).toHaveProperty("value", "");
   });
 
   it("groups by the URL's key, not the remembered one", async () => {
-    localStorage.setItem("nit.graph-group.4", "session");
+    localStorage.setItem("nit.graph-group.4", "session-id");
     renderDashboard(4, "?group=none-such");
 
     await screen.findByText("lumen: parse the manifest lazily");
@@ -114,14 +116,14 @@ describe("repo dashboard change graph", () => {
 
   it("remembers the grouping per repo", async () => {
     renderDashboard(4);
-    // The selector offers `session` once the repo's tags arrive.
-    await screen.findByRole("option", { name: "session" });
+    // The selector offers `session-id` once the repo's tags arrive.
+    await screen.findByRole("option", { name: "session-id" });
     fireEvent.change(screen.getByLabelText("Group by"), {
-      target: { value: "session" },
+      target: { value: "session-id" },
     });
 
     await screen.findByText("alpha", { selector: ".graph-gap-label" });
-    expect(localStorage.getItem("nit.graph-group.4")).toBe("session");
+    expect(localStorage.getItem("nit.graph-group.4")).toBe("session-id");
     expect(localStorage.getItem("nit.graph-group.1")).toBeNull();
   });
 });

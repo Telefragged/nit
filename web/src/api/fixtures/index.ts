@@ -548,7 +548,7 @@ export async function mockRequest(
     const c = getChange(Number(m[1]));
     const number = Number(m[2]);
     const against = q.has("against") ? Number(q.get("against")) : undefined;
-    const revision = c.revisions.find((r) => r.number === number);
+    const revision = c.revisions[number];
     if (!revision) notFound(`revision ${number}`);
     const diff = c.diffs[diffKey(number, against)];
     if (!diff) return notFound(`diff for revision ${number}`);

@@ -15,17 +15,24 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { createDraft, getChain, getDiff, getRepo } from "../api/client";
+import {
+  createDraft,
+  getChain,
+  getChanges,
+  getDiff,
+  getRepo,
+} from "../api/client";
 import type {
   ChangeDetail,
   Decision,
   DiffMode,
   Review,
   Revision,
+  Tags,
 } from "../api/types";
 import { verdictStatus } from "../api/verdict";
 import { StatusChip } from "../components/badges";
-import ChainNav from "../components/ChainNav";
+import TagNav from "../components/TagNav";
 import CommentEditor from "../components/CommentEditor";
 import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
@@ -73,6 +80,23 @@ const LAYOUT_KEY = "nit.diff-layout";
 type Layout = "unified" | "split";
 
 const MODE_KEY = "nit.diff-mode";
+const TAG_KEY = "nit.review-tag";
+
+/** The tag the sidebar follows: the reviewer's last key when the change
+ * carries it, else `session-id`, else the first key. Null only when the
+ * change carries no tag. */
+function selectTag(
+  tags: Tags,
+  preferred: string | null,
+): [string, string] | null {
+  const entries = Object.entries(tags);
+  return (
+    entries.find(([key]) => key === preferred) ??
+    entries.find(([key]) => key === "session-id") ??
+    entries[0] ??
+    null
+  );
+}
 
 /** Why `c` drafted nothing — each names the rule the selection broke and
  * the selection that satisfies it. */
@@ -299,23 +323,49 @@ export default function ReviewPage() {
   const defaultRev =
     pinnedRev?.changeNumber === changeNumber ? pinnedRev.revision : undefined;
 
-  const selectedRev =
-    revisions.find((r) => r.number === (revisionParam ?? defaultRev)) ?? latest;
+  // A revision number is its index.
+  const selectedRev = revisions[revisionParam ?? defaultRev ?? -1] ?? latest;
   const selected = selectedRev?.number ?? 1;
   const latestRevision = latest?.number ?? 1;
 
-  // The chain context is the derived chain through this change rooted at the
-  // viewed revision — the path that pins `selected`. Fetched with the revision
-  // so switching revisions re-roots onto that revision's chain.
+  // The chain rooted at the viewed revision, for the review bar's submit.
   const chainQ = useQuery({
     queryKey: ["chain", changeNumber, selected],
     queryFn: published ? () => getChain(changeNumber, selected) : skipToken,
   });
-  const memberIds = (chainQ.data?.path ?? []).map((m) => m.change_number);
 
-  // Subscribe to the change and every chain member: each projection + live fold is
-  // written into the ["change", id] cache the queries above read. The drafts
-  // overlay rides a separate ["drafts", id] read; `change` composes the two.
+  // The sidebar lists every change that carries the same value as this one
+  // for the selected tag key. The key the reviewer picked last is kept per
+  // browser, so it follows them between changes as long as each carries it.
+  const [preferredKey, setPreferredKey] = useState(() =>
+    localStorage.getItem(TAG_KEY),
+  );
+  const chooseTagKey = useCallback((key: string) => {
+    setPreferredKey(key);
+    localStorage.setItem(TAG_KEY, key);
+  }, []);
+  const tags = published?.tags ?? {};
+  const selectedTag = selectTag(tags, preferredKey);
+  const tag =
+    selectedTag === null ? undefined : `${selectedTag[0]}=${selectedTag[1]}`;
+  const membersQ = useQuery({
+    queryKey: ["changes", published?.repo_id, tag],
+    queryFn:
+      published && tag !== undefined
+        ? () => getChanges(published.repo_id, [], tag)
+        : skipToken,
+  });
+  // The listed change numbers, ascending; the stream below supplies each
+  // one's detail.
+  const memberIds = useMemo(
+    () => (membersQ.data?.changes ?? []).map((c) => c.id).sort((a, b) => a - b),
+    [membersQ.data],
+  );
+
+  // Subscribe to the change and every listed member: each projection + live
+  // fold is written into the ["change", id] cache the queries above read. The
+  // drafts overlay rides a separate ["drafts", id] read; `change` composes
+  // the two.
   useChangeStream([changeNumber, ...memberIds]);
   const draftsMap = useDrafts([changeNumber, ...memberIds]);
   const overlay = draftsMap.get(changeNumber);
@@ -342,23 +392,24 @@ export default function ReviewPage() {
     }
   }, [revisionParam, defaultRev, updateParams]);
 
-  // Each chain member's published projection comes from the ["change", id]
-  // cache the stream keeps live (ChainNav reads each member's
-  // unresolved/latest-revision); its draft decision comes from the member's
-  // drafts overlay, for the review bar's chain-wide "Submit (k)" count + nav.
+  // Each member's published projection comes from the ["change", id] cache
+  // the stream keeps live (TagNav reads each member's status and unresolved
+  // count); its draft decision comes from the member's drafts overlay, for
+  // the review bar's chain-wide "Submit (k)" count.
   const memberQueries = useQueries({
     queries: memberIds.map((id) => ({
       queryKey: ["change", id],
       queryFn: skipToken,
     })),
   });
-  const memberDetails = new Map<number, ChangeDetail>();
-  memberIds.forEach((id, i) => {
-    // A skipToken-only query never infers its data type; the cache rows are
-    // written as ChangeDetail by useChangeStream.
-    const detail = memberQueries[i]?.data as ChangeDetail | undefined;
-    if (detail) memberDetails.set(id, detail);
-  });
+  // A skipToken-only query never infers its data type; the cache rows are
+  // written as ChangeDetail by useChangeStream. A row renders once its
+  // member's projection has arrived.
+  const members = useMemo(
+    () =>
+      memberQueries.flatMap((q) => (q.data ? [q.data as ChangeDetail] : [])),
+    [memberQueries],
+  );
   const memberDecisions = new Map<number, Decision | null>();
   draftsMap.forEach((d, id) => {
     memberDecisions.set(id, d.draft_decision?.decision ?? null);
@@ -526,7 +577,6 @@ export default function ReviewPage() {
   );
 
   const navigate = useNavigate();
-  const chainPath = chainQ.data?.path;
   const fileCount = files.length;
 
   const createChangeComment = useMutation({
@@ -559,13 +609,10 @@ export default function ReviewPage() {
         );
         revealFile(next);
       } else if (key === "n" || key === "shift+n") {
-        if (!chainPath) return;
-        const position = chainPath.findIndex(
-          (c) => c.change_number === changeNumber,
-        );
+        const position = memberIds.indexOf(changeNumber);
         if (position < 0) return;
-        const next = chainPath[position + (key === "n" ? 1 : -1)];
-        if (next) void navigate(`/changes/${next.change_number}`);
+        const next = memberIds[position + (key === "n" ? 1 : -1)];
+        if (next !== undefined) void navigate(`/changes/${next}`);
       } else if (key === "r") {
         // Guarded, because switchRange asks the reviewer to discard an open
         // comment editor — the latest revision is where they already are.
@@ -611,7 +658,7 @@ export default function ReviewPage() {
     fileCount,
     activeFile,
     revealFile,
-    chainPath,
+    memberIds,
     changeNumber,
     navigate,
     replyOpen,
@@ -746,8 +793,6 @@ export default function ReviewPage() {
 
   const chain = chainQ.data;
   const repo = repoQ.data;
-  // Position for this change is on the path entry, not on ChangeDetail.
-  const here = chain?.path.find((c) => c.change_number === change.id);
   const allFilesExpanded = allExpanded(expanded, files);
 
   const changeLevelThreads = threads.filter(
@@ -771,10 +816,7 @@ export default function ReviewPage() {
               {repo ? repoPath(repo.git_dir) : `repo ${change.repo_id}`}
             </Link>
             <span className="sep">/</span>
-            <span className="dim">
-              change {here ? here.position + 1 : "—"}
-              {chain ? ` of ${chain.path.length}` : ""}
-            </span>
+            <span className="dim">change {change.id}</span>
             <span className="sep">·</span>
             <span className="mono dim" title={change.change_id}>
               {change.change_id.slice(0, 12)}
@@ -874,10 +916,12 @@ export default function ReviewPage() {
 
         <div className="review-layout">
           <aside className="review-sidebar">
-            <ChainNav
-              chain={chain}
+            <TagNav
+              tags={tags}
+              selectedKey={selectedTag?.[0] ?? null}
+              onSelectKey={chooseTagKey}
+              members={members}
               currentId={changeNumber}
-              memberDetails={memberDetails}
             />
             <FileRail
               files={files}

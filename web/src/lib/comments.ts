@@ -220,7 +220,7 @@ export function commentCountLabel(n: number): string {
 }
 
 /** A change's published activity at one revision: the comment/draft/unresolved
- * counts an aggregate row (a graph node, a chain-nav member) shows. Recomputed
+ * counts an aggregate row (a graph node, a tag-nav row) shows. Recomputed
  * client-side from a change's threads + drafts so those aggregate rows need not
  * denormalize it — the mirror of the server's `change_counts` /
  * `unresolved_at`, pinned to `revision`. */
