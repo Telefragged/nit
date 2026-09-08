@@ -6,8 +6,8 @@ mod common;
 use std::time::Duration;
 
 use common::{
-    GitRepo, TestServer, change_by_label, first_repo_id, get_changes, http_get, msg, nit,
-    nit_register, nit_spawn, review,
+    GitRepo, TestServer, change_by_label, first_repo_id, get_changes, msg, nit, nit_register,
+    nit_spawn, repo_log, review,
 };
 
 /// Registers the repo (a push needs one to exist), bare-pushes the cwd HEAD,
@@ -22,15 +22,11 @@ fn push_head(server: &TestServer, g: &GitRepo) -> u64 {
 
 /// The highest sequence the repo's log holds.
 fn head_sequence(server: &TestServer) -> u64 {
-    let repo_id = first_repo_id(server);
-    let (_, log) = http_get(&server.url(&format!("/api/log?repo={repo_id}")));
-    log["entries"]
-        .as_array()
-        .unwrap()
+    repo_log(server)
         .iter()
         .filter_map(|e| e["sequence"].as_u64())
         .max()
-        .unwrap()
+        .expect("a pushed change has a log")
 }
 
 /// Long enough for a spawned `--wait` to read the log and open its socket

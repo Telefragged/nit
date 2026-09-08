@@ -669,7 +669,6 @@ export type LogEntry = {
  * A client → server websocket message. Externally tagged, `snake_case`.
  */
 export type ClientMessage =
-  | { subscribe: { [key in string]: number } }
   | { subscribe_projection: Array<ChangeNumber> }
   | {
       subscribe_tagged: {

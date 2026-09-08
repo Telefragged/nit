@@ -817,38 +817,20 @@ pub fn log_between(
     Ok(rows)
 }
 
-/// One change's entries in `[from, to)`, position-ascending.
-///
-/// `to = None` means through head.
+/// One change's entries, position-ascending.
 ///
 /// # Errors
 ///
 /// On a database failure.
-pub fn log_entries(
-    conn: &Connection,
-    change_number: ChangeNumber,
-    from: u64,
-    to: Option<u64>,
-) -> Result<Vec<LogRow>> {
+pub fn log_entries(conn: &Connection, change_number: ChangeNumber) -> Result<Vec<LogRow>> {
     let change_number = i64::try_from(change_number.get())?;
-    let from = i64::try_from(from)?;
-    // Omit the upper bound entirely rather than fake one with a sentinel.
-    let rows = match to {
-        Some(to) => conn
-            .prepare(
-                "SELECT sequence, position, kind, payload, created_at FROM log
-                 WHERE change_number = ?1 AND position >= ?2 AND position < ?3 ORDER BY position",
-            )?
-            .query_map(params![change_number, from, i64::try_from(to)?], map_log)?
-            .collect::<rusqlite::Result<Vec<_>>>()?,
-        None => conn
-            .prepare(
-                "SELECT sequence, position, kind, payload, created_at FROM log
-                 WHERE change_number = ?1 AND position >= ?2 ORDER BY position",
-            )?
-            .query_map(params![change_number, from], map_log)?
-            .collect::<rusqlite::Result<Vec<_>>>()?,
-    };
+    let rows = conn
+        .prepare(
+            "SELECT sequence, position, kind, payload, created_at FROM log
+             WHERE change_number = ?1 ORDER BY position",
+        )?
+        .query_map(params![change_number], map_log)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -1478,13 +1460,11 @@ mod tests {
         .expect("append");
         assert!(s1 > s0, "sequence is monotone");
         assert_eq!(log_head(&conn, c).expect("head"), 2);
-        let entries = log_entries(&conn, c, 0, None).expect("entries");
+        let entries = log_entries(&conn, c).expect("entries");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].kind, "revision");
         assert_eq!(entries[1].position, 1);
-        let tail = log_entries(&conn, c, 1, None).expect("tail");
-        assert_eq!(tail.len(), 1);
-        assert_eq!(tail[0].kind, "comment");
+        assert_eq!(entries[1].kind, "comment");
     }
 
     #[test]

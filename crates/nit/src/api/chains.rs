@@ -11,11 +11,9 @@ use nit_types::chains::ChainList;
 use nit_types::domain::Chain;
 use nit_types::domain::ChangeNumber;
 use nit_types::graph::{HistoryCommit, RepoHistory};
-use nit_types::log::Log;
 
 use crate::db;
 use crate::gitscan;
-use crate::review;
 
 use super::views;
 use super::{AppPath, AppQuery, AppState, Error, with_conn};
@@ -110,27 +108,6 @@ pub(super) async fn get_chain(
     with_conn(state.pool(), move |conn| {
         let (view, repo_id, tip_sha) = chain_context(&state, conn, change_number, q.revision)?;
         Ok(Json(views::build_chain(&view, repo_id, &tip_sha)))
-    })
-    .await
-}
-
-/// The aggregated chain log: every member's entries, sorted by global `sequence`.
-pub(super) async fn chain_log(
-    State(state): State<Arc<AppState>>,
-    AppPath(change_number): AppPath<ChangeNumber>,
-    AppQuery(q): AppQuery<ChainQuery>,
-) -> Result<Json<Log>, Error> {
-    with_conn(state.pool(), move |conn| {
-        let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_number, q.revision)?;
-        let path = view.path_from_tip(&tip_sha);
-        let mut entries = Vec::new();
-        for member in &path {
-            for row in db::log_entries(conn, member.change_number, 0, None)? {
-                entries.push(review::entry_from_row(member.change_number, &row)?);
-            }
-        }
-        entries.sort_by_key(|e| e.sequence);
-        Ok(Json(Log { entries }))
     })
     .await
 }

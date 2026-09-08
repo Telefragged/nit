@@ -310,7 +310,7 @@ impl AppState {
     /// Replays `row`'s log into the map, or returns what a concurrent
     /// resolve of the same change already put there.
     fn resolve(&self, conn: &Connection, row: &db::ChangeRow) -> anyhow::Result<Arc<ChangeEntry>> {
-        let entries = db::log_entries(conn, row.id, 0, None)?;
+        let entries = db::log_entries(conn, row.id)?;
         let entry = Arc::new(ChangeEntry::new(review::replay_rows(row, &entries)?));
         Ok(self
             .changes

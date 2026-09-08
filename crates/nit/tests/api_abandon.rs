@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push, status_at};
+use common::{GitRepo, TestServer, http_post, member_id, msg, push, repo_log, status_at};
 use serde_json::json;
 
 #[test]
@@ -32,10 +32,8 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
         Some("abandoned")
     );
 
-    let (_, log) = http_get(&server.url(&format!("/api/chains/{change_number}/log")));
-    let abandoned = log["entries"]
-        .as_array()
-        .expect("entries")
+    let log = repo_log(&server);
+    let abandoned = log
         .iter()
         .find(|e| e["kind"] == "lifecycle" && e["payload"]["action"] == "abandoned")
         .expect("a lifecycle{abandoned} entry");

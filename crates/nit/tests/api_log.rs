@@ -1,6 +1,5 @@
-//! The log over real HTTP. `GET /api/chains/{change_number}/log` merges
-//! every member's entries, and `GET /api/log` the entries of every change
-//! a filter matches, both sorted by ascending global `sequence`.
+//! The log over real HTTP. `GET /api/log` reads the entries of every
+//! change a filter matches, sorted by ascending global `sequence`.
 
 mod common;
 
@@ -18,82 +17,6 @@ fn seqs(resp: &Value) -> Vec<u64> {
 
 fn entries(resp: &Value) -> &Vec<Value> {
     resp["entries"].as_array().unwrap()
-}
-
-#[test]
-fn chain_log_aggregates_members_in_seq_order() {
-    // m → A → B: two changes in one chain. A comment lands on A *between* the
-    // two pushes, so the aggregated chain log must interleave it by global
-    // `sequence`, not group by member.
-    let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("core: A", "Ia"), &[("a.txt", "a\n")]);
-    g.branch("feat", a);
-
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-
-    // This push contributes the A.revision entry.
-    let (st, res) = push(&server, &g, "feat", "main");
-    assert_eq!(st, 200, "{res}");
-    let a_id = member_id(&res, "Ia");
-
-    // An author comment on A (sequence: A.comment) — written before B exists, so it
-    // must sort before B's revision in the merged timeline.
-    let (st, _) = http_post(
-        &server.url(&format!("/api/changes/{a_id}/comments")),
-        &serde_json::json!({"revision": 0, "body": "note on A"}),
-    );
-    assert_eq!(st, 200);
-
-    // This push contributes the B.revision entry.
-    let b = g.commit(&[a], &msg("core: B", "Ib"), &[("b.txt", "b\n")]);
-    g.branch("feat", b);
-    let (st, res) = push(&server, &g, "feat", "main");
-    assert_eq!(st, 200, "{res}");
-    let b_id = member_id(&res, "Ib");
-    assert_ne!(a_id, b_id);
-
-    let (st, log) = http_get(&server.url(&format!("/api/chains/{b_id}/log")));
-    assert_eq!(st, 200, "{log}");
-
-    let sequence = seqs(&log);
-    assert_eq!(sequence.len(), 3, "{log}");
-    assert!(
-        sequence.windows(2).all(|w| w[0] < w[1]),
-        "sequence strictly ascending"
-    );
-
-    let got: Vec<(u64, &str)> = entries(&log)
-        .iter()
-        .map(|e| {
-            (
-                e["change_number"].as_u64().unwrap(),
-                e["kind"].as_str().unwrap(),
-            )
-        })
-        .collect();
-    assert_eq!(
-        got,
-        vec![(a_id, "revision"), (a_id, "comment"), (b_id, "revision")],
-        "A's two entries precede B's, interleaved by write order"
-    );
-
-    // The comment opened a new thread, so the append minted its id (0) and
-    // stamped it into the stored payload — readers need no replay to name it.
-    let comment = entries(&log)
-        .iter()
-        .find(|e| e["kind"] == "comment")
-        .expect("the comment entry");
-    assert_eq!(
-        comment["payload"]["thread_id"],
-        serde_json::json!(0),
-        "the comment names its minted thread in the payload"
-    );
-
-    // Querying the same chain by its base member's id walks the same tip and
-    // yields the identical aggregate (the chain is tip-rooted either way).
-    let (st, from_a) = http_get(&server.url(&format!("/api/chains/{a_id}/log")));
-    assert_eq!(st, 200, "{from_a}");
-    assert_eq!(seqs(&from_a), sequence);
 }
 
 /// Two changes on separate branches, one tagged. The read returns every
@@ -142,6 +65,13 @@ fn log_by_tag_reads_the_matched_changes_past_a_cursor() {
         vec![(a_id, "revision"), (a_id, "comment"), (a_id, "tags")],
         "only the tagged change, every entry it has, in sequence order"
     );
+    // The comment opened a new thread, so the append minted its id (0) and
+    // stamped it into the stored payload — readers need no replay to name it.
+    assert_eq!(
+        entries(&tagged)[1]["payload"]["thread_id"],
+        json!(0),
+        "the comment names its minted thread in the payload"
+    );
 
     let whole_repo = read("");
     assert_eq!(seqs(&whole_repo).len(), 4, "{whole_repo}");
@@ -158,12 +88,4 @@ fn log_by_tag_reads_the_matched_changes_past_a_cursor() {
     assert_eq!(st, 400, "the repo is required: {body}");
     let (st, body) = http_get(&server.url("/api/log?repo=1&tag=branch"));
     assert_eq!(st, 400, "a tag is spelled key=value: {body}");
-}
-
-#[test]
-fn chain_log_unknown_change_is_404() {
-    let g = GitRepo::new();
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, _) = http_get(&server.url("/api/chains/999/log"));
-    assert_eq!(st, 404);
 }

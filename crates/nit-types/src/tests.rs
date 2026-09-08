@@ -124,10 +124,9 @@ fn side_round_trips_without_clap() {
 #[test]
 fn client_msg_subscribe_is_externally_tagged() {
     use crate::events::ClientMessage;
-    use std::collections::HashMap;
-    let map = HashMap::from([("10".to_string(), 5u64)]);
-    let json = serde_json::to_string(&ClientMessage::Subscribe(map)).expect("serialize");
-    assert_eq!(json, r#"{"subscribe":{"10":5}}"#);
+    let msg = ClientMessage::SubscribeProjection(vec![ChangeNumber::new(10)]);
+    let json = serde_json::to_string(&msg).expect("serialize");
+    assert_eq!(json, r#"{"subscribe_projection":[10]}"#);
 }
 
 #[test]

@@ -99,8 +99,8 @@ impl TagWatch {
 /// Drives one follower's socket.
 ///
 /// It holds one receiver on the server's event channel for its whole life,
-/// so every subscribe is armed before it reads its backlog (a `[from, head)`
-/// replay, a `ChangeProjection`, or the log past a sequence). An entry
+/// so every subscribe is armed before it reads its backlog (a
+/// `ChangeProjection`, or the log past a sequence). An entry
 /// written during that read arrives twice, once in the read and once on
 /// the channel, and the watermark drops the second copy. An overflowed
 /// receiver closes the socket — the client reconnects and re-reads the
@@ -155,18 +155,6 @@ async fn apply_client_msg(
     client: ClientMessage,
 ) -> Result<(), ()> {
     match client {
-        ClientMessage::Subscribe(map) => {
-            let cursors = map
-                .iter()
-                .filter_map(|(id, from)| Some((id.parse::<ChangeNumber>().ok()?, *from)))
-                .collect();
-            for (change_number, next, backlog) in read_backlogs(state, cursors).await {
-                following.follow_change(change_number, next);
-                for e in backlog {
-                    send(socket, &StreamMessage::Entry(e)).await?;
-                }
-            }
-        }
         ClientMessage::SubscribeProjection(ids) => {
             for (change_number, proj) in read_projections(state, ids).await {
                 // The projection's `entries_folded` is the high-water mark, so an
@@ -195,39 +183,6 @@ async fn send(socket: &mut WebSocket, msg: &StreamMessage) -> Result<(), ()> {
         .send(Message::Text(text.into()))
         .await
         .map_err(|_| ())
-}
-
-/// Each cursor's log slice `[from, head)` as tagged entries.
-///
-/// With the position that slice ends at, read over one borrowed connection — a
-/// subscribe carries a whole chain, so the frames it answers with are sent
-/// after the read rather than between two of them. A change left out of the
-/// result is left unsubscribed: it does not exist, or the read failed and
-/// the follower re-reads on reconnect.
-async fn read_backlogs(
-    state: &Arc<AppState>,
-    cursors: Vec<(ChangeNumber, u64)>,
-) -> Vec<(ChangeNumber, u64, Vec<LogEntry>)> {
-    with_conn(state.pool(), move |conn| {
-        let mut out = Vec::with_capacity(cursors.len());
-        for (change_number, from) in cursors {
-            // Existence is a row read: cursor mode replays the log itself and
-            // never touches the fold.
-            if db::get_change(conn, change_number)?.is_none() {
-                continue;
-            }
-            let rows = db::log_entries(conn, change_number, from, None)?;
-            let entries = rows
-                .iter()
-                .map(|r| review::entry_from_row(change_number, r))
-                .collect::<anyhow::Result<Vec<_>>>()?;
-            let next = entries.last().map_or(from, |e| e.position + 1);
-            out.push((change_number, next, entries));
-        }
-        Ok(out)
-    })
-    .await
-    .unwrap_or_default()
 }
 
 /// The stored entries with `sequence > after` of every change in `repo`

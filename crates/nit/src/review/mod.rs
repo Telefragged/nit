@@ -7,7 +7,7 @@
 //! module adds the two things that must **not** follow it to the browser: the
 //! storage boundary (`payload_to_json`/`payload_from_json`, the
 //! `log.payload` column split) and the row adapters that build wire
-//! [`LogEntry`]s from `db` rows ([`entry_from_row`]/[`replay_rows`]).
+//! [`LogEntry`]s from `db` rows (`entry_from_row`/[`replay_rows`]).
 
 use anyhow::{Result, anyhow};
 
@@ -87,7 +87,7 @@ pub fn entries_between(
 /// # Errors
 ///
 /// When the stored `kind` is unknown or the payload is not valid JSON.
-pub fn entry_from_row(change_number: ChangeNumber, row: &db::LogRow) -> Result<LogEntry> {
+fn entry_from_row(change_number: ChangeNumber, row: &db::LogRow) -> Result<LogEntry> {
     let kind: LogKind = row
         .kind
         .parse()

@@ -6,7 +6,7 @@ mod common;
 
 use common::{
     GitRepo, TestServer, a_change, abandon, change_id, change_ids, change_tags, first_repo_id,
-    get_changes, http_get, msg, push, tag_change,
+    get_changes, http_get, msg, push, repo_log, tag_change,
 };
 use serde_json::{Value, json};
 
@@ -97,11 +97,12 @@ fn tags_that_move_no_key_append_nothing() {
     );
 }
 
-/// How many entries the change's chain log holds.
+/// How many entries the change's log holds.
 fn log_len(server: &TestServer, change_number: u64) -> usize {
-    let (st, log) = http_get(&server.url(&format!("/api/chains/{change_number}/log")));
-    assert_eq!(st, 200, "{log}");
-    log["entries"].as_array().expect("entries").len()
+    repo_log(server)
+        .iter()
+        .filter(|e| e["change_number"] == change_number)
+        .count()
 }
 
 // A change nobody has heard of takes no tags.

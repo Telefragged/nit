@@ -1,10 +1,8 @@
 //! Websocket messages over `WS /api/stream`.
 //!
-//! The client picks one of three subscribe modes; the server answers with
+//! The client picks one of two subscribe modes; the server answers with
 //! [`StreamMessage`] frames — a `ChangeProjection` (projection mode) and/or
 //! live log entries.
-
-use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -18,18 +16,11 @@ use crate::domain::Tags;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum ClientMessage {
-    /// Cursor replay (the CLI follower): `change_number` → from-position.
-    ///
-    /// The server replays each change's `[from, head)` backlog, then
-    /// streams live. Integer map keys can't survive serde's tagged-enum
-    /// content buffering, so the numbers are `String`.
-    Subscribe(HashMap<String, u64>),
     /// Projection mode (the web change page).
     ///
     /// For each change number the server folds a [`ChangeProjection`] projection and
     /// ships it, then attaches the live tail past the projection's
-    /// high-water mark. A `Vec` has no map keys, so the numbers stay
-    /// `u64` (unlike `Subscribe`).
+    /// high-water mark.
     SubscribeProjection(Vec<ChangeNumber>),
     /// Tag mode (the CLI follower): every change in `repo` that has `tags`.
     ///

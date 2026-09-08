@@ -499,15 +499,6 @@ export async function mockRequest(
     return { chains: listed.map(chainView) };
   }
 
-  // The aggregated chain log is not in this cut (events return later); serve
-  // an empty timeline so the endpoint exists.
-  if ((m = /^\/chains\/(\d+)\/log$/.exec(p)) && method === "GET") {
-    const id = Number(m[1]);
-    if (!tips.some((t) => t.tip_change_number === id))
-      return notFound(`chain ${id}`);
-    return { entries: [] };
-  }
-
   if ((m = /^\/chains\/(\d+)$/.exec(p)) && method === "GET") {
     const id = Number(m[1]);
     const revision = q.has("revision") ? Number(q.get("revision")) : undefined;

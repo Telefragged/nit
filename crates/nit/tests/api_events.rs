@@ -1,5 +1,5 @@
-//! `WS /api/stream`: backlog replay, the position watermark, and live
-//! streaming.
+//! `WS /api/stream`: the projection watermark, the tag subscription, and
+//! live streaming.
 
 mod common;
 
@@ -7,40 +7,11 @@ use std::time::Duration;
 
 use common::{
     GitRepo, TestServer, first_repo_id, member_id, msg, push, review, tag_change, ws_entry,
-    ws_read, ws_subscribe, ws_subscribe_projection, ws_subscribe_tagged,
+    ws_read, ws_subscribe_projection, ws_subscribe_tagged,
 };
 use serde_json::json;
 
 const READ: Duration = Duration::from_secs(3);
-
-/// At position 0 replays full backlog; `sequence` is monotone across the replay/live boundary.
-#[test]
-fn subscribe_replays_backlog_then_streams_live() {
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    g.branch("feat", c1);
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (st, res) = push(&server, &g, "feat", "main");
-    assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "I001");
-
-    let mut socket = ws_subscribe(&server, &[(change_number, 0)], READ);
-    let backlog = ws_entry(&mut socket).expect("backlog revision entry");
-    assert_eq!(backlog["change_number"], change_number);
-    assert_eq!(backlog["position"], 0);
-    assert_eq!(backlog["kind"], "revision");
-
-    // review() drafts via a side-table write (no log entry), then submits —
-    // that's why the `review` lands at position 1.
-    review(&server, change_number, "request_changes", "fix");
-    let live = ws_entry(&mut socket).expect("live review entry");
-    assert_eq!(live["kind"], "review");
-    assert_eq!(live["position"], 1);
-    assert!(
-        live["sequence"].as_u64().unwrap() > backlog["sequence"].as_u64().unwrap(),
-        "sequence is monotone: {live} after {backlog}"
-    );
-}
 
 /// Projection mode ships the folded `ChangeProjection` (its `entries_folded` the
 /// high-water mark), then attaches the live tail past it.
@@ -63,27 +34,6 @@ fn subscribe_projection_ships_it_then_streams_live() {
 
     review(&server, change_number, "approve", "lgtm");
     let live = ws_entry(&mut socket).expect("live review entry past the projection");
-    assert_eq!(live["kind"], "review");
-    assert_eq!(live["position"], 1);
-}
-
-/// The connection stays live past an empty backlog drain — the doorbell `nit wait` relies on.
-#[test]
-fn subscribe_at_head_skips_backlog() {
-    let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    g.branch("feat", c1);
-    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (_, res) = push(&server, &g, "feat", "main");
-    let change_number = member_id(&res, "I001");
-
-    // The revision is at position 0, so head is position 1: no backlog replays.
-    let mut socket = ws_subscribe(&server, &[(change_number, 1)], Duration::from_millis(400));
-    assert!(ws_read(&mut socket).is_none(), "no backlog at head");
-
-    // Resubscribe is not needed — the live append arrives on this same socket.
-    review(&server, change_number, "approve", "lgtm");
-    let live = ws_entry(&mut socket).expect("live entry after head subscribe");
     assert_eq!(live["kind"], "review");
     assert_eq!(live["position"], 1);
 }
@@ -167,13 +117,10 @@ fn unsubscribed_changes_are_silent() {
     let one = member_id(&res, "I001");
     let two = member_id(&res, "I002");
 
-    // Subscribe only to change one; reading its backlog revision is the sync
+    // Subscribe only to change one; reading its projection is the sync
     // point that puts the subscription in place before any review broadcasts.
-    let mut socket = ws_subscribe(&server, &[(one, 0)], READ);
-    assert_eq!(
-        ws_entry(&mut socket).expect("backlog for one")["kind"],
-        "revision"
-    );
+    let mut socket = ws_subscribe_projection(&server, &[one], READ);
+    assert!(ws_read(&mut socket).is_some_and(|f| f["projection"].is_object()));
 
     // Review change two (unsubscribed) then change one (subscribed). The next
     // frame must be change one's review: two's review is broadcast first, so a

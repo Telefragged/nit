@@ -212,10 +212,8 @@ fn batch_submit_abandon_decision_drains_and_records_reason() {
         "comment published"
     );
 
-    let (_, log) = http_get(&server.url(&format!("/api/chains/{id}/log")));
-    let abandoned = log["entries"]
-        .as_array()
-        .unwrap()
+    let log = repo_log(&server);
+    let abandoned = log
         .iter()
         .find(|e| e["kind"] == "lifecycle" && e["payload"]["action"] == "abandoned")
         .expect("a lifecycle{abandoned} entry");

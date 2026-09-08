@@ -458,6 +458,14 @@ pub fn first_repo_id(server: &TestServer) -> u64 {
     repos["repos"][0]["id"].as_u64().expect("a repo")
 }
 
+/// Every entry of the first repo's log, in sequence order.
+pub fn repo_log(server: &TestServer) -> Vec<Value> {
+    let repo_id = first_repo_id(server);
+    let (st, log) = http_get(&server.url(&format!("/api/log?repo={repo_id}")));
+    assert_eq!(st, 200, "{log}");
+    log["entries"].as_array().expect("entries").clone()
+}
+
 /// Find a change's `change_number` by its Change-Id, in a `Chain`
 /// (`value["path"]`) or a `PushResult` (`value["changes"]`).
 pub fn member_id(value: &Value, label: &str) -> u64 {
@@ -504,19 +512,6 @@ fn ws_open(server: &TestServer, read_timeout: Duration) -> WsSock {
         s.set_read_timeout(Some(read_timeout))
             .expect("read timeout");
     }
-    socket
-}
-
-/// Cursor mode: `change_number` → `from-position` pairs; the server replays each
-/// `[from, head)` backlog, then streams live.
-pub fn ws_subscribe(server: &TestServer, subs: &[(u64, u64)], read_timeout: Duration) -> WsSock {
-    let mut socket = ws_open(server, read_timeout);
-    let map: std::collections::HashMap<String, u64> =
-        subs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-    let sub = json!({ "subscribe": map }).to_string();
-    socket
-        .send(tungstenite::Message::Text(sub.into()))
-        .expect("subscribe");
     socket
 }
 
