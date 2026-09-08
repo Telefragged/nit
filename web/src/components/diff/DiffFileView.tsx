@@ -31,8 +31,7 @@ import {
   pairLines,
   rangeSliceOnLine,
   type RowPair,
-  skippedAfter,
-  skippedBefore,
+  skipped,
   statusLetter,
 } from "../../lib/diffview";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
@@ -594,7 +593,7 @@ export default function DiffFileView({
               {hunks.map((hunk, hi) => (
                 <Fragment key={hi}>
                   <HunkSeparator
-                    more={skippedBefore(hunks[hi - 1], hunk)}
+                    more={skipped(hunks[hi - 1], hunk, file)}
                     hunk={hunk}
                     sep={hi}
                     expansion={expansion}
@@ -602,12 +601,12 @@ export default function DiffFileView({
                   {layout === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
                 </Fragment>
               ))}
-              {/* The run below the last hunk reveals from its top only,
-                  toward new_total (no hunk beneath to pull up from). Like the
-                  interior separators it always renders; skippedAfter → 0
-                  collapses it when the last hunk already reaches EOF. */}
+              {/* The run below the last hunk reveals from its top only (no
+                  hunk beneath to pull up from). Like the interior separators
+                  it always renders; skipped → 0 collapses it when the last
+                  hunk already reaches EOF. */}
               <HunkSeparator
-                more={skippedAfter(hunks.at(-1), file.new_total)}
+                more={skipped(hunks.at(-1), undefined, file)}
                 hunk={undefined}
                 sep={hunks.length}
                 expansion={expansion}

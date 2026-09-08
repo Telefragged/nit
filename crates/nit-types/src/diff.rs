@@ -22,6 +22,12 @@ pub struct FileLines {
     pub lines: Vec<Line>,
 }
 
+/// One file of a diff.
+///
+/// The two totals are the EOF anchors that let the client reveal the run
+/// below the last hunk, which no hunk bounds from beneath. A delete holds
+/// lines in that run and has no new side to measure them on, so each side
+/// carries its own count.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct DiffFile {
@@ -35,10 +41,9 @@ pub struct DiffFile {
     pub binary: bool,
     pub additions: u64,
     pub deletions: u64,
+    /// Old-side line count; 0 when added or binary.
+    pub old_total: u64,
     /// New-side line count; 0 when deleted or binary.
-    ///
-    /// The EOF anchor that lets the client reveal the run below
-    /// the last hunk, which no hunk bounds from beneath.
     pub new_total: u64,
     /// Empty when binary.
     pub hunks: Vec<Hunk>,

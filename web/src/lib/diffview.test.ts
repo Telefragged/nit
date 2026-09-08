@@ -6,7 +6,7 @@ import {
   intralineMarks,
   pairLines,
   rangeSliceOnLine,
-  skippedBefore,
+  skipped,
   treeOrder,
 } from "./diffview";
 
@@ -78,7 +78,7 @@ describe("intralineMarks", () => {
   });
 });
 
-describe("skippedBefore", () => {
+describe("skipped", () => {
   const hunk = (
     oldStart: number,
     oldLines: number,
@@ -92,29 +92,47 @@ describe("skippedBefore", () => {
     header: "",
     lines: [],
   });
+  const totals = (old_total: number, new_total: number) => ({
+    old_total,
+    new_total,
+  });
 
   it("counts the lines before the first hunk", () => {
-    expect(skippedBefore(undefined, hunk(10, 3, 12, 3))).toBe(11);
+    expect(skipped(undefined, hunk(10, 3, 12, 3), totals(30, 30))).toBe(11);
   });
 
   it("is zero when the file starts at the first hunk", () => {
-    expect(skippedBefore(undefined, hunk(1, 3, 1, 3))).toBe(0);
+    expect(skipped(undefined, hunk(1, 3, 1, 3), totals(30, 30))).toBe(0);
   });
 
   it("takes the larger of the old/new gaps between hunks", () => {
-    expect(skippedBefore(hunk(1, 3, 1, 5), hunk(10, 2, 8, 2))).toBe(6);
+    expect(skipped(hunk(1, 3, 1, 5), hunk(10, 2, 8, 2), totals(30, 30))).toBe(
+      6,
+    );
   });
 
   it("is zero for adjacent hunks", () => {
-    expect(skippedBefore(hunk(1, 3, 1, 3), hunk(4, 2, 4, 2))).toBe(0);
+    expect(skipped(hunk(1, 3, 1, 3), hunk(4, 2, 4, 2), totals(30, 30))).toBe(0);
   });
 
   it("counts up to the line a side carrying nothing sits after", () => {
-    expect(skippedBefore(hunk(1, 3, 1, 3), hunk(10, 0, 4, 2))).toBe(7);
+    expect(skipped(hunk(1, 3, 1, 3), hunk(10, 0, 4, 2), totals(30, 30))).toBe(
+      7,
+    );
+  });
+
+  it("measures the run below the last hunk against both totals", () => {
+    expect(skipped(hunk(1, 3, 1, 3), undefined, totals(30, 20))).toBe(27);
+  });
+
+  it("measures a delete's tail on the old side alone", () => {
+    expect(skipped(hunk(1, 3, 0, 0), undefined, totals(30, 0))).toBe(27);
   });
 });
 
 describe("gapLines", () => {
+  // Bigger than every fixture below, so only a named hunk bounds a gap.
+  const whole = { old_total: 99, new_total: 99 };
   const hunk = (oldStart: number, newStart: number) => ({
     old_start: oldStart,
     old_lines: 1,
@@ -135,12 +153,12 @@ describe("gapLines", () => {
   ];
 
   it("returns the run between two hunks, del lines included", () => {
-    const out = gapLines(full, hunk(3, 3), hunk(6, 5));
+    const out = gapLines(full, hunk(3, 3), hunk(6, 5), whole);
     expect(out).toEqual([del(4, "dropped by the base"), ctx(5, 4)]);
   });
 
   it("returns the run above the first hunk", () => {
-    expect(gapLines(full, undefined, hunk(3, 3))).toEqual([
+    expect(gapLines(full, undefined, hunk(3, 3), whole)).toEqual([
       ctx(1, 1),
       ctx(2, 2),
     ]);
@@ -162,11 +180,11 @@ describe("gapLines", () => {
   const braces = { ...hunk(4, 2), old_lines: 1, new_lines: 3 };
 
   it("reveals a line on whichever side of it the gap holds", () => {
-    expect(gapLines(outlined, signature, braces)).toEqual([
+    expect(gapLines(outlined, signature, braces, whole)).toEqual([
       del(2, "    body"),
       del(3, "    more"),
     ]);
-    expect(gapLines(outlined, braces, undefined)).toEqual([
+    expect(gapLines(outlined, braces, undefined, whole)).toEqual([
       add(5, "    body"),
       add(6, "    more"),
       add(7, "}"),
@@ -214,6 +232,7 @@ describe("treeOrder", () => {
     binary: false,
     additions: 1,
     deletions: 1,
+    old_total: 0,
     new_total: 0,
     hunks: [],
   });

@@ -31,7 +31,7 @@ import { placementLine } from "../../lib/comments";
 import { verdictStatus } from "../verdict";
 import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, projection } from "./stream";
-import { diffKey, newSideEnd } from "./builders";
+import { diffKey, sideEnd } from "./builders";
 import { changes, draftReviews, drafts, repos, tips } from "./data";
 import type {
   AuthoredFile,
@@ -432,7 +432,7 @@ function wholeLines(file: AuthoredFile): Line[] {
       if (l.new !== undefined) newN = l.new + 1;
     }
   }
-  fill(newSideEnd(file) + 1);
+  fill(sideEnd(file, "new") + 1);
   return out;
 }
 
@@ -552,8 +552,12 @@ export async function mockRequest(
     if (!revision) notFound(`revision ${number}`);
     const diff = c.diffs[diffKey(number, against)];
     if (!diff) return notFound(`diff for revision ${number}`);
-    // Fill the EOF anchor the wire shape carries but ./data omits.
-    const files = diff.files.map((f) => ({ ...f, new_total: newSideEnd(f) }));
+    // Fill the EOF anchors the wire shape carries but ./data omits.
+    const files = diff.files.map((f) => ({
+      ...f,
+      old_total: sideEnd(f, "old"),
+      new_total: sideEnd(f, "new"),
+    }));
     return structuredClone({ files });
   }
 

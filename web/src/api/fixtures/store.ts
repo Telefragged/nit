@@ -11,10 +11,13 @@ import type {
   ThreadComment,
 } from "../types";
 
-/** A file authored in ./data may omit `new_total`, which ./index fills from
- * the last hunk when serving — a mock file has no body past its hunks, so it
- * ends where its last hunk does unless it declares otherwise. */
-export type AuthoredFile = Omit<DiffFile, "new_total"> & { new_total?: number };
+/** A file authored in ./data may omit either total, which ./index fills
+ * from the last hunk when serving. A mock file has no body past its hunks,
+ * so it ends where its last hunk does unless it declares otherwise. */
+export type AuthoredFile = Omit<DiffFile, "old_total" | "new_total"> & {
+  old_total?: number;
+  new_total?: number;
+};
 interface AuthoredDiff {
   files: AuthoredFile[];
 }

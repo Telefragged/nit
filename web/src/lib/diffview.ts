@@ -201,15 +201,22 @@ export function rangeSliceOnLine(
  * A side carrying no lines names the line it sits after (git's `-N,0`), so
  * its range comes back empty while both ends still bound the runs around
  * it. */
-function span(hunk: Hunk, side: Side): [number, number] {
+export function span(hunk: Hunk, side: Side): [number, number] {
   const start = side === "old" ? hunk.old_start : hunk.new_start;
   const count = side === "old" ? hunk.old_lines : hunk.new_lines;
   return count > 0 ? [start, start + count - 1] : [start + 1, start];
 }
 
+/** The two line counts that say where a file ends on each side. */
+export type Totals = Pick<DiffFile, "old_total" | "new_total">;
+
+/** The file's line count on `side`. */
+const total = (file: Totals, side: Side) =>
+  side === "old" ? file.old_total : file.new_total;
+
 /** One side's `[lo, hi]` of the file lines hidden between `prev` and `hunk`,
  * empty when `hi < lo`. An absent `prev` is the file's start, an absent
- * `hunk` its end.
+ * `hunk` its end, which the file's total for that side bounds.
  *
  * A gap's two sides are measured apart because an outline diff pairs
  * signatures straight across the bodies it collapsed, so a body the change
@@ -218,28 +225,27 @@ function gapWindow(
   prev: Hunk | undefined,
   hunk: Hunk | undefined,
   side: Side,
+  file: Totals,
 ): [number, number] {
   return [
     prev ? span(prev, side)[1] + 1 : 1,
-    hunk ? span(hunk, side)[0] - 1 : Infinity,
+    hunk ? span(hunk, side)[0] - 1 : total(file, side),
   ];
 }
 
-/** How many lines the gap before `hunk` hides — the wider of its two
- * sides. */
-export function skippedBefore(prev: Hunk | undefined, hunk: Hunk): number {
+/** How many lines the gap between `prev` and `hunk` hides: the wider of its
+ * two sides. A delete has no new side, so the run below its last hunk is
+ * only ever on the old one. */
+export function skipped(
+  prev: Hunk | undefined,
+  hunk: Hunk | undefined,
+  file: Totals,
+): number {
   const hidden = (side: Side) => {
-    const [lo, hi] = gapWindow(prev, hunk, side);
+    const [lo, hi] = gapWindow(prev, hunk, side, file);
     return Math.max(hi - lo + 1, 0);
   };
   return Math.max(hidden("old"), hidden("new"));
-}
-
-/** skippedBefore's counterpart. `newTotal` is the only total the client is
- * given, so the new side alone bounds the run below the last hunk. */
-export function skippedAfter(last: Hunk | undefined, newTotal: number): number {
-  if (!last) return 0;
-  return Math.max(newTotal - span(last, "new")[1], 0);
 }
 
 /** The lines that fall in the gap between `prev` and `hunk` — the hidden
@@ -256,9 +262,10 @@ export function gapLines(
   whole: readonly Line[],
   prev: Hunk | undefined,
   hunk: Hunk | undefined,
+  file: Totals,
 ): Line[] {
-  const [oldLo, oldHi] = gapWindow(prev, hunk, "old");
-  const [newLo, newHi] = gapWindow(prev, hunk, "new");
+  const [oldLo, oldHi] = gapWindow(prev, hunk, "old", file);
+  const [newLo, newHi] = gapWindow(prev, hunk, "new", file);
   const gap: Line[] = [];
   for (const line of whole) {
     const onOld =

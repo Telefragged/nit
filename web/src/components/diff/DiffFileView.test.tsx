@@ -36,6 +36,7 @@ const gapped = (gap: number): DiffFile => ({
   binary: false,
   additions: 1,
   deletions: 0,
+  old_total: 4 + 2 * gap,
   new_total: 5 + 2 * gap,
   hunks: [
     {
@@ -76,6 +77,7 @@ const mixed: DiffFile = {
   binary: false,
   additions: 1,
   deletions: 1,
+  old_total: 4,
   new_total: 4,
   hunks: [
     {
@@ -197,6 +199,7 @@ describe("a deleted file's outline", () => {
     binary: false,
     additions: 0,
     deletions: 2,
+    old_total: 27,
     new_total: 0,
     hunks: [
       {
@@ -218,12 +221,25 @@ describe("a deleted file's outline", () => {
     ],
   };
 
+  const interior = [
+    ["expand-all", "+25"],
+    ["expand-down", "+10"],
+    ["expand-up", "+10"],
+  ];
+
   it("offers to reveal the run the collapse hid", () => {
     expect(buttons(renderFile("unified", deleted).container)).toEqual([
+      interior,
+    ]);
+  });
+
+  it("offers the run below the last hunk, which only old_total bounds", () => {
+    const tail = { ...deleted, old_total: 40 };
+    expect(buttons(renderFile("unified", tail).container)).toEqual([
+      interior,
       [
-        ["expand-all", "+25"],
+        ["expand-all", "+13"],
         ["expand-down", "+10"],
-        ["expand-up", "+10"],
       ],
     ]);
   });
@@ -237,6 +253,7 @@ describe("a file the change only renamed", () => {
     binary: false,
     additions: 0,
     deletions: 0,
+    old_total: 8,
     new_total: 8,
     hunks: [],
   };

@@ -16,6 +16,7 @@ const file = (path: string): DiffFile => ({
   binary: false,
   additions: 1,
   deletions: 1,
+  old_total: 0,
   new_total: 0,
   hunks: [],
 });

@@ -127,6 +127,7 @@ pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<DiffFile> {
         binary: true,
         additions: 0,
         deletions: 0,
+        old_total: 0,
         new_total: 0,
         hunks: Vec::new(),
     })
@@ -195,9 +196,8 @@ pub(super) fn render_delta(
 /// Under [`DiffMode::Outline`] both sides are collapsed before they are
 /// diffed, so the hunks describe the change to the file's outline and the
 /// counts measure it — a rewritten function body the signature survives is
-/// `+0 -0` here and its real size in [`DiffMode::Full`]. `new_total` is the
-/// whole file either way: it anchors EOF for the client's expansion, which
-/// reveals real lines.
+/// `+0 -0` here and its real size in [`DiffMode::Full`]. The two totals
+/// measure the whole file either way.
 pub(super) fn fill_lines(
     file: &mut DiffFile,
     old: &[u8],
@@ -207,6 +207,7 @@ pub(super) fn fill_lines(
 ) {
     let (old, new) = (String::from_utf8_lossy(old), String::from_utf8_lossy(new));
     file.binary = false;
+    file.old_total = old.lines().count() as u64;
     file.new_total = new.lines().count() as u64;
     file.hunks = match mode {
         DiffMode::Full => line_hunks(&InternedInput::new(&*old, &*new), context, &Lines::Every),
@@ -480,6 +481,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
         binary: true,
         additions: 0,
         deletions: 0,
+        old_total: 0,
         new_total: 0,
         hunks: Vec::new(),
     };

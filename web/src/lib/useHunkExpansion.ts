@@ -56,13 +56,14 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
     const newN = (ls: Line[]) => ls.filter((l) => l.new !== undefined).length;
     return file.hunks.map((hunk, i) => {
       const upN = up.get(i) ?? 0;
-      const before = gapLines(whole, file.hunks[i - 1], hunk);
+      const before = gapLines(whole, file.hunks[i - 1], hunk, file);
       const pre = upN > 0 ? before.slice(before.length - upN) : [];
       // `next` is undefined for the last hunk; its down-gap is the run to
       // EOF, which gapLines bounds by the file's end.
       const next = file.hunks[i + 1];
       const downN = down.get(i + 1) ?? 0;
-      const post = downN > 0 ? gapLines(whole, hunk, next).slice(0, downN) : [];
+      const post =
+        downN > 0 ? gapLines(whole, hunk, next, file).slice(0, downN) : [];
       if (pre.length === 0 && post.length === 0) return hunk;
       // A revealed line shifts each side's start/count only where it has a
       // number, so a drift del moves the old side without the new.
@@ -75,7 +76,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
         lines: [...pre, ...hunk.lines, ...post],
       };
     });
-  }, [file.hunks, whole, down, up]);
+  }, [file, whole, down, up]);
 
   /** The whole file as diff lines, fetched once and shared across both ends
    * and every gap; `null` if the diff switched out from under the fetch. */
@@ -109,7 +110,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
     try {
       const lines = await loadWhole();
       if (!lines || fileRef.current !== file) return;
-      const gap = gapLines(lines, file.hunks[sep - 1], file.hunks[sep]);
+      const gap = gapLines(lines, file.hunks[sep - 1], file.hunks[sep], file);
       const remaining = gap.length - (down.get(sep) ?? 0) - (up.get(sep) ?? 0);
       if (remaining <= 0) return;
       const step = Math.min(count, remaining);

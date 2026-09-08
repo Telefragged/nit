@@ -445,6 +445,14 @@ export type EditDraft = { body: string; resolved?: boolean };
 
 export type Diff = { files: Array<DiffFile> };
 
+/**
+ * One file of a diff.
+ *
+ * The two totals are the EOF anchors that let the client reveal the run
+ * below the last hunk, which no hunk bounds from beneath. A delete holds
+ * lines in that run and has no new side to measure them on, so each side
+ * carries its own count.
+ */
 export type DiffFile = {
   /**
    * New path (old path when deleted).
@@ -459,10 +467,11 @@ export type DiffFile = {
   additions: number;
   deletions: number;
   /**
+   * Old-side line count; 0 when added or binary.
+   */
+  old_total: number;
+  /**
    * New-side line count; 0 when deleted or binary.
-   *
-   * The EOF anchor that lets the client reveal the run below
-   * the last hunk, which no hunk bounds from beneath.
    */
   new_total: number;
   /**

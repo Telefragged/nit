@@ -93,6 +93,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
             "binary": false,
             "additions": 3,
             "deletions": 0,
+            "old_total": 0,
             "new_total": 3,
             "hunks": [{
                 "old_start": 0, "old_lines": 0, "new_start": 1, "new_lines": 3,
@@ -116,6 +117,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
             "binary": false,
             "additions": 2,
             "deletions": 2,
+            "old_total": 12,
             "new_total": 12,
             "hunks": [
                 {
@@ -154,6 +156,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
             "binary": false,
             "additions": 2,
             "deletions": 0,
+            "old_total": 0,
             "new_total": 2,
             "hunks": [{
                 "old_start": 0, "old_lines": 0, "new_start": 1, "new_lines": 2,
@@ -174,6 +177,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
             "binary": true,
             "additions": 0,
             "deletions": 0,
+            "old_total": 0,
             "new_total": 0,
             "hunks": [],
         })
