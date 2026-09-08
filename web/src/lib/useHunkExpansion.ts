@@ -11,14 +11,16 @@ export const EXPAND_STEP = 10;
  * is fetched once on the first expand, and the run hidden in each gap
  * is sliced from it and folded back into the bordering hunks as real Lines —
  * drift and all — so highlight/comment/placement and the drift tint flow
- * through unchanged. The synthetic commit message and deletions have no diff to
- * expand. Reveals are keyed by separator `i` (the gap before hunk i): `down`
- * pulls from the gap's top into hunk i-1, `up` from its bottom into hunk i.
+ * through unchanged. The synthetic commit message is the one file with no
+ * diff to expand: a deleted file has gaps too, because an outline collapses
+ * its lines and the run each collapse hid is a gap. Reveals are keyed by
+ * separator `i` (the gap before hunk i): `down` pulls from the gap's top
+ * into hunk i-1, `up` from its bottom into hunk i.
  *
  * Returns the spliced `hunks`, whether the file is expandable, the `expand`
  * action, and `busyAt` to check a given end/separator's in-flight state. */
 export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
-  const expandable = file.path !== COMMIT_MSG_PATH && file.status !== "deleted";
+  const expandable = file.path !== COMMIT_MSG_PATH;
   const [whole, setWhole] = useState<readonly Line[] | null>(null);
   const [down, setDown] = useState<ReadonlyMap<number, number>>(new Map());
   const [up, setUp] = useState<ReadonlyMap<number, number>>(new Map());

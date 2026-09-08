@@ -155,16 +155,16 @@ describe("code cell text nodes", () => {
   });
 });
 
-describe("context-expand buttons", () => {
-  /** Each separator's buttons, as [class suffix, label] pairs. */
-  const buttons = (container: HTMLElement) =>
-    [...container.querySelectorAll(".hunk-row")].map((row) =>
-      [...row.querySelectorAll("button")].map((b) => [
-        b.className.replace("hunk-expand ", ""),
-        b.textContent,
-      ]),
-    );
+/** Each separator's buttons, as [class suffix, label] pairs. */
+const buttons = (container: HTMLElement) =>
+  [...container.querySelectorAll(".hunk-row")].map((row) =>
+    [...row.querySelectorAll("button")].map((b) => [
+      b.className.replace("hunk-expand ", ""),
+      b.textContent,
+    ]),
+  );
 
+describe("context-expand buttons", () => {
   it("offers the whole gap beside the stepped reveals", () => {
     expect(buttons(renderFile("unified", gapped(25)).container)).toEqual([
       // The top gap has no hunk above to step down from.
@@ -184,6 +184,48 @@ describe("context-expand buttons", () => {
     expect(
       buttons(renderFile("unified", gapped(EXPAND_STEP)).container),
     ).toEqual([[["expand-all", "+10"]], [["expand-all", "+10"]]]);
+  });
+});
+
+describe("a deleted file's outline", () => {
+  /** The outline kept line 1 and line 27, so the gap between them hides
+   * the 25 lines the collapse took. The delete leaves the new side empty,
+   * which is why every hunk sits at new line 0. */
+  const deleted: DiffFile = {
+    path: "src/gone.rs",
+    status: "deleted",
+    binary: false,
+    additions: 0,
+    deletions: 2,
+    new_total: 0,
+    hunks: [
+      {
+        old_start: 1,
+        old_lines: 1,
+        new_start: 0,
+        new_lines: 0,
+        header: "",
+        lines: [{ kind: "del", old: 1, text: "fn a() {" }],
+      },
+      {
+        old_start: 27,
+        old_lines: 1,
+        new_start: 0,
+        new_lines: 0,
+        header: "",
+        lines: [{ kind: "del", old: 27, text: "fn b() {" }],
+      },
+    ],
+  };
+
+  it("offers to reveal the run the collapse hid", () => {
+    expect(buttons(renderFile("unified", deleted).container)).toEqual([
+      [
+        ["expand-all", "+25"],
+        ["expand-down", "+10"],
+        ["expand-up", "+10"],
+      ],
+    ]);
   });
 });
 
