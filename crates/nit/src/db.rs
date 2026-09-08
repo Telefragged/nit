@@ -576,6 +576,8 @@ pub struct ChangeFilter {
     /// A change must have every one of these, same key and same value. A
     /// map, because a filter has one value per key.
     pub tags: Tags,
+    /// The change with this `Change-Id`. At most one per repo.
+    pub change_id: Option<ChangeId>,
 }
 
 impl ChangeFilter {
@@ -588,6 +590,10 @@ impl ChangeFilter {
         let mut sql = String::new();
         let mut values: Vec<rusqlite::types::Value> = Vec::new();
         push_status_filter(&mut sql, &mut values, "status", &self.statuses);
+        if let Some(change_id) = &self.change_id {
+            sql.push_str(" AND change_id = ?");
+            values.push(change_id.as_str().to_string().into());
+        }
         for (key, value) in self.tags.iter() {
             sql.push_str(
                 " AND id IN (SELECT change_number FROM change_tags WHERE key = ? AND value = ?)",

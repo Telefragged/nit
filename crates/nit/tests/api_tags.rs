@@ -144,6 +144,11 @@ fn tag_filter_is_exact_and_ands_every_pair() {
     );
     assert!(q("&tag=feature=epic").is_empty(), "no prefix matching");
     assert!(q("&tag=session-id=s2").is_empty());
+    assert_eq!(
+        q(&format!("&change_id={}", change_id("Ib"))),
+        vec![change_id("Ib")],
+        "`change_id` selects the one change that carries it"
+    );
 }
 
 #[test]

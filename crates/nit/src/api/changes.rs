@@ -12,6 +12,7 @@ use serde::Deserialize;
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList};
 use nit_types::changes::{TagList, TagsRequest};
 use nit_types::diff::{Diff, FileLines};
+use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
 use nit_types::domain::DiffMode;
@@ -42,6 +43,8 @@ pub(super) struct ListChangesQuery {
     /// malformed pair fails the query deserialization, so it is a 400.
     #[serde(default)]
     tag: Vec<Tag>,
+    /// The change with this `Change-Id`.
+    change_id: Option<ChangeId>,
 }
 
 /// Serves `GET /api/changes`: matching changes as folded projections.
@@ -55,6 +58,7 @@ pub(super) async fn list_changes(
         let filter = db::ChangeFilter {
             statuses: q.status,
             tags: q.tag.into_iter().collect(),
+            change_id: q.change_id,
         };
         let mut changes = Vec::new();
         for repo_id in state.repo_ids_matching(q.repo) {
@@ -89,6 +93,7 @@ pub(super) async fn list_log(
         let filter = db::ChangeFilter {
             statuses: q.status,
             tags: q.tag.into_iter().collect(),
+            change_id: None,
         };
         let entries = review::entries_between(conn, q.repo, &filter, q.after, q.before)?;
         Ok(Json(Log { entries }))

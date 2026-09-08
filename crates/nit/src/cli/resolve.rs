@@ -4,11 +4,10 @@
 //! [`Selection`], and reads the selection from the server.
 
 use anyhow::{Result, anyhow, bail};
+use git2::Repository;
 use serde::Serialize;
 
-use nit_types::chains::ChainList;
 use nit_types::changes::ChangeList;
-use nit_types::domain::Chain;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::LogEntry;
@@ -17,7 +16,7 @@ use nit_types::log::Log;
 use nit_types::repos::RepoList;
 
 use super::client::{Client, Retry};
-use super::git::{discover_repo, head_sha};
+use super::git::discover_repo;
 use super::tags::selection_tag;
 
 /// The changes a command reads: every change in `repo` that has `tags`.
@@ -84,8 +83,7 @@ pub struct SelectArgs {
 impl SelectArgs {
     /// Turns the flag, or the checkout, into a [`Selection`].
     pub(crate) fn resolve(&self, client: &Client) -> Result<Selection> {
-        let (git_dir, repo) = discover_repo()?;
-        let repo_id = repo_id_for(client, &git_dir, Retry::No)?;
+        let (repo_id, repo) = cwd_repo(client)?;
         let tags: Tags = if self.tag.is_empty() {
             let Some(observed) = selection_tag(&repo) else {
                 bail!("nothing to select by: no branch, session, or worktree — pass --tag");
@@ -101,42 +99,29 @@ impl SelectArgs {
     }
 }
 
-/// Resolves the cwd's HEAD to its chain's tip change number.
-///
-/// `retry` covers only the network GETs (here and in `repo_id_for`); repo
-/// discovery and a failed lookup (unregistered repo, or no chain matching
-/// HEAD) stay fatal — never retried.
-pub(crate) fn resolve_tip_change(client: &Client, retry: Retry) -> Result<ChangeNumber> {
-    let (git_dir, repo) = discover_repo()?;
-    let head = head_sha(&repo)?;
-    let repo_id = repo_id_for(client, &git_dir, retry)?;
-    let list: ChainList =
-        client.get_retry(&format!("/api/chains?repo={repo_id}&status=all"), retry)?;
-    list.chains
-        .iter()
-        .find(|c| c.path.last().map(|m| m.commit_sha.as_str()) == Some(head.as_str()))
-        .map(|c| c.tip_change_number)
-        .ok_or_else(|| anyhow!("HEAD is not registered with nit — run 'nit push' first"))
-}
-
+/// Resolves a `Change-Id` to its change number, within the cwd's repo.
 pub(crate) fn resolve_change(client: &Client, change_id: &str) -> Result<ChangeNumber> {
-    let tip = resolve_tip_change(client, Retry::No)?;
-    let chain: Chain = client.get(&format!("/api/chains/{tip}"))?;
-    chain
-        .path
-        .iter()
-        .find(|m| m.change_id.as_str() == change_id)
-        .map(|m| m.change_number)
-        .ok_or_else(|| anyhow!("no change with Change-Id {change_id:?} on this chain"))
+    let (repo_id, _) = cwd_repo(client)?;
+    let list: ChangeList = client.get(&format!(
+        "/api/changes?repo={repo_id}&change_id={change_id}"
+    ))?;
+    list.changes
+        .first()
+        .map(|c| c.id)
+        .ok_or_else(|| anyhow!("no change with Change-Id {change_id:?} in this repo"))
 }
 
-fn repo_id_for(client: &Client, git_dir: &str, retry: Retry) -> Result<u64> {
-    let list: RepoList = client.get_retry("/api/repos", retry)?;
-    list.repos
+/// The cwd's repo: its id on the server, and the repo itself.
+fn cwd_repo(client: &Client) -> Result<(u64, Repository)> {
+    let (git_dir, repo) = discover_repo()?;
+    let list: RepoList = client.get("/api/repos")?;
+    let repo_id = list
+        .repos
         .iter()
         .find(|r| r.git_dir == git_dir)
         .map(|r| r.id)
-        .ok_or_else(|| anyhow!("repo not registered with nit — run 'nit push' first"))
+        .ok_or_else(|| anyhow!("repo not registered with nit — run 'nit push' first"))?;
+    Ok((repo_id, repo))
 }
 
 #[cfg(test)]
