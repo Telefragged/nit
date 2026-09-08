@@ -6,6 +6,7 @@ import type {
   BatchSubmitResult,
   ChangeDrafts,
   ChangeList,
+  ChangeQuery,
   ChangeStatus,
   NewDraft,
   Diff,
@@ -70,21 +71,19 @@ export const getRepo = (id: number) => request<Repo>("GET", `/repos/${id}`);
 const statusQuery = (statuses: ChangeStatus[]) =>
   statuses.map((s) => `&status=${s}`).join("");
 
-/** A repo's changes as folded projections, narrowed to the statuses named,
- * and to the changes carrying `tag` (`key=value`) when one is given. The
- * status filter is explicit and repeatable. The API serves no default
- * subset. */
-export const getChanges = (
-  repoId: number,
-  statuses: ChangeStatus[],
-  tag?: string,
-) =>
-  request<ChangeList>(
-    "GET",
-    `/changes?repo=${repoId}${statusQuery(statuses)}${
-      tag === undefined ? "" : `&tag=${encodeURIComponent(tag)}`
-    }`,
-  );
+/** A change query as its query string: each list field repeats its key. */
+const changeQuery = (query: ChangeQuery) => {
+  const params = new URLSearchParams();
+  if (query.repo !== undefined) params.set("repo", String(query.repo));
+  for (const status of query.status ?? []) params.append("status", status);
+  for (const tag of query.tag ?? []) params.append("tag", tag);
+  if (query.change_id !== undefined) params.set("change_id", query.change_id);
+  return params.toString();
+};
+
+/** The changes `query` picks, as folded projections. */
+export const getChanges = (query: ChangeQuery) =>
+  request<ChangeList>("GET", `/changes?${changeQuery(query)}`);
 
 /** The tags the repo's changes at `statuses` carry now, grouped by key. */
 export const getTags = (repoId: number, statuses: ChangeStatus[]) =>
@@ -154,10 +153,7 @@ export const setDraftDecision = (changeNumber: number, req: DraftDecision) =>
 export const clearDecision = (changeNumber: number) =>
   request("DELETE", `/changes/${changeNumber}/decision`);
 
-/** Publish the draft decision of every change in `repoId` carrying `tag`
- * (`key=value`), each at its latest revision. */
-export const submitDecisions = (repoId: number, tag: string) =>
-  request<BatchSubmitResult>(
-    "POST",
-    `/submit?repo=${repoId}&tag=${encodeURIComponent(tag)}`,
-  );
+/** Publish the draft decision of every change `query` picks, each at its
+ * latest revision. */
+export const submitDecisions = (query: ChangeQuery) =>
+  request<BatchSubmitResult>("POST", `/submit?${changeQuery(query)}`);

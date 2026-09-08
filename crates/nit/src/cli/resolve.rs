@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow, bail};
 use git2::Repository;
 use serde::Serialize;
 
-use nit_types::changes::ChangeList;
+use nit_types::changes::{ChangeList, ChangeQuery};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::LogEntry;
@@ -45,22 +45,25 @@ impl Selection {
         Ok(log.entries)
     }
 
-    /// The query string that selects the changes: `repo={id}&tag=key=value…`,
-    /// plus `after` when given.
+    /// The query string that selects the changes: a [`ChangeQuery`], plus
+    /// `after` when given.
     ///
     /// Each value is percent-encoded, because a tag value may contain a
     /// space or an ampersand.
     fn query(&self, after: Option<u64>) -> String {
         #[derive(Serialize)]
         struct Query {
-            repo: u64,
-            tag: Vec<String>,
+            #[serde(flatten)]
+            changes: ChangeQuery,
             #[serde(skip_serializing_if = "Option::is_none")]
             after: Option<u64>,
         }
         let query = Query {
-            repo: self.repo,
-            tag: self.tags.spelled().collect(),
+            changes: ChangeQuery {
+                repo: Some(self.repo),
+                tag: self.tags.to_vec(),
+                ..ChangeQuery::default()
+            },
             after,
         };
         serde_html_form::to_string(&query).expect("a query of numbers and strings serializes")

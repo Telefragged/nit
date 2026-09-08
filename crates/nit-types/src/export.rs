@@ -51,6 +51,7 @@ fn write_wire_types() {
         crate::graph::HistoryCommit,
         crate::graph::RepoHistory,
         crate::changes::ChangeList,
+        crate::changes::ChangeQuery,
         crate::changes::ChangeDetail,
         crate::changes::ChangeDrafts,
         crate::changes::Revision,

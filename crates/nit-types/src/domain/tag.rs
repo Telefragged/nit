@@ -87,6 +87,18 @@ impl Tags {
     pub fn spelled(&self) -> impl Iterator<Item = String> {
         self.iter().map(|(key, value)| format!("{key}={value}"))
     }
+
+    /// Each tag as a [`Tag`], ascending by key.
+    #[must_use]
+    pub fn to_vec(&self) -> Vec<Tag> {
+        self.0
+            .iter()
+            .map(|(key, value)| Tag {
+                key: key.clone(),
+                value: value.clone(),
+            })
+            .collect()
+    }
 }
 
 impl FromIterator<Tag> for Tags {
@@ -213,6 +225,13 @@ impl FromStr for Tag {
             .split_once('=')
             .ok_or_else(|| TagError::NotAPair(arg.to_string()))?;
         Tag::new(key, value)
+    }
+}
+
+/// Spelled `key=value`, the form [`FromStr`] parses.
+impl Serialize for Tag {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("{}={}", self.key, self.value))
     }
 }
 

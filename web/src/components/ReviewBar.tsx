@@ -107,7 +107,7 @@ export default function ReviewBar({
   const submit = useMutation({
     mutationFn: () => {
       if (tag === undefined) throw new Error("the change carries no tag");
-      return submitDecisions(change.repo_id, tag);
+      return submitDecisions({ repo: change.repo_id, tag: [tag] });
     },
     onSuccess: (result) => {
       invalidate();

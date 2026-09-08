@@ -345,7 +345,7 @@ export default function ReviewPage() {
     queryKey: ["changes", published?.repo_id, tag],
     queryFn:
       published && tag !== undefined
-        ? () => getChanges(published.repo_id, [], tag)
+        ? () => getChanges({ repo: published.repo_id, tag: [tag] })
         : skipToken,
   });
   // The listed change numbers, ascending; the stream below supplies each

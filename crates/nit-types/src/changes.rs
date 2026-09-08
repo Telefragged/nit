@@ -12,24 +12,44 @@ use crate::domain::Draft;
 use crate::domain::DraftDecision;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
+use crate::domain::Tag;
 use crate::domain::Tags;
 use crate::domain::ThreadProjection;
 use crate::domain::Verdict;
 
-/// The `GET /api/changes` response: matching changes as folded projections.
+/// The query that picks changes: `GET /api/changes` and `POST /api/submit`.
 ///
-/// The same shape the websocket ships in projection mode. `repo` narrows to
-/// one repo (an unknown id matches nothing); `status` is repeatable
+/// Every field narrows and an empty field does not, so the empty query
+/// picks every change of every repo. `repo` narrows to one repo (an
+/// unknown id matches nothing). `status` is repeatable
 /// (`?status={s}&status={s}`) and matches each change's status at its
-/// **latest revision** (terminal states win). **No `status` param means
-/// every change** — the API bakes in no default subset.
+/// **latest revision** (terminal states win). `tag` is repeatable too
+/// (`?tag=key=value&tag=key=value`); each one matches the change's tags,
+/// verbatim key and value, and every one given must match. There is no
+/// prefix, wildcard, or key-only form. `change_id` picks the change with
+/// that `Change-Id`. Filters compose, so a tag match admits merged and
+/// abandoned changes like any other; narrow with `status` to exclude them.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ChangeQuery {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub repo: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status: Vec<ChangeStatus>,
+    /// A malformed pair fails the query deserialization.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
+    pub tag: Vec<Tag>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub change_id: Option<ChangeId>,
+}
+
+/// The `GET /api/changes` response: the changes a [`ChangeQuery`] picks,
+/// as folded projections.
 ///
-/// `tag` is repeatable too (`?tag=key=value&tag=key=value`). Each one
-/// matches the change's tags, verbatim key and value, and every one
-/// given must match. There is no prefix, wildcard,
-/// or key-only form. Filters compose, so a tag match admits merged and
-/// abandoned changes like any other. Narrow with `status` to exclude
-/// them.
+/// The same shape the websocket ships in projection mode.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeList {

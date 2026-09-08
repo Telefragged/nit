@@ -250,22 +250,36 @@ export type RepoHistory = {
 };
 
 /**
- * The `GET /api/changes` response: matching changes as folded projections.
+ * The `GET /api/changes` response: the changes a [`ChangeQuery`] picks,
+ * as folded projections.
  *
- * The same shape the websocket ships in projection mode. `repo` narrows to
- * one repo (an unknown id matches nothing); `status` is repeatable
- * (`?status={s}&status={s}`) and matches each change's status at its
- * **latest revision** (terminal states win). **No `status` param means
- * every change** — the API bakes in no default subset.
- *
- * `tag` is repeatable too (`?tag=key=value&tag=key=value`). Each one
- * matches the change's tags, verbatim key and value, and every one
- * given must match. There is no prefix, wildcard,
- * or key-only form. Filters compose, so a tag match admits merged and
- * abandoned changes like any other. Narrow with `status` to exclude
- * them.
+ * The same shape the websocket ships in projection mode.
  */
 export type ChangeList = { changes: Array<ChangeProjection> };
+
+/**
+ * The query that picks changes: `GET /api/changes` and `POST /api/submit`.
+ *
+ * Every field narrows and an empty field does not, so the empty query
+ * picks every change of every repo. `repo` narrows to one repo (an
+ * unknown id matches nothing). `status` is repeatable
+ * (`?status={s}&status={s}`) and matches each change's status at its
+ * **latest revision** (terminal states win). `tag` is repeatable too
+ * (`?tag=key=value&tag=key=value`); each one matches the change's tags,
+ * verbatim key and value, and every one given must match. There is no
+ * prefix, wildcard, or key-only form. `change_id` picks the change with
+ * that `Change-Id`. Filters compose, so a tag match admits merged and
+ * abandoned changes like any other; narrow with `status` to exclude them.
+ */
+export type ChangeQuery = {
+  repo?: number;
+  status?: Array<ChangeStatus>;
+  /**
+   * A malformed pair fails the query deserialization.
+   */
+  tag?: Array<string>;
+  change_id?: ChangeId;
+};
 
 /**
  * `GET /api/changes/{id}` response.

@@ -9,6 +9,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 
+use nit_types::changes::ChangeQuery;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::DraftDecision;
@@ -19,7 +20,6 @@ use nit_types::domain::{Decision, LifecycleAction, Verdict};
 use crate::db;
 use nit_types::domain::Lifecycle;
 
-use super::changes::ChangeQuery;
 use super::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change_with, with_conn,
 };
@@ -159,7 +159,7 @@ pub(super) async fn submit(
 ) -> Result<Json<BatchSubmitResult>, Error> {
     with_conn(state.pool(), move |conn| {
         let repo_ids = state.repo_ids_matching(q.repo);
-        let filter = q.filter();
+        let filter = db::ChangeFilter::from(q);
         let mut submitted = 0u64;
         let mut errors = Vec::new();
         for repo_id in repo_ids {

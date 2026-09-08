@@ -22,6 +22,7 @@ use anyhow::{Context, Result, anyhow};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use std::fmt::Write as _;
 
+use nit_types::changes::ChangeQuery;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::Tags;
 use nit_types::domain::{Anchor, CommentRange, LineAnchor};
@@ -578,6 +579,17 @@ pub struct ChangeFilter {
     pub tags: Tags,
     /// The change with this `Change-Id`. At most one per repo.
     pub change_id: Option<ChangeId>,
+}
+
+/// The filter half of a query: `repo` stays with the caller.
+impl From<ChangeQuery> for ChangeFilter {
+    fn from(query: ChangeQuery) -> ChangeFilter {
+        ChangeFilter {
+            statuses: query.status,
+            tags: query.tag.into_iter().collect(),
+            change_id: query.change_id,
+        }
+    }
 }
 
 impl ChangeFilter {

@@ -70,7 +70,12 @@ export default function Dashboard() {
   });
   const changesQuery = useQuery({
     queryKey: ["repo-changes", id, tag ?? null],
-    queryFn: () => getChanges(id, GRAPH_STATUSES, tag),
+    queryFn: () =>
+      getChanges({
+        repo: id,
+        status: GRAPH_STATUSES,
+        tag: tag === undefined ? [] : [tag],
+      }),
   });
   const historyQuery = useQuery({
     queryKey: ["history", id],
