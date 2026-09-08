@@ -375,7 +375,7 @@ export default function DiffFileView({
     for (const t of inline.get(`${side}:${no}`) ?? []) {
       items.push(
         <div className="meta-item" key={`t-${side}-${threadKey(t)}`}>
-          <CommentThread thread={t} changeNumber={ctx.changeNumber} />
+          <CommentThread thread={t} />
         </div>,
       );
     }
@@ -574,7 +574,7 @@ export default function DiffFileView({
                       lang={lang}
                     />
                   </div>
-                  <CommentThread thread={t} changeNumber={ctx.changeNumber} />
+                  <CommentThread thread={t} />
                 </div>
               ))}
             </div>

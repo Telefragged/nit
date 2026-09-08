@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import type { LineAnchor, Side } from "../api/types";
-import { placementLine } from "../lib/comments";
+import { placementLine, type DiffRange } from "../lib/comments";
 
 /** Anchor of the draft editor currently open in the diff. */
 export interface DraftTarget {
@@ -38,6 +38,11 @@ export interface ReviewCtx {
   selected: number;
   /** The FROM side: undefined = base, else the interdiff's left revision. */
   against: number | undefined;
+  /** The change's newest revision. */
+  latestRevision: number;
+  /** Shows a diff range the page computed for a thread (`rangeSince`). It
+   * runs the same draft-editor guard as the range selects. */
+  showRange: (range: DiffRange) => void;
   editingTarget: DraftTarget | null;
   /** Guarded: moving or clearing the target unmounts the inline editor, so
    * this confirms first while `editorDirty` is set, returning whether the

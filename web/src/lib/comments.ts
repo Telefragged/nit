@@ -154,6 +154,47 @@ export function draftAnchor(
   return { revision: against, side: "new" };
 }
 
+/** A diff range as the page shows it: `[against] → [selected]`. */
+export interface DiffRange {
+  against: number;
+  selected: number;
+}
+
+/** Whether a thread shows in the range `[FROM] → [TO]`: a line thread needs
+ * a column there, and a thread anchored off a line shows in every range. */
+export function threadInRange(
+  c: CommentAnchor,
+  selected: number,
+  against: number | undefined,
+): boolean {
+  return (
+    anchorAt(c.anchor) === null ||
+    commentPlacement(c, selected, against) !== null
+  );
+}
+
+/**
+ * The interdiff that reads a thread against the author's later work,
+ * `[the thread's revision] → [latest]`, or null when the page must not
+ * offer it.
+ *
+ * There is nothing to offer when the change ends at the thread's own
+ * revision, when that range is already on screen, or when the thread has no
+ * column in it. The last case is the old-side thread: it reads the tree
+ * before its revision, and an interdiff never shows that tree.
+ */
+export function rangeSince(
+  c: CommentAnchor,
+  selected: number,
+  against: number | undefined,
+  latest: number,
+): DiffRange | null {
+  if (c.revision >= latest) return null;
+  const range = { against: c.revision, selected: latest };
+  if (against === range.against && selected === range.selected) return null;
+  return threadInRange(c, range.selected, range.against) ? range : null;
+}
+
 /**
  * How many threads are anchored to each revision, for the revision dropdowns.
  * Counts both published and draft-only threads — the dropdown answers "which

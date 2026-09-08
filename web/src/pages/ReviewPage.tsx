@@ -45,11 +45,12 @@ import {
   anchorLineText,
   assembleThreads,
   commentCountLabel,
-  commentPlacement,
   placementLine,
   pendingUnresolvedCount,
   threadCountByRevision,
+  threadInRange,
   threadKey,
+  type DiffRange,
   type UiThread,
 } from "../lib/comments";
 import { confirmDiscard } from "../lib/confirmDiscard";
@@ -301,6 +302,7 @@ export default function ReviewPage() {
   const selectedRev =
     revisions.find((r) => r.number === (revisionParam ?? defaultRev)) ?? latest;
   const selected = selectedRev?.number ?? 1;
+  const latestRevision = latest?.number ?? 1;
 
   // The chain context is the derived chain through this change rooted at the
   // viewed revision — the path that pins `selected`. Fetched with the revision
@@ -417,11 +419,61 @@ export default function ReviewPage() {
     [files],
   );
 
+  /** Collapsing the section that hosts the open inline CommentEditor
+   * unmounts it and destroys its draft — the same discard path the guarded
+   * setEditingTarget covers: confirm while dirty. `hidesEditor` says
+   * whether the attempted collapse covers the editor's section; returns
+   * false when the user keeps their text, and the caller must abort the
+   * collapse (no state change). On an accepted discard the target is
+   * cleared too — left in place, re-expanding the file would resurrect an
+   * empty editor at the stale anchor. */
+  const confirmEditorCollapse = useCallback((hidesEditor: boolean): boolean => {
+    if (!hidesEditor) return true;
+    if (!confirmDiscard(editorDirty.current)) return false;
+    editorDirty.current = false;
+    setEditingTarget(null);
+    return true;
+  }, []);
+
+  // An open editor's anchor is its *visual* column, which a range switch
+  // would silently re-map to a different (revision, side) at save time
+  // (lib/comments draftAnchor). Confirm-and-clear it first, instead of
+  // re-anchoring behind the user.
+  const switchRange = useCallback(
+    (patch: Record<string, string | null>) => {
+      if (!confirmEditorCollapse(editingTarget !== null)) return;
+      updateParams(patch);
+    },
+    [editingTarget, confirmEditorCollapse, updateParams],
+  );
+
+  // Diff range dropdowns. Left writes ?against ("base" | "1".."N-1").
+  // Right writes ?revision; a still-valid numeric base is preserved (the
+  // dropdowns are independent coordinates, as in Gerrit), an invalid one
+  // resets to Base, an explicit "base" is kept.
+  const onLeft = (v: string) => {
+    switchRange({ against: v });
+  };
+  const onRight = (n: number) => {
+    const patch: Record<string, string | null> = { revision: String(n) };
+    if (
+      againstRaw !== null &&
+      againstRaw !== "base" &&
+      deriveDiffBase(againstRaw, n) === undefined
+    )
+      patch.against = null;
+    switchRange(patch);
+  };
+
   const ctxValue: ReviewCtx = useMemo(
     () => ({
       changeNumber,
       selected,
       against,
+      latestRevision,
+      showRange: ({ against: from, selected: to }: DiffRange) => {
+        switchRange({ against: String(from), revision: String(to) });
+      },
       editingTarget,
       // Moving or clearing the target unmounts the inline CommentEditor and
       // destroys its draft, so this is a discard path: confirm while dirty.
@@ -445,7 +497,14 @@ export default function ReviewPage() {
         editorDirty.current = dirty;
       },
     }),
-    [changeNumber, selected, against, editingTarget],
+    [
+      changeNumber,
+      selected,
+      against,
+      latestRevision,
+      switchRange,
+      editingTarget,
+    ],
   );
 
   // The reviewer's view of every thread: published threads merged with their
@@ -645,11 +704,7 @@ export default function ReviewPage() {
     for (const t of threads) {
       const path = anchorFile(t.anchor);
       if (path === null) continue;
-      if (
-        anchorAt(t.anchor) !== null &&
-        commentPlacement(t, selected, against) === null
-      )
-        continue;
+      if (!threadInRange(t, selected, against)) continue;
       const file = files.find((f) => f.path === path || f.old_path === path);
       const key = file ? file.path : path;
       const list = map.get(key) ?? [];
@@ -685,53 +740,12 @@ export default function ReviewPage() {
   const here = chain?.path.find((c) => c.change_number === change.id);
   const allFilesExpanded = allExpanded(expanded, files);
 
-  /** Collapsing the section that hosts the open inline CommentEditor
-   * unmounts it and destroys its draft — the same discard path the guarded
-   * setEditingTarget covers: confirm while dirty. `hidesEditor` says
-   * whether the attempted collapse covers the editor's section; returns
-   * false when the user keeps their text, and the caller must abort the
-   * collapse (no state change). On an accepted discard the target is
-   * cleared too — left in place, re-expanding the file would resurrect an
-   * empty editor at the stale anchor. */
-  const confirmEditorCollapse = (hidesEditor: boolean): boolean => {
-    if (!hidesEditor) return true;
-    if (!confirmDiscard(editorDirty.current)) return false;
-    editorDirty.current = false;
-    setEditingTarget(null);
-    return true;
-  };
   const changeLevelThreads = threads.filter(
     (t) => anchorFile(t.anchor) === null,
   );
   const orphanFileThreads = [...threadsByFile.entries()].filter(
     ([path]) => !files.some((f) => f.path === path),
   );
-
-  // Diff range dropdowns. Left writes ?against ("base" | "1".."N-1").
-  // Right writes ?revision; a still-valid numeric base is preserved (the
-  // dropdowns are independent coordinates, as in Gerrit), an invalid one
-  // resets to Base, an explicit "base" is kept.
-  // An open editor's anchor is its *visual* column, which a range switch
-  // would silently re-map to a different (revision, side) at save time
-  // (lib/comments draftAnchor). Confirm-and-clear it first — the same
-  // discard guard collapse uses — instead of re-anchoring behind the user.
-  const switchRange = (patch: Record<string, string | null>) => {
-    if (editingTarget && !confirmEditorCollapse(true)) return;
-    updateParams(patch);
-  };
-  const onLeft = (v: string) => {
-    switchRange({ against: v });
-  };
-  const onRight = (n: number) => {
-    const patch: Record<string, string | null> = { revision: String(n) };
-    if (
-      againstRaw !== null &&
-      againstRaw !== "base" &&
-      deriveDiffBase(againstRaw, n) === undefined
-    )
-      patch.against = null;
-    switchRange(patch);
-  };
 
   const setLayoutPersist = (l: Layout) => {
     setLayout(l);
@@ -900,11 +914,7 @@ export default function ReviewPage() {
               <section className="change-threads">
                 <div className="outdated-title">Change discussion</div>
                 {changeLevelThreads.map((t) => (
-                  <CommentThread
-                    key={threadKey(t)}
-                    thread={t}
-                    changeNumber={changeNumber}
-                  />
+                  <CommentThread key={threadKey(t)} thread={t} />
                 ))}
                 {changeCommentOpen ? (
                   <CommentEditor
@@ -989,10 +999,7 @@ export default function ReviewPage() {
                               />
                             </div>
                           ) : null}
-                          <CommentThread
-                            thread={t}
-                            changeNumber={changeNumber}
-                          />
+                          <CommentThread thread={t} />
                         </div>
                       );
                     })}

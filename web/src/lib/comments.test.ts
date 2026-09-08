@@ -7,6 +7,7 @@ import {
   commentPlacement,
   draftAnchor,
   pendingResolved,
+  rangeSince,
   pendingUnresolvedCount,
   revisionActivity,
   threadCountByRevision,
@@ -174,6 +175,30 @@ describe("draftAnchor", () => {
         expect(placed).toEqual({ side: column, line: 12 });
       }
     }
+  });
+});
+
+describe("rangeSince", () => {
+  it("offers the interdiff from the thread's revision to the latest", () => {
+    expect(rangeSince(anchor(1, "new", 5), 1, undefined, 3)).toEqual({
+      against: 1,
+      selected: 3,
+    });
+  });
+  it("offers nothing on the latest revision", () => {
+    expect(rangeSince(anchor(3, "new", 5), 3, undefined, 3)).toBeNull();
+  });
+  it("offers nothing while that range is on screen", () => {
+    expect(rangeSince(anchor(1, "new", 5), 3, 1, 3)).toBeNull();
+  });
+  it("offers a change-level thread the range too", () => {
+    expect(rangeSince(anchor(1, "new", null), 1, undefined, 3)).toEqual({
+      against: 1,
+      selected: 3,
+    });
+  });
+  it("offers nothing to an old-side thread, which the range would hide", () => {
+    expect(rangeSince(anchor(1, "old", 5), 1, undefined, 3)).toBeNull();
   });
 });
 

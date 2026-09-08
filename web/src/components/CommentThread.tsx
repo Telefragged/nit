@@ -3,8 +3,9 @@ import { useState } from "react";
 import { createDraft, deleteDraft, updateDraft } from "../api/client";
 import type { Draft, ThreadComment } from "../api/types";
 import type { UiThread } from "../lib/comments";
-import { pendingResolved } from "../lib/comments";
+import { pendingResolved, rangeSince } from "../lib/comments";
 import { timeAgo } from "../lib/time";
+import { useReview } from "../pages/reviewContext";
 import CommentEditor from "./CommentEditor";
 import Markdown from "./Markdown";
 
@@ -127,15 +128,11 @@ interface ThreadEditor {
  * .comment-draft. A draft-only thread (`id === null`) is just its editable
  * draft — no published comments and no actions yet.
  */
-export default function CommentThread({
-  thread,
-  changeNumber,
-}: {
-  thread: UiThread;
-  changeNumber: number;
-}) {
+export default function CommentThread({ thread }: { thread: UiThread }) {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<ThreadEditor | null>(null);
+  const { changeNumber, selected, against, latestRevision, showRange } =
+    useReview();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["drafts", changeNumber] });
 
@@ -163,6 +160,7 @@ export default function CommentThread({
   });
 
   const isDraftThread = thread.id === null;
+  const since = rangeSince(thread, selected, against, latestRevision);
 
   return (
     <div className={`thread ${isDraftThread ? "thread-draft" : ""}`}>
@@ -199,6 +197,17 @@ export default function CommentThread({
           <span className="spacer" />
           {editor === null ? (
             <>
+              {since ? (
+                <button
+                  className="linkish"
+                  title="Show what the author changed after this comment"
+                  onClick={() => {
+                    showRange(since);
+                  }}
+                >
+                  Diff against latest
+                </button>
+              ) : null}
               <button
                 className="linkish"
                 onClick={() => {

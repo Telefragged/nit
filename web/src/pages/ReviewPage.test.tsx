@@ -424,6 +424,39 @@ describe("comment counts in the diff-range dropdowns", () => {
   });
 });
 
+// A thread anchored to an older revision offers the interdiff from that
+// revision to the latest, so the reviewer reads the thread against the
+// author's answer to it.
+describe("the thread's range button", () => {
+  const offers = () =>
+    screen.queryAllByRole("button", { name: "Diff against latest" });
+
+  it("switches the diff range to the thread's revision → latest", async () => {
+    renderReview("/changes/11?revision=0&against=base");
+    await diffLoaded("src/auth/rotate.rs");
+    fireEvent.click(
+      must(
+        byPath("src/auth/rotate.rs").querySelector(".file-header"),
+        ".file-header",
+      ),
+    );
+
+    await waitFor(() => {
+      expect(offers().length).toBeGreaterThan(0);
+    });
+    fireEvent.click(must(offers()[0], "a range button"));
+
+    const base = screen.getByLabelText<HTMLSelectElement>("Diff base");
+    const rev = screen.getByLabelText<HTMLSelectElement>("Revision");
+    await waitFor(() => {
+      expect(base.value).toBe("0");
+      expect(rev.value).toBe("1");
+    });
+    // The r0 → r1 range is on screen now, so nothing is left to offer.
+    expect(offers()).toHaveLength(0);
+  });
+});
+
 // `s` is the keyboard twin of the Submit button: inert until something is
 // drafted, then publishes the chain.
 describe("the s key submits the chain's draft decisions", () => {

@@ -19,6 +19,8 @@ const ctx: ReviewCtx = {
   changeNumber: 1,
   selected: 2,
   against: 1,
+  latestRevision: 2,
+  showRange: () => undefined,
   editingTarget: null,
   setEditingTarget: () => false,
   setEditorDirty: () => undefined,
