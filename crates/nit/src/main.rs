@@ -27,7 +27,7 @@ enum Cmd {
     Serve(server::ServeArgs),
     /// Push the cwd's checked-out commit (or [COMMIT]) for review (idempotent)
     Push(cli::PushArgs),
-    /// Print the chain's status: derived state and one line per member
+    /// Print one line per selected change: the branch's, or --tag
     Status(cli::StatusArgs),
     /// Print the aggregated chain log; --follow to stream, --wait to drain and exit
     Log(cli::LogArgs),

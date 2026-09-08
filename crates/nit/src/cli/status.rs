@@ -1,31 +1,43 @@
-//! `nit status` — print the chain's derived state plus one line per member.
+//! `nit status` — print one line per selected change.
 
 use anyhow::Result;
 
-use nit_types::domain::Chain;
-use nit_types::domain::ChangeNumber;
-
 use super::client::{Client, Retry, ServerOpt, server_url};
-use super::format::print_chain_digest;
-use super::resolve::resolve_chain;
+use super::format::tagged_digest;
+use super::resolve::{SelectArgs, Selection};
 
 #[derive(clap::Args)]
 pub struct StatusArgs {
-    /// Chain to read, by its tip change number; overrides the cwd lookup.
-    #[arg(long)]
-    pub chain: Option<ChangeNumber>,
+    #[command(flatten)]
+    pub select: SelectArgs,
     #[command(flatten)]
     pub server: ServerOpt,
 }
 
-/// Prints the chain's derived state plus one line per member.
+/// Prints the digest of the selected changes.
 ///
 /// # Errors
 ///
-/// When the server can't be reached or no chain matches the current branch.
+/// When the server can't be reached or the checkout selects nothing.
 pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
-    let change_number = resolve_chain(&client, args.chain, Retry::No)?;
-    let chain: Chain = client.get(&format!("/api/chains/{change_number}"))?;
-    print_chain_digest(&client, &chain, None)
+    let selection = args.select.resolve(&client)?;
+    print_digest(&client, &selection, None, Retry::No)
+}
+
+/// Prints the digest of the selected changes, with a `cursor=` line first
+/// when the caller gives a cursor.
+///
+/// # Errors
+///
+/// When the server can't be reached.
+pub(crate) fn print_digest(
+    client: &Client,
+    selection: &Selection,
+    cursor: Option<u64>,
+    retry: Retry,
+) -> Result<()> {
+    let changes = selection.changes(client, retry)?;
+    print!("{}", tagged_digest(&selection.tags, &changes, cursor));
+    Ok(())
 }

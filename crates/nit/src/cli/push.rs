@@ -12,13 +12,8 @@ use nit_types::push::{PushRequest, PushResult};
 
 use super::client::{Client, ServerOpt, server_url};
 use super::format::print_chain_digest;
-use super::git::{canonical_workdir, discover_repo, head_branch, resolve_tip};
-
-/// The environment variable Claude Code exports into every command it runs.
-///
-/// The tag key stays generic, so another harness passes its own id through
-/// `--tag session-id=…`.
-const SESSION_ID_VAR: &str = "CLAUDE_CODE_SESSION_ID";
+use super::git::{discover_repo, resolve_tip};
+use super::tags::observed_tags;
 
 #[derive(clap::Args)]
 pub struct PushArgs {
@@ -83,24 +78,7 @@ fn tag_chain(client: &Client, chain: &Chain, tags: Tags) -> Result<()> {
 /// commit. An explicit rev may name any commit in the repo, so the
 /// checked-out branch would say nothing about it.
 fn push_tags(repo: &Repository, args: &PushArgs) -> Tags {
-    // Observed context is a convenience. A value the vocabulary rejects
-    // drops here, and the push still succeeds. A path holding a control
-    // character is the case that reaches it.
-    [
-        canonical_workdir(repo).map(|dir| ("worktree", dir)),
-        args.commit
-            .is_none()
-            .then(|| head_branch(repo))
-            .flatten()
-            .map(|name| ("branch", name)),
-        std::env::var(SESSION_ID_VAR)
-            .ok()
-            .filter(|id| !id.is_empty())
-            .map(|id| ("session-id", id)),
-    ]
-    .into_iter()
-    .flatten()
-    .filter_map(|(key, value)| Tag::new(key, value).ok())
-    .chain(args.tag.iter().cloned())
-    .collect()
+    let mut tags = observed_tags(repo, args.commit.is_none());
+    tags.overlay(&args.tag.iter().cloned().collect());
+    tags
 }

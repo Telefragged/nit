@@ -5,7 +5,6 @@ use axum::extract::State;
 use git2::Repository;
 
 use nit_types::domain::ChangeNumber;
-use nit_types::domain::RevisionNumber;
 use nit_types::domain::{LogPayload, RevisionPayload};
 use nit_types::push::{PushRequest, PushResult, TipChange};
 
@@ -161,9 +160,7 @@ pub(super) async fn push(
             TipChange {
                 change_number: tip.change_number,
                 change_id: proj.change_id.clone(),
-                revision: proj
-                    .latest_revision()
-                    .map_or(RevisionNumber::new(0), |r| r.number),
+                revision: proj.latest_revision_number(),
                 status: proj.current_status(),
             }
         };

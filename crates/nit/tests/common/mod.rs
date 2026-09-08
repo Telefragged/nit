@@ -48,6 +48,12 @@ impl GitRepo {
         self.repo.workdir().unwrap().to_path_buf()
     }
 
+    /// The canonical workdir path, as the `worktree` tag spells it.
+    pub fn canonical_workdir(&self) -> String {
+        let workdir = std::fs::canonicalize(self.workdir()).expect("canonical workdir");
+        workdir.to_str().expect("utf-8 workdir").to_owned()
+    }
+
     /// The repo's canonical git-common-dir — the repo identity on the wire.
     pub fn git_dir(&self) -> String {
         git_dir_string(&self.repo)
@@ -271,13 +277,13 @@ fn parsed_output(out: &std::process::Output) -> (bool, Value, String) {
     (out.status.success(), value, stderr)
 }
 
-/// `nit push <branch>` from inside the repo: the branch is the positional
-/// commit (resolved locally). Registers the repo first (`nit repo create
-/// --canonical-ref main`) so the push has a base to fork from; a repeat create just
-/// errors, which is ignored.
-pub fn nit_register(server: &TestServer, repo: &GitRepo, branch: &str) -> (bool, Value, String) {
+/// A bare `nit push` from inside the repo: the checked-out commit, tagged
+/// with its branch. Registers the repo first (`nit repo create
+/// --canonical-ref main`) so the push has a base to fork from; a repeat
+/// create just errors, which is ignored.
+pub fn nit_register(server: &TestServer, repo: &GitRepo) -> (bool, Value, String) {
     let _ = nit(server, repo, &["repo", "create", "--canonical-ref", "main"]);
-    nit(server, repo, &["push", branch])
+    nit(server, repo, &["push"])
 }
 
 fn agent() -> ureq::Agent {

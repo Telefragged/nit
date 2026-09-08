@@ -1,7 +1,8 @@
 //! Display helpers shared by 2+ commands.
 //!
-//! One-line digests of log entries and chains, plus the `--change` /
-//! `--change-id` selector flattened into every change-scoped Args struct.
+//! One-line digests of log entries, chains and tag selections, plus the
+//! `--change` / `--change-id` selector flattened into every change-scoped
+//! Args struct.
 
 use std::collections::HashMap;
 
@@ -12,8 +13,13 @@ use nit_types::domain::Anchor;
 use nit_types::domain::Chain;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::ChangeProjection;
+use nit_types::domain::ChangeStatus;
 use nit_types::domain::LineAnchor;
+use nit_types::domain::RevisionNumber;
+use nit_types::domain::Tags;
 use nit_types::domain::ThreadProjection;
+use nit_types::domain::unresolved_at;
 use nit_types::domain::{CommentInput, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
@@ -108,18 +114,13 @@ pub(crate) fn print_chain_digest(
 }
 
 /// Unresolved-thread count per member, scoped to the revision the path pins.
-fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<ChangeNumber, u64>> {
+fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<ChangeNumber, usize>> {
     let mut counts = HashMap::new();
     for member in &chain.path {
         let detail: ChangeDetail = client.get(&format!("/api/changes/{}", member.change_number))?;
-        let open = detail
-            .threads
-            .iter()
-            .filter(|t| t.revision == member.revision && !t.resolved)
-            .count();
         counts.insert(
             member.change_number,
-            u64::try_from(open).unwrap_or(u64::MAX),
+            unresolved_at(&detail.threads, member.revision),
         );
     }
     Ok(counts)
@@ -127,36 +128,88 @@ fn member_unresolved(client: &Client, chain: &Chain) -> Result<HashMap<ChangeNum
 
 fn chain_digest(
     chain: &Chain,
-    unresolved: &HashMap<ChangeNumber, u64>,
+    unresolved: &HashMap<ChangeNumber, usize>,
     cursor: Option<u64>,
 ) -> String {
+    let header = match cursor {
+        Some(sequence) => format!("cursor={sequence} state={}", chain.state.as_str()),
+        None => format!("state={}", chain.state.as_str()),
+    };
+    let rows = chain.path.iter().map(|m| {
+        let row = digest_row(
+            m.position,
+            &m.change_id,
+            m.status,
+            m.revision,
+            unresolved.get(&m.change_number).copied().unwrap_or(0),
+        );
+        (row, m.subject.clone())
+    });
+    digest(&[header], rows)
+}
+
+/// The digest of the changes a tag selects.
+///
+/// Prints a `cursor=` line when the caller gives a cursor, then one
+/// `tag key=value` line per selecting tag, then one aligned line per
+/// change: `number change_id status rN Nu subject`. The changes stay in
+/// the server's order, ascending by change number. The number is the one
+/// `nit comment --change` takes. `status` and `Nu` are the change's status
+/// and unresolved thread count at its latest revision.
+pub(crate) fn tagged_digest(
+    tags: &Tags,
+    changes: &[ChangeProjection],
+    cursor: Option<u64>,
+) -> String {
+    let headers: Vec<String> = cursor
+        .map(|sequence| format!("cursor={sequence}"))
+        .into_iter()
+        .chain(tags.spelled().map(|tag| format!("tag {tag}")))
+        .collect();
+    let rows = changes.iter().map(|c| {
+        let revision = c.latest_revision_number();
+        let row = digest_row(
+            c.id.get(),
+            &c.change_id,
+            c.current_status(),
+            revision,
+            unresolved_at(&c.threads, revision),
+        );
+        (row, c.subject_at(revision))
+    });
+    digest(&headers, rows)
+}
+
+/// The fixed cells of one digest line.
+fn digest_row(
+    first: u64,
+    change_id: &ChangeId,
+    status: ChangeStatus,
+    revision: RevisionNumber,
+    unresolved: usize,
+) -> [String; 5] {
+    [
+        first.to_string(),
+        short_change_id(change_id),
+        status.as_str().to_string(),
+        format!("r{revision}"),
+        format!("{unresolved}u"),
+    ]
+}
+
+/// Prints the header lines, then one aligned line per row, each ending
+/// with its subject.
+fn digest(headers: &[String], rows: impl Iterator<Item = ([String; 5], String)>) -> String {
     use std::fmt::Write;
     let inf = "write to String is infallible";
     let mut out = String::new();
-    match cursor {
-        Some(sequence) => writeln!(out, "cursor={sequence} state={}", chain.state.as_str()),
-        None => writeln!(out, "state={}", chain.state.as_str()),
+    for header in headers {
+        writeln!(out, "{header}").expect(inf);
     }
-    .expect(inf);
-    let rows: Vec<[String; 5]> = chain
-        .path
-        .iter()
-        .map(|m| {
-            [
-                m.position.to_string(),
-                short_change_id(&m.change_id),
-                m.status.as_str().to_string(),
-                format!("r{}", m.revision),
-                format!(
-                    "{}u",
-                    unresolved.get(&m.change_number).copied().unwrap_or(0)
-                ),
-            ]
-        })
-        .collect();
-    let widths = column_widths(&rows);
-    for (m, cols) in chain.path.iter().zip(&rows) {
-        writeln!(out, "{}", aligned_row(cols, widths, &m.subject)).expect(inf);
+    let (cells, subjects): (Vec<[String; 5]>, Vec<String>) = rows.unzip();
+    let widths = column_widths(&cells);
+    for (cols, subject) in cells.iter().zip(&subjects) {
+        writeln!(out, "{}", aligned_row(cols, widths, subject)).expect(inf);
     }
     out
 }
@@ -502,6 +555,67 @@ mod tests {
         assert_eq!(
             render_entry(&revision(6, 20, "1234567890abcdef", "queue: second")),
             "sequence 20  change 42  revision 1234567890ab  queue: second"
+        );
+    }
+
+    #[test]
+    fn tagged_digest_lists_changes_by_number_at_their_latest_revision() {
+        use nit_types::domain::{Lifecycle, RevisionProjection, ThreadProjection};
+        use nit_types::testing::tags;
+        let revision = |number: u64, message: &str| RevisionProjection {
+            number: RevisionNumber::new(number),
+            commit_sha: sha(""),
+            parent_sha: sha(""),
+            fork_sha: sha(""),
+            message: message.to_string(),
+            resets_status: true,
+            created_at: String::new(),
+        };
+        let thread = |revision: u64, resolved: bool| ThreadProjection {
+            id: 0,
+            revision: RevisionNumber::new(revision),
+            anchor: Anchor::Change,
+            resolved,
+            comments: vec![],
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        let change = |id: u64, key: &str, revisions: Vec<RevisionProjection>, threads| {
+            let mut c = ChangeProjection::new(ChangeNumber::new(id), 1, change_id(key));
+            c.revisions = revisions;
+            c.threads = threads;
+            c
+        };
+        let mut merged = change(
+            2,
+            "Iabcdef0123456",
+            vec![revision(0, "web: render")],
+            vec![],
+        );
+        merged.lifecycle = Lifecycle::Merged;
+        let changes = vec![
+            merged,
+            change(
+                12,
+                "I0123456789abc",
+                vec![
+                    revision(0, "old"),
+                    revision(1, "server: add health\n\nbody"),
+                ],
+                vec![thread(0, false), thread(1, false), thread(1, true)],
+            ),
+        ];
+        // The count includes only the unresolved threads on the latest
+        // revision.
+        assert_eq!(
+            tagged_digest(&tags(&[("branch", "track/a")]), &changes, None),
+            "tag branch=track/a\n\
+             2   Iabcdef0  merged   r0  0u  web: render\n\
+             12  I0123456  pending  r1  1u  server: add health\n"
+        );
+        assert!(
+            tagged_digest(&tags(&[("branch", "track/a")]), &changes, Some(14))
+                .starts_with("cursor=14\ntag branch=track/a\n")
         );
     }
 

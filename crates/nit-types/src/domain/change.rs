@@ -158,16 +158,23 @@ impl ChangeProjection {
             .unwrap_or_default()
     }
 
+    /// The number of the latest revision, or 0 when the change has none.
+    ///
+    /// A thread or a status created before the first revision uses 0,
+    /// because the first revision gets number 0 when it arrives.
+    #[must_use]
+    pub fn latest_revision_number(&self) -> RevisionNumber {
+        self.latest_revision()
+            .map_or(RevisionNumber::new(0), |r| r.number)
+    }
+
     /// The change's current status.
     ///
     /// [`status_at`](Self::status_at) its latest revision (pending when it
     /// has none).
     #[must_use]
     pub fn current_status(&self) -> ChangeStatus {
-        self.status_at(
-            self.latest_revision()
-                .map_or(RevisionNumber::new(0), |r| r.number),
-        )
+        self.status_at(self.latest_revision_number())
     }
 
     /// The displayed status at a pinned revision.

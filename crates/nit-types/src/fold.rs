@@ -145,11 +145,9 @@ fn open_thread(
     review_id: Option<u64>,
     now: &str,
 ) {
-    let revision = c.revision.unwrap_or_else(|| {
-        change
-            .latest_revision()
-            .map_or(RevisionNumber::new(0), |r| r.number)
-    });
+    let revision = c
+        .revision
+        .unwrap_or_else(|| change.latest_revision_number());
     change.threads.push(ThreadProjection {
         id,
         revision,

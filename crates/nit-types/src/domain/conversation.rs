@@ -239,6 +239,15 @@ pub struct ThreadProjection {
     pub updated_at: String,
 }
 
+/// How many of `threads` are on `revision` and unresolved.
+#[must_use]
+pub fn unresolved_at(threads: &[ThreadProjection], revision: RevisionNumber) -> usize {
+    threads
+        .iter()
+        .filter(|t| t.revision == revision && !t.resolved)
+        .count()
+}
+
 /// One message in a thread.
 ///
 /// `review_id` is the review that published it, or `None` for an author's

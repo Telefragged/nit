@@ -18,8 +18,8 @@ use common::{
 };
 
 /// `nit push` prints the resulting chain digest and registers the chain;
-/// `nit status`/`nit log` then read the derived chain back, resolved from the
-/// cwd HEAD.
+/// `nit status`/`nit log` then read the change back by the worktree it was
+/// pushed from.
 #[test]
 fn push_prints_digest_then_status_and_log_read_it_back() {
     let g = GitRepo::new();
@@ -28,7 +28,7 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
     g.repo.set_head("refs/heads/feat").unwrap(); // the author's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
     // push prints the chain digest — a `state=` header and one member line
     // (position change_id status rN Nu subject) — so no follow-up read.
@@ -39,13 +39,16 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
         "{push}"
     );
 
-    // status reads the derived chain back from the cwd HEAD and prints the same
-    // digest.
+    // status reads by the worktree's tag (the harness clears the session
+    // id) and prints one line per change that has it.
     let (ok, status, stderr) = nit(&server, &g, &["status"]);
     assert!(ok, "{stderr}");
     let status = status.as_str().expect("status prints text");
-    assert!(status.contains("state=waiting_for_review"), "{status}");
-    assert!(status.contains("Ia") && status.contains("r0"), "{status}");
+    assert!(status.starts_with("tag worktree="), "{status}");
+    assert!(
+        status.contains("Ia") && status.contains("pending") && status.contains("r0"),
+        "{status}"
+    );
 
     let (ok, log, stderr) = nit(&server, &g, &["log"]);
     assert!(ok, "{stderr}");
@@ -66,12 +69,12 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, _push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
 
     let c1b = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nB\n")]);
     g.branch("feat", c1b);
-    let (ok, push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
     assert!(
         push.as_str().is_some_and(|d| d.contains("r1")),
@@ -87,7 +90,7 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
         "two revision entries: {log}"
     );
 
-    let (ok, push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
     assert!(push.as_str().is_some_and(|d| d.contains("r1")), "{push}");
     let (_ok, log, _) = nit(&server, &g, &["log"]);
@@ -107,7 +110,7 @@ fn comment_opens_replies_resolves() {
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (ok, _push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, _push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
 
     // Open a new thread on the change, resolved by the cwd's Change-Id. The
@@ -189,7 +192,7 @@ fn comment_body_from_file_and_stdin() {
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let (ok, _push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, _push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
 
     let body_path = g.dir.path().join("body.md");
@@ -261,7 +264,7 @@ fn reopen_an_abandoned_change() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, _push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
 
     // CLI abandon — a reviewer or author judgment, distinct from the background
@@ -285,7 +288,7 @@ fn reopen_an_abandoned_change() {
     );
 
     // No 409 gate after reopen — the change accepts a new push.
-    let (ok, push, stderr) = nit_register(&server, &g, "feat");
+    let (ok, push, stderr) = nit_register(&server, &g);
     assert!(ok, "reopened change accepts a push: {stderr}");
     assert!(push.as_str().is_some_and(|d| d.contains("Ia")), "{push}");
 }
@@ -299,12 +302,71 @@ fn push_without_change_number_fails_with_a_helpful_message() {
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    let (ok, _json, stderr) = nit_register(&server, &g, "feat");
+    let (ok, _json, stderr) = nit_register(&server, &g);
     assert!(!ok, "a missing Change-Id must fail the push");
     assert!(
         stderr.contains("Change-Id trailer"),
         "the error names the missing trailer: {stderr}"
     );
+}
+
+/// Without `--tag`, `nit status` selects by the harness session, else
+/// the worktree, else the branch. `--tag` replaces that with any tag.
+#[test]
+fn status_selects_by_the_session_worktree_or_branch_or_an_explicit_tag() {
+    let g = GitRepo::new();
+    let a = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    let b = g.commit(&[a], &msg("core: add b", "Ib"), &[("b.txt", "b\n")]);
+    g.branch("feat", b);
+    let c = g.commit(&[g.root], &msg("core: add c", "Ic"), &[("c.txt", "c\n")]);
+    g.branch("other", c);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let (ok, _, stderr) = nit_register(&server, &g);
+    assert!(ok, "{stderr}");
+    g.repo.set_head("refs/heads/other").unwrap();
+    let (ok, _, stderr) = nit_register(&server, &g);
+    assert!(ok, "{stderr}");
+    g.repo.set_head("refs/heads/feat").unwrap();
+
+    // The harness clears the session id, so the worktree comes first, and
+    // both branches were pushed from it.
+    let (ok, status, stderr) = nit(&server, &g, &["status"]);
+    assert!(ok, "{stderr}");
+    let status = status.as_str().expect("status prints text");
+    let lines: Vec<&str> = status.lines().collect();
+    assert_eq!(
+        lines[0],
+        format!("tag worktree={}", g.canonical_workdir()),
+        "{status}"
+    );
+    assert_eq!(
+        lines.len(),
+        4,
+        "one line per change in the worktree: {status}"
+    );
+    assert!(
+        lines[1].contains("Ia") && lines[2].contains("Ib") && lines[3].contains("Ic"),
+        "{status}"
+    );
+
+    // A session id comes before the worktree. No change carries this one.
+    let (ok, status, stderr) = nit_env(
+        &server,
+        &g,
+        &["status"],
+        &[("CLAUDE_CODE_SESSION_ID", "sess-9")],
+    );
+    assert!(ok, "{stderr}");
+    let status = status.as_str().expect("status prints text");
+    assert_eq!(status.trim_end(), "tag session-id=sess-9", "{status}");
+
+    let (ok, status, stderr) = nit(&server, &g, &["status", "--tag", "branch=other"]);
+    assert!(ok, "{stderr}");
+    let status = status.as_str().expect("status prints text");
+    assert!(status.starts_with("tag branch=other\n"), "{status}");
+    assert!(status.contains("Ic") && !status.contains("Ia"), "{status}");
 }
 
 #[test]
@@ -404,10 +466,9 @@ fn push_tags_derived_and_explicit_values() {
     assert!(ok, "{stderr}");
 
     let repo_id = first_repo_id(&server);
-    let workdir = std::fs::canonicalize(g.workdir()).expect("canonical workdir");
     let tags = change_tags(&server, repo_id, "Ia");
     assert_eq!(tags["branch"], "feat");
-    assert_eq!(tags["worktree"], workdir.to_str().expect("utf-8 workdir"));
+    assert_eq!(tags["worktree"], g.canonical_workdir());
     assert_eq!(tags["session-id"], "sess-1");
     assert_eq!(tags["feature"], "epic-saga");
 
@@ -421,7 +482,7 @@ fn push_tags_derived_and_explicit_values() {
         tags.get("branch").is_none(),
         "no branch for an explicit rev: {tags}"
     );
-    assert_eq!(tags["worktree"], workdir.to_str().expect("utf-8 workdir"));
+    assert_eq!(tags["worktree"], g.canonical_workdir());
     assert!(
         tags.get("session-id").is_none(),
         "the harness clears the ambient session id: {tags}"

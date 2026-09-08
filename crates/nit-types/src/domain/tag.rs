@@ -79,6 +79,14 @@ impl Tags {
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
         self.0.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
+
+    /// Each tag as a `key=value` string, ascending by key.
+    ///
+    /// [`Tag`] parses this form, so a set survives a round trip through
+    /// strings.
+    pub fn spelled(&self) -> impl Iterator<Item = String> {
+        self.iter().map(|(key, value)| format!("{key}={value}"))
+    }
 }
 
 impl FromIterator<Tag> for Tags {

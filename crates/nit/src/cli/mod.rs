@@ -4,13 +4,16 @@
 //! git repo. They print concise text for the author to act on; all review
 //! logic lives server-side.
 //!
-//! A chain is addressed by its **tip change number**. `nit status`/`nit log`
-//! resolve the cwd's tip change from local HEAD; `nit comment` targets a change
-//! directly. The live followers `nit log --follow`/`--wait` watch the cwd's
-//! chain over the websocket change stream.
+//! `nit status` and `nit log` read the changes that have a tag. The tag
+//! comes from `--tag`, or else from the checkout: its harness session,
+//! else its worktree, else its branch. `nit comment` names a change
+//! directly.
+//! `nit log --follow` and `--wait` read the same changes and then wait for
+//! new entries on the websocket.
 //!
 //! Modules: shared infrastructure (`client` transport, `git` discovery,
-//! `resolve` id-lookup, `format` digests) plus one module per subcommand group.
+//! `tags` the checkout's tags, `resolve` the selection, `format` digests)
+//! plus one module per subcommand group.
 
 mod client;
 mod comment;
@@ -22,6 +25,7 @@ mod push;
 mod repo;
 mod resolve;
 mod status;
+mod tags;
 mod version;
 
 pub use comment::{CommentArgs, comment};
