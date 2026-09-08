@@ -454,16 +454,19 @@ export default function ReviewPage() {
   const onLeft = (v: string) => {
     switchRange({ against: v });
   };
-  const onRight = (n: number) => {
-    const patch: Record<string, string | null> = { revision: String(n) };
-    if (
-      againstRaw !== null &&
-      againstRaw !== "base" &&
-      deriveDiffBase(againstRaw, n) === undefined
-    )
-      patch.against = null;
-    switchRange(patch);
-  };
+  const onRight = useCallback(
+    (n: number) => {
+      const patch: Record<string, string | null> = { revision: String(n) };
+      if (
+        againstRaw !== null &&
+        againstRaw !== "base" &&
+        deriveDiffBase(againstRaw, n) === undefined
+      )
+        patch.against = null;
+      switchRange(patch);
+    },
+    [againstRaw, switchRange],
+  );
 
   const ctxValue: ReviewCtx = useMemo(
     () => ({
@@ -538,8 +541,9 @@ export default function ReviewPage() {
   });
 
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
-  // expanded, then scrolled), n / shift+n next/previous change, c comments
-  // on the selected diff text, a opens the reply modal. All inert while the
+  // expanded, then scrolled), n / shift+n next/previous change, r the latest
+  // revision, c comments on the selected diff text, a opens the reply modal.
+  // All inert while the
   // modal is open — it is a showModal() dialog, so it owns the keyboard
   // (Escape arrives as its cancel event) and the page behind it is inert.
   useEffect(() => {
@@ -562,6 +566,10 @@ export default function ReviewPage() {
         if (position < 0) return;
         const next = chainPath[position + (key === "n" ? 1 : -1)];
         if (next) void navigate(`/changes/${next.change_number}`);
+      } else if (key === "r") {
+        // Guarded, because switchRange asks the reviewer to discard an open
+        // comment editor — the latest revision is where they already are.
+        if (selected !== latestRevision) onRight(latestRevision);
       } else if (key === "c") {
         // Draft a comment on the selected diff text (gerrit's c) — or on
         // the caret's line when the selection is collapsed.
@@ -611,6 +619,9 @@ export default function ReviewPage() {
     diffKey,
     mode,
     chooseMode,
+    selected,
+    latestRevision,
+    onRight,
   ]);
 
   // Side-by-side selection paint: tag the diff column with the side the
@@ -816,12 +827,12 @@ export default function ReviewPage() {
             </button>
             <span
               className="kbd-hint"
-              title="Keyboard: [ and ] switch files, n and shift+n switch changes, c comments on the selected diff text, a opens the reply dialog"
+              title="Keyboard: [ and ] switch files, n and shift+n switch changes, r shows the latest revision, c comments on the selected diff text, a opens the reply dialog"
             >
               <kbd>[</kbd>
               <kbd>]</kbd> files · <kbd>n</kbd>
-              <kbd>shift+n</kbd> changes · <kbd>c</kbd> comment · <kbd>a</kbd>{" "}
-              reply · <kbd>0</kbd> outline
+              <kbd>shift+n</kbd> changes · <kbd>r</kbd> latest revision ·{" "}
+              <kbd>c</kbd> comment · <kbd>a</kbd> reply · <kbd>0</kbd> outline
             </span>
             <span className="seg">
               <button

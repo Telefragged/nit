@@ -457,6 +457,24 @@ describe("the thread's range button", () => {
   });
 });
 
+// The page holds the revision it opened with, so `r` is how the reviewer
+// follows a revision the author pushes mid-review.
+describe("the latest-revision shortcut", () => {
+  it("r moves the revision to the latest and keeps the diff base", async () => {
+    renderReview("/changes/11?revision=0&against=base");
+    await diffLoaded("src/auth/rotate.rs");
+
+    fireEvent.keyDown(window, { key: "r" });
+
+    const base = screen.getByLabelText<HTMLSelectElement>("Diff base");
+    const rev = screen.getByLabelText<HTMLSelectElement>("Revision");
+    await waitFor(() => {
+      expect(rev.value).toBe("1");
+    });
+    expect(base.value).toBe("base");
+  });
+});
+
 // `s` is the keyboard twin of the Submit button: inert until something is
 // drafted, then publishes the chain.
 describe("the s key submits the chain's draft decisions", () => {
