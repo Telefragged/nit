@@ -70,13 +70,13 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(repos::get_repo).patch(repos::relocate_repo),
         )
         .route("/api/push", post(push::push))
+        .route("/api/submit", post(reviews::submit))
         .route("/api/changes", get(changes::list_changes))
         .route("/api/tags", get(changes::list_tags))
         .route("/api/log", get(changes::list_log))
         .route("/api/history", get(chains::repo_history))
         .route("/api/chains", get(chains::list_chains))
         .route("/api/chains/{id}", get(chains::get_chain))
-        .route("/api/chains/{id}/submit", post(reviews::submit_chain))
         .route("/api/changes/{id}", get(changes::get_change_detail))
         .route(
             "/api/changes/{id}/revisions/{n}/diff",
@@ -211,8 +211,7 @@ fn change_or_404(
 /// The chain context a chain endpoint operates on.
 ///
 /// The repo's [`RepoView`], its id, and the tip sha the path through
-/// `change_number` walks at `revision`. Shared by `get_chain` and
-/// `submit_chain`.
+/// `change_number` walks at `revision`.
 fn chain_context(
     state: &Arc<AppState>,
     conn: &rusqlite::Connection,

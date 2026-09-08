@@ -1,7 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { clearDecision, setDraftDecision, submitChain } from "../api/client";
-import type { Chain, ChangeDetail, Decision } from "../api/types";
+import {
+  clearDecision,
+  setDraftDecision,
+  submitDecisions,
+} from "../api/client";
+import type { ChangeDetail, Decision } from "../api/types";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { shortcutKey } from "../lib/shortcutKey";
@@ -28,26 +32,27 @@ function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
 
 /**
  * Slim sticky bottom bar and the review modal it opens (`a`). The modal
- * drafts into the change's `draft_decision`; the bar's **Submit chain**
- * publishes every member's at once.
+ * drafts into the change's `draft_decision`; the bar's **Submit**
+ * publishes every listed change's at once.
  * The bar shows the draft/unresolved counts plus the draft decision so the
  * reviewer can see and submit pending work without leaving the diff.
  */
 export default function ReviewBar({
   change,
-  chain,
-  memberDecisions,
+  tag,
+  drafted,
   selectedRevision,
   unresolved,
   replyOpen,
   onReplyOpenChange,
 }: {
   change: ChangeDetail;
-  /** The selected revision's chain context, for the chain-wide submit. */
-  chain: Chain | undefined;
-  /** Each chain member's draft decision (or null), keyed by change number —
-   * the source for the chain-wide submit count. */
-  memberDecisions: Map<number, Decision | null>;
+  /** The tag (`key=value`) the listed changes share; undefined when the
+   * change carries none, and then nothing submits. */
+  tag: string | undefined;
+  /** How many changes carrying `tag` have a draft decision — what Submit
+   * publishes. */
+  drafted: number;
   selectedRevision: number;
   /** Threads that would stay open once the drafts publish. */
   unresolved: number;
@@ -65,22 +70,15 @@ export default function ReviewBar({
   const drafts = change.drafts.length;
   const draftDecision = change.draft_decision;
   const abandoned = change.revisions.at(-1)?.status === "abandoned";
-  // Chain members with a draft decision — what Submit publishes.
-  const draftedInChain =
-    chain?.path.filter(
-      (c) => (memberDecisions.get(c.change_number) ?? null) !== null,
-    ).length ?? 0;
-
   const invalidate = () => {
-    // The chain-wide count reads every member's draft decision, so refresh all
+    // The submit count reads every member's draft decision, so refresh all
     // loaded drafts overlays, not only this one (each is keyed ["drafts", id]).
     // The published projection updates itself off the websocket.
     void queryClient.invalidateQueries({ queryKey: ["drafts"] });
-    void queryClient.invalidateQueries({ queryKey: ["chain"] });
   };
 
-  // Draft a decision (does not publish); the reviewer sweeps the chain and
-  // submits when every member is decided.
+  // Draft a decision (does not publish); the reviewer sweeps the listed
+  // changes and submits when every one is decided.
   const saveDraft = useMutation({
     mutationFn: (decision: Decision) =>
       setDraftDecision(change.id, { decision, message: message.trim() }),
@@ -103,13 +101,13 @@ export default function ReviewBar({
     },
   });
 
-  // Publish every draft decision in this chain. Best-effort per change: a
+  // Publish every listed change's draft decision. Best-effort per change: a
   // member skipped for a stale/terminal lifecycle comes back in `errors` and
   // keeps the modal-equivalent banner.
   const submit = useMutation({
     mutationFn: () => {
-      if (!chain) throw new Error("no chain context to submit");
-      return submitChain(chain.tip_change_number, chain.path.at(-1)?.revision);
+      if (tag === undefined) throw new Error("the change carries no tag");
+      return submitDecisions(change.repo_id, tag);
     },
     onSuccess: (result) => {
       invalidate();
@@ -126,7 +124,7 @@ export default function ReviewBar({
   });
 
   // What gates the Submit button and its `s` shortcut alike.
-  const canSubmit = draftedInChain > 0 && !submit.isPending;
+  const canSubmit = drafted > 0 && !submit.isPending;
 
   // Seed the cover message from the draft decision when the modal opens —
   // adjust-during-render on the false→true edge (not an effect), so the draft
@@ -202,15 +200,15 @@ export default function ReviewBar({
             className="btn-primary"
             disabled={!canSubmit}
             title={
-              draftedInChain === 0
+              drafted === 0
                 ? "Draft a decision first (Review)"
-                : "Publish every draft decision in this chain"
+                : "Publish every listed change's draft decision"
             }
             onClick={() => {
               submit.mutate();
             }}
           >
-            Submit chain (s){draftedInChain > 0 ? ` · ${draftedInChain}` : ""}
+            Submit (s){drafted > 0 ? ` · ${drafted}` : ""}
           </button>
           <button
             className="btn-primary"
@@ -248,8 +246,8 @@ export default function ReviewBar({
               {stats}
             </div>
             <div className="dim reply-modal-hint">
-              Your decision is a draft, not published — submit the chain to
-              publish every member&apos;s decision at once.
+              Your decision is a draft, not published — Submit publishes every
+              listed change&apos;s decision at once.
             </div>
             {error ? (
               <div className="banner banner-error review-conflict">

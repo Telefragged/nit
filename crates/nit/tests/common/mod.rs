@@ -419,20 +419,30 @@ pub fn change_tags(server: &TestServer, repo_id: u64, label: &str) -> Value {
 }
 
 /// Publish a verdict on a change through the only publish path — draft the
-/// decision, then batch-submit the change's chain. The change is its own
-/// tip for a single-commit chain; for a multi-commit one only this change
-/// is drafted, so submit publishes just it. Returns the `BatchSubmitResult`.
+/// decision, then batch-submit that one change. Returns the
+/// `BatchSubmitResult`.
 pub fn review(server: &TestServer, change_number: u64, verdict: &str, message: &str) -> Value {
     let (st, _) = http_put(
         &server.url(&format!("/api/changes/{change_number}/decision")),
         &json!({"decision": verdict, "message": message}),
     );
     assert_eq!(st, 200, "draft decision on change {change_number}");
-    let (st, out) = http_post(
-        &server.url(&format!("/api/chains/{change_number}/submit")),
-        &json!({}),
-    );
-    assert_eq!(st, 200, "submit chain {change_number}: {out}");
+    submit_change(server, change_number)
+}
+
+/// Submits the one change, by its `Change-Id`.
+pub fn submit_change(server: &TestServer, change_number: u64) -> Value {
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_number}")));
+    assert_eq!(st, 200, "{detail}");
+    let change_id = detail["change_id"].as_str().expect("a change id");
+    submit(server, &format!("change_id={change_id}"))
+}
+
+/// `POST /api/submit?{query}`: publishes the draft decisions of the changes
+/// the query picks. Returns the `BatchSubmitResult`.
+pub fn submit(server: &TestServer, query: &str) -> Value {
+    let (st, out) = http_post(&server.url(&format!("/api/submit?{query}")), &json!({}));
+    assert_eq!(st, 200, "submit {query}: {out}");
     out
 }
 

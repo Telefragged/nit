@@ -547,7 +547,7 @@ const captures = [
     },
   },
   // A change with a draft decision (change 12, seeded request_changes): the
-  // bottom bar shows the draft chip and an enabled "Submit chain", and the
+  // bottom bar shows the draft chip and an enabled "Submit", and the
   // modal pre-fills the draft decision (✎ on Request changes) + its message.
   {
     name: "review-draft-decision",

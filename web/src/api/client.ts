@@ -4,7 +4,6 @@
 
 import type {
   BatchSubmitResult,
-  Chain,
   ChangeDrafts,
   ChangeList,
   ChangeStatus,
@@ -67,16 +66,6 @@ async function request<T = void>(
 export const listRepos = () => request<RepoList>("GET", "/repos");
 
 export const getRepo = (id: number) => request<Repo>("GET", `/repos/${id}`);
-
-/** The derived chain through a change's tip. `revision` selects which
- * version of the change to root on (and hence the chain context). */
-export const getChain = (changeNumber: number, revision?: number) =>
-  request<Chain>(
-    "GET",
-    revision === undefined
-      ? `/chains/${changeNumber}`
-      : `/chains/${changeNumber}?revision=${revision}`,
-  );
 
 const statusQuery = (statuses: ChangeStatus[]) =>
   statuses.map((s) => `&status=${s}`).join("");
@@ -156,7 +145,7 @@ export const updateDraft = (id: number, req: EditDraft) =>
 
 export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
 
-// Reviewer decisions (drafted like comments, published per chain)
+// Reviewer decisions (drafted like comments, published in a batch)
 
 /** Set (or overwrite) a change's draft decision. */
 export const setDraftDecision = (changeNumber: number, req: DraftDecision) =>
@@ -165,12 +154,10 @@ export const setDraftDecision = (changeNumber: number, req: DraftDecision) =>
 export const clearDecision = (changeNumber: number) =>
   request("DELETE", `/changes/${changeNumber}/decision`);
 
-/** Publish every member's draft decision for the chain rooted at `tipChangeId`.
- * `revision` picks the chain context (the tip's own), like getChain. */
-export const submitChain = (tipChangeId: number, revision?: number) =>
+/** Publish the draft decision of every change in `repoId` carrying `tag`
+ * (`key=value`), each at its latest revision. */
+export const submitDecisions = (repoId: number, tag: string) =>
   request<BatchSubmitResult>(
     "POST",
-    revision === undefined
-      ? `/chains/${tipChangeId}/submit`
-      : `/chains/${tipChangeId}/submit?revision=${revision}`,
+    `/submit?repo=${repoId}&tag=${encodeURIComponent(tag)}`,
   );

@@ -17,14 +17,13 @@ import { flushSync } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   createDraft,
-  getChain,
+  getChangeDrafts,
   getChanges,
   getDiff,
   getRepo,
 } from "../api/client";
 import type {
   ChangeDetail,
-  Decision,
   DiffMode,
   Review,
   Revision,
@@ -261,7 +260,7 @@ export default function ReviewPage() {
   // The change page is event-driven: the published projection (revisions,
   // threads, reviews) is folded from the change-event websocket into the
   // ["change", id] cache by `useChangeStream` (below). This query only reads
-  // that cache (skipToken — never fetches). The chain structure, the diff, the
+  // that cache (skipToken — never fetches). The listed changes, the diff, the
   // repo, and the reviewer's drafts/draft decision are not in the log, so they
   // stay REST; `change` composes the published projection with the drafts
   // overlay (`useDrafts`).
@@ -328,12 +327,6 @@ export default function ReviewPage() {
   const selected = selectedRev?.number ?? 1;
   const latestRevision = latest?.number ?? 1;
 
-  // The chain rooted at the viewed revision, for the review bar's submit.
-  const chainQ = useQuery({
-    queryKey: ["chain", changeNumber, selected],
-    queryFn: published ? () => getChain(changeNumber, selected) : skipToken,
-  });
-
   // The sidebar lists every change that carries the same value as this one
   // for the selected tag key. The key the reviewer picked last is kept per
   // browser, so it follows them between changes as long as each carries it.
@@ -368,6 +361,12 @@ export default function ReviewPage() {
   // the two.
   useChangeStream([changeNumber, ...memberIds]);
   const draftsMap = useDrafts([changeNumber, ...memberIds]);
+  // The same read useDrafts makes for this change, for its error: an
+  // unknown change number surfaces here, because the websocket says nothing.
+  const draftsQ = useQuery({
+    queryKey: ["drafts", changeNumber],
+    queryFn: () => getChangeDrafts(changeNumber),
+  });
   const overlay = draftsMap.get(changeNumber);
   const change = useMemo(
     () =>
@@ -394,8 +393,7 @@ export default function ReviewPage() {
 
   // Each member's published projection comes from the ["change", id] cache
   // the stream keeps live (TagNav reads each member's status and unresolved
-  // count); its draft decision comes from the member's drafts overlay, for
-  // the review bar's chain-wide "Submit (k)" count.
+  // count).
   const memberQueries = useQueries({
     queries: memberIds.map((id) => ({
       queryKey: ["change", id],
@@ -410,10 +408,9 @@ export default function ReviewPage() {
       memberQueries.flatMap((q) => (q.data ? [q.data as ChangeDetail] : [])),
     [memberQueries],
   );
-  const memberDecisions = new Map<number, Decision | null>();
-  draftsMap.forEach((d, id) => {
-    memberDecisions.set(id, d.draft_decision?.decision ?? null);
-  });
+  const drafted = [...draftsMap.values()].filter(
+    (d) => d.draft_decision !== null,
+  ).length;
 
   const againstRaw = searchParams.get("against");
   const against = deriveDiffBase(againstRaw, selected);
@@ -773,11 +770,11 @@ export default function ReviewPage() {
   }, [threads, files, selected, against]);
 
   // The change's published projection arrives over the websocket (no fetch to
-  // error on); a bad change number surfaces when its chain REST read fails.
-  if (chainQ.isError) {
+  // error on); a bad change number surfaces when its drafts REST read fails.
+  if (draftsQ.isError) {
     return (
       <main className="page">
-        <ErrorPanel error={chainQ.error} />
+        <ErrorPanel error={draftsQ.error} />
       </main>
     );
   }
@@ -791,7 +788,6 @@ export default function ReviewPage() {
     );
   }
 
-  const chain = chainQ.data;
   const repo = repoQ.data;
   const allFilesExpanded = allExpanded(expanded, files);
 
@@ -1064,8 +1060,8 @@ export default function ReviewPage() {
 
         <ReviewBar
           change={change}
-          chain={chain}
-          memberDecisions={memberDecisions}
+          tag={tag}
+          drafted={drafted}
           selectedRevision={selected}
           unresolved={pendingUnresolvedCount(threads)}
           replyOpen={replyOpen}

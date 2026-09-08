@@ -1,10 +1,9 @@
-//! Draft reviewer decisions + the per-chain batch submit. A decision is
-//! reviewer scratch like a comment draft
-//! (`PUT`/`DELETE /api/changes/{id}/decision`), published only by
-//! `POST /api/chains/{id}/submit`, which publishes each member's draft
-//! decision at the revision the chain path pins. Abandonment is one of
-//! the decisions, published by the same submit; submit is idempotent (a
-//! published decision's row is gone).
+//! Draft reviewer decisions + the batch submit. A decision is reviewer
+//! scratch like a comment draft (`PUT`/`DELETE /api/changes/{id}/decision`),
+//! published only by `POST /api/submit`, which publishes the draft
+//! decision of every change its query picks, at the change's latest
+//! revision. Abandonment is one of the decisions, published by the same
+//! submit; submit is idempotent (a published decision's row is gone).
 
 mod common;
 
@@ -32,16 +31,7 @@ fn draft(server: &TestServer, change_number: u64, decision: &str, message: &str)
     assert_eq!(d["decision"], decision);
 }
 
-fn submit_chain(server: &TestServer, tip: u64) -> Value {
-    let (st, out) = http_post(
-        &server.url(&format!("/api/chains/{tip}/submit")),
-        &json!({}),
-    );
-    assert_eq!(st, 200, "{out}");
-    out
-}
-
-/// The change's status at the revision its own chain pins.
+/// The change's status at its latest revision.
 fn status_at(server: &TestServer, change_number: u64) -> String {
     common::status_at(server, change_number, None).unwrap_or_else(|| "?".to_string())
 }
@@ -136,7 +126,7 @@ fn batch_submit_publishes_verdict_and_drains_comments() {
     draft_comment(&server, id, "a.txt", 2, "why a2?");
     draft(&server, id, "request_changes", "a nit");
 
-    let out = submit_chain(&server, id);
+    let out = submit_change(&server, id);
     assert_eq!(out["submitted"], 1);
     assert!(out["errors"].as_array().unwrap().is_empty());
 
@@ -170,7 +160,7 @@ fn batch_submit_leaves_undecided_comment_only_change() {
 
     draft_comment(&server, id, "a.txt", 1, "a note, no verdict");
 
-    let out = submit_chain(&server, id);
+    let out = submit_change(&server, id);
     assert_eq!(out["submitted"], 0, "nothing drafted → nothing published");
     let d = detail(&server, id);
     assert_eq!(
@@ -196,7 +186,7 @@ fn batch_submit_abandon_decision_drains_and_records_reason() {
     draft_comment(&server, id, "a.txt", 1, "this is why it is wrong");
     draft(&server, id, "abandon", "superseded by another approach");
 
-    let out = submit_chain(&server, id);
+    let out = submit_change(&server, id);
     assert_eq!(out["submitted"], 1);
     assert_eq!(status_at(&server, id), "abandoned");
 
@@ -242,7 +232,7 @@ fn batch_submit_reopen_decision() {
     assert_eq!(status_at(&server, id), "abandoned");
 
     draft(&server, id, "reopen", "");
-    let out = submit_chain(&server, id);
+    let out = submit_change(&server, id);
     assert_eq!(out["submitted"], 1);
     assert_eq!(status_at(&server, id), "pending", "reopened back to live");
     assert_eq!(detail(&server, id)["draft_decision"], Value::Null);
@@ -265,7 +255,7 @@ fn batch_submit_skips_illegal_decision_keeps_row() {
     assert_eq!(st, 200);
     draft(&server, id, "approve", "lgtm");
 
-    let out = submit_chain(&server, id);
+    let out = submit_change(&server, id);
     assert_eq!(out["submitted"], 0);
     let errors = out["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 1);
@@ -286,8 +276,8 @@ fn batch_submit_is_idempotent() {
     let id = push_one(&server, &g, "feat", "Ia");
 
     draft(&server, id, "approve", "lgtm");
-    assert_eq!(submit_chain(&server, id)["submitted"], 1);
-    assert_eq!(submit_chain(&server, id)["submitted"], 0);
+    assert_eq!(submit_change(&server, id)["submitted"], 1);
+    assert_eq!(submit_change(&server, id)["submitted"], 0);
     assert_eq!(
         detail(&server, id)["reviews"].as_array().unwrap().len(),
         1,
@@ -296,10 +286,10 @@ fn batch_submit_is_idempotent() {
     assert_eq!(status_at(&server, id), "approved");
 }
 
-/// One submit publishes every member's draft decision, each at the revision
-/// the chain path pins on it.
+/// One submit publishes the draft decision of every change carrying the
+/// tag, and leaves a change outside the tag alone.
 #[test]
-fn batch_submit_publishes_every_member() {
+fn batch_submit_publishes_every_tagged_change() {
     let g = GitRepo::new();
     let a = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
     let b = g.commit(&[a], &msg("core: b", "Ib"), &[("b.txt", "b\n")]);
@@ -310,21 +300,34 @@ fn batch_submit_publishes_every_member() {
     let id_a = member_id(&res, "Ia");
     let id_b = member_id(&res, "Ib");
 
+    let c = g.commit(&[g.root], &msg("core: c", "Ic"), &[("c.txt", "c\n")]);
+    g.branch("other", c);
+    let id_c = push_one(&server, &g, "other", "Ic");
+    for id in [id_a, id_b] {
+        let (st, _) = http_post(
+            &server.url(&format!("/api/changes/{id}/tags")),
+            &json!({"tags": {"session-id": "s1"}}),
+        );
+        assert_eq!(st, 200);
+    }
+
     draft(&server, id_a, "approve", "a lgtm");
     draft(&server, id_b, "request_changes", "b needs work");
+    draft(&server, id_c, "approve", "c lgtm");
 
-    let out = submit_chain(&server, id_b);
+    let out = submit(&server, "tag=session-id=s1");
     assert_eq!(out["submitted"], 2);
     assert!(out["errors"].as_array().unwrap().is_empty());
     assert_eq!(status_at(&server, id_a), "approved");
     assert_eq!(status_at(&server, id_b), "changes_requested");
+    assert_eq!(status_at(&server, id_c), "pending", "outside the tag");
 }
 
-/// A decision publishes at the revision the chain pins (the live latest), never
-/// a superseded revision: after an amend, submitting approves r1, leaving r0's
-/// own status untouched.
+/// A decision publishes at the latest revision, never a superseded one:
+/// after an amend, submitting approves r1, leaving r0's own status
+/// untouched.
 #[test]
-fn batch_submit_publishes_at_pinned_revision() {
+fn batch_submit_publishes_at_latest_revision() {
     let g = GitRepo::new();
     let c0 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a1\n")]);
     g.branch("feat", c0);
@@ -337,18 +340,15 @@ fn batch_submit_publishes_at_pinned_revision() {
     assert_eq!(id2, id);
 
     draft(&server, id, "approve", "lgtm");
-    assert_eq!(submit_chain(&server, id)["submitted"], 1);
+    assert_eq!(submit_change(&server, id)["submitted"], 1);
 
     let d = detail(&server, id);
-    let review = &d["reviews"][0];
     assert_eq!(
-        review["revision"], 1,
-        "published at the pinned (latest) revision"
+        d["reviews"][0]["revision"], 1,
+        "published at the latest revision"
     );
-    let (_, chain) = http_get(&server.url(&format!("/api/chains/{id}?revision=1")));
-    assert_eq!(chain["path"][0]["status"], "approved");
-    let (_, r0) = http_get(&server.url(&format!("/api/chains/{id}?revision=0")));
-    assert_eq!(r0["path"][0]["status"], "pending");
+    assert_eq!(d["revisions"][1]["status"], "approved");
+    assert_eq!(d["revisions"][0]["status"], "pending");
 }
 
 /// An unknown decision value is a 400 (enum deserialize); an unknown change is

@@ -530,17 +530,20 @@ export type Line = {
 };
 
 /**
- * `POST /api/chains/{id}/submit` response.
+ * `POST /api/submit` response.
  *
- * The outcome of publishing every chain member's draft decision.
+ * The query is the change list's (`repo`, `status`, `tag`, `change_id`),
+ * and every change it picks publishes its draft decision, at the
+ * change's latest revision. A change with no draft decision is left as
+ * it is, comment drafts included.
  */
 export type BatchSubmitResult = {
   /**
-   * Members whose draft decision published.
+   * Changes whose draft decision published.
    */
   submitted: number;
   /**
-   * Members skipped (stale/terminal); their draft decision is kept.
+   * Changes skipped (stale/terminal); their draft decision is kept.
    */
   errors: Array<SubmitError>;
 };

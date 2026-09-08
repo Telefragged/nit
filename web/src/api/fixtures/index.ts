@@ -91,11 +91,11 @@ function decisionBlock(c: ChangeRecord, decision: Decision): string | null {
     : null;
 }
 
-/** Publish one draft decision (mirrors the server's publish_member): an
+/** Publish one draft decision (mirrors the server's publish_change): an
  * optional reopen, a review draining comment drafts (the decision's verdict, or
  * `comment` to carry draft comments under a lifecycle decision), then an
  * optional abandon. */
-function publishMember(
+function publishChange(
   c: ChangeRecord,
   decision: Decision,
   message: string,
@@ -507,26 +507,34 @@ export async function mockRequest(
     return chainView(tip);
   }
 
-  // Batch submit.
-  if ((m = /^\/chains\/(\d+)\/submit$/.exec(p)) && method === "POST") {
-    const id = Number(m[1]);
-    const revision = q.has("revision") ? Number(q.get("revision")) : undefined;
-    const tip = resolveTip(id, revision);
-    if (!tip) return notFound(`chain ${id}`);
+  // Batch submit: every draft decision the change query picks, each at the
+  // change's latest revision.
+  if (method === "POST" && p === "/submit") {
+    const repo = q.get("repo");
+    const picked = listChanges(
+      repo === null ? null : Number(repo),
+      q.getAll("status") as ChangeStatus[],
+      q.getAll("tag"),
+    ).changes;
     const now = new Date().toISOString();
     let submitted = 0;
     const errors: { change_number: number; message: string }[] = [];
-    for (const member of derivePath(tip)) {
-      const draft = draftReviews.get(member.change_number);
-      if (!draft) continue; // no decision — leave the member's comment drafts
-      const c = changes.find((x) => x.id === member.change_number);
-      if (!c) continue;
+    for (const { id } of picked) {
+      const draft = draftReviews.get(id);
+      if (!draft) continue; // no decision — leave the change's comment drafts
+      const c = getChange(id);
       const block = decisionBlock(c, draft.decision);
       if (block) {
         errors.push({ change_number: c.id, message: block });
         continue;
       }
-      publishMember(c, draft.decision, draft.message, member.revision, now);
+      publishChange(
+        c,
+        draft.decision,
+        draft.message,
+        latestRevision(c).number,
+        now,
+      );
       draftReviews.delete(c.id);
       submitted++;
     }
@@ -619,7 +627,7 @@ export async function mockRequest(
   }
 
   // Draft / clear a reviewer decision (drafted like a comment; published by
-  // the chain batch submit above).
+  // the batch submit above).
   if ((m = /^\/changes\/(\d+)\/decision$/.exec(p)) && method === "PUT") {
     const c = getChange(Number(m[1]));
     const req = body as DraftDecision;

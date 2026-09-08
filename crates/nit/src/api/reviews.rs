@@ -1,6 +1,7 @@
 //! Reviews + reviewer decisions.
 //!
-//! Set or clear a draft decision and publish a chain's draft decisions.
+//! Set or clear a draft decision and publish the draft decisions of the
+//! changes a query picks.
 
 use std::sync::Arc;
 
@@ -18,10 +19,11 @@ use nit_types::domain::{Decision, LifecycleAction, Verdict};
 use crate::db;
 use nit_types::domain::Lifecycle;
 
+use super::changes::ChangeQuery;
 use super::{
     AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change_with, with_conn,
 };
-use super::{ChainQuery, chain_context, change_or_404, map_busy};
+use super::{change_or_404, map_busy};
 
 /// One change's reviewer comment drafts as `CommentInput`s.
 ///
@@ -53,10 +55,10 @@ fn drafts_to_comments(
 /// lifecycle), then an `abandon` lifecycle — whichever the decision calls
 /// for. The drained comment drafts and the change's `draft_reviews` row are
 /// deleted in the same transaction, so a half-published batch never strands
-/// work and a re-submit is idempotent. Called per member by the chain batch
+/// work and a re-submit is idempotent. Called per change by the batch
 /// submit — the only publish path; the caller validates the target
 /// revision/lifecycle first.
-fn publish_member(
+fn publish_change(
     conn: &mut rusqlite::Connection,
     state: &Arc<AppState>,
     entry: &ChangeEntry,
@@ -143,53 +145,57 @@ pub(super) async fn clear_decision(
     .await
 }
 
-/// `POST /api/chains/{id}/submit` — publishes every draft decision.
+/// `POST /api/submit` — publishes every draft decision the query picks.
 ///
-/// Re-derives the path, then for each chain member with a decision
-/// publishes it at the revision this path pins on the member, each in its
-/// own transaction (atomic per change, not across the chain). A decision
-/// illegal for the member's current lifecycle is skipped into `errors`
-/// with its row kept; a published decision's row is deleted, so a
-/// re-submit finishes a torn batch without double-publishing.
-pub(super) async fn submit_chain(
+/// `nit_types::decisions::BatchSubmitResult` carries the contract. Each
+/// change publishes at its latest revision, in its own transaction
+/// (atomic per change, not across the batch). A decision illegal for the
+/// change's current lifecycle is skipped into `errors` with its row kept;
+/// a published decision's row is deleted, so a re-submit finishes a torn
+/// batch without double-publishing.
+pub(super) async fn submit(
     State(state): State<Arc<AppState>>,
-    AppPath(change_number): AppPath<ChangeNumber>,
-    AppQuery(q): AppQuery<ChainQuery>,
+    AppQuery(q): AppQuery<ChangeQuery>,
 ) -> Result<Json<BatchSubmitResult>, Error> {
     with_conn(state.pool(), move |conn| {
-        let (view, _repo_id, tip_sha) = chain_context(&state, conn, change_number, q.revision)?;
-
+        let repo_ids = state.repo_ids_matching(q.repo);
+        let filter = q.filter();
         let mut submitted = 0u64;
         let mut errors = Vec::new();
-        for member in view.path_from_tip(&tip_sha) {
-            let Some(draft) = db::get_draft_review(conn, member.change_number)? else {
-                continue; // leave its comment drafts
-            };
-            let Some(member_entry) = state.change(conn, member.change_number)? else {
-                continue;
-            };
-            let lifecycle = member_entry.read().lifecycle;
-            if let Some(reason) = decision_block(lifecycle, draft.decision) {
-                errors.push(SubmitError {
-                    change_number: member.change_number,
-                    message: reason.to_string(),
-                });
-                continue;
-            }
-            match publish_member(
-                conn,
-                &state,
-                &member_entry,
-                member.change_number,
-                draft.decision,
-                &draft.message,
-                member.revision,
-            ) {
-                Ok(()) => submitted += 1,
-                Err(e) => errors.push(SubmitError {
-                    change_number: member.change_number,
-                    message: e.message,
-                }),
+        for repo_id in repo_ids {
+            for row in db::repo_changes(conn, repo_id, &filter)? {
+                let Some(draft) = db::get_draft_review(conn, row.id)? else {
+                    continue; // leave its comment drafts
+                };
+                let Some(entry) = state.change(conn, row.id)? else {
+                    continue;
+                };
+                let (lifecycle, revision) = {
+                    let change = entry.read();
+                    (change.lifecycle, change.latest_revision_number())
+                };
+                if let Some(reason) = decision_block(lifecycle, draft.decision) {
+                    errors.push(SubmitError {
+                        change_number: row.id,
+                        message: reason.to_string(),
+                    });
+                    continue;
+                }
+                match publish_change(
+                    conn,
+                    &state,
+                    &entry,
+                    row.id,
+                    draft.decision,
+                    &draft.message,
+                    revision,
+                ) {
+                    Ok(()) => submitted += 1,
+                    Err(e) => errors.push(SubmitError {
+                        change_number: row.id,
+                        message: e.message,
+                    }),
+                }
             }
         }
         Ok(Json(BatchSubmitResult { submitted, errors }))

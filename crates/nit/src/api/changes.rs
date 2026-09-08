@@ -32,9 +32,12 @@ use super::views;
 use super::{AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, with_conn};
 use super::{append_to_change, change_detail_json, change_or_404, map_busy};
 
+/// The query that picks changes: `GET /api/changes` and `POST /api/submit`.
+///
+/// `nit_types::changes::ChangeList` carries the filter semantics.
 #[derive(Deserialize)]
-pub(super) struct ListChangesQuery {
-    repo: Option<u64>,
+pub(super) struct ChangeQuery {
+    pub(super) repo: Option<u64>,
     /// Repeated (`?status=pending&status=commented`); empty means every
     /// change — no default subset.
     #[serde(default)]
@@ -47,21 +50,26 @@ pub(super) struct ListChangesQuery {
     change_id: Option<ChangeId>,
 }
 
+impl ChangeQuery {
+    pub(super) fn filter(self) -> db::ChangeFilter {
+        db::ChangeFilter {
+            statuses: self.status,
+            tags: self.tag.into_iter().collect(),
+            change_id: self.change_id,
+        }
+    }
+}
+
 /// Serves `GET /api/changes`: matching changes as folded projections.
-///
-/// `nit_types::changes::ChangeList` carries the filter semantics.
 pub(super) async fn list_changes(
     State(state): State<Arc<AppState>>,
-    AppQuery(q): AppQuery<ListChangesQuery>,
+    AppQuery(q): AppQuery<ChangeQuery>,
 ) -> Result<Json<ChangeList>, Error> {
     with_conn(state.pool(), move |conn| {
-        let filter = db::ChangeFilter {
-            statuses: q.status,
-            tags: q.tag.into_iter().collect(),
-            change_id: q.change_id,
-        };
+        let repo_ids = state.repo_ids_matching(q.repo);
+        let filter = q.filter();
         let mut changes = Vec::new();
-        for repo_id in state.repo_ids_matching(q.repo) {
+        for repo_id in repo_ids {
             changes.extend(state.repo_changes(conn, repo_id, &filter)?);
         }
         Ok(Json(ChangeList { changes }))

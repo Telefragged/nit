@@ -232,15 +232,15 @@ describe("expansion across diff-range navigation", () => {
   it("navigating to another change resets to the default expansion", async () => {
     await expandRotate();
 
-    fireEvent.keyDown(window, { key: "n" }); // next change in the chain
+    fireEvent.keyDown(window, { key: "n" }); // next change under the tag
     await diffLoaded("docs/auth-rotation.md");
     expect(isExpanded(byPath(COMMIT_MSG_PATH))).toBe(true);
     expect(isExpanded(byPath("docs/auth-rotation.md"))).toBe(false);
   });
 });
 
-describe("chain navigation", () => {
-  it("n takes the next change in the chain, shift+n the previous", async () => {
+describe("change navigation", () => {
+  it("n takes the next change under the tag, shift+n the previous", async () => {
     renderReview();
     await diffLoaded("src/auth/store.rs");
 
@@ -476,8 +476,8 @@ describe("the latest-revision shortcut", () => {
 });
 
 // `s` is the keyboard twin of the Submit button: inert until something is
-// drafted, then publishes the chain.
-describe("the s key submits the chain's draft decisions", () => {
+// drafted, then publishes the listed changes.
+describe("the s key submits the listed changes' draft decisions", () => {
   // jsdom has no top-layer, so the review modal's showModal() is absent — stub
   // it so opening the modal to draft a decision doesn't throw.
   beforeEach(() => {
@@ -517,11 +517,11 @@ describe("the s key submits the chain's draft decisions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Review (a)" }));
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
-    await screen.findByRole("button", { name: /Submit chain \(s\) · 1/ });
+    await screen.findByRole("button", { name: /Submit \(s\) · 1/ });
 
     fireEvent.keyDown(window, { key: "s" });
     // The drafted count drains once the invalidated drafts overlay refetches.
-    await screen.findByRole("button", { name: "Submit chain (s)" });
+    await screen.findByRole("button", { name: "Submit (s)" });
     expect(path).toBe("/changes/20");
   });
 });
