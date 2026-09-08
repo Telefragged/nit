@@ -39,7 +39,7 @@ Run a parked monitor under the **Monitor tool** (set it persistent), not under
 background `Bash`:
 
 ```sh
-nit log --follow --reviewer-only 0
+nit log --follow --incoming 0
 ```
 
 `--follow` streams each new entry as it lands and never exits — so a background
@@ -49,7 +49,7 @@ notification you act on. Leave the monitor's stderr alone — never redirect it
 into stdout with `2>&1`. Run it from the worktree. It prints the entries of
 every change your session pushed. A commit you add or reorder later
 belongs to the session too, so one monitor per session is enough.
-`--reviewer-only` hides your own entries. Each review it prints
+`--incoming` hides your own entries. Each review it prints
 includes the cover message and every comment with its file and line, so
 you act on it directly. `0` starts from the first entry (after a restart,
 pass the last sequence you saw instead).

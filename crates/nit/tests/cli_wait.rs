@@ -99,7 +99,7 @@ fn wait_wakes_on_a_change_pushed_after_it_parked() {
     let wait = nit_spawn(
         &server,
         &g,
-        &["log", "--wait", "--reviewer-only", &head_seq.to_string()],
+        &["log", "--wait", "--incoming", &head_seq.to_string()],
     );
     std::thread::sleep(PARKED);
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);

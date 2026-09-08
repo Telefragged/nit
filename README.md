@@ -56,7 +56,7 @@ With a cooperative monitor, tail instead of blocking on `--wait`. The
 monitor follows the session, new commits included:
 
 ```sh
-nit log --follow --reviewer-only   # stream reviewer activity as it lands
+nit log --follow --incoming   # stream the reviews and the lifecycle as they land
 ```
 
 Details for agents: the `nit` plugin's `lifecycle` and `comment` skills, and

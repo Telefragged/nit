@@ -6,7 +6,6 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 
-use nit_types::domain::LifecycleAction;
 use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::events::{StreamMessage, Subscription};
 
@@ -41,11 +40,10 @@ pub struct LogArgs {
     /// then those entries, then exit.
     #[arg(long, conflicts_with = "follow")]
     pub wait: bool,
-    /// Print only the reviewer's entries: drop the author's own
-    /// (`revision`/`comment`/`tags`) and the automatic `merged` one. Works
-    /// with every mode.
+    /// Print the reviews and the lifecycle changes only: drop your own
+    /// `revision`, `comment` and `tags` entries. Works with every mode.
     #[arg(long)]
-    pub reviewer_only: bool,
+    pub incoming: bool,
     #[command(flatten)]
     pub server: ServerOpt,
 }
@@ -70,7 +68,7 @@ pub fn log(args: LogArgs) -> Result<()> {
             selection: &args.select.resolve(&client)?,
             cursor,
             oneline: args.oneline,
-            reviewer_only: args.reviewer_only,
+            incoming: args.incoming,
             once: args.wait,
         }
         .run();
@@ -85,7 +83,7 @@ pub fn log(args: LogArgs) -> Result<()> {
         .log(&client, None, Retry::No)?
         .into_iter()
         .filter(|e| ranges.iter().any(|r| r.contains(e.sequence)))
-        .filter(|e| !(args.reviewer_only && muted_by_reviewer_only(e)))
+        .filter(|e| !(args.incoming && dropped_by_incoming(e)))
         .collect();
     print_selected(&entries, args.oneline);
     Ok(())
@@ -98,7 +96,7 @@ struct Follower<'a> {
     /// The highest `sequence` seen. Entries above it are new.
     cursor: u64,
     oneline: bool,
-    reviewer_only: bool,
+    incoming: bool,
     /// Return after the first batch of new entries. That is `--wait`.
     once: bool,
 }
@@ -119,9 +117,9 @@ impl Follower<'_> {
     /// it start over.
     ///
     /// With `once`, the first batch of new entries prints the digest, then
-    /// the entries, and the function returns. With `reviewer_only`, the
+    /// the entries, and the function returns. With `incoming`, the
     /// author's own entries move the cursor but do not count as new, so
-    /// `--wait` returns only on reviewer activity.
+    /// `--wait` returns only on a review or a lifecycle change.
     ///
     /// # Errors
     ///
@@ -170,7 +168,7 @@ impl Follower<'_> {
         let fresh: Vec<LogEntry> = entries
             .into_iter()
             .filter(|e| e.sequence > since)
-            .filter(|e| !(self.reviewer_only && muted_by_reviewer_only(e)))
+            .filter(|e| !(self.incoming && dropped_by_incoming(e)))
             .collect();
         if fresh.is_empty() {
             return Ok(false);
@@ -222,18 +220,17 @@ fn follow_cursor(spec: &str) -> Result<u64> {
         .with_context(|| format!("bad sequence cursor {spec:?}"))
 }
 
-/// Whether `--reviewer-only` suppresses this log entry.
+/// Whether `--incoming` drops this log entry.
 ///
-/// It suppresses the author's own echoes (`revision`/`comment`/`tags`) and
-/// the automatic `merged` lifecycle (written by the merge timer, not the
-/// reviewer). Reviewer verdicts and the reviewer-driven `abandoned`/`reopened`
-/// lifecycle always reach the monitor.
-fn muted_by_reviewer_only(entry: &LogEntry) -> bool {
-    match &entry.payload {
-        LogPayload::Revision(_) | LogPayload::Comment(_) | LogPayload::Tags(_) => true,
-        LogPayload::Lifecycle(p) => p.action == LifecycleAction::Merged,
-        LogPayload::Review(_) => false,
-    }
+/// It drops the entries the author writes about their own work: a
+/// `revision`, a `comment`, a set of `tags`. Reviews and every lifecycle
+/// change reach the monitor, `merged` included, because the merge ends
+/// the author's work on the change.
+fn dropped_by_incoming(entry: &LogEntry) -> bool {
+    matches!(
+        entry.payload,
+        LogPayload::Revision(_) | LogPayload::Comment(_) | LogPayload::Tags(_)
+    )
 }
 
 /// A parsed `nit log` selector over global `sequence`, half-open.
@@ -282,6 +279,7 @@ impl LogRange {
 mod tests {
     use super::*;
     use nit_types::domain::ChangeNumber;
+    use nit_types::domain::LifecycleAction;
     use nit_types::domain::RevisionNumber;
 
     use nit_types::testing::sha;
@@ -316,11 +314,11 @@ mod tests {
     }
 
     #[test]
-    fn reviewer_only_mutes_agent_echoes_and_auto_merge() {
+    fn incoming_drops_the_authors_own_entries() {
         use nit_types::domain::Verdict;
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
-        let muted = |payload| {
-            muted_by_reviewer_only(&LogEntry {
+        let dropped = |payload| {
+            dropped_by_incoming(&LogEntry {
                 change_number: ChangeNumber::new(1),
                 position: 0,
                 sequence: 0,
@@ -355,14 +353,12 @@ mod tests {
             })
         };
         let life = |a| LogPayload::lifecycle(a, None, None);
-        assert!(muted(revision()));
-        assert!(muted(comment()));
-        // The automatic merge is the timer's, not reviewer activity.
-        assert!(muted(life(LifecycleAction::Merged)));
-        // Reviewer activity and reviewer-driven lifecycle reach the monitor.
-        assert!(!muted(review()));
-        assert!(!muted(life(LifecycleAction::Abandoned)));
-        assert!(!muted(life(LifecycleAction::Reopened)));
+        assert!(dropped(revision()));
+        assert!(dropped(comment()));
+        assert!(!dropped(review()));
+        assert!(!dropped(life(LifecycleAction::Merged)));
+        assert!(!dropped(life(LifecycleAction::Abandoned)));
+        assert!(!dropped(life(LifecycleAction::Reopened)));
     }
 
     #[test]
