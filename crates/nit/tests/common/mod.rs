@@ -580,23 +580,45 @@ pub fn nit_bounded(
     args: &[&str],
     deadline: Duration,
 ) -> (bool, Value, String) {
-    let mut child = nit_command(server, repo, args)
+    nit_spawn(server, repo, args).finish(deadline)
+}
+
+/// A running `nit` process, so the test can act while a `--wait` waits.
+pub struct RunningNit {
+    child: std::process::Child,
+    args: String,
+}
+
+/// Spawns `nit` and returns without waiting for it.
+pub fn nit_spawn(server: &TestServer, repo: &GitRepo, args: &[&str]) -> RunningNit {
+    let child = nit_command(server, repo, args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .expect("spawn nit");
-    let start = Instant::now();
-    loop {
-        if child.try_wait().expect("try_wait").is_some() {
-            let out = child.wait_with_output().expect("output");
-            return parsed_output(&out);
+    RunningNit {
+        child,
+        args: format!("{args:?}"),
+    }
+}
+
+impl RunningNit {
+    /// Waits for the process to exit and returns its output. If it has not
+    /// exited by `deadline`, kills it and panics, so the suite never hangs.
+    pub fn finish(mut self, deadline: Duration) -> (bool, Value, String) {
+        let start = Instant::now();
+        loop {
+            if self.child.try_wait().expect("try_wait").is_some() {
+                let out = self.child.wait_with_output().expect("output");
+                return parsed_output(&out);
+            }
+            if start.elapsed() >= deadline {
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                panic!("nit {} did not finish within {deadline:?}", self.args);
+            }
+            std::thread::sleep(Duration::from_millis(50));
         }
-        if start.elapsed() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("nit {args:?} did not finish within {deadline:?}");
-        }
-        std::thread::sleep(Duration::from_millis(50));
     }
 }
 

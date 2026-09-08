@@ -5,8 +5,7 @@
 //!
 //! `nit push` walks the change-centric model: oldest-first, upsert each change
 //! by its `Change-Id`, append a revision iff the sha moved. `nit status`
-//! and `nit log` resolve the cwd's tip change from local
-//! HEAD, then read the derived chain on demand.
+//! and `nit log` read the changes that carry the checkout's branch tag.
 
 mod common;
 

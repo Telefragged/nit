@@ -11,7 +11,9 @@ use nit_types::changes::ChangeList;
 use nit_types::domain::Chain;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
+use nit_types::domain::LogEntry;
 use nit_types::domain::{Tag, Tags};
+use nit_types::log::Log;
 use nit_types::repos::RepoList;
 
 use super::client::{Client, Retry};
@@ -27,24 +29,40 @@ pub(crate) struct Selection {
 impl Selection {
     /// Reads the selected changes, ascending by change number.
     pub(crate) fn changes(&self, client: &Client, retry: Retry) -> Result<Vec<ChangeProjection>> {
-        let query = self.query();
+        let query = self.query(None);
         let list: ChangeList = client.get_retry(&format!("/api/changes?{query}"), retry)?;
         Ok(list.changes)
     }
 
-    /// The query string that selects the changes: `repo={id}&tag=key=value…`.
+    /// Reads the selected changes' log entries with `sequence > after`.
+    pub(crate) fn log(
+        &self,
+        client: &Client,
+        after: Option<u64>,
+        retry: Retry,
+    ) -> Result<Vec<LogEntry>> {
+        let query = self.query(after);
+        let log: Log = client.get_retry(&format!("/api/log?{query}"), retry)?;
+        Ok(log.entries)
+    }
+
+    /// The query string that selects the changes: `repo={id}&tag=key=value…`,
+    /// plus `after` when given.
     ///
     /// Each value is percent-encoded, because a tag value may contain a
     /// space or an ampersand.
-    fn query(&self) -> String {
+    fn query(&self, after: Option<u64>) -> String {
         #[derive(Serialize)]
         struct Query {
             repo: u64,
             tag: Vec<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            after: Option<u64>,
         }
         let query = Query {
             repo: self.repo,
             tag: self.tags.spelled().collect(),
+            after,
         };
         serde_html_form::to_string(&query).expect("a query of numbers and strings serializes")
     }
@@ -101,17 +119,6 @@ pub(crate) fn resolve_tip_change(client: &Client, retry: Retry) -> Result<Change
         .ok_or_else(|| anyhow!("HEAD is not registered with nit — run 'nit push' first"))
 }
 
-pub(crate) fn resolve_chain(
-    client: &Client,
-    explicit: Option<ChangeNumber>,
-    retry: Retry,
-) -> Result<ChangeNumber> {
-    match explicit {
-        Some(id) => Ok(id),
-        None => resolve_tip_change(client, retry),
-    }
-}
-
 pub(crate) fn resolve_change(client: &Client, change_id: &str) -> Result<ChangeNumber> {
     let tip = resolve_tip_change(client, Retry::No)?;
     let chain: Chain = client.get(&format!("/api/chains/{tip}"))?;
@@ -144,8 +151,13 @@ mod tests {
             tags: tags(&[("branch", "track/a b"), ("worktree", "/w/x=y&z")]),
         };
         assert_eq!(
-            tagged.query(),
+            tagged.query(None),
             "repo=7&tag=branch%3Dtrack%2Fa+b&tag=worktree%3D%2Fw%2Fx%3Dy%26z"
         );
+        let untagged = Selection {
+            repo: 7,
+            tags: Tags::new(),
+        };
+        assert_eq!(untagged.query(Some(12)), "repo=7&after=12");
     }
 }

@@ -6,7 +6,6 @@
 //! `nit-types` shape — no `serde_json::Value` crosses this boundary.
 
 use anyhow::{Result, anyhow};
-use nit_types::domain::ChangeNumber;
 use nit_types::error::ApiError;
 use nit_types::events::ClientMessage;
 use serde::Serialize;
@@ -103,7 +102,7 @@ pub(crate) enum Retry {
     ///
     /// An immediate "is 'nit serve' running?" beats hanging.
     No,
-    /// Keep retrying with backoff (`nit wait`/`--follow` riding out a restart).
+    /// Keep retrying with backoff (`--wait`/`--follow` during a server restart).
     UntilUp,
 }
 
@@ -165,17 +164,12 @@ impl Client {
         self.retry_loop(retry, || self.get_raw(path))
     }
 
-    /// `subs` maps `change_number` → from-position.
-    pub(crate) fn ws_connect(
-        &self,
-        subs: &std::collections::HashMap<ChangeNumber, u64>,
-        retry: Retry,
-    ) -> Result<WsConn> {
+    /// Opens the change stream and sends `subscribe` on it, retrying while
+    /// the server is unreachable.
+    pub(crate) fn ws_connect(&self, subscribe: &ClientMessage) -> Result<WsConn> {
         let url = format!("{}/api/stream", self.base.replacen("http", "ws", 1));
-        let map: std::collections::HashMap<String, u64> =
-            subs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let sub = serde_json::to_string(&ClientMessage::Subscribe(map))?;
-        self.retry_loop(retry, || Self::try_ws(&url, &sub))
+        let sub = serde_json::to_string(subscribe)?;
+        self.retry_loop(Retry::UntilUp, || Self::try_ws(&url, &sub))
     }
 
     fn try_ws(url: &str, sub: &str) -> Result<WsConn, CallError> {

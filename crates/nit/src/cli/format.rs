@@ -272,7 +272,7 @@ pub(crate) fn print_comment(thread: &ThreadProjection, change_number: ChangeNumb
 /// A pure function of that entry, so it reconstructs nothing the entry does
 /// not carry: a `revision` entry shows no revision number, and a reply names
 /// only its thread — a reply's anchor lives on the thread's opening entry.
-pub(crate) fn render_entry(entry: &LogEntry) -> String {
+fn render_entry(entry: &LogEntry) -> String {
     let sequence = entry.sequence;
     let change = entry.change_number;
     match &entry.payload {

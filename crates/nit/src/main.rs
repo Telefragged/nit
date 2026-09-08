@@ -29,7 +29,7 @@ enum Cmd {
     Push(cli::PushArgs),
     /// Print one line per selected change: the branch's, or --tag
     Status(cli::StatusArgs),
-    /// Print the aggregated chain log; --follow to stream, --wait to drain and exit
+    /// Print the selected changes' log; --follow to stream, --wait to drain and exit
     Log(cli::LogArgs),
     /// Comment on a change (--change / --change-id): open a thread or reply (--thread)
     Comment(cli::CommentArgs),
