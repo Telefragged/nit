@@ -436,21 +436,20 @@ pub fn review(server: &TestServer, change_number: u64, verdict: &str, message: &
     out
 }
 
-/// A change's displayed status off its derived chain path — the change is
-/// its own degenerate tip once terminal. `revision` pins a revision;
-/// `None` reads the one the chain's tip pins. `None` back means the chain
-/// did not resolve.
+/// A change's status at `revision`, or at its latest revision for `None`.
+///
+/// `None` back means the change or the revision does not exist.
 pub fn status_at(server: &TestServer, change_number: u64, revision: Option<u64>) -> Option<String> {
-    let query = revision.map_or(String::new(), |r| format!("?revision={r}"));
-    let (st, chain) = http_get(&server.url(&format!("/api/chains/{change_number}{query}")));
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_number}")));
     if st != 200 {
         return None;
     }
-    chain["path"]
-        .as_array()?
-        .iter()
-        .find(|m| m["change_number"].as_u64() == Some(change_number))
-        .and_then(|m| m["status"].as_str().map(str::to_string))
+    let revisions = detail["revisions"].as_array()?;
+    let revision = match revision {
+        Some(number) => revisions.get(usize::try_from(number).ok()?)?,
+        None => revisions.last()?,
+    };
+    revision["status"].as_str().map(str::to_string)
 }
 
 pub fn first_repo_id(server: &TestServer) -> u64 {

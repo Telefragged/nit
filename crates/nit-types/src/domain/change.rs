@@ -123,9 +123,11 @@ impl ChangeProjection {
         self.revisions.last()
     }
 
+    /// Revision numbers are minted in order from 0, so a number is its
+    /// index.
     #[must_use]
     pub fn revision(&self, number: RevisionNumber) -> Option<&RevisionProjection> {
-        self.revisions.iter().find(|r| r.number == number)
+        self.revisions.get(usize::try_from(number.get()).ok()?)
     }
 
     #[must_use]
@@ -189,8 +191,9 @@ impl ChangeProjection {
     /// The displayed status at a pinned revision.
     ///
     /// The lifecycle overlay (`abandoned` change-wide, `merged` at the
-    /// latest revision) over the verdict-derived review status
-    /// (`review_status_at`).
+    /// latest revision) over the verdict-derived review status: the latest
+    /// review on the revision, else the prior revision's when this one is
+    /// a pure rebase, else pending.
     #[must_use]
     pub fn status_at(&self, revision: RevisionNumber) -> ChangeStatus {
         if matches!(self.lifecycle, Lifecycle::Abandoned) {
@@ -205,27 +208,18 @@ impl ChangeProjection {
         self.review_status_at(revision)
     }
 
-    /// The verdict-derived status at a revision.
-    ///
-    /// The latest review on it, else the prior revision's status when this
-    /// one is a pure rebase, else pending. Never the lifecycle-overlay
-    /// values (`merged`/`abandoned`).
     fn review_status_at(&self, revision: RevisionNumber) -> ChangeStatus {
-        if let Some(rv) = self
-            .reviews
-            .iter()
-            .filter(|r| r.revision == revision)
-            .max_by_key(|r| r.id)
-        {
-            return rv.verdict.into();
+        // Reviews fold in log order, so the last one on the revision is
+        // the latest.
+        if let Some(review) = self.reviews.iter().rev().find(|r| r.revision == revision) {
+            return review.verdict.into();
         }
-        // No review here: a pure-rebase revision carries the prior one forward.
-        if let Some(previous) = revision.previous()
-            && self.revision(revision).is_some_and(|r| !r.resets_status)
-        {
-            return self.review_status_at(previous);
+        match revision.previous() {
+            Some(previous) if self.revision(revision).is_some_and(|r| !r.resets_status) => {
+                self.review_status_at(previous)
+            }
+            _ => ChangeStatus::Pending,
         }
-        ChangeStatus::Pending
     }
 
     /// Resolves a comment's thread id and keeps `next_thread_id` past it.

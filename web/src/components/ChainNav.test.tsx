@@ -58,7 +58,9 @@ function detail(
       parent_sha: "",
       fork_sha: "",
       message: "",
+      subject: "",
       created_at: "",
+      status: "pending" as const,
     })),
     threads: Array.from({ length: unresolved }, (_, i) => ({
       id: i,

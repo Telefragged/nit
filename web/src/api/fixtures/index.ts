@@ -22,7 +22,6 @@ import type {
   PathEntry,
   Repo,
   Review,
-  Revision,
   DraftDecision,
   TagList,
   Verdict,
@@ -35,6 +34,7 @@ import { diffKey, sideEnd } from "./builders";
 import { changes, draftReviews, drafts, repos, tips } from "./data";
 import type {
   AuthoredFile,
+  AuthoredRevision,
   ChangeRecord,
   DraftRecord,
   TipRecord,
@@ -161,14 +161,14 @@ function emitLifecycle(
  * that derives every chain path. */
 const shaIndex = new Map<
   string,
-  { change: ChangeRecord; revision: Revision }
+  { change: ChangeRecord; revision: AuthoredRevision }
 >();
 for (const c of changes) {
   for (const r of c.revisions)
     shaIndex.set(r.commit_sha, { change: c, revision: r });
 }
 
-const latestRevision = (c: ChangeRecord): Revision => {
+const latestRevision = (c: ChangeRecord): AuthoredRevision => {
   const r = c.revisions[c.revisions.length - 1];
   if (!r) throw new Error(`change ${c.id} has no revisions`);
   return r;
@@ -193,14 +193,14 @@ function statusAt(c: ChangeRecord, revision: number): ChangeStatus {
  * on the canonical ref). */
 function walkPath(
   tip: TipRecord,
-): { change: ChangeRecord; revision: Revision }[] {
+): { change: ChangeRecord; revision: AuthoredRevision }[] {
   const tipChange = changes.find((c) => c.id === tip.tip_change_number);
   if (!tipChange)
     throw new Error(`unknown tip change ${tip.tip_change_number}`);
   const tipRev =
     tipChange.revisions.find((r) => r.number === tip.revision) ??
     latestRevision(tipChange);
-  const out: { change: ChangeRecord; revision: Revision }[] = [
+  const out: { change: ChangeRecord; revision: AuthoredRevision }[] = [
     { change: tipChange, revision: tipRev },
   ];
   let parent = tipRev.parent_sha;
@@ -216,7 +216,7 @@ function walkPath(
 }
 
 function pathEntry(
-  member: { change: ChangeRecord; revision: Revision },
+  member: { change: ChangeRecord; revision: AuthoredRevision },
   position: number,
 ): PathEntry {
   const { change: c, revision } = member;

@@ -366,7 +366,17 @@ export type Revision = {
    * Full commit message.
    */
   message: string;
+  /**
+   * The message's subject ([`subject_of`](crate::domain::subject_of)).
+   */
+  subject: string;
   created_at: string;
+  /**
+   * The change's status at this revision, lifecycle included.
+   *
+   * The last revision's is the change's status.
+   */
+  status: ChangeStatus;
 };
 
 export type Review = {

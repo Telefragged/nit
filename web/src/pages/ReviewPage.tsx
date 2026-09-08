@@ -746,8 +746,7 @@ export default function ReviewPage() {
 
   const chain = chainQ.data;
   const repo = repoQ.data;
-  // Position and displayed status for this change are on the path entry, not
-  // on ChangeDetail.
+  // Position for this change is on the path entry, not on ChangeDetail.
   const here = chain?.path.find((c) => c.change_number === change.id);
   const allFilesExpanded = allExpanded(expanded, files);
 
@@ -762,8 +761,6 @@ export default function ReviewPage() {
     setLayout(l);
     localStorage.setItem(LAYOUT_KEY, l);
   };
-
-  const subjectLine = selectedRev.message.split("\n")[0] ?? "";
 
   return (
     <ReviewContext.Provider value={ctxValue}>
@@ -784,8 +781,8 @@ export default function ReviewPage() {
             </span>
           </div>
           <div className="subject-line">
-            <h1>{subjectLine}</h1>
-            {here ? <StatusChip status={here.status} /> : null}
+            <h1>{selectedRev.subject}</h1>
+            <StatusChip status={selectedRev.status} />
           </div>
           <div className="meta-line">
             <span className="dim">

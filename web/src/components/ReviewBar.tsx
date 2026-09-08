@@ -64,9 +64,7 @@ export default function ReviewBar({
 
   const drafts = change.drafts.length;
   const draftDecision = change.draft_decision;
-  // This change's path member carries its displayed status (per (change, revision)).
-  const here = chain?.path.find((c) => c.change_number === change.id);
-  const abandoned = here?.status === "abandoned";
+  const abandoned = change.revisions.at(-1)?.status === "abandoned";
   // Chain members with a draft decision — what Submit publishes.
   const draftedInChain =
     chain?.path.filter(

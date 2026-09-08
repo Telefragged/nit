@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
 use crate::domain::ChangeProjection;
+use crate::domain::ChangeStatus;
 use crate::domain::Draft;
 use crate::domain::DraftDecision;
 use crate::domain::RevisionNumber;
@@ -77,7 +78,13 @@ pub struct Revision {
     pub fork_sha: Sha,
     /// Full commit message.
     pub message: String,
+    /// The message's subject ([`subject_of`](crate::domain::subject_of)).
+    pub subject: String,
     pub created_at: String,
+    /// The change's status at this revision, lifecycle included.
+    ///
+    /// The last revision's is the change's status.
+    pub status: ChangeStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

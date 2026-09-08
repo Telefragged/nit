@@ -32,7 +32,9 @@
 use crate::changes::{ChangeDetail, Review, Revision};
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
+use crate::domain::ChangeStatus;
 use crate::domain::RevisionNumber;
+use crate::domain::subject_of;
 use crate::domain::{
     Anchor, ChangeProjection, Lifecycle, LifecycleAction, ReviewProjection, RevisionProjection,
     ThreadComment, ThreadProjection,
@@ -184,15 +186,16 @@ pub fn replay(
 // Projection → wire: the published view of a change, shared by the
 // server's change endpoint and the WebAssembly fold.
 
-#[must_use]
-pub fn revision_view(revision: &RevisionProjection) -> Revision {
+fn revision_view(revision: &RevisionProjection, status: ChangeStatus) -> Revision {
     Revision {
         number: revision.number,
         commit_sha: revision.commit_sha.clone(),
         parent_sha: revision.parent_sha.clone(),
         fork_sha: revision.fork_sha.clone(),
         message: revision.message.clone(),
+        subject: subject_of(&revision.message),
         created_at: revision.created_at.clone(),
+        status,
     }
 }
 
@@ -219,7 +222,11 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
         id: change.id,
         repo_id: change.repo_id,
         change_id: change.change_id.clone(),
-        revisions: change.revisions.iter().map(revision_view).collect(),
+        revisions: change
+            .revisions
+            .iter()
+            .map(|r| revision_view(r, change.status_at(r.number)))
+            .collect(),
         tags: change.tags.clone(),
         threads: change.threads.clone(),
         drafts: Vec::new(),

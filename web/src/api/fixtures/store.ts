@@ -18,6 +18,9 @@ export type AuthoredFile = Omit<DiffFile, "old_total" | "new_total"> & {
   old_total?: number;
   new_total?: number;
 };
+/** A revision as authored in ./data: its subject and status are folded,
+ * never written. */
+export type AuthoredRevision = Omit<Revision, "subject" | "status">;
 interface AuthoredDiff {
   files: AuthoredFile[];
 }
@@ -31,7 +34,7 @@ export interface ChangeRecord {
   terminal?: Extract<ChangeStatus, "merged" | "abandoned">;
   /** The tags one `tags` entry put on the change, after its revisions. */
   tags?: Record<string, string>;
-  revisions: Revision[];
+  revisions: AuthoredRevision[];
   reviews: Review[];
   /** Keyed by diffKey(revision, against). */
   diffs: Record<string, AuthoredDiff>;
