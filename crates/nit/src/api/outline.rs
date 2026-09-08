@@ -59,16 +59,46 @@ const NIX_PATTERNS: &str = "
 /// holds in the file.
 ///
 /// Collapsing only ever removes lines, so what comes back is a subsequence
-/// of the file carrying the numbers a reader would count to. A path in a
-/// language with no grammar keeps every line, so the outline of a diff over
-/// it is the diff itself.
+/// of the file carrying the numbers a reader would count to. A file the
+/// collapse leaves whole is its own outline, which is what a path in a
+/// language with no grammar gets: the outline of a diff over it is the diff
+/// itself.
 pub(super) fn outline<'a>(path: &str, text: &'a str) -> (Vec<u64>, Vec<&'a str>) {
     let collapsed = collapsed_lines(path, text);
-    text.lines()
+    let kept = text
+        .lines()
         .enumerate()
         .filter(|(i, _)| !collapsed[*i])
-        .map(|(i, line)| (i as u64 + 1, line))
-        .unzip()
+        .map(|(i, line)| (i as u64 + 1, line));
+    if collapsed.contains(&true) {
+        thin_blank_runs(kept)
+    } else {
+        kept.unzip()
+    }
+}
+
+/// `kept` with each run of blank lines reduced to its first line, and a run
+/// at either end removed.
+///
+/// A collapse takes the content between two blank lines and leaves both, so
+/// an import block outlines as a run of empty lines. One of them still
+/// marks the break, and a run at an end separates nothing.
+fn thin_blank_runs<'a>(kept: impl Iterator<Item = (u64, &'a str)>) -> (Vec<u64>, Vec<&'a str>) {
+    let (mut at, mut lines) = (Vec::new(), Vec::new());
+    let mut pending = None;
+    for (number, line) in kept {
+        if line.trim().is_empty() {
+            pending = pending.or(Some((number, line)));
+            continue;
+        }
+        if let Some((blank, empty)) = pending.take().filter(|_| !at.is_empty()) {
+            at.push(blank);
+            lines.push(empty);
+        }
+        at.push(number);
+        lines.push(line);
+    }
+    (at, lines)
 }
 
 /// Which of the file's lines a collapse drops, indexed from 0.
@@ -263,7 +293,50 @@ from typing import (
 class Chain:
     pass
 ";
-        assert_eq!(kept("m.py", text), "6:\n7:class Chain:\n8:    pass");
+        assert_eq!(kept("m.py", text), "7:class Chain:\n8:    pass");
+    }
+
+    #[test]
+    fn an_import_block_outlines_as_one_blank_line() {
+        let text = "\
+//! A module.
+
+use std::io;
+
+use crate::domain::Sha;
+
+struct Rev;
+";
+        assert_eq!(kept("m.rs", text), "1://! A module.\n2:\n7:struct Rev;");
+    }
+
+    #[test]
+    fn a_blank_line_between_two_signatures_stays_in_every_language() {
+        let rust = "\
+fn one() -> u8 {
+    1
+}
+
+fn two() -> u8 {
+    2
+}
+";
+        assert_eq!(
+            kept("m.rs", rust),
+            "1:fn one() -> u8 {\n3:}\n4:\n5:fn two() -> u8 {\n7:}"
+        );
+        let python = "\
+class Chain:
+    def one(self) -> int:
+        return 1
+
+    def two(self) -> int:
+        return 2
+";
+        assert_eq!(
+            kept("m.py", python),
+            "1:class Chain:\n2:    def one(self) -> int:\n4:\n5:    def two(self) -> int:"
+        );
     }
 
     #[test]
