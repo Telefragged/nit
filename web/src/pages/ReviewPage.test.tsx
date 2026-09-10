@@ -232,7 +232,7 @@ describe("expansion across diff-range navigation", () => {
   it("navigating to another change resets to the default expansion", async () => {
     await expandRotate();
 
-    fireEvent.keyDown(window, { key: "n" }); // next change under the tag
+    fireEvent.keyDown(window, { key: "n" }); // the row above: change 12
     await diffLoaded("docs/auth-rotation.md");
     expect(isExpanded(byPath(COMMIT_MSG_PATH))).toBe(true);
     expect(isExpanded(byPath("docs/auth-rotation.md"))).toBe(false);
@@ -240,7 +240,9 @@ describe("expansion across diff-range navigation", () => {
 });
 
 describe("change navigation", () => {
-  it("n takes the next change under the tag, shift+n the previous", async () => {
+  // The graph lists the chain tip first, so n steps up to the child
+  // (change 12) and shift+n back down.
+  it("n takes the row above in the tag graph, shift+n the row below", async () => {
     renderReview();
     await diffLoaded("src/auth/store.rs");
 

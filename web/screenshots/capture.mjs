@@ -102,21 +102,29 @@ const captures = [
       await page.waitForTimeout(100);
     },
   },
-  // Tag nav expanded (default): the changes sharing the selected tag
-  // stacked above the file list in the sidebar, the current one highlighted.
+  // The tag graph at the right of the header: the changes that share the
+  // selected tag at their latest revisions, the current one highlighted.
   {
     name: "review-tag-nav",
     path: "/changes/11?against=base",
     fullPage: false,
   },
-  // Tag nav collapsed: the header alone, the file list below reclaiming
-  // the freed height.
+  // Repo 5: a twelve-change chain plus a merged and an abandoned lone
+  // change. The graph windows to nine rows around the current change, with
+  // the chain's edges running out of the window at both ends.
   {
-    name: "review-tag-collapsed",
-    path: "/changes/11?against=base",
+    name: "review-tag-window",
+    path: "/changes/77?against=base",
+    fullPage: false,
+  },
+  // The same graph after "show all": every row, the two terminal changes
+  // as lone nodes below the chain.
+  {
+    name: "review-tag-expanded",
+    path: "/changes/77?against=base",
     fullPage: false,
     actions: async (page) => {
-      await page.locator(".tag-nav-toggle").click();
+      await page.locator(".tag-nav-all").click();
       await page.waitForTimeout(100);
     },
   },

@@ -4,8 +4,9 @@ import { Link, useParams } from "react-router-dom";
 import { getChanges, getHistory, getRepo, getTags } from "../api/client";
 import { repoGraph } from "../api/fold";
 import type { ChangeStatus } from "../api/types";
-import GraphTable, { type NodeActivity } from "../components/GraphTable";
+import GraphTable from "../components/GraphTable";
 import { repoPath } from "../lib/repo";
+import { nodeActivity } from "../lib/comments";
 import { useDrafts } from "../lib/useDrafts";
 import { useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
@@ -113,20 +114,7 @@ export default function Dashboard() {
     [graph],
   );
   const overlays = useDrafts(activityIds);
-  const projs = changesQuery.data?.changes;
-  const activity = useMemo(() => {
-    const projById = new Map((projs ?? []).map((p) => [p.id, p]));
-    return new Map<number, NodeActivity>(
-      activityIds.map((id) => [
-        id,
-        {
-          threads: projById.get(id)?.threads ?? [],
-          drafts: overlays.get(id)?.drafts ?? [],
-          decision: overlays.get(id)?.draft_decision?.decision ?? null,
-        },
-      ]),
-    );
-  }, [activityIds, projs, overlays]);
+  const activity = nodeActivity(changesQuery.data?.changes ?? [], overlays);
 
   const repo = repoQuery.data;
   const error = changesQuery.error ?? historyQuery.error;

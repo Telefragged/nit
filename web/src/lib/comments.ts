@@ -9,7 +9,10 @@
 
 import type {
   Anchor,
+  ChangeDrafts,
+  ChangeProjection,
   CommentRange,
+  Decision,
   LineAnchor,
   Side,
   Draft,
@@ -267,4 +270,35 @@ export function pendingUnresolvedCount(threads: readonly UiThread[]): number {
  * thread's lone draft id (published threads never share a draft id). */
 export function threadKey(t: UiThread): string {
   return t.id !== null ? `t${t.id}` : `d${t.drafts[0]?.id ?? ""}`;
+}
+
+/** What a node's activity badges draw — read off the bulk change folds and
+ * the reviewer's drafts overlay rather than denormalized onto the graph
+ * node. */
+export interface NodeActivity {
+  threads: readonly ThreadProjection[];
+  drafts: readonly Draft[];
+  decision: Decision | null;
+}
+
+/** Each change's activity, keyed by change number: its threads off its
+ * projection, and its drafts and draft decision off the reviewer's overlay
+ * (`GET /changes/{id}/drafts`) when that has arrived. */
+export function nodeActivity(
+  projections: readonly ChangeProjection[],
+  overlays: Map<number, ChangeDrafts>,
+): Map<number, NodeActivity> {
+  return new Map(
+    projections.map((p) => {
+      const overlay = overlays.get(p.id);
+      return [
+        p.id,
+        {
+          threads: p.threads,
+          drafts: overlay?.drafts ?? [],
+          decision: overlay?.draft_decision?.decision ?? null,
+        },
+      ];
+    }),
+  );
 }

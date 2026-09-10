@@ -4,9 +4,19 @@
   padding-bottom: 56px; /* room for the fixed single-row review bar */
 }
 
+/* The header: the change's own lines at the left, and at the right the
+   graph of the changes that share its tag (TagNav.tsx). */
 .review-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
   padding: 14px 16px 10px;
   border-bottom: 1px solid var(--border);
+}
+
+.review-header-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .crumb-line {
@@ -171,7 +181,7 @@
   font-weight: 600;
 }
 
-/* layout: sidebar (tag nav + file list) + diff column */
+/* layout: sidebar (file list) + diff column */
 
 .review-layout {
   display: flex;
@@ -180,11 +190,8 @@
   gap: 14px;
 }
 
-/* The sidebar is the one sticky, height-bounded column; the tag nav and
-   the file tree stack inside it and split that height. The tag nav leads
-   at a fixed position (so its rows don't jump when you switch changes) and
-   caps its own list; the tree takes what's left below and scrolls — so
-   neither can push the other off-screen. */
+/* The sidebar is the one sticky, height-bounded column; the file tree
+   sizes its scrollport against it. */
 .review-sidebar {
   width: 270px;
   flex: none;
@@ -255,42 +262,22 @@
   font-weight: 400;
 }
 
-/* tag nav — the changes that share a tag, stacked above the file list
-   (TagNav.tsx). It leads the sidebar so its rows hold a fixed position as
-   you switch changes; the file list below absorbs the per-change reflow.
-   The disclosure collapses the list to give the files below more room; the
-   list caps its own height and scrolls, so a long list can't crowd the
-   files out. Rows echo the file rail's metrics so the two read as one
-   column. */
+/* tag nav: the graph of the changes that share a tag, at the right of the
+   review header (TagNav.tsx). The rail SVG is laid out over the whole
+   graph, and the graph body clips it to the rows in the window. Rows are
+   one line high, so the window fits beside the header's own lines. */
 .tag-nav {
   flex: none;
-  padding-bottom: 4px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+  width: 480px;
 }
 
 .tag-nav-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px 6px;
+  gap: 8px;
+  padding: 0 0 6px;
   font-size: 10px;
   color: var(--text-faint);
-}
-
-.tag-nav-toggle {
-  padding: 0;
-  background: none;
-  border: none;
-  font-size: 11px;
-  color: var(--text-faint);
-}
-
-.tag-nav-toggle:hover:not(:disabled) {
-  background: none;
-  color: var(--text-dim);
 }
 
 .tag-nav-title .revision-select {
@@ -303,16 +290,18 @@
   letter-spacing: 0;
 }
 
-.tag-nav-list {
-  max-height: 33vh;
-  overflow-y: auto;
+.tag-nav-all {
+  font-size: 10.5px;
 }
 
+/* The rail column is padding: the rail SVG paints over it. */
 .tag-nav-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   gap: 6px;
   align-items: center;
-  padding: 3px 8px;
+  height: var(--row-h);
+  padding: 0 8px 0 var(--rail-w);
   border-radius: 4px;
   font-size: 11.5px;
   color: var(--text-dim);
@@ -329,21 +318,13 @@
   color: var(--text);
 }
 
-.tag-nav-row .pos {
-  width: 12px;
-  flex: none;
-  text-align: right;
-}
-
 .tag-nav-row .subj {
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tag-nav-row .unresolved-count {
-  flex: none;
   font-size: 10.5px;
   color: var(--amber);
 }

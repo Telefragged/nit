@@ -1,7 +1,6 @@
 import {
   skipToken,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -16,6 +15,7 @@ import {
 import { flushSync } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { createDraft, getChangeDrafts, getDiff, getRepo } from "../api/client";
+import { tagGraph } from "../api/fold";
 import type {
   ChangeDetail,
   DiffMode,
@@ -26,6 +26,7 @@ import type {
 } from "../api/types";
 import { verdictStatus } from "../api/verdict";
 import { StatusChip } from "../components/badges";
+
 import TagNav from "../components/TagNav";
 import CommentEditor from "../components/CommentEditor";
 import CommentThread from "../components/CommentThread";
@@ -46,6 +47,7 @@ import {
   anchorLineText,
   assembleThreads,
   commentCountLabel,
+  nodeActivity,
   placementLine,
   pendingUnresolvedCount,
   threadCountByRevision,
@@ -321,7 +323,7 @@ export default function ReviewPage() {
   const selected = selectedRev?.number ?? 1;
   const latestRevision = latest?.number ?? 1;
 
-  // The sidebar lists every change that carries the same value as this one
+  // The header graphs every change that carries the same value as this one
   // for the selected tag key. The key the reviewer picked last is kept per
   // browser, so it follows them between changes as long as each carries it.
   const [preferredKey, setPreferredKey] = useState(() =>
@@ -345,14 +347,19 @@ export default function ReviewPage() {
         : { repo: published.repo_id, tag: [tag] },
   };
   const memberProjections = useChangeStream(subscription);
-  const memberIds = useMemo(
-    () => memberProjections.map((p) => p.id),
-    [memberProjections],
+  const graph = useMemo(() => tagGraph(memberProjections), [memberProjections]);
+  // The graph's row order, top to bottom: n steps up it, shift+n down.
+  const rowIds = useMemo(
+    () =>
+      graph.nodes.flatMap((n) =>
+        n.change_number === null ? [] : [n.change_number],
+      ),
+    [graph],
   );
   // This change stays in the drafts read while a new subscription refills
   // the picked set, so its overlay never blinks out.
   const draftsMap = useDrafts(
-    memberIds.includes(changeNumber) ? memberIds : [changeNumber, ...memberIds],
+    rowIds.includes(changeNumber) ? rowIds : [changeNumber, ...rowIds],
   );
   // The same read useDrafts makes for this change, for its error: an
   // unknown change number surfaces here, because the websocket says nothing.
@@ -384,23 +391,7 @@ export default function ReviewPage() {
     }
   }, [revisionParam, defaultRev, updateParams]);
 
-  // Each member's published projection comes from the ["change", id] cache
-  // the stream keeps live (TagNav reads each member's status and unresolved
-  // count).
-  const memberQueries = useQueries({
-    queries: memberIds.map((id) => ({
-      queryKey: ["change", id],
-      queryFn: skipToken,
-    })),
-  });
-  // A skipToken-only query never infers its data type; the cache rows are
-  // written as ChangeDetail by useChangeStream. A row renders once its
-  // member's projection has arrived.
-  const members = useMemo(
-    () =>
-      memberQueries.flatMap((q) => (q.data ? [q.data as ChangeDetail] : [])),
-    [memberQueries],
-  );
+  const activity = nodeActivity(memberProjections, draftsMap);
   const drafted = [...draftsMap.values()].filter(
     (d) => d.draft_decision !== null,
   ).length;
@@ -599,9 +590,9 @@ export default function ReviewPage() {
         );
         revealFile(next);
       } else if (key === "n" || key === "shift+n") {
-        const position = memberIds.indexOf(changeNumber);
+        const position = rowIds.indexOf(changeNumber);
         if (position < 0) return;
-        const next = memberIds[position + (key === "n" ? 1 : -1)];
+        const next = rowIds[position + (key === "n" ? -1 : 1)];
         if (next !== undefined) void navigate(`/changes/${next}`);
       } else if (key === "r") {
         // Guarded, because switchRange asks the reviewer to discard an open
@@ -648,7 +639,7 @@ export default function ReviewPage() {
     fileCount,
     activeFile,
     revealFile,
-    memberIds,
+    rowIds,
     changeNumber,
     navigate,
     replyOpen,
@@ -800,37 +791,47 @@ export default function ReviewPage() {
     <ReviewContext.Provider value={ctxValue}>
       <main className="page-wide review-page">
         <div className="review-header">
-          <div className="crumb-line">
-            <Link to={`/repos/${change.repo_id}`}>
-              {repo ? repoPath(repo.git_dir) : `repo ${change.repo_id}`}
-            </Link>
-            <span className="sep">/</span>
-            <span className="dim">change {change.id}</span>
-            <span className="sep">·</span>
-            <span className="mono dim" title={change.change_id}>
-              {change.change_id.slice(0, 12)}
-            </span>
-          </div>
-          <div className="subject-line">
-            <h1>{selectedRev.subject}</h1>
-            <StatusChip status={selectedRev.status} />
-          </div>
-          <div className="meta-line">
-            <span className="dim">
-              commit{" "}
-              <span className="mono">
-                {selectedRev.commit_sha.slice(0, 12)}
+          <div className="review-header-main">
+            <div className="crumb-line">
+              <Link to={`/repos/${change.repo_id}`}>
+                {repo ? repoPath(repo.git_dir) : `repo ${change.repo_id}`}
+              </Link>
+              <span className="sep">/</span>
+              <span className="dim">change {change.id}</span>
+              <span className="sep">·</span>
+              <span className="mono dim" title={change.change_id}>
+                {change.change_id.slice(0, 12)}
               </span>
-            </span>
-            <span className="dim">
-              parent{" "}
-              <span className="mono">
-                {selectedRev.parent_sha.slice(0, 12)}
+            </div>
+            <div className="subject-line">
+              <h1>{selectedRev.subject}</h1>
+              <StatusChip status={selectedRev.status} />
+            </div>
+            <div className="meta-line">
+              <span className="dim">
+                commit{" "}
+                <span className="mono">
+                  {selectedRev.commit_sha.slice(0, 12)}
+                </span>
               </span>
-            </span>
-            <span className="dim">{timeAgo(selectedRev.created_at)}</span>
+              <span className="dim">
+                parent{" "}
+                <span className="mono">
+                  {selectedRev.parent_sha.slice(0, 12)}
+                </span>
+              </span>
+              <span className="dim">{timeAgo(selectedRev.created_at)}</span>
+            </div>
+            <ReviewsStrip change={change} />
           </div>
-          <ReviewsStrip change={change} />
+          <TagNav
+            tags={tags}
+            selectedKey={selectedTag?.[0] ?? null}
+            onSelectKey={chooseTagKey}
+            graph={graph}
+            activity={activity}
+            currentId={changeNumber}
+          />
         </div>
 
         <div className="diffbar">
@@ -905,13 +906,6 @@ export default function ReviewPage() {
 
         <div className="review-layout">
           <aside className="review-sidebar">
-            <TagNav
-              tags={tags}
-              selectedKey={selectedTag?.[0] ?? null}
-              onSelectKey={chooseTagKey}
-              members={members}
-              currentId={changeNumber}
-            />
             <FileRail
               files={files}
               threadsByFile={threadsByFile}

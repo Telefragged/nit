@@ -1,13 +1,8 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ChangeDetail, ChangeStatus } from "../api/types";
+import type { ChangeGraph, ChangeStatus, GraphNode } from "../api/types";
+import type { NodeActivity } from "../lib/comments";
 import TagNav from "./TagNav";
 
 afterEach(cleanup);
@@ -18,33 +13,32 @@ function must<T>(value: T | null | undefined, what: string): T {
   return value;
 }
 
-/** A change whose latest revision carries `status` and `unresolved` open
- * threads: what a row reads. */
-function detail(
+function node(
   changeNumber: number,
   subject: string,
   status: ChangeStatus,
-  unresolved: number,
-): ChangeDetail {
+  parent: string,
+): GraphNode {
   return {
-    id: changeNumber,
-    repo_id: 1,
+    commit_sha: `sha${changeNumber}`,
+    section: "open",
+    subject,
+    status,
+    parents: [parent],
+    change_number: changeNumber,
     change_id: `I${changeNumber}`,
-    revisions: [
-      {
-        number: 0,
-        commit_sha: `sha${changeNumber}`,
-        parent_sha: "",
-        fork_sha: "",
-        message: `${subject}\n\nbody`,
-        subject,
-        created_at: "",
-        status,
-      },
-    ],
-    threads: Array.from({ length: unresolved }, (_, i) => ({
+    revision: 0,
+    fork_sha: "m",
+    group: null,
+  };
+}
+
+/** `count` unresolved threads at revision 0. */
+function activity(count: number): NodeActivity {
+  return {
+    threads: Array.from({ length: count }, (_, i) => ({
       id: i,
-      change_number: changeNumber,
+      change_number: 0,
       revision: 0,
       anchor: "change" as const,
       resolved: false,
@@ -53,36 +47,58 @@ function detail(
       updated_at: "",
     })),
     drafts: [],
-    reviews: [],
-    draft_decision: null,
+    decision: null,
   };
 }
 
-const members = [
-  detail(10, "first change", "approved", 0),
-  detail(11, "second change", "changes_requested", 2),
-  detail(12, "third change", "pending", 0),
-];
+/** A chain of `n` changes numbered from 10, tip first as the graph lists
+ * them: change 10 + n - 1 at the top, change 10 at the bottom on "m". */
+function chain(n: number): ChangeGraph {
+  const nodes: GraphNode[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const id = 10 + i;
+    nodes.push(
+      node(id, `change ${id}`, "pending", i === 0 ? "m" : `sha${id - 1}`),
+    );
+  }
+  return { history_truncated: false, nodes };
+}
 
-const renderNav = (currentId: number, onSelectKey = vi.fn()) =>
+const three: ChangeGraph = {
+  history_truncated: false,
+  nodes: [
+    node(12, "third change", "pending", "sha11"),
+    node(11, "second change", "changes_requested", "sha10"),
+    node(10, "first change", "approved", "m"),
+  ],
+};
+
+const renderNav = (
+  graph: ChangeGraph,
+  currentId: number,
+  onSelectKey = vi.fn(),
+) =>
   render(
     <MemoryRouter>
       <TagNav
         tags={{ branch: "feat", "session-id": "s1" }}
         selectedKey="session-id"
         onSelectKey={onSelectKey}
-        members={members}
+        graph={graph}
+        activity={new Map([[11, activity(2)]])}
         currentId={currentId}
       />
     </MemoryRouter>,
   );
 
-const list = () => document.querySelector(".tag-nav-list");
+const rows = () => [...document.querySelectorAll(".tag-nav-row")];
+const subjects = () =>
+  rows().map((r) => r.querySelector(".subj")?.textContent ?? "");
 
 describe("TagNav", () => {
   it("offers the change's tag keys and reports the chosen one", () => {
     const onSelectKey = vi.fn();
-    renderNav(11, onSelectKey);
+    renderNav(three, 11, onSelectKey);
     const select = screen.getByLabelText<HTMLSelectElement>("Tag");
     expect(select.disabled).toBe(false);
     expect([...select.options].map((o) => o.value)).toEqual([
@@ -102,25 +118,30 @@ describe("TagNav", () => {
           tags={{}}
           selectedKey={null}
           onSelectKey={vi.fn()}
-          members={[]}
+          graph={{ history_truncated: false, nodes: [] }}
+          activity={new Map()}
           currentId={11}
         />
       </MemoryRouter>,
     );
     expect(screen.getByLabelText<HTMLSelectElement>("Tag").disabled).toBe(true);
-    expect(document.querySelectorAll(".tag-nav-row")).toHaveLength(0);
+    expect(rows()).toHaveLength(0);
   });
 
-  it("lists every member, links the siblings, and marks the current one", () => {
-    renderNav(11);
+  it("draws every row in graph order, links the others, and marks the current one", () => {
+    renderNav(three, 11);
     expect(document.querySelector(".tag-nav-pos")?.textContent).toBe("2/3");
-
-    expect(document.querySelectorAll(".tag-nav-row")).toHaveLength(3);
+    expect(subjects()).toEqual([
+      "third change",
+      "second change",
+      "first change",
+    ]);
+    expect(document.querySelector(".graph-rail")).not.toBeNull();
 
     const links = screen.getAllByRole("link");
     expect(links.map((a) => a.getAttribute("href"))).toEqual([
-      "/changes/10",
       "/changes/12",
+      "/changes/10",
     ]);
 
     // A div, not a link, so the current page never self-links; aria-current
@@ -131,25 +152,44 @@ describe("TagNav", () => {
     );
     expect(current.tagName).toBe("DIV");
     expect(current.getAttribute("aria-current")).toBe("page");
-    expect(within(current).getByText("second change")).toBeTruthy();
-    expect(within(current).getByText("2 open")).toBeTruthy();
+    expect(current.querySelector(".subj")?.textContent).toBe("second change");
+    expect(current.querySelector(".unresolved-count")?.textContent).toBe(
+      "2 open",
+    );
     expect(document.querySelectorAll(".unresolved-count")).toHaveLength(1);
+    // Nothing to expand: the whole graph fits the window.
+    expect(document.querySelector(".tag-nav-all")).toBeNull();
   });
 
-  it("collapses and expands the list from the disclosure", () => {
-    renderNav(11);
-    const toggle = screen.getByRole("button");
+  it("windows nine rows around the current change", () => {
+    // Twelve changes, 21 at the top. Change 16 sits at row 5, so the
+    // window holds four rows either side of it.
+    renderNav(chain(12), 16);
+    expect(document.querySelector(".tag-nav-pos")?.textContent).toBe("6/12");
+    expect(subjects()).toEqual(
+      [20, 19, 18, 17, 16, 15, 14, 13, 12].map((id) => `change ${id}`),
+    );
+  });
 
-    // Defaults open: the sidebar has room, so the list is visible up front.
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(list()).not.toBeNull();
+  it("moves the window to the end when the current change is near it", () => {
+    renderNav(chain(12), 20);
+    expect(subjects()).toEqual(
+      [21, 20, 19, 18, 17, 16, 15, 14, 13].map((id) => `change ${id}`),
+    );
+    cleanup();
+    renderNav(chain(12), 11);
+    expect(subjects()).toEqual(
+      [18, 17, 16, 15, 14, 13, 12, 11, 10].map((id) => `change ${id}`),
+    );
+  });
 
+  it("shows the whole graph on request, and the window again", () => {
+    renderNav(chain(12), 16);
+    const toggle = screen.getByRole("button", { name: "show all 12" });
     fireEvent.click(toggle);
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(list()).toBeNull();
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(list()).not.toBeNull();
+    expect(rows()).toHaveLength(12);
+    expect(screen.getByRole("button", { name: "show 9" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "show 9" }));
+    expect(rows()).toHaveLength(9);
   });
 });

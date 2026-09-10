@@ -1,58 +1,75 @@
-import { memo, useState } from "react";
+import { type CSSProperties, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type { ChangeDetail, Tags } from "../api/types";
-import { revisionActivity } from "../lib/comments";
+import type { ChangeGraph, Tags } from "../api/types";
+import { type NodeActivity, revisionActivity } from "../lib/comments";
+import { LAYOUT_DENSE, type LaidNode, layoutGraph } from "../lib/graphLayout";
 import { StatusDot } from "./badges";
+import { GraphRail } from "./GraphTable";
+
+/** Rows shown before the reviewer asks for the whole graph. */
+const WINDOW = 9;
+
+/** The first row of the window: `WINDOW` rows around `current`, moved up
+ * or down as far as needed to stay inside `total`. */
+function windowStart(current: number, total: number): number {
+  const half = Math.floor(WINDOW / 2);
+  return Math.max(0, Math.min(current - half, total - WINDOW));
+}
 
 /**
- * The review sidebar's list of the changes that share a tag with the
- * current one, above the file list: one row per change (status dot,
- * position, subject, unresolved count), the current one highlighted and
- * the others linking through. The header's selector picks which of the
- * current change's tag keys the list follows; a change with no tags
- * disables it. Sitting on top fixes the list's position, so the rows stay
- * put when you click between changes and the file list below absorbs the
- * reflow. A disclosure collapses the list; the list scrolls within its
- * own height cap (styles/review.css).
+ * The review header's graph of the changes that share a tag with the
+ * current one: the tag graph (api/fold tagGraph) drawn as the dashboard's
+ * rail beside one-line rows (status dot, subject, revision, unresolved
+ * count), the current change highlighted and the others linking through.
+ * The selector picks which of the current change's tag keys the graph
+ * follows; a change with no tags disables it. Nine rows around the current
+ * change show at first, and "show all" opens the whole graph. The rail is
+ * laid out over the whole graph and clipped to the window, so an edge
+ * that leaves the window reads as continuing past it.
  */
 export default function TagNav({
   tags,
   selectedKey,
   onSelectKey,
-  members,
+  graph,
+  activity,
   currentId,
 }: {
   /** The current change's tags: the keys the selector offers. */
   tags: Tags;
-  /** The key the list follows; null only when `tags` is empty. */
+  /** The key the graph follows; null only when `tags` is empty. */
   selectedKey: string | null;
   onSelectKey: (key: string) => void;
-  /** Every change carrying the selected key's value, ascending by number. */
-  members: ChangeDetail[];
+  /** The tag graph of every change carrying the selected key's value. */
+  graph: ChangeGraph;
+  /** Per-change activity, keyed by change number: the unresolved count. */
+  activity: Map<number, NodeActivity>;
   currentId: number;
 }) {
-  const [open, setOpen] = useState(true);
-  const keys = Object.keys(tags);
-  const position = members.findIndex((m) => m.id === currentId);
-  const posLabel = `${position < 0 ? "—" : position + 1}/${members.length}`;
+  const [expanded, setExpanded] = useState(false);
+  const layout = useMemo(() => layoutGraph(graph, LAYOUT_DENSE), [graph]);
+  const total = layout.nodes.length;
+  const position = layout.nodes.findIndex(
+    (ln) => ln.node.change_number === currentId,
+  );
+  const start = expanded ? 0 : windowStart(position, total);
+  const rows = expanded
+    ? layout.nodes
+    : layout.nodes.slice(start, start + WINDOW);
+  const posLabel = `${position < 0 ? "—" : position + 1}/${total}`;
+  const style = {
+    height: rows.length * layout.rowH,
+    "--rail-w": `${layout.railWidth}px`,
+    "--row-h": `${layout.rowH}px`,
+  } as CSSProperties;
 
   return (
     <section className="tag-nav">
       <div className="tag-nav-title">
-        <button
-          className="tag-nav-toggle"
-          aria-expanded={open}
-          title={open ? "Collapse the change list" : "Expand the change list"}
-          onClick={() => {
-            setOpen((v) => !v);
-          }}
-        >
-          <span className="fchevron">{open ? "▾" : "▸"}</span>
-        </button>
         <select
           className="revision-select"
           aria-label="Tag"
-          title="List the changes that share this tag's value"
+          title="Graph the changes that share this tag's value"
           disabled={selectedKey === null}
           value={selectedKey ?? ""}
           onChange={(e) => {
@@ -60,48 +77,65 @@ export default function TagNav({
           }}
         >
           {selectedKey === null ? <option value="">no tags</option> : null}
-          {keys.map((key) => (
+          {Object.keys(tags).map((key) => (
             <option key={key} value={key}>
               {key}
             </option>
           ))}
         </select>
         <span className="tag-nav-pos mono">{posLabel}</span>
+        {total > WINDOW ? (
+          <button
+            className="linkish tag-nav-all"
+            onClick={() => {
+              setExpanded((v) => !v);
+            }}
+          >
+            {expanded ? `show ${WINDOW}` : `show all ${total}`}
+          </button>
+        ) : null}
       </div>
-      {open ? (
-        <div className="tag-nav-list">
-          {members.map((m, i) => (
-            <Row key={m.id} member={m} index={i} current={m.id === currentId} />
-          ))}
-        </div>
-      ) : null}
+      <div className="graph-body" style={style}>
+        <GraphRail layout={layout} style={{ top: -start * layout.rowH }} />
+        {rows.map((ln) => (
+          <Row
+            key={ln.node.commit_sha}
+            ln={ln}
+            act={
+              ln.node.change_number === null
+                ? undefined
+                : activity.get(ln.node.change_number)
+            }
+            current={ln.node.change_number === currentId}
+          />
+        ))}
+      </div>
     </section>
   );
 }
 
-/** One change's row. Memoized, so a projection arriving for one member
- * re-renders that row alone. */
-const Row = memo(function Row({
-  member,
-  index,
+function Row({
+  ln,
+  act,
   current,
 }: {
-  member: ChangeDetail;
-  index: number;
+  ln: LaidNode;
+  act: NodeActivity | undefined;
   current: boolean;
 }) {
-  const latest = member.revisions.at(-1);
-  const subject = latest?.subject ?? "";
-  const status = latest?.status ?? "pending";
-  const title = `${index + 1}. ${subject} — ${status}`;
-  const unresolved = latest
-    ? revisionActivity(member.threads, member.drafts, latest.number).unresolved
-    : 0;
+  const { node } = ln;
+  const unresolved =
+    act && node.revision !== null
+      ? revisionActivity(act.threads, act.drafts, node.revision).unresolved
+      : 0;
+  const title = `${node.subject} · ${node.status}`;
   const inner = (
     <>
-      <StatusDot status={status} />
-      <span className="pos mono dim">{index + 1}</span>
-      <span className="subj">{subject}</span>
+      <StatusDot status={node.status} />
+      <span className="subj">{node.subject}</span>
+      <span className="mono dim">
+        {node.revision === null ? "" : `r${node.revision}`}
+      </span>
       {unresolved > 0 ? (
         <span className="unresolved-count" title="unresolved threads">
           {unresolved} open
@@ -118,8 +152,12 @@ const Row = memo(function Row({
       {inner}
     </div>
   ) : (
-    <Link className="tag-nav-row" to={`/changes/${member.id}`} title={title}>
+    <Link
+      className="tag-nav-row"
+      to={`/changes/${node.change_number}`}
+      title={title}
+    >
       {inner}
     </Link>
   );
-});
+}

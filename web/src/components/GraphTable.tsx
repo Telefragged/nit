@@ -1,14 +1,8 @@
 import { type CSSProperties, Fragment, useMemo } from "react";
 import { Link } from "react-router-dom";
-import type {
-  Decision,
-  Draft,
-  GraphNode,
-  ChangeGraph,
-  ThreadProjection,
-} from "../api/types";
-import { revisionActivity } from "../lib/comments";
-import type { LaidEdge, LaidNode } from "../lib/graphLayout";
+import type { ChangeGraph, GraphNode } from "../api/types";
+import { type NodeActivity, revisionActivity } from "../lib/comments";
+import type { GraphLayout, LaidEdge, LaidNode } from "../lib/graphLayout";
 import { layoutGraph } from "../lib/graphLayout";
 import { useRowNav } from "../lib/useRowNav";
 import { StatusChip } from "./badges";
@@ -46,10 +40,11 @@ function BreakMark({
   );
 }
 
-// The change graph, centered on the canonical ref: one DAG over it,
-// rendered as an SVG rail (left column) beside per-row change
-// cards. The layout pass (lib/graphLayout) owns all geometry; this component
-// only paints the computed coordinates and the row content.
+// The change graph as a table: an SVG rail (left column) beside per-row
+// change cards. The layout pass (lib/graphLayout) owns all geometry; this
+// module only paints the computed coordinates and the row content. The
+// rail is its own component, so a page can draw the same rail beside rows
+// of its own.
 
 const shortSha = (sha: string): string => sha.slice(0, 12);
 
@@ -59,15 +54,6 @@ function nodeColor(ln: LaidNode): string {
   if (ln.isHead) return "head";
   if (ln.node.section === "history") return "gray";
   return `lane-${ln.lane % LANE_COLORS}`;
-}
-
-/** What a node's activity badges draw — read off the bulk change folds and
- * the reviewer's drafts overlay rather than denormalized onto the graph
- * node. */
-export interface NodeActivity {
-  threads: readonly ThreadProjection[];
-  drafts: readonly Draft[];
-  decision: Decision | null;
 }
 
 // Comment/draft/unresolved counts at the node's pinned revision plus the
@@ -186,6 +172,60 @@ function GroupGap({ group }: { group: string | null }) {
   );
 }
 
+/** The SVG rail of a laid-out graph: every edge, node and the collapsed
+ * marker, painted at the layout's coordinates. The caller positions it
+ * over its rows. */
+export function GraphRail({
+  layout,
+  style,
+}: {
+  layout: GraphLayout;
+  style?: CSSProperties;
+}) {
+  const collapsed = layout.collapsed;
+  return (
+    <svg
+      className="graph-rail"
+      width={layout.railWidth}
+      height={layout.height}
+      style={style}
+      aria-hidden="true"
+    >
+      {layout.edges.map((e) => (
+        <Fragment key={e.key}>
+          <path className={edgeClass(e)} d={e.d} opacity={e.opacity} />
+          {e.mark && <BreakMark {...e.mark} className={edgeClass(e)} />}
+        </Fragment>
+      ))}
+      {layout.nodes.map((ln) => (
+        <g key={ln.node.commit_sha} opacity={ln.opacity}>
+          {ln.isHead && (
+            <circle
+              className="graph-node-ring"
+              cx={ln.cx}
+              cy={ln.cy}
+              r={ln.r + 4.5}
+            />
+          )}
+          <circle
+            className={`graph-node node-${nodeColor(ln)}`}
+            cx={ln.cx}
+            cy={ln.cy}
+            r={ln.r}
+          />
+        </g>
+      ))}
+      {collapsed && (
+        <path
+          className="graph-chevron"
+          d={`M ${collapsed.cx - 5} ${collapsed.cy - 3} L ${collapsed.cx} ${collapsed.cy + 3} L ${collapsed.cx + 5} ${collapsed.cy - 3}`}
+          opacity={collapsed.opacity}
+        />
+      )}
+    </svg>
+  );
+}
+
 export default function GraphTable({
   graph,
   activity,
@@ -216,44 +256,7 @@ export default function GraphTable({
         <span>Activity</span>
       </div>
       <div className="graph-body" style={bodyStyle}>
-        <svg
-          className="graph-rail"
-          width={layout.railWidth}
-          height={layout.height}
-          aria-hidden="true"
-        >
-          {layout.edges.map((e) => (
-            <Fragment key={e.key}>
-              <path className={edgeClass(e)} d={e.d} opacity={e.opacity} />
-              {e.mark && <BreakMark {...e.mark} className={edgeClass(e)} />}
-            </Fragment>
-          ))}
-          {layout.nodes.map((ln) => (
-            <g key={ln.node.commit_sha} opacity={ln.opacity}>
-              {ln.isHead && (
-                <circle
-                  className="graph-node-ring"
-                  cx={ln.cx}
-                  cy={ln.cy}
-                  r={ln.r + 4.5}
-                />
-              )}
-              <circle
-                className={`graph-node node-${nodeColor(ln)}`}
-                cx={ln.cx}
-                cy={ln.cy}
-                r={ln.r}
-              />
-            </g>
-          ))}
-          {collapsed && (
-            <path
-              className="graph-chevron"
-              d={`M ${collapsed.cx - 5} ${collapsed.cy - 3} L ${collapsed.cx} ${collapsed.cy + 3} L ${collapsed.cx + 5} ${collapsed.cy - 3}`}
-              opacity={collapsed.opacity}
-            />
-          )}
-        </svg>
+        <GraphRail layout={layout} />
         {layout.nodes.map((ln) => (
           <Fragment key={ln.node.commit_sha}>
             {ln.gapAbove && <GroupGap group={ln.node.group} />}

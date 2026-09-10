@@ -32,6 +32,11 @@
 //            parent nit never registered (a torn push): the graph attaches
 //            it to its fork with a break edge. Grouping by `session-id` runs
 //            each session's changes together.
+//   repo 5 (ledger)  one session's chain of twelve changes (70–81), plus a
+//            merged change (82) the chain no longer sits on and an
+//            abandoned one (83): the review page's tag graph windows the
+//            chain around the current change and shows the two terminal
+//            changes as lone nodes.
 //
 // Every stored diff leads with the synthetic /COMMIT_MSG file, like the
 // real server.
@@ -139,6 +144,12 @@ export const repos: RepoRecord[] = [
   {
     id: 4,
     git_dir: "/home/vetle/src/lumen/.git",
+    canonical_ref: "main",
+    history: graphHistory,
+  },
+  {
+    id: 5,
+    git_dir: "/home/vetle/src/ledger/.git",
     canonical_ref: "main",
     history: graphHistory,
   },
@@ -1467,8 +1478,88 @@ const changeR: ChangeRecord = {
 };
 
 // ---------------------------------------------------------------------------
+// repo 5 (ledger): session ledger-split, a twelve-change chain off HEAD
+
+const mLedger = sha(900);
+const ledgerSubjects = [
+  "ledger: split the journal by period",
+  "ledger: index entries by account",
+  "ledger: stream a period's entries",
+  "ledger: close a period in one statement",
+  "ledger: reopen a period on demand",
+  "ledger: carry balances across periods",
+  "ledger: reject an entry in a closed period",
+  "ledger: audit period closes",
+  "ledger: back-fill period ids",
+  "ledger: drop the monolithic journal",
+  "ledger: document period lifecycle",
+  "ledger: benchmark period queries",
+];
+
+function ledgerChange(
+  id: number,
+  subject: string,
+  parent: string,
+  terminal?: "merged" | "abandoned",
+): ChangeRecord {
+  const message = `${subject}\n\nChange-Id: I${id}00aa11bb22cc33dd`;
+  return {
+    id,
+    repo_id: 5,
+    change_id: changeId(`I${id}00aa11bb22cc33dd`),
+    subject,
+    terminal,
+    tags: { "session-id": "ledger-split", branch: "feat/ledger-split" },
+    revisions: [
+      {
+        number: 0,
+        commit_sha: sha(700 + id),
+        parent_sha: parent,
+        fork_sha: mLedger,
+        message,
+        created_at: ago(90 - id),
+      },
+    ],
+    reviews:
+      id < 73
+        ? [
+            {
+              // The review entry's position: after the revision and tags.
+              id: 2,
+              revision: 0,
+              verdict: "approve",
+              message: "Looks good.",
+              created_at: ago(80 - id),
+            },
+          ]
+        : [],
+    diffs: {
+      [diffKey(0)]: trivialDiff(message, "src/ledger.rs", `// ${subject}`),
+    },
+  };
+}
+
+const ledgerChain: ChangeRecord[] = ledgerSubjects.map((subject, i) => {
+  const id = 70 + i;
+  return ledgerChange(id, subject, i === 0 ? mLedger : sha(700 + id - 1));
+});
+const ledgerMerged = ledgerChange(
+  82,
+  "ledger: pin the journal schema version",
+  sha(901),
+  "merged",
+);
+const ledgerAbandoned = ledgerChange(
+  83,
+  "ledger: shard the journal by account",
+  mLedger,
+  "abandoned",
+);
 
 export const changes: ChangeRecord[] = [
+  ...ledgerChain,
+  ledgerMerged,
+  ledgerAbandoned,
   change10,
   change11,
   change12,

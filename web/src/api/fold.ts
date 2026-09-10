@@ -14,6 +14,7 @@ import {
   fold_entry,
   repo_graph,
   replay_proj,
+  tag_graph,
 } from "../wasm/nit_wasm";
 import type {
   ChangeDetail,
@@ -63,4 +64,10 @@ export function repoGraph(
   groupBy: string | null,
 ): ChangeGraph {
   return repo_graph(changes, history, groupBy ?? undefined) as ChangeGraph;
+}
+
+/** Assemble the tag graph: `changes` (the members of one tag) at their
+ * latest revisions. */
+export function tagGraph(changes: ChangeProjection[]): ChangeGraph {
+  return tag_graph(changes) as ChangeGraph;
 }
