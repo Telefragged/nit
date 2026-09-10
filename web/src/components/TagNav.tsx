@@ -91,7 +91,7 @@ export default function TagNav({
               setExpanded((v) => !v);
             }}
           >
-            {expanded ? `show ${WINDOW}` : `show all ${total}`}
+            {expanded ? "show less" : "show all"}
           </button>
         ) : null}
       </div>

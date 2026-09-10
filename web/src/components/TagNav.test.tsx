@@ -185,11 +185,9 @@ describe("TagNav", () => {
 
   it("shows the whole graph on request, and the window again", () => {
     renderNav(chain(12), 16);
-    const toggle = screen.getByRole("button", { name: "show all 12" });
-    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "show all" }));
     expect(rows()).toHaveLength(12);
-    expect(screen.getByRole("button", { name: "show 7" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "show 7" }));
+    fireEvent.click(screen.getByRole("button", { name: "show less" }));
     expect(rows()).toHaveLength(7);
   });
 });
