@@ -83,8 +83,7 @@ Read the statuses together:
 - **every change `approved`** — the cue to land, not to hand off. Land it per
   this project's approve action (your project config records it) and drive
   it through to `merged` yourself — don't stop to ask.
-- **every change `merged` / `abandoned`** — the work is closed. Stop the
-  monitor.
+- **every change `merged` / `abandoned`** — the work is closed.
 
 Never submit a review verdict yourself — that is the human's side. Your surface
 is push / status / log / comment.
