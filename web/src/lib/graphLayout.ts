@@ -1,5 +1,5 @@
 // The change-graph layout pass — pure, kept separate from the render so the
-// geometry stays unit-testable. Input: a RepoGraph (nodes already in
+// geometry stays unit-testable. Input: a ChangeGraph (nodes already in
 // topological row order). Output: positioned nodes and
 // edge paths, ready for the SVG renderer.
 //
@@ -19,7 +19,7 @@
 // gap between two rows whose group differs, so each run of a group reads as
 // one block.
 
-import type { GraphNode, RepoGraph } from "../api/types";
+import type { GraphNode, ChangeGraph } from "../api/types";
 
 /** Visual constants for the change-graph layout (the approved "trunk &
  * branches" design: dense rows, hollow ringed nodes, elbow connectors). */
@@ -104,7 +104,7 @@ interface Branch {
 }
 
 /** Pure: never mutates `graph`. */
-export function layoutGraph(graph: RepoGraph): GraphLayout {
+export function layoutGraph(graph: ChangeGraph): GraphLayout {
   const nodes = graph.nodes;
   const n = nodes.length;
 

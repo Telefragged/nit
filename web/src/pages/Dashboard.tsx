@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { getChanges, getHistory, getRepo, getTags } from "../api/client";
 import { repoGraph } from "../api/fold";
 import type { ChangeStatus } from "../api/types";
-import ChangeGraph, { type NodeActivity } from "../components/ChangeGraph";
+import GraphTable, { type NodeActivity } from "../components/GraphTable";
 import { repoPath } from "../lib/repo";
 import { useDrafts } from "../lib/useDrafts";
 import { useUrlParams } from "../lib/useUrlParams";
@@ -196,7 +196,7 @@ export default function Dashboard() {
           a change for review.
         </div>
       ) : (
-        <ChangeGraph graph={graph} activity={activity} />
+        <GraphTable graph={graph} activity={activity} />
       )}
     </main>
   );

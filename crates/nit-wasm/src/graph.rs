@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use nit_types::domain::Sha;
 use nit_types::domain::{ChangeProjection, RevisionProjection};
 use nit_types::domain::{ChangeStatus, GraphSection};
-use nit_types::graph::{self, GraphNode, RepoGraph, RepoHistory};
+use nit_types::graph::{self, ChangeGraph, GraphNode, RepoHistory};
 
 /// One node of the graph's open region.
 ///
@@ -120,14 +120,14 @@ fn open_nodes(changes: &[ChangeProjection]) -> Vec<OpenNode<'_>> {
 /// float to the top, which is wrong whenever the whole stack forks behind
 /// HEAD.
 ///
-/// `group_by` names the tag key to group the open region on. [`RepoGraph`]
+/// `group_by` names the tag key to group the open region on. [`ChangeGraph`]
 /// states the order that a grouped graph guarantees.
 #[must_use]
 pub fn assemble(
     changes: &[ChangeProjection],
     history: &RepoHistory,
     group_by: Option<&str>,
-) -> RepoGraph {
+) -> ChangeGraph {
     let mut nodes: Vec<GraphNode> = Vec::new();
     let shas: HashSet<&str> = history.commits.iter().map(|h| h.sha.as_str()).collect();
 
@@ -201,7 +201,7 @@ pub fn assemble(
             }),
     );
 
-    RepoGraph {
+    ChangeGraph {
         history_truncated: history.truncated,
         nodes,
     }
@@ -471,7 +471,7 @@ mod tests {
             commits: vec![commit("h", &[])],
             truncated: false,
         };
-        let shas = |g: &RepoGraph| {
+        let shas = |g: &ChangeGraph| {
             g.nodes
                 .iter()
                 .map(|n| n.commit_sha.clone())

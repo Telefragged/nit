@@ -4,7 +4,7 @@ import type {
   Decision,
   Draft,
   GraphNode,
-  RepoGraph,
+  ChangeGraph,
   ThreadProjection,
 } from "../api/types";
 import { revisionActivity } from "../lib/comments";
@@ -186,11 +186,11 @@ function GroupGap({ group }: { group: string | null }) {
   );
 }
 
-export default function ChangeGraph({
+export default function GraphTable({
   graph,
   activity,
 }: {
-  graph: RepoGraph;
+  graph: ChangeGraph;
   /** Per-change activity, keyed by change number — the source for each node's
    * badges. */
   activity: Map<number, NodeActivity>;

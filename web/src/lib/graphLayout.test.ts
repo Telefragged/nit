@@ -3,7 +3,7 @@ import type {
   ChangeStatus,
   GraphNode,
   GraphSection,
-  RepoGraph,
+  ChangeGraph,
 } from "../api/types";
 import type { GraphLayout, LaidNode } from "./graphLayout";
 import { LAYOUT_B, layoutGraph } from "./graphLayout";
@@ -47,7 +47,7 @@ const edge = (g: GraphLayout, from: string, to: string) =>
 
 // Node order below is the row order layoutGraph keys off (array index →
 // row); reordering these nodes shifts every row-based assertion below.
-function mockGraph(): RepoGraph {
+function mockGraph(): ChangeGraph {
   return {
     history_truncated: false,
     nodes: [
@@ -187,7 +187,7 @@ describe("layoutGraph behind-HEAD base (below window)", () => {
 describe("layoutGraph break (hidden parent)", () => {
   // K's parent "hidden" is no node, and it is not K's fork H either: the
   // commits between K and H are missing from the graph.
-  function graph(truncated: boolean): RepoGraph {
+  function graph(truncated: boolean): ChangeGraph {
     return {
       history_truncated: truncated,
       nodes: [
@@ -214,7 +214,7 @@ describe("layoutGraph break (hidden parent)", () => {
   });
 
   it("marks the behind edge when the fork is below the window", () => {
-    const below: RepoGraph = {
+    const below: ChangeGraph = {
       history_truncated: true,
       nodes: [
         { ...node("K", "open", "pending", ["hidden"]), fork_sha: "old" },

@@ -46,7 +46,7 @@ fn write_wire_types() {
         crate::domain::Tags,
         crate::repos::Repo,
         crate::repos::RepoList,
-        crate::graph::RepoGraph,
+        crate::graph::ChangeGraph,
         crate::graph::GraphNode,
         crate::graph::HistoryCommit,
         crate::graph::RepoHistory,

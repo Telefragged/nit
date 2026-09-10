@@ -19,7 +19,7 @@ import type {
   ChangeDetail,
   ChangeProjection,
   LogEntry,
-  RepoGraph,
+  ChangeGraph,
   RepoHistory,
 } from "./types";
 
@@ -61,6 +61,6 @@ export function repoGraph(
   changes: ChangeProjection[],
   history: RepoHistory,
   groupBy: string | null,
-): RepoGraph {
-  return repo_graph(changes, history, groupBy ?? undefined) as RepoGraph;
+): ChangeGraph {
+  return repo_graph(changes, history, groupBy ?? undefined) as ChangeGraph;
 }

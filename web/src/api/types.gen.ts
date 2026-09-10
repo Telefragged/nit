@@ -133,7 +133,7 @@ export type Repo = {
 export type RepoList = { repos: Array<Repo> };
 
 /**
- * One repo's change graph: a commit-sha-keyed DAG over the canonical ref.
+ * A change graph: a commit-sha-keyed DAG over the canonical ref.
  *
  * Not a response body — the browser assembles it (`crates/nit-wasm`) from
  * the two primitive reads, `GET /api/changes` and `GET /api/history`; the
@@ -143,7 +143,7 @@ export type RepoList = { repos: Array<Repo> };
  * the same value for that key then sit in one run of rows. Each node
  * reports its own value as `group`.
  */
-export type RepoGraph = {
+export type ChangeGraph = {
   /**
    * The canonical ref has merged commits below the displayed window — the
    * client shows an "earlier history hidden" marker and dangles deep forks

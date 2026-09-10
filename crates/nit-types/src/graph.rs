@@ -42,7 +42,7 @@ pub struct RepoHistory {
     pub truncated: bool,
 }
 
-/// One repo's change graph: a commit-sha-keyed DAG over the canonical ref.
+/// A change graph: a commit-sha-keyed DAG over the canonical ref.
 ///
 /// Not a response body — the browser assembles it (`crates/nit-wasm`) from
 /// the two primitive reads, `GET /api/changes` and `GET /api/history`; the
@@ -53,7 +53,7 @@ pub struct RepoHistory {
 /// reports its own value as `group`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct RepoGraph {
+pub struct ChangeGraph {
     /// The canonical ref has merged commits below the displayed window — the
     /// client shows an "earlier history hidden" marker and dangles deep forks
     /// to it.
