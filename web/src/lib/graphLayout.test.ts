@@ -6,7 +6,7 @@ import type {
   ChangeGraph,
 } from "../api/types";
 import type { GraphLayout, LaidNode } from "./graphLayout";
-import { LAYOUT_B, layoutGraph } from "./graphLayout";
+import { LAYOUT_B, LAYOUT_DENSE, layoutGraph } from "./graphLayout";
 
 function must<T>(v: T | undefined, msg: string): T {
   if (v === undefined) throw new Error(`missing ${msg}`);
@@ -81,6 +81,36 @@ describe("layoutGraph lanes", () => {
     expect(g.railWidth).toBe(
       LAYOUT_B.railPadL + 1 * LAYOUT_B.laneGap + LAYOUT_B.railPadR,
     );
+  });
+});
+
+describe("layoutGraph without a head", () => {
+  // The tag graph: two chains and a lone node, no canonical ref.
+  const headless: ChangeGraph = {
+    history_truncated: false,
+    nodes: [
+      node("A2", "open", "pending", ["A1"]),
+      node("A1", "open", "pending", ["m"]),
+      node("B2", "open", "pending", ["B1"]),
+      node("B1", "open", "pending", ["m"]),
+      node("L", "open", "merged", ["m"]),
+    ],
+  };
+
+  it("packs every branch from lane 0 and reserves none", () => {
+    const g = layoutGraph(headless);
+    expect(g.anchorRow).toBe(-1);
+    expect(g.nodes.map((ln) => ln.lane)).toEqual([0, 0, 0, 0, 0]);
+    expect(g.edges.map((e) => e.key)).toEqual(["A2>A1", "B2>B1"]);
+    expect(g.railWidth).toBe(LAYOUT_B.railPadL + LAYOUT_B.railPadR);
+  });
+
+  it("lays out in the metrics it is given", () => {
+    const g = layoutGraph(headless, LAYOUT_DENSE);
+    expect(g.rowH).toBe(LAYOUT_DENSE.rowH);
+    expect(find(g, "A1").cy).toBe(LAYOUT_DENSE.rowH * 1.5);
+    expect(find(g, "A1").cx).toBe(LAYOUT_DENSE.railPadL);
+    expect(g.height).toBe(LAYOUT_DENSE.rowH * 5);
   });
 });
 

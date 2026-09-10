@@ -6,9 +6,10 @@
 // Lanes are assigned gleisbau-style (git-graph 0.7's interval-graph coloring):
 // the canonical ref is pinned to lane 0 (the center column), every other
 // branch is a row span packed into the first lane (1, 2, …) whose occupants
-// don't overlap it. The row coordinate is the array index — children sit above
-// their parents, so open changes ascend from the HEAD anchor and merged
-// history descends below it. An open change attaches to its base with a solid
+// don't overlap it. A graph without a head (the tag graph) has no canonical
+// ref, so its branches pack from lane 0. The row coordinate is the array
+// index: children sit above their parents, so open changes ascend from the
+// HEAD anchor and merged history descends below it. An open change attaches to its base with a solid
 // edge whenever that base is a visible node (HEAD or a merged commit still in
 // the window); only a base older than the window — no node to anchor to —
 // dangles a dashed "behind" edge into the collapsed-history marker. An open
@@ -21,25 +22,52 @@
 
 import type { GraphNode, ChangeGraph } from "../api/types";
 
+/** The geometry a layout is measured in. */
+export interface LayoutMetrics {
+  /** The SVG node centers align to each table row's center. */
+  rowH: number;
+  /** Center of lane 0 from the rail's left edge. */
+  railPadL: number;
+  laneGap: number;
+  railPadR: number;
+  nodeR: number;
+  /** Extra radius for a merge node. */
+  mergeBump: number;
+  /** Elbow quarter-circle radius for a cross-lane connector. */
+  elbow: number;
+  /** Per-row opacity falloff for merged history. */
+  fadeStep: number;
+  fadeFloor: number;
+  /** The gap above a row that starts a new group. */
+  gapH: number;
+}
+
 /** Visual constants for the change-graph layout (the approved "trunk &
  * branches" design: dense rows, hollow ringed nodes, elbow connectors). */
-export const LAYOUT_B = {
-  /** The SVG node centers align to each table row's center. */
+export const LAYOUT_B: LayoutMetrics = {
   rowH: 46,
-  /** Center of lane 0 (the canonical ref) from the rail's left edge. */
   railPadL: 42,
   laneGap: 42,
   railPadR: 26,
   nodeR: 5,
-  /** Extra radius for a merge node. */
   mergeBump: 1.5,
-  /** Elbow quarter-circle radius for a cross-lane connector. */
   elbow: 9,
-  /** Per-row opacity falloff for merged history. */
   fadeStep: 0.13,
   fadeFloor: 0.3,
-  /** The gap above a row that starts a new group. */
   gapH: 24,
+};
+
+/** The tag graph's metrics: one-line rows, and lanes packed close. */
+export const LAYOUT_DENSE: LayoutMetrics = {
+  ...LAYOUT_B,
+  rowH: 24,
+  railPadL: 11,
+  laneGap: 14,
+  railPadR: 11,
+  nodeR: 4,
+  mergeBump: 1,
+  elbow: 6,
+  gapH: 0,
 };
 
 export interface LaidNode {
@@ -104,7 +132,10 @@ interface Branch {
 }
 
 /** Pure: never mutates `graph`. */
-export function layoutGraph(graph: ChangeGraph): GraphLayout {
+export function layoutGraph(
+  graph: ChangeGraph,
+  m: LayoutMetrics = LAYOUT_B,
+): GraphLayout {
   const nodes = graph.nodes;
   const n = nodes.length;
 
@@ -148,16 +179,16 @@ export function layoutGraph(graph: ChangeGraph): GraphLayout {
   // The collapsed-history marker row (one below the last node), or -1.
   const markerRow = graph.history_truncated && n > 0 ? n : -1;
 
-  // 1. The canonical ref: first-parent chain down from the anchor (top row
-  //    if none); then up via the primary (smallest-row, per the childRows
-  //    sort above) child.
+  // 1. The canonical ref: first-parent chain down from the anchor; then up
+  //    via the primary (smallest-row, per the childRows sort above) child.
+  //    Without a head there is no canonical ref, and no lane is reserved.
   const canonical = new Set<number>();
-  let cur = anchorRow >= 0 ? anchorRow : 0;
-  while (cur >= 0 && cur < n && !canonical.has(cur)) {
-    canonical.add(cur);
-    cur = firstParent(cur);
-  }
   if (anchorRow >= 0) {
+    let cur = anchorRow;
+    while (cur >= 0 && !canonical.has(cur)) {
+      canonical.add(cur);
+      cur = firstParent(cur);
+    }
     cur = anchorRow;
     for (;;) {
       const kid = childrenAt(cur).find(
@@ -209,13 +240,15 @@ export function layoutGraph(graph: ChangeGraph): GraphLayout {
     branches.push({ rows, top, bot });
   }
 
-  // 3. Interval-graph coloring.
+  // 3. Interval-graph coloring. With a head, the canonical ref owns lane 0
+  //    for the whole height.
+  const laneSpans: [number, number][][] =
+    anchorRow >= 0 ? [[[0, Number.POSITIVE_INFINITY]]] : [];
   const ordered = [...branches].sort((a, b) => {
     const la = a.bot - a.top;
     const lb = b.bot - b.top;
     return lb !== la ? lb - la : a.top - b.top;
   });
-  const laneSpans: [number, number][][] = [];
   for (const br of ordered) {
     let placed = laneSpans.findIndex(
       (spans) => !spans.some(([s, e]) => br.top <= e && br.bot >= s),
@@ -225,7 +258,7 @@ export function layoutGraph(graph: ChangeGraph): GraphLayout {
       laneSpans.push([]);
     }
     laneSpans[placed]?.push([br.top, br.bot]);
-    for (const r of br.rows) lane[r] = placed + 1;
+    for (const r of br.rows) lane[r] = placed;
   }
 
   // Row tops. The first row of a run gets a gap above it, so every run
@@ -237,23 +270,22 @@ export function layoutGraph(graph: ChangeGraph): GraphLayout {
   const rowTop: number[] = [];
   let bottom = 0;
   nodes.forEach((_, i) => {
-    if (gapAbove[i]) bottom += LAYOUT_B.gapH;
+    if (gapAbove[i]) bottom += m.gapH;
     rowTop.push(bottom);
-    bottom += LAYOUT_B.rowH;
+    bottom += m.rowH;
   });
-  const top = (r: number): number =>
-    rowTop[r] ?? bottom + (r - n) * LAYOUT_B.rowH;
+  const top = (r: number): number => rowTop[r] ?? bottom + (r - n) * m.rowH;
 
   const laneAt = (i: number): number => lane[i] ?? 0;
-  const cx = (l: number): number => LAYOUT_B.railPadL + l * LAYOUT_B.laneGap;
-  const cy = (r: number): number => top(r) + LAYOUT_B.rowH / 2;
+  const cx = (l: number): number => m.railPadL + l * m.laneGap;
+  const cy = (r: number): number => top(r) + m.rowH / 2;
   const fade = (depth: number): number =>
-    Math.max(LAYOUT_B.fadeFloor, 1 - depth * LAYOUT_B.fadeStep);
+    Math.max(m.fadeFloor, 1 - depth * m.fadeStep);
   const maxLane = lane.reduce((m, l) => Math.max(m, l), 0);
 
   const edgePath = (x0: number, y0: number, x1: number, y1: number): string => {
     if (x0 === x1) return `M ${x0} ${y0} L ${x1} ${y1}`;
-    const b = LAYOUT_B.elbow;
+    const b = m.elbow;
     const sign = x1 > x0 ? 1 : -1;
     return `M ${x0} ${y0} L ${x0} ${y1 - b} Q ${x0} ${y1} ${x0 + sign * b} ${y1} L ${x1} ${y1}`;
   };
@@ -269,7 +301,7 @@ export function layoutGraph(graph: ChangeGraph): GraphLayout {
       lane: laneAt(i),
       cx: cx(laneAt(i)),
       cy: cy(i),
-      r: LAYOUT_B.nodeR + (isMerge ? LAYOUT_B.mergeBump : 0),
+      r: m.nodeR + (isMerge ? m.mergeBump : 0),
       isHead,
       isMerge,
       depth,
@@ -326,7 +358,7 @@ export function layoutGraph(graph: ChangeGraph): GraphLayout {
     }
     if (ln.node.section !== "open" || inSet.length > 0) return;
     const isBroken = broken[i] ?? false;
-    const mark = { x: ln.cx, y: ln.cy + LAYOUT_B.rowH / 2 };
+    const mark = { x: ln.cx, y: ln.cy + m.rowH / 2 };
     const fork = laidNodes[breakRow[i] ?? -1];
     if (fork !== undefined) {
       // Hidden commits between the change and its visible fork.
@@ -371,11 +403,10 @@ export function layoutGraph(graph: ChangeGraph): GraphLayout {
   return {
     nodes: laidNodes,
     edges,
-    railWidth:
-      LAYOUT_B.railPadL + maxLane * LAYOUT_B.laneGap + LAYOUT_B.railPadR,
-    height: bottom + (markerRow >= 0 ? LAYOUT_B.rowH : 0),
-    rowH: LAYOUT_B.rowH,
-    gapH: LAYOUT_B.gapH,
+    railWidth: m.railPadL + maxLane * m.laneGap + m.railPadR,
+    height: bottom + (markerRow >= 0 ? m.rowH : 0),
+    rowH: m.rowH,
+    gapH: m.gapH,
     anchorRow,
     collapsed,
   };
