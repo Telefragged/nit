@@ -1,6 +1,6 @@
 ---
 name: merge
-description: The approve action for the nit repo — merge an approved chain onto main with scripts/merge.sh: rebase onto main if it moved, run `nix flake check` on every commit, fast-forward merge, then confirm the chain flips to `merged`. Use whenever a chain you built reaches `approved` and needs merging to main — `approved` is the cue to merge, not to hand off. Never run it on a chain that isn't `approved`, and never submit the review verdict yourself.
+description: The approve action for the nit repo — merge an approved chain onto main with scripts/merge.sh: rebase onto main if it moved, run `nix flake check` on every commit, fast-forward merge. Use whenever a chain you built reaches `approved` and needs merging to main — `approved` is the cue to merge, not to hand off. Never run it on a chain that isn't `approved`, and never submit the review verdict yourself.
 ---
 
 # merge — the approve action for this repo
