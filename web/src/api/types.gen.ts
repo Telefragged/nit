@@ -133,21 +133,27 @@ export type Repo = {
 export type RepoList = { repos: Array<Repo> };
 
 /**
- * A change graph: a commit-sha-keyed DAG over the canonical ref.
+ * A change graph: a commit-sha-keyed DAG of change commits.
  *
- * Not a response body — the browser assembles it (`crates/nit-wasm`) from
- * the two primitive reads, `GET /api/changes` and `GET /api/history`; the
- * shape lives here because it crosses the wasm↔JS boundary.
+ * Not a response body. The browser assembles it (`crates/nit-wasm`), and
+ * the shape lives here because it crosses the wasm↔JS boundary. There are
+ * two assemblies. The repo graph is centered on the canonical ref: the
+ * active changes ascend above the ref's HEAD and its merged history
+ * descends below, from the two primitive reads `GET /api/changes` and
+ * `GET /api/history`. The tag graph has no canonical ref: it is the
+ * latest revision of every change that shares a tag, whatever its
+ * lifecycle, joined only where one such revision is the parent of
+ * another.
  *
- * The caller may group the graph by one tag key. Open nodes that carry
- * the same value for that key then sit in one run of rows. Each node
- * reports its own value as `group`.
+ * The caller may group the repo graph by one tag key. Open nodes that
+ * carry the same value for that key then sit in one run of rows. Each
+ * node reports its own value as `group`.
  */
 export type ChangeGraph = {
   /**
    * The canonical ref has merged commits below the displayed window — the
    * client shows an "earlier history hidden" marker and dangles deep forks
-   * to it.
+   * to it. Always `false` in a tag graph.
    */
   history_truncated: boolean;
   /**
@@ -156,7 +162,10 @@ export type ChangeGraph = {
    * A topological order in which every node precedes its parents. In a
    * grouped graph, nodes of one group are adjacent wherever that order
    * allows. A node of another group interrupts a run only when the
-   * topological order puts it between two nodes of that run.
+   * topological order puts it between two nodes of that run. In a tag
+   * graph, the nodes of one connected component are adjacent the same
+   * way, and a component with an active change precedes a component
+   * whose every change is merged or abandoned.
    */
   nodes: Array<GraphNode>;
 };

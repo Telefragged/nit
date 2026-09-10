@@ -111,6 +111,17 @@ pub fn repo_graph(
     to_js(&graph::assemble(&changes, &history, group_by.as_deref()))
 }
 
+/// Assembles the tag graph: the change folds at their latest revisions.
+///
+/// # Errors
+///
+/// When `changes` fails to parse or the graph fails to serialize.
+#[wasm_bindgen]
+pub fn tag_graph(changes: JsValue) -> Result<JsValue, JsValue> {
+    let changes: Vec<ChangeProjection> = serde_wasm_bindgen::from_value(changes)?;
+    to_js(&graph::assemble_tag(&changes))
+}
+
 /// Marks the characters that changed inside a diff's replacement blocks.
 ///
 /// One list of ranges per line of the block (rationale and budgets in

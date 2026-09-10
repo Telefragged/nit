@@ -1,26 +1,46 @@
-//! Assembles the change graph from the two primitive reads.
+//! Assembles a change graph from change folds.
 //!
-//! The reads are the repo's change folds (`GET /api/changes`) and the
-//! canonical ref's merged history (`GET /api/history`). Runs only in the
+//! The repo graph joins the repo's change folds (`GET /api/changes`) to
+//! the canonical ref's merged history (`GET /api/history`). The tag graph
+//! is the folds alone, at their latest revisions. Both run only in the
 //! browser — the server serves the parts, never the whole.
 //!
 //! Kept `cfg`-free so the host build compiles the same code wasm32 does and
 //! the `test-nit-wasm` flake check covers it natively.
 
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 
 use nit_types::domain::Sha;
 use nit_types::domain::{ChangeProjection, RevisionProjection};
 use nit_types::domain::{ChangeStatus, GraphSection};
 use nit_types::graph::{self, ChangeGraph, GraphNode, RepoHistory};
 
-/// One node of the graph's open region.
-///
-/// An active change pinned at the revision its tip walked.
+/// One node of a graph's open region: a change pinned at one revision.
 #[derive(Clone, Copy)]
 struct OpenNode<'a> {
     change: &'a ChangeProjection,
     revision: &'a RevisionProjection,
+}
+
+impl OpenNode<'_> {
+    /// The node as the graph carries it, `group` its value for the
+    /// grouping key.
+    fn graph_node(self, group: Option<String>) -> GraphNode {
+        let OpenNode { change, revision } = self;
+        GraphNode {
+            commit_sha: revision.commit_sha.clone(),
+            section: GraphSection::Open,
+            subject: change.subject_at(revision.number),
+            status: change.status_at(revision.number),
+            parents: vec![revision.parent_sha.clone()],
+            change_number: Some(change.id),
+            change_id: Some(change.change_id.clone()),
+            revision: Some(revision.number),
+            fork_sha: Some(revision.fork_sha.clone()),
+            group,
+        }
+    }
 }
 
 /// Commit-sha → the change and revision that produced it.
@@ -128,53 +148,28 @@ pub fn assemble(
     history: &RepoHistory,
     group_by: Option<&str>,
 ) -> ChangeGraph {
-    let mut nodes: Vec<GraphNode> = Vec::new();
     let shas: HashSet<&str> = history.commits.iter().map(|h| h.sha.as_str()).collect();
 
-    // Open region: active changes, in ascending (tip-walk) order.
-    for OpenNode { change, revision } in open_nodes(changes) {
-        if shas.contains(revision.commit_sha.as_str()) {
-            continue; // already placed (an anchor/history sha)
-        }
-        let group = group_by
-            .and_then(|key| change.tags.get(key))
-            .map(str::to_string);
-        nodes.push(GraphNode {
-            commit_sha: revision.commit_sha.clone(),
-            section: GraphSection::Open,
-            subject: change.subject_at(revision.number),
-            status: change.status_at(revision.number),
-            parents: vec![revision.parent_sha.clone()],
-            change_number: Some(change.id),
-            change_id: Some(change.change_id.clone()),
-            revision: Some(revision.number),
-            fork_sha: Some(revision.fork_sha.clone()),
-            group,
-        });
-    }
+    // Open region: active changes, in ascending (tip-walk) order, less the
+    // ones already placed as an anchor or history sha.
+    let open: Vec<OpenNode<'_>> = open_nodes(changes)
+        .into_iter()
+        .filter(|n| !shas.contains(n.revision.commit_sha.as_str()))
+        .collect();
+    let groups: Vec<Option<&str>> = open
+        .iter()
+        .map(|n| group_by.and_then(|key| n.change.tags.get(key)))
+        .collect();
+    let nodes = open
+        .iter()
+        .zip(&groups)
+        .map(|(n, group)| n.graph_node(group.map(str::to_string)))
+        .collect();
+    let mut nodes = ordered(nodes, &groups, |_| ());
 
     // An open stack's root keeps its real fork (`fork_sha`): the client draws a
     // "behind" edge to it when it is a visible history node, or dangles it into
     // the "earlier history hidden" marker when the fork predates the window.
-
-    let pairs: Vec<(Sha, Vec<Sha>)> = nodes
-        .iter()
-        .map(|n| (n.commit_sha.clone(), n.parents.clone()))
-        .collect();
-    let mut order = graph::row_order(&pairs);
-    if group_by.is_some() {
-        let groups: HashMap<&Sha, Option<&str>> = nodes
-            .iter()
-            .map(|n| (&n.commit_sha, n.group.as_deref()))
-            .collect();
-        order = grouped_order(&order, &pairs, &groups);
-    }
-    let pos: HashMap<Sha, usize> = order
-        .into_iter()
-        .enumerate()
-        .map(|(i, sha)| (sha, i))
-        .collect();
-    nodes.sort_by_key(|n| pos.get(&n.commit_sha).copied().unwrap_or(usize::MAX));
 
     // The HEAD anchor + history keep the canonical-walk order below the open
     // region.
@@ -207,18 +202,56 @@ pub fn assemble(
     }
 }
 
+/// Sorts `nodes` into row order, each group's nodes adjacent.
+///
+/// `groups[i]` is the group of `nodes[i]`. The base is a topological
+/// order, children before parents. A group ranks by `priority` first and
+/// by its first node in that order second, and the groups run in rank
+/// order where the topological order allows.
+fn ordered<G: Hash + Eq + Copy, P: Ord + Copy>(
+    mut nodes: Vec<GraphNode>,
+    groups: &[G],
+    priority: impl Fn(G) -> P,
+) -> Vec<GraphNode> {
+    let pairs: Vec<(Sha, Vec<Sha>)> = nodes
+        .iter()
+        .map(|n| (n.commit_sha.clone(), n.parents.clone()))
+        .collect();
+    let group_of: HashMap<&Sha, G> = nodes
+        .iter()
+        .zip(groups)
+        .map(|(n, group)| (&n.commit_sha, *group))
+        .collect();
+    let order = graph::row_order(&pairs);
+    let mut rank_of: HashMap<G, (P, usize)> = HashMap::new();
+    for sha in &order {
+        let next = rank_of.len();
+        rank_of
+            .entry(group_of[sha])
+            .or_insert_with(|| (priority(group_of[sha]), next));
+    }
+    let order = grouped_order(&order, &pairs, |sha| rank_of[&group_of[sha]]);
+    let pos: HashMap<Sha, usize> = order
+        .into_iter()
+        .enumerate()
+        .map(|(i, sha)| (sha, i))
+        .collect();
+    nodes.sort_by_key(|n| pos.get(&n.commit_sha).copied().unwrap_or(usize::MAX));
+    nodes
+}
+
 /// Reorders a topological `order` so that each group's nodes sit together.
 ///
-/// A group is the set of nodes with one value in `groups`. A group ranks
-/// by its first node in `order`. The result stays topological: this
-/// function places a node only after it places every child of that node.
-/// It continues the current group while that group has such a node.
-/// Otherwise it starts the lowest-ranked group that has one, so a group
-/// splits only where a node of another group sits between two of its own.
-fn grouped_order(
+/// `rank` names each node's group by the group's rank. The result stays
+/// topological: this function places a node only after it places every
+/// child of that node. It continues the current group while that group
+/// has such a node. Otherwise it starts the lowest-ranked group that has
+/// one, so a group splits only where a node of another group sits
+/// between two of its own.
+fn grouped_order<K: Ord + Copy>(
     order: &[Sha],
     pairs: &[(Sha, Vec<Sha>)],
-    groups: &HashMap<&Sha, Option<&str>>,
+    rank: impl Fn(&Sha) -> K,
 ) -> Vec<Sha> {
     let mut children: HashMap<&Sha, Vec<&Sha>> = HashMap::new();
     for (sha, parents) in pairs {
@@ -226,12 +259,6 @@ fn grouped_order(
             children.entry(parent).or_default().push(sha);
         }
     }
-    let mut rank_of: HashMap<Option<&str>, usize> = HashMap::new();
-    for sha in order {
-        let next = rank_of.len();
-        rank_of.entry(groups[sha]).or_insert(next);
-    }
-    let rank = |sha: &Sha| rank_of[&groups[sha]];
 
     let mut placed: HashSet<&Sha> = HashSet::new();
     let mut out: Vec<Sha> = Vec::with_capacity(order.len());
@@ -257,6 +284,65 @@ fn grouped_order(
         out.push(next.clone());
     }
     out
+}
+
+/// The root of a union-find set, with path halving.
+fn root(link: &mut [usize], i: usize) -> usize {
+    let mut i = i;
+    while link[i] != i {
+        link[i] = link[link[i]];
+        i = link[i];
+    }
+    i
+}
+
+/// Assembles the tag graph: `changes` at their latest revisions.
+///
+/// One node per change, pinned at its latest revision whatever its
+/// lifecycle. A node's edge goes to the node whose commit is its parent.
+/// So a change whose parent is not another member's latest revision is a
+/// root, and a merged or abandoned change is a root of its own unless a
+/// member still sits on it. Rows are topological, and the nodes of one
+/// connected component are adjacent. A component with an active change
+/// precedes a component whose every change is merged or abandoned. Among
+/// components, and among the tips of one, the order of `changes` breaks
+/// the tie.
+#[must_use]
+pub fn assemble_tag(changes: &[ChangeProjection]) -> ChangeGraph {
+    let latest: Vec<OpenNode<'_>> = changes
+        .iter()
+        .filter_map(|change| {
+            let revision = change.latest_revision()?;
+            Some(OpenNode { change, revision })
+        })
+        .collect();
+    let index: HashMap<&Sha, usize> = latest
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (&n.revision.commit_sha, i))
+        .collect();
+
+    // Connected components over the in-set parent edges.
+    let mut link: Vec<usize> = (0..latest.len()).collect();
+    for (i, n) in latest.iter().enumerate() {
+        if let Some(&parent) = index.get(&n.revision.parent_sha) {
+            let (a, b) = (root(&mut link, i), root(&mut link, parent));
+            link[a] = b;
+        }
+    }
+    let component: Vec<usize> = (0..latest.len()).map(|i| root(&mut link, i)).collect();
+    let active: HashSet<usize> = latest
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| !n.change.is_terminal())
+        .map(|(i, _)| component[i])
+        .collect();
+
+    let nodes = latest.iter().map(|n| n.graph_node(None)).collect();
+    ChangeGraph {
+        history_truncated: false,
+        nodes: ordered(nodes, &component, |c| !active.contains(&c)),
+    }
 }
 
 #[cfg(test)]
@@ -492,5 +578,53 @@ mod tests {
         let other = assemble(&changes, &history, Some("absent"));
         assert_eq!(shas(&other), shas(&plain));
         assert!(other.nodes.iter().all(|n| n.group.is_none()));
+    }
+
+    // Two stacks share a tag. Their nodes stay in two runs, each tip
+    // above its base, and a change whose parent is not a member's latest
+    // revision is a root with no edge.
+    #[test]
+    fn tag_graph_runs_each_component_together() {
+        let a1 = change(1, "Ia1", vec![revision(0, "A1", "m", "m")]);
+        let b1 = change(2, "Ib1", vec![revision(0, "B1", "m", "m")]);
+        let a2 = change(3, "Ia2", vec![revision(0, "A2", "A1", "m")]);
+        let b2 = change(4, "Ib2", vec![revision(0, "B2", "B1", "m")]);
+        let a3 = change(5, "Ia3", vec![revision(0, "A3", "A2", "m")]);
+        let g = assemble_tag(&[a1, b1, a2, b2, a3]);
+        let shas: Vec<Sha> = g.nodes.iter().map(|n| n.commit_sha.clone()).collect();
+        // B2 is the first tip in the input, so B's run leads.
+        assert_eq!(shas, ["B2", "B1", "A3", "A2", "A1"].map(sha));
+        assert!(!g.history_truncated);
+        assert!(g.nodes.iter().all(|n| n.section == GraphSection::Open));
+        assert_eq!(g.nodes[1].parents, vec![sha("m")]);
+    }
+
+    // Only the latest revisions join. A change amended onto a new parent
+    // leaves the member that still sits on its old commit as a root, and
+    // a component of terminal changes sinks below the active ones.
+    #[test]
+    fn tag_graph_pins_latest_revisions_and_sinks_terminal_components() {
+        let mut old = change(1, "Iold", vec![revision(0, "O", "m", "m")]);
+        old.lifecycle = Lifecycle::Merged;
+        let mut dead = change(2, "Idead", vec![revision(0, "D", "O", "m")]);
+        dead.lifecycle = Lifecycle::Abandoned;
+        let a = change(
+            3,
+            "Ia",
+            vec![revision(0, "A", "m", "m"), revision(1, "Ap", "n", "n")],
+        );
+        let b = change(4, "Ib", vec![revision(0, "B", "A", "m")]);
+        let g = assemble_tag(&[old, dead, a, b]);
+        let shas: Vec<Sha> = g.nodes.iter().map(|n| n.commit_sha.clone()).collect();
+        assert_eq!(shas, ["Ap", "B", "D", "O"].map(sha));
+        let node = |name: &str| {
+            g.nodes
+                .iter()
+                .find(|n| n.commit_sha == sha(name))
+                .expect(name)
+        };
+        assert_eq!(node("Ap").revision, Some(RevisionNumber::new(1)));
+        assert_eq!(node("D").status, ChangeStatus::Abandoned);
+        assert_eq!(node("O").status, ChangeStatus::Merged);
     }
 }
