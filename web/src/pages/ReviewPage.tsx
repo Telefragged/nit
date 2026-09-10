@@ -344,7 +344,11 @@ export default function ReviewPage() {
         ? { change: changeNumber }
         : { repo: published.repo_id, tag: [tag] },
   };
-  const memberIds = useChangeStream(subscription);
+  const memberProjections = useChangeStream(subscription);
+  const memberIds = useMemo(
+    () => memberProjections.map((p) => p.id),
+    [memberProjections],
+  );
   // This change stays in the drafts read while a new subscription refills
   // the picked set, so its overlay never blinks out.
   const draftsMap = useDrafts(

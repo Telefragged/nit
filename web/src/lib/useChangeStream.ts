@@ -13,18 +13,18 @@ import type {
 /** Keep the changes a subscription picks live over the websocket: hold each
  * one's ChangeProjection, fold its live tail with the shared wasm fold, and
  * write the published projection (revisions/threads/reviews) into the
- * ["change", id] react-query cache. Returns the picked change numbers,
- * ascending, as their projections arrive. The reviewer's drafts + draft
- * decision are not log state, so they ride a separate ["drafts", id] read
- * (useDrafts); the page composes the two. */
+ * ["change", id] react-query cache. Returns the picked changes' projections,
+ * ascending by change number, as they arrive and as they advance. The
+ * reviewer's drafts + draft decision are not log state, so they ride a
+ * separate ["drafts", id] read (useDrafts); the page composes the two. */
 export function useChangeStream(
   subscription: Subscription | undefined,
-): number[] {
+): ChangeProjection[] {
   const queryClient = useQueryClient();
   // The folded projection per change, mutated in the socket callback.
   const projs = useRef(new Map<number, ChangeProjection>());
   const handle = useRef<StreamHandle | null>(null);
-  const [ids, setIds] = useState<number[]>([]);
+  const [projections, setProjections] = useState<ChangeProjection[]>([]);
 
   useEffect(() => {
     const publish = (changeNumber: number) => {
@@ -35,15 +35,13 @@ export function useChangeStream(
         ["change", changeNumber],
         changeDetail(proj),
       );
+      setProjections([...projs.current.values()].sort((a, b) => a.id - b.id));
     };
     const stream = openStream((msg: StreamMessage) => {
       if ("projection" in msg) {
         const id = msg.projection.id;
         projs.current.set(id, msg.projection);
         publish(id);
-        setIds((prev) =>
-          prev.includes(id) ? prev : [...prev, id].sort((a, b) => a - b),
-        );
         return;
       }
       const { change_number } = msg.entry;
@@ -61,12 +59,12 @@ export function useChangeStream(
 
   // A new subscription replaces the old one on the same socket; its
   // projections start the picked set over. The reset is adjust-during-render
-  // so the old ids never render against the new subscription.
+  // so the old set never renders against the new subscription.
   const key = subscription === undefined ? null : JSON.stringify(subscription);
   const [sentKey, setSentKey] = useState<string | null>(null);
   if (sentKey !== key) {
     setSentKey(key);
-    setIds([]);
+    setProjections([]);
   }
   useEffect(() => {
     if (key === null) return;
@@ -74,5 +72,5 @@ export function useChangeStream(
     handle.current?.subscribe(JSON.parse(key) as Subscription);
   }, [key]);
 
-  return ids;
+  return projections;
 }
