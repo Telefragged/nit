@@ -7,7 +7,7 @@ import { StatusDot } from "./badges";
 import { GraphRail } from "./GraphTable";
 
 /** Rows shown before the reviewer asks for the whole graph. */
-const WINDOW = 9;
+const WINDOW = 7;
 
 /** The first row of the window: `WINDOW` rows around `current`, moved up
  * or down as far as needed to stay inside `total`. */
@@ -22,7 +22,7 @@ function windowStart(current: number, total: number): number {
  * rail beside one-line rows (status dot, subject, revision, unresolved
  * count), the current change highlighted and the others linking through.
  * The selector picks which of the current change's tag keys the graph
- * follows; a change with no tags disables it. Nine rows around the current
+ * follows; a change with no tags disables it. Seven rows around the current
  * change show at first, and "show all" opens the whole graph. The rail is
  * laid out over the whole graph and clipped to the window, so an edge
  * that leaves the window reads as continuing past it.

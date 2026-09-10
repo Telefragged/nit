@@ -161,25 +161,25 @@ describe("TagNav", () => {
     expect(document.querySelector(".tag-nav-all")).toBeNull();
   });
 
-  it("windows nine rows around the current change", () => {
+  it("windows seven rows around the current change", () => {
     // Twelve changes, 21 at the top. Change 16 sits at row 5, so the
-    // window holds four rows either side of it.
+    // window holds three rows either side of it.
     renderNav(chain(12), 16);
     expect(document.querySelector(".tag-nav-pos")?.textContent).toBe("6/12");
     expect(subjects()).toEqual(
-      [20, 19, 18, 17, 16, 15, 14, 13, 12].map((id) => `change ${id}`),
+      [19, 18, 17, 16, 15, 14, 13].map((id) => `change ${id}`),
     );
   });
 
   it("moves the window to the end when the current change is near it", () => {
     renderNav(chain(12), 20);
     expect(subjects()).toEqual(
-      [21, 20, 19, 18, 17, 16, 15, 14, 13].map((id) => `change ${id}`),
+      [21, 20, 19, 18, 17, 16, 15].map((id) => `change ${id}`),
     );
     cleanup();
     renderNav(chain(12), 11);
     expect(subjects()).toEqual(
-      [18, 17, 16, 15, 14, 13, 12, 11, 10].map((id) => `change ${id}`),
+      [16, 15, 14, 13, 12, 11, 10].map((id) => `change ${id}`),
     );
   });
 
@@ -188,8 +188,8 @@ describe("TagNav", () => {
     const toggle = screen.getByRole("button", { name: "show all 12" });
     fireEvent.click(toggle);
     expect(rows()).toHaveLength(12);
-    expect(screen.getByRole("button", { name: "show 9" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "show 9" }));
-    expect(rows()).toHaveLength(9);
+    expect(screen.getByRole("button", { name: "show 7" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "show 7" }));
+    expect(rows()).toHaveLength(7);
   });
 });

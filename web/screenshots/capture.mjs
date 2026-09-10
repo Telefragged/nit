@@ -110,7 +110,7 @@ const captures = [
     fullPage: false,
   },
   // Repo 5: a twelve-change chain plus a merged and an abandoned lone
-  // change. The graph windows to nine rows around the current change, with
+  // change. The graph windows to seven rows around the current change, with
   // the chain's edges running out of the window at both ends.
   {
     name: "review-tag-window",
