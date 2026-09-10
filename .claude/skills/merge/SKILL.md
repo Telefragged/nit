@@ -31,13 +31,7 @@ project. Here it's a fast-forward-only merge to `main` — no merge commits
    branch merged into main
    ```
 
-3. **Confirm `merged`.** The script fast-forwards `main`; a background timer
-   (~5s) observes the move and appends the `merged` entry — the merge isn't
-   done until that arrives. Poll `nit status` until `state: merged`. If it
-   hasn't flipped after ~15s, the merge didn't take — investigate, don't
-   assume done.
-
-4. **Clean up.** merge.sh ran from inside the worktree, so step out to the
+3. **Clean up.** merge.sh ran from inside the worktree, so step out to the
    primary checkout first — git won't remove the worktree you're standing in:
 
    ```sh
