@@ -56,7 +56,6 @@ export default function TagNav({
   const rows = expanded
     ? layout.nodes
     : layout.nodes.slice(start, start + WINDOW);
-  const posLabel = `${position < 0 ? "—" : position + 1}/${total}`;
   const style = {
     height: rows.length * layout.rowH,
     "--rail-w": `${layout.railWidth}px`,
@@ -83,7 +82,6 @@ export default function TagNav({
             </option>
           ))}
         </select>
-        <span className="tag-nav-pos mono">{posLabel}</span>
         {total > WINDOW ? (
           <button
             className="linkish tag-nav-all"

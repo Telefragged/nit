@@ -130,7 +130,6 @@ describe("TagNav", () => {
 
   it("draws every row in graph order, links the others, and marks the current one", () => {
     renderNav(three, 11);
-    expect(document.querySelector(".tag-nav-pos")?.textContent).toBe("2/3");
     expect(subjects()).toEqual([
       "third change",
       "second change",
@@ -165,7 +164,6 @@ describe("TagNav", () => {
     // Twelve changes, 21 at the top. Change 16 sits at row 5, so the
     // window holds three rows either side of it.
     renderNav(chain(12), 16);
-    expect(document.querySelector(".tag-nav-pos")?.textContent).toBe("6/12");
     expect(subjects()).toEqual(
       [19, 18, 17, 16, 15, 14, 13].map((id) => `change ${id}`),
     );

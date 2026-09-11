@@ -285,12 +285,8 @@
   min-width: 0;
 }
 
-.tag-nav-pos {
-  margin-left: auto;
-  letter-spacing: 0;
-}
-
 .tag-nav-all {
+  margin-left: auto;
   font-size: 10.5px;
 }
 
