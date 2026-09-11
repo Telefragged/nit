@@ -947,7 +947,7 @@ export default function ReviewPage() {
             ) : null}
             {changeLevelThreads.length > 0 || changeCommentOpen ? (
               <section className="change-threads">
-                <div className="outdated-title">Change discussion</div>
+                <div className="thread-group-title">Change discussion</div>
                 {changeLevelThreads.map((t) => (
                   <CommentThread key={threadKey(t)} thread={t} />
                 ))}
@@ -1007,7 +1007,7 @@ export default function ReviewPage() {
 
             {orphanFileThreads.length > 0 ? (
               <section className="leftover-threads">
-                <div className="outdated-title">
+                <div className="thread-group-title">
                   Threads on files outside this diff
                 </div>
                 {orphanFileThreads.map(([path, fileThreads]) => (
@@ -1020,7 +1020,7 @@ export default function ReviewPage() {
                       const at = anchorAt(t.anchor);
                       const line = at && placementLine(at);
                       return (
-                        <div className="outdated-item" key={threadKey(t)}>
+                        <div className="thread-group-item" key={threadKey(t)}>
                           {lineText ? (
                             <div className="line-excerpt">
                               <span className="excerpt-line">

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Anchor, Draft, ThreadProjection } from "../api/types";
 import type { CommentAnchor, UiThread } from "./comments";
 import {
+  anchorKind,
   assembleThreads,
   commentCountLabel,
   commentPlacement,
@@ -11,6 +12,7 @@ import {
   pendingUnresolvedCount,
   revisionActivity,
   threadCountByRevision,
+  threadInRange,
 } from "./comments";
 
 /** A line anchor on src/main.rs, on the side and line given. */
@@ -322,5 +324,25 @@ describe("revisionActivity", () => {
       drafts: 0,
       unresolved: 0,
     });
+  });
+});
+
+// The three anchor kinds answer the range question differently. Only a
+// line anchor can lose its column.
+describe("anchorKind", () => {
+  const fileAnchor: Anchor = { file: { file: "src/main.rs" } };
+
+  it("returns the arm the anchor is on", () => {
+    expect(anchorKind("change")).toBe("change");
+    expect(anchorKind(fileAnchor)).toBe("file");
+    expect(anchorKind(lineAnchor("new", 3))).toBe("line");
+  });
+
+  it("shows a file thread in every range, its own or not", () => {
+    const t = { revision: 0, anchor: fileAnchor } satisfies CommentAnchor;
+    expect(threadInRange(t, 0, undefined)).toBe(true);
+    expect(threadInRange(t, 3, 2)).toBe(true);
+    // A line thread on the same revision has no column in that range.
+    expect(threadInRange(anchor(0, "new", 3), 3, 2)).toBe(false);
   });
 });

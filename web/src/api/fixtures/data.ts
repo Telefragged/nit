@@ -15,7 +15,8 @@
 //            revisions (amended in place, interdiff available), a resolved
 //            thread, an unresolved thread, a thread on a line r1 rewrote
 //            (all pinned to r0, so they land on the left of the r0 → r1
-//            interdiff), 2 drafts, plus a resolved thread on its commit
+//            interdiff), a thread on a whole file, 2 drafts, plus a
+//            resolved thread on its commit
 //            message (/COMMIT_MSG) and a reworded r1 message so the
 //            interdiff carries a real message diff; change 12's diff has a
 //            rename and a binary file.
@@ -1673,6 +1674,25 @@ export const threads: ThreadRecord[] = [
     ],
     created_at: ago(21 * 60),
     updated_at: ago(105),
+  },
+  // renders above the diff, in the file's own discussion group.
+  {
+    id: 74,
+    change_number: 11,
+    revision: 0,
+    anchor: { file: { file: "src/auth/store.rs" } },
+    resolved: false,
+    comments: [
+      {
+        body:
+          "This file mixes the pool wiring and the token queries. Split the " +
+          "queries into store/tokens.rs before it grows further.",
+        review_id: 3,
+        created_at: ago(21 * 60),
+      },
+    ],
+    created_at: ago(21 * 60),
+    updated_at: ago(21 * 60),
   },
   // spans the generate/mark pair (partial first line through mid last line);
   // survives amend, shifting 22-23 → 30-31 with chars intact.

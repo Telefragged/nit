@@ -399,11 +399,11 @@ describe("comment counts in the diff-range dropdowns", () => {
     renderReview(); // full r1 diff; the counts are range-independent anyway
     await diffLoaded("src/auth/store.rs");
 
-    // change 11: r0 carries 5 root threads, r1 the 3 drafts on it. Replies
+    // change 11: r0 carries 6 root threads, r1 the 3 drafts on it. Replies
     // ride with their thread and are not counted separately.
     const revSelect = screen.getByLabelText<HTMLSelectElement>("Revision");
     expect(Array.from(revSelect.options).map((o) => o.textContent)).toEqual([
-      "r0 · 5 comments",
+      "r0 · 6 comments",
       "r1 · 3 comments",
     ]);
 
@@ -411,7 +411,7 @@ describe("comment counts in the diff-range dropdowns", () => {
     const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");
     expect(Array.from(baseSelect.options).map((o) => o.textContent)).toEqual([
       "Base",
-      "r0 · 5 comments",
+      "r0 · 6 comments",
       "r1 · 3 comments",
     ]);
   });
@@ -542,9 +542,10 @@ describe("comment counts in the file headers", () => {
     expect(fcomments(1)).toBe("2 comments");
     // tests/rotation.rs (file-3): a single r1 draft.
     expect(fcomments(3)).toBe("1 comment");
-    // store.rs (file-2) and /COMMIT_MSG (file-0): only r0 threads, all
-    // pinned to a revision this range does not show — no badge.
-    expect(fcomments(2)).toBeNull();
+    // store.rs (file-2): this range hides its r0 line thread, but its
+    // file thread has no line, so it shows in every range.
+    expect(fcomments(2)).toBe("1 comment");
+    // /COMMIT_MSG (file-0): only r0 line threads — no badge.
     expect(fcomments(0)).toBeNull();
   });
 
@@ -582,5 +583,27 @@ describe("context expansion", () => {
     });
     // Every hidden line came in, starting at the file's first.
     expect(section(1).textContent).toContain("unchanged line 1");
+  });
+});
+
+// A file thread is correctly placed, unlike a thread whose line the shown
+// hunks do not cover. The two must not share a group, or a file comment
+// reads as a stale one.
+describe("file-anchored threads", () => {
+  it("renders in the file's own discussion group, with no line excerpt", async () => {
+    renderReview();
+    const store = await diffLoaded("src/auth/store.rs");
+    toggleSection(2);
+
+    const group = must(
+      store.querySelector('[data-threads="file"]'),
+      "file thread group on store.rs",
+    );
+    expect(group.textContent).toContain("File discussion");
+    expect(group.textContent).toContain(
+      "Split the queries into store/tokens.rs",
+    );
+    expect(group.querySelector(".line-excerpt")).toBeNull();
+    expect(store.querySelector('[data-threads="displaced"]')).toBeNull();
   });
 });

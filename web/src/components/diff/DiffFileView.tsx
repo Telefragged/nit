@@ -14,10 +14,9 @@ import {
   type Side,
 } from "../../api/types";
 import {
-  anchorAt,
+  anchorKind,
   anchorLineText,
   anchorRange,
-  anchorSide,
   commentCountLabel,
   commentPlacement,
   draftAnchor,
@@ -255,12 +254,17 @@ export default function DiffFileView({
   // Bucket each thread by where its anchor lands in the current diff
   // range. A thread pinned to a revision that
   // is neither FROM nor TO is dropped — it is not part of this diff.
-  // File-level comments (no line) have no column; they group at the top.
-  const topThreads: UiThread[] = [];
+  // A file thread has no line, so no column can hold it: it renders
+  // above the diff. A line thread whose line the shown hunks do not
+  // cover renders there too, under a separate heading.
+  const fileThreads: UiThread[] = [];
+  // Carries the column it renders under, not the raw stored side — an
+  // interdiff-left thread is stored "new" on the FROM revision.
+  const displaced: { t: UiThread; side: Side }[] = [];
   const inline = new Map<string, UiThread[]>();
   for (const t of threads) {
-    if (anchorAt(t.anchor) === null) {
-      topThreads.push(t);
+    if (anchorKind(t.anchor) === "file") {
+      fileThreads.push(t);
       continue;
     }
     const p = commentPlacement(t, ctx.selected, ctx.against);
@@ -271,7 +275,7 @@ export default function DiffFileView({
       list.push(t);
       inline.set(key, list);
     } else {
-      topThreads.push(t);
+      displaced.push({ t, side: p.side });
     }
   }
 
@@ -553,25 +557,29 @@ export default function DiffFileView({
 
       {collapsed ? null : (
         <>
-          {topThreads.length > 0 ? (
-            <div className="outdated-group">
-              <div className="outdated-title">Comments not on a shown line</div>
-              {topThreads.map((t) => (
-                <div className="outdated-item" key={threadKey(t)}>
+          {fileThreads.length > 0 ? (
+            <div className="thread-group" data-threads="file">
+              <div className="thread-group-title">File discussion</div>
+              {fileThreads.map((t) => (
+                <div className="thread-group-item" key={threadKey(t)}>
+                  <CommentThread thread={t} />
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {displaced.length > 0 ? (
+            <div className="thread-group" data-threads="displaced">
+              <div className="thread-group-title">
+                Comments not on a shown line
+              </div>
+              {displaced.map(({ t, side }) => (
+                <div className="thread-group-item" key={threadKey(t)}>
                   <div className="line-excerpt">
                     <span className="excerpt-line">
-                      r{t.revision}
-                      {/* Label the column it renders under (placement side),
-                          not the raw stored side — an interdiff-left thread
-                          is stored "new" on the FROM revision. */}
-                      {anchorAt(t.anchor) !== null
-                        ? ` · ${commentPlacement(t, ctx.selected, ctx.against)?.side ?? anchorSide(t.anchor)}`
-                        : ""}
+                      r{t.revision} · {side}
                     </span>
-                    <Code
-                      text={anchorLineText(t.anchor) ?? "(file comment)"}
-                      lang={lang}
-                    />
+                    <Code text={anchorLineText(t.anchor) ?? ""} lang={lang} />
                   </div>
                   <CommentThread thread={t} />
                 </div>

@@ -20,14 +20,22 @@ import type {
   ThreadComment,
 } from "../api/types";
 
-/** The line anchor's payload, or null when the anchor names no line. */
+/** The line anchor's payload, or null when the anchor has no line. */
 const lineOf = (a: Anchor) => (a === "change" || "file" in a ? null : a.line);
+
+/** Which arm of the anchor union a thread is on. Placement tests this
+ * first, and a kind answers it directly: "has no line" is true of a change
+ * anchor and a file anchor alike. */
+export type AnchorKind = "change" | "file" | "line";
+
+export const anchorKind = (a: Anchor): AnchorKind =>
+  a === "change" ? "change" : "file" in a ? "file" : "line";
 
 /** The file an anchor names, or null for a change-level one. */
 export const anchorFile = (a: Anchor): string | null =>
   a === "change" ? null : "file" in a ? a.file.file : a.line.file;
 
-/** Where in the file an anchor hangs, or null when it names no line. */
+/** Where in the file an anchor hangs, or null when it has no line. */
 export const anchorAt = (a: Anchor): LineAnchor | null => lineOf(a)?.at ?? null;
 
 /** The line a thread renders on: a selection hangs under the line it ends
@@ -36,7 +44,7 @@ export const placementLine = (at: LineAnchor): number =>
   "whole" in at ? at.whole : at.selection.end_line;
 
 /** The side a line anchor reads. Off a line, the side is `new`. */
-export const anchorSide = (a: Anchor): Side => lineOf(a)?.side ?? "new";
+const anchorSide = (a: Anchor): Side => lineOf(a)?.side ?? "new";
 
 /** The selection inside the line, if the anchor holds one. */
 export const anchorRange = (a: Anchor): CommentRange | null => {
@@ -163,15 +171,16 @@ export interface DiffRange {
   selected: number;
 }
 
-/** Whether a thread shows in the range `[FROM] → [TO]`: a line thread needs
- * a column there, and a thread anchored off a line shows in every range. */
+/** Whether a thread shows in the range `[FROM] → [TO]`. A line thread needs
+ * a column there. A change or file thread has no line, so no single tree
+ * holds it and it shows in every range. */
 export function threadInRange(
   c: CommentAnchor,
   selected: number,
   against: number | undefined,
 ): boolean {
   return (
-    anchorAt(c.anchor) === null ||
+    anchorKind(c.anchor) !== "line" ||
     commentPlacement(c, selected, against) !== null
   );
 }

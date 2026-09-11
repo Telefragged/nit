@@ -233,15 +233,15 @@
   background: var(--blue-dim);
 }
 
-/* outdated / leftover groups */
+/* titled thread groups, and the leftover ones */
 
-.outdated-group {
+.thread-group {
   border-bottom: 1px solid var(--border);
   background: var(--bg-inset);
   padding: 8px 12px 2px;
 }
 
-.outdated-title {
+.thread-group-title {
   font-size: 10px;
   font-weight: 600;
   color: var(--text-faint);
@@ -250,12 +250,12 @@
   margin-bottom: 6px;
 }
 
-.outdated-item {
+.thread-group-item {
   margin-bottom: 10px;
 }
 
-.outdated-item .thread,
-.outdated-item .editor {
+.thread-group-item .thread,
+.thread-group-item .editor {
   margin: 6px 0 0 24px;
 }
 
