@@ -44,8 +44,7 @@ fn wait_returns_existing_activity() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     push_head(&server, &g);
 
-    let (ok, out, err) =
-        nit_spawn(&server, &g, &["log", "--wait", "0"]).finish(Duration::from_secs(15));
+    let (ok, out, err) = nit_spawn(&server, &g, &["log", "--wait", "0"]).finish();
     assert!(ok, "wait failed: {err}");
     let out = out.as_str().expect("wait prints text");
     assert!(out.contains("cursor="), "prints the digest header: {out}");
@@ -70,7 +69,7 @@ fn wait_blocks_then_wakes_on_a_review() {
     std::thread::sleep(PARKED);
     review(&server, change_number, "request_changes", "fix the unwrap");
 
-    let (ok, out, err) = wait.finish(Duration::from_secs(20));
+    let (ok, out, err) = wait.finish();
     assert!(ok, "wait failed: {err}");
     let out = out.as_str().expect("wait prints text");
     assert!(
@@ -111,7 +110,7 @@ fn wait_wakes_on_a_change_pushed_after_it_parked() {
         .expect("the new change");
     review(&server, two, "request_changes", "fix the unwrap");
 
-    let (ok, out, err) = wait.finish(Duration::from_secs(20));
+    let (ok, out, err) = wait.finish();
     assert!(ok, "wait failed: {err}");
     let out = out.as_str().expect("wait prints text");
     assert!(

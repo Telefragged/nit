@@ -10,7 +10,7 @@
 )]
 
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use git2::{Oid, Repository, RepositoryInitOptions, Signature, Time};
 use serde_json::{Value, json};
@@ -262,7 +262,9 @@ pub fn nit_env(
         .envs(envs.iter().copied())
         .output()
         .expect("running nit");
-    parsed_output(&out)
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    (out.status.success(), parse_stdout(&stdout), stderr)
 }
 
 /// The `nit` child every helper runs, configured but not spawned.
@@ -275,14 +277,12 @@ fn nit_command(server: &TestServer, repo: &GitRepo, args: &[&str]) -> std::proce
     cmd
 }
 
-fn parsed_output(out: &std::process::Output) -> (bool, Value, String) {
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
-    // Text-output commands (status/push/comment/…) aren't JSON; keep their raw
-    // stdout as a string so a test can assert on the rendered lines.
-    let value = serde_json::from_str(stdout.trim())
-        .unwrap_or_else(|_| Value::String(stdout.trim().to_string()));
-    (out.status.success(), value, stderr)
+/// The child's stdout as JSON, or as a string when it is not JSON.
+///
+/// Text-output commands (status/push/comment/…) aren't JSON, and keeping
+/// their raw stdout lets a test assert on the rendered lines.
+fn parse_stdout(stdout: &str) -> Value {
+    serde_json::from_str(stdout.trim()).unwrap_or_else(|_| Value::String(stdout.trim().to_string()))
 }
 
 /// A bare `nit push` from inside the repo: the checked-out commit, tagged
@@ -569,53 +569,69 @@ pub fn ws_read(socket: &mut WsSock) -> Value {
     }
 }
 
-/// Run the `nit` binary with a hard deadline — a `wait`/`--follow` that never
-/// wakes is killed and reported, never hangs the suite.
-pub fn nit_bounded(
-    server: &TestServer,
-    repo: &GitRepo,
-    args: &[&str],
-    deadline: Duration,
-) -> (bool, Value, String) {
-    nit_spawn(server, repo, args).finish(deadline)
-}
-
 /// A running `nit` process, so the test can act while a `--wait` waits.
+///
+/// A reader thread drains each of the child's pipes, so the test wakes on
+/// what the child writes and never on a clock.
 pub struct RunningNit {
     child: std::process::Child,
     args: String,
+    /// The whole stdout, sent once the child closes the pipe.
+    stdout: std::sync::mpsc::Receiver<String>,
+    /// The whole stderr, sent once the child closes the pipe.
+    stderr: std::sync::mpsc::Receiver<String>,
 }
 
 /// Spawns `nit` and returns without waiting for it.
 pub fn nit_spawn(server: &TestServer, repo: &GitRepo, args: &[&str]) -> RunningNit {
-    let child = nit_command(server, repo, args)
+    let mut child = nit_command(server, repo, args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .expect("spawn nit");
     RunningNit {
+        stdout: read_to_end(child.stdout.take().expect("stdout")),
+        stderr: read_to_end(child.stderr.take().expect("stderr")),
         child,
         args: format!("{args:?}"),
     }
 }
 
+/// Reads the pipe to its end and sends the whole text. The send is the
+/// child's EOF on that pipe, which is the child exiting.
+///
+/// One thread per pipe: a child that fills the pipe nobody is reading
+/// would block against a reader that takes them in turn.
+fn read_to_end(mut pipe: impl std::io::Read + Send + 'static) -> std::sync::mpsc::Receiver<String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = std::io::Read::read_to_string(&mut pipe, &mut text);
+        let _ = tx.send(text);
+    });
+    rx
+}
+
 impl RunningNit {
-    /// Waits for the process to exit and returns its output. If it has not
-    /// exited by `deadline`, kills it and panics, so the suite never hangs.
-    pub fn finish(mut self, deadline: Duration) -> (bool, Value, String) {
-        let start = Instant::now();
-        loop {
-            if self.child.try_wait().expect("try_wait").is_some() {
-                let out = self.child.wait_with_output().expect("output");
-                return parsed_output(&out);
-            }
-            if start.elapsed() >= deadline {
-                let _ = self.child.kill();
-                let _ = self.child.wait();
-                panic!("nit {} did not finish within {deadline:?}", self.args);
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
+    /// Waits for the process to exit and returns its output.
+    ///
+    /// Panics on a child that never exits, so the suite never hangs.
+    pub fn finish(mut self) -> (bool, Value, String) {
+        let Ok(stdout) = self.stdout.recv_timeout(HANG) else {
+            panic!("nit {} did not finish within {HANG:?}", self.args);
+        };
+        let status = self.child.wait().expect("wait");
+        let stderr = self.stderr.recv().unwrap_or_default();
+        (status.success(), parse_stdout(&stdout), stderr)
+    }
+}
+
+/// Kills the child, so neither a wait a test left running nor its reader
+/// threads outlive the test that spawned it.
+impl Drop for RunningNit {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
