@@ -33,6 +33,7 @@ import DiffFileView from "../components/diff/DiffFileView";
 import FileRail from "../components/diff/FileRail";
 import ReviewBar from "../components/ReviewBar";
 import ReviewSettingsMenu from "../components/ReviewSettings";
+import Select, { type SelectOption } from "../components/Select";
 import {
   allExpanded,
   collapseAll,
@@ -132,10 +133,9 @@ function deriveDiffBase(
 }
 
 /** Gerrit-style diff range: [Base|rM] → [rN]. Left picks the diff base,
- * right the revision under review. Each rN option is tagged with its own
+ * right the revision under review. Each rN row carries its own
  * comment-thread count (`counts`) so the reviewer sees where discussion
- * sits before switching — native <option> takes plain text only, so it
- * reads "r2 · 3 comments", not the styled label the file headers use. */
+ * sits before switching. */
 function DiffRangeSelect({
   revisions,
   selected,
@@ -151,48 +151,41 @@ function DiffRangeSelect({
   onLeft: (v: string) => void;
   onRight: (n: number) => void;
 }) {
-  const label = (r: Revision) => {
+  const option = (r: Revision): SelectOption => {
     const n = counts.get(r.number) ?? 0;
-    return n > 0 ? `r${r.number} · ${commentCountLabel(n)}` : `r${r.number}`;
+    return {
+      value: String(r.number),
+      label: `r${r.number}`,
+      detail: n > 0 ? commentCountLabel(n) : undefined,
+    };
   };
   return (
     <>
-      <select
-        className="revision-select"
-        aria-label="Diff base"
+      <Select
+        label="Diff base"
         title="Base = parent commit; rM = interdiff against revision M"
+        placeholder="no base"
         value={against === undefined ? "base" : String(against)}
-        onChange={(e) => {
-          onLeft(e.target.value);
-        }}
-      >
-        <option value="base">Base</option>
-        {revisions.map((r) => (
-          <option
-            key={r.number}
-            value={String(r.number)}
-            disabled={r.number >= selected}
-          >
-            {label(r)}
-          </option>
-        ))}
-      </select>
+        onChange={onLeft}
+        options={[
+          { value: "base", label: "Base" },
+          ...revisions.map((r) => ({
+            ...option(r),
+            disabled: r.number >= selected,
+          })),
+        ]}
+      />
       <span className="dim mono">→</span>
-      <select
-        className="revision-select"
-        aria-label="Revision"
+      <Select
+        label="Revision"
         title="Revision under review"
+        placeholder="no revisions"
         value={String(selected)}
-        onChange={(e) => {
-          onRight(Number(e.target.value));
+        onChange={(v) => {
+          onRight(Number(v));
         }}
-      >
-        {revisions.map((r) => (
-          <option key={r.number} value={String(r.number)}>
-            {label(r)}
-          </option>
-        ))}
-      </select>
+        options={revisions.map(option)}
+      />
     </>
   );
 }

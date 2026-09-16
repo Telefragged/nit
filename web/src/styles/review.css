@@ -119,8 +119,10 @@
   cursor: pointer;
 }
 
-.revision-select option:disabled {
-  color: var(--text-faint);
+/* Wide enough for a revision and its comment count, so choosing one
+   never reflows the toolbar around it. */
+.diffbar-mode .select {
+  min-width: 18ch;
 }
 
 .diffbar-toggles {

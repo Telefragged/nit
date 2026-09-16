@@ -81,6 +81,24 @@ const select = (range: Range) => {
   sel.addRange(range);
 };
 
+/** The head of a diff-range picker, which names the chosen end. */
+const picker = (label: string): HTMLButtonElement =>
+  screen.getByLabelText<HTMLButtonElement>(label);
+
+/** Opens `label`'s list and chooses the option named `option`. */
+const choose = (label: string, option: string) => {
+  fireEvent.click(picker(label));
+  fireEvent.click(screen.getByRole("option", { name: option }));
+};
+
+/** The options `label` offers, each as it reads on screen. */
+const optionsOf = (label: string) => {
+  fireEvent.click(picker(label));
+  const named = screen.getAllByRole("option").map((o) => o.textContent);
+  fireEvent.click(picker(label));
+  return named;
+};
+
 const queryPath = (path: string) =>
   document.querySelector<HTMLElement>(`section[data-diff-path="${path}"]`);
 const byPath = (path: string): HTMLElement =>
@@ -205,9 +223,7 @@ describe("expansion across diff-range navigation", () => {
 
     // r0 → r1 interdiff: the same files in the same (tree) order, so the
     // settled range is the signal that the new diff has rendered.
-    fireEvent.change(screen.getByLabelText("Diff base"), {
-      target: { value: "0" },
-    });
+    choose("Diff base", "r0 6 comments");
     await waitFor(() => {
       expect(document.querySelector('[data-diff-ready="0"]')).not.toBeNull();
     });
@@ -216,9 +232,7 @@ describe("expansion across diff-range navigation", () => {
 
     // r0 vs base (the invalid against=0 snaps back to Base): rotate.rs is
     // still open; store.rs stays collapsed; tests/rotation.rs drops out.
-    fireEvent.change(screen.getByLabelText("Revision"), {
-      target: { value: "0" },
-    });
+    choose("Revision", "r0 6 comments");
     await waitFor(() => {
       // Every section is absent during the refetch gap, so the removal
       // alone would pass before the new diff renders.
@@ -312,9 +326,7 @@ describe("the selection-miss bubble", () => {
     expect(bubble()).not.toBeNull();
 
     // Switching the range leaves different lines where it hangs.
-    fireEvent.change(screen.getByLabelText("Diff base"), {
-      target: { value: "0" },
-    });
+    choose("Diff base", "r0 6 comments");
     expect(bubble()).toBeNull();
   });
 });
@@ -401,18 +413,13 @@ describe("comment counts in the diff-range dropdowns", () => {
 
     // change 11: r0 carries 6 root threads, r1 the 3 drafts on it. Replies
     // ride with their thread and are not counted separately.
-    const revSelect = screen.getByLabelText<HTMLSelectElement>("Revision");
-    expect(Array.from(revSelect.options).map((o) => o.textContent)).toEqual([
-      "r0 · 6 comments",
-      "r1 · 3 comments",
-    ]);
+    expect(optionsOf("Revision")).toEqual(["r0 6 comments", "r1 3 comments"]);
 
     // The base picker counts the same way; its extra "Base" option has none.
-    const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");
-    expect(Array.from(baseSelect.options).map((o) => o.textContent)).toEqual([
+    expect(optionsOf("Diff base")).toEqual([
       "Base",
-      "r0 · 6 comments",
-      "r1 · 3 comments",
+      "r0 6 comments",
+      "r1 3 comments",
     ]);
   });
 
@@ -421,8 +428,7 @@ describe("comment counts in the diff-range dropdowns", () => {
     // would wrongly reject it.
     renderReview("/changes/11?against=0");
     await diffLoaded("src/auth/store.rs");
-    const baseSelect = screen.getByLabelText<HTMLSelectElement>("Diff base");
-    expect(baseSelect.value).toBe("0");
+    expect(picker("Diff base").textContent).toBe("r0 6 comments");
   });
 });
 
@@ -448,11 +454,9 @@ describe("the thread's range button", () => {
     });
     fireEvent.click(must(offers()[0], "a range button"));
 
-    const base = screen.getByLabelText<HTMLSelectElement>("Diff base");
-    const rev = screen.getByLabelText<HTMLSelectElement>("Revision");
     await waitFor(() => {
-      expect(base.value).toBe("0");
-      expect(rev.value).toBe("1");
+      expect(picker("Diff base").textContent).toBe("r0 6 comments");
+      expect(picker("Revision").textContent).toContain("r1");
     });
     // The r0 → r1 range is on screen now, so nothing is left to offer.
     expect(offers()).toHaveLength(0);
@@ -468,12 +472,10 @@ describe("the latest-revision shortcut", () => {
 
     fireEvent.keyDown(window, { key: "r" });
 
-    const base = screen.getByLabelText<HTMLSelectElement>("Diff base");
-    const rev = screen.getByLabelText<HTMLSelectElement>("Revision");
     await waitFor(() => {
-      expect(rev.value).toBe("1");
+      expect(picker("Revision").textContent).toBe("r1 3 comments");
     });
-    expect(base.value).toBe("base");
+    expect(picker("Diff base").textContent).toBe("Base");
   });
 });
 

@@ -4,7 +4,13 @@
 // a timeout, never polling) for the page to fold and re-render.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -29,17 +35,22 @@ function renderReview(url: string) {
   );
 }
 
-const revSelect = () => screen.getByLabelText<HTMLSelectElement>("Revision");
-const revOptions = () => Array.from(revSelect().options).map((o) => o.value);
+const revHead = () => screen.getByLabelText<HTMLButtonElement>("Revision");
+/** The rows the open picker offers, each as it reads on screen. */
+const revOptions = () =>
+  screen.queryAllByRole("option").map((o) => o.textContent);
 
 describe("event-driven change page", () => {
   it("makes a pushed revision selectable without jumping to it", async () => {
     renderReview("/changes/11");
+    // The list stays open across the live event, so the rows it gains are
+    // the assertion.
+    fireEvent.click(await screen.findByLabelText("Revision"));
     // The projection on subscribe gives r0 and r1 before any live event.
     await waitFor(() => {
-      expect(revOptions()).toEqual(["0", "1"]);
+      expect(revOptions()).toEqual(["r0 6 comments", "r1 3 comments"]);
     });
-    expect(revSelect().value).toBe("1");
+    expect(revHead().textContent).toBe("r1 3 comments");
 
     mockAppend(11, "2026-06-28T00:00:00.000Z", {
       kind: "revision",
@@ -53,9 +64,9 @@ describe("event-driven change page", () => {
     });
 
     await waitFor(() => {
-      expect(revOptions()).toEqual(["0", "1", "2"]);
+      expect(revOptions()).toEqual(["r0 6 comments", "r1 3 comments", "r2"]);
     });
-    expect(revSelect().value).toBe("1");
+    expect(revHead().textContent).toBe("r1 3 comments");
   });
 
   it("folds a review published over the websocket into the page", async () => {

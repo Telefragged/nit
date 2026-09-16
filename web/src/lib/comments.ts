@@ -208,7 +208,7 @@ export function rangeSince(
 }
 
 /**
- * How many threads are anchored to each revision, for the revision dropdowns.
+ * How many threads are anchored to each revision, for the revision pickers.
  * Counts both published and draft-only threads — the dropdown answers "which
  * revisions carry discussion", and an in-progress draft is discussion too.
  * Keyed by revision number; revisions with none are absent (read with `?? 0`).
@@ -225,7 +225,7 @@ export function threadCountByRevision(
   return counts;
 }
 
-/** The count label the revision dropdowns and the file headers share, so
+/** The count label the revision pickers and the file headers share, so
  * the wording stays in one place. */
 export function commentCountLabel(n: number): string {
   return `${n} comment${n === 1 ? "" : "s"}`;

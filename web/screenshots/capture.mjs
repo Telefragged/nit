@@ -136,6 +136,16 @@ const captures = [
       await openPicker(page, "Tag");
     },
   },
+  // The diff base picker open: every revision with its comment count, the
+  // ones at or past the reviewed revision offered but not choosable.
+  {
+    name: "review-base-select",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await openPicker(page, "Diff base");
+    },
+  },
   // Repo 5: a twelve-change chain plus a merged and an abandoned lone
   // change. The graph windows to seven rows around the current change, with
   // the chain's edges running out of the window at both ends.
@@ -382,14 +392,15 @@ const captures = [
     path: "/changes/11?revision=0",
     actions: expandAllFiles,
   },
-  // Explicit interdiff picked via the base dropdown (no "since your
-  // review" hint) — exercises select → URL → refetch end to end.
+  // Explicit interdiff picked from the base picker (no "since your
+  // review" hint) — exercises pick → URL → refetch end to end.
   {
     name: "review-interdiff-picked",
     path: "/changes/11?against=base",
     fullPage: false,
     actions: async (page) => {
-      await page.getByLabel("Diff base").selectOption("0");
+      await openPicker(page, "Diff base");
+      await page.getByRole("option", { name: "r0 6 comments" }).click();
       // Wait for the r0 interdiff to actually render: the switch refetches
       // under a new query key (skeleton meanwhile), and data-diff-ready
       // carries the resolved base only once that settles. Keyed to "0", not a
