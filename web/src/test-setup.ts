@@ -20,3 +20,9 @@ configure({ asyncUtilTimeout: ASYNC_TIMEOUT_MS });
 afterEach(() => {
   localStorage.clear();
 });
+
+// jsdom has no top-layer, so a <dialog> carries no showModal(); opening a
+// modal throws without this stub.
+HTMLDialogElement.prototype.showModal = function () {
+  this.open = true;
+};

@@ -480,14 +480,6 @@ describe("the latest-revision shortcut", () => {
 // `s` is the keyboard twin of the Submit button: inert until something is
 // drafted, then publishes the listed changes.
 describe("the s key submits the listed changes' draft decisions", () => {
-  // jsdom has no top-layer, so the review modal's showModal() is absent — stub
-  // it so opening the modal to draft a decision doesn't throw.
-  beforeEach(() => {
-    HTMLDialogElement.prototype.showModal = function () {
-      this.open = true;
-    };
-  });
-
   let path = "";
   function LocationProbe() {
     const loc = useLocation();
@@ -531,12 +523,6 @@ describe("the s key submits the listed changes' draft decisions", () => {
 // An open modal owns the keyboard: its dialog is in the top layer, but the
 // page's window listener still hears every keystroke.
 describe("the page shortcuts while the settings popup is open", () => {
-  beforeEach(() => {
-    HTMLDialogElement.prototype.showModal = function () {
-      this.open = true;
-    };
-  });
-
   let path = "";
   function LocationProbe() {
     const loc = useLocation();

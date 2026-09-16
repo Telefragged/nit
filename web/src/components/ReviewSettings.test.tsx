@@ -1,18 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import ReviewSettingsMenu from "./ReviewSettings";
 import type { ReviewSettings } from "../lib/reviewSettings";
 
 afterEach(cleanup);
-
-// jsdom has no top-layer, so showModal() is absent — stub it, or opening
-// the popup throws.
-beforeEach(() => {
-  HTMLDialogElement.prototype.showModal = function () {
-    this.open = true;
-  };
-});
 
 /** The page's half of the contract: it holds the applied settings. */
 function Harness({ applied }: { applied: ReviewSettings[] }) {
