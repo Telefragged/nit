@@ -8,6 +8,7 @@
 // published threads + reviewer drafts into the UI thread model. Pure and
 // side-effect-free, so the rules are unit-tested without a DOM.
 
+import { unresolvedThreads } from "../api/fold";
 import type {
   Anchor,
   ChangeDrafts,
@@ -272,15 +273,14 @@ export function commentCountLabel(n: number): string {
   return `${n} comment${n === 1 ? "" : "s"}`;
 }
 
-/** A change's published activity at one revision: the comment/draft/unresolved
+/** A change's published activity at one revision: the comment and draft
  * counts an aggregate row (a graph node, a tag-nav row) shows. Recomputed
- * client-side from a change's threads + drafts so those aggregate rows need not
- * denormalize it — the mirror of the server's `change_counts` /
- * `unresolved_at`, pinned to `revision`. */
+ * client-side from a change's threads + drafts so those aggregate rows need
+ * not denormalize it. The unresolved count is the change's, not a
+ * revision's: see `NodeActivity`. */
 export interface RevisionActivity {
   threads: number;
   drafts: number;
-  unresolved: number;
 }
 
 export function revisionActivity(
@@ -288,11 +288,9 @@ export function revisionActivity(
   drafts: readonly { revision: number }[],
   revision: number,
 ): RevisionActivity {
-  const atRevision = threads.filter((t) => t.revision === revision);
   return {
-    threads: atRevision.length,
+    threads: threads.filter((t) => t.revision === revision).length,
     drafts: drafts.filter((d) => d.revision === revision).length,
-    unresolved: atRevision.filter((t) => !t.resolved).length,
   };
 }
 
@@ -328,6 +326,8 @@ export function threadKey(t: UiThread): string {
 export interface NodeActivity {
   threads: readonly ThreadProjection[];
   drafts: readonly Draft[];
+  /** Unresolved threads over every revision (`unresolvedThreads`). */
+  unresolved: number;
   decision: Decision | null;
 }
 
@@ -346,6 +346,7 @@ export function nodeActivity(
         {
           threads: p.threads,
           drafts: overlay?.drafts ?? [],
+          unresolved: unresolvedThreads(p),
           decision: overlay?.draft_decision?.decision ?? null,
         },
       ];

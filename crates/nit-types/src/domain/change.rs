@@ -178,13 +178,13 @@ impl ChangeProjection {
         self.status_at(self.latest_revision_number())
     }
 
-    /// How many threads on `revision` are unresolved.
+    /// How many of the change's threads are unresolved.
+    ///
+    /// An open thread is owed an answer whichever revision it was written
+    /// on, so the count is the change's and not a revision's.
     #[must_use]
-    pub fn unresolved_at(&self, revision: RevisionNumber) -> usize {
-        self.threads
-            .iter()
-            .filter(|t| t.revision == revision && !t.resolved)
-            .count()
+    pub fn unresolved(&self) -> usize {
+        self.threads.iter().filter(|t| !t.resolved).count()
     }
 
     /// The displayed status at a pinned revision.

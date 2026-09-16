@@ -47,6 +47,7 @@ function activity(count: number): NodeActivity {
       updated_at: "",
     })),
     drafts: [],
+    unresolved: count,
     decision: null,
   };
 }

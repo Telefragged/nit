@@ -66,12 +66,12 @@ function Activity({
   act: NodeActivity | undefined;
 }) {
   if (!act || node.revision === null) return null;
-  const { threads, drafts, unresolved } = revisionActivity(
+  const { threads, drafts } = revisionActivity(
     act.threads,
     act.drafts,
     node.revision,
   );
-  const decision = act.decision;
+  const { unresolved, decision } = act;
   if (threads === 0 && drafts === 0 && unresolved === 0 && !decision) {
     return null;
   }

@@ -306,7 +306,7 @@ describe("commentCountLabel", () => {
 });
 
 describe("revisionActivity", () => {
-  it("counts threads, drafts and unresolved at the pinned revision only", () => {
+  it("counts threads and drafts at the pinned revision only", () => {
     const a = revisionActivity(
       [
         thread({ id: 1, revision: 2, resolved: false }),
@@ -316,16 +316,11 @@ describe("revisionActivity", () => {
       [draft({ id: 11, revision: 2 }), draft({ id: 12, revision: 1 })],
       2,
     );
-    // unresolved excludes the resolved thread; the revision-1 thread/draft are out.
-    expect(a).toEqual({ threads: 2, drafts: 1, unresolved: 1 });
+    expect(a).toEqual({ threads: 2, drafts: 1 });
   });
 
   it("is all-zero for a revision with no activity", () => {
-    expect(revisionActivity([], [], 0)).toEqual({
-      threads: 0,
-      drafts: 0,
-      unresolved: 0,
-    });
+    expect(revisionActivity([], [], 0)).toEqual({ threads: 0, drafts: 0 });
   });
 });
 

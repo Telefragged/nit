@@ -15,6 +15,7 @@ import {
   repo_graph,
   replay_proj,
   tag_graph,
+  unresolved_threads,
 } from "../wasm/nit_wasm";
 import type {
   ChangeDetail,
@@ -64,6 +65,12 @@ export function repoGraph(
   groupBy: string | null,
 ): ChangeGraph {
   return repo_graph(changes, history, groupBy ?? undefined) as ChangeGraph;
+}
+
+/** How many of the change's threads are unresolved, over every revision:
+ * the domain's count, so the CLI's `Nu` column and the graph rows agree. */
+export function unresolvedThreads(proj: ChangeProjection): number {
+  return unresolved_threads(proj);
 }
 
 /** Assemble the tag graph: `changes` (the members of one tag) at their

@@ -122,6 +122,17 @@ pub fn tag_graph(changes: JsValue) -> Result<JsValue, JsValue> {
     to_js(&graph::assemble_tag(&changes))
 }
 
+/// How many of the change's threads are unresolved, over every revision.
+///
+/// # Errors
+///
+/// When `proj` fails to parse.
+#[wasm_bindgen]
+pub fn unresolved_threads(proj: JsValue) -> Result<usize, JsValue> {
+    let proj: ChangeProjection = serde_wasm_bindgen::from_value(proj)?;
+    Ok(proj.unresolved())
+}
+
 /// Marks the characters that changed inside a diff's replacement blocks.
 ///
 /// One list of ranges per line of the block (rationale and budgets in

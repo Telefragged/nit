@@ -1,7 +1,7 @@
 import { type CSSProperties, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, Tags } from "../api/types";
-import { type NodeActivity, revisionActivity } from "../lib/comments";
+import type { NodeActivity } from "../lib/comments";
 import { LAYOUT_DENSE, type LaidNode, layoutGraph } from "../lib/graphLayout";
 import { StatusDot } from "./badges";
 import { GraphRail } from "./GraphTable";
@@ -118,10 +118,7 @@ function Row({
   current: boolean;
 }) {
   const { node } = ln;
-  const unresolved =
-    act && node.revision !== null
-      ? revisionActivity(act.threads, act.drafts, node.revision).unresolved
-      : 0;
+  const unresolved = act?.unresolved ?? 0;
   const title = `${node.subject} · ${node.status}`;
   const inner = (
     <>

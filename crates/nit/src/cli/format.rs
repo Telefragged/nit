@@ -91,8 +91,8 @@ fn entry_summary(entry: &LogEntry) -> String {
 /// `tag key=value` line per selecting tag, then one aligned line per
 /// change: `number change_id status rN Nu subject`. The changes stay in
 /// the server's order, ascending by change number. The number is the one
-/// `nit comment --change` takes. `status` and `Nu` are the change's status
-/// and unresolved thread count at its latest revision.
+/// `nit comment --change` takes. `status` is the change's status at its
+/// latest revision and `Nu` its unresolved threads over every revision.
 pub(crate) fn tagged_digest(
     tags: &Tags,
     changes: &[ChangeProjection],
@@ -113,7 +113,7 @@ pub(crate) fn tagged_digest(
                 short_change_id(&c.change_id),
                 c.current_status().as_str().to_string(),
                 format!("r{revision}"),
-                format!("{}u", c.unresolved_at(revision)),
+                format!("{}u", c.unresolved()),
             ];
             (cells, c.subject_at(revision))
         })
@@ -521,13 +521,13 @@ mod tests {
                 vec![thread(0, false), thread(1, false), thread(1, true)],
             ),
         ];
-        // The count includes only the unresolved threads on the latest
-        // revision.
+        // The count spans every revision: the open thread on revision 0
+        // counts with the one on revision 1.
         assert_eq!(
             tagged_digest(&tags(&[("branch", "track/a")]), &changes, None),
             "tag branch=track/a\n\
              2   Iabcdef0  merged   r0  0u  web: render\n\
-             12  I0123456  pending  r1  1u  server: add health\n"
+             12  I0123456  pending  r1  2u  server: add health\n"
         );
         assert!(
             tagged_digest(&tags(&[("branch", "track/a")]), &changes, Some(14))
