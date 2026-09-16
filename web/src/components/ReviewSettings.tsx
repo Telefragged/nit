@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { confirmDiscard } from "../lib/confirmDiscard";
+import Modal from "./Modal";
 import type { ReviewSettings } from "../lib/reviewSettings";
 
 interface Option<T> {
@@ -81,15 +82,6 @@ export default function ReviewSettingsMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(settings);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  // showModal() puts the dialog in the top layer and makes the rest of the
-  // page inert; Escape arrives as the `cancel` event wherever focus sits.
-  // Layout effect so the dialog is visible the frame it mounts.
-  useLayoutEffect(() => {
-    if (!open) return;
-    dialogRef.current?.showModal();
-  }, [open]);
 
   // Every knob compares itself, so a knob added later needs no edit here.
   const edited = (Object.keys(draft) as (keyof ReviewSettings)[]).some(
@@ -117,63 +109,54 @@ export default function ReviewSettingsMenu({
         ⚙
       </button>
       {open ? (
-        // The native modal dialog is its own full-bleed backdrop; the
-        // mousedown below dismisses on a backdrop press.
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- keyboard dismiss is onCancel (Escape)
-        <dialog
-          ref={dialogRef}
-          className="modal-backdrop"
-          aria-label="Settings"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) requestClose();
-          }}
-          onCancel={(e) => {
-            e.preventDefault();
-            setOpen(false);
+        <Modal
+          label="Settings"
+          card="settings-modal"
+          onDismiss={(via) => {
+            if (via === "backdrop") requestClose();
+            else setOpen(false);
           }}
         >
-          <div className="settings-modal">
-            <div className="settings-modal-head">
-              <strong>Review settings</strong>
-              <span className="dim">Saved in this browser</span>
-            </div>
-            <Knob
-              label="Diff body"
-              value={draft.mode}
-              options={MODE_OPTIONS}
-              onChange={(mode) => {
-                setDraft({ ...draft, mode });
-              }}
-            />
-            <Knob
-              label="Columns"
-              value={draft.layout}
-              options={LAYOUT_OPTIONS}
-              onChange={(layout) => {
-                setDraft({ ...draft, layout });
-              }}
-            />
-            <div className="settings-modal-actions">
-              <button
-                onClick={() => {
-                  setOpen(false);
-                }}
-              >
-                Cancel
-              </button>
-              <span className="spacer" />
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  onApply(draft);
-                  setOpen(false);
-                }}
-              >
-                Apply
-              </button>
-            </div>
+          <div className="modal-head">
+            <strong>Review settings</strong>
+            <span className="dim">Saved in this browser</span>
           </div>
-        </dialog>
+          <Knob
+            label="Diff body"
+            value={draft.mode}
+            options={MODE_OPTIONS}
+            onChange={(mode) => {
+              setDraft({ ...draft, mode });
+            }}
+          />
+          <Knob
+            label="Columns"
+            value={draft.layout}
+            options={LAYOUT_OPTIONS}
+            onChange={(layout) => {
+              setDraft({ ...draft, layout });
+            }}
+          />
+          <div className="modal-actions">
+            <button
+              onClick={() => {
+                setOpen(false);
+              }}
+            >
+              Cancel
+            </button>
+            <span className="spacer" />
+            <button
+              className="btn-primary"
+              onClick={() => {
+                onApply(draft);
+                setOpen(false);
+              }}
+            >
+              Apply
+            </button>
+          </div>
+        </Modal>
       ) : null}
     </>
   );

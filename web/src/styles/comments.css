@@ -382,11 +382,10 @@
   background: transparent;
 }
 
-.reply-modal {
+.modal-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 560px;
   max-width: calc(100vw - 48px);
   background: var(--bg-raised);
   border: 1px solid var(--border-strong);
@@ -395,7 +394,11 @@
   box-shadow: 0 12px 36px rgb(0 0 0 / 60%);
 }
 
-.reply-modal-head {
+.reply-modal {
+  width: 560px;
+}
+
+.modal-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -421,13 +424,13 @@
   overflow-y: auto;
 }
 
-.reply-modal-actions {
+.modal-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.reply-modal-actions .spacer {
+.modal-actions .spacer {
   flex: 1;
 }
 

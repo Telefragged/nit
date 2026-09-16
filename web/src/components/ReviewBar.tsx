@@ -9,6 +9,7 @@ import type { ChangeDetail, Decision } from "../api/types";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { shortcutKey } from "../lib/shortcutKey";
+import Modal from "./Modal";
 
 /** Human label for a draft decision (the bar chip + the modal's current state). */
 const DECISION_LABEL: Record<Decision, string> = {
@@ -61,7 +62,6 @@ export default function ReviewBar({
 }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
 
@@ -138,13 +138,10 @@ export default function ReviewBar({
     }
   }
 
-  // showModal() puts the dialog in the top layer and makes the rest of the
-  // page inert; Escape arrives as the `cancel` event wherever focus sits. Layout
-  // effect so the dialog is visible the frame it mounts; focus the textarea
-  // explicitly (React's autoFocus fires before showModal opens it).
+  // Focus the textarea explicitly: React's autoFocus fires before the modal
+  // opens the dialog.
   useLayoutEffect(() => {
     if (!replyOpen) return;
-    dialogRef.current?.showModal();
     textareaRef.current?.focus();
   }, [replyOpen]);
 
@@ -221,88 +218,68 @@ export default function ReviewBar({
         </div>
       </div>
       {replyOpen ? (
-        // The native modal dialog is its own full-bleed backdrop; the mousedown
-        // below dismisses on a backdrop press. Escape is the keyboard
-        // equivalent (onCancel), reachable without a pointer.
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- keyboard dismiss is onCancel (Escape)
-        <dialog
-          ref={dialogRef}
-          className="modal-backdrop"
-          aria-label="Review"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) requestClose();
-          }}
-          onCancel={(e) => {
-            e.preventDefault();
-            requestClose();
-          }}
-          onClose={() => {
-            onReplyOpenChange(false);
-          }}
-        >
-          <div className="reply-modal">
-            <div className="reply-modal-head">
-              <strong>Review</strong>
-              {stats}
-            </div>
-            <div className="dim reply-modal-hint">
-              Your decision is a draft, not published — Submit publishes every
-              listed change&apos;s decision at once.
-            </div>
-            {error ? (
-              <div className="banner banner-error review-conflict">
-                <strong>action failed</strong>
-                <span className="banner-body">{error}</span>
-              </div>
-            ) : null}
-            <textarea
-              ref={textareaRef}
-              placeholder="Cover message (saved with your decision)…"
-              value={message}
-              onChange={(e) => {
-                setMessage(e.target.value);
-              }}
-            />
-            <div className="reply-modal-actions">
-              <button
-                onClick={requestClose}
-                disabled={saveDraft.isPending || clear.isPending}
-              >
-                Cancel
-              </button>
-              {draftDecision ? (
-                <button
-                  className="linkish"
-                  disabled={saveDraft.isPending || clear.isPending}
-                  onClick={() => {
-                    clear.mutate();
-                  }}
-                >
-                  Clear draft
-                </button>
-              ) : null}
-              <span className="spacer" />
-              {offered(abandoned).map(({ decision, cls }) => (
-                <button
-                  key={decision}
-                  className={cls}
-                  disabled={saveDraft.isPending}
-                  title={
-                    draftDecision?.decision === decision
-                      ? "Currently drafted"
-                      : undefined
-                  }
-                  onClick={() => {
-                    saveDraft.mutate(decision);
-                  }}
-                >
-                  {draftDecision?.decision === decision ? "✎ " : ""}
-                  {DECISION_LABEL[decision]}
-                </button>
-              ))}
-            </div>
+        <Modal label="Review" card="reply-modal" onDismiss={requestClose}>
+          <div className="modal-head">
+            <strong>Review</strong>
+            {stats}
           </div>
-        </dialog>
+          <div className="dim reply-modal-hint">
+            Your decision is a draft, not published — Submit publishes every
+            listed change&apos;s decision at once.
+          </div>
+          {error ? (
+            <div className="banner banner-error review-conflict">
+              <strong>action failed</strong>
+              <span className="banner-body">{error}</span>
+            </div>
+          ) : null}
+          <textarea
+            ref={textareaRef}
+            placeholder="Cover message (saved with your decision)…"
+            value={message}
+            onChange={(e) => {
+              setMessage(e.target.value);
+            }}
+          />
+          <div className="modal-actions">
+            <button
+              onClick={requestClose}
+              disabled={saveDraft.isPending || clear.isPending}
+            >
+              Cancel
+            </button>
+            {draftDecision ? (
+              <button
+                className="linkish"
+                disabled={saveDraft.isPending || clear.isPending}
+                onClick={() => {
+                  clear.mutate();
+                }}
+              >
+                Clear draft
+              </button>
+            ) : null}
+            <span className="spacer" />
+            {offered(abandoned).map(({ decision, cls }) => (
+              <button
+                key={decision}
+                className={cls}
+                disabled={saveDraft.isPending}
+                title={
+                  draftDecision?.decision === decision
+                    ? "Currently drafted"
+                    : undefined
+                }
+                onClick={() => {
+                  saveDraft.mutate(decision);
+                }}
+              >
+                {draftDecision?.decision === decision ? "✎ " : ""}
+                {DECISION_LABEL[decision]}
+              </button>
+            ))}
+          </div>
+        </Modal>
       ) : null}
     </>
   );
