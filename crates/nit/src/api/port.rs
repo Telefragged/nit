@@ -25,11 +25,13 @@ use nit_types::domain::{
 use super::diff;
 use super::position::{self, Edit, Span};
 
-/// The threads of earlier revisions, ported to `target`.
+/// The threads of earlier revisions, ported to each of `targets`.
 ///
-/// Every thread of `threads` written on a revision before `target` comes
-/// back at the place its anchor maps to in `target`'s trees, sorted by
-/// thread id. `revisions` must hold every revision such a thread names.
+/// Every thread of `threads` written on a revision before a target comes
+/// back at the place its anchor maps to in that target's trees. The
+/// entries of one target are sorted by thread id, and the targets keep
+/// the order given. `revisions` must hold every revision such a thread
+/// names.
 ///
 /// # Errors
 ///
@@ -37,41 +39,46 @@ use super::position::{self, Edit, Span};
 pub fn port_threads(
     repo: &Repository,
     revisions: &[RevisionProjection],
-    target: &RevisionProjection,
+    targets: &[&RevisionProjection],
     threads: &[ThreadOrigin],
 ) -> Result<Vec<PortedComment>> {
     let mut by_source: BTreeMap<_, Vec<&ThreadOrigin>> = BTreeMap::new();
-    for thread in threads.iter().filter(|t| t.revision < target.number) {
+    for thread in threads {
         by_source.entry(thread.revision).or_default().push(thread);
     }
     let tree =
         |sha| diff::commit_tree(repo, sha).with_context(|| format!("tree for {sha} missing"));
-    let dst_of = |side| match side {
-        Side::Old => &target.parent_sha,
-        Side::New => &target.commit_sha,
-    };
-    let mut ported = Vec::new();
+    let mut ported: Vec<Vec<PortedComment>> = vec![Vec::new(); targets.len()];
     for (k, threads) in by_source {
         let source = revisions
             .iter()
             .find(|r| r.number == k)
             .with_context(|| format!("revision {k} missing"))?;
+        let later: Vec<(usize, &RevisionProjection)> = targets
+            .iter()
+            .enumerate()
+            .filter(|(_, target)| k < target.number)
+            .map(|(i, target)| (i, *target))
+            .collect();
+        if later.is_empty() {
+            continue;
+        }
         let (messages, in_trees): (Vec<_>, Vec<_>) = threads
             .into_iter()
             .partition(|t| t.anchor.file() == Some(diff::COMMIT_MSG_PATH));
         if !messages.is_empty() {
-            let edits =
-                position::buffer_edits(source.message.as_bytes(), target.message.as_bytes());
-            for thread in messages {
-                ported.push(PortedComment {
+            for &(i, target) in &later {
+                let edits =
+                    position::buffer_edits(source.message.as_bytes(), target.message.as_bytes());
+                ported[i].extend(messages.iter().map(|thread| PortedComment {
                     thread_id: thread.thread_id,
                     revision: target.number,
                     anchor: port_in_file(&thread.anchor, diff::COMMIT_MSG_PATH, Some(&edits)),
-                });
+                }));
             }
         }
-        // One tree diff per source tree: the anchors of one revision and
-        // side were all written against the same tree.
+        // One tree diff per source tree and target: the anchors of one
+        // revision and side were all written against the same tree.
         for side in [Side::Old, Side::New] {
             let threads: Vec<_> = in_trees
                 .iter()
@@ -85,21 +92,29 @@ pub fn port_threads(
                 Side::New => &source.commit_sha,
             })?;
             let anchors: Vec<&Anchor> = threads.iter().map(|t| &t.anchor).collect();
-            let carried = port_anchors(repo, &src, &tree(dst_of(side))?, &anchors)?;
-            ported.extend(
-                threads
-                    .iter()
-                    .zip(carried)
-                    .map(|(t, anchor)| PortedComment {
-                        thread_id: t.thread_id,
-                        revision: target.number,
-                        anchor,
-                    }),
-            );
+            for &(i, target) in &later {
+                let dst = tree(match side {
+                    Side::Old => &target.parent_sha,
+                    Side::New => &target.commit_sha,
+                })?;
+                let carried = port_anchors(repo, &src, &dst, &anchors)?;
+                ported[i].extend(
+                    threads
+                        .iter()
+                        .zip(carried)
+                        .map(|(t, anchor)| PortedComment {
+                            thread_id: t.thread_id,
+                            revision: target.number,
+                            anchor,
+                        }),
+                );
+            }
         }
     }
-    ported.sort_by_key(|p| p.thread_id);
-    Ok(ported)
+    for entries in &mut ported {
+        entries.sort_by_key(|p| p.thread_id);
+    }
+    Ok(ported.into_iter().flatten().collect())
 }
 
 /// Carries `anchors`, written against `src`, into `dst`.

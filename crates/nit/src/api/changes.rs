@@ -375,11 +375,12 @@ pub(super) async fn ported_comments(
             (proj.revisions.clone(), threads)
         };
         let repo = open_repo(&revs.git_dir)?;
-        let mut ported = port::port_threads(&repo, &revisions, &revs.revision, &threads)?;
-        if let Some(m) = &revs.against {
-            ported.extend(port::port_threads(&repo, &revisions, m, &threads)?);
-        }
-        Ok(Json(ported))
+        let targets: Vec<_> = std::iter::once(&revs.revision)
+            .chain(revs.against.as_ref())
+            .collect();
+        Ok(Json(port::port_threads(
+            &repo, &revisions, &targets, &threads,
+        )?))
     })
     .await
 }
