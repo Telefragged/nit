@@ -47,6 +47,9 @@
 //! **Draft** — a comment or a decision the reviewer has written but not
 //! published; private to them until a review publishes it.
 //!
+//! **Ported comment** — a thread shown at a revision it was not written
+//! on, at the place its anchor maps to in that revision's trees.
+//!
 //! # What happens
 //!
 //! **Push** — an author offering the current tip for review. Nothing is
