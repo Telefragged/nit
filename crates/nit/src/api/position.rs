@@ -13,8 +13,6 @@ use std::ops::Range;
 
 use imara_diff::InternedInput;
 
-use super::diff;
-
 /// A 0-based, half-open line range; `Edit` turns one into another.
 ///
 /// [`imara_diff::Hunk`]'s `before`/`after`, which is already what the
@@ -25,7 +23,7 @@ pub type Edit = imara_diff::Hunk;
 
 /// One edit per contiguous change region of `old → new`.
 pub fn buffer_edits(old: &[u8], new: &[u8]) -> Vec<Edit> {
-    diff::line_edits(&InternedInput::new(old, new))
+    crate::hunks::line_edits(&InternedInput::new(old, new))
 }
 
 fn net_delta(e: &Edit) -> i64 {

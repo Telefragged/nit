@@ -10,6 +10,7 @@
 //!   replay of its append-only log.
 //! - [`gitscan`] — the git layer: the push walk, merged/abandoned detection,
 //!   and GC-safety keep refs ([`gitscan::objects`]).
+//! - [`hunks`] — line-level diffing: the hunks of one file's two versions.
 //! - [`api`] — the axum HTTP layer (wire contract: the `nit_types`
 //!   crate) plus the `nit serve` wiring.
 //! - [`cli`] — `nit push`/`status`/`log`/`comment`, thin clients of the API.
@@ -27,4 +28,5 @@ pub mod api;
 pub mod cli;
 pub mod db;
 pub mod gitscan;
+pub mod hunks;
 pub mod review;
