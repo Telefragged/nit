@@ -15,6 +15,7 @@
 
 pub mod diff;
 mod outline;
+mod position;
 pub mod rebase;
 pub mod state;
 pub mod views;

@@ -45,85 +45,20 @@
 //!   and stays a real edit.
 
 use std::collections::{BTreeSet, HashMap};
-use std::ops::Range;
 use std::path::Path;
 
 use anyhow::Result;
 use git2::{Delta, Oid, Repository, Tree};
-use imara_diff::InternedInput;
 
 use nit_types::diff::{Diff, DiffFile, Line};
 use nit_types::domain::Sha;
 use nit_types::domain::{DiffMode, LineKind};
 
 use super::diff;
-
-/// A 0-based, half-open line range; `Edit` turns one into another.
-///
-/// [`imara_diff::Hunk`]'s `before`/`after`, which is already what the
-/// projection speaks. A pure insertion has an empty `before`, a pure
-/// deletion an empty `after`.
-type Span = Range<u32>;
-type Edit = imara_diff::Hunk;
+use super::position::{Edit, Span, buffer_edits, project_clipped};
 
 /// One file's drifted lines, on the old (`m`) and new (`n`) side.
 type DriftRanges = (Vec<Span>, Vec<Span>);
-
-/// One edit per contiguous change region of `old → new`.
-fn buffer_edits(old: &[u8], new: &[u8]) -> Vec<Edit> {
-    diff::line_edits(&InternedInput::new(old, new))
-}
-
-fn net_delta(e: &Edit) -> i64 {
-    i64::from(e.after.end - e.after.start) - i64::from(e.before.end - e.before.start)
-}
-
-/// Maps the parts of `pos` the mappings missed into B coordinates.
-///
-/// The parts of `pos` that the change's own edits (`mappings`) did **not**
-/// touch move into the mappings' B-coordinate space, each surviving
-/// sub-range shifted by the running insert/delete delta of the mappings
-/// before it. A part of `pos` covered by a mapping's A-range is dropped —
-/// the change edited those lines, so they show as a real edit, not drift
-/// (gerrit's `OmitPositionOnConflict`, refined to line granularity: a base
-/// edit that straddles one of the change's own lines still contributes its
-/// untouched lines).
-///
-/// `mappings` must be ascending by `before.start` and disjoint —
-/// `buffer_edits` (one edit per ascending hunk) yields them that way.
-fn project_clipped(pos: &Span, mappings: &[Edit]) -> Vec<Span> {
-    debug_assert!(
-        mappings
-            .windows(2)
-            .all(|w| w[0].before.end <= w[1].before.start),
-        "mappings must be ascending and disjoint"
-    );
-    let mut out = Vec::new();
-    let mut cursor = pos.start; // start of the next not-yet-covered gap
-    let mut shift: i64 = 0; // net delta of the mappings before `cursor`
-    let mut emit = |from: u32, to: u32, shift: i64| {
-        let shifted = |x: u32| u32::try_from(i64::from(x) + shift).ok();
-        if from < to
-            && let (Some(start), Some(end)) = (shifted(from), shifted(to))
-        {
-            out.push(start..end);
-        }
-    };
-    for m in mappings {
-        if m.before.start >= pos.end {
-            break;
-        }
-        if m.before.end <= cursor {
-            shift += net_delta(m);
-            continue;
-        }
-        emit(cursor, m.before.start, shift);
-        cursor = m.before.end;
-        shift += net_delta(m);
-    }
-    emit(cursor, pos.end, shift);
-    out
-}
 
 /// Projects every base-movement edit into the interdiff's coordinates.
 ///
@@ -382,86 +317,8 @@ pub struct Rev<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::position::tests::{edit, span};
     use super::*;
-
-    fn span(start: u32, end: u32) -> Span {
-        start..end
-    }
-
-    fn edit(before: (u32, u32), after: (u32, u32)) -> Edit {
-        Edit {
-            before: span(before.0, before.1),
-            after: span(after.0, after.1),
-        }
-    }
-
-    #[test]
-    fn buffer_edits_span_every_range_shape() {
-        let text = |lines: &[&str]| lines.join("\n").into_bytes();
-        let base = text(&["a", "b", "c", "d", "e", ""]);
-        // Every shape a span can take, since the projection reads both ends of
-        // both sides: replace, insert (empty before), delete (empty after),
-        // and each side empty for a whole-file add or delete.
-        assert_eq!(
-            buffer_edits(&base, &text(&["a", "b", "C", "D", "E", "e", ""])),
-            vec![edit((2, 4), (2, 5))]
-        );
-        assert_eq!(
-            buffer_edits(&base, &text(&["a", "b", "c", "d", "e", "f", "g", ""])),
-            vec![edit((5, 5), (5, 7))]
-        );
-        assert_eq!(
-            buffer_edits(&base, &text(&["a", "b", "e", ""])),
-            vec![edit((2, 4), (2, 2))]
-        );
-        assert_eq!(
-            buffer_edits(b"", &text(&["a", "b", "c", ""])),
-            vec![edit((0, 0), (0, 3))]
-        );
-        assert_eq!(
-            buffer_edits(&text(&["a", "b", "c", ""]), b""),
-            vec![edit((0, 3), (0, 0))]
-        );
-    }
-
-    #[test]
-    fn project_clipped_shifts_an_uncovered_position() {
-        // +2 at the top shifts a later position down by 2; a 3-line delete
-        // before it shifts up by 3.
-        assert_eq!(
-            project_clipped(&span(5, 6), &[edit((0, 0), (0, 2))]),
-            vec![span(7, 8)]
-        );
-        assert_eq!(
-            project_clipped(&span(8, 9), &[edit((5, 8), (5, 5))]),
-            vec![span(5, 6)]
-        );
-    }
-
-    #[test]
-    fn project_clipped_handles_after_and_full_cover() {
-        assert_eq!(
-            project_clipped(&span(2, 3), &[edit((5, 8), (5, 8))]),
-            vec![span(2, 3)]
-        );
-        // A position inside the change's own edit is dropped, not drift.
-        assert!(project_clipped(&span(6, 7), &[edit((5, 8), (5, 8))]).is_empty());
-    }
-
-    #[test]
-    fn project_clipped_keeps_the_part_outside_the_changes_edit() {
-        // The fix for drift the diff folds across one of the change's own
-        // lines: the base region straddles that edit [5,8), and the untouched
-        // remainder still projects (size-neutral mapping ⇒ no shift).
-        let m = [edit((5, 8), (5, 8))];
-        assert_eq!(project_clipped(&span(4, 6), &m), vec![span(4, 5)]);
-        assert_eq!(project_clipped(&span(7, 9), &m), vec![span(8, 9)]);
-        // An interior edit by the change splits the base region in two.
-        assert_eq!(
-            project_clipped(&span(1, 9), &[edit((4, 5), (4, 5))]),
-            vec![span(1, 4), span(5, 9)]
-        );
-    }
 
     #[test]
     fn drift_ranges_shifts_with_the_changes_edits_and_clips_overlap() {
