@@ -52,7 +52,7 @@ use git2::{Delta, Oid, Repository, Tree};
 
 use nit_types::diff::{Diff, DiffFile, Line};
 use nit_types::domain::Sha;
-use nit_types::domain::{DiffMode, LineKind};
+use nit_types::domain::{DiffView, LineKind};
 
 use super::diff;
 use super::position::{Edit, Span, buffer_edits, project_clipped};
@@ -189,7 +189,7 @@ pub fn contain(
     m: &Rev,
     n: &Rev,
     context: u32,
-    mode: DiffMode,
+    view: DiffView,
     keep: impl Fn(&str) -> bool,
 ) -> Result<Diff> {
     let (Some(tree_m), Some(tree_n), Some(parent_m), Some(parent_n)) = (
@@ -262,7 +262,7 @@ pub fn contain(
         // disagreed) is left plain: diffing unrelated parent blobs could
         // claim the change's real edits as drift.
         if base.get(name_pm).map(String::as_str) != Some(name_pn) {
-            files.push(diff::render_delta(repo, &delta, file, context, mode)?);
+            files.push(diff::render_delta(repo, &delta, file, context, view)?);
             continue;
         }
         // Gerrit's implicitRename: a rename either side's delta produced is
@@ -288,12 +288,12 @@ pub fn contain(
             blob(name_n, oid_n)?,
         ) else {
             // Binary on some side.
-            files.push(diff::render_delta(repo, &delta, file, context, mode)?);
+            files.push(diff::render_delta(repo, &delta, file, context, view)?);
             continue;
         };
         let ranges = file_drift(&bpm, &bm, &bpn, &bn);
         let real_edit = own_edit(&bm, &bn, &ranges);
-        diff::fill_lines(&mut file, &bm, &bn, context, mode);
+        diff::fill_lines(&mut file, &bm, &bn, context, view);
         tag(&mut file, &ranges);
         // A rename the change made is its own work even when every line
         // inside it drifted.

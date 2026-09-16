@@ -14,13 +14,13 @@ use nit_types::changes::{TagList, TagsRequest};
 use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
-use nit_types::domain::DiffMode;
 use nit_types::domain::PortedComment;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
 use nit_types::domain::Tag;
 use nit_types::domain::ThreadOrigin;
+use nit_types::domain::{DiffMode, DiffView, Whitespace};
 use nit_types::domain::{LogPayload, TagsPayload};
 use nit_types::log::Log;
 
@@ -162,9 +162,8 @@ pub(super) async fn get_change_drafts(
 #[derive(Deserialize)]
 pub(super) struct DiffQuery {
     against: Option<RevisionNumber>,
-    /// `full` when the request is silent.
-    #[serde(default)]
-    mode: DiffMode,
+    #[serde(flatten)]
+    view: DiffView,
 }
 
 pub(super) async fn revision_diff(
@@ -175,7 +174,7 @@ pub(super) async fn revision_diff(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let revs = resolve_revs(&state, &entry, n, q.against)?;
-        let mut wire = contained_diff(&revs, 3, q.mode, None)?;
+        let mut wire = contained_diff(&revs, 3, q.view, None)?;
         // After tagging: the message is not a git delta, so it is never drift.
         wire.files.insert(
             0,
@@ -200,6 +199,11 @@ pub(super) struct LinesQuery {
     /// side alone, a renamed file would come back as a whole-file add.
     old_path: Option<String>,
     against: Option<RevisionNumber>,
+    /// How the diff this reveal happens inside compares whitespace.
+    ///
+    /// A revealed line then carries the kind it would hold in a hunk.
+    #[serde(default)]
+    whitespace: Whitespace,
 }
 
 /// The whole of file `path`, as diff lines.
@@ -220,7 +224,11 @@ pub(super) async fn revision_lines(
             path: q.path,
             old_path: q.old_path,
         };
-        let wire = contained_diff(&revs, u32::MAX, DiffMode::Full, Some(&wanted))?;
+        let view = DiffView {
+            mode: DiffMode::Full,
+            whitespace: q.whitespace,
+        };
+        let wire = contained_diff(&revs, u32::MAX, view, Some(&wanted))?;
         let lines = wire
             .files
             .into_iter()
@@ -295,7 +303,7 @@ fn resolve_revs(
 fn contained_diff(
     revs: &Revs,
     context: u32,
-    mode: DiffMode,
+    view: DiffView,
     only: Option<&Wanted>,
 ) -> Result<Diff, Error> {
     let repo = open_repo(&revs.git_dir)?;
@@ -310,7 +318,7 @@ fn contained_diff(
     let names = only.map(Wanted::names);
     let git = diff::git_diff(&repo, &old_tree, &new_tree, names.as_deref())?;
     let shown = |path: &str| only.is_none_or(|w| w.path == path);
-    let plain = || diff::render(&repo, &git, context, mode, shown);
+    let plain = || diff::render(&repo, &git, context, view, shown);
 
     let mut wire = match revs
         .against
@@ -318,13 +326,13 @@ fn contained_diff(
         .filter(|a| a.parent_sha != revision.parent_sha)
     {
         None => plain()?,
-        Some(m) => rebase::contain(&repo, &git, &at(m), &at(revision), context, mode, shown)
+        Some(m) => rebase::contain(&repo, &git, &at(m), &at(revision), context, view, shown)
             .or_else(|e| {
                 tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
                 plain()
             })?,
     };
-    if mode == DiffMode::Outline {
+    if view.mode == DiffMode::Outline {
         // An outline answers with outlines, so a file that has none to show
         // is not in it — whatever else its delta did. A change inside a
         // body, a rename, a binary blob: each leaves a row saying nothing,
@@ -399,4 +407,30 @@ fn open_repo(git_dir: &str) -> Result<Repository, Error> {
 
 fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Result<Tree<'r>, Error> {
     diff::commit_tree(repo, sha).ok_or_else(|| Error::internal(format!("tree for {sha} missing")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A flattened field makes serde buffer the whole query before it reads
+    /// any of it, and a buffered number arrives as a string. The parser has
+    /// to convert it back, or `against` fails as soon as another field is
+    /// flattened beside it.
+    #[test]
+    fn a_diff_request_reads_its_revision_beside_its_view() {
+        let q: DiffQuery = serde_html_form::from_str("against=1&mode=outline&whitespace=ignore")
+            .expect("query parses");
+        assert_eq!(q.against.map(RevisionNumber::get), Some(1));
+        assert_eq!(
+            q.view,
+            DiffView {
+                mode: DiffMode::Outline,
+                whitespace: Whitespace::Ignore,
+            }
+        );
+
+        let silent: DiffQuery = serde_html_form::from_str("").expect("empty query parses");
+        assert_eq!(silent.view, DiffView::default());
+    }
 }

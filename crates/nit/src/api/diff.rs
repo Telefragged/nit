@@ -11,7 +11,7 @@ use git2::{Delta, Repository, Tree};
 
 use nit_types::diff::{Diff, DiffFile, Hunk, Line};
 use nit_types::domain::Sha;
-use nit_types::domain::{DiffMode, FileStatus, LineKind};
+use nit_types::domain::{DiffView, FileStatus, LineKind};
 
 use crate::hunks::{self, wire_line};
 
@@ -141,7 +141,7 @@ pub fn render(
     repo: &Repository,
     diff: &git2::Diff,
     context: u32,
-    mode: DiffMode,
+    view: DiffView,
     keep: impl Fn(&str) -> bool,
 ) -> Result<Diff> {
     let mut files = Vec::new();
@@ -152,7 +152,7 @@ pub fn render(
         if !keep(&file.path) {
             continue;
         }
-        files.push(render_delta(repo, &delta, file, context, mode)?);
+        files.push(render_delta(repo, &delta, file, context, view)?);
     }
     Ok(Diff { files })
 }
@@ -170,12 +170,12 @@ pub(super) fn render_delta(
     delta: &git2::DiffDelta,
     mut file: DiffFile,
     context: u32,
-    mode: DiffMode,
+    view: DiffView,
 ) -> Result<DiffFile> {
     let old = blob_bytes(repo, &file.path, delta.old_file().id())?;
     let new = blob_bytes(repo, &file.path, delta.new_file().id())?;
     if let (Some(old), Some(new)) = (old, new) {
-        fill_lines(&mut file, &old, &new, context, mode);
+        fill_lines(&mut file, &old, &new, context, view);
     }
     Ok(file)
 }
@@ -194,13 +194,13 @@ pub(super) fn fill_lines(
     old: &[u8],
     new: &[u8],
     context: u32,
-    mode: DiffMode,
+    view: DiffView,
 ) {
     let (old, new) = (String::from_utf8_lossy(old), String::from_utf8_lossy(new));
     file.binary = false;
     file.old_total = old.lines().count() as u64;
     file.new_total = new.lines().count() as u64;
-    file.hunks = hunks::of_file(&file.path, &old, &new, context, mode);
+    file.hunks = hunks::of_file(&file.path, &old, &new, context, view);
     (file.additions, file.deletions) = stats(&file.hunks);
 }
 
@@ -282,7 +282,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
         old.unwrap_or_default().as_bytes(),
         new.as_bytes(),
         3,
-        DiffMode::Full,
+        DiffView::default(),
     );
     if file.hunks.is_empty() && !new.is_empty() {
         let lines: Vec<Line> = new
@@ -293,7 +293,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
                     LineKind::Context,
                     Some(i as u64 + 1),
                     Some(i as u64 + 1),
-                    text,
+                    text.to_string(),
                 )
             })
             .collect();
@@ -346,6 +346,7 @@ pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: u64) -> Optio
 mod tests {
     use super::*;
     use git2::RepositoryInitOptions;
+    use nit_types::domain::DiffMode;
 
     struct Repo {
         _directory: tempfile::TempDir,
@@ -392,19 +393,29 @@ mod tests {
 
     fn shown(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
-        render(repo, &diff, 3, DiffMode::Full, |_| true).expect("diff renders")
+        render(repo, &diff, 3, DiffView::default(), |_| true).expect("diff renders")
     }
 
     /// One file's diff with every unchanged line kept as context — what the UI
     /// reveals from when expanding a hunk's surroundings.
     fn whole(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
-        render(repo, &diff, u32::MAX, DiffMode::Full, |p| p == only).expect("diff renders")
+        render(repo, &diff, u32::MAX, DiffView::default(), |p| p == only).expect("diff renders")
     }
 
     fn outlined(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
-        render(repo, &diff, 3, DiffMode::Outline, |_| true).expect("diff renders")
+        render(
+            repo,
+            &diff,
+            3,
+            DiffView {
+                mode: DiffMode::Outline,
+                ..DiffView::default()
+            },
+            |_| true,
+        )
+        .expect("diff renders")
     }
 
     /// A body rewritten under an untouched signature.
