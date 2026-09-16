@@ -10,7 +10,9 @@ import {
   pendingResolved,
   rangeSince,
   pendingUnresolvedCount,
+  portThreads,
   revisionActivity,
+  shownAt,
   threadCountByRevision,
   threadInRange,
 } from "./comments";
@@ -344,5 +346,54 @@ describe("anchorKind", () => {
     expect(threadInRange(t, 3, 2)).toBe(true);
     // A line thread on the same revision has no column in that range.
     expect(threadInRange(anchor(0, "new", 3), 3, 2)).toBe(false);
+  });
+});
+
+describe("portThreads", () => {
+  // The server lists TO's places before FROM's.
+  const ported = [
+    { thread_id: 1, revision: 2, anchor: lineAnchor("new", 8) },
+    { thread_id: 1, revision: 1, anchor: lineAnchor("new", 6) },
+  ];
+  const only = (threads: UiThread[]): UiThread => {
+    const t = threads[0];
+    if (t === undefined || threads.length !== 1) throw new Error("one thread");
+    return t;
+  };
+
+  it("shows a hidden thread at its ported place", () => {
+    const t = ui({ id: 1, revision: 0, anchor: lineAnchor("new", 5) });
+    const shown = only(portThreads([t], ported, 2, undefined));
+    expect(shown.ported).toEqual({ revision: 2, anchor: lineAnchor("new", 8) });
+    expect(shownAt(shown)).toEqual(shown.ported);
+    expect(shown.anchor).toEqual(lineAnchor("new", 5));
+  });
+
+  it("keeps a thread the range already shows", () => {
+    const t = ui({ id: 1, revision: 2, anchor: lineAnchor("new", 5) });
+    const shown = only(portThreads([t], ported, 2, undefined));
+    expect(shown.ported).toBeUndefined();
+    expect(shownAt(shown)).toBe(shown);
+  });
+
+  it("takes the first ported place the range shows", () => {
+    const t = ui({ id: 1, revision: 0, anchor: lineAnchor("new", 5) });
+    expect(only(portThreads([t], ported, 2, 1)).ported?.revision).toBe(2);
+    // Vs base, FROM's tree is not shown, so only TO's place counts.
+    expect(only(portThreads([t], ported.slice(1), 2, undefined)).ported).toBe(
+      undefined,
+    );
+    expect(only(portThreads([t], ported.slice(1), 2, 1)).ported).toEqual({
+      revision: 1,
+      anchor: lineAnchor("new", 6),
+    });
+  });
+
+  it("leaves a thread the server did not port, and every draft-only thread", () => {
+    const missing = ui({ id: 9, revision: 0, anchor: lineAnchor("new", 5) });
+    const draftOnly = ui({ id: null, revision: 0 });
+    for (const t of portThreads([missing, draftOnly], ported, 2, undefined)) {
+      expect(t.ported).toBeUndefined();
+    }
   });
 });

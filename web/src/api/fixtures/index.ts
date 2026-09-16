@@ -409,6 +409,19 @@ export async function mockRequest(
     return structuredClone({ files });
   }
 
+  if (
+    (m = /^\/changes\/(\d+)\/revisions\/(\d+)\/ported$/.exec(p)) &&
+    method === "GET"
+  ) {
+    const c = getChange(Number(m[1]));
+    const number = Number(m[2]);
+    if (!c.revisions[number]) notFound(`revision ${number}`);
+    const against = q.has("against") ? Number(q.get("against")) : undefined;
+    const at = (revision: number | undefined) =>
+      revision === undefined ? [] : (c.ported?.[revision] ?? []);
+    return structuredClone([...at(number), ...at(against)]);
+  }
+
   // Context expansion. The fixtures hold diffs, not whole files, so
   // reconstruct the whole file from the
   // shown hunks with synthesized context filling the gaps — enough for the

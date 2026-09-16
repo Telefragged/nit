@@ -14,7 +14,13 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { createDraft, getChangeDrafts, getDiff, getRepo } from "../api/client";
+import {
+  createDraft,
+  getChangeDrafts,
+  getDiff,
+  getPorted,
+  getRepo,
+} from "../api/client";
 import { tagGraph } from "../api/fold";
 import type {
   ChangeDetail,
@@ -51,6 +57,8 @@ import {
   nodeActivity,
   placementLine,
   pendingUnresolvedCount,
+  portThreads,
+  shownAt,
   threadCountByRevision,
   threadInRange,
   threadKey,
@@ -489,7 +497,10 @@ export default function ReviewPage() {
       against,
       latestRevision,
       showRange: ({ against: from, selected: to }: DiffRange) => {
-        switchRange({ against: String(from), revision: String(to) });
+        switchRange({
+          against: from === undefined ? null : String(from),
+          revision: String(to),
+        });
       },
       editingTarget,
       // Moving or clearing the target unmounts the inline CommentEditor and
@@ -537,6 +548,27 @@ export default function ReviewPage() {
   const revisionCommentCounts = useMemo(
     () => threadCountByRevision(threads),
     [threads],
+  );
+
+  // The ported comments of the shown range. The key carries the threads
+  // the server would port, so a thread opened or resolved since refetches;
+  // the anchors themselves change only with the revisions.
+  const portKey = useMemo(
+    () =>
+      threads
+        .filter((t) => t.id !== null && !t.resolved && t.revision < selected)
+        .map((t) => t.id)
+        .join(","),
+    [threads, selected],
+  );
+  const portedQ = useQuery({
+    queryKey: ["ported", changeNumber, selected, against ?? null, portKey],
+    queryFn: () => getPorted(changeNumber, selected, against),
+    enabled: published !== undefined && selected > 0,
+  });
+  const shownThreads = useMemo(
+    () => portThreads(threads, portedQ.data ?? [], selected, against),
+    [threads, portedQ.data, selected, against],
   );
 
   const navigate = useNavigate();
@@ -724,10 +756,11 @@ export default function ReviewPage() {
   // group alike.
   const threadsByFile = useMemo(() => {
     const map = new Map<string, UiThread[]>();
-    for (const t of threads) {
-      const path = anchorFile(t.anchor);
+    for (const t of shownThreads) {
+      const at = shownAt(t);
+      const path = anchorFile(at.anchor);
       if (path === null) continue;
-      if (!threadInRange(t, selected, against)) continue;
+      if (!threadInRange(at, selected, against)) continue;
       const file = files.find((f) => f.path === path || f.old_path === path);
       const key = file ? file.path : path;
       const list = map.get(key) ?? [];
@@ -735,7 +768,7 @@ export default function ReviewPage() {
       map.set(key, list);
     }
     return map;
-  }, [threads, files, selected, against]);
+  }, [shownThreads, files, selected, against]);
 
   // The change's published projection arrives over the websocket (no fetch to
   // error on); a bad change number surfaces when its drafts read fails.
@@ -759,8 +792,8 @@ export default function ReviewPage() {
   const repo = repoQ.data;
   const allFilesExpanded = allExpanded(expanded, files);
 
-  const changeLevelThreads = threads.filter(
-    (t) => anchorFile(t.anchor) === null,
+  const changeLevelThreads = shownThreads.filter(
+    (t) => anchorFile(shownAt(t).anchor) === null,
   );
   const orphanFileThreads = [...threadsByFile.entries()].filter(
     ([path]) => !files.some((f) => f.path === path),

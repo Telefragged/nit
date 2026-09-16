@@ -1,10 +1,11 @@
 // Comment placement: which column of a diff range a thread renders in, and
 // the inverse — which (revision, side) a new draft on a column stores to.
-// Threads are pinned to their revision — one renders only when its
-// (revision, side) names a displayed tree, never ported onto another
-// revision; the server stores anchors verbatim and this module is the sole
-// owner of the placement rules. Plus assembling the server's published
-// threads + reviewer drafts into the UI thread model. Pure and
+// Threads are pinned to their revision — one renders at its own anchor only
+// when its (revision, side) names a displayed tree. A thread the range
+// hides may be shown at the place the server ported it to in a displayed
+// tree (`portThreads`); the server stores anchors verbatim and this module
+// is the sole owner of the placement rules. Plus assembling the server's
+// published threads + reviewer drafts into the UI thread model. Pure and
 // side-effect-free, so the rules are unit-tested without a DOM.
 
 import type {
@@ -16,6 +17,7 @@ import type {
   LineAnchor,
   Side,
   Draft,
+  PortedComment,
   ThreadProjection,
   ThreadComment,
 } from "../api/types";
@@ -85,6 +87,44 @@ export interface UiThread {
   drafts: Draft[];
   /** When the thread (or its draft) was created — its sort key. */
   created_at: string;
+  /** Where a ported comment is shown: a displayed revision's trees, at the
+   * place the server ported its anchor to. Absent when the thread is shown
+   * at its own anchor. */
+  ported?: CommentAnchor;
+}
+
+/** The place a thread is shown: its ported place when it has one, else its
+ * own anchor. Placement and grouping read this, never `anchor` directly. */
+export function shownAt(t: UiThread): CommentAnchor {
+  return t.ported ?? t;
+}
+
+/**
+ * Marks each thread the range `[FROM] → [TO]` would hide with the first of
+ * its `ported` places the range shows. A thread the range already shows
+ * keeps its own anchor, so the original is never doubled. The server lists
+ * `TO`'s places before `FROM`'s, so the later tree wins: it is where the
+ * author's fix would be.
+ */
+export function portThreads(
+  threads: readonly UiThread[],
+  ported: readonly PortedComment[],
+  selected: number,
+  against: number | undefined,
+): UiThread[] {
+  const places = new Map<number, CommentAnchor[]>();
+  for (const { thread_id, revision, anchor } of ported) {
+    const list = places.get(thread_id) ?? [];
+    list.push({ revision, anchor });
+    places.set(thread_id, list);
+  }
+  return threads.map((t) => {
+    if (t.id === null || threadInRange(t, selected, against)) return t;
+    const at = places
+      .get(t.id)
+      ?.find((p) => threadInRange(p, selected, against));
+    return at ? { ...t, ported: at } : t;
+  });
 }
 
 /**
@@ -167,7 +207,8 @@ export function draftAnchor(
 
 /** A diff range as the page shows it: `[against] → [selected]`. */
 export interface DiffRange {
-  against: number;
+  /** `undefined` is the base, as everywhere in this module. */
+  against: number | undefined;
   selected: number;
 }
 

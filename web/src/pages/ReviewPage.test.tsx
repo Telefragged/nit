@@ -568,17 +568,20 @@ describe("comment counts in the file headers", () => {
     section(i).querySelector(".fcomments")?.textContent ?? null;
 
   it("counts only this file's threads visible in the current range", async () => {
-    // base → r1: the r0 threads are pinned away, so only the r1 drafts show.
+    // base → r1: the r0 threads are pinned away, so only the r1 drafts and
+    // the r0 threads the server ported to r1 show.
     renderReview("/changes/11?against=base");
     await diffLoaded("src/auth/store.rs");
 
-    // rotate.rs (file-1): two drafts on r1 — one new-side, one old-side.
-    expect(fcomments(1)).toBe("2 comments");
+    // rotate.rs (file-1): two drafts on r1 — one new-side, one old-side —
+    // and the open r0 selection thread ported to its shifted lines.
+    expect(fcomments(1)).toBe("3 comments");
     // tests/rotation.rs (file-3): a single r1 draft.
     expect(fcomments(3)).toBe("1 comment");
-    // store.rs (file-2): this range hides its r0 line thread, but its
-    // file thread has no line, so it shows in every range.
-    expect(fcomments(2)).toBe("1 comment");
+    // store.rs (file-2): its file thread has no line, so it shows in every
+    // range, and its r0 line thread is ported to the file since r1 rewrote
+    // the line.
+    expect(fcomments(2)).toBe("2 comments");
     // /COMMIT_MSG (file-0): only r0 line threads — no badge.
     expect(fcomments(0)).toBeNull();
   });

@@ -8,17 +8,18 @@ import type {
   ChangeList,
   ChangeQuery,
   ChangeStatus,
-  NewDraft,
   Diff,
   DiffFile,
   DiffMode,
   Draft,
+  DraftDecision,
+  EditDraft,
   FileLines,
+  NewDraft,
+  PortedComment,
   Repo,
   RepoHistory,
   RepoList,
-  DraftDecision,
-  EditDraft,
   TagList,
 } from "./types";
 
@@ -133,6 +134,21 @@ export const getFileLines = (
   return request<FileLines>(
     "GET",
     `/changes/${changeNumber}/revisions/${revision}/lines?${q}`,
+  );
+};
+
+/** The unresolved threads of earlier revisions at their place in
+ * `revision`'s trees and, over the same range as `getDiff`, in `against`'s:
+ * `revision`'s entries first. */
+export const getPorted = (
+  changeNumber: number,
+  revision: number,
+  against?: number,
+) => {
+  const query = against === undefined ? "" : `?against=${against}`;
+  return request<PortedComment[]>(
+    "GET",
+    `/changes/${changeNumber}/revisions/${revision}/ported${query}`,
   );
 };
 

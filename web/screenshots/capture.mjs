@@ -106,6 +106,13 @@ const captures = [
     name: "change-graph-filtered",
     path: "/repos/4?group=session-id&value=beta",
   },
+  // Change 11 at rev1 against base: the open r0 threads are ported, one to
+  // its shifted lines and one to its file.
+  {
+    name: "review-ported",
+    path: "/changes/11?against=base",
+    actions: expandAllFiles,
+  },
   // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
   { name: "review-interdiff", path: "/changes/11?against=0" },
   // Long review cover message expanded via the "more" toggle. Viewport-only

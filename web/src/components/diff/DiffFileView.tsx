@@ -20,6 +20,7 @@ import {
   commentCountLabel,
   commentPlacement,
   draftAnchor,
+  shownAt,
   threadKey,
   type UiThread,
 } from "../../lib/comments";
@@ -268,11 +269,12 @@ export default function DiffFileView({
   const displaced: { t: UiThread; side: Side }[] = [];
   const inline = new Map<string, UiThread[]>();
   for (const t of threads) {
-    if (anchorKind(t.anchor) === "file") {
+    const at = shownAt(t);
+    if (anchorKind(at.anchor) === "file") {
       fileThreads.push(t);
       continue;
     }
-    const p = commentPlacement(t, ctx.selected, ctx.against);
+    const p = commentPlacement(at, ctx.selected, ctx.against);
     if (!p) continue;
     const key = `${p.side}:${p.line}`;
     if (present.has(key)) {
@@ -345,9 +347,10 @@ export default function DiffFileView({
       active: boolean;
     }[] = [];
     for (const t of threads) {
-      const range = anchorRange(t.anchor);
+      const at = shownAt(t);
+      const range = anchorRange(at.anchor);
       if (!range) continue;
-      const p = commentPlacement(t, ctx.selected, ctx.against);
+      const p = commentPlacement(at, ctx.selected, ctx.against);
       if (p) paints.push({ side: p.side, range, active: false });
     }
     const et = ctx.editingTarget;

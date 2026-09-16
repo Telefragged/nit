@@ -3,7 +3,7 @@ import { useState } from "react";
 import { createDraft, deleteDraft, updateDraft } from "../api/client";
 import type { Draft, ThreadComment } from "../api/types";
 import type { UiThread } from "../lib/comments";
-import { pendingResolved, rangeSince } from "../lib/comments";
+import { anchorKind, pendingResolved, rangeSince } from "../lib/comments";
 import { timeAgo } from "../lib/time";
 import { useReview } from "../pages/reviewContext";
 import CommentEditor from "./CommentEditor";
@@ -161,6 +161,11 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
 
   const isDraftThread = thread.id === null;
   const since = rangeSince(thread, selected, against, latestRevision);
+  // A ported line thread whose lines the amend rewrote is shown on its file.
+  const lineLost =
+    thread.ported !== undefined &&
+    anchorKind(thread.anchor) === "line" &&
+    anchorKind(thread.ported.anchor) !== "line";
 
   return (
     <div className={`thread ${isDraftThread ? "thread-draft" : ""}`}>
@@ -193,6 +198,18 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
             <span className="dim" title="applies when you submit the review">
               · unsaved
             </span>
+          ) : null}
+          {thread.ported ? (
+            <button
+              className="linkish thread-ported"
+              title="Show the revision this thread was written on"
+              onClick={() => {
+                showRange({ against: undefined, selected: thread.revision });
+              }}
+            >
+              ported from r{thread.revision}
+              {lineLost ? ", line rewritten" : ""}
+            </button>
           ) : null}
           <span className="spacer" />
           {editor === null ? (

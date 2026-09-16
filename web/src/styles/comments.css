@@ -167,6 +167,11 @@
   color: var(--red);
 }
 
+.thread-ported {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
 /* editors */
 
 .editor {

@@ -5,6 +5,7 @@ import type {
   Anchor,
   ChangeStatus,
   DiffFile,
+  PortedComment,
   Review,
   Revision,
   ThreadComment,
@@ -37,6 +38,9 @@ export interface ChangeRecord {
   reviews: Review[];
   /** Keyed by diffKey(revision, against). */
   diffs: Record<string, AuthoredDiff>;
+  /** The ported comments the server would compute for each revision,
+   * keyed by that revision. Absent means none. */
+  ported?: Record<number, PortedComment[]>;
 }
 
 /** A repo registry entry. */
