@@ -367,7 +367,8 @@ export type Revision = {
  *
  * The response ports every unresolved thread of a revision earlier than
  * `n` to `n`, and with `?against={m}` to `m` as well, `n`'s entries
- * first. Entries for one revision are sorted by thread id.
+ * first. `?include_resolved=true` ports the resolved threads too. Entries
+ * for one revision are sorted by thread id.
  */
 export type PortedComment = {
   thread_id: number;

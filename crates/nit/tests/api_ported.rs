@@ -1,5 +1,6 @@
 //! Ported comments over HTTP: `GET /api/changes/{id}/revisions/{n}/ported`
-//! carries every unresolved thread of an earlier revision to `n`.
+//! carries every unresolved thread of an earlier revision to `n`. On
+//! request it carries the resolved threads too.
 
 mod common;
 
@@ -123,7 +124,10 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
         .iter()
         .map(|x| x["thread_id"].as_u64().unwrap())
         .collect();
-    assert!(!ids.contains(&resolved), "a resolved thread is not ported");
+    assert!(
+        !ids.contains(&resolved),
+        "a resolved thread is not ported by default"
+    );
     assert!(
         !ids.contains(&later),
         "a thread on the target is not ported"
@@ -133,6 +137,11 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
         p.as_array().unwrap().iter().all(|x| x["revision"] == 1),
         "every entry names the target"
     );
+
+    let (st, p) = ported(&server, id, 1, "?include_resolved=true");
+    assert_eq!(st, 200, "{p}");
+    assert_eq!(anchor_of(&p, resolved), line("a.txt", "new", 3));
+    assert_eq!(p.as_array().unwrap().len(), 9);
 
     let (st, e) = ported(&server, id, 9, "");
     assert_eq!(st, 404, "{e}");

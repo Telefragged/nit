@@ -335,6 +335,8 @@ fn contained_diff(
 #[derive(Deserialize)]
 pub(super) struct PortedQuery {
     against: Option<RevisionNumber>,
+    #[serde(default)]
+    include_resolved: bool,
 }
 
 /// `GET /api/changes/{id}/revisions/{n}/ported`.
@@ -348,7 +350,13 @@ pub(super) async fn ported_comments(
         let revs = resolve_revs(&state, &entry, n, q.against)?;
         let (revisions, threads) = {
             let proj = entry.read();
-            (proj.revisions.clone(), proj.threads.clone())
+            let threads: Vec<_> = proj
+                .threads
+                .iter()
+                .filter(|t| q.include_resolved || !t.resolved)
+                .cloned()
+                .collect();
+            (proj.revisions.clone(), threads)
         };
         let repo = open_repo(&revs.git_dir)?;
         let mut ported = port::port_threads(&repo, &revisions, &revs.revision, &threads)?;

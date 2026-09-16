@@ -28,7 +28,7 @@ use super::position::{self, Edit, Span};
 
 /// The threads of earlier revisions, ported to `target`.
 ///
-/// Every unresolved thread written on a revision before `target` comes
+/// Every thread of `threads` written on a revision before `target` comes
 /// back at the place its anchor maps to in `target`'s trees, sorted by
 /// thread id. `revisions` must hold every revision such a thread names.
 ///
@@ -42,10 +42,7 @@ pub fn port_threads(
     threads: &[ThreadProjection],
 ) -> Result<Vec<PortedComment>> {
     let mut by_source: BTreeMap<_, Vec<&ThreadProjection>> = BTreeMap::new();
-    for thread in threads
-        .iter()
-        .filter(|t| t.revision < target.number && !t.resolved)
-    {
+    for thread in threads.iter().filter(|t| t.revision < target.number) {
         by_source.entry(thread.revision).or_default().push(thread);
     }
     let tree =
