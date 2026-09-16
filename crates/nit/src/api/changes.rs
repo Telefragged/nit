@@ -20,6 +20,7 @@ use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
 use nit_types::domain::Tag;
+use nit_types::domain::ThreadOrigin;
 use nit_types::domain::{LogPayload, TagsPayload};
 use nit_types::log::Log;
 
@@ -354,13 +355,22 @@ pub(super) async fn ported_comments(
     with_conn(state.pool(), move |conn| {
         let entry = change_or_404(&state, conn, id)?;
         let revs = resolve_revs(&state, &entry, n, q.against)?;
+        // Only a thread of an earlier revision can port to either target.
+        let latest = revs
+            .against
+            .as_ref()
+            .map_or(revs.revision.number, |m| m.number.max(revs.revision.number));
         let (revisions, threads) = {
             let proj = entry.read();
             let threads: Vec<_> = proj
                 .threads
                 .iter()
-                .filter(|t| q.include_resolved || !t.resolved)
-                .cloned()
+                .filter(|t| t.revision < latest && (q.include_resolved || !t.resolved))
+                .map(|t| ThreadOrigin {
+                    thread_id: t.id,
+                    revision: t.revision,
+                    anchor: t.anchor.clone(),
+                })
                 .collect();
             (proj.revisions.clone(), threads)
         };

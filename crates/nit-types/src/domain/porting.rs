@@ -5,6 +5,16 @@ use serde::{Deserialize, Serialize};
 use super::Anchor;
 use super::RevisionNumber;
 
+/// Where a thread was written: its revision and the anchor it was given.
+///
+/// A port starts here and ends in a [`PortedComment`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThreadOrigin {
+    pub thread_id: u64,
+    pub revision: RevisionNumber,
+    pub anchor: Anchor,
+}
+
 /// A thread's anchor carried to a revision it was not written on.
 ///
 /// The thread keeps the anchor it was written with. `anchor` is where that

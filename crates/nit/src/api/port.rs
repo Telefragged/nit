@@ -19,7 +19,7 @@ use anyhow::{Context, Result};
 use git2::{Delta, Repository, Tree};
 
 use nit_types::domain::{
-    Anchor, CommentRange, LineAnchor, PortedComment, RevisionProjection, Side, ThreadProjection,
+    Anchor, CommentRange, LineAnchor, PortedComment, RevisionProjection, Side, ThreadOrigin,
 };
 
 use super::diff;
@@ -38,9 +38,9 @@ pub fn port_threads(
     repo: &Repository,
     revisions: &[RevisionProjection],
     target: &RevisionProjection,
-    threads: &[ThreadProjection],
+    threads: &[ThreadOrigin],
 ) -> Result<Vec<PortedComment>> {
-    let mut by_source: BTreeMap<_, Vec<&ThreadProjection>> = BTreeMap::new();
+    let mut by_source: BTreeMap<_, Vec<&ThreadOrigin>> = BTreeMap::new();
     for thread in threads.iter().filter(|t| t.revision < target.number) {
         by_source.entry(thread.revision).or_default().push(thread);
     }
@@ -64,7 +64,7 @@ pub fn port_threads(
                 position::buffer_edits(source.message.as_bytes(), target.message.as_bytes());
             for thread in messages {
                 ported.push(PortedComment {
-                    thread_id: thread.id,
+                    thread_id: thread.thread_id,
                     revision: target.number,
                     anchor: port_in_file(&thread.anchor, diff::COMMIT_MSG_PATH, Some(&edits)),
                 });
@@ -91,7 +91,7 @@ pub fn port_threads(
                     .iter()
                     .zip(carried)
                     .map(|(t, anchor)| PortedComment {
-                        thread_id: t.id,
+                        thread_id: t.thread_id,
                         revision: target.number,
                         anchor,
                     }),
