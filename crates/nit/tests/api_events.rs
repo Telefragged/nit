@@ -2,21 +2,30 @@
 
 mod common;
 
-use std::time::Duration;
-
 use common::{
     GitRepo, TestServer, first_repo_id, member_id, msg, push, review, tag_change, ws_entry,
     ws_read, ws_subscribe,
 };
 use serde_json::{Value, json};
 
-const READ: Duration = Duration::from_secs(3);
-
 /// The next frame's `projection`, which must be the next frame.
 fn ws_projection(socket: &mut common::WsSock) -> Value {
-    let frame = ws_read(socket).expect("a frame");
+    let frame = ws_read(socket);
     assert!(frame["projection"].is_object(), "not a projection: {frame}");
     frame["projection"].clone()
+}
+
+/// Publishes a review on `change` and returns the entry the socket reads.
+///
+/// The socket sends its stored entries before any entry published after
+/// it opened, so a stored entry the subscription should not have got
+/// would arrive ahead of this one.
+fn fence(server: &TestServer, socket: &mut common::WsSock, change: u64) -> Value {
+    review(server, change, "comment", "fence");
+    let entry = ws_entry(socket);
+    assert_eq!(entry["change_number"].as_u64(), Some(change));
+    assert_eq!(entry["kind"], "review");
+    entry
 }
 
 /// Without a cursor, a subscription ships the picked change's projection
@@ -33,7 +42,7 @@ fn subscribe_ships_the_projection_then_streams_live() {
     let change_number = member_id(&res, "I001");
 
     let query = json!({ "change": change_number });
-    let mut socket = ws_subscribe(&server, &query, None, READ);
+    let mut socket = ws_subscribe(&server, &query, None);
     let snap = ws_projection(&mut socket);
     assert_eq!(snap["id"], change_number);
     assert_eq!(snap["revisions"].as_array().expect("revisions").len(), 1);
@@ -41,7 +50,7 @@ fn subscribe_ships_the_projection_then_streams_live() {
     assert_eq!(snap["entries_folded"], 1);
 
     review(&server, change_number, "approve", "lgtm");
-    let live = ws_entry(&mut socket).expect("live review entry past the projection");
+    let live = ws_entry(&mut socket);
     assert_eq!(live["kind"], "review");
     assert_eq!(live["position"], 1);
 }
@@ -71,9 +80,9 @@ fn subscribe_by_tag_follows_the_changes_that_carry_the_tags() {
     // The stored entries: the tagged change's revision and tags entries,
     // behind its projection. The revision is included even though it was
     // written before the tag.
-    let mut socket = ws_subscribe(&server, &query, Some(0), READ);
+    let mut socket = ws_subscribe(&server, &query, Some(0));
     assert_eq!(ws_projection(&mut socket)["id"], one);
-    let revision = ws_entry(&mut socket).expect("backlog revision");
+    let revision = ws_entry(&mut socket);
     assert_eq!(
         (
             revision["change_number"].as_u64(),
@@ -81,7 +90,7 @@ fn subscribe_by_tag_follows_the_changes_that_carry_the_tags() {
         ),
         (Some(one), Some("revision"))
     );
-    let tags = ws_entry(&mut socket).expect("backlog tags");
+    let tags = ws_entry(&mut socket);
     assert_eq!(tags["kind"], "tags");
 
     // Same check as `unpicked_changes_are_silent`: the untagged change's
@@ -89,7 +98,7 @@ fn subscribe_by_tag_follows_the_changes_that_carry_the_tags() {
     // before the tagged change's review.
     review(&server, two, "approve", "ok");
     review(&server, one, "request_changes", "fix");
-    let live = ws_entry(&mut socket).expect("live review on the tagged change");
+    let live = ws_entry(&mut socket);
     assert_eq!(live["change_number"], one);
     assert_eq!(live["kind"], "review");
 
@@ -98,30 +107,30 @@ fn subscribe_by_tag_follows_the_changes_that_carry_the_tags() {
     let met = ws_projection(&mut socket);
     assert_eq!(met["id"], two, "the socket meets two at its tags entry");
     assert_eq!(met["entries_folded"], 3, "the projection already holds it");
-    let joined = ws_entry(&mut socket).expect("the tags entry that adds two");
+    let joined = ws_entry(&mut socket);
     assert_eq!(
         (joined["change_number"].as_u64(), joined["kind"].as_str()),
         (Some(two), Some("tags"))
     );
     review(&server, two, "approve", "now followed");
-    let live = ws_entry(&mut socket).expect("live review on the newly tagged change");
+    let live = ws_entry(&mut socket);
     assert_eq!(live["change_number"], two);
     assert_eq!(live["kind"], "review");
 
     // Without a cursor, the subscription announces both picked changes and
     // sends no stored entry.
-    let mut fresh = ws_subscribe(&server, &query, None, Duration::from_millis(400));
+    let mut fresh = ws_subscribe(&server, &query, None);
     assert_eq!(ws_projection(&mut fresh)["id"], one);
     assert_eq!(ws_projection(&mut fresh)["id"], two);
-    assert!(ws_read(&mut fresh).is_none(), "no stored entries");
+    let fenced = fence(&server, &mut fresh, one);
 
     // `after` is exclusive, so a subscription at the last sequence gets the
     // projections and no stored entry.
-    let head = live["sequence"].as_u64().expect("sequence");
-    let mut parked = ws_subscribe(&server, &query, Some(head), Duration::from_millis(400));
+    let head = fenced["sequence"].as_u64().expect("sequence");
+    let mut parked = ws_subscribe(&server, &query, Some(head));
     assert_eq!(ws_projection(&mut parked)["id"], one);
     assert_eq!(ws_projection(&mut parked)["id"], two);
-    assert!(ws_read(&mut parked).is_none(), "no backlog at head");
+    fence(&server, &mut parked, two);
 }
 
 #[test]
@@ -139,7 +148,7 @@ fn unpicked_changes_are_silent() {
     // Subscribe only to change one; reading its projection is the sync
     // point that puts the subscription in place before any review broadcasts.
     let query = json!({ "repo": repo_id, "change_id": common::change_id("I001") });
-    let mut socket = ws_subscribe(&server, &query, None, READ);
+    let mut socket = ws_subscribe(&server, &query, None);
     assert_eq!(ws_projection(&mut socket)["id"], one);
 
     // Review change two (unpicked) then change one (picked). The next frame
@@ -148,7 +157,7 @@ fn unpicked_changes_are_silent() {
     // read-timeout wait.
     review(&server, two, "approve", "ok");
     review(&server, one, "approve", "ok");
-    let frame = ws_entry(&mut socket).expect("review for one");
+    let frame = ws_entry(&mut socket);
     assert_eq!(frame["change_number"], one);
     assert_eq!(frame["kind"], "review");
     assert_eq!(frame["position"], 1);
