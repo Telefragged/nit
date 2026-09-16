@@ -19,6 +19,15 @@ use serde_json::{Value, json};
 /// shas.
 static CLOCK: AtomicI64 = AtomicI64::new(1_700_000_000);
 
+/// `prefix1\nprefix2\n…` over `n`: a file body with one numbered line each.
+pub fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
+    use std::fmt::Write;
+    n.fold(String::new(), |mut s, i| {
+        writeln!(s, "{prefix}{i}").unwrap();
+        s
+    })
+}
+
 pub fn sig() -> Signature<'static> {
     let t = CLOCK.fetch_add(1, Ordering::SeqCst);
     Signature::new("Test", "test@example.com", &Time::new(t, 0)).unwrap()

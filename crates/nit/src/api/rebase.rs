@@ -95,8 +95,7 @@ fn entry_oid(tree: &Tree, path: &str) -> Oid {
 
 /// Every path a tree diff touches, as `(name in old, name in new)`.
 ///
-/// The two differ exactly when rename detection paired a delete with an
-/// add. `paths` bounds the diff as [`diff::git_diff`] takes it.
+/// `paths` bounds the diff as [`diff::git_diff`] takes it.
 fn moves(
     repo: &Repository,
     old: &Tree,
@@ -104,10 +103,9 @@ fn moves(
     paths: Option<&[String]>,
 ) -> Result<Vec<(String, String)>> {
     let diff = diff::git_diff(repo, old, new, paths)?;
-    let name = |f: git2::DiffFile<'_>| f.path().map(|p| p.to_string_lossy().into_owned());
     Ok(diff
         .deltas()
-        .filter_map(|d| Some((name(d.old_file())?, name(d.new_file())?)))
+        .filter_map(|d| diff::delta_names(&d))
         .collect())
 }
 

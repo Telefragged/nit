@@ -15,6 +15,7 @@
 
 pub mod diff;
 mod outline;
+mod port;
 mod position;
 pub mod rebase;
 pub mod state;
@@ -79,6 +80,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/changes/{id}/revisions/{n}/lines",
             get(changes::revision_lines),
+        )
+        .route(
+            "/api/changes/{id}/revisions/{n}/ported",
+            get(changes::ported_comments),
         )
         .route(
             "/api/changes/{id}/drafts",

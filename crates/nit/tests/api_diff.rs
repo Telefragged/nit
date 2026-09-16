@@ -7,16 +7,8 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, change_id, http_get, msg, push, tip_change};
+use common::{GitRepo, TestServer, change_id, http_get, lines, msg, push, tip_change};
 use serde_json::{Value, json};
-
-fn lines(prefix: &str, n: std::ops::RangeInclusive<i64>) -> String {
-    use std::fmt::Write;
-    n.fold(String::new(), |mut s, i| {
-        writeln!(s, "{prefix}{i}").unwrap();
-        s
-    })
-}
 
 /// Revision 0 of the tip change lives here after the first push.
 fn tip_change_number(push_result: &Value) -> u64 {

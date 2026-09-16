@@ -77,6 +77,23 @@ pub fn project_clipped(pos: &Span, mappings: &[Edit]) -> Vec<Span> {
     out
 }
 
+/// Maps `pos` whole into B coordinates, or `None` when a mapping touched it.
+///
+/// The position keeps its length and moves by the net delta of the
+/// mappings above it. A mapping that covers, cuts or splits it means the
+/// lines it named were rewritten, and no span in B is those lines
+/// (gerrit's range conflict). A mapping that ends exactly where the
+/// position starts, or starts where it ends, only shifts it.
+///
+/// `mappings` must be ascending by `before.start` and disjoint, as for
+/// [`project_clipped`].
+pub fn shift(pos: &Span, mappings: &[Edit]) -> Option<Span> {
+    match project_clipped(pos, mappings).as_slice() {
+        [whole] if whole.len() == pos.len() => Some(whole.clone()),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
@@ -157,5 +174,32 @@ pub(super) mod tests {
             project_clipped(&span(1, 9), &[edit((4, 5), (4, 5))]),
             vec![span(1, 4), span(5, 9)]
         );
+    }
+
+    #[test]
+    fn shift_moves_a_whole_position_and_refuses_a_cut_one() {
+        // Two lines inserted above move it down; a deletion above moves it up.
+        assert_eq!(
+            shift(&span(5, 7), &[edit((0, 0), (0, 2))]),
+            Some(span(7, 9))
+        );
+        assert_eq!(
+            shift(&span(8, 9), &[edit((5, 8), (5, 5))]),
+            Some(span(5, 6))
+        );
+        // An insertion at either end of the position touches none of its
+        // lines.
+        assert_eq!(
+            shift(&span(5, 7), &[edit((5, 5), (5, 6))]),
+            Some(span(6, 8))
+        );
+        assert_eq!(
+            shift(&span(5, 7), &[edit((7, 7), (7, 8))]),
+            Some(span(5, 7))
+        );
+        // Covered, cut at one end, or split in the middle: the lines are gone.
+        assert_eq!(shift(&span(5, 7), &[edit((4, 8), (4, 8))]), None);
+        assert_eq!(shift(&span(5, 7), &[edit((6, 8), (6, 8))]), None);
+        assert_eq!(shift(&span(5, 7), &[edit((6, 6), (6, 7))]), None);
     }
 }

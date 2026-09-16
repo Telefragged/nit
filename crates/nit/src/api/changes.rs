@@ -10,7 +10,7 @@ use git2::{Repository, Tree};
 use serde::Deserialize;
 
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList, ChangeQuery};
-use nit_types::changes::{TagList, TagsRequest};
+use nit_types::changes::{PortedComment, TagList, TagsRequest};
 use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
@@ -26,6 +26,7 @@ use crate::db;
 use crate::review;
 
 use super::diff;
+use super::port;
 use super::rebase;
 use super::views;
 use super::{AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, with_conn};
@@ -329,6 +330,34 @@ fn contained_diff(
         wire.files.retain(|file| !file.hunks.is_empty());
     }
     Ok(wire)
+}
+
+#[derive(Deserialize)]
+pub(super) struct PortedQuery {
+    against: Option<RevisionNumber>,
+}
+
+/// `GET /api/changes/{id}/revisions/{n}/ported`.
+pub(super) async fn ported_comments(
+    State(state): State<Arc<AppState>>,
+    AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,
+    AppQuery(q): AppQuery<PortedQuery>,
+) -> Result<Json<Vec<PortedComment>>, Error> {
+    with_conn(state.pool(), move |conn| {
+        let entry = change_or_404(&state, conn, id)?;
+        let revs = resolve_revs(&state, &entry, n, q.against)?;
+        let (revisions, threads) = {
+            let proj = entry.read();
+            (proj.revisions.clone(), proj.threads.clone())
+        };
+        let repo = open_repo(&revs.git_dir)?;
+        let mut ported = port::port_threads(&repo, &revisions, &revs.revision, &threads)?;
+        if let Some(m) = &revs.against {
+            ported.extend(port::port_threads(&repo, &revisions, m, &threads)?);
+        }
+        Ok(Json(ported))
+    })
+    .await
 }
 
 fn at(r: &RevisionProjection) -> rebase::Rev<'_> {

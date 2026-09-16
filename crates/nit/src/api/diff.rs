@@ -100,6 +100,14 @@ pub(super) fn line_edits<T: AsRef<[u8]>>(input: &InternedInput<T>) -> Vec<imara_
     diff.hunks().collect()
 }
 
+/// A delta's two names, `(in old, in new)`.
+///
+/// They differ exactly when rename detection paired a delete with an add.
+pub(super) fn delta_names(delta: &git2::DiffDelta) -> Option<(String, String)> {
+    let name = |f: git2::DiffFile<'_>| f.path().map(|p| p.to_string_lossy().into_owned());
+    Some((name(delta.old_file())?, name(delta.new_file())?))
+}
+
 /// A delta's identity as the wire carries it, with no lines yet.
 ///
 /// Its status, the path it appears under (the new-side name, or the
