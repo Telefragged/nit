@@ -21,7 +21,7 @@ pub struct StatusArgs {
 /// When the server can't be reached or the checkout selects nothing.
 pub fn status(args: StatusArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
-    let selection = args.select.resolve(&client)?;
+    let selection = args.select.resolve(&client, Retry::No)?;
     print_digest(&client, &selection, None, Retry::No)
 }
 

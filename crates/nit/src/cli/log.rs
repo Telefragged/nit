@@ -9,10 +9,10 @@ use anyhow::{Context, Result, anyhow, bail};
 use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::events::{StreamMessage, Subscription};
 
-use super::client::{Client, Retry, ServerOpt, next_text, server_url};
+use super::client::{Client, Retry, ServerOpt, next_text, retry_delay, server_url};
 use super::format::{print_entries, print_oneline_entries};
+use super::format::{render_entries, render_oneline_entries, tagged_digest};
 use super::resolve::{SelectArgs, Selection};
-use super::status::print_digest;
 
 #[derive(clap::Args)]
 #[expect(
@@ -65,28 +65,65 @@ pub fn log(args: LogArgs) -> Result<()> {
         let cursor = follow_cursor(spec)?;
         return Follower {
             client: &client,
-            selection: &args.select.resolve(&client)?,
+            selection: &args.select.resolve(&client, Retry::No)?,
             cursor,
             oneline: args.oneline,
             incoming: args.incoming,
             once: args.wait,
+            sink: &mut |text: &str| {
+                println!("{text}");
+                Ok(())
+            },
         }
-        .run();
+        .run()
+        .map(|_| ());
     }
     let ranges = args
         .ranges
         .iter()
         .map(|s| LogRange::parse(s))
         .collect::<Result<Vec<_>>>()?;
-    let selection = args.select.resolve(&client)?;
+    let selection = args.select.resolve(&client, Retry::No)?;
     let entries: Vec<LogEntry> = selection
         .log(&client, None, Retry::No)?
         .into_iter()
         .filter(|e| ranges.iter().any(|r| r.contains(e.sequence)))
         .filter(|e| !(args.incoming && dropped_by_incoming(e)))
         .collect();
-    print_selected(&entries, args.oneline);
+    if args.oneline {
+        print_oneline_entries(&entries);
+    } else {
+        print_entries(&entries);
+    }
     Ok(())
+}
+
+/// Sends every entry the selection gains to `sink`, and never returns.
+///
+/// This is `--follow` with somewhere other than stdout to write to.
+/// `nit watch` follows this way and sends each batch to the session.
+///
+/// # Errors
+///
+/// When the server returns a malformed response, a fatal client error, or
+/// the sink fails.
+pub(super) fn follow(
+    client: &Client,
+    selection: &Selection,
+    incoming: bool,
+    sink: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    Follower {
+        client,
+        selection,
+        cursor: 0,
+        oneline: false,
+        incoming,
+        once: false,
+        sink,
+    }
+    .run()
+    .map(|_| ())
 }
 
 /// `--follow` and `--wait`: the selection, the cursor, and how to print.
@@ -99,6 +136,9 @@ struct Follower<'a> {
     incoming: bool,
     /// Return after the first batch of new entries. That is `--wait`.
     once: bool,
+    /// Where a printed batch goes. `nit log` writes it to stdout, and
+    /// `nit watch` posts it to the session's inbox.
+    sink: &'a mut dyn FnMut(&str) -> Result<()>,
 }
 
 impl Follower<'_> {
@@ -121,17 +161,24 @@ impl Follower<'_> {
     /// author's own entries move the cursor but do not count as new, so
     /// `--wait` returns only on a review or a lifecycle change.
     ///
+    /// Returns the cursor that the printed batch ended on. Without
+    /// `once` it never returns, because `--follow` runs until it is
+    /// stopped.
+    ///
     /// # Errors
     ///
     /// When the server returns a malformed response, a fatal client error,
     /// or stdout can't be written.
-    fn run(mut self) -> Result<()> {
+    fn run(mut self) -> Result<u64> {
+        // A server that accepts the socket and then drops it, which an
+        // overflowed broadcast does, would otherwise spin the reconnect.
+        let mut silent_reconnects = 0;
         loop {
             let entries = self
                 .selection
                 .log(self.client, Some(self.cursor), Self::RETRY)?;
             if self.print_new(entries)? {
-                return Ok(());
+                return Ok(self.cursor);
             }
             // The socket sends only entries past the cursor, and the caller
             // has printed everything up to it.
@@ -140,7 +187,9 @@ impl Follower<'_> {
                 after: Some(self.cursor),
             };
             let mut socket = self.client.ws_connect(&subscription)?;
+            let mut sent_anything = false;
             while let Some(text) = next_text(&mut socket) {
+                sent_anything = true;
                 let Ok(StreamMessage::Entry(entry)) = serde_json::from_str::<StreamMessage>(&text)
                 else {
                     continue;
@@ -152,8 +201,14 @@ impl Follower<'_> {
                     vec![entry]
                 };
                 if self.print_new(entries)? {
-                    return Ok(());
+                    return Ok(self.cursor);
                 }
+            }
+            if sent_anything {
+                silent_reconnects = 0;
+            } else {
+                std::thread::sleep(retry_delay(silent_reconnects));
+                silent_reconnects += 1;
             }
         }
     }
@@ -173,33 +228,28 @@ impl Follower<'_> {
         if fresh.is_empty() {
             return Ok(false);
         }
+        let mut text = String::new();
         if self.once {
-            print_digest(
-                self.client,
-                self.selection,
+            let changes = self.selection.changes(self.client, Retry::UntilUp)?;
+            text.push_str(&tagged_digest(
+                &self.selection.tags,
+                &changes,
                 Some(self.cursor),
-                Retry::UntilUp,
-            )?;
-            println!("--- new since cursor ---");
-            print_selected(&fresh, self.oneline);
-            return Ok(true);
+            ));
+            text.push_str("--- new since cursor ---\n");
         }
-        print_selected(&fresh, self.oneline);
-        // The full rendering puts a blank line between entries, so put
-        // one after the batch too, before the next batch prints.
-        if !self.oneline {
-            println!();
-        }
-        Ok(false)
+        text.push_str(&render_selected(&fresh, self.oneline));
+        (self.sink)(&text)?;
+        Ok(self.once)
     }
 }
 
-/// Prints the entries, one line each with `oneline`, else in full.
-fn print_selected(entries: &[LogEntry], oneline: bool) {
+/// Renders the entries, one line each with `oneline`, else in full.
+fn render_selected(entries: &[LogEntry], oneline: bool) -> String {
     if oneline {
-        print_oneline_entries(entries);
+        render_oneline_entries(entries)
     } else {
-        print_entries(entries);
+        render_entries(entries)
     }
 }
 

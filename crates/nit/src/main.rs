@@ -39,6 +39,8 @@ enum Cmd {
     Reopen(cli::ReopenArgs),
     /// Inspect and manage registered repositories
     Repo(cli::RepoArgs),
+    /// Wait for the reviewer once and print what they wrote (for a harness hook)
+    Watch(cli::WatchArgs),
 }
 
 fn main() -> Result<()> {
@@ -68,5 +70,6 @@ fn main() -> Result<()> {
         Cmd::Abandon(args) => cli::abandon(args),
         Cmd::Reopen(args) => cli::reopen(args),
         Cmd::Repo(args) => cli::repo(args),
+        Cmd::Watch(args) => cli::watch(args),
     }
 }

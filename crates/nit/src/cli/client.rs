@@ -106,7 +106,7 @@ pub(crate) enum Retry {
     UntilUp,
 }
 
-fn retry_delay(attempt: u32) -> std::time::Duration {
+pub(crate) fn retry_delay(attempt: u32) -> std::time::Duration {
     std::time::Duration::from_secs(1 << attempt.min(4)).min(std::time::Duration::from_secs(10))
 }
 

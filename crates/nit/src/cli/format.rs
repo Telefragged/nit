@@ -51,13 +51,9 @@ impl ChangeTarget {
 ///
 /// One whitespace-separated line per entry keyed by its global `sequence`.
 pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
-    for e in entries {
-        println!(
-            "sequence {}  {}  {}",
-            e.sequence,
-            e.payload.kind().as_str(),
-            entry_summary(e)
-        );
+    let text = render_oneline_entries(entries);
+    if !text.is_empty() {
+        println!("{text}");
     }
 }
 
@@ -323,10 +319,35 @@ fn indent(text: &str, n: usize) -> String {
 
 /// Prints each entry's rich rendering, a blank line between entries.
 pub(crate) fn print_entries(entries: &[LogEntry]) {
-    let blocks: Vec<String> = entries.iter().map(render_entry).collect();
-    if !blocks.is_empty() {
-        println!("{}", blocks.join("\n\n"));
+    let text = render_entries(entries);
+    if !text.is_empty() {
+        println!("{text}");
     }
+}
+
+/// The full rendering of the entries, one blank line between them.
+pub(crate) fn render_entries(entries: &[LogEntry]) -> String {
+    entries
+        .iter()
+        .map(render_entry)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+/// The terse one-line-per-entry rendering (`--oneline`).
+pub(crate) fn render_oneline_entries(entries: &[LogEntry]) -> String {
+    entries
+        .iter()
+        .map(|e| {
+            format!(
+                "sequence {}  {}  {}",
+                e.sequence,
+                e.payload.kind().as_str(),
+                entry_summary(e)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]

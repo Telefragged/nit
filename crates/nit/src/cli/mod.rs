@@ -9,7 +9,8 @@
 //! else its worktree, else its branch. `nit comment` names a change
 //! directly.
 //! `nit log --follow` and `--wait` read the same changes and then wait for
-//! new entries on the websocket.
+//! new entries on the websocket. `nit watch` is one `--wait` with the
+//! cursor kept for it, for a harness hook to run.
 //!
 //! Modules: shared infrastructure (`client` transport, `git` discovery,
 //! `tags` the checkout's tags, `resolve` the selection, `format` digests)
@@ -27,6 +28,7 @@ mod resolve;
 mod status;
 mod tags;
 mod version;
+mod watch;
 
 pub use comment::{CommentArgs, comment};
 pub use lifecycle::{AbandonArgs, ReopenArgs, abandon, reopen};
@@ -35,3 +37,4 @@ pub use push::{PushArgs, push};
 pub use repo::{RepoArgs, repo};
 pub use status::{StatusArgs, status};
 pub use version::version;
+pub use watch::{WatchArgs, watch};

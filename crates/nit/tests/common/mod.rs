@@ -273,7 +273,11 @@ fn nit_command(server: &TestServer, repo: &GitRepo, args: &[&str]) -> std::proce
     cmd.args(args)
         .current_dir(repo.workdir())
         .env("NIT_SERVER", &server.base)
-        .env_remove("CLAUDE_CODE_SESSION_ID");
+        // The suite runs inside a harness of its own. Its session and its
+        // inbox are not the ones a test means to drive.
+        .env_remove("CLAUDE_CODE_SESSION_ID")
+        .env_remove("CLAUDE_CODE_MESSAGING_SOCKET")
+        .env_remove("CLAUDE_CODE_MESSAGING_TOKEN");
     cmd
 }
 
@@ -519,7 +523,7 @@ pub fn sweep(server: &TestServer) {
 /// How long the harness waits before it calls the suite hung: a child that
 /// never exits, or a frame that never arrives. Only a broken test reaches
 /// it, so it is far above anything a loaded machine needs.
-const HANG: Duration = Duration::from_secs(20);
+pub const HANG: Duration = Duration::from_secs(20);
 
 pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 
@@ -569,7 +573,7 @@ pub fn ws_read(socket: &mut WsSock) -> Value {
     }
 }
 
-/// A running `nit` process, so the test can act while a `--wait` waits.
+/// A running `nit` process, so the test can act while a watch runs.
 ///
 /// A reader thread drains each of the child's pipes, so the test wakes on
 /// what the child writes and never on a clock.
@@ -584,7 +588,18 @@ pub struct RunningNit {
 
 /// Spawns `nit` and returns without waiting for it.
 pub fn nit_spawn(server: &TestServer, repo: &GitRepo, args: &[&str]) -> RunningNit {
+    nit_spawn_env(server, repo, args, &[])
+}
+
+/// [`nit_spawn`], with the harness variables a command reads.
+pub fn nit_spawn_env(
+    server: &TestServer,
+    repo: &GitRepo,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> RunningNit {
     let mut child = nit_command(server, repo, args)
+        .envs(env.iter().copied())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -626,7 +641,7 @@ impl RunningNit {
     }
 }
 
-/// Kills the child, so neither a wait a test left running nor its reader
+/// Kills the child, so neither a watch a test left running nor its reader
 /// threads outlive the test that spawned it.
 impl Drop for RunningNit {
     fn drop(&mut self) {

@@ -90,8 +90,8 @@ pub struct SelectArgs {
 
 impl SelectArgs {
     /// Turns the flag, or the checkout, into a [`Selection`].
-    pub(crate) fn resolve(&self, client: &Client) -> Result<Selection> {
-        let (repo_id, repo) = cwd_repo(client)?;
+    pub(crate) fn resolve(&self, client: &Client, retry: Retry) -> Result<Selection> {
+        let (repo_id, repo) = cwd_repo(client, retry)?;
         let tags: Tags = if self.tag.is_empty() {
             let Some(observed) = selection_tag(&repo) else {
                 bail!("nothing to select by: no branch, session, or worktree — pass --tag");
@@ -109,7 +109,7 @@ impl SelectArgs {
 
 /// Resolves a `Change-Id` to its change number, within the cwd's repo.
 pub(crate) fn resolve_change(client: &Client, change_id: &str) -> Result<ChangeNumber> {
-    let (repo_id, _) = cwd_repo(client)?;
+    let (repo_id, _) = cwd_repo(client, Retry::No)?;
     let list: ChangeList = client.get(&format!(
         "/api/changes?repo={repo_id}&change_id={change_id}"
     ))?;
@@ -120,9 +120,9 @@ pub(crate) fn resolve_change(client: &Client, change_id: &str) -> Result<ChangeN
 }
 
 /// The cwd's repo: its id on the server, and the repo itself.
-fn cwd_repo(client: &Client) -> Result<(u64, Repository)> {
+fn cwd_repo(client: &Client, retry: Retry) -> Result<(u64, Repository)> {
     let (git_dir, repo) = discover_repo()?;
-    let list: RepoList = client.get("/api/repos")?;
+    let list: RepoList = client.get_retry("/api/repos", retry)?;
     let repo_id = list
         .repos
         .iter()
