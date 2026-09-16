@@ -93,6 +93,16 @@ describe("repo dashboard change graph", () => {
     expect(screen.queryByRole("option", { name: "branch" })).toBeNull();
   });
 
+  it("breaks the chain where an abandoned change sat", async () => {
+    // Repo 4's gamma session stacks a live change on an abandoned one.
+    renderDashboard(4, "?group=session-id&value=gamma");
+    await screen.findByText("lumen: verify a pinned manifest on read");
+    expect(
+      screen.queryByText("lumen: pin manifests to a content hash"),
+    ).toBeNull();
+    expect(document.querySelector(".graph-break")).not.toBeNull();
+  });
+
   it("restores the last grouping and clears the filter", async () => {
     localStorage.setItem("nit.graph-group.4", "session-id");
     renderDashboard(4, "?value=beta");
