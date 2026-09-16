@@ -84,11 +84,13 @@ describe("repo dashboard change graph", () => {
     expect(document.querySelector(".graph-break")).not.toBeNull();
   });
 
-  it("offers the tag keys the repo's changes carry", async () => {
+  it("offers the tag keys the repo's live changes carry", async () => {
     renderDashboard(4);
     expect(
       await screen.findByRole("option", { name: "session-id" }),
     ).toBeTruthy();
+    // Repo 4 puts `branch` on its abandoned change alone.
+    expect(screen.queryByRole("option", { name: "branch" })).toBeNull();
   });
 
   it("restores the last grouping and clears the filter", async () => {

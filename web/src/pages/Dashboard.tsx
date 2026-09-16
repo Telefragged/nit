@@ -11,16 +11,19 @@ import { useDrafts } from "../lib/useDrafts";
 import { useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
 
-/** Every status but `merged`: the open region derives from active tips, but a
- * walk may pass through an abandoned member (abandonment is
- * membership-inert), so the fetch must resolve those too. */
-const GRAPH_STATUSES: ChangeStatus[] = [
+/** The statuses whose tags the selectors offer: the live ones. A reviewer
+ * restores an abandoned change so rarely that its tags read as gone. */
+const TAG_STATUSES: ChangeStatus[] = [
   "pending",
   "approved",
   "changes_requested",
   "commented",
-  "abandoned",
 ];
+
+/** Every status but `merged`: the open region derives from active tips, but a
+ * walk may pass through an abandoned member (abandonment is
+ * membership-inert), so the fetch must resolve those too. */
+const GRAPH_STATUSES: ChangeStatus[] = [...TAG_STATUSES, "abandoned"];
 
 /** `list`, plus `choice` when the list lacks it. */
 const pinned = (list: string[], choice: string | null): string[] =>
@@ -89,12 +92,10 @@ export default function Dashboard() {
         : undefined,
     [changesQuery.data, historyQuery.data, groupBy],
   );
-  // The selectors offer what an unmerged change carries now, plus the
-  // URL's own choice. The selectors then still show the choice of a stale
-  // link.
+  // The selectors still show the choice a stale link carries.
   const tagsQuery = useQuery({
     queryKey: ["repo-tags", id],
-    queryFn: () => getTags(id, GRAPH_STATUSES),
+    queryFn: () => getTags(id, TAG_STATUSES),
   });
   const tags = tagsQuery.data?.tags ?? {};
   const groupKeys = pinned(Object.keys(tags), groupBy);

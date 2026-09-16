@@ -31,8 +31,9 @@
 //   repo 4 (lumen)  two sessions' stacks off HEAD, tagged `session-id`, one
 //            session's change stacked on the other's tip, and a change whose
 //            parent nit never registered (a torn push): the graph attaches
-//            it to its fork with a break edge. Grouping by `session-id` runs
-//            each session's changes together.
+//            it to its fork with a break edge, and a third session whose
+//            live change stacks on an abandoned one. Grouping by
+//            `session-id` runs each session's changes together.
 //   repo 5 (ledger)  one session's chain of twelve changes (70–81), plus a
 //            merged change (82) the chain no longer sits on and an
 //            abandoned one (83): the review page's tag graph windows the
@@ -1351,6 +1352,7 @@ const changeE: ChangeRecord = {
 //   m → F(60) → G(61) → R(65)      session alpha, then beta's R on top
 //   m → P(63) → Q(64)              session beta
 //   m → (unregistered) → T(62)     beta; T's parent is no revision nit holds
+//   m → S(66) → U(67)              session gamma; S is abandoned
 //
 // T forks from m like F does. Its parent sha names nothing in the repo, so
 // the graph cannot draw the commit between them. A break edge attaches T
@@ -1364,6 +1366,8 @@ const cUnregistered = sha(629);
 const cP = sha(630);
 const cQ = sha(640);
 const cR = sha(650);
+const cS = sha(660);
+const cU = sha(661);
 
 const msgF =
   "lumen: parse the manifest lazily\n\n" +
@@ -1382,6 +1386,12 @@ const msgQ =
   "Change-Id: Iq0055ee66ff778899";
 const msgR =
   "lumen: evict cached manifests by age\n\n" + "Change-Id: Ir0066ff77889900aa";
+const msgS =
+  "lumen: pin manifests to a content hash\n\n" +
+  "Change-Id: Is0077aa88bb99ccdd";
+const msgU =
+  "lumen: verify a pinned manifest on read\n\n" +
+  "Change-Id: Iu0088bb99ccddeeff";
 
 const changeF: ChangeRecord = {
   id: 60,
@@ -1515,6 +1525,51 @@ const changeR: ChangeRecord = {
   },
 };
 
+const changeS: ChangeRecord = {
+  id: 66,
+  repo_id: 4,
+  change_id: changeId("Is0077aa88bb99ccdd"),
+  subject: "lumen: pin manifests to a content hash",
+  terminal: "abandoned",
+  tags: { "session-id": "gamma", branch: "feat/manifest-pin" },
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cS,
+      parent_sha: mLumen,
+      fork_sha: mLumen,
+      message: msgS,
+      created_at: ago(200),
+    },
+  ],
+  reviews: [],
+  diffs: {
+    [diffKey(0)]: trivialDiff(msgS, "src/pin.rs", "pub fn pin() {}"),
+  },
+};
+
+const changeU: ChangeRecord = {
+  id: 67,
+  repo_id: 4,
+  change_id: changeId("Iu0088bb99ccddeeff"),
+  subject: "lumen: verify a pinned manifest on read",
+  tags: { "session-id": "gamma" },
+  revisions: [
+    {
+      number: 0,
+      commit_sha: cU,
+      parent_sha: cS,
+      fork_sha: mLumen,
+      message: msgU,
+      created_at: ago(190),
+    },
+  ],
+  reviews: [],
+  diffs: {
+    [diffKey(0)]: trivialDiff(msgU, "src/pin.rs", "pub fn verify() {}"),
+  },
+};
+
 // ---------------------------------------------------------------------------
 // repo 5 (ledger): session ledger-split, a twelve-change chain off HEAD
 
@@ -1615,6 +1670,8 @@ export const changes: ChangeRecord[] = [
   changeP,
   changeQ,
   changeR,
+  changeS,
+  changeU,
 ];
 
 // ---------------------------------------------------------------------------
