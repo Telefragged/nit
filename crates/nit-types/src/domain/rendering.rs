@@ -43,6 +43,33 @@ pub enum DiffMode {
     Outline,
 }
 
+/// Whether whitespace is part of a line's identity.
+///
+/// `Compare` compares a line as its whole text. `Ignore` compares two
+/// lines as one line when they hold the same characters apart from
+/// whitespace, so the diff does not show a block that was only
+/// re-indented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum Whitespace {
+    #[default]
+    Compare,
+    Ignore,
+}
+
+/// How a reviewer asked for a diff to be drawn.
+///
+/// Each setting is independent, and a request that omits one takes its
+/// default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct DiffView {
+    #[serde(default)]
+    pub mode: DiffMode,
+    #[serde(default)]
+    pub whitespace: Whitespace,
+}
+
 /// A diff line's role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

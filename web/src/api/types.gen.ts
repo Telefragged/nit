@@ -100,6 +100,16 @@ export type LineKind = "context" | "add" | "del";
 export type DiffMode = "full" | "outline";
 
 /**
+ * Whether whitespace is part of a line's identity.
+ *
+ * `Compare` compares a line as its whole text. `Ignore` compares two
+ * lines as one line when they hold the same characters apart from
+ * whitespace, so the diff does not show a block that was only
+ * re-indented.
+ */
+export type Whitespace = "compare" | "ignore";
+
+/**
  * What a `lifecycle` log entry records about a change.
  */
 export type LifecycleAction = "merged" | "abandoned" | "reopened";
