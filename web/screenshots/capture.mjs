@@ -54,6 +54,17 @@ const expandAllFiles = async (page) => {
   await page.waitForTimeout(100);
 };
 
+/** Diff settings live behind the diffbar cog; a capture that wants a
+ * non-default one picks it in the modal and applies. */
+const applySetting = async (page, name) => {
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name }).click();
+  await page.getByRole("button", { name: "Apply" }).click();
+  // Apply and the dismissal commit together, so the modal leaving the DOM
+  // says the new setting has rendered.
+  await page.waitForSelector(".settings-modal", { state: "detached" });
+};
+
 /**
  * Page states to capture. `actions` runs after load to put the page into a
  * specific state (toggles, editors, error paths). Add an entry whenever a
@@ -229,6 +240,16 @@ const captures = [
       await page.waitForSelector(".comment-resolution-only");
     },
   },
+  // The diffbar cog's settings popup, holding the diff knobs.
+  {
+    name: "review-settings",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await page.getByRole("button", { name: "Settings" }).click();
+      await page.waitForSelector(".settings-modal");
+    },
+  },
   // Side-by-side, base → r1: new-side drafts sit under the right column,
   // the old-side draft under the left.
   {
@@ -236,8 +257,7 @@ const captures = [
     path: "/changes/11?against=base",
     actions: async (page) => {
       await expandAllFiles(page);
-      await page.getByRole("button", { name: "Side-by-side" }).click();
-      await page.waitForTimeout(200);
+      await applySetting(page, "Side-by-side");
     },
   },
   // Side-by-side with an old-column selection: only the left (selected)
@@ -250,8 +270,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await expandAllFiles(page);
-      await page.getByRole("button", { name: "Side-by-side" }).click();
-      await page.waitForTimeout(200);
+      await applySetting(page, "Side-by-side");
       await page.evaluate(() => {
         // Select three consecutive old-side context lines within one file
         // (context lines have aligned text on both columns, so a stray
@@ -285,8 +304,7 @@ const captures = [
     path: "/changes/11?against=0",
     actions: async (page) => {
       await expandAllFiles(page);
-      await page.getByRole("button", { name: "Side-by-side" }).click();
-      await page.waitForTimeout(200);
+      await applySetting(page, "Side-by-side");
     },
   },
   // Rebase drift contained: in the r0 → r1 interdiff, src/auth/store.rs
@@ -517,8 +535,7 @@ const captures = [
     path: "/changes/11?against=0",
     actions: async (page) => {
       await expandAllFiles(page);
-      await page.getByRole("button", { name: "Side-by-side" }).click();
-      await page.waitForTimeout(200);
+      await applySetting(page, "Side-by-side");
       await page.evaluate(() => {
         const oldCell = [
           ...document.querySelectorAll('.code[data-side="old"] .code-text'),

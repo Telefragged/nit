@@ -124,6 +124,8 @@
 }
 
 .diffbar-toggles {
+  display: flex;
+  align-items: center;
   margin-left: auto;
 }
 
@@ -152,15 +154,66 @@
   background: var(--bg-inset);
 }
 
+.settings-cog {
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.settings-cog:hover:not(:disabled) {
+  background: none;
+  border: none;
+  color: var(--text);
+}
+
+.settings-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 36px rgb(0 0 0 / 60%);
+}
+
+.settings-modal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.settings-knob {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.settings-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.settings-modal-actions .spacer {
+  flex: 1;
+}
+
 .seg {
   display: inline-flex;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   overflow: hidden;
-}
-
-.seg + .seg {
-  margin-left: 10px;
 }
 
 .seg button {

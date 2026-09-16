@@ -528,6 +528,52 @@ describe("the s key submits the listed changes' draft decisions", () => {
   });
 });
 
+// An open modal owns the keyboard: its dialog is in the top layer, but the
+// page's window listener still hears every keystroke.
+describe("the page shortcuts while the settings popup is open", () => {
+  beforeEach(() => {
+    HTMLDialogElement.prototype.showModal = function () {
+      this.open = true;
+    };
+  });
+
+  let path = "";
+  function LocationProbe() {
+    const loc = useLocation();
+    path = loc.pathname;
+    return null;
+  }
+
+  function renderChange11() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/changes/11?against=base"]}>
+          <LocationProbe />
+          <Routes>
+            <Route path="/changes/:id" element={<ReviewPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("navigates on n, and stops once the popup opens", async () => {
+    renderChange11();
+    await diffLoaded("src/auth/store.rs");
+
+    fireEvent.keyDown(window, { key: "n" });
+    const moved = path;
+    expect(moved).not.toBe("/changes/11");
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.keyDown(window, { key: "n" });
+    expect(path).toBe(moved);
+  });
+});
+
 // Counting comments pinned to a hidden revision would lie about what's shown.
 describe("comment counts in the file headers", () => {
   const fcomments = (i: number): string | null =>

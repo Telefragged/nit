@@ -18,7 +18,6 @@ import { createDraft, getChangeDrafts, getDiff, getRepo } from "../api/client";
 import { tagGraph } from "../api/fold";
 import type {
   ChangeDetail,
-  DiffMode,
   Review,
   Revision,
   Subscription,
@@ -33,6 +32,7 @@ import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
 import FileRail from "../components/diff/FileRail";
 import ReviewBar from "../components/ReviewBar";
+import ReviewSettingsMenu from "../components/ReviewSettings";
 import {
   allExpanded,
   collapseAll,
@@ -67,15 +67,12 @@ import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
 import { useChangeStream } from "../lib/useChangeStream";
 import { useDrafts } from "../lib/useDrafts";
+import { useReviewSettings } from "../lib/reviewSettings";
 import { useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
 import { targetLine, type DraftTarget, type ReviewCtx } from "./reviewContext";
 import { ReviewContext, sameTarget } from "./reviewContext";
 
-const LAYOUT_KEY = "nit.diff-layout";
-type Layout = "unified" | "split";
-
-const MODE_KEY = "nit.diff-mode";
 const TAG_KEY = "nit.review-tag";
 
 /** The tag the sidebar follows: the reviewer's last key when the change
@@ -275,16 +272,8 @@ export default function ReviewPage() {
     queryFn: published ? () => getRepo(published.repo_id) : skipToken,
   });
 
-  const [layout, setLayout] = useState<Layout>(() =>
-    localStorage.getItem(LAYOUT_KEY) === "split" ? "split" : "unified",
-  );
-  const [mode, setMode] = useState<DiffMode>(() =>
-    localStorage.getItem(MODE_KEY) === "outline" ? "outline" : "full",
-  );
-  const chooseMode = useCallback((next: DiffMode) => {
-    setMode(next);
-    localStorage.setItem(MODE_KEY, next);
-  }, []);
+  const [settings, saveSettings] = useReviewSettings();
+  const { mode, layout } = settings;
   const [editingTarget, setEditingTarget] = useState<DraftTarget | null>(null);
   const editorDirty = useRef(false);
   const diffColumnRef = useRef<HTMLDivElement>(null);
@@ -574,12 +563,12 @@ export default function ReviewPage() {
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
   // expanded, then scrolled), n / shift+n next/previous change, r the latest
   // revision, c comments on the selected diff text, a opens the reply modal.
-  // All inert while the
-  // modal is open — it is a showModal() dialog, so it owns the keyboard
-  // (Escape arrives as its cancel event) and the page behind it is inert.
+  // All inert while a modal is open — a showModal() dialog owns the keyboard
+  // (Escape arrives as its cancel event), but window listeners still fire, so
+  // the open dialog itself is the gate.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (replyOpen) return;
+      if (document.querySelector("dialog[open]")) return;
       const key = shortcutKey(e);
       if (key === "[" || key === "]") {
         if (fileCount === 0) return;
@@ -628,7 +617,10 @@ export default function ReviewPage() {
         e.preventDefault();
         setReplyOpen(true);
       } else if (key === "0") {
-        chooseMode(mode === "outline" ? "full" : "outline");
+        saveSettings({
+          ...settings,
+          mode: settings.mode === "outline" ? "full" : "outline",
+        });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -642,11 +634,10 @@ export default function ReviewPage() {
     rowIds,
     changeNumber,
     navigate,
-    replyOpen,
     ctxValue,
     diffKey,
-    mode,
-    chooseMode,
+    settings,
+    saveSettings,
     selected,
     latestRevision,
     onRight,
@@ -782,11 +773,6 @@ export default function ReviewPage() {
     ([path]) => !files.some((f) => f.path === path),
   );
 
-  const setLayoutPersist = (l: Layout) => {
-    setLayout(l);
-    localStorage.setItem(LAYOUT_KEY, l);
-  };
-
   return (
     <ReviewContext.Provider value={ctxValue}>
       <main className="page-wide review-page">
@@ -863,44 +849,7 @@ export default function ReviewPage() {
               <kbd>shift+n</kbd> changes · <kbd>r</kbd> latest revision ·{" "}
               <kbd>c</kbd> comment · <kbd>a</kbd> reply · <kbd>0</kbd> outline
             </span>
-            <span className="seg">
-              <button
-                className={mode === "full" ? "active" : ""}
-                onClick={() => {
-                  chooseMode("full");
-                }}
-                title="Every line the change touched (0)"
-              >
-                Full
-              </button>
-              <button
-                className={mode === "outline" ? "active" : ""}
-                onClick={() => {
-                  chooseMode("outline");
-                }}
-                title="Every function body collapsed, leaving signatures (0)"
-              >
-                Outline
-              </button>
-            </span>
-            <span className="seg">
-              <button
-                className={layout === "unified" ? "active" : ""}
-                onClick={() => {
-                  setLayoutPersist("unified");
-                }}
-              >
-                Unified
-              </button>
-              <button
-                className={layout === "split" ? "active" : ""}
-                onClick={() => {
-                  setLayoutPersist("split");
-                }}
-              >
-                Side-by-side
-              </button>
-            </span>
+            <ReviewSettingsMenu settings={settings} onApply={saveSettings} />
           </div>
         </div>
 
