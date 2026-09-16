@@ -14,7 +14,7 @@ use serde_json::Value;
 
 use common::{
     GitRepo, HANG, TestServer, change_by_label, first_repo_id, get_changes, msg, nit, nit_register,
-    nit_spawn_env, review,
+    nit_spawn, review,
 };
 
 /// A stand-in for the session's inbox socket.
@@ -98,7 +98,7 @@ fn session() -> (GitRepo, TestServer, Inbox, u64) {
 fn watch_posts_a_review_to_the_inbox() {
     let (g, server, inbox, change_number) = session();
 
-    let _watch = nit_spawn_env(&server, &g, &inbox.args(), &[]);
+    let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
     review(&server, change_number, "request_changes", "fix the unwrap");
 
     let text = posted_text(&inbox.next());
@@ -117,7 +117,7 @@ fn watch_posts_a_review_of_a_change_pushed_after_it_started() {
     let (g, server, inbox, _) = session();
     let head = g.tip("feat");
 
-    let _watch = nit_spawn_env(&server, &g, &inbox.args(), &[]);
+    let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
     let c2 = g.commit(&[head], &msg("two", "I002"), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
     let (ok, _, err) = nit(&server, &g, &["push"]);
@@ -140,7 +140,7 @@ fn watch_posts_a_review_of_a_change_pushed_after_it_started() {
 fn watch_opens_with_the_token_the_harness_exports() {
     let (g, server, inbox, change_number) = session();
 
-    let _watch = nit_spawn_env(
+    let _watch = nit_spawn(
         &server,
         &g,
         &inbox.args(),
@@ -159,7 +159,7 @@ fn watch_opens_with_the_token_the_harness_exports() {
 fn a_second_watch_leaves_the_session_to_the_first() {
     let (g, server, inbox, change_number) = session();
 
-    let _watch = nit_spawn_env(&server, &g, &inbox.args(), &[]);
+    let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
     review(&server, change_number, "request_changes", "fix the unwrap");
     // The first watch holds the lock once it has posted.
     inbox.next();

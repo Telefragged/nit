@@ -23,9 +23,9 @@ nit --version        # client + server build; non-zero exit if the server is dow
 Author loop (any tool that can run shell commands):
 
 ```sh
+nit watch            # background: post the reviewer's entries to this session
 nit push             # register the checked-out commit and its chain for review
-nit log --wait 0     # block until the reviewer acts; prints the digest and the entries
-# fix → amend the commit (keep its Change-Id) → nit push → nit log --wait N → …
+# fix → amend the commit (keep its Change-Id) → nit push → …
 # all approved → merge
 ```
 
@@ -52,12 +52,9 @@ tag feature=epic-saga
 `GET /api/log?repo={id}&tag=…` reads their log as one, and
 `GET /api/tags?repo={id}` lists the keys and values in use.
 
-With a cooperative monitor, tail instead of blocking on `--wait`. The
-monitor follows the session, new commits included:
-
-```sh
-nit log --follow --incoming   # stream the reviews and the lifecycle as they land
-```
+`nit watch` follows the session, new commits included, and posts each review
+and lifecycle change to the agent that started it. It needs a harness that
+exports an inbox socket, or `--inbox <path>`.
 
 Details for agents: the `nit` plugin's `lifecycle` and `comment` skills, and
 `nit --help`.

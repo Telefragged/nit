@@ -8,9 +8,8 @@
 //! comes from `--tag`, or else from the checkout: its harness session,
 //! else its worktree, else its branch. `nit comment` names a change
 //! directly.
-//! `nit log --follow` and `--wait` read the same changes and then wait for
-//! new entries on the websocket. `nit watch` is one `--wait` with the
-//! cursor kept for it, for a harness hook to run.
+//! `nit watch` reads the same changes and then follows new entries on the
+//! websocket, posting each one to the session that runs it.
 //!
 //! Modules: shared infrastructure (`client` transport, `git` discovery,
 //! `tags` the checkout's tags, `resolve` the selection, `format` digests)

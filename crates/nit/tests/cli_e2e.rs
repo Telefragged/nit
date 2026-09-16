@@ -1,7 +1,7 @@
 //! End-to-end CLI: the real `nit` binary (`CARGO_BIN_EXE`) run from inside a
 //! fixture repo against a real server. The author drives push / status /
-//! log / comment / reopen one-shot (the live followers `nit log --follow` /
-//! `--wait` live in `cli_wait.rs`).
+//! log / comment / reopen one-shot (the live follower lives in
+//! `cli_watch.rs`).
 //!
 //! `nit push` walks the change-centric model: oldest-first, upsert each change
 //! by its `Change-Id`, append a revision iff the sha moved. `nit status`

@@ -51,9 +51,13 @@ impl ChangeTarget {
 ///
 /// One whitespace-separated line per entry keyed by its global `sequence`.
 pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
-    let text = render_oneline_entries(entries);
-    if !text.is_empty() {
-        println!("{text}");
+    for e in entries {
+        println!(
+            "sequence {}  {}  {}",
+            e.sequence,
+            e.payload.kind().as_str(),
+            entry_summary(e)
+        );
     }
 }
 
@@ -83,23 +87,13 @@ fn entry_summary(entry: &LogEntry) -> String {
 
 /// The digest of the changes a tag selects.
 ///
-/// Prints a `cursor=` line when the caller gives a cursor, then one
-/// `tag key=value` line per selecting tag, then one aligned line per
-/// change: `number change_id status rN Nu subject`. The changes stay in
+/// Prints one `tag key=value` line per selecting tag, then one aligned
+/// line per change: `number change_id status rN Nu subject`. The changes stay in
 /// the server's order, ascending by change number. The number is the one
 /// `nit comment --change` takes. `status` is the change's status at its
 /// latest revision and `Nu` its unresolved threads over every revision.
-pub(crate) fn tagged_digest(
-    tags: &Tags,
-    changes: &[ChangeProjection],
-    cursor: Option<u64>,
-) -> String {
+pub(crate) fn tagged_digest(tags: &Tags, changes: &[ChangeProjection]) -> String {
     use std::fmt::Write;
-    let headers: Vec<String> = cursor
-        .map(|sequence| format!("cursor={sequence}"))
-        .into_iter()
-        .chain(tags.spelled().map(|tag| format!("tag {tag}")))
-        .collect();
     let (cells, subjects): (Vec<[String; 5]>, Vec<String>) = changes
         .iter()
         .map(|c| {
@@ -116,8 +110,8 @@ pub(crate) fn tagged_digest(
         .unzip();
     let inf = "write to String is infallible";
     let mut out = String::new();
-    for header in headers {
-        writeln!(out, "{header}").expect(inf);
+    for tag in tags.spelled() {
+        writeln!(out, "tag {tag}").expect(inf);
     }
     let widths = column_widths(&cells);
     for (cols, subject) in cells.iter().zip(&subjects) {
@@ -334,22 +328,6 @@ pub(crate) fn render_entries(entries: &[LogEntry]) -> String {
         .join("\n\n")
 }
 
-/// The terse one-line-per-entry rendering (`--oneline`).
-pub(crate) fn render_oneline_entries(entries: &[LogEntry]) -> String {
-    entries
-        .iter()
-        .map(|e| {
-            format!(
-                "sequence {}  {}  {}",
-                e.sequence,
-                e.payload.kind().as_str(),
-                entry_summary(e)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,14 +523,10 @@ mod tests {
         // The count spans every revision: the open thread on revision 0
         // counts with the one on revision 1.
         assert_eq!(
-            tagged_digest(&tags(&[("branch", "track/a")]), &changes, None),
+            tagged_digest(&tags(&[("branch", "track/a")]), &changes),
             "tag branch=track/a\n\
              2   Iabcdef0  merged   r0  0u  web: render\n\
              12  I0123456  pending  r1  2u  server: add health\n"
-        );
-        assert!(
-            tagged_digest(&tags(&[("branch", "track/a")]), &changes, Some(14))
-                .starts_with("cursor=14\ntag branch=track/a\n")
         );
     }
 }

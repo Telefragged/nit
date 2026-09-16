@@ -102,7 +102,7 @@ pub(crate) enum Retry {
     ///
     /// An immediate "is 'nit serve' running?" beats hanging.
     No,
-    /// Keep retrying with backoff (`--wait`/`--follow` during a server restart).
+    /// Keep retrying with backoff (`nit watch`, across a server restart).
     UntilUp,
 }
 

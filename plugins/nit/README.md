@@ -38,10 +38,11 @@ way the `/nit:lifecycle` skill tells it to. Every review, comment and lifecycle
 change from the reviewer then arrives in that session as a message, and the
 agent acts on it without a prompt from you.
 
-`nit watch` is `nit log --follow --incoming` posted to the session's own
-[inbox socket](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)
-rather than printed. It runs as a child of the session, so it lives exactly as
-long as the session does, however long that session idles.
+`nit watch` follows the changes the session pushed and posts each review to the
+session's own
+[inbox socket](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket).
+It runs as a child of the session, so it lives exactly as long as the session
+does, however long that session idles.
 
 ## Commands — things you initiate
 

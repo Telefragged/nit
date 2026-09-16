@@ -586,13 +586,9 @@ pub struct RunningNit {
     stderr: std::sync::mpsc::Receiver<String>,
 }
 
-/// Spawns `nit` and returns without waiting for it.
-pub fn nit_spawn(server: &TestServer, repo: &GitRepo, args: &[&str]) -> RunningNit {
-    nit_spawn_env(server, repo, args, &[])
-}
-
-/// [`nit_spawn`], with the harness variables a command reads.
-pub fn nit_spawn_env(
+/// Spawns `nit` with the harness variables it reads, and returns without
+/// waiting for it.
+pub fn nit_spawn(
     server: &TestServer,
     repo: &GitRepo,
     args: &[&str],

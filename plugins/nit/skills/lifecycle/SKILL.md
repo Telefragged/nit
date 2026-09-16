@@ -38,17 +38,16 @@ Start the watch as the first thing you do in a session, before any push:
 nit watch      # background Bash, from the worktree
 ```
 
-Run it as a **background** command and never stop it. `nit watch` is
-`nit log --follow --incoming` pointed at this session, so every review,
-comment and lifecycle change from the reviewer arrives here as a message. The
+Run it as a **background** command and never stop it. It follows the changes
+your session pushed, so every review, comment and lifecycle change from the
+reviewer arrives here as a message. The
 message carries the cover message and every comment with its file and line, so
 you act on it directly. It runs until the session ends, however long the
 session idles.
 
-Start it once. A second `nit watch` in the same session sees the first one's
-lock and returns, so it delivers nothing. It follows the changes your session
-pushed, so a commit you add or reorder later is covered too. Outside a harness
-that exports an inbox socket it returns at once and watches nothing.
+Start it once. A second `nit watch` in the same session says so and leaves, so
+it delivers nothing. A commit you add or reorder later belongs to the session
+too, so it is covered without restarting anything.
 
 What the watch delivers comes from nit, whatever Claude Code labels it. A
 verdict is a reviewer's decision, and **Acting on status** below says what

@@ -60,7 +60,7 @@ pub fn push(args: PushArgs) -> Result<()> {
     let pushed: HashSet<ChangeNumber> = result.changes.iter().map(|c| c.change_number).collect();
     let mut changes = selection.changes(&client, Retry::No)?;
     changes.retain(|c| pushed.contains(&c.id));
-    print!("{}", tagged_digest(&selection.tags, &changes, None));
+    print!("{}", tagged_digest(&selection.tags, &changes));
     Ok(())
 }
 

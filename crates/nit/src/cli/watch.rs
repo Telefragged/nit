@@ -19,9 +19,13 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
 
-use super::client::{Client, Retry, ServerOpt, server_url};
-use super::log::follow;
-use super::resolve::SelectArgs;
+use nit_types::domain::{LogEntry, LogPayload};
+use nit_types::events::{StreamMessage, Subscription};
+
+use super::client::{Client, Retry, ServerOpt, next_text, retry_delay, server_url};
+use super::format::render_entries;
+use super::log::dropped_by_incoming;
+use super::resolve::{SelectArgs, Selection};
 
 /// What Claude Code calls the inbox socket it exports to every command.
 const SOCKET_VAR: &str = "CLAUDE_CODE_MESSAGING_SOCKET";
@@ -68,9 +72,105 @@ pub fn watch(args: WatchArgs) -> Result<()> {
     // The watch rides out a server restart for its whole life, so it
     // waits for a server that is not up yet either.
     let selection = args.select.resolve(&client, Retry::UntilUp)?;
-    follow(&client, &selection, true, &mut |text| {
-        inbox.post(&format!("{LEAD}\n\n{text}"))
-    })
+    Follower {
+        client: &client,
+        selection: &selection,
+        inbox: &inbox,
+        cursor: 0,
+    }
+    .run()
+}
+
+/// The selection being followed, and the inbox its entries go to.
+struct Follower<'a> {
+    client: &'a Client,
+    selection: &'a Selection,
+    inbox: &'a Inbox,
+    /// The highest `sequence` seen. Entries above it are new.
+    cursor: u64,
+}
+
+impl Follower<'_> {
+    /// A follower rides out a server restart.
+    const RETRY: Retry = Retry::UntilUp;
+
+    /// Sends the selection's entries past the cursor, then each new one
+    /// as it arrives. Never returns.
+    ///
+    /// It reads the log past the cursor and sends the new entries. Then
+    /// it opens a websocket and sends each entry the server writes. A
+    /// `tags` entry can be the first the socket sends for a change,
+    /// because the change got the tag with that entry, and its earlier
+    /// entries exist only in the log. So a `tags` frame makes it read the
+    /// log past the cursor again. A closed socket (a server restart) makes
+    /// it start over.
+    ///
+    /// The author's own entries move the cursor but count as nothing
+    /// new, so only a review or a lifecycle change reaches the agent.
+    ///
+    /// # Errors
+    ///
+    /// When the server returns a malformed response, a fatal client
+    /// error, or the inbox refuses a message.
+    fn run(mut self) -> Result<()> {
+        // A server that accepts the socket and then drops it, which an
+        // overflowed broadcast does, would otherwise spin the reconnect.
+        let mut silent_reconnects = 0;
+        loop {
+            let entries = self
+                .selection
+                .log(self.client, Some(self.cursor), Self::RETRY)?;
+            self.send_new(entries)?;
+            // The socket sends only entries past the cursor, and the caller
+            // has taken everything up to it.
+            let subscription = Subscription {
+                query: self.selection.change_query(),
+                after: Some(self.cursor),
+            };
+            let mut socket = self.client.ws_connect(&subscription)?;
+            let mut sent_anything = false;
+            while let Some(text) = next_text(&mut socket) {
+                sent_anything = true;
+                let Ok(StreamMessage::Entry(entry)) = serde_json::from_str::<StreamMessage>(&text)
+                else {
+                    continue;
+                };
+                let entries = if matches!(entry.payload, LogPayload::Tags(_)) {
+                    self.selection
+                        .log(self.client, Some(self.cursor), Self::RETRY)?
+                } else {
+                    vec![entry]
+                };
+                self.send_new(entries)?;
+            }
+            if sent_anything {
+                silent_reconnects = 0;
+            } else {
+                std::thread::sleep(retry_delay(silent_reconnects));
+                silent_reconnects += 1;
+            }
+        }
+    }
+
+    /// Sends the entries past the cursor and moves the cursor past them.
+    fn send_new(&mut self, entries: Vec<LogEntry>) -> Result<()> {
+        let since = self.cursor;
+        self.cursor = max_seq(&entries).max(since);
+        let fresh: Vec<LogEntry> = entries
+            .into_iter()
+            .filter(|e| e.sequence > since)
+            .filter(|e| !dropped_by_incoming(e))
+            .collect();
+        if fresh.is_empty() {
+            return Ok(());
+        }
+        self.inbox
+            .post(&format!("{LEAD}\n\n{}", render_entries(&fresh)))
+    }
+}
+
+fn max_seq(entries: &[LogEntry]) -> u64 {
+    entries.iter().map(|e| e.sequence).max().unwrap_or(0)
 }
 
 /// The session's inbox: where to post, and what proves who posts.

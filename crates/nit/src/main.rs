@@ -29,7 +29,7 @@ enum Cmd {
     Push(cli::PushArgs),
     /// Print one line per selected change: the branch's, or --tag
     Status(cli::StatusArgs),
-    /// Print the selected changes' log; --follow to stream, --wait to drain and exit
+    /// Print the selected changes' log
     Log(cli::LogArgs),
     /// Comment on a change (--change / --change-id): open a thread or reply (--thread)
     Comment(cli::CommentArgs),
@@ -39,7 +39,7 @@ enum Cmd {
     Reopen(cli::ReopenArgs),
     /// Inspect and manage registered repositories
     Repo(cli::RepoArgs),
-    /// Wait for the reviewer once and print what they wrote (for a harness hook)
+    /// Follow the reviewer's entries and post each one to this session
     Watch(cli::WatchArgs),
 }
 
