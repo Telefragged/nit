@@ -27,6 +27,7 @@ import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
   intralineMarks,
+  oneSided,
   pairLines,
   rangeSliceOnLine,
   type RowPair,
@@ -227,6 +228,10 @@ export default function DiffFileView({
 
   const expansion = useHunkExpansion(file, ctx);
   const { hunks } = expansion;
+
+  // Side-by-side would leave one of a one-sided file's columns blank and
+  // squeeze its text into the half beside it.
+  const rendered = oneSided(file) ? "unified" : layout;
 
   // Intraline emphasis for modified line pairs, per hunk (keyed by line
   // object identity, so unified and split rows share the same map).
@@ -594,9 +599,9 @@ export default function DiffFileView({
           ) : (
             <div
               className={`diff-grid ${
-                layout === "split" ? "diff-grid-split" : "diff-grid-unified"
+                rendered === "split" ? "diff-grid-split" : "diff-grid-unified"
               }`}
-              onMouseDown={layout === "split" ? lockSelectionSide : undefined}
+              onMouseDown={rendered === "split" ? lockSelectionSide : undefined}
             >
               {hunks.map((hunk, hi) => (
                 <Fragment key={hi}>
@@ -606,7 +611,7 @@ export default function DiffFileView({
                     sep={hi}
                     expansion={expansion}
                   />
-                  {layout === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
+                  {rendered === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
                 </Fragment>
               ))}
               {/* The run below the last hunk reveals from its top only (no

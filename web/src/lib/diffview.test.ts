@@ -4,6 +4,7 @@ import { COMMIT_MSG_PATH } from "../api/types";
 import {
   gapLines,
   intralineMarks,
+  oneSided,
   pairLines,
   rangeSliceOnLine,
   skipped,
@@ -276,5 +277,15 @@ describe("treeOrder", () => {
     const input = [file("b.rs"), file("a.rs")];
     treeOrder(input);
     expect(input.map((f) => f.path)).toEqual(["b.rs", "a.rs"]);
+  });
+});
+
+describe("oneSided", () => {
+  it("reads the totals, so a file emptied to nothing counts", () => {
+    expect(oneSided({ old_total: 3, new_total: 0 })).toBe(true);
+  });
+
+  it("is false while both sides carry lines", () => {
+    expect(oneSided({ old_total: 3, new_total: 4 })).toBe(false);
   });
 });

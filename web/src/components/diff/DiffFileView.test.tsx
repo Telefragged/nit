@@ -8,6 +8,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { msgFile } from "../../api/fixtures/builders";
 import type { DiffFile } from "../../api/types";
 import { EXPAND_STEP } from "../../lib/useHunkExpansion";
 import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
@@ -262,5 +263,18 @@ describe("a file the change only renamed", () => {
     const { container } = renderFile("unified", clean);
     expect(container.querySelector(".file-section")).not.toBeNull();
     expect(container.textContent).toContain("No changed lines to show");
+  });
+});
+
+describe("a file with lines on one side only", () => {
+  it("takes the whole width under a split layout", () => {
+    const { container } = renderFile("split", msgFile("auth: rotate tokens"));
+    expect(container.querySelector(".diff-grid-unified")).not.toBeNull();
+    expect(container.querySelector(".code.half")).toBeNull();
+  });
+
+  it("leaves a file with both sides split", () => {
+    const { container } = renderFile("split");
+    expect(container.querySelector(".diff-grid-split")).not.toBeNull();
   });
 });

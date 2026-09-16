@@ -210,6 +210,13 @@ export function span(hunk: Hunk, side: Side): [number, number] {
 /** The two line counts that say where a file ends on each side. */
 export type Totals = Pick<DiffFile, "old_total" | "new_total">;
 
+/** Whether the file holds lines on one side only: an addition, a
+ * deletion, or a commit message read against its parent. A binary file
+ * declares no lines on either side, so it answers true as well. */
+export function oneSided(file: Totals): boolean {
+  return file.old_total === 0 || file.new_total === 0;
+}
+
 /** The file's line count on `side`. */
 const total = (file: Totals, side: Side) =>
   side === "old" ? file.old_total : file.new_total;
