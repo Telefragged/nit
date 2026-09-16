@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { LineAnchor, Side } from "../api/types";
+import type { LineAnchor, Side, Whitespace } from "../api/types";
 import { placementLine, type DiffRange } from "../lib/comments";
 
 /** Anchor of the draft editor currently open in the diff. */
@@ -40,6 +40,9 @@ export interface ReviewCtx {
   against: number | undefined;
   /** The change's newest revision. */
   latestRevision: number;
+  /** How the diff on screen compares whitespace. A reveal reads the file
+   * the same way, so a revealed line matches the hunks around it. */
+  whitespace: Whitespace;
   /** Shows a diff range the page computed for a thread (`rangeSince`). It
    * runs the same draft-editor guard as the range selects. */
   showRange: (range: DiffRange) => void;

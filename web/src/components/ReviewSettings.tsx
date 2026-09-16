@@ -48,6 +48,19 @@ const PORTED_OPTIONS: Option<ReviewSettings["ported"]>[] = [
   },
 ];
 
+const WHITESPACE_OPTIONS: Option<ReviewSettings["whitespace"]>[] = [
+  {
+    value: "compare",
+    label: "Compare",
+    title: "Whitespace makes two lines different",
+  },
+  {
+    value: "ignore",
+    label: "Ignore",
+    title: "Two lines that differ only in whitespace are one line",
+  },
+];
+
 /** One knob: a label and a segmented control over its options. */
 function Knob<T extends string>({
   label,
@@ -140,6 +153,14 @@ export default function ReviewSettingsMenu({
             options={MODE_OPTIONS}
             onChange={(mode) => {
               setDraft({ ...draft, mode });
+            }}
+          />
+          <Knob
+            label="Whitespace"
+            value={draft.whitespace}
+            options={WHITESPACE_OPTIONS}
+            onChange={(whitespace) => {
+              setDraft({ ...draft, whitespace });
             }}
           />
           <Knob

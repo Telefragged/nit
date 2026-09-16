@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { DiffMode } from "../api/types";
+import type { DiffMode, Whitespace } from "../api/types";
 
 const KEY = "nit.review-settings";
 
@@ -13,12 +13,15 @@ export interface ReviewSettings {
   /** Which threads of earlier revisions are ported into the shown range:
    * `open` the unresolved ones, `all` the resolved ones too. */
   ported: "open" | "all";
+  /** `ignore` reads two lines that differ only in whitespace as one line. */
+  whitespace: Whitespace;
 }
 
 const DEFAULTS: ReviewSettings = {
   mode: "full",
   layout: "unified",
   ported: "open",
+  whitespace: "compare",
 };
 
 /** Each field falls back on its own, so a value this build does not know
@@ -36,6 +39,7 @@ function load(): ReviewSettings {
     mode: saved?.mode === "outline" ? "outline" : DEFAULTS.mode,
     layout: saved?.layout === "split" ? "split" : DEFAULTS.layout,
     ported: saved?.ported === "all" ? "all" : DEFAULTS.ported,
+    whitespace: saved?.whitespace === "ignore" ? "ignore" : DEFAULTS.whitespace,
   };
 }
 

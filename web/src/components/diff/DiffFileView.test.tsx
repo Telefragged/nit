@@ -21,6 +21,7 @@ const ctx: ReviewCtx = {
   selected: 2,
   against: 1,
   latestRevision: 2,
+  whitespace: "compare",
   showRange: () => undefined,
   editingTarget: null,
   setEditingTarget: () => false,

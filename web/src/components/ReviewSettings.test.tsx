@@ -12,6 +12,7 @@ function Harness({ applied }: { applied: ReviewSettings[] }) {
     mode: "full",
     layout: "unified",
     ported: "open",
+    whitespace: "compare",
   });
   return (
     <ReviewSettingsMenu
@@ -39,9 +40,20 @@ describe("the review settings popup", () => {
     const applied = openAndChange();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(applied).toEqual([
-      { mode: "full", layout: "split", ported: "open" },
+      { mode: "full", layout: "split", ported: "open", whitespace: "compare" },
     ]);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("applies the whitespace knob", () => {
+    const applied: ReviewSettings[] = [];
+    render(<Harness applied={applied} />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ignore" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(applied).toEqual([
+      { mode: "full", layout: "unified", ported: "open", whitespace: "ignore" },
+    ]);
   });
 
   it("drops the draft on Cancel without asking", () => {

@@ -21,6 +21,7 @@ import type {
   RepoHistory,
   RepoList,
   TagList,
+  Whitespace,
 } from "./types";
 
 export class ApiError extends Error {
@@ -105,10 +106,12 @@ export const getDiff = (
   revision: number,
   against?: number,
   mode: DiffMode = "full",
+  whitespace: Whitespace = "compare",
 ) => {
   const q = new URLSearchParams();
   if (against !== undefined) q.set("against", String(against));
   if (mode !== "full") q.set("mode", mode);
+  if (whitespace !== "compare") q.set("whitespace", whitespace);
   const query = q.size > 0 ? `?${q}` : "";
   return request<Diff>(
     "GET",
@@ -127,10 +130,12 @@ export const getFileLines = (
   revision: number,
   file: Pick<DiffFile, "path" | "old_path">,
   against?: number,
+  whitespace: Whitespace = "compare",
 ) => {
   const q = new URLSearchParams({ path: file.path });
   if (file.old_path !== undefined) q.set("old_path", file.old_path);
   if (against !== undefined) q.set("against", String(against));
+  if (whitespace !== "compare") q.set("whitespace", whitespace);
   return request<FileLines>(
     "GET",
     `/changes/${changeNumber}/revisions/${revision}/lines?${q}`,

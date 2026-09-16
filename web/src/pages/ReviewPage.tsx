@@ -274,7 +274,7 @@ export default function ReviewPage() {
   });
 
   const [settings, saveSettings] = useReviewSettings();
-  const { mode, layout } = settings;
+  const { mode, layout, whitespace } = settings;
   const [editingTarget, setEditingTarget] = useState<DraftTarget | null>(null);
   const editorDirty = useRef(false);
   const diffColumnRef = useRef<HTMLDivElement>(null);
@@ -393,12 +393,19 @@ export default function ReviewPage() {
   // outlives every way of replacing it (it is reused across /changes/:id).
   // Adjust-during-render, like `shownChange` below: a bubble hanging over
   // code it never described must not paint even once.
-  const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}:${mode}`;
+  const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}:${mode}:${whitespace}`;
   if (selectionMiss && selectionMiss.diff !== diffKey) setSelectionMiss(null);
 
   const diffQ = useQuery({
-    queryKey: ["diff", changeNumber, selected, against ?? null, mode],
-    queryFn: () => getDiff(changeNumber, selected, against, mode),
+    queryKey: [
+      "diff",
+      changeNumber,
+      selected,
+      against ?? null,
+      mode,
+      whitespace,
+    ],
+    queryFn: () => getDiff(changeNumber, selected, against, mode, whitespace),
     enabled: published !== undefined,
     retry: false,
   });
@@ -496,6 +503,7 @@ export default function ReviewPage() {
       selected,
       against,
       latestRevision,
+      whitespace,
       showRange: ({ against: from, selected: to }: DiffRange) => {
         switchRange({
           against: from === undefined ? null : String(from),
@@ -530,6 +538,7 @@ export default function ReviewPage() {
       selected,
       against,
       latestRevision,
+      whitespace,
       switchRange,
       editingTarget,
     ],

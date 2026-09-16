@@ -88,6 +88,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
         ctx.selected,
         file,
         ctx.against,
+        ctx.whitespace,
       ).then((r) => {
         if (fileRef.current !== file) return null;
         setWhole(r.lines);
