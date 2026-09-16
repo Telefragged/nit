@@ -3,8 +3,6 @@
 
 mod common;
 
-use std::time::Duration;
-
 use common::{
     GitRepo, TestServer, change_by_label, first_repo_id, get_changes, msg, nit, nit_register,
     nit_spawn, repo_log, review,
@@ -28,10 +26,6 @@ fn head_sequence(server: &TestServer) -> u64 {
         .max()
         .expect("a pushed change has a log")
 }
-
-/// Long enough for a spawned `--wait` to read the log and open its socket
-/// before the test acts, so the test exercises the socket path.
-const PARKED: Duration = Duration::from_millis(400);
 
 /// `nit log --wait 0` wakes immediately on any existing activity past the cursor
 /// (here, the author's own push revision), printing the digest and the entry.
@@ -66,7 +60,6 @@ fn wait_blocks_then_wakes_on_a_review() {
     let head_seq = head_sequence(&server);
 
     let wait = nit_spawn(&server, &g, &["log", "--wait", &head_seq.to_string()]);
-    std::thread::sleep(PARKED);
     review(&server, change_number, "request_changes", "fix the unwrap");
 
     let (ok, out, err) = wait.finish();
@@ -86,7 +79,7 @@ fn wait_blocks_then_wakes_on_a_review() {
 /// A `--wait` started on the branch returns on a review of a change pushed
 /// to the branch after the wait started.
 #[test]
-fn wait_wakes_on_a_change_pushed_after_it_parked() {
+fn wait_wakes_on_a_change_pushed_after_it_started() {
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
@@ -100,7 +93,6 @@ fn wait_wakes_on_a_change_pushed_after_it_parked() {
         &g,
         &["log", "--wait", "--incoming", &head_seq.to_string()],
     );
-    std::thread::sleep(PARKED);
     let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
     let (ok, _, err) = nit(&server, &g, &["push"]);
