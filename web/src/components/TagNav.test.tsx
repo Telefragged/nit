@@ -101,17 +101,15 @@ describe("TagNav", () => {
     renderNav(three, 11, onSelectKey);
     const head = screen.getByLabelText<HTMLButtonElement>("Tag");
     expect(head.disabled).toBe(false);
-    expect(head.querySelector(".tag-select-key")?.textContent).toBe(
-      "session-id",
-    );
-    expect(head.querySelector(".tag-select-value")?.textContent).toBe("s1");
+    expect(head.querySelector(".select-label")?.textContent).toBe("session-id");
+    expect(head.querySelector(".select-detail")?.textContent).toBe("s1");
 
     fireEvent.click(head);
     const options = screen.getAllByRole("option");
     expect(
       options.map((o) => [
-        o.querySelector(".tag-select-key")?.textContent,
-        o.querySelector(".tag-select-value")?.textContent,
+        o.querySelector(".select-label")?.textContent,
+        o.querySelector(".select-detail")?.textContent,
         o.getAttribute("aria-selected"),
       ]),
     ).toEqual([

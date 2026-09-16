@@ -330,3 +330,74 @@ table.list tbody tr:hover {
   font-weight: 600;
   margin-bottom: 4px;
 }
+
+/* ------ select (components/Select.tsx) */
+
+.select {
+  position: relative;
+  display: inline-block;
+}
+
+.select-head,
+.select-list button {
+  display: grid;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 2px 6px;
+}
+
+/* The third track holds the caret, which only the head carries; placing
+   it there keeps it at the edge whether or not a detail sits beside it. */
+.select-head {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+}
+
+.select-caret {
+  grid-column: 3;
+  align-self: center;
+  width: 10px;
+  height: 6px;
+}
+
+.select-label,
+.select-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-detail {
+  text-align: right;
+  color: var(--text-faint);
+}
+
+/* The list is at least as wide as the head and grows to fit the longest
+   row, as a native select's popup does, and scrolls past a half screen. */
+.select-list {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 320px;
+  max-height: 50vh;
+  overflow: hidden auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 45%);
+}
+
+.select-list button {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  border: 0;
+  border-radius: 0;
+}
+
+.select-list button[aria-selected="true"] .select-label {
+  color: var(--blue);
+}

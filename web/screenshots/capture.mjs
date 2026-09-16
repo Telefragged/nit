@@ -54,6 +54,12 @@ const expandAllFiles = async (page) => {
   await page.waitForTimeout(100);
 };
 
+/** Opens the picker `label` names, so the capture shows its list. */
+const openPicker = async (page, label) => {
+  await page.getByLabel(label).click();
+  await page.waitForTimeout(100);
+};
+
 /** Diff settings live behind the diffbar cog; a capture that wants a
  * non-default one picks it in the modal and applies. */
 const applySetting = async (page, name) => {
@@ -127,8 +133,7 @@ const captures = [
     path: "/changes/11?against=base",
     fullPage: false,
     actions: async (page) => {
-      await page.locator(".tag-select-head").click();
-      await page.waitForTimeout(100);
+      await openPicker(page, "Tag");
     },
   },
   // Repo 5: a twelve-change chain plus a merged and an abandoned lone

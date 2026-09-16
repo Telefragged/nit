@@ -305,63 +305,9 @@
   color: var(--text-faint);
 }
 
-.tag-select {
-  position: relative;
+.tag-nav-title .select {
   flex: 1;
   min-width: 0;
-}
-
-.tag-select-head,
-.tag-select-list button {
-  display: grid;
-  gap: 8px;
-  align-items: baseline;
-  width: 100%;
-}
-
-/* The third track is the arrowhead, which only the head carries. */
-.tag-select-head {
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
-}
-
-.tag-select-key,
-.tag-select-value {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tag-select-value {
-  text-align: right;
-  color: var(--text-faint);
-}
-
-.tag-select-caret {
-  align-self: center;
-  width: 10px;
-  height: 6px;
-}
-
-.tag-select-list {
-  position: absolute;
-  z-index: 3;
-  top: calc(100% + 2px);
-  left: 0;
-  width: 100%;
-  overflow: hidden;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  box-shadow: 0 6px 16px rgb(0 0 0 / 45%);
-}
-
-.tag-select-list button {
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  border: 0;
-}
-
-.tag-select-list button[aria-selected="true"] .tag-select-key {
-  color: var(--blue);
 }
 
 .tag-nav-all {
