@@ -96,19 +96,41 @@ const subjects = () =>
   rows().map((r) => r.querySelector(".subj")?.textContent ?? "");
 
 describe("TagNav", () => {
-  it("offers the change's tag keys and reports the chosen one", () => {
+  it("shows the chosen key with its value, and offers the others", () => {
     const onSelectKey = vi.fn();
     renderNav(three, 11, onSelectKey);
-    const select = screen.getByLabelText<HTMLSelectElement>("Tag");
-    expect(select.disabled).toBe(false);
-    expect([...select.options].map((o) => o.value)).toEqual([
-      "branch",
+    const head = screen.getByLabelText<HTMLButtonElement>("Tag");
+    expect(head.disabled).toBe(false);
+    expect(head.querySelector(".tag-select-key")?.textContent).toBe(
       "session-id",
-    ]);
-    expect(select.value).toBe("session-id");
+    );
+    expect(head.querySelector(".tag-select-value")?.textContent).toBe("s1");
 
-    fireEvent.change(select, { target: { value: "branch" } });
+    fireEvent.click(head);
+    const options = screen.getAllByRole("option");
+    expect(
+      options.map((o) => [
+        o.querySelector(".tag-select-key")?.textContent,
+        o.querySelector(".tag-select-value")?.textContent,
+        o.getAttribute("aria-selected"),
+      ]),
+    ).toEqual([
+      ["branch", "feat", "false"],
+      ["session-id", "s1", "true"],
+    ]);
+
+    fireEvent.click(must(options[0], "the branch option"));
     expect(onSelectKey).toHaveBeenCalledWith("branch");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("closes the list on a second press of the head", () => {
+    renderNav(three, 11);
+    const head = screen.getByLabelText<HTMLButtonElement>("Tag");
+    fireEvent.click(head);
+    expect(screen.getByRole("listbox")).not.toBeNull();
+    fireEvent.click(head);
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 
   it("disables the selector for a change with no tags", () => {
@@ -124,7 +146,7 @@ describe("TagNav", () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByLabelText<HTMLSelectElement>("Tag").disabled).toBe(true);
+    expect(screen.getByLabelText<HTMLButtonElement>("Tag").disabled).toBe(true);
     expect(rows()).toHaveLength(0);
   });
 

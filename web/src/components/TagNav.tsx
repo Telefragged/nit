@@ -1,4 +1,10 @@
-import { type CSSProperties, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, Tags } from "../api/types";
 import { type NodeActivity, revisionActivity } from "../lib/comments";
@@ -22,10 +28,10 @@ function windowStart(current: number, total: number): number {
  * rail beside one-line rows (status dot, subject, revision, unresolved
  * count), the current change highlighted and the others linking through.
  * The selector picks which of the current change's tag keys the graph
- * follows; a change with no tags disables it. Seven rows around the current
- * change show at first, and "show all" opens the whole graph. The rail is
- * laid out over the whole graph and clipped to the window, so an edge
- * that leaves the window reads as continuing past it.
+ * follows. Seven rows around the current change show at first, and "show
+ * all" opens the whole graph. The rail is laid out over the whole graph
+ * and clipped to the window, so an edge that leaves the window reads as
+ * continuing past it.
  */
 export default function TagNav({
   tags,
@@ -65,23 +71,11 @@ export default function TagNav({
   return (
     <section className="tag-nav">
       <div className="tag-nav-title">
-        <select
-          className="revision-select"
-          aria-label="Tag"
-          title="Graph the changes that share this tag's value"
-          disabled={selectedKey === null}
-          value={selectedKey ?? ""}
-          onChange={(e) => {
-            onSelectKey(e.target.value);
-          }}
-        >
-          {selectedKey === null ? <option value="">no tags</option> : null}
-          {Object.keys(tags).map((key) => (
-            <option key={key} value={key}>
-              {key}
-            </option>
-          ))}
-        </select>
+        <TagSelect
+          tags={tags}
+          selectedKey={selectedKey}
+          onSelectKey={onSelectKey}
+        />
         {total > WINDOW ? (
           <button
             className="linkish tag-nav-all"
@@ -109,6 +103,108 @@ export default function TagNav({
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * The selector over the current change's tag keys: each row carries its
+ * key and, right-aligned and dim, the value that key holds, so the
+ * reviewer sees which value the graph follows without opening the list.
+ * A change with no tags disables it.
+ *
+ * A native `<select>` cannot lay an option out in two columns, so this is
+ * a button over a list of buttons. The list drops below the head, which
+ * stays put, so a second press on the head closes it again.
+ */
+function TagSelect({
+  tags,
+  selectedKey,
+  onSelectKey,
+}: {
+  tags: Tags;
+  selectedKey: string | null;
+  onSelectKey: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const group = useRef<HTMLDivElement>(null);
+  const entries = Object.entries(tags);
+  const selected = entries.find(([key]) => key === selectedKey);
+
+  // An open list owns the pointer and the keyboard, so both listeners sit
+  // on the document: the press that dismisses it lands anywhere on the
+  // page, and the page's one-key shortcuts must not fire underneath it.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!group.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+      e.stopPropagation();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="tag-select" ref={group}>
+      <button
+        className="revision-select tag-select-head"
+        aria-label="Tag"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Graph the changes that share this tag's value"
+        disabled={selected === undefined}
+        onClick={() => {
+          setOpen((v) => !v);
+        }}
+      >
+        {selected === undefined ? (
+          <span className="tag-select-key">no tags</span>
+        ) : (
+          <TagRow tagKey={selected[0]} value={selected[1]} />
+        )}
+        <svg className="tag-select-caret" viewBox="0 0 10 6" aria-hidden="true">
+          <path
+            d="M1 1 5 5 9 1"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+          />
+        </svg>
+      </button>
+      {open ? (
+        <div className="tag-select-list" role="listbox">
+          {entries.map(([key, value]) => (
+            <button
+              key={key}
+              className="revision-select"
+              role="option"
+              aria-selected={key === selectedKey}
+              onClick={() => {
+                onSelectKey(key);
+                setOpen(false);
+              }}
+            >
+              <TagRow tagKey={key} value={value} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TagRow({ tagKey, value }: { tagKey: string; value: string }) {
+  return (
+    <>
+      <span className="tag-select-key">{tagKey}</span>
+      <span className="tag-select-value">{value}</span>
+    </>
   );
 }
 

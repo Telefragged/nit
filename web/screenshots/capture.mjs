@@ -120,6 +120,17 @@ const captures = [
     path: "/changes/11?against=base",
     fullPage: false,
   },
+  // The tag selector open: every key the change carries, each with its
+  // value at the right.
+  {
+    name: "review-tag-select",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await page.locator(".tag-select-head").click();
+      await page.waitForTimeout(100);
+    },
+  },
   // Repo 5: a twelve-change chain plus a merged and an abandoned lone
   // change. The graph windows to seven rows around the current change, with
   // the chain's edges running out of the window at both ends.
