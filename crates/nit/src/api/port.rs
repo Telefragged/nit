@@ -18,9 +18,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use anyhow::{Context, Result};
 use git2::{Delta, Repository, Tree};
 
-use nit_types::changes::PortedComment;
 use nit_types::domain::{
-    Anchor, CommentRange, LineAnchor, RevisionProjection, Side, ThreadProjection,
+    Anchor, CommentRange, LineAnchor, PortedComment, RevisionProjection, Side, ThreadProjection,
 };
 
 use super::diff;

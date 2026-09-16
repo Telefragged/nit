@@ -4,7 +4,6 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::Anchor;
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
 use crate::domain::ChangeProjection;
@@ -81,28 +80,6 @@ pub struct ChangeDetail {
     pub drafts: Vec<Draft>,
     pub reviews: Vec<Review>,
     pub draft_decision: Option<DraftDecision>,
-}
-
-/// One entry of `GET /api/changes/{id}/revisions/{n}/ported`: a thread's
-/// anchor carried to a revision it was not written on.
-///
-/// The thread keeps the anchor it was written with. `anchor` is where that
-/// one lands in the trees of `revision`, read off the diff between them:
-/// the same lines when the diff left them alone, shifted lines when it
-/// inserted or deleted lines above them, and the next place up (the file,
-/// then the change) when it rewrote those lines or dropped the file. A
-/// ported line anchor carries no `line_text`.
-///
-/// The response ports every unresolved thread of a revision earlier than
-/// `n` to `n`, and with `?against={m}` to `m` as well, `n`'s entries
-/// first. `?include_resolved=true` ports the resolved threads too. Entries
-/// for one revision are sorted by thread id.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct PortedComment {
-    pub thread_id: u64,
-    pub revision: RevisionNumber,
-    pub anchor: Anchor,
 }
 
 /// `GET /api/changes/{id}/drafts` response.

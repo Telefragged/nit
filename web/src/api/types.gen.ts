@@ -354,28 +354,6 @@ export type Revision = {
   status: ChangeStatus;
 };
 
-/**
- * One entry of `GET /api/changes/{id}/revisions/{n}/ported`: a thread's
- * anchor carried to a revision it was not written on.
- *
- * The thread keeps the anchor it was written with. `anchor` is where that
- * one lands in the trees of `revision`, read off the diff between them:
- * the same lines when the diff left them alone, shifted lines when it
- * inserted or deleted lines above them, and the next place up (the file,
- * then the change) when it rewrote those lines or dropped the file. A
- * ported line anchor carries no `line_text`.
- *
- * The response ports every unresolved thread of a revision earlier than
- * `n` to `n`, and with `?against={m}` to `m` as well, `n`'s entries
- * first. `?include_resolved=true` ports the resolved threads too. Entries
- * for one revision are sorted by thread id.
- */
-export type PortedComment = {
-  thread_id: number;
-  revision: RevisionNumber;
-  anchor: Anchor;
-};
-
 export type Review = {
   id: number;
   revision: RevisionNumber;
@@ -391,6 +369,22 @@ export type Review = {
  * A reviewer's draft decision plus its cover note/reason.
  */
 export type DraftDecision = { decision: Decision; message: string };
+
+/**
+ * A thread's anchor carried to a revision it was not written on.
+ *
+ * The thread keeps the anchor it was written with. `anchor` is where that
+ * one lands in the trees of `revision`, read off the diff between them:
+ * the same lines when the diff left them alone, shifted lines when it
+ * inserted or deleted lines above them, and the next place up (the file,
+ * then the change) when it rewrote those lines or dropped the file. A
+ * ported line anchor carries no `line_text`.
+ */
+export type PortedComment = {
+  thread_id: number;
+  revision: RevisionNumber;
+  anchor: Anchor;
+};
 
 /**
  * Selected-text anchor of a line comment.

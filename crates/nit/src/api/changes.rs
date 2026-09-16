@@ -10,11 +10,12 @@ use git2::{Repository, Tree};
 use serde::Deserialize;
 
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList, ChangeQuery};
-use nit_types::changes::{PortedComment, TagList, TagsRequest};
+use nit_types::changes::{TagList, TagsRequest};
 use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeStatus;
 use nit_types::domain::DiffMode;
+use nit_types::domain::PortedComment;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
@@ -340,6 +341,11 @@ pub(super) struct PortedQuery {
 }
 
 /// `GET /api/changes/{id}/revisions/{n}/ported`.
+///
+/// Ports every unresolved thread of a revision earlier than `n` to `n`,
+/// and with `?against={m}` to `m` as well, `n`'s entries first.
+/// `?include_resolved=true` ports the resolved threads too. Entries for
+/// one revision are sorted by thread id.
 pub(super) async fn ported_comments(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,
