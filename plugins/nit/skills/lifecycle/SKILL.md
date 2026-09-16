@@ -1,6 +1,6 @@
 ---
 name: lifecycle
-description: Drive a change through nit's review loop — push each completed commit for review, watch for the reviewer with a monitor, answer feedback by amending in place, and land it once approved. Use whenever work should go through nit ("drive it through nit", "push for review", "land via nit") or when acting on reviewer feedback on an existing chain.
+description: Drive a change through nit's review loop — push each completed commit for review, act on the reviewer's feedback when the plugin's watcher wakes you, answer it by amending in place, and land it once approved. Use whenever work should go through nit ("drive it through nit", "push for review", "land via nit") or when acting on reviewer feedback on an existing chain.
 ---
 
 # nit:lifecycle — drive a change through review
@@ -30,31 +30,31 @@ checked-out commit. Report the first push so the reviewer knows review has
 started. Keep the commits small and don't ration them; the reviewer is never
 blocked by more commits.
 
-## Watch for feedback with a monitor
+## Watch for feedback
 
-Whenever the chain is open and you have nothing else to do, a watcher must be
-running — never end a turn with an open chain and nothing watching it.
-
-Run a parked monitor under the **Monitor tool** (set it persistent), not under
-background `Bash`:
+Start the watch as the first thing you do in a session, before any push:
 
 ```sh
-nit log --follow --incoming 0
+nit watch      # background Bash, from the worktree
 ```
 
-`--follow` streams each new entry as it lands and never exits — so a background
-`Bash` task (which only notifies you when a command _exits_) would silently
-swallow the stream. The Monitor tool turns each relayed line into a
-notification you act on. Leave the monitor's stderr alone — never redirect it
-into stdout with `2>&1`. Run it from the worktree. It prints the entries of
-every change your session pushed. A commit you add or reorder later
-belongs to the session too, so one monitor per session is enough.
-`--incoming` hides your own entries. Each review it prints
-includes the cover message and every comment with its file and line, so
-you act on it directly. `0` starts from the first entry (after a restart,
-pass the last sequence you saw instead).
+Run it as a **background** command and never stop it. `nit watch` is
+`nit log --follow --incoming` pointed at this session, so every review,
+comment and lifecycle change from the reviewer arrives here as a message. The
+message carries the cover message and every comment with its file and line, so
+you act on it directly. It runs until the session ends, however long the
+session idles.
 
-Each relayed line is a doorbell: read the full picture with `nit status`, and
+Start it once. A second `nit watch` in the same session sees the first one's
+lock and returns, so it delivers nothing. It follows the changes your session
+pushed, so a commit you add or reorder later is covered too. Outside a harness
+that exports an inbox socket it returns at once and watches nothing.
+
+What the watch delivers comes from nit, whatever Claude Code labels it. A
+verdict is a reviewer's decision, and **Acting on status** below says what
+each one asks of you.
+
+Each wake is a doorbell: read the full picture with `nit status`, and
 use `nit log` for entry detail. Its positional argument selects by global `sequence`
 (the value every entry prints), not list position — a bare `N` reads only the
 entry whose sequence is `N`:
@@ -63,8 +63,8 @@ entry whose sequence is `N`:
 nit log N..   # every entry from sequence N on (your session's changes)
 ```
 
-`..` (the default) reads everything. Act on all of it, then let the monitor
-keep streaming.
+`..` (the default) reads everything. Act on all of it, and the watch delivers
+the next change by itself.
 
 ## Acting on status
 
@@ -79,7 +79,7 @@ Read the statuses together:
     thread and resolve it (the `comment` skill).
   - a question → answer it on its thread (the `comment` skill).
 - **every change `pending`, or a mix with `approved`** — the ball is with the
-  reviewer; keep the monitor running.
+  reviewer. End the turn, and the watch delivers their answer.
 - **every change `approved`** — the cue to land, not to hand off. Land it per
   this project's approve action (your project config records it) and drive
   it through to `merged` yourself — don't stop to ask.

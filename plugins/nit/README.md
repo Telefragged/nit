@@ -28,8 +28,20 @@ nit".
 
 | Skill            | What it does                                                                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/nit:lifecycle` | Drive a change through the review loop — push each completed commit, watch for the reviewer, answer feedback by amending in place, and land once approved.         |
+| `/nit:lifecycle` | Drive a change through the review loop — push each completed commit, act on the reviewer, answer feedback by amending in place, and land once approved.            |
 | `/nit:comment`   | Talk to the reviewer in nit — open and reply to threads with `nit comment`, anchored as tightly as possible, keeping the conversation in nit rather than the chat. |
+
+## The watch — how the reviewer reaches the agent
+
+The agent starts `nit watch` in the background at the start of a session, the
+way the `/nit:lifecycle` skill tells it to. Every review, comment and lifecycle
+change from the reviewer then arrives in that session as a message, and the
+agent acts on it without a prompt from you.
+
+`nit watch` is `nit log --follow --incoming` posted to the session's own
+[inbox socket](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)
+rather than printed. It runs as a child of the session, so it lives exactly as
+long as the session does, however long that session idles.
 
 ## Commands — things you initiate
 
