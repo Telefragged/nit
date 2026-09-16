@@ -766,10 +766,17 @@ const change11: ChangeRecord = {
     },
   },
   // What the server ports to r1: the generate/mark selection shifted
-  // 22-23 → 30-31 with chars intact, and thread 73 on the file since r1
-  // rewrote its line.
+  // 22-23 → 30-31 with chars intact, the resolved thread on line 22 shifted
+  // with it, and thread 73 on the file since r1 rewrote its line.
   ported: {
     1: [
+      {
+        thread_id: 71,
+        revision: 1,
+        anchor: {
+          line: { file: "src/auth/rotate.rs", side: "new", at: { whole: 30 } },
+        },
+      },
       {
         thread_id: 73,
         revision: 1,

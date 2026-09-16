@@ -11,6 +11,7 @@ function Harness({ applied }: { applied: ReviewSettings[] }) {
   const [settings, setSettings] = useState<ReviewSettings>({
     mode: "full",
     layout: "unified",
+    ported: "open",
   });
   return (
     <ReviewSettingsMenu
@@ -37,7 +38,9 @@ describe("the review settings popup", () => {
   it("applies the draft and closes", () => {
     const applied = openAndChange();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    expect(applied).toEqual([{ mode: "full", layout: "split" }]);
+    expect(applied).toEqual([
+      { mode: "full", layout: "split", ported: "open" },
+    ]);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 

@@ -550,20 +550,29 @@ export default function ReviewPage() {
     [threads],
   );
 
-  // The ported comments of the shown range. The key carries the threads
-  // the server would port, so a thread opened or resolved since refetches;
-  // the anchors themselves change only with the revisions.
+  // The ported comments of the shown range. The key carries the earlier
+  // threads and their resolution, so a thread opened or resolved since
+  // refetches under either setting; the anchors themselves change only
+  // with the revisions.
+  const includeResolved = settings.ported === "all";
   const portKey = useMemo(
     () =>
       threads
-        .filter((t) => t.id !== null && !t.resolved && t.revision < selected)
-        .map((t) => t.id)
+        .filter((t) => t.id !== null && t.revision < selected)
+        .map((t) => (t.resolved ? `${t.id}r` : t.id))
         .join(","),
     [threads, selected],
   );
   const portedQ = useQuery({
-    queryKey: ["ported", changeNumber, selected, against ?? null, portKey],
-    queryFn: () => getPorted(changeNumber, selected, against),
+    queryKey: [
+      "ported",
+      changeNumber,
+      selected,
+      against ?? null,
+      includeResolved,
+      portKey,
+    ],
+    queryFn: () => getPorted(changeNumber, selected, against, includeResolved),
     enabled: published !== undefined && selected > 0,
   });
   const shownThreads = useMemo(

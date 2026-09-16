@@ -64,8 +64,11 @@ const openPicker = async (page, label) => {
  * non-default one picks it in the modal and applies. */
 const applySetting = async (page, name) => {
   await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name }).click();
-  await page.getByRole("button", { name: "Apply" }).click();
+  // Scoped to the modal: an option label can be part of a page button's
+  // name, as "All" is of "expand all".
+  const modal = page.locator(".settings-modal");
+  await modal.getByRole("button", { name, exact: true }).click();
+  await modal.getByRole("button", { name: "Apply" }).click();
   // Apply and the dismissal commit together, so the modal leaving the DOM
   // says the new setting has rendered.
   await page.waitForSelector(".settings-modal", { state: "detached" });
@@ -112,6 +115,16 @@ const captures = [
     name: "review-ported",
     path: "/changes/11?against=base",
     actions: expandAllFiles,
+  },
+  // The same range with the "All" ported setting: the resolved r0 thread
+  // shows at its shifted line too.
+  {
+    name: "review-ported-all",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await applySetting(page, "All");
+    },
   },
   // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
   { name: "review-interdiff", path: "/changes/11?against=0" },

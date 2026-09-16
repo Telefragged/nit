@@ -39,7 +39,8 @@ export interface ChangeRecord {
   /** Keyed by diffKey(revision, against). */
   diffs: Record<string, AuthoredDiff>;
   /** The ported comments the server would compute for each revision,
-   * keyed by that revision. Absent means none. */
+   * keyed by that revision, resolved threads included: the route drops
+   * those unless the request asks for them. Absent means none. */
   ported?: Record<number, PortedComment[]>;
 }
 

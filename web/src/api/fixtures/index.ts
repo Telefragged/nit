@@ -419,7 +419,14 @@ export async function mockRequest(
     const against = q.has("against") ? Number(q.get("against")) : undefined;
     const at = (revision: number | undefined) =>
       revision === undefined ? [] : (c.ported?.[revision] ?? []);
-    return structuredClone([...at(number), ...at(against)]);
+    const ported = [...at(number), ...at(against)];
+    if (q.get("include_resolved") === "true") return structuredClone(ported);
+    const resolved = new Set(
+      projection(c.id)
+        .threads.filter((t) => t.resolved)
+        .map((t) => t.id),
+    );
+    return structuredClone(ported.filter((p) => !resolved.has(p.thread_id)));
   }
 
   // Context expansion. The fixtures hold diffs, not whole files, so

@@ -586,6 +586,15 @@ describe("comment counts in the file headers", () => {
     expect(fcomments(0)).toBeNull();
   });
 
+  it("ports the resolved threads too when the settings ask for all", async () => {
+    localStorage.setItem("nit.review-settings", '{"ported":"all"}');
+    renderReview("/changes/11?against=base");
+    await diffLoaded("src/auth/rotate.rs");
+    // rotate.rs: the three of the open setting plus the resolved r0 line
+    // thread ported to its shifted line.
+    expect(fcomments(1)).toBe("4 comments");
+  });
+
   it("follows the range: the r0 → r1 interdiff surfaces the r0 threads", async () => {
     // The left column is r0's own tree, so r0-pinned threads reappear there.
     renderReview("/changes/11?against=0");

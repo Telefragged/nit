@@ -35,6 +35,19 @@ const LAYOUT_OPTIONS: Option<ReviewSettings["layout"]>[] = [
   },
 ];
 
+const PORTED_OPTIONS: Option<ReviewSettings["ported"]>[] = [
+  {
+    value: "open",
+    label: "Open",
+    title: "The unresolved threads of earlier revisions",
+  },
+  {
+    value: "all",
+    label: "All",
+    title: "The resolved threads of earlier revisions too",
+  },
+];
+
 /** One knob: a label and a segmented control over its options. */
 function Knob<T extends string>({
   label,
@@ -135,6 +148,14 @@ export default function ReviewSettingsMenu({
             options={LAYOUT_OPTIONS}
             onChange={(layout) => {
               setDraft({ ...draft, layout });
+            }}
+          />
+          <Knob
+            label="Ported comments"
+            value={draft.ported}
+            options={PORTED_OPTIONS}
+            onChange={(ported) => {
+              setDraft({ ...draft, ported });
             }}
           />
           <div className="modal-actions">

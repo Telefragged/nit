@@ -10,9 +10,16 @@ export interface ReviewSettings {
   mode: DiffMode;
   /** `split` draws the old and the new side in two columns. */
   layout: "unified" | "split";
+  /** Which threads of earlier revisions are ported into the shown range:
+   * `open` the unresolved ones, `all` the resolved ones too. */
+  ported: "open" | "all";
 }
 
-const DEFAULTS: ReviewSettings = { mode: "full", layout: "unified" };
+const DEFAULTS: ReviewSettings = {
+  mode: "full",
+  layout: "unified",
+  ported: "open",
+};
 
 /** Each field falls back on its own, so a value this build does not know
  * costs that one knob rather than the whole page. */
@@ -28,6 +35,7 @@ function load(): ReviewSettings {
   return {
     mode: saved?.mode === "outline" ? "outline" : DEFAULTS.mode,
     layout: saved?.layout === "split" ? "split" : DEFAULTS.layout,
+    ported: saved?.ported === "all" ? "all" : DEFAULTS.ported,
   };
 }
 
