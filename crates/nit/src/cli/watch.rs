@@ -77,8 +77,9 @@ pub struct WatchArgs {
 ///
 /// # Errors
 ///
-/// When no inbox is given and the harness exports none, when the lock
-/// can't be taken, or when the server returns a malformed response.
+/// When no inbox is given and the harness exports none, when the lock or
+/// the cursor can't be read, or when the server returns a malformed
+/// response.
 pub fn watch(args: WatchArgs) -> Result<()> {
     let inbox = Inbox::open(args.inbox)?;
     // Before the git discovery and the repo lookup, which a second watch
@@ -87,23 +88,25 @@ pub fn watch(args: WatchArgs) -> Result<()> {
         println!("another nit watch already holds this session");
         return Ok(());
     };
+    let cursor = Cursor::open(&inbox.path, &args.select)?;
     let client = Client::new(server_url(args.server.server));
     // The watch rides out a server restart for its whole life, so it
     // waits for a server that is not up yet either.
     let selection = args.select.resolve(&client, Retry::UntilUp)?;
 
     let (entries, batches) = sync_channel(QUEUE);
+    let start = cursor.read()?;
     let follower = std::thread::spawn(move || {
         Follower {
             client,
             selection,
             entries,
-            cursor: 0,
+            cursor: start,
         }
         .run()
     });
 
-    deliver(&inbox, &batches)?;
+    deliver(&inbox, &batches, &cursor)?;
     match follower.join() {
         Ok(Err(e)) => Err(e),
         Ok(Ok(never)) => match never {},
@@ -119,8 +122,8 @@ pub fn watch(args: WatchArgs) -> Result<()> {
 ///
 /// # Errors
 ///
-/// When the inbox refuses a message.
-fn deliver(inbox: &Inbox, batches: &Receiver<Vec<LogEntry>>) -> Result<()> {
+/// When the inbox refuses a message, or the cursor can't be written.
+fn deliver(inbox: &Inbox, batches: &Receiver<Vec<LogEntry>>, cursor: &Cursor) -> Result<()> {
     while let Ok(first) = batches.recv() {
         let mut run = first;
         let ceiling = Instant::now() + CEILING;
@@ -133,6 +136,7 @@ fn deliver(inbox: &Inbox, batches: &Receiver<Vec<LogEntry>>) -> Result<()> {
             run.extend(batch);
         }
         inbox.post(&run)?;
+        cursor.write(max_seq(&run))?;
     }
     Ok(())
 }
@@ -230,6 +234,60 @@ fn max_seq(entries: &[LogEntry]) -> u64 {
     entries.iter().map(|e| e.sequence).max().unwrap_or(0)
 }
 
+/// The highest `sequence` the watch has posted, kept across restarts.
+///
+/// A restarted watch resumes from it, rather than posting every entry
+/// the selection ever collected. It carries the lock's key, so the watch
+/// that holds the lock is the only one that writes it.
+struct Cursor {
+    path: PathBuf,
+}
+
+impl Cursor {
+    /// The file this watch's cursor lives in.
+    ///
+    /// # Errors
+    ///
+    /// When the state directory can't be created.
+    fn open(socket: &std::path::Path, select: &SelectArgs) -> Result<Cursor> {
+        Ok(Cursor {
+            path: state_path(socket, select, "cursor")?,
+        })
+    }
+
+    /// The stored cursor, or 0 when no watch has posted for this
+    /// selection yet.
+    ///
+    /// # Errors
+    ///
+    /// When the file exists and can't be read or parsed, because
+    /// starting over would repost entries the agent has seen.
+    fn read(&self) -> Result<u64> {
+        let text = match std::fs::read_to_string(&self.path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+            Err(e) => return Err(e).with_context(|| format!("read {}", self.path.display())),
+        };
+        text.trim()
+            .parse()
+            .with_context(|| format!("read the cursor in {}", self.path.display()))
+    }
+
+    /// Stores the cursor, once its message is on the socket.
+    ///
+    /// # Errors
+    ///
+    /// When the file can't be written.
+    fn write(&self, sequence: u64) -> Result<()> {
+        // Written beside the cursor and renamed, because the read refuses
+        // a half-written one and no later watch would start.
+        let staged = self.path.with_extension("new");
+        std::fs::write(&staged, sequence.to_string())
+            .with_context(|| format!("write {}", staged.display()))?;
+        std::fs::rename(&staged, &self.path).with_context(|| format!("rename {}", staged.display()))
+    }
+}
+
 /// The session's inbox: where to post, and what proves who posts.
 struct Inbox {
     path: PathBuf,
@@ -311,19 +369,16 @@ fn harness_var(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|value| !value.is_empty())
 }
 
-/// Claims this watch, or returns `None` when one already runs.
+/// One of the watch's state files, named for the inbox and the selection.
 ///
-/// The claim is an exclusive lock on a file named for the inbox and the
-/// selection, so two watches of different changes can share a session.
-/// The operating system drops the lock when the process ends, so a watch
-/// that dies with its session leaves nothing stale behind. The file lives
-/// in the temporary directory because the claim lasts no longer than the
-/// machine's uptime.
+/// Two watches of different changes can share a session, and each gets
+/// files of its own. The files live in the temporary directory, because
+/// a session lasts no longer than the machine's uptime.
 ///
 /// # Errors
 ///
-/// When the lock file can't be created or read.
-fn lock(socket: &std::path::Path, select: &SelectArgs) -> Result<Option<File>> {
+/// When the directory can't be created.
+fn state_path(socket: &std::path::Path, select: &SelectArgs, extension: &str) -> Result<PathBuf> {
     let mut hasher = DefaultHasher::new();
     socket.hash(&mut hasher);
     for tag in &select.tag {
@@ -332,7 +387,20 @@ fn lock(socket: &std::path::Path, select: &SelectArgs) -> Result<Option<File>> {
     }
     let dir = std::env::temp_dir().join("nit-watch");
     std::fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
-    let path = dir.join(format!("{:016x}.lock", hasher.finish()));
+    Ok(dir.join(format!("{:016x}.{extension}", hasher.finish())))
+}
+
+/// Claims this watch, or returns `None` when one already runs.
+///
+/// The claim is an exclusive lock on the watch's own file. The operating
+/// system drops the lock when the process ends, so a watch that dies with
+/// its session leaves nothing stale behind.
+///
+/// # Errors
+///
+/// When the lock file can't be created or read.
+fn lock(socket: &std::path::Path, select: &SelectArgs) -> Result<Option<File>> {
+    let path = state_path(socket, select, "lock")?;
     let file = OpenOptions::new()
         .read(true)
         .write(true)

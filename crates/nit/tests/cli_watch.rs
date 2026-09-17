@@ -217,3 +217,29 @@ fn watch_posts_a_run_of_entries_as_one_message() {
     assert!(text.contains("and this one"), "the second review: {text}");
     inbox.quiet();
 }
+
+/// The watch stores what it has posted, so a restarted watch posts the
+/// next review and not the whole history again.
+#[test]
+fn a_restarted_watch_resumes_where_it_stopped() {
+    let (g, server, inbox, change_number) = session();
+
+    let watch = nit_spawn(&server, &g, &inbox.args(), &[]);
+    review(&server, change_number, "comment", "the first pass");
+    inbox.next();
+    // The watch stores the cursor after it posts, so the second message
+    // is what proves the first pass was stored.
+    review(&server, change_number, "comment", "the second pass");
+    inbox.next();
+    drop(watch);
+
+    let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
+    review(&server, change_number, "request_changes", "the third pass");
+
+    let text = posted_text(&inbox.next());
+    assert!(text.contains("the third pass"), "{text}");
+    assert!(
+        !text.contains("the first pass"),
+        "reposted from the start: {text}"
+    );
+}
