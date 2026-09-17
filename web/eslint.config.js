@@ -109,12 +109,22 @@ export default tseslint.config(
     rules: { "no-restricted-imports": "off" },
   },
 
-  // ── Build/tooling files — not in tsconfig, so lint without type info ──
+  // ── Node tooling at the repo root — type-aware via tsconfig.node.json ──
   {
-    files: [
-      "*.{ts,js}",
-      "screenshots/**/*.{mjs,js}",
-    ],
+    files: ["*.ts"],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: "./tsconfig.node.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+      globals: { ...globals.node },
+    },
+  },
+
+  // ── Plain-JS tooling — in no tsconfig, so lint without type info ──
+  {
+    files: ["*.js", "screenshots/**/*.{mjs,js}"],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: {
       parserOptions: { projectService: false, project: null },
