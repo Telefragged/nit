@@ -16,7 +16,7 @@ import {
   replay_proj,
   tag_graph,
   unresolved_threads,
-} from "../wasm/nit_wasm";
+} from "../lib/wasm";
 import type {
   ChangeDetail,
   ChangeProjection,

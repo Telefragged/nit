@@ -84,15 +84,35 @@ export default tseslint.config(
         { allowNumber: true },
       ],
 
+      // The `web` wasm-bindgen target leaves instantiation to the caller,
+      // so a wrapper reached any other way throws. lib/wasm.ts awaits
+      // `init()` and re-exports the fold; it is the only way in.
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/wasm/nit_wasm"],
+              message: "Import the fold from lib/wasm, which instantiates it.",
+            },
+          ],
+        },
+      ],
+
       // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
     },
+  },
+
+  // The two modules that do the instantiating, one per runtime.
+  {
+    files: ["src/lib/wasm.ts", "wasm-test-setup.ts"],
+    rules: { "no-restricted-imports": "off" },
   },
 
   // ── Build/tooling files — not in tsconfig, so lint without type info ──
   {
     files: [
-      "*.config.{ts,js}",
-      "vite-plugin-gen-wasm.ts",
+      "*.{ts,js}",
       "screenshots/**/*.{mjs,js}",
     ],
     extends: [tseslint.configs.disableTypeChecked],

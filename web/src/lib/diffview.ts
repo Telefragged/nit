@@ -3,7 +3,7 @@
 import { prepareFileTreeInput } from "@pierre/trees";
 import type { CommentRange, DiffFile, Hunk, Line, Side } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
-import { intraline_marks } from "../wasm/nit_wasm";
+import { intraline_marks } from "./wasm";
 
 /** Display label for a diff path: the synthetic /COMMIT_MSG file reads
  * "Commit message" (gerrit-style); real paths are themselves. */

@@ -167,7 +167,7 @@
           inherit (webArgs) src;
           inherit (pkgs) nodejs;
           name = "nit-web-npm-deps";
-          hash = "sha256-LudNekNokhx4wwOWx17+5knvsOcuAOXNaaIXGvfmX98=";
+          hash = "sha256-Mzv68ATocWq96tpzPBKIbzQYYCBqYaa/CU6SZN9zZTc=";
         };
 
       # The screenshot harness launches chromium and nothing else
@@ -242,7 +242,7 @@
         };
 
       # The shared change fold compiled to WebAssembly: nit-wasm built for
-      # wasm32, then run through wasm-bindgen (`--target bundler`) into the JS
+      # wasm32, then run through wasm-bindgen (`--target web`) into the JS
       # glue + `.wasm` the web imports. Offline and pinned like wireTypesTs; the
       # `rust-toolchain.toml` wasm32 target and the wasm-bindgen-cli version
       # (which must match nit-wasm's `wasm-bindgen` dep) come from this flake.
@@ -273,7 +273,7 @@
           buildPhase = stubMembers [ "crates/nit" ] + ''
             cargo build --offline --release --target wasm32-unknown-unknown -p nit-wasm
             wasm-bindgen target/wasm32-unknown-unknown/release/nit_wasm.wasm \
-              --target bundler --out-dir pkg
+              --target web --out-dir pkg
           '';
           installPhase = "cp -r pkg $out";
           dontFixup = true;
