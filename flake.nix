@@ -165,6 +165,7 @@
         pkgs:
         pkgs.fetchNpmDeps {
           inherit (webArgs) src;
+          inherit (pkgs) nodejs;
           name = "nit-web-npm-deps";
           hash = "sha256-ye7jtF2Ggn3aptOK4Mggen7X220Ovge4wLIkwFLgX/k=";
         };
@@ -333,8 +334,10 @@
               wasm-bindgen-cli
               (genWasmApp pkgs)
 
-              # Web frontend
-              nodejs_22
+              # Web frontend. Every npm derivation below takes this same
+              # `pkgs.nodejs`, so the shell and the build share an npm and
+              # read each other's lock file.
+              nodejs
 
               # Formatting — treefmt drives the per-language formatters
               # configured in treefmt.toml (rustfmt from the toolchain above)
@@ -368,6 +371,7 @@
           nit-web = pkgs.buildNpmPackage {
             pname = "nit-web";
             inherit (webArgs) version src;
+            inherit (pkgs) nodejs;
             npmDeps = webNpmDeps;
             preBuild = injectWasm pkgs;
             installPhase = "cp -r dist $out";
@@ -453,6 +457,7 @@
           web-lint = pkgs.buildNpmPackage {
             pname = "nit-web-lint";
             inherit (webArgs) version src;
+            inherit (pkgs) nodejs;
             npmDeps = webNpmDeps;
             dontNpmBuild = true;
             installPhase = injectWasm pkgs + "npm run lint > $out";
@@ -460,6 +465,7 @@
           web-test = pkgs.buildNpmPackage {
             pname = "nit-web-test";
             inherit (webArgs) version src;
+            inherit (pkgs) nodejs;
             npmDeps = webNpmDeps;
             dontNpmBuild = true;
             installPhase = injectWasm pkgs + "npm run test > $out";
@@ -470,6 +476,7 @@
           web-screenshots = pkgs.buildNpmPackage {
             pname = "nit-web-screenshots";
             inherit (webArgs) version src;
+            inherit (pkgs) nodejs;
             npmDeps = webNpmDeps;
             dontNpmBuild = true;
             env = {
