@@ -90,7 +90,7 @@ fn drifted(ranges: &[Span], line: u32) -> bool {
 /// add or delete, and what [`diff::blob_bytes`] reads as the empty text.
 fn entry_oid(tree: &Tree, path: &str) -> Oid {
     tree.get_path(Path::new(path))
-        .map_or(Oid::zero(), |e| e.id())
+        .map_or(Oid::ZERO_SHA1, |e| e.id())
 }
 
 /// Every path a tree diff touches, as `(name in old, name in new)`.

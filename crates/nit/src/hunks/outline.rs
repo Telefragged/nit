@@ -128,7 +128,7 @@ fn collapsed_lines(path: &str, text: &str) -> Vec<bool> {
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(&grammar.query, tree.root_node(), text.as_bytes());
     while let Some(matched) = matches.next() {
-        for span in matched.captures {
+        for span in matched.captures() {
             let (first, last) = (span.node.start_position().row, span.node.end_position().row);
             let (opens, closes) = match grammar.query.capture_names()[span.index as usize] {
                 "whole" => (first, last + 1),

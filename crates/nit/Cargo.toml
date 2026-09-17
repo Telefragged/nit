@@ -13,16 +13,16 @@ anyhow = "1"
 async-broadcast = "0.7"
 axum = { version = "0.8", features = ["ws"] }
 clap = { version = "4", features = ["derive"] }
-deadpool-sqlite = "0.13.0"
-git2 = { version = "0.20", default-features = false }
+deadpool-sqlite = "0.14.0"
+git2 = { version = "0.21", default-features = false }
 imara-diff = { version = "0.2.0", default-features = false }
 jiff = "0.2"
 nit-types = { workspace = true, features = ["clap"] }
-rusqlite = "0.38"
+rusqlite = "0.40"
 serde = { workspace = true }
 # Query-string parsing for AppQuery: unlike serde_urlencoded (axum's
 # built-in Query), it deserializes a repeated key into a Vec.
-serde_html_form = "0.2"
+serde_html_form = "0.4"
 serde_json = "1"
 tokio = { version = "1", features = [
   "macros",
@@ -33,15 +33,15 @@ tokio = { version = "1", features = [
   "time",
 ] }
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
-tower-http = { version = "0.6.11", features = ["fs"] }
+tower-http = { version = "0.7.1", features = ["fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tree-sitter = "0.25"
+tree-sitter = "0.27"
 tree-sitter-nix = "0.3"
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"
-tungstenite = "0.29"
+tungstenite = "0.30"
 ureq = { version = "3.3.0", default-features = false, features = ["json"] }
 
 [dev-dependencies]

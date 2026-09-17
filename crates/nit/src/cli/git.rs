@@ -45,9 +45,10 @@ pub(crate) fn head_branch(repo: &Repository) -> Option<String> {
     // A detached HEAD resolves to a reference named `HEAD`, which is not a
     // branch, and an unborn one resolves to nothing at all.
     let head = repo.head().ok()?;
-    head.is_branch()
-        .then(|| head.shorthand())?
-        .map(str::to_string)
+    if !head.is_branch() {
+        return None;
+    }
+    head.shorthand().ok().map(str::to_string)
 }
 
 pub(crate) fn discover_repo() -> Result<(String, Repository)> {
