@@ -52,11 +52,7 @@ export type Verdict = "approve" | "request_changes" | "comment";
  * [`Decision::as_lifecycle`]).
  */
 export type Decision =
-  | "approve"
-  | "request_changes"
-  | "comment"
-  | "abandon"
-  | "reopen";
+  "approve" | "request_changes" | "comment" | "abandon" | "reopen";
 
 /**
  * A change's displayed status at a pinned revision.
@@ -714,8 +710,7 @@ export type Subscription = {
  * A server → client websocket message. Externally tagged, `snake_case`.
  */
 export type StreamMessage =
-  | { projection: ChangeProjection }
-  | { entry: LogEntry };
+  { projection: ChangeProjection } | { entry: LogEntry };
 
 /**
  * A change's terminal lifecycle, folded from its `lifecycle` entries.
