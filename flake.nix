@@ -169,6 +169,16 @@
           hash = "sha256-ye7jtF2Ggn3aptOK4Mggen7X220Ovge4wLIkwFLgX/k=";
         };
 
+      # The screenshot harness launches chromium and nothing else
+      # (web/screenshots/capture.mjs), so drop firefox and webkit from the
+      # browser set it runs against.
+      playwrightBrowsersFor =
+        pkgs:
+        pkgs.playwright-driver.selectBrowsers {
+          withFirefox = false;
+          withWebkit = false;
+        };
+
       # Build metadata for `nit --version`: `+<sha>[.dirty]` from the flake's
       # git state, which the build sandbox can't reach itself (no `.git`).
       # `rev` is set only on a clean tree, `dirtyRev` only on a dirty one;
@@ -339,7 +349,7 @@
             ];
 
             env = {
-              PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
+              PLAYWRIGHT_BROWSERS_PATH = playwrightBrowsersFor pkgs;
               PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
               # Pin for package.json: npm playwright must match the driver.
               PLAYWRIGHT_DRIVER_VERSION = pkgs.playwright-driver.version;
@@ -390,6 +400,7 @@
         let
           cargoNix = cargoNixFor pkgs;
           webNpmDeps = webNpmDepsFor pkgs;
+          playwrightBrowsers = playwrightBrowsersFor pkgs;
         in
         {
           build = self.packages.${pkgs.system}.nit;
@@ -462,7 +473,7 @@
             npmDeps = webNpmDeps;
             dontNpmBuild = true;
             env = {
-              PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
+              PLAYWRIGHT_BROWSERS_PATH = playwrightBrowsers;
               PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
               # No user namespaces / writable /dev/shm in the build sandbox.
               NIT_SCREENSHOT_NO_SANDBOX = "1";
