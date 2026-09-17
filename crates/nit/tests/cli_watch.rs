@@ -13,8 +13,8 @@ use std::sync::mpsc::{Receiver, channel};
 use serde_json::Value;
 
 use common::{
-    GitRepo, HANG, TestServer, change_by_label, first_repo_id, get_changes, msg, nit, nit_register,
-    nit_spawn, review,
+    GitRepo, HANG, TestServer, change_by_label, draft, first_repo_id, get_changes, msg, nit,
+    nit_register, nit_spawn, review, submit,
 };
 
 /// A stand-in for the session's inbox socket.
@@ -48,6 +48,14 @@ impl Inbox {
     /// The `nit watch` arguments that point it at this inbox.
     fn args(&self) -> [&str; 3] {
         ["watch", "--inbox", self.path.to_str().expect("utf-8 path")]
+    }
+
+    /// Fails when a message arrives in the next half second.
+    fn quiet(&self) {
+        let next = self
+            .messages
+            .recv_timeout(std::time::Duration::from_millis(500));
+        assert!(next.is_err(), "posted a second message: {next:?}");
     }
 
     /// The next message's frames, each parsed as JSON.
@@ -92,6 +100,17 @@ fn session() -> (GitRepo, TestServer, Inbox, u64) {
     (g, server, inbox, change_number)
 }
 
+/// A second commit on the branch, pushed for review.
+fn push_second(g: &GitRepo, server: &TestServer) -> u64 {
+    let c2 = g.commit(&[g.tip("feat")], &msg("two", "I002"), &[("b.txt", "b\n")]);
+    g.branch("feat", c2);
+    let (ok, _, err) = nit(server, g, &["push"]);
+    assert!(ok, "push failed: {err}");
+    change_by_label(server, first_repo_id(server), "I002")["id"]
+        .as_u64()
+        .expect("the new change")
+}
+
 /// The author's own push produces a `revision` entry, which the watch
 /// drops, so only the review reaches the inbox.
 #[test]
@@ -115,16 +134,9 @@ fn watch_posts_a_review_to_the_inbox() {
 #[test]
 fn watch_posts_a_review_of_a_change_pushed_after_it_started() {
     let (g, server, inbox, _) = session();
-    let head = g.tip("feat");
 
     let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
-    let c2 = g.commit(&[head], &msg("two", "I002"), &[("b.txt", "b\n")]);
-    g.branch("feat", c2);
-    let (ok, _, err) = nit(&server, &g, &["push"]);
-    assert!(ok, "push failed: {err}");
-    let two = change_by_label(&server, first_repo_id(&server), "I002")["id"]
-        .as_u64()
-        .expect("the new change");
+    let two = push_second(&g, &server);
     review(&server, two, "request_changes", "fix the unwrap");
 
     let text = posted_text(&inbox.next());
@@ -180,4 +192,28 @@ fn watch_without_an_inbox_fails() {
     let (ok, _, err) = nit(&server, &g, &["watch"]);
     assert!(!ok, "a watch with no inbox should fail");
     assert!(err.contains("no inbox"), "{err}");
+}
+
+/// One submit writes an entry per change. The watch posts the run as one
+/// message, so one reviewer pass starts one turn.
+#[test]
+fn watch_posts_a_run_of_entries_as_one_message() {
+    let (g, server, inbox, one) = session();
+    let two = push_second(&g, &server);
+
+    let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
+    // The watch reads the log once before it follows the stream, so the
+    // run has to land after this first message.
+    review(&server, one, "comment", "started");
+    inbox.next();
+
+    for (change, message) in [(one, "fix the unwrap"), (two, "and this one")] {
+        draft(&server, change, "request_changes", message);
+    }
+    submit(&server, &format!("repo={}", first_repo_id(&server)));
+
+    let text = posted_text(&inbox.next());
+    assert!(text.contains("fix the unwrap"), "the first review: {text}");
+    assert!(text.contains("and this one"), "the second review: {text}");
+    inbox.quiet();
 }

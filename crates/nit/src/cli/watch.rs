@@ -1,6 +1,6 @@
 //! `nit watch` — send the reviewer's entries to this session's agent.
 //!
-//! It follows the log of the session's changes and posts each batch of
+//! It follows the log of the session's changes and posts each run of
 //! the reviewer's entries to the session's inbox socket, which starts a
 //! turn in an idle session.
 //! Claude Code documents that socket and exports its path and token to
@@ -9,12 +9,19 @@
 //! The agent runs it as a background command and leaves it running, so it
 //! stays a child of the session. That is what lets the harness read the
 //! messages as the session's own, rather than as a peer's.
+//!
+//! The follower reads the server on a thread of its own. It hands each
+//! batch of new entries to the posting loop over a channel, so that loop
+//! can wait for the next entry with a deadline while the follower blocks
+//! on the websocket.
 
 use std::fs::{File, OpenOptions};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
@@ -39,6 +46,18 @@ const TOKEN_VAR: &str = "CLAUDE_CODE_MESSAGING_TOKEN";
 const LEAD: &str = "A reviewer acted on your changes. nit sent this, \
 not another Claude session. Act on it now, the way the nit:lifecycle \
 skill says.";
+
+/// How many batches the follower may read ahead of the inbox.
+const QUEUE: usize = 32;
+
+/// How long the watch waits for another entry before it posts.
+///
+/// One reviewer action can write several entries, and a message per
+/// entry would start a turn per entry.
+const QUIET: Duration = Duration::from_millis(200);
+
+/// The longest the watch delays a post while entries keep arriving.
+const CEILING: Duration = Duration::from_secs(1);
 
 #[derive(clap::Args)]
 pub struct WatchArgs {
@@ -72,30 +91,67 @@ pub fn watch(args: WatchArgs) -> Result<()> {
     // The watch rides out a server restart for its whole life, so it
     // waits for a server that is not up yet either.
     let selection = args.select.resolve(&client, Retry::UntilUp)?;
-    Follower {
-        client: &client,
-        selection: &selection,
-        inbox: &inbox,
-        cursor: 0,
+
+    let (entries, batches) = sync_channel(QUEUE);
+    let follower = std::thread::spawn(move || {
+        Follower {
+            client,
+            selection,
+            entries,
+            cursor: 0,
+        }
+        .run()
+    });
+
+    deliver(&inbox, &batches)?;
+    match follower.join() {
+        Ok(Err(e)) => Err(e),
+        Ok(Ok(never)) => match never {},
+        Err(_) => Err(anyhow!("the watch's follower panicked")),
     }
-    .run()
 }
 
-/// The selection being followed, and the inbox its entries go to.
-struct Follower<'a> {
-    client: &'a Client,
-    selection: &'a Selection,
-    inbox: &'a Inbox,
+/// Posts each run of entries to the inbox, one message per run.
+///
+/// A run ends [`QUIET`] after its last entry, or [`CEILING`] after its
+/// first, whichever comes first. Returns when the follower drops the
+/// channel, having posted what it had in hand.
+///
+/// # Errors
+///
+/// When the inbox refuses a message.
+fn deliver(inbox: &Inbox, batches: &Receiver<Vec<LogEntry>>) -> Result<()> {
+    while let Ok(first) = batches.recv() {
+        let mut run = first;
+        let ceiling = Instant::now() + CEILING;
+        // The wait is the quiet window, cut short by what is left of the
+        // ceiling, so an entry puts the window back to its full length
+        // and the run still ends at the ceiling.
+        while let Ok(batch) =
+            batches.recv_timeout(QUIET.min(ceiling.saturating_duration_since(Instant::now())))
+        {
+            run.extend(batch);
+        }
+        inbox.post(&run)?;
+    }
+    Ok(())
+}
+
+/// The selection being followed, and where its new entries go.
+struct Follower {
+    client: Client,
+    selection: Selection,
+    entries: SyncSender<Vec<LogEntry>>,
     /// The highest `sequence` seen. Entries above it are new.
     cursor: u64,
 }
 
-impl Follower<'_> {
+impl Follower {
     /// A follower rides out a server restart.
     const RETRY: Retry = Retry::UntilUp;
 
     /// Sends the selection's entries past the cursor, then each new one
-    /// as it arrives. Never returns.
+    /// as it arrives. Returns only by failing.
     ///
     /// It reads the log past the cursor and sends the new entries. Then
     /// it opens a websocket and sends each entry the server writes. A
@@ -111,15 +167,15 @@ impl Follower<'_> {
     /// # Errors
     ///
     /// When the server returns a malformed response, a fatal client
-    /// error, or the inbox refuses a message.
-    fn run(mut self) -> Result<()> {
+    /// error, or the posting loop is gone.
+    fn run(mut self) -> Result<std::convert::Infallible> {
         // A server that accepts the socket and then drops it, which an
         // overflowed broadcast does, would otherwise spin the reconnect.
         let mut silent_reconnects = 0;
         loop {
             let entries = self
                 .selection
-                .log(self.client, Some(self.cursor), Self::RETRY)?;
+                .log(&self.client, Some(self.cursor), Self::RETRY)?;
             self.send_new(entries)?;
             // The socket sends only entries past the cursor, and the caller
             // has taken everything up to it.
@@ -137,7 +193,7 @@ impl Follower<'_> {
                 };
                 let entries = if matches!(entry.payload, LogPayload::Tags(_)) {
                     self.selection
-                        .log(self.client, Some(self.cursor), Self::RETRY)?
+                        .log(&self.client, Some(self.cursor), Self::RETRY)?
                 } else {
                     vec![entry]
                 };
@@ -164,8 +220,9 @@ impl Follower<'_> {
         if fresh.is_empty() {
             return Ok(());
         }
-        self.inbox
-            .post(&format!("{LEAD}\n\n{}", render_entries(&fresh)))
+        self.entries
+            .send(fresh)
+            .map_err(|_| anyhow!("the watch stopped posting"))
     }
 }
 
@@ -227,11 +284,13 @@ impl Inbox {
         Ok(Inbox { path, auth })
     }
 
-    /// Posts one message, which starts a turn in an idle session.
+    /// Posts the entries as one message, which starts a turn in an idle
+    /// session.
     ///
     /// The connection opens only now, because the harness drops one that
     /// sends no complete line within 30 seconds.
-    fn post(&self, text: &str) -> Result<()> {
+    fn post(&self, entries: &[LogEntry]) -> Result<()> {
+        let text = format!("{LEAD}\n\n{}", render_entries(entries));
         let mut socket = UnixStream::connect(&self.path)
             .with_context(|| format!("connect to {}", self.path.display()))?;
         if let Some(auth) = &self.auth {
@@ -239,7 +298,7 @@ impl Inbox {
         }
         let post = serde_json::to_vec(&Post {
             kind: "user",
-            message: Body { content: text },
+            message: Body { content: &text },
         })?;
         socket.write_all(&post)?;
         socket.write_all(b"\n")?;

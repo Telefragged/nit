@@ -434,12 +434,17 @@ pub fn change_tags(server: &TestServer, repo_id: u64, label: &str) -> Value {
 /// decision, then batch-submit that one change. Returns the
 /// `BatchSubmitResult`.
 pub fn review(server: &TestServer, change_number: u64, verdict: &str, message: &str) -> Value {
+    draft(server, change_number, verdict, message);
+    submit_change(server, change_number)
+}
+
+/// Records a decision on one change, leaving it a draft.
+pub fn draft(server: &TestServer, change_number: u64, verdict: &str, message: &str) {
     let (st, _) = http_put(
         &server.url(&format!("/api/changes/{change_number}/decision")),
         &json!({"decision": verdict, "message": message}),
     );
     assert_eq!(st, 200, "draft decision on change {change_number}");
-    submit_change(server, change_number)
 }
 
 /// Submits the one change, by its `Change-Id`.
