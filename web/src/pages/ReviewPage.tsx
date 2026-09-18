@@ -75,6 +75,7 @@ import type { SelectionMiss } from "../lib/selection";
 import { selectionAnchorSide, selectionTarget } from "../lib/selection";
 import { timeAgo } from "../lib/time";
 import { useChangeStream } from "../lib/useChangeStream";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 import { useDrafts } from "../lib/useDrafts";
 import { useReviewSettings } from "../lib/reviewSettings";
 import { useUrlParams } from "../lib/useUrlParams";
@@ -312,6 +313,7 @@ export default function ReviewPage() {
   const selectedRev = revisions[revisionParam ?? defaultRev ?? -1] ?? latest;
   const selected = selectedRev?.number ?? 1;
   const latestRevision = latest?.number ?? 1;
+  useDocumentTitle(selectedRev?.subject ?? null);
 
   // The header graphs every change that carries the same value as this one
   // for the selected tag key. The key the reviewer picked last is kept per

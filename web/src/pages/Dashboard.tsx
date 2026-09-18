@@ -7,6 +7,7 @@ import type { ChangeStatus } from "../api/types";
 import GraphTable from "../components/GraphTable";
 import { repoPath } from "../lib/repo";
 import { nodeActivity } from "../lib/comments";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 import { useDrafts } from "../lib/useDrafts";
 import { useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
@@ -114,6 +115,7 @@ export default function Dashboard() {
   const activity = nodeActivity(changesQuery.data?.changes ?? [], overlays);
 
   const repo = repoQuery.data;
+  useDocumentTitle(repo ? repoPath(repo.git_dir) : null);
   const error = changesQuery.error ?? historyQuery.error;
 
   return (
