@@ -11,6 +11,7 @@ use nit_types::domain::{LogEntry, LogPayload};
 use super::client::{Client, Retry, ServerOpt, server_url};
 use super::format::{print_entries, print_oneline_entries};
 use super::resolve::SelectArgs;
+use super::snippet::Sources;
 
 #[derive(clap::Args)]
 pub struct LogArgs {
@@ -54,7 +55,7 @@ pub fn log(args: LogArgs) -> Result<()> {
     if args.oneline {
         print_oneline_entries(&entries);
     } else {
-        print_entries(&entries);
+        print_entries(&entries, &Sources::fetch(&client, &entries, Retry::No)?);
     }
     Ok(())
 }

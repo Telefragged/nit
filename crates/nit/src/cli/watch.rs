@@ -33,6 +33,7 @@ use super::client::{Client, Retry, ServerOpt, next_text, retry_delay, server_url
 use super::format::render_entries;
 use super::log::dropped_by_incoming;
 use super::resolve::{SelectArgs, Selection};
+use super::snippet::Sources;
 
 /// What Claude Code calls the inbox socket it exports to every command.
 const SOCKET_VAR: &str = "CLAUDE_CODE_MESSAGING_SOCKET";
@@ -96,9 +97,10 @@ pub fn watch(args: WatchArgs) -> Result<()> {
 
     let (entries, batches) = sync_channel(QUEUE);
     let start = cursor.read()?;
+    let follower_client = client.clone();
     let follower = std::thread::spawn(move || {
         Follower {
-            client,
+            client: follower_client,
             selection,
             entries,
             cursor: start,
@@ -106,7 +108,7 @@ pub fn watch(args: WatchArgs) -> Result<()> {
         .run()
     });
 
-    deliver(&inbox, &batches, &cursor)?;
+    deliver(&inbox, &batches, &cursor, &client)?;
     match follower.join() {
         Ok(Err(e)) => Err(e),
         Ok(Ok(never)) => match never {},
@@ -114,7 +116,8 @@ pub fn watch(args: WatchArgs) -> Result<()> {
     }
 }
 
-/// Posts each run of entries to the inbox, one message per run.
+/// Posts each run of entries to the inbox, one message per run, with the
+/// lines that its line comments anchor to.
 ///
 /// A run ends [`QUIET`] after its last entry, or [`CEILING`] after its
 /// first, whichever comes first. Returns when the follower drops the
@@ -122,8 +125,14 @@ pub fn watch(args: WatchArgs) -> Result<()> {
 ///
 /// # Errors
 ///
-/// When the inbox refuses a message, or the cursor can't be written.
-fn deliver(inbox: &Inbox, batches: &Receiver<Vec<LogEntry>>, cursor: &Cursor) -> Result<()> {
+/// When the inbox refuses a message, the server rejects a request for
+/// the lines, or the cursor can't be written.
+fn deliver(
+    inbox: &Inbox,
+    batches: &Receiver<Vec<LogEntry>>,
+    cursor: &Cursor,
+    client: &Client,
+) -> Result<()> {
     while let Ok(first) = batches.recv() {
         let mut run = first;
         let ceiling = Instant::now() + CEILING;
@@ -135,7 +144,7 @@ fn deliver(inbox: &Inbox, batches: &Receiver<Vec<LogEntry>>, cursor: &Cursor) ->
         {
             run.extend(batch);
         }
-        inbox.post(&run)?;
+        inbox.post(&run, &Sources::fetch(client, &run, Retry::UntilUp)?)?;
         cursor.write(max_seq(&run))?;
     }
     Ok(())
@@ -347,8 +356,8 @@ impl Inbox {
     ///
     /// The connection opens only now, because the harness drops one that
     /// sends no complete line within 30 seconds.
-    fn post(&self, entries: &[LogEntry]) -> Result<()> {
-        let text = format!("{LEAD}\n\n{}", render_entries(entries));
+    fn post(&self, entries: &[LogEntry], sources: &Sources) -> Result<()> {
+        let text = format!("{LEAD}\n\n{}", render_entries(entries, sources));
         let mut socket = UnixStream::connect(&self.path)
             .with_context(|| format!("connect to {}", self.path.display()))?;
         if let Some(auth) = &self.auth {

@@ -113,6 +113,7 @@ pub(crate) fn retry_delay(attempt: u32) -> std::time::Duration {
 pub(crate) type WsConn =
     tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 
+#[derive(Clone)]
 pub(crate) struct Client {
     agent: ureq::Agent,
     base: String,

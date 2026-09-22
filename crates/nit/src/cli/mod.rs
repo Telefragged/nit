@@ -24,6 +24,7 @@ mod log;
 mod push;
 mod repo;
 mod resolve;
+mod snippet;
 mod status;
 mod tags;
 mod version;

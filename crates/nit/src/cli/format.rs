@@ -20,6 +20,7 @@ use nit_types::domain::subject_of;
 
 use super::client::Client;
 use super::resolve::resolve_change;
+use super::snippet::Sources;
 
 /// The shared `--change` / `--change-id` selector for change-scoped commands.
 #[derive(clap::Args)]
@@ -175,10 +176,11 @@ pub(crate) fn print_comment(thread: &ThreadProjection, change_number: ChangeNumb
 
 /// The multi-line rendering of one log entry (no trailing blank line).
 ///
-/// A pure function of that entry, so it reconstructs nothing the entry does
-/// not carry: a `revision` entry shows no revision number, and a reply names
-/// only its thread — a reply's anchor lives on the thread's opening entry.
-fn render_entry(entry: &LogEntry) -> String {
+/// A pure function of that entry and the `sources` it quotes, so it
+/// reconstructs nothing the entry does not carry: a `revision` entry shows
+/// no revision number, and a reply names only its thread — a reply's anchor
+/// lives on the thread's opening entry.
+fn render_entry(entry: &LogEntry, sources: &Sources) -> String {
     let sequence = entry.sequence;
     let change = entry.change_number;
     match &entry.payload {
@@ -207,18 +209,19 @@ fn render_entry(entry: &LogEntry) -> String {
             }
             for c in &p.comments {
                 out.push('\n');
-                out.push_str(&render_comment(c));
+                out.push_str(&render_comment(c, sources.quote(change, c)));
             }
             out
         }
         LogPayload::Comment(c) => {
-            let head = match comment_target(c) {
+            let (anchor, body) = shown(c, sources.quote(change, c));
+            let head = match comment_target(c.thread_id, anchor) {
                 Some(target) => {
                     format!("sequence {sequence}  change {change}  comment on {target}")
                 }
                 None => format!("sequence {sequence}  change {change}  comment"),
             };
-            format!("{head}\n{}", indent(&c.body, 4))
+            format!("{head}\n{}", indent(&body, 4))
         }
         LogPayload::Lifecycle(p) => match &p.message {
             Some(m) if !m.is_empty() => {
@@ -239,39 +242,40 @@ fn render_entry(entry: &LogEntry) -> String {
 ///
 /// The body follows on its own line indented one level deeper. The anchor
 /// shows only when this entry opened the thread; a reply carries none.
-fn render_comment(c: &CommentInput) -> String {
+fn render_comment(c: &CommentInput, quote: Option<String>) -> String {
     let resolved = if c.resolved == Some(true) {
         "  [resolved]"
     } else {
         ""
     };
-    let loc = opening_anchor(c);
+    let (anchor, body) = shown(c, quote);
+    let loc = anchor.map_or(String::new(), |a| format!("  {}", anchor_label(a)));
     let head = match c.thread_id {
         Some(id) => format!("    t{id}{loc}{resolved}"),
         None => format!("    {loc}{resolved}"),
     };
-    format!("{head}\n{}", indent(&c.body, 8))
+    format!("{head}\n{}", indent(&body, 8))
+}
+
+/// The anchor label and the body that a comment shows.
+///
+/// A `quote` of the anchored lines carries both, so it replaces the label
+/// and stands in for the body. A reply carries no anchor, because its
+/// anchor lives on the opening entry.
+fn shown(c: &CommentInput, quote: Option<String>) -> (Option<&Anchor>, String) {
+    match quote {
+        Some(quote) => (None, quote),
+        None => (c.anchor.as_ref(), c.body.clone()),
+    }
 }
 
 /// The `thread N (location)` target of an author `comment` entry.
-///
-/// The location shows only when this entry opened the thread.
-fn comment_target(c: &CommentInput) -> Option<String> {
-    let tid = c.thread_id?;
-    Some(match &c.anchor {
+fn comment_target(thread_id: Option<u64>, anchor: Option<&Anchor>) -> Option<String> {
+    let tid = thread_id?;
+    Some(match anchor {
         Some(anchor) => format!("thread {tid} ({})", anchor_label(anchor)),
         None => format!("thread {tid}"),
     })
-}
-
-/// The `  <anchor>` an opening comment carries in its own payload.
-///
-/// Empty for a reply, whose anchor lives on the opening entry.
-fn opening_anchor(c: &CommentInput) -> String {
-    match &c.anchor {
-        Some(anchor) => format!("  {}", anchor_label(anchor)),
-        None => String::new(),
-    }
 }
 
 /// The anchor label.
@@ -312,18 +316,18 @@ fn indent(text: &str, n: usize) -> String {
 }
 
 /// Prints each entry's rich rendering, a blank line between entries.
-pub(crate) fn print_entries(entries: &[LogEntry]) {
-    let text = render_entries(entries);
+pub(crate) fn print_entries(entries: &[LogEntry], sources: &Sources) {
+    let text = render_entries(entries, sources);
     if !text.is_empty() {
         println!("{text}");
     }
 }
 
 /// The full rendering of the entries, one blank line between them.
-pub(crate) fn render_entries(entries: &[LogEntry]) -> String {
+pub(crate) fn render_entries(entries: &[LogEntry], sources: &Sources) -> String {
     entries
         .iter()
-        .map(render_entry)
+        .map(|entry| render_entry(entry, sources))
         .collect::<Vec<_>>()
         .join("\n\n")
 }
@@ -436,7 +440,7 @@ mod tests {
         // by its thread id, body indented one level deeper; the range anchor is
         // the full form and the resolved marker sits on the anchor line.
         assert_eq!(
-            render_entry(&review),
+            render_entry(&review, &Sources::default()),
             "sequence 12  change 42 r2  reviewer: request_changes\n\
              \x20   Cover one.\n\
              \x20   Cover two.\n\
@@ -464,11 +468,17 @@ mod tests {
             )
         };
         assert_eq!(
-            render_entry(&revision(0, 3, "abcdef0123456789", "queue: first\n\nbody")),
+            render_entry(
+                &revision(0, 3, "abcdef0123456789", "queue: first\n\nbody"),
+                &Sources::default()
+            ),
             "sequence 3  change 42  revision abcdef012345  queue: first"
         );
         assert_eq!(
-            render_entry(&revision(6, 20, "1234567890abcdef", "queue: second")),
+            render_entry(
+                &revision(6, 20, "1234567890abcdef", "queue: second"),
+                &Sources::default()
+            ),
             "sequence 20  change 42  revision 1234567890ab  queue: second"
         );
     }
