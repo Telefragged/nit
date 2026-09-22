@@ -11,14 +11,14 @@ use crate::domain::RevisionNumber;
 ///
 /// The repo must already be registered (`nit repo create`); the canonical
 /// branch is its stored `canonical_ref`, so push takes no base.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PushRequest {
     pub git_dir: String,
     /// Any ref or revision, resolved to a commit at push time.
     pub tip: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PushResult {
     /// The repo the push registered the changes in.
     pub repo: u64,
@@ -29,7 +29,7 @@ pub struct PushResult {
 }
 
 /// One change a push walked, at the revision the push left it at.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PushedChange {
     pub change_number: ChangeNumber,
     pub change_id: ChangeId,

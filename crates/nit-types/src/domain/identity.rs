@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// It is carried in the commit message and survives the rewrites review
 /// provokes, which is what binds a new revision to the change it revises;
 /// a commit sha does not.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "String")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeId(String);
@@ -89,7 +89,7 @@ impl std::fmt::Display for ChangeId {
 /// A git object name, in full: 40 hex characters.
 ///
 /// Only display ever shortens it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "String")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Sha(String);
@@ -165,7 +165,19 @@ impl std::fmt::Display for Sha {
 
 /// Which version of a change: 0-based, in the order the revisions were
 /// observed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    utoipa::ToSchema,
+)]
 #[serde(transparent)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct RevisionNumber(u64);
@@ -206,7 +218,19 @@ impl std::str::FromStr for RevisionNumber {
 ///
 /// Scoped to one nit instance, unlike the [`ChangeId`] that travels in the
 /// commit message.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    utoipa::ToSchema,
+)]
 #[serde(transparent)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ChangeNumber(u64);

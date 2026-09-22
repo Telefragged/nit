@@ -13,7 +13,7 @@ use super::Tags;
 use super::Verdict;
 
 /// The kind of one log entry.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LogKind {
     Revision,
@@ -55,6 +55,7 @@ impl std::str::FromStr for LogKind {
 /// What a `lifecycle` log entry records about a change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LifecycleAction {
     Merged,
@@ -80,6 +81,7 @@ impl LifecycleAction {
 /// concurrent shared-change push cannot duplicate it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct RevisionPayload {
     pub commit_sha: Sha,
     pub parent_sha: Sha,
@@ -100,12 +102,14 @@ pub struct RevisionPayload {
 /// disturbs no review status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct TagsPayload {
     pub tags: Tags,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ReviewPayload {
     pub revision: RevisionNumber,
     pub verdict: Verdict,
@@ -121,7 +125,7 @@ pub struct ReviewPayload {
 ///
 /// With `thread_id` unset it **opens a new thread** at its anchor; with
 /// it set it **replies** to that thread, which owns the anchor.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(from = "LoggedComment")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentInput {
@@ -211,6 +215,7 @@ impl From<LoggedComment> for CommentInput {
 /// canonical ref; `message` is an optional reason on `abandoned`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct LifecyclePayload {
     pub action: LifecycleAction,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -225,6 +230,7 @@ pub struct LifecyclePayload {
 /// `{…, "kind": …, "payload": …}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(tag = "kind", content = "payload", rename_all = "snake_case")]
 pub enum LogPayload {
     Revision(RevisionPayload),
@@ -270,6 +276,7 @@ impl LogPayload {
 /// discriminant and the `payload` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct LogEntry {
     pub change_number: ChangeNumber,
     pub position: u64,

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// The map orders by key, so a set serializes stably and two sets
 /// compare verbatim. Only a [`Tag`] enters a set, and that holds for a
 /// set arriving over the wire, so every pair in one meets the vocabulary.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "BTreeMap<String, String>")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Tags(BTreeMap<String, String>);
@@ -234,6 +234,16 @@ impl Serialize for Tag {
         serializer.serialize_str(&format!("{}={}", self.key, self.value))
     }
 }
+
+impl utoipa::PartialSchema for Tag {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::Type::String)
+            .into()
+    }
+}
+
+impl utoipa::ToSchema for Tag {}
 
 impl TryFrom<String> for Tag {
     type Error = TagError;

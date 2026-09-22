@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 /// it is, comment drafts included.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct BatchSubmitResult {
     /// Changes whose draft decision published.
     pub submitted: u64,
@@ -20,6 +21,7 @@ pub struct BatchSubmitResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct SubmitError {
     pub change_number: ChangeNumber,
     pub message: String,

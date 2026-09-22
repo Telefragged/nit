@@ -7,6 +7,7 @@ use super::LifecycleAction;
 /// A reviewer's verdict on one change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
     Approve,
@@ -33,6 +34,7 @@ impl Verdict {
 /// [`Decision::as_lifecycle`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Decision {
     Approve,
@@ -93,6 +95,7 @@ impl std::str::FromStr for Decision {
 /// A change's displayed status at a pinned revision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ChangeStatus {
     Pending,

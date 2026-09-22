@@ -15,6 +15,7 @@ use crate::domain::{ChangeStatus, GraphSection};
 /// Walked from the tracked ref's HEAD down (`GET /api/history?repo={id}`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct HistoryCommit {
     pub sha: Sha,
     /// Parent commit-shas; more than one is a merge.
@@ -34,6 +35,7 @@ pub struct HistoryCommit {
 /// commits** deep.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct RepoHistory {
     /// HEAD-first, and every commit precedes its parents. Each commit's
     /// `parents` carry the edges.
@@ -59,6 +61,7 @@ pub struct RepoHistory {
 /// node reports its own value as `group`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ChangeGraph {
     /// The canonical ref has merged commits below the displayed window — the
     /// client shows an "earlier history hidden" marker and dangles deep forks
@@ -85,6 +88,7 @@ pub struct ChangeGraph {
 /// than the displayed window, and nothing is missing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct GraphNode {
     /// The node's stable id.
     pub commit_sha: Sha,

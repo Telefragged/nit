@@ -32,6 +32,8 @@ use crate::domain::Verdict;
 /// with `status` to exclude them.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct ChangeQuery {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
@@ -56,6 +58,7 @@ pub struct ChangeQuery {
 /// The same shape the websocket ships as a `projection` frame.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ChangeList {
     pub changes: Vec<ChangeProjection>,
 }
@@ -63,6 +66,7 @@ pub struct ChangeList {
 /// `GET /api/changes/{id}` response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ChangeDetail {
     pub id: ChangeNumber,
     pub repo_id: u64,
@@ -88,6 +92,7 @@ pub struct ChangeDetail {
 /// decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ChangeDrafts {
     pub drafts: Vec<Draft>,
     pub draft_decision: Option<DraftDecision>,
@@ -95,6 +100,7 @@ pub struct ChangeDrafts {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct Revision {
     pub number: RevisionNumber,
     pub commit_sha: Sha,
@@ -113,6 +119,7 @@ pub struct Revision {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct Review {
     pub id: u64,
     pub revision: RevisionNumber,
@@ -127,7 +134,7 @@ pub struct Review {
 /// Labelling is its own action, so it needs no push and no new revision.
 /// The tags land as a [`crate::domain::TagsPayload`], which says how they
 /// meet the tags the change already carries.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct TagsRequest {
     pub tags: Tags,
 }
@@ -136,7 +143,7 @@ pub struct TagsRequest {
 ///
 /// The body is optional — an absent or empty `message` abandons without
 /// a reason.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct AbandonRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -151,6 +158,7 @@ pub struct AbandonRequest {
 /// contribute too.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct TagList {
     /// Each key in use, with its distinct values. Keys and values sorted.
     pub tags: BTreeMap<String, Vec<String>>,

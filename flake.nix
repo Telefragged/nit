@@ -440,7 +440,7 @@
             '';
           };
           # Build and round-trip-test nit-types with NO optional features —
-          # the serde-only baseline an optional feature (the server's
+          # the no-feature baseline an optional feature (the server's
           # `features = ["clap"]`, the web's `features = ["ts"]`) would mask.
           test-nit-types = cargoNix.workspaceMembers."nit-types".build.override {
             runTests = true;

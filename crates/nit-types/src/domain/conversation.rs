@@ -11,7 +11,7 @@ use super::RevisionNumber;
 ///
 /// `new` is the revision's commit tree, `old` its parent tree. An
 /// unspecified side is `new`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -49,6 +49,7 @@ impl std::str::FromStr for Side {
 /// Where a thread is anchored within a revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case", from = "StoredAnchor")]
 pub enum Anchor {
     /// The change as a whole (no file).
@@ -133,6 +134,7 @@ impl From<StoredAnchor> for Anchor {
 /// exactly one line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LineAnchor {
     /// The whole line.
@@ -229,6 +231,7 @@ pub enum AnchorError {
 /// fold-assigned by creation order, never stored.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ThreadProjection {
     pub id: u64,
     pub revision: RevisionNumber,
@@ -245,6 +248,7 @@ pub struct ThreadProjection {
 /// own note — which is what distinguishes reviewer from author.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ThreadComment {
     pub body: String,
     pub review_id: Option<u64>,
@@ -257,7 +261,7 @@ pub struct ThreadComment {
 /// exclusive, `end_line` = the comment's `line`. The JSON shape is these
 /// four fields. They are domain coordinates (always non-negative), so the
 /// shape is `u64`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "Selection")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentRange {
@@ -360,6 +364,7 @@ impl TryFrom<Selection> for CommentRange {
 /// A reviewer's unpublished comment.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct Draft {
     pub id: u64,
     pub change_number: ChangeNumber,
@@ -378,6 +383,7 @@ pub struct Draft {
 /// A reviewer's draft decision plus its cover note/reason.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct DraftDecision {
     pub decision: Decision,
     #[serde(default)]

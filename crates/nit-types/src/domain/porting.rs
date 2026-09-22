@@ -25,6 +25,7 @@ pub struct ThreadOrigin {
 /// ported line anchor carries no `line_text`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct PortedComment {
     pub thread_id: u64,
     pub revision: RevisionNumber,

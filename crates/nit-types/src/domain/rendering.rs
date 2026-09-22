@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// and `history` descends below it: merged commits, oldest deepest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GraphSection {
     Open,
@@ -18,6 +19,7 @@ pub enum GraphSection {
 /// How a file changed between the two diffed trees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FileStatus {
     Added,
@@ -36,6 +38,7 @@ pub enum FileStatus {
 /// as a column of empty lines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffMode {
     #[default]
@@ -51,6 +54,7 @@ pub enum DiffMode {
 /// re-indented.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Whitespace {
     #[default]
@@ -62,7 +66,19 @@ pub enum Whitespace {
 ///
 /// Each setting is independent, and a request that omits one takes its
 /// default.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    utoipa::ToSchema,
+    utoipa::IntoParams,
+)]
+#[into_params(parameter_in = Query)]
 pub struct DiffView {
     #[serde(default)]
     pub mode: DiffMode,
@@ -73,6 +89,7 @@ pub struct DiffView {
 /// A diff line's role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LineKind {
     Context,

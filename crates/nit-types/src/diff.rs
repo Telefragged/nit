@@ -6,6 +6,7 @@ use crate::domain::{FileStatus, LineKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct Diff {
     pub files: Vec<DiffFile>,
 }
@@ -18,6 +19,7 @@ pub struct Diff {
 /// hunks do.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct FileLines {
     pub lines: Vec<Line>,
 }
@@ -30,6 +32,7 @@ pub struct FileLines {
 /// carries its own count.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct DiffFile {
     /// New path (old path when deleted).
     pub path: String,
@@ -51,6 +54,7 @@ pub struct DiffFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct Hunk {
     pub old_start: u64,
     pub old_lines: u64,
@@ -62,6 +66,7 @@ pub struct Hunk {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct Line {
     pub kind: LineKind,
     /// Old line number; absent for add.

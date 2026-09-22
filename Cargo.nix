@@ -2956,6 +2956,27 @@ rec {
             packageId = "hashbrown 0.17.1";
             usesDefaultFeatures = false;
           }
+          {
+            name = "serde";
+            packageId = "serde";
+            optional = true;
+            usesDefaultFeatures = false;
+            target = { target, features }: false;
+          }
+          {
+            name = "serde_core";
+            packageId = "serde_core";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
+        devDependencies = [
+          {
+            name = "serde";
+            packageId = "serde";
+            usesDefaultFeatures = false;
+            features = [ "derive" ];
+          }
         ];
         features = {
           "arbitrary" = [ "dep:arbitrary" ];
@@ -2966,7 +2987,7 @@ rec {
           "serde" = [ "dep:serde_core" "dep:serde" ];
           "sval" = [ "dep:sval" ];
         };
-        resolvedDefaultFeatures = [ "default" "std" ];
+        resolvedDefaultFeatures = [ "default" "serde" "std" ];
       };
       "is_terminal_polyfill" = rec {
         crateName = "is_terminal_polyfill";
@@ -3765,6 +3786,10 @@ rec {
             name = "ts-rs";
             packageId = "ts-rs";
             optional = true;
+          }
+          {
+            name = "utoipa";
+            packageId = "utoipa";
           }
         ];
         devDependencies = [
@@ -6803,6 +6828,99 @@ rec {
         features = {
         };
         resolvedDefaultFeatures = [ "default" ];
+      };
+      "utoipa" = rec {
+        crateName = "utoipa";
+        version = "5.5.0";
+        edition = "2021";
+        sha256 = "0q01idama7ndvhknm9fsi24ibbbh0zl1d5kbs73ic2z8d3gibplb";
+        authors = [
+          "Juha Kukkonen <juha7kukkonen@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "indexmap";
+            packageId = "indexmap";
+            features = [ "serde" ];
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+          }
+          {
+            name = "utoipa-gen";
+            packageId = "utoipa-gen";
+            optional = true;
+          }
+        ];
+        features = {
+          "actix_extras" = [ "utoipa-gen?/actix_extras" ];
+          "auto_into_responses" = [ "utoipa-gen?/auto_into_responses" ];
+          "axum_extras" = [ "utoipa-gen?/axum_extras" ];
+          "chrono" = [ "utoipa-gen?/chrono" ];
+          "config" = [ "utoipa-gen?/config" ];
+          "debug" = [ "utoipa-gen?/debug" ];
+          "decimal" = [ "utoipa-gen?/decimal" ];
+          "decimal_float" = [ "utoipa-gen?/decimal_float" ];
+          "default" = [ "macros" ];
+          "indexmap" = [ "utoipa-gen?/indexmap" ];
+          "jiff_0_2" = [ "utoipa-gen?/jiff_0_2" ];
+          "macros" = [ "dep:utoipa-gen" ];
+          "non_strict_integers" = [ "utoipa-gen?/non_strict_integers" ];
+          "rc_schema" = [ "utoipa-gen?/rc_schema" ];
+          "repr" = [ "utoipa-gen?/repr" ];
+          "rocket_extras" = [ "utoipa-gen?/rocket_extras" ];
+          "serde_norway" = [ "dep:serde_norway" ];
+          "smallvec" = [ "utoipa-gen?/smallvec" ];
+          "time" = [ "utoipa-gen?/time" ];
+          "ulid" = [ "utoipa-gen?/ulid" ];
+          "url" = [ "utoipa-gen?/url" ];
+          "uuid" = [ "utoipa-gen?/uuid" ];
+          "yaml" = [ "serde_norway" "utoipa-gen?/yaml" ];
+        };
+        resolvedDefaultFeatures = [ "default" "macros" ];
+      };
+      "utoipa-gen" = rec {
+        crateName = "utoipa-gen";
+        version = "5.5.0";
+        edition = "2021";
+        sha256 = "1y1fnnamhi9j21swzcvvi8gscb8hjz3l0f6r6n305wrdwngbk83b";
+        procMacro = true;
+        libName = "utoipa_gen";
+        authors = [
+          "Juha Kukkonen <juha7kukkonen@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+          {
+            name = "syn";
+            packageId = "syn 2.0.119";
+            features = [ "full" "extra-traits" ];
+          }
+        ];
+        features = {
+          "actix_extras" = [ "regex" "syn/extra-traits" ];
+          "axum_extras" = [ "regex" "syn/extra-traits" ];
+          "config" = [ "dep:utoipa-config" "dep:once_cell" ];
+          "debug" = [ "syn/extra-traits" ];
+          "regex" = [ "dep:regex" ];
+          "rocket_extras" = [ "regex" "syn/extra-traits" ];
+          "ulid" = [ "dep:ulid" ];
+          "url" = [ "dep:url" ];
+          "uuid" = [ "dep:uuid" ];
+        };
       };
       "valuable" = rec {
         crateName = "valuable";

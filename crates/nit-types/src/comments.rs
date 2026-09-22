@@ -8,6 +8,7 @@ use crate::domain::RevisionNumber;
 /// `POST /api/changes/{id}/drafts` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct NewDraft {
     pub revision: RevisionNumber,
     /// Where a new thread hangs. A reply keeps the anchor it copies.
@@ -26,6 +27,7 @@ pub struct NewDraft {
 /// `PATCH /api/drafts/{id}` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct EditDraft {
     pub body: String,
     #[serde(default)]
@@ -36,7 +38,7 @@ pub struct EditDraft {
 /// `POST /api/changes/{id}/comments` request.
 ///
 /// The author's single comment-posting path.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NewComment {
     #[serde(default)]
     pub thread_id: Option<u64>,

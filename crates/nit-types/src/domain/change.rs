@@ -18,6 +18,7 @@ use super::Verdict;
 /// the fold answers "is it merged", the log answers "as what".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Lifecycle {
     Active,
@@ -27,6 +28,7 @@ pub enum Lifecycle {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct RevisionProjection {
     /// 0-based, minted in the fold.
     pub number: RevisionNumber,
@@ -41,6 +43,7 @@ pub struct RevisionProjection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ReviewProjection {
     /// The `position` of the `review` entry this is the fold of.
     ///
@@ -59,6 +62,7 @@ pub struct ReviewProjection {
 /// opaque: a projection is only ever produced and consumed by the fold.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct ChangeProjection {
     pub id: ChangeNumber,
     pub repo_id: u64,

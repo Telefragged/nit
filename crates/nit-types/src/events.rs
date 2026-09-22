@@ -21,6 +21,7 @@ use crate::domain::LogEntry;
 /// A socket holds one subscription. A second one replaces the first.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 pub struct Subscription {
     pub query: ChangeQuery,
     /// Send the stored entries with a `sequence` greater than this.
@@ -32,6 +33,7 @@ pub struct Subscription {
 /// A server → client websocket message. Externally tagged, `snake_case`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum StreamMessage {
     /// A picked change's folded projection, sent once, before its entries.
