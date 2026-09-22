@@ -398,3 +398,50 @@ fn lines_of_a_renamed_file_need_both_of_its_names() {
     assert_eq!(count(&one_sided, "context"), 0);
     assert_eq!(count(&one_sided, "add"), 40);
 }
+
+/// `/lines` serves the whole commit message for `/COMMIT_MSG`, both against
+/// the parent and against an earlier revision.
+#[test]
+fn lines_of_the_commit_message() {
+    let g = GitRepo::new();
+    let base = g.commit(&[g.root], "base\n", &[("a.txt", "a\n")]);
+    g.branch("main", base);
+    let message = |subject: &str| {
+        format!(
+            "{subject}\n\n{}\nChange-Id: {}\n",
+            lines("body", 1..=8),
+            change_id("Imsglines")
+        )
+    };
+    let c1 = g.commit(&[base], &message("feat: thing"), &[("a.txt", "b\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, pushed) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{pushed}");
+    let id = tip_change_number(&pushed);
+    let c2 = g.commit(&[base], &message("feat: reworded"), &[("a.txt", "b\n")]);
+    g.branch("feat", c2);
+    let (st, pushed) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{pushed}");
+
+    let kinds = |query: &str| {
+        let (st, body) = http_get(&server.url(&format!(
+            "/api/changes/{id}/revisions/1/lines?path=/COMMIT_MSG{query}"
+        )));
+        assert_eq!(st, 200, "{body}");
+        body["lines"]
+            .as_array()
+            .expect("lines array")
+            .iter()
+            .map(|l| l["kind"].as_str().expect("a kind").to_string())
+            .collect::<Vec<_>>()
+    };
+    let count = |kinds: &[String], kind: &str| kinds.iter().filter(|k| *k == kind).count();
+    // Subject, blank, eight body lines, blank, trailer.
+    assert_eq!(count(&kinds(""), "add"), 12);
+    // The reworded subject, then every unchanged line, not only the three
+    // around the change.
+    let interdiff = kinds("&against=0");
+    assert_eq!((count(&interdiff, "del"), count(&interdiff, "add")), (1, 1));
+    assert_eq!(count(&interdiff, "context"), 11);
+}

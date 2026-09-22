@@ -259,9 +259,9 @@ pub(super) fn stats(hunks: &[Hunk]) -> (u64, u64) {
 /// Vs parent (`old: None`) the whole message as one all-`add` hunk;
 /// interdiff a real line diff `old → new`, identical messages rendered as
 /// a single all-`context` hunk so the message stays visible and
-/// commentable.
+/// commentable. `context` is the count of unchanged lines around a change.
 #[must_use]
-pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
+pub fn commit_msg_file(old: Option<&str>, new: &str, context: u32) -> DiffFile {
     let mut file = DiffFile {
         path: COMMIT_MSG_PATH.to_string(),
         old_path: None,
@@ -281,7 +281,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str) -> DiffFile {
         &mut file,
         old.unwrap_or_default().as_bytes(),
         new.as_bytes(),
-        3,
+        context,
         DiffView::default(),
     );
     if file.hunks.is_empty() && !new.is_empty() {
@@ -700,7 +700,7 @@ mod tests {
     #[test]
     fn commit_msg_file_vs_parent_is_all_add() {
         let msg = "feat: subject\n\nA body line.\n\nChange-Id: Iabc\n";
-        let f = commit_msg_file(None, msg);
+        let f = commit_msg_file(None, msg, 3);
         assert_eq!(f.path, COMMIT_MSG_PATH);
         assert_eq!(f.old_path, None);
         assert_eq!(f.status, FileStatus::Added);
@@ -733,7 +733,7 @@ mod tests {
     fn commit_msg_file_interdiff_diffs_messages() {
         let old = "feat: subject\n\nOld body.\n\nChange-Id: Iabc\n";
         let new = "feat: subject\n\nNew body,\nover two lines.\n\nChange-Id: Iabc\n";
-        let f = commit_msg_file(Some(old), new);
+        let f = commit_msg_file(Some(old), new, 3);
         assert_eq!(f.path, COMMIT_MSG_PATH);
         assert_eq!(f.status, FileStatus::Modified);
         assert_eq!((f.additions, f.deletions), (2, 1));
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn commit_msg_file_identical_interdiff_is_all_context() {
         let msg = "feat: subject\n\nSame body.\n\nChange-Id: Iabc\n";
-        let f = commit_msg_file(Some(msg), msg);
+        let f = commit_msg_file(Some(msg), msg, 3);
         assert_eq!(f.status, FileStatus::Modified);
         assert_eq!((f.additions, f.deletions), (0, 0));
         assert_eq!(f.hunks.len(), 1);

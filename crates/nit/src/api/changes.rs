@@ -181,6 +181,7 @@ pub(super) async fn revision_diff(
             diff::commit_msg_file(
                 revs.against.as_ref().map(|a| a.message.as_str()),
                 &revs.revision.message,
+                3,
             ),
         );
         Ok(Json(wire))
@@ -211,7 +212,9 @@ pub(super) struct LinesQuery {
 /// Lets the UI reveal the unchanged runs the shown diff hides. Built from
 /// the **same** `old → new` trees and drift tagging as [`revision_diff`],
 /// so a revealed line carries the exact kind/drift it would inside a
-/// hunk; the client slices the gap it needs.
+/// hunk; the client slices the gap it needs. The synthetic
+/// [`diff::COMMIT_MSG_PATH`] answers with the whole commit message, as
+/// [`revision_diff`] compares it.
 pub(super) async fn revision_lines(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,
@@ -228,11 +231,19 @@ pub(super) async fn revision_lines(
             mode: DiffMode::Full,
             whitespace: q.whitespace,
         };
-        let wire = contained_diff(&revs, u32::MAX, view, Some(&wanted))?;
-        let lines = wire
-            .files
-            .into_iter()
-            .find(|f| f.path == wanted.path)
+        let file = if wanted.path == diff::COMMIT_MSG_PATH {
+            Some(diff::commit_msg_file(
+                revs.against.as_ref().map(|a| a.message.as_str()),
+                &revs.revision.message,
+                u32::MAX,
+            ))
+        } else {
+            contained_diff(&revs, u32::MAX, view, Some(&wanted))?
+                .files
+                .into_iter()
+                .find(|f| f.path == wanted.path)
+        };
+        let lines = file
             .map(|f| f.hunks.into_iter().flat_map(|h| h.lines).collect())
             .unwrap_or_default();
         Ok(Json(FileLines { lines }))
