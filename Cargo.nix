@@ -1765,7 +1765,6 @@ rec {
           "default" = [ "std" ];
           "std" = [ "alloc" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
       "futures-task" = rec {
         crateName = "futures-task";
@@ -2267,14 +2266,6 @@ rec {
           "full" = [ "channel" ];
         };
         resolvedDefaultFeatures = [ "default" ];
-      };
-      "http-range-header" = rec {
-        crateName = "http-range-header";
-        version = "0.4.2";
-        edition = "2018";
-        sha256 = "171mszmmq0lzpj9brig4wz1sz8hh3h6dgmaxs69q2db8ibma4wci";
-        libName = "http_range_header";
-
       };
       "httparse" = rec {
         crateName = "httparse";
@@ -2874,6 +2865,49 @@ rec {
         ];
         features = {
           "default" = [ "unified_diff" ];
+        };
+      };
+      "include_dir" = rec {
+        crateName = "include_dir";
+        version = "0.7.4";
+        edition = "2021";
+        sha256 = "1pfh3g45z88kwq93skng0n6g3r7zkhq9ldqs9y8rvr7i11s12gcj";
+        authors = [
+          "Michael Bryan <michaelfbryan@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "include_dir_macros";
+            packageId = "include_dir_macros";
+          }
+        ];
+        features = {
+          "glob" = [ "dep:glob" ];
+          "metadata" = [ "include_dir_macros/metadata" ];
+          "nightly" = [ "include_dir_macros/nightly" ];
+        };
+        resolvedDefaultFeatures = [ "default" ];
+      };
+      "include_dir_macros" = rec {
+        crateName = "include_dir_macros";
+        version = "0.7.4";
+        edition = "2021";
+        sha256 = "0x8smnf6knd86g69p19z5lpfsaqp8w0nx14kdpkz1m8bxnkqbavw";
+        procMacro = true;
+        authors = [
+          "Michael Bryan <michaelfbryan@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+        ];
+        features = {
         };
       };
       "indexmap" = rec {
@@ -3487,6 +3521,7 @@ rec {
         features = {
           "default" = [ "rev-mappings" ];
         };
+        resolvedDefaultFeatures = [ "default" "rev-mappings" ];
       };
       "mio" = rec {
         crateName = "mio";
@@ -3570,8 +3605,16 @@ rec {
             usesDefaultFeatures = false;
           }
           {
+            name = "include_dir";
+            packageId = "include_dir";
+          }
+          {
             name = "jiff";
             packageId = "jiff";
+          }
+          {
+            name = "mime_guess";
+            packageId = "mime_guess";
           }
           {
             name = "nit-types";
@@ -3599,17 +3642,6 @@ rec {
             name = "tokio";
             packageId = "tokio";
             features = [ "macros" "net" "rt-multi-thread" "signal" "sync" "time" ];
-          }
-          {
-            name = "tower";
-            packageId = "tower";
-            usesDefaultFeatures = false;
-            features = [ "util" ];
-          }
-          {
-            name = "tower-http";
-            packageId = "tower-http";
-            features = [ "fs" ];
           }
           {
             name = "tracing";
@@ -5216,7 +5248,7 @@ rec {
           }
           {
             name = "getrandom";
-            packageId = "getrandom 0.3.4";
+            packageId = "getrandom 0.4.3";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: ((target."unix" or false) || (target."windows" or false) || ("wasi" == target."os" or null));
@@ -5577,7 +5609,7 @@ rec {
           "tracing" = [ "dep:tracing" ];
           "windows-sys" = [ "dep:windows-sys" ];
         };
-        resolvedDefaultFeatures = [ "bytes" "default" "fs" "io-util" "libc" "macros" "mio" "net" "rt" "rt-multi-thread" "signal" "signal-hook-registry" "socket2" "sync" "time" "tokio-macros" "windows-sys" ];
+        resolvedDefaultFeatures = [ "bytes" "default" "io-util" "libc" "macros" "mio" "net" "rt" "rt-multi-thread" "signal" "signal-hook-registry" "socket2" "sync" "time" "tokio-macros" "windows-sys" ];
       };
       "tokio-macros" = rec {
         crateName = "tokio-macros";
@@ -5666,64 +5698,6 @@ rec {
           "webpki-roots" = [ "dep:webpki-roots" ];
         };
         resolvedDefaultFeatures = [ "connect" "default" "handshake" "stream" ];
-      };
-      "tokio-util" = rec {
-        crateName = "tokio-util";
-        version = "0.7.19";
-        edition = "2021";
-        sha256 = "0licqrhrawysjrsr0qw3cgzkkjph7090hlcqcm45aazmkg81aj29";
-        libName = "tokio_util";
-        authors = [
-          "Tokio Contributors <team@tokio.rs>"
-        ];
-        dependencies = [
-          {
-            name = "bytes";
-            packageId = "bytes";
-          }
-          {
-            name = "futures-core";
-            packageId = "futures-core";
-          }
-          {
-            name = "futures-sink";
-            packageId = "futures-sink";
-          }
-          {
-            name = "pin-project-lite";
-            packageId = "pin-project-lite";
-          }
-          {
-            name = "tokio";
-            packageId = "tokio";
-            features = [ "sync" ];
-          }
-        ];
-        devDependencies = [
-          {
-            name = "tokio";
-            packageId = "tokio";
-            features = [ "full" ];
-          }
-        ];
-        features = {
-          "__docs_rs" = [ "futures-util" ];
-          "codec" = [ "libc" ];
-          "compat" = [ "futures-io" ];
-          "full" = [ "codec" "compat" "io-util" "time" "net" "rt" "join-map" ];
-          "futures-io" = [ "dep:futures-io" ];
-          "futures-util" = [ "dep:futures-util" ];
-          "hashbrown" = [ "dep:hashbrown" ];
-          "io-util" = [ "io" "tokio/rt" "tokio/io-util" ];
-          "join-map" = [ "rt" "hashbrown" ];
-          "libc" = [ "dep:libc" ];
-          "net" = [ "tokio/net" ];
-          "rt" = [ "tokio/rt" "tokio/sync" "futures-util" ];
-          "slab" = [ "dep:slab" ];
-          "time" = [ "tokio/time" "slab" ];
-          "tracing" = [ "dep:tracing" ];
-        };
-        resolvedDefaultFeatures = [ "io" ];
       };
       "tower" = rec {
         crateName = "tower";
@@ -5826,162 +5800,6 @@ rec {
           "util" = [ "futures-core" "futures-util" "pin-project-lite" "sync_wrapper" ];
         };
         resolvedDefaultFeatures = [ "futures-core" "futures-util" "log" "make" "pin-project-lite" "sync_wrapper" "tokio" "tracing" "util" ];
-      };
-      "tower-http" = rec {
-        crateName = "tower-http";
-        version = "0.7.1";
-        edition = "2018";
-        sha256 = "172v4iw852pzl0v0k0nlklavlsnaw3zmbmx1w2xirmpxlik5m808";
-        libName = "tower_http";
-        authors = [
-          "Tower Maintainers <team@tower-rs.com>"
-        ];
-        dependencies = [
-          {
-            name = "bitflags";
-            packageId = "bitflags 2.13.2";
-          }
-          {
-            name = "bytes";
-            packageId = "bytes";
-          }
-          {
-            name = "futures-core";
-            packageId = "futures-core";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "futures-util";
-            packageId = "futures-util";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "http";
-            packageId = "http";
-          }
-          {
-            name = "http-body";
-            packageId = "http-body";
-            optional = true;
-          }
-          {
-            name = "http-body-util";
-            packageId = "http-body-util";
-            optional = true;
-          }
-          {
-            name = "http-range-header";
-            packageId = "http-range-header";
-            optional = true;
-          }
-          {
-            name = "httpdate";
-            packageId = "httpdate";
-            optional = true;
-          }
-          {
-            name = "mime";
-            packageId = "mime";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "mime_guess";
-            packageId = "mime_guess";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "percent-encoding";
-            packageId = "percent-encoding";
-          }
-          {
-            name = "pin-project-lite";
-            packageId = "pin-project-lite";
-          }
-          {
-            name = "tokio";
-            packageId = "tokio";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "tokio-util";
-            packageId = "tokio-util";
-            optional = true;
-            usesDefaultFeatures = false;
-            features = [ "io" ];
-          }
-          {
-            name = "tower-layer";
-            packageId = "tower-layer";
-          }
-          {
-            name = "tower-service";
-            packageId = "tower-service";
-          }
-        ];
-        devDependencies = [
-          {
-            name = "bytes";
-            packageId = "bytes";
-          }
-          {
-            name = "futures-util";
-            packageId = "futures-util";
-          }
-          {
-            name = "http-body";
-            packageId = "http-body";
-          }
-          {
-            name = "http-body-util";
-            packageId = "http-body-util";
-          }
-          {
-            name = "tokio";
-            packageId = "tokio";
-            features = [ "full" ];
-          }
-        ];
-        features = {
-          "auth" = [ "base64" "validate-request" ];
-          "base64" = [ "dep:base64" ];
-          "catch-panic" = [ "tracing" "futures-util/std" "dep:http-body" "dep:http-body-util" ];
-          "compression-br" = [ "dep:async-compression" "async-compression?/brotli" "futures-core" "dep:http-body" "tokio-util" "dep:tokio" ];
-          "compression-deflate" = [ "dep:async-compression" "async-compression?/zlib" "futures-core" "dep:http-body" "tokio-util" "dep:tokio" ];
-          "compression-full" = [ "compression-br" "compression-deflate" "compression-gzip" "compression-zstd" ];
-          "compression-gzip" = [ "dep:async-compression" "async-compression?/gzip" "futures-core" "dep:http-body" "tokio-util" "dep:tokio" ];
-          "compression-zstd" = [ "dep:async-compression" "async-compression?/zstd" "futures-core" "dep:http-body" "tokio-util" "dep:tokio" ];
-          "decompression-br" = [ "dep:async-compression" "async-compression?/brotli" "futures-core" "dep:http-body" "dep:http-body-util" "tokio-util" "dep:tokio" ];
-          "decompression-deflate" = [ "dep:async-compression" "async-compression?/zlib" "futures-core" "dep:http-body" "dep:http-body-util" "tokio-util" "dep:tokio" ];
-          "decompression-full" = [ "decompression-br" "decompression-deflate" "decompression-gzip" "decompression-zstd" ];
-          "decompression-gzip" = [ "dep:async-compression" "async-compression?/gzip" "futures-core" "dep:http-body" "dep:http-body-util" "tokio-util" "dep:tokio" ];
-          "decompression-zstd" = [ "dep:async-compression" "async-compression?/zstd" "futures-core" "dep:http-body" "dep:http-body-util" "tokio-util" "dep:tokio" ];
-          "follow-redirect" = [ "futures-util" "dep:http-body" "dep:url" "tower/util" ];
-          "fs" = [ "dep:tokio" "tokio?/fs" "tokio?/io-util" "futures-core" "futures-util" "dep:http-body" "dep:http-body-util" "tokio-util/io" "dep:http-range-header" "mime_guess" "mime" "httpdate" "set-status" "futures-util/alloc" ];
-          "full" = [ "add-extension" "auth" "catch-panic" "compression-full" "cors" "csrf" "decompression-full" "follow-redirect" "fs" "limit" "map-request-body" "map-response-body" "metrics" "normalize-path" "on-early-drop" "propagate-header" "redirect" "request-id" "sensitive-headers" "set-header" "set-status" "timeout" "trace" "util" "validate-request" ];
-          "futures-core" = [ "dep:futures-core" ];
-          "futures-util" = [ "dep:futures-util" ];
-          "httpdate" = [ "dep:httpdate" ];
-          "limit" = [ "dep:http-body" "dep:http-body-util" ];
-          "metrics" = [ "dep:http-body" "dep:tokio" "tokio?/time" ];
-          "mime" = [ "dep:mime" ];
-          "mime_guess" = [ "dep:mime_guess" ];
-          "on-early-drop" = [ "dep:http-body" ];
-          "request-id" = [ "uuid" ];
-          "timeout" = [ "dep:http-body" "dep:tokio" "tokio?/time" ];
-          "tokio-util" = [ "dep:tokio-util" ];
-          "tower" = [ "dep:tower" ];
-          "trace" = [ "dep:http-body" "tracing" ];
-          "tracing" = [ "dep:tracing" ];
-          "util" = [ "tower" ];
-          "uuid" = [ "dep:uuid" ];
-          "validate-request" = [ "mime" ];
-        };
-        resolvedDefaultFeatures = [ "default" "fs" "futures-core" "futures-util" "httpdate" "mime" "mime_guess" "set-status" "tokio-util" ];
       };
       "tower-layer" = rec {
         crateName = "tower-layer";

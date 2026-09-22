@@ -1,20 +1,30 @@
 //! Static UI serving: the built SPA outside /api, index.html fallback
-//! for client-side routes, API-only without a web dist. Client routes
+//! for client-side routes, API-only without a web UI. Client routes
 //! are id addressed (`/repos/{id}`, `/changes/{id}`).
 
 mod common;
 
 use common::*;
+use include_dir::{Dir, DirEntry, File};
+
+static WEB_UI: Dir = Dir::new(
+    "",
+    &[
+        DirEntry::File(File::new("index.html", b"<html>nit-spa</html>")),
+        DirEntry::Dir(Dir::new(
+            "assets",
+            &[DirEntry::File(File::new(
+                "assets/app.js",
+                b"console.log('nit')",
+            ))],
+        )),
+    ],
+);
 
 #[test]
 fn serves_spa_with_index_fallback() {
     let dir = tempfile::tempdir().unwrap();
-    let dist = dir.path().join("dist");
-    std::fs::create_dir_all(dist.join("assets")).unwrap();
-    std::fs::write(dist.join("index.html"), "<html>nit-spa</html>").unwrap();
-    std::fs::write(dist.join("assets/app.js"), "console.log('nit')").unwrap();
-
-    let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(dist));
+    let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(&WEB_UI));
 
     let (st, body) = http_get(&server.url("/index.html"));
     assert_eq!(st, 200);
@@ -41,7 +51,7 @@ fn serves_spa_with_index_fallback() {
 }
 
 #[test]
-fn runs_api_only_without_web_dist() {
+fn runs_api_only_without_web_ui() {
     let dir = tempfile::tempdir().unwrap();
     let server = TestServer::start(dir.path().join("nit.sqlite3"), None);
 
@@ -60,10 +70,7 @@ fn runs_api_only_without_web_dist() {
 #[test]
 fn api_errors_are_json_everywhere() {
     let dir = tempfile::tempdir().unwrap();
-    let dist = dir.path().join("dist");
-    std::fs::create_dir_all(&dist).unwrap();
-    std::fs::write(dist.join("index.html"), "<html>nit-spa</html>").unwrap();
-    let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(dist));
+    let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(&WEB_UI));
 
     // Unknown /api paths error as JSON, not the SPA fallback.
     for path in ["/api", "/api/", "/api/nonexistent", "/api/chain/12"] {

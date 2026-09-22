@@ -1,7 +1,6 @@
 //! `nit serve` — the process wiring for the axum app (`nit::api`).
 //!
-//! Wires it to a listener, the sqlite database and the optional built web
-//! UI.
+//! Wires it to a listener and the sqlite database.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -15,10 +14,6 @@ pub struct ServeArgs {
     /// Default: `$XDG_DATA_HOME/nit/nit.sqlite3` when unset.
     #[arg(long)]
     pub db: Option<PathBuf>,
-    /// Built web UI directory served outside /api
-    /// (default: `$NIT_WEB_DIST`; API-only when unset)
-    #[arg(long)]
-    pub web_dist: Option<PathBuf>,
 }
 
 pub fn run(args: ServeArgs) -> Result<()> {
@@ -26,18 +21,15 @@ pub fn run(args: ServeArgs) -> Result<()> {
         Some(path) => path,
         None => nit::db::default_db_path()?,
     };
-    let web_dist = args
-        .web_dist
-        .or_else(|| std::env::var_os("NIT_WEB_DIST").map(PathBuf::from));
-    if web_dist.is_none() {
-        tracing::info!("no --web-dist/$NIT_WEB_DIST — serving the API only");
+    if nit::api::WEB_UI.is_none() {
+        tracing::info!("built without NIT_WEB_DIST, so serving the API only");
     }
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
         .block_on(async {
             let listener = tokio::net::TcpListener::bind(args.listen).await?;
-            nit::api::serve_on(listener, db_path, web_dist, shutdown_signal()).await
+            nit::api::serve_on(listener, db_path, shutdown_signal()).await
         })
 }
 

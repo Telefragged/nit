@@ -104,42 +104,43 @@ pub fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+/// The built web UI, compiled in when the build sets `NIT_WEB_DIST`.
+#[cfg(nit_web_ui)]
+pub static WEB_UI: Option<&include_dir::Dir> = Some(&include_dir::include_dir!("$NIT_WEB_DIST"));
+#[cfg(not(nit_web_ui))]
+pub static WEB_UI: Option<&include_dir::Dir> = None;
+
 /// Unknown `/api/*` paths stay JSON 404s.
-pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
+pub fn app(state: Arc<AppState>, web_ui: Option<&'static include_dir::Dir<'static>>) -> Router {
     let api = router(state).method_not_allowed_fallback(|| async {
         Error {
             status: StatusCode::METHOD_NOT_ALLOWED,
             message: "method not allowed".to_string(),
         }
     });
-    let spa = web_dist.map(|dist| {
-        tower_http::services::ServeDir::new(&dist).fallback(tower_http::services::ServeFile::new(
-            dist.join("index.html"),
-        ))
-    });
-    api.fallback(move |req: axum::extract::Request| {
-        let spa = spa.clone();
-        async move {
-            let path = req.uri().path();
-            if path == "/api" || path.starts_with("/api/") {
-                return Error::not_found(format!("no such endpoint: {path}")).into_response();
-            }
-            match spa {
-                Some(spa) => match tower::ServiceExt::oneshot(spa, req).await {
-                    // index.html is unhashed and points at the rest, so a
-                    // short cap means a redeployed UI is picked up promptly.
-                    Ok(mut resp) => {
-                        resp.headers_mut().insert(
-                            axum::http::header::CACHE_CONTROL,
-                            axum::http::HeaderValue::from_static("max-age=60"),
-                        );
-                        resp.into_response()
-                    }
-                    Err(infallible) => match infallible {},
-                },
-                None => StatusCode::NOT_FOUND.into_response(),
-            }
+    api.fallback(move |req: axum::extract::Request| async move {
+        let path = req.uri().path();
+        if path == "/api" || path.starts_with("/api/") {
+            return Error::not_found(format!("no such endpoint: {path}")).into_response();
         }
+        // A client-side route names no file, so it gets index.html.
+        let Some(file) = web_ui.and_then(|ui| {
+            ui.get_file(path.trim_start_matches('/'))
+                .or_else(|| ui.get_file("index.html"))
+        }) else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
+        let mime = mime_guess::from_path(file.path()).first_or_octet_stream();
+        (
+            [
+                (axum::http::header::CONTENT_TYPE, mime.to_string()),
+                // index.html is unhashed and points at the rest, so a short
+                // cap means a redeployed UI is picked up promptly.
+                (axum::http::header::CACHE_CONTROL, "max-age=60".to_string()),
+            ],
+            file.contents(),
+        )
+            .into_response()
     })
 }
 
@@ -151,14 +152,13 @@ pub fn app(state: Arc<AppState>, web_dist: Option<PathBuf>) -> Router {
 pub async fn serve_on(
     listener: tokio::net::TcpListener,
     db_path: PathBuf,
-    web_dist: Option<PathBuf>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     let state = AppState::load(db_path).await?;
     tracing::info!("listening on http://{addr}");
     let timer = tokio::spawn(timer::run_lifecycle_timer(state.clone()));
-    let res = serve_on_state(listener, state, web_dist, shutdown).await;
+    let res = serve_on_state(listener, state, WEB_UI, shutdown).await;
     timer.abort();
     res
 }
@@ -178,7 +178,7 @@ pub async fn serve_on(
 pub async fn serve_on_state(
     listener: tokio::net::TcpListener,
     state: Arc<AppState>,
-    web_dist: Option<PathBuf>,
+    web_ui: Option<&'static include_dir::Dir<'static>>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
     let st = state.clone();
@@ -186,7 +186,7 @@ pub async fn serve_on_state(
         shutdown.await;
         st.begin_shutdown();
     };
-    axum::serve(listener, app(state, web_dist))
+    axum::serve(listener, app(state, web_ui))
         .with_graceful_shutdown(shutdown)
         .await?;
     Ok(())

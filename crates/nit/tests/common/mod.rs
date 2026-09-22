@@ -176,14 +176,17 @@ pub struct TestServer {
 }
 
 impl TestServer {
-    pub fn start(db_path: std::path::PathBuf, web_dist: Option<std::path::PathBuf>) -> Self {
-        Self::start_at("127.0.0.1:0".parse().unwrap(), db_path, web_dist)
+    pub fn start(
+        db_path: std::path::PathBuf,
+        web_ui: Option<&'static include_dir::Dir<'static>>,
+    ) -> Self {
+        Self::start_at("127.0.0.1:0".parse().unwrap(), db_path, web_ui)
     }
 
     pub fn start_at(
         addr: std::net::SocketAddr,
         db_path: std::path::PathBuf,
-        web_dist: Option<std::path::PathBuf>,
+        web_ui: Option<&'static include_dir::Dir<'static>>,
     ) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
@@ -198,7 +201,7 @@ impl TestServer {
         let served = {
             let state = state.clone();
             rt.spawn(async move {
-                nit::api::serve_on_state(listener, state, web_dist, async {
+                nit::api::serve_on_state(listener, state, web_ui, async {
                     let _ = rx.await;
                 })
                 .await

@@ -6,6 +6,10 @@
 //! dirty flag is best-effort — a git change outside the crate won't re-stamp
 //! until the crate rebuilds. nix recomputes every build, so release stamps are
 //! exact.
+//!
+//! It also compiles the built web UI into the binary when `NIT_WEB_DIST` names
+//! its directory. The flake sets it; a plain `cargo` build leaves it unset and
+//! serves the API only.
 
 use std::process::Command;
 
@@ -16,6 +20,10 @@ fn main() {
         .or_else(git_suffix)
         .unwrap_or_default();
     println!("cargo:rustc-env=NIT_GIT_SUFFIX={suffix}");
+    println!("cargo::rustc-check-cfg=cfg(nit_web_ui)");
+    if std::env::var_os("NIT_WEB_DIST").is_some() {
+        println!("cargo::rustc-cfg=nit_web_ui");
+    }
 }
 
 /// `+<short-sha>[.dirty]`, or `None` outside a git tree (a tarball build).

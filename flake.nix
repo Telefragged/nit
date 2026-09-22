@@ -363,43 +363,31 @@
       packages = forAllSystems (
         pkgs:
         let
-          cargoNix = cargoNixFor pkgs;
-          webNpmDeps = webNpmDepsFor pkgs;
-        in
-        rec {
           nit-web = pkgs.buildNpmPackage {
             pname = "nit-web";
             inherit (webArgs) version src;
             inherit (pkgs) nodejs;
-            npmDeps = webNpmDeps;
+            npmDeps = webNpmDepsFor pkgs;
             preBuild = injectWasm pkgs;
             installPhase = "cp -r dist $out";
           };
-
           # Build only; tests live in the `test` check (the build/verify split).
-          # The git suffix rides in as an env var the crate's build.rs reads.
-          nit-unwrapped = cargoNix.workspaceMembers."nit".build.overrideAttrs (_: {
-            NIT_GIT_SUFFIX = gitSuffix;
-          });
-
-          # The real product: nit with the built web UI baked in via env.
-          nit =
-            pkgs.runCommand "nit"
-              {
-                nativeBuildInputs = [ pkgs.makeWrapper ];
-              }
-              ''
-                mkdir -p $out/bin
-                makeWrapper ${nit-unwrapped}/bin/nit $out/bin/nit \
-                  --set-default NIT_WEB_DIST ${nit-web}
-              '';
-
+          # The crate's build.rs reads the git suffix, and it compiles in the
+          # web UI that NIT_WEB_DIST names.
+          nitFor =
+            cargoPkgs:
+            (cargoNixFor cargoPkgs).workspaceMembers."nit".build.overrideAttrs (_: {
+              NIT_GIT_SUFFIX = gitSuffix;
+              NIT_WEB_DIST = nit-web;
+            });
+        in
+        rec {
+          inherit nit-web;
+          nit = nitFor pkgs;
           default = nit;
         }
         // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          nit-static = (cargoNixFor pkgs.pkgsStatic).workspaceMembers."nit".build.overrideAttrs (_: {
-            NIT_GIT_SUFFIX = gitSuffix;
-          });
+          nit-static = nitFor pkgs.pkgsStatic;
         }
       );
 
