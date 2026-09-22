@@ -121,7 +121,7 @@
       cargoNixFor =
         pkgs:
         let
-          rustToolchain = rustToolchainFor pkgs;
+          rustToolchain = rustToolchainFor pkgs.buildPackages;
           lints = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.lints;
         in
         pkgs.callPackage ./Cargo.nix {
@@ -321,7 +321,6 @@
               # come from the one pinned toolchain.
               rustToolchain
               pkg-config
-              libgit2
               sqlite
               zlib
 
@@ -396,6 +395,11 @@
               '';
 
           default = nit;
+        }
+        // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          nit-static = (cargoNixFor pkgs.pkgsStatic).workspaceMembers."nit".build.overrideAttrs (_: {
+            NIT_GIT_SUFFIX = gitSuffix;
+          });
         }
       );
 
@@ -506,6 +510,9 @@
             fi
             touch $out
           '';
+        }
+        // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          build-static = self.packages.${pkgs.system}.nit-static;
         }
       );
 

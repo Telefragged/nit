@@ -2066,6 +2066,7 @@ rec {
           "vendored-openssl" = [ "openssl-sys/vendored" "libgit2-sys/vendored-openssl" ];
           "zlib-ng-compat" = [ "libgit2-sys/zlib-ng-compat" ];
         };
+        resolvedDefaultFeatures = [ "vendored-libgit2" ];
       };
       "hashbrown 0.15.5" = rec {
         crateName = "hashbrown";
@@ -3239,6 +3240,7 @@ rec {
           "vendored-openssl" = [ "openssl-sys/vendored" ];
           "zlib-ng-compat" = [ "libz-sys/zlib-ng" "libssh2-sys?/zlib-ng-compat" ];
         };
+        resolvedDefaultFeatures = [ "vendored" ];
       };
       "libsqlite3-sys" = rec {
         crateName = "libsqlite3-sys";
@@ -3560,6 +3562,7 @@ rec {
             name = "git2";
             packageId = "git2";
             usesDefaultFeatures = false;
+            features = [ "vendored-libgit2" ];
           }
           {
             name = "imara-diff";
@@ -5213,7 +5216,7 @@ rec {
           }
           {
             name = "getrandom";
-            packageId = "getrandom 0.4.3";
+            packageId = "getrandom 0.3.4";
             optional = true;
             usesDefaultFeatures = false;
             target = { target, features }: ((target."unix" or false) || (target."windows" or false) || ("wasi" == target."os" or null));

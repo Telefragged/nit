@@ -14,7 +14,9 @@ async-broadcast = "0.7"
 axum = { version = "0.8", features = ["ws"] }
 clap = { version = "4", features = ["derive"] }
 deadpool-sqlite = "0.14.0"
-git2 = { version = "0.21", default-features = false }
+git2 = { version = "0.21", default-features = false, features = [
+  "vendored-libgit2",
+] }
 imara-diff = { version = "0.2.0", default-features = false }
 jiff = "0.2"
 nit-types = { workspace = true, features = ["clap"] }
