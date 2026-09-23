@@ -59,31 +59,141 @@ const serve = (dir) =>
     createReadStream(file).pipe(res);
   });
 
-/** File sections start collapsed; captures that show diff contents open
- * them all via the rail's toggle first. */
-const expandAllFiles = async (page) => {
-  await page.getByRole("button", { name: "expand all" }).click();
-  await page.waitForTimeout(100);
+/** The page half of `untilDom`: resolves once `test(arg)` holds. It runs
+ * the test now, then after each DOM mutation, and never on a timer. The
+ * file rail renders into a shadow root, which an observer of the document
+ * does not see, so the observer also watches that root once it exists. */
+function observe(test, arg) {
+  return new Promise((resolve) => {
+    const options = {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    };
+    const observer = new MutationObserver(check);
+    let rail = null;
+    function check() {
+      const root = document.querySelector("file-tree-container")?.shadowRoot;
+      if (root && root !== rail) {
+        rail = root;
+        observer.observe(root, options);
+      }
+      if (!test(arg)) return;
+      observer.disconnect();
+      resolve();
+    }
+    observer.observe(document, options);
+    check();
+  });
+}
+
+/** Resolves once `test(arg)` holds in the page. `test` runs in the page,
+ * so it can reach nothing of this module but `arg`. */
+const untilDom = (page, test, arg) =>
+  page.evaluate(
+    `(${observe.toString()})(${test.toString()}, ${JSON.stringify(arg)})`,
+  );
+
+/** Every page marks its `<main>` busy until all the data it draws has
+ * arrived. No `<main>` exists before the page's route has loaded. */
+const untilReady = (page) =>
+  untilDom(
+    page,
+    () =>
+      document.querySelector("#root main")?.getAttribute("aria-busy") ===
+      "false",
+  );
+
+/** The scroll spy highlights, in the rail, the last file section whose top
+ * is at or above the sticky line. It follows a scroll one frame and one
+ * render later, so a capture that scrolls waits until the highlight
+ * matches the layout. */
+const untilSpySettled = (page) =>
+  untilDom(page, () => {
+    const sections = [...document.querySelectorAll(".file-section")];
+    if (sections.length === 0) return true;
+    const line = parseFloat(getComputedStyle(sections[0]).scrollMarginTop) + 1;
+    const path = sections
+      .filter((s) => s.getBoundingClientRect().top <= line)
+      .at(-1)?.dataset.diffPath;
+    const selected = document
+      .querySelector("file-tree-container")
+      ?.shadowRoot?.querySelector('[data-item-selected="true"]');
+    return (
+      (selected?.dataset.itemPath ?? null) ===
+      (path === "/COMMIT_MSG" ? "Commit message" : (path ?? null))
+    );
+  });
+
+/** Checks that `locator` names exactly one element. Each step acts on what
+ * the step before it has already rendered, so a missing element is a
+ * failure to report at once, not a state to wait for. */
+const expectOne = async (locator) => {
+  const count = await locator.count();
+  if (count !== 1) {
+    throw new Error(`${locator.toString()} matched ${String(count)} elements`);
+  }
 };
 
-/** Opens the picker `label` names, so the capture shows its list. */
-const openPicker = async (page, label) => {
-  await page.getByLabel(label).click();
-  await page.waitForTimeout(100);
+/** Clicks the one element `locator` names, without Playwright's retries
+ * for actionability. */
+const clickNow = async (locator) => {
+  await expectOne(locator);
+  await locator.click({ force: true });
 };
+
+/** Types `text` into the one element `locator` names. */
+const fillNow = async (locator, text) => {
+  await expectOne(locator);
+  await locator.fill(text, { force: true });
+};
+
+/** Clicks a context-expand button and waits for the lines it reveals. The
+ * reveal waits on a read of the whole file, and its commit is the first
+ * after the click that adds diff lines. */
+const revealContext = async (page, button) => {
+  const before = await page.locator(".code").count();
+  await clickNow(button);
+  await untilDom(
+    page,
+    (n) => document.querySelectorAll(".code").length > n,
+    before,
+  );
+};
+
+/** Resolves once a draft that only resolves or reopens a thread shows. The
+ * fixtures seed none, so it can only be the one the capture saved. */
+const untilResolutionDraft = (page) =>
+  untilDom(page, () => !!document.querySelector(".comment-resolution-only"));
+
+/** File sections start collapsed; captures that show diff contents open
+ * them all via the rail's toggle first. */
+const expandAllFiles = (page) =>
+  clickNow(page.getByRole("button", { name: "expand all" }));
+
+/** Opens the picker `label` names, so the capture shows its list. */
+const openPicker = (page, label) => clickNow(page.getByLabel(label));
 
 /** Diff settings live behind the diffbar cog; a capture that wants a
  * non-default one picks it in the modal and applies. */
 const applySetting = async (page, name) => {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await clickNow(page.getByRole("button", { name: "Settings" }));
   // Scoped to the modal: an option label can be part of a page button's
   // name, as "All" is of "expand all".
   const modal = page.locator(".settings-modal");
-  await modal.getByRole("button", { name, exact: true }).click();
-  await modal.getByRole("button", { name: "Apply" }).click();
-  // Apply and the dismissal commit together, so the modal leaving the DOM
-  // says the new setting has rendered.
-  await page.waitForSelector(".settings-modal", { state: "detached" });
+  await clickNow(modal.getByRole("button", { name, exact: true }));
+  await clickNow(modal.getByRole("button", { name: "Apply" }));
+  // Apply closes the modal in the commit that applies the setting. A
+  // setting that is part of a read's key marks the page busy in that same
+  // commit, so an idle page without the modal shows the new setting.
+  await untilDom(
+    page,
+    () =>
+      !document.querySelector(".settings-modal") &&
+      document.querySelector("#root main")?.getAttribute("aria-busy") ===
+        "false",
+  );
 };
 
 /**
@@ -147,8 +257,7 @@ const captures = [
     path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
-      await page.locator(".review-item .review-more").click();
-      await page.waitForTimeout(100);
+      await clickNow(page.locator(".review-item .review-more"));
     },
   },
   // The tag graph at the right of the header: the changes that share the
@@ -193,8 +302,7 @@ const captures = [
     path: "/changes/77?against=base",
     fullPage: false,
     actions: async (page) => {
-      await page.locator(".tag-nav-all").click();
-      await page.waitForTimeout(100);
+      await clickNow(page.locator(".tag-nav-all"));
     },
   },
   {
@@ -212,10 +320,11 @@ const captures = [
     path: "/changes/11?against=base",
     actions: async (page) => {
       await expandAllFiles(page);
-      const btn = page.locator(".hunk-expand.expand-down").first();
-      await btn.scrollIntoViewIfNeeded();
-      await btn.click();
-      await page.waitForTimeout(150);
+      await revealContext(
+        page,
+        page.locator(".hunk-expand.expand-down").first(),
+      );
+      await untilSpySettled(page);
     },
   },
   // Trailing context: the run below the last hunk gets its own separator
@@ -226,12 +335,13 @@ const captures = [
     path: "/changes/11?against=base",
     actions: async (page) => {
       await expandAllFiles(page);
-      const btn = page.locator(
-        ".hunk-row:not(:has(.hunk-header)) .hunk-expand.expand-down",
+      await revealContext(
+        page,
+        page.locator(
+          ".hunk-row:not(:has(.hunk-header)) .hunk-expand.expand-down",
+        ),
       );
-      await btn.scrollIntoViewIfNeeded();
-      await btn.click();
-      await page.waitForTimeout(150);
+      await untilSpySettled(page);
     },
   },
   // Collapsed-by-default file sections: only the synthetic commit message
@@ -243,8 +353,8 @@ const captures = [
     name: "review-files-mixed",
     path: "/changes/11?against=base",
     actions: async (page) => {
-      await page.locator('[data-item-path="src/auth/store.rs"]').click();
-      await page.waitForTimeout(300);
+      await clickNow(page.locator('[data-item-path="src/auth/store.rs"]'));
+      await untilSpySettled(page);
     },
   },
   // The synthetic "Commit message" file with its resolved inline thread —
@@ -263,8 +373,8 @@ const captures = [
     path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
-      await page.getByRole("button", { name: "Reply" }).first().click();
-      await page.waitForSelector(".resolve-check");
+      await clickNow(page.getByRole("button", { name: "Reply" }).first());
+      await expectOne(page.locator(".resolve-check"));
     },
   },
   // Drafted thread resolution: Reopen the
@@ -276,10 +386,9 @@ const captures = [
     path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
-      await page.getByRole("button", { name: "Reopen" }).first().click();
-      await page.waitForSelector(".resolve-check");
-      await page.getByRole("button", { name: "Save draft" }).click();
-      await page.waitForSelector(".comment-resolution-only");
+      await clickNow(page.getByRole("button", { name: "Reopen" }).first());
+      await clickNow(page.getByRole("button", { name: "Save draft" }));
+      await untilResolutionDraft(page);
     },
   },
   // One-click Resolve: Resolve on an open thread drafts the empty
@@ -291,11 +400,13 @@ const captures = [
     path: "/changes/11?against=0",
     actions: async (page) => {
       await expandAllFiles(page);
-      await page
-        .locator(".thread", { hasText: "clone the pool" })
-        .getByRole("button", { name: "Resolve" })
-        .click();
-      await page.waitForSelector(".comment-resolution-only");
+      await clickNow(
+        page
+          .locator(".thread", { hasText: "clone the pool" })
+          .getByRole("button", { name: "Resolve" }),
+      );
+      await untilResolutionDraft(page);
+      await untilSpySettled(page);
     },
   },
   // The diffbar cog's settings popup, holding the diff knobs.
@@ -304,8 +415,8 @@ const captures = [
     path: "/changes/11?against=base",
     fullPage: false,
     actions: async (page) => {
-      await page.getByRole("button", { name: "Settings" }).click();
-      await page.waitForSelector(".settings-modal");
+      await clickNow(page.getByRole("button", { name: "Settings" }));
+      await expectOne(page.locator(".settings-modal"));
     },
   },
   // Side-by-side, base → r1: new-side drafts sit under the right column,
@@ -352,7 +463,11 @@ const captures = [
           return;
         }
       });
-      await page.waitForTimeout(150);
+      await untilDom(
+        page,
+        () => !!document.querySelector('.diff-column[data-sel-side="old"]'),
+      );
+      await untilSpySettled(page);
     },
   },
   // Side-by-side interdiff r0 → r1: comments pinned to r0 land under the
@@ -379,7 +494,7 @@ const captures = [
           .querySelector('[data-diff-path="src/auth/store.rs"]')
           ?.scrollIntoView({ block: "center" });
       });
-      await page.waitForTimeout(200);
+      await untilSpySettled(page);
     },
   },
   // Scroll spy: scrolled into the middle of the third file, so its header
@@ -398,7 +513,7 @@ const captures = [
           window.scrollY + el.getBoundingClientRect().top - 40,
         );
       });
-      await page.waitForTimeout(250); // rAF measure + react re-render
+      await untilSpySettled(page);
     },
   },
   // Scrolled mid-file: the sticky file header must pin flush under the
@@ -415,7 +530,7 @@ const captures = [
         const sec = document.getElementById("file-1");
         window.scrollTo(0, sec.offsetTop + 200);
       });
-      await page.waitForTimeout(200);
+      await untilSpySettled(page);
     },
   },
   // Old revision selected: full diff of r0, threads at their written lines.
@@ -432,10 +547,11 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await openPicker(page, "Diff base");
-      await page.getByRole("option", { name: "r0 6 comments" }).click();
+      await clickNow(page.getByRole("option", { name: "r0 6 comments" }));
       // data-diff-ready="0" shows that the r0 diff read succeeded, and an
       // idle page shows that the other reads have answered too.
-      await page.waitForFunction(
+      await untilDom(
+        page,
         () =>
           !!document.querySelector('[data-diff-ready="0"]') &&
           document.querySelector("#root main")?.getAttribute("aria-busy") ===
@@ -469,7 +585,7 @@ const captures = [
         sel.addRange(range);
       });
       await page.keyboard.press("c");
-      await page.waitForSelector(".selection-miss");
+      await expectOne(page.locator(".selection-miss"));
     },
   },
   {
@@ -492,10 +608,10 @@ const captures = [
         sel.addRange(range);
       });
       await page.keyboard.press("c");
-      await page.waitForSelector("textarea");
-      await page
-        .locator("textarea")
-        .fill("Should revoke_family also bump the metrics counter?");
+      await fillNow(
+        page.locator("textarea"),
+        "Should revoke_family also bump the metrics counter?",
+      );
     },
   },
   // Autosize: the inline editor grows to fit a multi-line draft instead of
@@ -517,17 +633,15 @@ const captures = [
         sel.addRange(range);
       });
       await page.keyboard.press("c");
-      await page.waitForSelector("textarea");
-      await page
-        .locator("textarea")
-        .fill(
-          "Walk the family-revocation path here:\n" +
-            "1. lookup() returns the presented token's row;\n" +
-            "2. reuse flips the whole family to revoked in one statement;\n" +
-            "3. every descendant token stops validating;\n" +
-            "4. the metrics counter should bump too.\n" +
-            "The editor grew to fit all of this — no inner scrollbar.",
-        );
+      await fillNow(
+        page.locator("textarea"),
+        "Walk the family-revocation path here:\n" +
+          "1. lookup() returns the presented token's row;\n" +
+          "2. reuse flips the whole family to revoked in one statement;\n" +
+          "3. every descendant token stops validating;\n" +
+          "4. the metrics counter should bump too.\n" +
+          "The editor grew to fit all of this — no inner scrollbar.",
+      );
     },
   },
   // Published range threads: the multi-line selection on rotate.rs and the
@@ -547,8 +661,11 @@ const captures = [
     actions: async (page) => {
       await expandAllFiles(page);
       const thread = page.locator(".thread", { hasText: "ChaCha12" });
-      await thread.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(150);
+      await expectOne(thread);
+      await thread.evaluate((el) => {
+        el.scrollIntoView({ block: "center" });
+      });
+      await untilSpySettled(page);
     },
   },
   // Selecting diff text and pressing c: the inline editor opens on the
@@ -582,10 +699,10 @@ const captures = [
         sel.addRange(range);
       });
       await page.keyboard.press("c");
-      await page.waitForSelector("textarea");
-      await page
-        .locator("textarea")
-        .fill("This whole reuse branch deserves its own unit test.");
+      await fillNow(
+        page.locator("textarea"),
+        "This whole reuse branch deserves its own unit test.",
+      );
     },
   },
   // Commenting on the OLD column of an interdiff: r0 → r1 side-by-side, a
@@ -610,12 +727,10 @@ const captures = [
         sel.addRange(range);
       });
       await page.keyboard.press("c");
-      await page.waitForSelector("textarea");
-      await page
-        .locator("textarea")
-        .fill(
-          "The pre-change signature returned Token directly — flag old callers.",
-        );
+      await fillNow(
+        page.locator("textarea"),
+        "The pre-change signature returned Token directly — flag old callers.",
+      );
     },
   },
   // Review modal opened via `a`: it DRAFTS a decision rather than publishing —
@@ -628,9 +743,13 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await page.keyboard.press("a");
-      await page
-        .getByPlaceholder("Cover message (saved with your decision)…")
-        .pressSequentially("Nice cleanup — two nits inline, otherwise ready.");
+      const cover = page.getByPlaceholder(
+        "Cover message (saved with your decision)…",
+      );
+      await expectOne(cover);
+      await cover.pressSequentially(
+        "Nice cleanup — two nits inline, otherwise ready.",
+      );
     },
   },
   // A change with a draft decision (change 12, seeded request_changes): the
@@ -641,8 +760,8 @@ const captures = [
     path: "/changes/12",
     fullPage: false,
     actions: async (page) => {
-      await page.getByRole("button", { name: "Review (a)" }).click();
-      await page.waitForSelector(".reply-modal");
+      await clickNow(page.getByRole("button", { name: "Review (a)" }));
+      await expectOne(page.locator(".reply-modal"));
     },
   },
   // Rename + binary file in one diff.
@@ -652,15 +771,6 @@ const captures = [
     actions: expandAllFiles,
   },
 ];
-
-/** Every page marks its `<main>` busy until all the data it draws has
- * arrived. No `<main>` exists before the page's route has loaded. */
-const waitForReady = (page) =>
-  page.waitForFunction(
-    () =>
-      document.querySelector("#root main")?.getAttribute("aria-busy") ===
-      "false",
-  );
 
 async function main() {
   const bundle = mkdtempSync(join(tmpdir(), "nit-screenshots-"));
@@ -689,19 +799,17 @@ async function main() {
       args: process.env.NIT_SCREENSHOT_NO_SANDBOX
         ? ["--no-sandbox", "--disable-dev-shm-usage"]
         : [],
+      timeout: 0,
     });
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       colorScheme: "dark",
       reducedMotion: "reduce",
     });
-    // Under a loaded CI box the defaults (30s) brush against first paint +
-    // wasm instantiation — and a `nix flake check` runs this beside every
-    // crate's build and test, so the renderer can be CPU-starved for minutes.
-    // A condition wait resolves the instant it holds; the ceiling only has to
-    // clear the worst-case starved run, never the happy path.
-    context.setDefaultTimeout(240_000);
-    context.setDefaultNavigationTimeout(240_000);
+    // No step has a time limit. Each wait ends on the event that produces
+    // its state, and a limit sized for load still fails a correct capture
+    // on a starved CI runner. The CI job bounds a hang.
+    context.setDefaultTimeout(0);
     // Keep captures order-independent (e.g. the persisted diff layout).
     await context.addInitScript(() => localStorage.clear());
 
@@ -711,7 +819,7 @@ async function main() {
       page.on("pageerror", (err) => errors.push(String(err)));
       try {
         await page.goto(baseUrl + cap.path, { waitUntil: "load" });
-        await waitForReady(page);
+        await untilReady(page);
         if (cap.actions) await cap.actions(page);
       } catch (err) {
         err.message = `capture ${cap.name}: ${err.message}`;
@@ -725,9 +833,15 @@ async function main() {
           content: ".review-bar { position: static !important; }",
         });
       }
-      await page.waitForTimeout(150); // settle fonts/highlighting
       const file = resolve(outDir, `${cap.name}.png`);
-      await page.screenshot({ path: file, fullPage: cap.fullPage ?? true });
+      // The file rail animates its hover styles with CSS transitions.
+      // `disabled` ends each running transition at its last frame, so no
+      // capture shows one halfway.
+      await page.screenshot({
+        path: file,
+        fullPage: cap.fullPage ?? true,
+        animations: "disabled",
+      });
       console.log(
         `captured ${cap.name}.png${errors.length ? `  PAGE ERRORS: ${errors.join("; ")}` : ""}`,
       );
