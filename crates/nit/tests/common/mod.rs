@@ -529,27 +529,17 @@ pub fn sweep(server: &TestServer) {
 }
 
 /// How long the harness waits before it calls the suite hung: a child that
-/// never exits, or a frame that never arrives. Only a broken test reaches
-/// it, so it is far above anything a loaded machine needs.
+/// never exits. Only a broken test reaches it, so it is far above anything
+/// a loaded machine needs.
 pub const HANG: Duration = Duration::from_secs(20);
 
 pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 
-/// Open the stream with a read timeout, so a frame that never arrives
-/// fails the test instead of hanging the suite.
-fn ws_open(server: &TestServer) -> WsSock {
-    let url = format!("ws://{}/api/stream", server.addr);
-    let (socket, _) = tungstenite::connect(&url).expect("ws connect");
-    if let tungstenite::stream::MaybeTlsStream::Plain(s) = socket.get_ref() {
-        s.set_read_timeout(Some(HANG)).expect("read timeout");
-    }
-    socket
-}
-
 /// Subscribes the socket to the changes `query` picks: their projections,
 /// the stored entries past `after` when given, then live entries.
 pub fn ws_subscribe(server: &TestServer, query: &Value, after: Option<u64>) -> WsSock {
-    let mut socket = ws_open(server);
+    let url = format!("ws://{}/api/stream", server.addr);
+    let (mut socket, _) = tungstenite::connect(&url).expect("ws connect");
     let sub = json!({ "query": query, "after": after }).to_string();
     socket
         .send(tungstenite::Message::Text(sub.into()))
@@ -564,8 +554,9 @@ pub fn ws_entry(socket: &mut WsSock) -> Value {
 
 /// The next Text frame (a `StreamMessage`) parsed as JSON.
 ///
-/// Panics when the socket closes or sends nothing, so a test asserts on
-/// the frame it reads and never on the absence of one.
+/// Blocks until the frame arrives, and panics when the socket closes. A
+/// test reads only a frame that a returned call has caused, because a
+/// frame that never arrives makes the test hang.
 pub fn ws_read(socket: &mut WsSock) -> Value {
     loop {
         match socket.read() {
@@ -576,7 +567,7 @@ pub fn ws_read(socket: &mut WsSock) -> Value {
                 let _ = socket.send(tungstenite::Message::Pong(p));
             }
             Ok(_) => {}
-            Err(e) => panic!("the stream sent no frame: {e}"),
+            Err(e) => panic!("the stream closed: {e}"),
         }
     }
 }

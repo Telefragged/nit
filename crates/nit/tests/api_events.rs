@@ -153,8 +153,7 @@ fn unpicked_changes_are_silent() {
 
     // Review change two (unpicked) then change one (picked). The next frame
     // must be change one's review: two's review is broadcast first, so a
-    // leak would arrive ahead of one's. A deterministic silence fence, with no
-    // read-timeout wait.
+    // leak would arrive ahead of one's.
     review(&server, two, "approve", "ok");
     review(&server, one, "approve", "ok");
     let frame = ws_entry(&mut socket);
