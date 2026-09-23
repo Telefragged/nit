@@ -16,7 +16,6 @@
 //! on the websocket.
 
 use std::fs::{File, OpenOptions};
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -388,15 +387,32 @@ fn harness_var(key: &str) -> Option<String> {
 ///
 /// When the directory can't be created.
 fn state_path(socket: &std::path::Path, select: &SelectArgs, extension: &str) -> Result<PathBuf> {
-    let mut hasher = DefaultHasher::new();
-    socket.hash(&mut hasher);
+    let mut key = socket.as_os_str().as_encoded_bytes().to_vec();
     for tag in &select.tag {
-        tag.key().hash(&mut hasher);
-        tag.value().hash(&mut hasher);
+        // The zero byte keeps one pair's end apart from the next one's
+        // start, so two different selections cannot spell one key.
+        key.push(0);
+        key.extend_from_slice(tag.key().as_bytes());
+        key.push(0);
+        key.extend_from_slice(tag.value().as_bytes());
     }
     let dir = std::env::temp_dir().join("nit-watch");
     std::fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
-    Ok(dir.join(format!("{:016x}.{extension}", hasher.finish())))
+    Ok(dir.join(format!("{:016x}.{extension}", fnv1a(&key))))
+}
+
+/// The 64-bit FNV-1a hash of `bytes`.
+///
+/// The watch names its files after this. The hash is written out here
+/// rather than taken from `DefaultHasher`, whose algorithm may change
+/// between Rust releases. A name that changes loses the cursor, and the
+/// next watch reposts the log the agent has already read.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    bytes.iter().fold(OFFSET, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(PRIME)
+    })
 }
 
 /// Claims this watch, or returns `None` when one already runs.
@@ -423,5 +439,19 @@ fn lock(socket: &std::path::Path, select: &SelectArgs) -> Result<Option<File>> {
         Err(std::fs::TryLockError::Error(e)) => {
             Err(e).with_context(|| format!("lock {}", path.display()))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fnv1a;
+
+    /// The published FNV-1a vectors, which pin the file names a watch
+    /// looks for.
+    #[test]
+    fn fnv1a_matches_the_published_vectors() {
+        assert_eq!(fnv1a(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a(b"foobar"), 0x8594_4171_f739_67e8);
     }
 }
