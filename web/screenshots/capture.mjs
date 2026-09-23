@@ -1,12 +1,12 @@
 // Screenshot harness — renders every page/state into PNGs so agents (and
 // humans) can see the UI. `npm run screenshots` from web/.
 //
-// Starts a vite dev server with VITE_MOCK=1 (canned fixtures, no backend)
-// and captures against it.
+// Builds the app with VITE_MOCK=1 (canned fixtures, no backend), serves
+// the bundle and captures against it.
 //
-// The mock server binds a free ephemeral port by default, so parallel runs
-// (several agents, each in its own worktree) never race on a shared port;
-// set NIT_SCREENSHOT_PORT to pin it when a stable URL is wanted.
+// The bundle's server listens on a port the OS picks, so parallel runs
+// (several agents, each in its own worktree) never share a port. Set
+// NIT_SCREENSHOT_PORT to pin it when a stable URL is wanted.
 //
 // Output: <repo root>/screenshots/*.png (gitignored), or
 // $NIT_SCREENSHOT_OUT_DIR when set.
@@ -16,35 +16,48 @@
 // `playwright install` here.
 
 import { chromium } from "@playwright/test";
-import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { createServer } from "node:net";
-import { dirname, resolve } from "node:path";
+import { once } from "node:events";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { build } from "vite";
 
 const webDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = process.env.NIT_SCREENSHOT_OUT_DIR
   ? resolve(process.env.NIT_SCREENSHOT_OUT_DIR)
   : resolve(webDir, "../screenshots");
 
-/** A free TCP port, obtained by letting the OS assign one on bind(0). The
- * mock vite server defaults to this so parallel screenshot runs (several
- * agents, each in its own worktree) never race on a shared port — the old
- * fixed port made every concurrent run collide. There is a tiny window
- * between closing this probe and vite binding, but across the ephemeral
- * range a clash is far less likely than the fixed-port one it replaces, and
- * --strictPort still makes any real clash fail loudly instead of drifting to
- * a port the harness isn't watching. */
-function freePort() {
-  return new Promise((res, rej) => {
-    const probe = createServer();
-    probe.once("error", rej);
-    probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address();
-      probe.close((err) => (err ? rej(err) : res(port)));
-    });
+const CONTENT_TYPES = {
+  ".html": "text/html",
+  ".js": "text/javascript",
+  ".css": "text/css",
+  ".svg": "image/svg+xml",
+  ".wasm": "application/wasm",
+};
+
+/** An HTTP server for the bundle in `dir`. A path that names no file gets
+ * index.html, so a deep link reaches the app's router. vite's preview()
+ * does not fit: on port 0 it probes for a free port and binds it later, so
+ * another process can take the port in between. */
+const serve = (dir) =>
+  createServer((req, res) => {
+    const path = join(dir, new URL(req.url, "http://bundle").pathname);
+    const file =
+      existsSync(path) && statSync(path).isFile()
+        ? path
+        : join(dir, "index.html");
+    res.writeHead(200, { "Content-Type": CONTENT_TYPES[extname(file)] });
+    createReadStream(file).pipe(res);
   });
-}
 
 /** File sections start collapsed; captures that show diff contents open
  * them all via the rail's toggle first. */
@@ -649,38 +662,23 @@ const waitForReady = (page) =>
       "false",
   );
 
-async function waitForServer(url, timeoutMs = 120_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`server at ${url} did not come up in ${timeoutMs}ms`);
-}
-
 async function main() {
-  const port = process.env.NIT_SCREENSHOT_PORT
-    ? Number(process.env.NIT_SCREENSHOT_PORT)
-    : await freePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const server = spawn(
-    resolve(webDir, "node_modules/.bin/vite"),
-    ["--port", String(port), "--strictPort"],
-    {
-      cwd: webDir,
-      env: { ...process.env, VITE_MOCK: "1" },
-      stdio: ["ignore", "pipe", "inherit"],
-    },
-  );
-  server.stdout.resume(); // drain, keep quiet
+  const bundle = mkdtempSync(join(tmpdir(), "nit-screenshots-"));
+  let server = null;
 
   try {
-    await waitForServer(baseUrl);
+    process.env.VITE_MOCK = "1";
+    await build({
+      root: webDir,
+      logLevel: "warn",
+      build: { outDir: bundle, emptyOutDir: true },
+    });
+    server = serve(bundle).listen(
+      Number(process.env.NIT_SCREENSHOT_PORT ?? 0),
+      "127.0.0.1",
+    );
+    await once(server, "listening");
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
     mkdirSync(outDir, { recursive: true });
 
     // Chromium's namespace sandbox can't nest inside the nix build sandbox
@@ -706,15 +704,6 @@ async function main() {
     context.setDefaultNavigationTimeout(240_000);
     // Keep captures order-independent (e.g. the persisted diff layout).
     await context.addInitScript(() => localStorage.clear());
-
-    // A fresh sandbox has no `node_modules/.vite` cache, so vite pre-bundles
-    // deps on the first request and then broadcasts a full-page reload. Absorb
-    // that one-time reload here so it can't detach a real capture's DOM
-    // mid-action (the primary flake this harness suffered).
-    const warm = await context.newPage();
-    await warm.goto(baseUrl, { waitUntil: "load" });
-    await waitForReady(warm);
-    await warm.close();
 
     for (const cap of captures) {
       const page = await context.newPage();
@@ -749,7 +738,8 @@ async function main() {
     await browser.close();
     console.log(`done → ${outDir}`);
   } finally {
-    server.kill("SIGTERM");
+    server?.close();
+    rmSync(bundle, { recursive: true, force: true });
   }
 }
 
