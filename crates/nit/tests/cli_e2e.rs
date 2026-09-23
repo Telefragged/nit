@@ -253,8 +253,7 @@ fn field_after(text: &str, marker: &str) -> u64 {
 }
 
 /// `nit reopen` clears an abandoned change back to its retained status so a new
-/// revision can be pushed. Abandonment is the background timer's call, so the
-/// timer is sped up and the API polled until it lands.
+/// revision can be pushed.
 #[test]
 fn reopen_an_abandoned_change() {
     let g = GitRepo::new();
@@ -266,8 +265,6 @@ fn reopen_an_abandoned_change() {
     let (ok, _push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
 
-    // CLI abandon — a reviewer or author judgment, distinct from the background
-    // timer — targeted by the cwd's Change-Id.
     let (ok, detail, stderr) = nit(&server, &g, &["abandon", "--change-id", &change_id("Ia")]);
     assert!(ok, "{stderr}");
     assert!(

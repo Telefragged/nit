@@ -10,8 +10,8 @@
 //! All rusqlite/git2 work runs off the async runtime; database work goes
 //! through a pooled connection ([`state::with_conn`]). Every appender to one
 //! change serializes through its projection write lock and folds in lock-step.
-//! Merged/abandoned detection runs in a background timer (`timer::run_lifecycle_timer`);
-//! there are no read-time scans.
+//! Merged detection runs in a background timer (`timer::run_lifecycle_timer`).
+//! There are no read-time scans.
 
 pub mod diff;
 mod port;

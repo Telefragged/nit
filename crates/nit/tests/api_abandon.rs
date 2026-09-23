@@ -1,7 +1,6 @@
 //! The abandon action (`POST /api/changes/{id}/abandon`, `nit abandon`): an
 //! explicit reviewer or author judgment that a change is dead, reversible by
-//! reopen. Distinct from the background timer — the change here stays reachable
-//! from a branch, so only the explicit action abandons it.
+//! reopen.
 
 mod common;
 
