@@ -22,15 +22,8 @@ use nit_types::domain::ChangeProjection;
 
 use super::{AppState, append_to_change, with_conn};
 
-/// Interval between timer sweeps, env-configurable for tests.
-fn timer_interval() -> Duration {
-    Duration::from_millis(
-        std::env::var("NIT_TIMER_INTERVAL_MS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(5_000),
-    )
-}
+/// Interval between timer sweeps.
+const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
 
 /// The background sweep for **merged** changes.
 ///
@@ -38,11 +31,10 @@ fn timer_interval() -> Duration {
 /// `lifecycle{merged}` entries. The only writer of `merged`. It never
 /// abandons — abandonment is an explicit action (`abandon_change`).
 pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
-    let interval = timer_interval();
     let mut shutdown = state.shutdown_watch();
     loop {
         tokio::select! {
-            () = tokio::time::sleep(interval) => {}
+            () = tokio::time::sleep(SWEEP_INTERVAL) => {}
             _ = shutdown.wait_for(|&s| s) => break,
         }
         sweep_once(&state).await;
