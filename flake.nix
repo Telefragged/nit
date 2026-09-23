@@ -270,7 +270,9 @@
             ];
           };
           nativeBuildInputs = [
-            (rustToolchainFor pkgs)
+            # With rust-src in the sysroot, rustc writes its store path into
+            # std's panic locations, and the server binary embeds this wasm.
+            ((rustToolchainFor pkgs).override { extensions = [ ]; })
             pkgs.wasm-bindgen-cli
             pkgs.rustPlatform.cargoSetupHook
           ];
