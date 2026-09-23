@@ -12,18 +12,9 @@ anchored to the exact lines it concerns.
 the plugin always matches your nit version. It registers the plugin with
 Claude Code as `nit@nit`.
 
-Without nit on the machine, install from the
-[nit repo](https://github.com/Telefragged/nit). It is also a Claude Code
-plugin marketplace. Add it, then install the plugin:
-
-```
-/plugin marketplace add Telefragged/nit
-/plugin install nit@nit
-```
-
-`/plugin list` confirms it's enabled and the `/nit:*` skills and commands are
-available; pin a branch or tag with `Telefragged/nit@<ref>`. Then run
-`/nit:install` once to set nit up for your project (see Prerequisites).
+`/plugin list` confirms that it is enabled and that the `/nit:*` skills and
+commands are available. Then run `/nit:install` once to set nit up for your
+project (see Prerequisites).
 
 ## Skills — the base behavior
 
