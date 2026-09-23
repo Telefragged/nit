@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getFileLines } from "../api/client";
 import { COMMIT_MSG_PATH, type DiffFile, type Line } from "../api/types";
@@ -20,6 +21,7 @@ export const EXPAND_STEP = 10;
  * Returns the spliced `hunks`, whether the file is expandable, the `expand`
  * action, and `busyAt` to check a given end/separator's in-flight state. */
 export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
+  const queryClient = useQueryClient();
   const expandable = file.path !== COMMIT_MSG_PATH;
   const [whole, setWhole] = useState<readonly Line[] | null>(null);
   const [down, setDown] = useState<ReadonlyMap<number, number>>(new Map());
@@ -43,12 +45,6 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
   useEffect(() => {
     fileRef.current = file;
   });
-  // The in-flight whole-file fetch, keyed by file so each end's button shares
-  // one request and a diff switch starts a fresh one.
-  const fetching = useRef<{
-    file: DiffFile;
-    lines: Promise<readonly Line[] | null>;
-  } | null>(null);
 
   const hunks = useMemo(() => {
     if (!whole || (down.size === 0 && up.size === 0)) return file.hunks;
@@ -80,23 +76,34 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
 
   /** The whole file as diff lines, fetched once and shared across both ends
    * and every gap; `null` if the diff switched out from under the fetch. */
-  function loadWhole(): Promise<readonly Line[] | null> {
-    if (whole) return Promise.resolve(whole);
-    if (fetching.current?.file !== file) {
-      const lines = getFileLines(
+  async function loadWhole(): Promise<readonly Line[] | null> {
+    if (whole) return whole;
+    const { lines } = await queryClient.query({
+      queryKey: [
+        "lines",
         ctx.changeNumber,
         ctx.selected,
-        file,
-        ctx.against,
+        ctx.against ?? null,
         ctx.whitespace,
-      ).then((r) => {
-        if (fileRef.current !== file) return null;
-        setWhole(r.lines);
-        return r.lines;
-      });
-      fetching.current = { file, lines };
-    }
-    return fetching.current.lines;
+        file.path,
+        file.old_path ?? null,
+      ],
+      queryFn: () =>
+        getFileLines(
+          ctx.changeNumber,
+          ctx.selected,
+          file,
+          ctx.against,
+          ctx.whitespace,
+        ),
+      // A revision's trees never change, so neither does the file.
+      staleTime: Infinity,
+      // To retry a failed reveal, the reviewer clicks the button again.
+      retry: false,
+    });
+    if (fileRef.current !== file) return null;
+    setWhole(lines);
+    return lines;
   }
 
   /** Reveal the next `count` hidden lines — capped by what the gap before
