@@ -1,67 +1,47 @@
 // The repo dashboard renders the change graph, centered on the canonical ref, against the
 // mock fixtures (VITE_MOCK is set by the vitest config).
 // Repo 1's open changes ascend above HEAD; the Activity column carries each
-// change's draft state, fetched per node from GET /api/changes/{id} — change
-// 12 has a seeded request_changes decision, so its row shows
-// "✎ request_changes" once that fetch resolves.
+// change's draft state, read per node from its drafts overlay. Change 12 has
+// a seeded request_changes decision, so its row shows "✎ request_changes".
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { Route } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
+import { renderPage } from "../test/page";
 import Dashboard from "./Dashboard";
 
 afterEach(cleanup);
 
-function renderDashboard(repo = 1, search = "") {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/repos/${repo}${search}`]}>
-        <Routes>
-          <Route path="/repos/:repoId" element={<Dashboard />} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
+const renderDashboard = (repo = 1, search = "") =>
+  renderPage(
+    `/repos/${repo}${search}`,
+    <Route path="/repos/:repoId" element={<Dashboard />} />,
   );
-}
 
 describe("repo dashboard change graph", () => {
   it("renders open changes linking to their change pages", async () => {
-    renderDashboard();
-    const subject = await screen.findByText(
+    await renderDashboard();
+    const subject = screen.getByText(
       "auth: document rotation and ship flow diagram",
     );
     expect(subject.closest("a")?.getAttribute("href")).toBe("/changes/12");
   });
 
   it("preserves the Activity column with each change's draft state", async () => {
-    renderDashboard();
-    const subject = await screen.findByText(
+    await renderDashboard();
+    const subject = screen.getByText(
       "auth: document rotation and ship flow diagram",
     );
 
     expect(screen.getByText("Activity")).toBeTruthy();
-    // Change 12's seeded draft decision shows in its activity cell — it
-    // arrives from the per-change fetch, so await it rather than reading sync.
     const row = subject.closest(".graph-row");
     if (!(row instanceof HTMLElement)) throw new Error("no row for change 12");
-    expect(await within(row).findByText("✎ request_changes")).toBeTruthy();
+    expect(within(row).getByText("✎ request_changes")).toBeTruthy();
   });
 
   it("groups by the tag key the URL names, labelling each run", async () => {
-    renderDashboard(4, "?group=session-id");
-    const alpha = await screen.findByText("alpha", {
-      selector: ".graph-gap-label",
-    });
+    await renderDashboard(4, "?group=session-id");
+    const alpha = screen.getByText("alpha", { selector: ".graph-gap-label" });
     const beta = screen.getByText("beta", { selector: ".graph-gap-label" });
     expect(screen.getByLabelText("Group by")).toHaveProperty(
       "value",
@@ -75,8 +55,10 @@ describe("repo dashboard change graph", () => {
   });
 
   it("keeps only the changes carrying the value the URL names", async () => {
-    renderDashboard(4, "?group=session-id&value=beta");
-    await screen.findByText("lumen: evict cached manifests by age");
+    await renderDashboard(4, "?group=session-id&value=beta");
+    expect(
+      screen.getByText("lumen: evict cached manifests by age"),
+    ).toBeTruthy();
     expect(screen.getByLabelText("Only")).toHaveProperty("value", "beta");
     expect(screen.queryByText("lumen: parse the manifest lazily")).toBeNull();
     // The filter excluded the stacked change's parent: a break mark cuts
@@ -85,18 +67,18 @@ describe("repo dashboard change graph", () => {
   });
 
   it("offers the tag keys the repo's live changes carry", async () => {
-    renderDashboard(4);
-    expect(
-      await screen.findByRole("option", { name: "session-id" }),
-    ).toBeTruthy();
+    await renderDashboard(4);
+    expect(screen.getByRole("option", { name: "session-id" })).toBeTruthy();
     // Repo 4 puts `branch` on its abandoned change alone.
     expect(screen.queryByRole("option", { name: "branch" })).toBeNull();
   });
 
   it("breaks the chain where an abandoned change sat", async () => {
     // Repo 4's gamma session stacks a live change on an abandoned one.
-    renderDashboard(4, "?group=session-id&value=gamma");
-    await screen.findByText("lumen: verify a pinned manifest on read");
+    await renderDashboard(4, "?group=session-id&value=gamma");
+    expect(
+      screen.getByText("lumen: verify a pinned manifest on read"),
+    ).toBeTruthy();
     expect(
       screen.queryByText("lumen: pin manifests to a content hash"),
     ).toBeNull();
@@ -105,9 +87,11 @@ describe("repo dashboard change graph", () => {
 
   it("restores the last grouping and clears the filter", async () => {
     localStorage.setItem("nit.graph-group.4", "session-id");
-    renderDashboard(4, "?value=beta");
+    await renderDashboard(4, "?value=beta");
 
-    await screen.findByText("alpha", { selector: ".graph-gap-label" });
+    expect(
+      screen.getByText("alpha", { selector: ".graph-gap-label" }),
+    ).toBeTruthy();
     expect(screen.getByLabelText("Group by")).toHaveProperty(
       "value",
       "session-id",
@@ -117,9 +101,9 @@ describe("repo dashboard change graph", () => {
 
   it("groups by the URL's key, not the remembered one", async () => {
     localStorage.setItem("nit.graph-group.4", "session-id");
-    renderDashboard(4, "?group=none-such");
+    await renderDashboard(4, "?group=none-such");
 
-    await screen.findByText("lumen: parse the manifest lazily");
+    expect(screen.getByText("lumen: parse the manifest lazily")).toBeTruthy();
     expect(screen.getByLabelText("Group by")).toHaveProperty(
       "value",
       "none-such",
@@ -127,14 +111,14 @@ describe("repo dashboard change graph", () => {
   });
 
   it("remembers the grouping per repo", async () => {
-    renderDashboard(4);
-    // The selector offers `session-id` once the repo's tags arrive.
-    await screen.findByRole("option", { name: "session-id" });
+    await renderDashboard(4);
     fireEvent.change(screen.getByLabelText("Group by"), {
       target: { value: "session-id" },
     });
 
-    await screen.findByText("alpha", { selector: ".graph-gap-label" });
+    expect(
+      screen.getByText("alpha", { selector: ".graph-gap-label" }),
+    ).toBeTruthy();
     expect(localStorage.getItem("nit.graph-group.4")).toBe("session-id");
     expect(localStorage.getItem("nit.graph-group.1")).toBeNull();
   });
