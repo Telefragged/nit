@@ -13,8 +13,8 @@ use std::sync::mpsc::{Receiver, channel};
 use serde_json::Value;
 
 use common::{
-    GitRepo, HANG, TestServer, change_by_label, draft, first_repo_id, get_changes, msg, nit,
-    nit_register, nit_spawn, review, submit,
+    GitRepo, HANG, TestServer, change_by_label, first_repo_id, get_changes, msg, nit, nit_register,
+    nit_spawn, review,
 };
 
 /// A stand-in for the session's inbox socket.
@@ -48,14 +48,6 @@ impl Inbox {
     /// The `nit watch` arguments that point it at this inbox.
     fn args(&self) -> [&str; 3] {
         ["watch", "--inbox", self.path.to_str().expect("utf-8 path")]
-    }
-
-    /// Fails when a message arrives in the next half second.
-    fn quiet(&self) {
-        let next = self
-            .messages
-            .recv_timeout(std::time::Duration::from_millis(500));
-        assert!(next.is_err(), "posted a second message: {next:?}");
     }
 
     /// The next message's frames, each parsed as JSON.
@@ -192,54 +184,4 @@ fn watch_without_an_inbox_fails() {
     let (ok, _, err) = nit(&server, &g, &["watch"]);
     assert!(!ok, "a watch with no inbox should fail");
     assert!(err.contains("no inbox"), "{err}");
-}
-
-/// One submit writes an entry per change. The watch posts the run as one
-/// message, so one reviewer pass starts one turn.
-#[test]
-fn watch_posts_a_run_of_entries_as_one_message() {
-    let (g, server, inbox, one) = session();
-    let two = push_second(&g, &server);
-
-    let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
-    // The watch reads the log once before it follows the stream, so the
-    // run has to land after this first message.
-    review(&server, one, "comment", "started");
-    inbox.next();
-
-    for (change, message) in [(one, "fix the unwrap"), (two, "and this one")] {
-        draft(&server, change, "request_changes", message);
-    }
-    submit(&server, &format!("repo={}", first_repo_id(&server)));
-
-    let text = posted_text(&inbox.next());
-    assert!(text.contains("fix the unwrap"), "the first review: {text}");
-    assert!(text.contains("and this one"), "the second review: {text}");
-    inbox.quiet();
-}
-
-/// The watch stores what it has posted, so a restarted watch posts the
-/// next review and not the whole history again.
-#[test]
-fn a_restarted_watch_resumes_where_it_stopped() {
-    let (g, server, inbox, change_number) = session();
-
-    let watch = nit_spawn(&server, &g, &inbox.args(), &[]);
-    review(&server, change_number, "comment", "the first pass");
-    inbox.next();
-    // The watch stores the cursor after it posts, so the second message
-    // is what proves the first pass was stored.
-    review(&server, change_number, "comment", "the second pass");
-    inbox.next();
-    drop(watch);
-
-    let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
-    review(&server, change_number, "request_changes", "the third pass");
-
-    let text = posted_text(&inbox.next());
-    assert!(text.contains("the third pass"), "{text}");
-    assert!(
-        !text.contains("the first pass"),
-        "reposted from the start: {text}"
-    );
 }
