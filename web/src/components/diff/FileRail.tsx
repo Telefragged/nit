@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import { preparePresortedFileTreeInput } from "@pierre/trees";
 import type { FileTreeRowDecoration, GitStatusEntry } from "@pierre/trees";
@@ -81,9 +81,11 @@ export default function FileRail({
 
   // The tree captures its callbacks once, when the model is built, so they
   // reach the current props through this ref rather than a stale closure.
-  // Published ahead of every effect below, which repaint against it.
+  // Published ahead of every effect below, which repaint against it. All of
+  // them are layout effects: the rail repaints in the commit that changes
+  // what it shows, so no frame paints it a step behind the diff.
   const live = useRef({ tree, threadsByFile, onSelect, activePath });
-  useEffect(() => {
+  useLayoutEffect(() => {
     live.current = { tree, threadsByFile, onSelect, activePath };
   });
 
@@ -136,7 +138,7 @@ export default function FileRail({
   // A new diff: swap the rows and their status lane. The reset repaints, so
   // the decorations come with it — but it also re-expands every directory,
   // which is why comment traffic cannot ride this path.
-  useEffect(() => {
+  useLayoutEffect(() => {
     model.resetPaths({ preparedInput: tree.input });
     model.setGitStatus(tree.gitStatus);
   }, [model, tree]);
@@ -145,7 +147,7 @@ export default function FileRail({
   // so their repaint is ours to force. Rendering without the mounted host
   // would build a detached one, so between mounts (StrictMode remounts the
   // tree) leave it to the tree's own mount render.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = model.getFileTreeContainer();
     if (host) model.render({ fileTreeContainer: host });
   }, [model, threadsByFile]);
@@ -153,7 +155,7 @@ export default function FileRail({
   // Selection is the rail's active-file highlight, driven by the page's
   // scroll spy as much as by clicks here. `tree` is a dependency because
   // resetting the paths drops the selection with them.
-  useEffect(() => {
+  useLayoutEffect(() => {
     for (const path of model.getSelectedPaths()) {
       if (path !== activePath) model.getItem(path)?.deselect();
     }
