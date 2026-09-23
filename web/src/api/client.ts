@@ -44,7 +44,7 @@ async function request<T = void>(
   if (import.meta.env.VITE_MOCK) {
     // Keeps fixtures out of production bundles.
     const { mockRequest } = await import("./fixtures");
-    return mockRequest(method, path, body) as Promise<T>;
+    return mockRequest(method, path, body) as T;
   }
   const res = await fetch(`/api${path}`, {
     method,

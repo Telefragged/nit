@@ -315,14 +315,11 @@ const getChange = (id: number): ChangeRecord =>
 // ---------------------------------------------------------------------------
 // The mock router — one arm per server endpoint
 
-const LATENCY_MS = 40;
-
-export async function mockRequest(
+export function mockRequest(
   method: string,
   path: string,
   body?: unknown,
-): Promise<unknown> {
-  await new Promise((r) => setTimeout(r, LATENCY_MS));
+): unknown {
   const url = new URL(path, "http://mock");
   const p = url.pathname;
   const q = url.searchParams;
