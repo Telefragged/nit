@@ -173,22 +173,14 @@ function GroupGap({ group }: { group: string | null }) {
 }
 
 /** The SVG rail of a laid-out graph: every edge, node and the collapsed
- * marker, painted at the layout's coordinates. The caller positions it
- * over its rows. */
-export function GraphRail({
-  layout,
-  style,
-}: {
-  layout: GraphLayout;
-  style?: CSSProperties;
-}) {
+ * marker, painted at the layout's coordinates. */
+export function GraphRail({ layout }: { layout: GraphLayout }) {
   const collapsed = layout.collapsed;
   return (
     <svg
       className="graph-rail"
       width={layout.railWidth}
       height={layout.height}
-      style={style}
       aria-hidden="true"
     >
       {layout.edges.map((e) => (

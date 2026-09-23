@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChangeGraph, ChangeStatus, GraphNode } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
+import { LAYOUT_DENSE } from "../lib/graphLayout";
 import TagNav from "./TagNav";
 
 afterEach(cleanup);
@@ -93,6 +94,12 @@ const renderNav = (
   );
 
 const rows = () => [...document.querySelectorAll(".tag-nav-row")];
+const scroller = () =>
+  must(
+    document.querySelector(".tag-nav .graph-body")?.parentElement,
+    "the graph's scroll window",
+  );
+const windowHeight = `${7 * LAYOUT_DENSE.rowH}px`;
 const subjects = () =>
   rows().map((r) => r.querySelector(".subj")?.textContent ?? "");
 
@@ -181,32 +188,22 @@ describe("TagNav", () => {
     expect(document.querySelector(".tag-nav-all")).toBeNull();
   });
 
-  it("windows seven rows around the current change", () => {
+  it("scrolls a seven-row window to center the current change", () => {
     // Twelve changes, 21 at the top. Change 16 sits at row 5, so the
-    // window holds three rows either side of it.
+    // window starts three rows above it.
     renderNav(chain(12), 16);
-    expect(subjects()).toEqual(
-      [19, 18, 17, 16, 15, 14, 13].map((id) => `change ${id}`),
-    );
-  });
-
-  it("moves the window to the end when the current change is near it", () => {
-    renderNav(chain(12), 20);
-    expect(subjects()).toEqual(
-      [21, 20, 19, 18, 17, 16, 15].map((id) => `change ${id}`),
-    );
-    cleanup();
-    renderNav(chain(12), 11);
-    expect(subjects()).toEqual(
-      [16, 15, 14, 13, 12, 11, 10].map((id) => `change ${id}`),
-    );
-  });
-
-  it("shows the whole graph on request, and the window again", () => {
-    renderNav(chain(12), 16);
-    fireEvent.click(screen.getByRole("button", { name: "show all" }));
     expect(rows()).toHaveLength(12);
+    const scroll = scroller();
+    expect(scroll.style.maxHeight).toBe(windowHeight);
+    expect(scroll.scrollTop).toBe(2 * LAYOUT_DENSE.rowH);
+  });
+
+  it("drops the height cap on request, and restores it", () => {
+    renderNav(chain(12), 16);
+    const scroll = scroller();
+    fireEvent.click(screen.getByRole("button", { name: "show all" }));
+    expect(scroll.style.maxHeight).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "show less" }));
-    expect(rows()).toHaveLength(7);
+    expect(scroll.style.maxHeight).toBe(windowHeight);
   });
 });

@@ -1,4 +1,10 @@
-import { type CSSProperties, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, Tags } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
@@ -7,15 +13,9 @@ import { StatusDot } from "./badges";
 import { GraphRail } from "./GraphTable";
 import Select from "./Select";
 
-/** Rows shown before the reviewer asks for the whole graph. */
+/** Rows the scroll window shows before the reviewer asks for the whole
+ * graph. */
 const WINDOW = 7;
-
-/** The first row of the window: `WINDOW` rows around `current`, moved up
- * or down as far as needed to stay inside `total`. */
-function windowStart(current: number, total: number): number {
-  const half = Math.floor(WINDOW / 2);
-  return Math.max(0, Math.min(current - half, total - WINDOW));
-}
 
 /**
  * The review header's graph of the changes that share a tag with the
@@ -23,10 +23,9 @@ function windowStart(current: number, total: number): number {
  * rail beside one-line rows (status dot, subject, revision, unresolved
  * count), the current change highlighted and the others linking through.
  * The selector picks which of the current change's tag keys the graph
- * follows. Seven rows around the current change show at first, and "show
- * all" opens the whole graph. The rail is laid out over the whole graph
- * and clipped to the window, so an edge that leaves the window reads as
- * continuing past it.
+ * follows. At first the graph scrolls inside a seven-row window centered
+ * on the current change, and "show all" grows the window to the whole
+ * graph.
  */
 export default function TagNav({
   tags,
@@ -53,12 +52,16 @@ export default function TagNav({
   const position = layout.nodes.findIndex(
     (ln) => ln.node.change_number === currentId,
   );
-  const start = expanded ? 0 : windowStart(position, total);
-  const rows = expanded
-    ? layout.nodes
-    : layout.nodes.slice(start, start + WINDOW);
+  const scroller = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    // The browser clamps scrollTop, so a change near either end of the
+    // graph lands the window on that end.
+    if (!expanded && scroller.current !== null)
+      scroller.current.scrollTop =
+        (position - Math.floor(WINDOW / 2)) * layout.rowH;
+  }, [expanded, position, layout.rowH]);
   const style = {
-    height: rows.length * layout.rowH,
+    height: layout.height,
     "--rail-w": `${layout.railWidth}px`,
     "--row-h": `${layout.rowH}px`,
   } as CSSProperties;
@@ -89,20 +92,35 @@ export default function TagNav({
           </button>
         ) : null}
       </div>
-      <div className="graph-body" style={style}>
-        <GraphRail layout={layout} style={{ top: -start * layout.rowH }} />
-        {rows.map((ln) => (
-          <Row
-            key={ln.node.commit_sha}
-            ln={ln}
-            act={
-              ln.node.change_number === null
-                ? undefined
-                : activity.get(ln.node.change_number)
-            }
-            current={ln.node.change_number === currentId}
-          />
-        ))}
+      <div
+        ref={scroller}
+        style={
+          expanded
+            ? undefined
+            : {
+                maxHeight: WINDOW * layout.rowH,
+                overflowY: "auto",
+                // A wheel at either end of the window stops there, not in
+                // the page.
+                overscrollBehavior: "contain",
+              }
+        }
+      >
+        <div className="graph-body" style={style}>
+          <GraphRail layout={layout} />
+          {layout.nodes.map((ln) => (
+            <Row
+              key={ln.node.commit_sha}
+              ln={ln}
+              act={
+                ln.node.change_number === null
+                  ? undefined
+                  : activity.get(ln.node.change_number)
+              }
+              current={ln.node.change_number === currentId}
+            />
+          ))}
+        </div>
       </div>
     </section>
   );

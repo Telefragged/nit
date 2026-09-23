@@ -290,9 +290,8 @@
 }
 
 /* tag nav: the graph of the changes that share a tag, at the right of the
-   review header (TagNav.tsx). The rail SVG is laid out over the whole
-   graph, and the graph body clips it to the rows in the window. Rows are
-   one line high, so the window fits beside the header's own lines. */
+   review header (TagNav.tsx). Rows are one line high, so the scroll
+   window fits beside the header's own lines. */
 .tag-nav {
   flex: none;
   width: 480px;

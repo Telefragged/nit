@@ -167,8 +167,8 @@ const captures = [
     },
   },
   // Repo 5: a twelve-change chain plus a merged and an abandoned lone
-  // change. The graph windows to seven rows around the current change, with
-  // the chain's edges running out of the window at both ends.
+  // change. The graph scrolls in a seven-row window centered on the current
+  // change, with the chain's edges running out of the window at both ends.
   {
     name: "review-tag-window",
     path: "/changes/77?against=base",
