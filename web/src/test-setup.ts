@@ -9,7 +9,7 @@
 import { configure } from "@testing-library/react";
 import { afterEach } from "vitest";
 
-export const ASYNC_TIMEOUT_MS = 10_000;
+const ASYNC_TIMEOUT_MS = 10_000;
 
 configure({ asyncUtilTimeout: ASYNC_TIMEOUT_MS });
 

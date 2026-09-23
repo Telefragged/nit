@@ -12,16 +12,19 @@ export interface StreamHandle {
   close(): void;
 }
 
+// The branch is dead code without VITE_MOCK, so production bundles carry no
+// fixtures.
+const mock = import.meta.env.VITE_MOCK
+  ? await import("./fixtures/stream")
+  : undefined;
+
 /** `onMessage` receives every `StreamMessage` frame the server writes — a
  * `projection` (a folded ChangeProjection) or an `entry` (one log entry);
  * the browser folds them. */
 export function openStream(
   onMessage: (msg: StreamMessage) => void,
 ): StreamHandle {
-  if (import.meta.env.VITE_MOCK) {
-    return openMockStream(onMessage);
-  }
-  return openSocketStream(onMessage);
+  return mock ? mock.mockOpenStream(onMessage) : openSocketStream(onMessage);
 }
 
 /** The real socket. A reconnect (the server closes the socket when a
@@ -79,30 +82,6 @@ function openSocketStream(
     close() {
       closed = true;
       ws?.close();
-    },
-  };
-}
-
-/** Mock mode: the fixtures replay/emit the stream. Loaded lazily so they stay
- * out of production bundles; `subscribe`/`close` queue until the import
- * resolves. */
-function openMockStream(onMessage: (msg: StreamMessage) => void): StreamHandle {
-  let mock: StreamHandle | null = null;
-  let closed = false;
-  let queued: Subscription | null = null;
-  void import("./fixtures/stream").then(({ mockOpenStream }) => {
-    if (closed) return;
-    mock = mockOpenStream(onMessage);
-    if (queued !== null) mock.subscribe(queued);
-  });
-  return {
-    subscribe(subscription) {
-      if (mock) mock.subscribe(subscription);
-      else queued = subscription;
-    },
-    close() {
-      closed = true;
-      mock?.close();
     },
   };
 }

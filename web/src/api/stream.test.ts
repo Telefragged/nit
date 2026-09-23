@@ -1,37 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { ASYNC_TIMEOUT_MS } from "../test-setup";
 import { mockAppend } from "./fixtures/stream";
 import { openStream } from "./stream";
 import type { StreamMessage } from "./types";
 
 describe("openStream (mock mode)", () => {
-  it("queues subscriptions until the mock loads, then projects and goes live", async () => {
+  it("projects on subscribe, then goes live", () => {
     const got: StreamMessage[] = [];
     const handle = openStream((m) => {
       got.push(m);
     });
-    // subscribe() is called before the lazy mock import resolves — it must
-    // queue. Change 30 is the only change under its session.
+    // Change 30 is the only change under its session.
     handle.subscribe({ query: { repo: 2, tag: ["session-id=ci-cache"] } });
+    expect(got.map((m) => "projection" in m && m.projection.id)).toEqual([30]);
 
-    // vi.waitFor keeps its own 1000ms default — testing-library's config
-    // doesn't reach it, so size it for load the same way (src/test-setup).
-    await vi.waitFor(
-      () => {
-        expect(
-          got.some((m) => "projection" in m && m.projection.id === 30),
-        ).toBe(true);
-      },
-      { timeout: ASYNC_TIMEOUT_MS },
-    );
-
-    const before = got.length;
     mockAppend(30, "t-live", {
       kind: "lifecycle",
       payload: { action: "abandoned", message: null },
     });
-    expect(got).toHaveLength(before + 1);
+    expect(got).toHaveLength(2);
     const last = got.at(-1);
     expect(last && "entry" in last && last.entry.change_number).toBe(30);
 
