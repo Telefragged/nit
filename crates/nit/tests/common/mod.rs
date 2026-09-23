@@ -229,17 +229,22 @@ impl Drop for TestServer {
             let _ = tx.send(());
         }
         if let Some(rt) = self.rt.take() {
-            if let Some(served) = self.served.take() {
-                let _ = rt
-                    .block_on(async { tokio::time::timeout(Duration::from_secs(5), served).await });
-            }
+            let served = self.served.take().map(|served| rt.block_on(served));
             // Drop the pooled AppState inside the runtime: deadpool closes
             // sqlite connections via spawn_blocking, which needs a live runtime.
             {
                 let _enter = rt.enter();
                 drop(self.state.take());
             }
-            rt.shutdown_timeout(Duration::from_secs(5));
+            // The runtime's drop joins its blocking pool, so every sqlite
+            // connection is closed before a restarted server opens the db.
+            drop(rt);
+            // A second panic while the test unwinds would abort the binary.
+            if let Some(Err(e)) = served
+                && !std::thread::panicking()
+            {
+                panic!("the server task failed: {e}");
+            }
         }
     }
 }
