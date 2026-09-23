@@ -47,7 +47,7 @@ export interface LayoutMetrics {
 export const LAYOUT_B: LayoutMetrics = {
   rowH: 46,
   railPadL: 42,
-  laneGap: 42,
+  laneGap: 24,
   railPadR: 26,
   nodeR: 5,
   mergeBump: 1.5,
