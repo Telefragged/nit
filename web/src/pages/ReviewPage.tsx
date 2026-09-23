@@ -443,9 +443,12 @@ export default function ReviewPage() {
         setActiveFile(index);
         if (path !== undefined) setExpanded((cur) => expand(cur, path));
       });
-      document
-        .getElementById(fileDomId(index))
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(fileDomId(index))?.scrollIntoView({
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+        block: "start",
+      });
     },
     [files],
   );

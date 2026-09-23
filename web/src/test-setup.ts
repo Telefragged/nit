@@ -12,3 +12,7 @@ afterEach(() => {
 HTMLDialogElement.prototype.showModal = function () {
   this.open = true;
 };
+
+// jsdom has no matchMedia, so a page that reads a media query throws
+// without this stub. No query matches.
+window.matchMedia = (media) => ({ matches: false, media }) as MediaQueryList;
