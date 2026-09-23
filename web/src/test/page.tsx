@@ -53,8 +53,15 @@ async function settle(client: QueryClient): Promise<void> {
   while (busy(client));
 }
 
-/** Renders `routes` at `url` with a fresh query client, then settles it. */
-export async function renderPage(url: string, routes: ReactNode) {
+/** Renders `routes` at `url` with a fresh query client, then settles it.
+ *
+ * `outside` renders inside the router but outside `routes`. The result's
+ * `settle` commits the fetches and mutations a later event starts. */
+export async function renderPage(
+  url: string,
+  routes: ReactNode,
+  outside?: ReactNode,
+) {
   const client = new QueryClient({
     // A retry waits for a backoff timer.
     defaultOptions: { queries: { retry: false } },
@@ -62,10 +69,11 @@ export async function renderPage(url: string, routes: ReactNode) {
   const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[url]}>
+        {outside}
         <Routes>{routes}</Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
   await settle(client);
-  return view;
+  return { ...view, client, settle: () => settle(client) };
 }

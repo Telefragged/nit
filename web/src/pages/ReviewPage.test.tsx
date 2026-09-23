@@ -3,18 +3,13 @@
 // the full r1 diff: /COMMIT_MSG, src/auth/rotate.rs, src/auth/store.rs,
 // tests/rotation.rs — i.e. file-0 .. file-3.
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { Route, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FILE_TREE_TAG_NAME } from "@pierre/trees";
 import { COMMIT_MSG_PATH } from "../api/types";
+import { renderPage } from "../test/page";
 import ReviewPage from "./ReviewPage";
 
 // No vitest globals → testing-library cannot auto-cleanup; without this,
@@ -45,20 +40,12 @@ beforeEach(() => {
   };
 });
 
-function renderReview(url = "/changes/11?against=base") {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[url]}>
-        <Routes>
-          <Route path="/changes/:id" element={<ReviewPage />} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
+const renderReview = (url = "/changes/11?against=base", outside?: ReactNode) =>
+  renderPage(
+    url,
+    <Route path="/changes/:id" element={<ReviewPage />} />,
+    outside,
   );
-}
 
 function must<T>(value: T | null | undefined, what: string): T {
   if (value == null) throw new Error(`expected ${what}`);
@@ -104,11 +91,6 @@ const queryPath = (path: string) =>
 const byPath = (path: string): HTMLElement =>
   must(queryPath(path), `section for ${path}`);
 
-/** Awaits diff load, signaled by a file's own section — not by the rail,
- * whose tree paints on its own schedule. */
-const diffLoaded = (path: string): Promise<HTMLElement> =>
-  waitFor(() => byPath(path));
-
 /** The rail renders into a shadow root, out of reach of `screen`. */
 const railQuery = (selector: string): Element | null =>
   document
@@ -124,8 +106,7 @@ const railActive = (): string | null =>
 
 describe("collapsed-by-default file sections", () => {
   it("starts with every file collapsed except the commit message", async () => {
-    renderReview();
-    await diffLoaded("src/auth/store.rs");
+    await renderReview();
 
     expect(isExpanded(section(0))).toBe(true); // /COMMIT_MSG
     expect(section(0).querySelector(".diff-grid")).not.toBeNull();
@@ -137,8 +118,7 @@ describe("collapsed-by-default file sections", () => {
   });
 
   it("toggles a section from its header without scrolling", async () => {
-    renderReview();
-    await diffLoaded("src/auth/store.rs");
+    const { settle } = await renderReview();
 
     const header = must(
       section(1).querySelector(".file-header"),
@@ -150,12 +130,13 @@ describe("collapsed-by-default file sections", () => {
     expect(isExpanded(section(1))).toBe(false);
     // The active file never moved.
     expect(scrollCalls).toEqual([]);
+    await settle();
+    expect(railRow("src/auth/rotate.rs")).not.toBeNull();
     expect(railActive()).toBeNull();
   });
 
   it("rail click expands the target and scrolls only after the expansion is committed", async () => {
-    renderReview();
-    await diffLoaded("src/auth/store.rs");
+    const { settle } = await renderReview();
 
     // layout-shift case: expanded content sits above the collapsed target.
     expect(isExpanded(section(0))).toBe(true);
@@ -165,17 +146,15 @@ describe("collapsed-by-default file sections", () => {
     fireEvent.click(must(railRow("src/auth/store.rs"), "rail row"));
 
     expect(scrollCalls).toEqual([{ id: "file-2", expandedAtCall: true }]);
-    // …and the rail follows the reveal (the tree repaints off-cycle).
-    await waitFor(() => {
-      expect(railActive()).toBe("src/auth/store.rs");
-    });
+    // …and the rail follows the reveal once the tree repaints.
+    await settle();
+    expect(railActive()).toBe("src/auth/store.rs");
     expect(isExpanded(section(2))).toBe(true);
     expect(isExpanded(section(1))).toBe(false);
   });
 
   it("the ] key reveals the next file like a rail click", async () => {
-    renderReview();
-    await diffLoaded("src/auth/store.rs");
+    const { settle } = await renderReview();
 
     fireEvent.keyDown(window, { key: "]" }); // already expanded (not the regression-guard case)
     fireEvent.keyDown(window, { key: "]" }); // was collapsed — this is the regression-guard case
@@ -184,15 +163,13 @@ describe("collapsed-by-default file sections", () => {
       { id: "file-0", expandedAtCall: true },
       { id: "file-1", expandedAtCall: true },
     ]);
-    await waitFor(() => {
-      expect(railActive()).toBe("src/auth/rotate.rs");
-    });
+    await settle();
+    expect(railActive()).toBe("src/auth/rotate.rs");
     expect(isExpanded(section(1))).toBe(true);
   });
 
   it("expand all / collapse all flips every section", async () => {
-    renderReview();
-    await diffLoaded("src/auth/store.rs");
+    const { settle } = await renderReview();
 
     fireEvent.click(screen.getByRole("button", { name: "expand all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(true);
@@ -200,6 +177,8 @@ describe("collapsed-by-default file sections", () => {
     fireEvent.click(screen.getByRole("button", { name: "collapse all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(false);
     expect(scrollCalls).toEqual([]);
+    await settle();
+    expect(railRow("src/auth/rotate.rs")).not.toBeNull();
     expect(railActive()).toBeNull();
   });
 });
@@ -207,8 +186,7 @@ describe("collapsed-by-default file sections", () => {
 describe("expansion across diff-range navigation", () => {
   /** Renders change 11 at r1 vs base and expands rotate.rs. */
   async function expandRotate() {
-    renderReview();
-    await diffLoaded("src/auth/store.rs");
+    const page = await renderReview();
     fireEvent.click(
       must(
         byPath("src/auth/rotate.rs").querySelector(".file-header"),
@@ -216,38 +194,38 @@ describe("expansion across diff-range navigation", () => {
       ),
     );
     expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
+    return page;
   }
 
-  it("keeps expanded files expanded when the base or revision changes", async () => {
-    await expandRotate();
+  /** The additions count in a file's header, which tells the ranges apart. */
+  const added = (path: string) =>
+    byPath(path).querySelector(".file-header .plus")?.textContent;
 
-    // r0 → r1 interdiff: the same files in the same (tree) order, so the
-    // settled range is the signal that the new diff has rendered.
+  it("keeps expanded files expanded when the base or revision changes", async () => {
+    const { settle } = await expandRotate();
+    expect(added("src/auth/rotate.rs")).toBe("+19");
+
+    // r0 → r1 interdiff: the same files in the same (tree) order.
     choose("Diff base", "r0 6 comments");
-    await waitFor(() => {
-      expect(document.querySelector('[data-diff-ready="0"]')).not.toBeNull();
-    });
+    await settle();
+    expect(added("src/auth/rotate.rs")).toBe("+17");
     expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
     expect(isExpanded(byPath("src/auth/store.rs"))).toBe(false);
 
     // r0 vs base (the invalid against=0 snaps back to Base): rotate.rs is
     // still open; store.rs stays collapsed; tests/rotation.rs drops out.
     choose("Revision", "r0 6 comments");
-    await waitFor(() => {
-      // Every section is absent during the refetch gap, so the removal
-      // alone would pass before the new diff renders.
-      expect(queryPath("src/auth/rotate.rs")).not.toBeNull();
-      expect(queryPath("tests/rotation.rs")).toBeNull();
-    });
+    await settle();
+    expect(queryPath("tests/rotation.rs")).toBeNull();
     expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
     expect(isExpanded(byPath("src/auth/store.rs"))).toBe(false);
   });
 
   it("navigating to another change resets to the default expansion", async () => {
-    await expandRotate();
+    const { settle } = await expandRotate();
 
     fireEvent.keyDown(window, { key: "n" }); // the row above: change 12
-    await diffLoaded("docs/auth-rotation.md");
+    await settle();
     expect(isExpanded(byPath(COMMIT_MSG_PATH))).toBe(true);
     expect(isExpanded(byPath("docs/auth-rotation.md"))).toBe(false);
   });
@@ -257,18 +235,30 @@ describe("change navigation", () => {
   // The graph lists the chain tip first, so n steps up to the child
   // (change 12) and shift+n back down.
   it("n takes the row above in the tag graph, shift+n the row below", async () => {
-    renderReview();
-    await diffLoaded("src/auth/store.rs");
+    const { settle } = await renderReview();
+    /** The changes whose diff is on screen, each told by a file only it
+     * touches. */
+    const shown = () =>
+      (
+        [
+          [11, "src/auth/store.rs"],
+          [12, "docs/auth-rotation.md"],
+        ] as const
+      ).flatMap(([change, path]) => (queryPath(path) ? [change] : []));
+    expect(shown()).toEqual([11]);
 
     fireEvent.keyDown(window, { key: "n" });
-    await diffLoaded("docs/auth-rotation.md");
+    await settle();
+    expect(shown()).toEqual([12]);
 
     fireEvent.keyDown(window, { key: "N", shiftKey: true });
-    await diffLoaded("src/auth/store.rs");
+    await settle();
+    expect(shown()).toEqual([11]);
 
     // CapsLock delivers `N` too, so only the held shift may step back.
     fireEvent.keyDown(window, { key: "N" });
-    await diffLoaded("docs/auth-rotation.md");
+    await settle();
+    expect(shown()).toEqual([12]);
   });
 });
 
@@ -287,8 +277,7 @@ describe("the selection-miss bubble", () => {
   /** Selects the del/add pair rotate.rs rewrites at line 20 — one line per
    * side, so no side can express the range (lib/selection's mixed-sides). */
   async function selectAcrossSides() {
-    renderReview();
-    await diffLoaded("src/auth/rotate.rs");
+    await renderReview();
     toggleSection(1);
     const codeText = (kind: string) => {
       const cell = [...section(1).querySelectorAll(".code")].find((c) =>
@@ -342,8 +331,7 @@ describe("collapse with an open dirty comment editor", () => {
   /** Leaves a dirty draft open on section(1); needs a manual caret + 'c'
    * because clicking a line doesn't open an editor (see lib/selection). */
   async function openDirtyEditor() {
-    renderReview();
-    await diffLoaded("src/auth/store.rs");
+    await renderReview();
     toggleSection(1);
     const code = must(section(1).querySelector(".code-text"), ".code-text");
     const range = document.createRange();
@@ -408,8 +396,7 @@ describe("collapse with an open dirty comment editor", () => {
 // reviewer sees where discussion sits before switching the diff range.
 describe("comment counts in the diff-range dropdowns", () => {
   it("tags each revision option with its thread count", async () => {
-    renderReview(); // full r1 diff; the counts are range-independent anyway
-    await diffLoaded("src/auth/store.rs");
+    await renderReview(); // full r1 diff; the counts are range-independent anyway
 
     // change 11: r0 carries 6 root threads, r1 the 3 drafts on it. Replies
     // ride with their thread and are not counted separately.
@@ -426,8 +413,7 @@ describe("comment counts in the diff-range dropdowns", () => {
   it("honors r0 as an explicit diff base instead of snapping to Base", async () => {
     // r0 is a valid interdiff base — selecting it must stick; an M >= 1 guard
     // would wrongly reject it.
-    renderReview("/changes/11?against=0");
-    await diffLoaded("src/auth/store.rs");
+    await renderReview("/changes/11?against=0");
     expect(picker("Diff base").textContent).toBe("r0 6 comments");
   });
 });
@@ -440,8 +426,9 @@ describe("the thread's range button", () => {
     screen.queryAllByRole("button", { name: "Diff against latest" });
 
   it("switches the diff range to the thread's revision → latest", async () => {
-    renderReview("/changes/11?revision=0&against=base");
-    await diffLoaded("src/auth/rotate.rs");
+    const { settle } = await renderReview(
+      "/changes/11?revision=0&against=base",
+    );
     fireEvent.click(
       must(
         byPath("src/auth/rotate.rs").querySelector(".file-header"),
@@ -449,16 +436,17 @@ describe("the thread's range button", () => {
       ),
     );
 
-    await waitFor(() => {
-      expect(offers().length).toBeGreaterThan(0);
-    });
+    expect(offers().length).toBeGreaterThan(0);
     fireEvent.click(must(offers()[0], "a range button"));
+    await settle();
 
-    await waitFor(() => {
-      expect(picker("Diff base").textContent).toBe("r0 6 comments");
-      expect(picker("Revision").textContent).toContain("r1");
-    });
-    // The r0 → r1 range is on screen now, so nothing is left to offer.
+    expect(picker("Diff base").textContent).toBe("r0 6 comments");
+    expect(picker("Revision").textContent).toContain("r1");
+    // The r0 → r1 range is on screen now, so nothing is left to offer,
+    // though its r0 threads still show.
+    expect(
+      byPath("src/auth/rotate.rs").querySelector(".thread-actions"),
+    ).not.toBeNull();
     expect(offers()).toHaveLength(0);
   });
 });
@@ -467,14 +455,11 @@ describe("the thread's range button", () => {
 // follows a revision the author pushes mid-review.
 describe("the latest-revision shortcut", () => {
   it("r moves the revision to the latest and keeps the diff base", async () => {
-    renderReview("/changes/11?revision=0&against=base");
-    await diffLoaded("src/auth/rotate.rs");
+    await renderReview("/changes/11?revision=0&against=base");
 
     fireEvent.keyDown(window, { key: "r" });
 
-    await waitFor(() => {
-      expect(picker("Revision").textContent).toBe("r1 3 comments");
-    });
+    expect(picker("Revision").textContent).toBe("r1 3 comments");
     expect(picker("Diff base").textContent).toBe("Base");
   });
 });
@@ -488,36 +473,29 @@ describe("the s key submits the listed changes' draft decisions", () => {
     path = loc.pathname + loc.hash;
     return null;
   }
-  function renderChange20() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    return render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/changes/20"]}>
-          <LocationProbe />
-          <Routes>
-            <Route path="/changes/:id" element={<ReviewPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-  }
-
   it("is inert with nothing drafted, and publishes once a decision is drafted", async () => {
-    renderChange20();
-    await diffLoaded("src/wal.rs");
+    const { client, settle } = await renderReview(
+      "/changes/20",
+      <LocationProbe />,
+    );
+    expect(queryPath("src/wal.rs")).not.toBeNull();
 
+    // A submit would be pending at once.
     fireEvent.keyDown(window, { key: "s" });
+    expect(client.isMutating()).toBe(0);
     expect(path).toBe("/changes/20");
 
     fireEvent.click(screen.getByRole("button", { name: "Review (a)" }));
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
-    await screen.findByRole("button", { name: /Submit \(s\) · 1/ });
+    await settle();
+    expect(
+      screen.getByRole("button", { name: /Submit \(s\) · 1/ }),
+    ).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "s" });
     // The drafted count drains once the invalidated drafts overlay refetches.
-    await screen.findByRole("button", { name: "Submit (s)" });
+    await settle();
+    expect(screen.getByRole("button", { name: "Submit (s)" })).toBeTruthy();
     expect(path).toBe("/changes/20");
   });
 });
@@ -532,33 +510,20 @@ describe("the page shortcuts while the settings popup is open", () => {
     return null;
   }
 
-  function renderChange11() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    return render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/changes/11?against=base"]}>
-          <LocationProbe />
-          <Routes>
-            <Route path="/changes/:id" element={<ReviewPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-  }
-
   it("navigates on n, and stops once the popup opens", async () => {
-    renderChange11();
-    await diffLoaded("src/auth/store.rs");
+    const { settle } = await renderReview(
+      "/changes/11?against=base",
+      <LocationProbe />,
+    );
 
     fireEvent.keyDown(window, { key: "n" });
-    const moved = path;
-    expect(moved).not.toBe("/changes/11");
+    await settle();
+    expect(path).toBe("/changes/12");
 
+    // Change 12 is the chain tip, so only shift+n moves from it.
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    fireEvent.keyDown(window, { key: "n" });
-    expect(path).toBe(moved);
+    fireEvent.keyDown(window, { key: "N", shiftKey: true });
+    expect(path).toBe("/changes/12");
   });
 });
 
@@ -570,8 +535,7 @@ describe("comment counts in the file headers", () => {
   it("counts only this file's threads visible in the current range", async () => {
     // base → r1: the r0 threads are pinned away, so only the r1 drafts and
     // the r0 threads the server ported to r1 show.
-    renderReview("/changes/11?against=base");
-    await diffLoaded("src/auth/store.rs");
+    await renderReview("/changes/11?against=base");
 
     // rotate.rs (file-1): two drafts on r1 — one new-side, one old-side —
     // and the open r0 selection thread ported to its shifted lines.
@@ -588,8 +552,7 @@ describe("comment counts in the file headers", () => {
 
   it("ports the resolved threads too when the settings ask for all", async () => {
     localStorage.setItem("nit.review-settings", '{"ported":"all"}');
-    renderReview("/changes/11?against=base");
-    await diffLoaded("src/auth/rotate.rs");
+    await renderReview("/changes/11?against=base");
     // rotate.rs: the three of the open setting plus the resolved r0 line
     // thread ported to its shifted line.
     expect(fcomments(1)).toBe("4 comments");
@@ -597,8 +560,7 @@ describe("comment counts in the file headers", () => {
 
   it("follows the range: the r0 → r1 interdiff surfaces the r0 threads", async () => {
     // The left column is r0's own tree, so r0-pinned threads reappear there.
-    renderReview("/changes/11?against=0");
-    await diffLoaded("src/auth/rotate.rs");
+    await renderReview("/changes/11?against=0");
 
     // rotate.rs: three r0 threads (lines 21/22/23) on the left + one r1
     // draft on the right; the old-side r1 draft has no column here.
@@ -612,8 +574,7 @@ describe("comment counts in the file headers", () => {
 // below.
 describe("context expansion", () => {
   it("reveals a whole top gap in one click", async () => {
-    renderReview();
-    await diffLoaded("src/auth/rotate.rs");
+    const { settle } = await renderReview();
     fireEvent.click(screen.getByRole("button", { name: "expand all" }));
 
     // rotate.rs hides a run above its first hunk and another between the two.
@@ -624,9 +585,8 @@ describe("context expansion", () => {
       must(section(1).querySelector(".expand-all"), ".expand-all"),
     );
 
-    await waitFor(() => {
-      expect(gaps()).toHaveLength(1);
-    });
+    await settle();
+    expect(gaps()).toHaveLength(1);
     // Every hidden line came in, starting at the file's first.
     expect(section(1).textContent).toContain("unchanged line 1");
   });
@@ -637,8 +597,8 @@ describe("context expansion", () => {
 // reads as a stale one.
 describe("file-anchored threads", () => {
   it("renders in the file's own discussion group, with no line excerpt", async () => {
-    renderReview();
-    const store = await diffLoaded("src/auth/store.rs");
+    await renderReview();
+    const store = byPath("src/auth/store.rs");
     toggleSection(2);
 
     const group = must(
