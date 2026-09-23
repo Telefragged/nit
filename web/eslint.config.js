@@ -24,6 +24,13 @@ import html from "@html-eslint/eslint-plugin";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
 
+const settleInstead =
+  "Await renderPage or its settle (src/test/page.tsx), then read the page with getBy or queryBy.";
+const awaitEvent =
+  "Await the event that produces the state: the operation's own promise, a callback, or settle (src/test/page.tsx).";
+const noPoll = `It polls. ${awaitEvent}`;
+const noTimer = `A timer waits a fixed time. ${awaitEvent}`;
+
 export default tseslint.config(
   {
     ignores: [
@@ -107,6 +114,54 @@ export default tseslint.config(
   {
     files: ["src/lib/wasm.ts", "wasm-test-setup.ts"],
     rules: { "no-restricted-imports": "off" },
+  },
+
+  // A test waits for the event that produces the state it checks. A timer
+  // waits a fixed time, and a poll stops at a fixed timeout. On a slow CI
+  // runner the state can arrive later than either, and the test fails on
+  // correct code.
+  {
+    files: ["src/**/*.test.{ts,tsx}", "src/test/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ImportSpecifier[imported.name=/^(waitFor|waitForElementToBeRemoved)$/], MemberExpression[property.name=/^(waitFor|waitForElementToBeRemoved)$/]",
+          message: noPoll,
+        },
+        {
+          selector:
+            "CallExpression[callee.name=/^find(All)?By/], CallExpression[callee.property.name=/^find(All)?By/]",
+          message: `findBy polls. ${settleInstead}`,
+        },
+      ],
+      "no-restricted-properties": [
+        "error",
+        ...[
+          ["vi", "waitUntil"],
+          ["expect", "poll"],
+        ].map(([object, property]) => ({
+          object,
+          property,
+          message: noPoll,
+        })),
+        ...["window", "globalThis"].flatMap((object) =>
+          ["setTimeout", "setInterval"].map((property) => ({
+            object,
+            property,
+            message: noTimer,
+          })),
+        ),
+      ],
+      "no-restricted-globals": [
+        "error",
+        ...["setTimeout", "setInterval"].map((name) => ({
+          name,
+          message: noTimer,
+        })),
+      ],
+    },
   },
 
   // ── Node tooling at the repo root — type-aware via tsconfig.node.json ──
