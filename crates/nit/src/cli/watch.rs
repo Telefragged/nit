@@ -132,21 +132,29 @@ fn deliver(
     cursor: &Cursor,
     client: &Client,
 ) -> Result<()> {
-    while let Ok(first) = batches.recv() {
-        let mut run = first;
-        let ceiling = Instant::now() + CEILING;
-        // The wait is the quiet window, cut short by what is left of the
-        // ceiling, so an entry puts the window back to its full length
-        // and the run still ends at the ceiling.
-        while let Ok(batch) =
-            batches.recv_timeout(QUIET.min(ceiling.saturating_duration_since(Instant::now())))
-        {
-            run.extend(batch);
-        }
+    while let Some(run) = next_run(batches) {
         inbox.post(&run, &Sources::fetch(client, &run, Retry::UntilUp)?)?;
         cursor.write(max_seq(&run))?;
     }
     Ok(())
+}
+
+/// The next run of entries, or `None` once the follower is gone.
+///
+/// A run opens with the next batch. It ends [`QUIET`] after its last
+/// batch, or [`CEILING`] after its first, whichever comes first.
+fn next_run(batches: &Receiver<Vec<LogEntry>>) -> Option<Vec<LogEntry>> {
+    let mut run = batches.recv().ok()?;
+    let ceiling = Instant::now() + CEILING;
+    // The wait is the quiet window, cut short by what is left of the
+    // ceiling, so a batch puts the window back to its full length and the
+    // run still ends at the ceiling.
+    while let Ok(batch) =
+        batches.recv_timeout(QUIET.min(ceiling.saturating_duration_since(Instant::now())))
+    {
+        run.extend(batch);
+    }
+    Some(run)
 }
 
 /// The selection being followed, and where its new entries go.
@@ -444,7 +452,27 @@ fn lock(socket: &std::path::Path, select: &SelectArgs) -> Result<Option<File>> {
 
 #[cfg(test)]
 mod tests {
-    use super::fnv1a;
+    use std::sync::mpsc::sync_channel;
+
+    use nit_types::domain::{ChangeNumber, Tags, TagsPayload};
+
+    use super::{Cursor, LogEntry, LogPayload, fnv1a, next_run};
+
+    fn entry(sequence: u64) -> LogEntry {
+        LogEntry {
+            change_number: ChangeNumber::new(1),
+            position: 0,
+            sequence,
+            created_at: String::new(),
+            payload: LogPayload::Tags(TagsPayload { tags: Tags::new() }),
+        }
+    }
+
+    fn cursor(dir: &tempfile::TempDir) -> Cursor {
+        Cursor {
+            path: dir.path().join("watch.cursor"),
+        }
+    }
 
     /// The published FNV-1a vectors, which pin the file names a watch
     /// looks for.
@@ -453,5 +481,42 @@ mod tests {
         assert_eq!(fnv1a(b""), 0xcbf2_9ce4_8422_2325);
         assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
         assert_eq!(fnv1a(b"foobar"), 0x8594_4171_f739_67e8);
+    }
+
+    /// The batches waiting in the channel make one run, which is what
+    /// sends one message per reviewer pass. The closed channel ends the
+    /// run at once, so this waits out no window.
+    #[test]
+    fn one_run_takes_every_waiting_batch() {
+        let (entries, batches) = sync_channel(4);
+        entries.send(vec![entry(1)]).expect("send the first batch");
+        entries
+            .send(vec![entry(2), entry(3)])
+            .expect("send the second batch");
+        drop(entries);
+
+        let run = next_run(&batches).expect("a run");
+        let sequences: Vec<u64> = run.iter().map(|e| e.sequence).collect();
+        assert_eq!(sequences, [1, 2, 3]);
+        assert!(next_run(&batches).is_none(), "the follower is gone");
+    }
+
+    #[test]
+    fn the_cursor_reads_back_what_it_wrote() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let cursor = cursor(&dir);
+        assert_eq!(cursor.read().expect("a missing cursor"), 0);
+        cursor.write(42).expect("write the cursor");
+        assert_eq!(cursor.read().expect("read the cursor"), 42);
+    }
+
+    /// A half-written cursor stops the watch, rather than reading as 0
+    /// and reposting the log the agent has already read.
+    #[test]
+    fn a_truncated_cursor_fails_the_read() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let cursor = cursor(&dir);
+        std::fs::write(&cursor.path, "").expect("truncate the cursor");
+        assert!(cursor.read().is_err(), "an empty cursor reads as an error");
     }
 }
