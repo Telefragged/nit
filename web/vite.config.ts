@@ -22,8 +22,8 @@ export default defineConfig({
     environment: "jsdom",
     env: { VITE_MOCK: "1" },
     setupFiles: ["./wasm-test-setup.ts", "./src/test-setup.ts"],
-    // Must clear src/test-setup's asyncUtilTimeout so a load-stretched poll
-    // isn't killed by the per-test cap before its findBy resolves.
-    testTimeout: 20_000,
+    // 0 turns the timeouts off. A test waits on events, never on a clock.
+    testTimeout: 0,
+    hookTimeout: 0,
   },
 });

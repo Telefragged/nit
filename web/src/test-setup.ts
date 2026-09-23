@@ -1,17 +1,4 @@
-// Vitest setup: size the async-polling ceilings for load. A `nix flake check`
-// runs every crate's build/clippy/test concurrently, so a jsdom test can be
-// badly CPU-starved. React's renders then land far later than on an idle
-// box. testing-library's 1000ms `asyncUtilTimeout` default is too tight
-// for that and flakes the rail-load `findBy`s. findBy/waitFor poll until
-// the state holds, so the ceiling only has to clear the worst-case
-// load-stretched completion, never the happy path: the assertion still
-// resolves the instant the element appears.
-import { configure } from "@testing-library/react";
 import { afterEach } from "vitest";
-
-const ASYNC_TIMEOUT_MS = 10_000;
-
-configure({ asyncUtilTimeout: ASYNC_TIMEOUT_MS });
 
 // Each test opens with an empty browser store. A page that remembers a view
 // choice — the diff mode, the change graph's grouping — would otherwise
