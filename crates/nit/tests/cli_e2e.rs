@@ -395,10 +395,12 @@ fn push_to_a_dead_server_reports_unreachable() {
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
 
-    // Start then drop a server to claim (and free) a port the client will hit.
-    let dead = TestServer::start(g.dir.path().join("dead.sqlite3"), None);
-    let base = dead.base.clone();
-    drop(dead);
+    // A socket that is bound but never listens: the kernel refuses every
+    // connection to its port, and no other socket can bind the port while
+    // this one is open.
+    let refusing = tokio::net::TcpSocket::new_v4().unwrap();
+    refusing.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let base = format!("http://{}", refusing.local_addr().unwrap());
 
     let out = Command::new(env!("CARGO_BIN_EXE_nit"))
         .args(["push", "feat"])
