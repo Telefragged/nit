@@ -10,6 +10,9 @@
 //! It also compiles the built web UI into the binary when `NIT_WEB_DIST` names
 //! its directory. The flake sets it; a plain `cargo` build leaves it unset and
 //! serves the API only.
+//!
+//! The Claude Code plugin is always compiled in, from `NIT_PLUGIN_DIR`. The
+//! flake sets it, and a plain `cargo` build reads the repo's `plugins/nit`.
 
 use std::process::Command;
 
@@ -23,6 +26,10 @@ fn main() {
     println!("cargo::rustc-check-cfg=cfg(nit_web_ui)");
     if std::env::var_os("NIT_WEB_DIST").is_some() {
         println!("cargo::rustc-cfg=nit_web_ui");
+    }
+    if std::env::var_os("NIT_PLUGIN_DIR").is_none() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../plugins/nit");
+        println!("cargo:rustc-env=NIT_PLUGIN_DIR={dir}");
     }
 }
 

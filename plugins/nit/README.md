@@ -8,7 +8,12 @@ anchored to the exact lines it concerns.
 
 ## Install
 
-The [nit repo](https://github.com/Telefragged/nit) doubles as a Claude Code
+`nit install-plugin` installs the plugin that your `nit` binary carries, so
+the plugin always matches your nit version. It registers the plugin with
+Claude Code as `nit@nit`.
+
+Without nit on the machine, install from the
+[nit repo](https://github.com/Telefragged/nit). It is also a Claude Code
 plugin marketplace. Add it, then install the plugin:
 
 ```

@@ -135,6 +135,11 @@
                 # buildRustCrate defaults to codegen-units=1 (serial codegen),
                 # ~3x slower per crate than cargo's release default. Match cargo.
                 defaultCodegenUnits = 16;
+                # The nit crate's source is its own directory only, so the
+                # plugin that it compiles in comes by path (crates/nit/build.rs).
+                defaultCrateOverrides = p.defaultCrateOverrides // {
+                  nit = _: { NIT_PLUGIN_DIR = ./plugins/nit; };
+                };
               };
             in
             crate:

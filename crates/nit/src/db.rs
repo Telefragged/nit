@@ -46,11 +46,22 @@ pub fn now_rfc3339() -> String {
 ///
 /// When neither `$XDG_DATA_HOME` nor `$HOME` is set.
 pub fn default_db_path() -> Result<PathBuf> {
+    nit_data_dir().map(|d| d.join("nit.sqlite3"))
+}
+
+/// nit's data directory: `$XDG_DATA_HOME/nit`.
+///
+/// Falls back to `~/.local/share/nit`.
+///
+/// # Errors
+///
+/// When neither `$XDG_DATA_HOME` nor `$HOME` is set.
+pub fn nit_data_dir() -> Result<PathBuf> {
     data_dir(
         std::env::var_os("XDG_DATA_HOME").map(PathBuf::from),
         std::env::var_os("HOME").map(PathBuf::from),
     )
-    .map(|d| d.join("nit").join("nit.sqlite3"))
+    .map(|d| d.join("nit"))
 }
 
 fn data_dir(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> Result<PathBuf> {

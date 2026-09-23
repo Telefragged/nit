@@ -41,6 +41,8 @@ enum Cmd {
     Repo(cli::RepoArgs),
     /// Follow the reviewer's entries and post each one to this session
     Watch(cli::WatchArgs),
+    /// Install the Claude Code plugin that this build carries
+    InstallPlugin,
 }
 
 fn main() -> Result<()> {
@@ -71,5 +73,6 @@ fn main() -> Result<()> {
         Cmd::Reopen(args) => cli::reopen(args),
         Cmd::Repo(args) => cli::repo(args),
         Cmd::Watch(args) => cli::watch(args),
+        Cmd::InstallPlugin => cli::install_plugin(),
     }
 }
