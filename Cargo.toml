@@ -1,5 +1,10 @@
 [workspace]
-members = ["crates/nit", "crates/nit-types", "crates/nit-wasm"]
+members = [
+  "crates/nit",
+  "crates/nit-contract",
+  "crates/nit-types",
+  "crates/nit-wasm",
+]
 resolver = "3"
 
 [workspace.package]
@@ -9,6 +14,7 @@ license = "MIT"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
+nit = { path = "crates/nit" }
 nit-types = { path = "crates/nit-types" }
 
 [workspace.lints.clippy]

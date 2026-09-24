@@ -53,6 +53,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "nit-contract" = rec {
+      packageId = "nit-contract";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "nit-contract";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "nit-types" = rec {
       packageId = "nit-types";
       build = internal.buildRustCrateWithFeatures {
@@ -3764,6 +3774,30 @@ rec {
           {
             name = "tempfile";
             packageId = "tempfile";
+          }
+        ];
+
+      };
+      "nit-contract" = rec {
+        crateName = "nit-contract";
+        version = "0.1.0";
+        edition = "2024";
+        crateBin = [
+          {
+            name = "nit-contract";
+            path = "src/main.rs";
+            requiredFeatures = [ ];
+          }
+        ];
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/nit-contract; };
+        dependencies = [
+          {
+            name = "anyhow";
+            packageId = "anyhow";
+          }
+          {
+            name = "nit";
+            packageId = "nit";
           }
         ];
 

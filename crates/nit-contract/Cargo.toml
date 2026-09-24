@@ -1,0 +1,13 @@
+[package]
+name = "nit-contract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Writes nit's public contract: the OpenAPI document"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1"
+nit = { workspace = true }

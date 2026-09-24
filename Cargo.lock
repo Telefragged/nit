@@ -1161,6 +1161,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nit-contract"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "nit",
+]
+
+[[package]]
 name = "nit-types"
 version = "0.1.0"
 dependencies = [

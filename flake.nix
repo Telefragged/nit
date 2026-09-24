@@ -222,6 +222,7 @@
               ./Cargo.lock
               ./crates/nit-types
               ./crates/nit/Cargo.toml
+              ./crates/nit-contract/Cargo.toml
               ./crates/nit-wasm/Cargo.toml
             ];
           };
@@ -234,6 +235,7 @@
           buildPhase =
             stubMembers [
               "crates/nit"
+              "crates/nit-contract"
               "crates/nit-wasm"
             ]
             + ''
@@ -267,6 +269,7 @@
               ./crates/nit-types
               ./crates/nit-wasm
               ./crates/nit/Cargo.toml
+              ./crates/nit-contract/Cargo.toml
             ];
           };
           nativeBuildInputs = [
@@ -277,11 +280,16 @@
             pkgs.rustPlatform.cargoSetupHook
           ];
           cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-          buildPhase = stubMembers [ "crates/nit" ] + ''
-            cargo build --offline --release --target wasm32-unknown-unknown -p nit-wasm
-            wasm-bindgen target/wasm32-unknown-unknown/release/nit_wasm.wasm \
-              --target web --out-dir pkg
-          '';
+          buildPhase =
+            stubMembers [
+              "crates/nit"
+              "crates/nit-contract"
+            ]
+            + ''
+              cargo build --offline --release --target wasm32-unknown-unknown -p nit-wasm
+              wasm-bindgen target/wasm32-unknown-unknown/release/nit_wasm.wasm \
+                --target web --out-dir pkg
+            '';
           installPhase = "cp -r pkg $out";
           dontFixup = true;
         };
