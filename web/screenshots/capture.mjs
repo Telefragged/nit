@@ -420,11 +420,14 @@ const captures = [
     actions: async (page) => {
       await openPicker(page, "Diff base");
       await page.getByRole("option", { name: "r0 6 comments" }).click();
-      // Wait for the r0 interdiff to actually render: the switch refetches
-      // under a new query key (skeleton meanwhile), and data-diff-ready
-      // carries the resolved base only once that settles. Keyed to "0", not a
-      // bare flag, so it can't pass on the still-mounted base diff.
-      await page.waitForSelector('[data-diff-ready="0"]');
+      // data-diff-ready="0" shows that the r0 diff read succeeded, and an
+      // idle page shows that the other reads have answered too.
+      await page.waitForFunction(
+        () =>
+          !!document.querySelector('[data-diff-ready="0"]') &&
+          document.querySelector("#root main")?.getAttribute("aria-busy") ===
+            "false",
+      );
     },
   },
   {
@@ -637,19 +640,14 @@ const captures = [
   },
 ];
 
-/** Every page renders `.skeleton` placeholders until its data (in mock mode,
- * the lazily-imported fixture stream) lands, so an empty `.skeleton` set means
- * the page has settled into real content. This replaces Playwright's
- * `networkidle`, which its own docs call "inherently racy": vite's on-demand
- * dep pre-bundle and the mock stream's dynamic import make the network go
- * quiet mid-render, so `networkidle` could resolve on a half-built page. */
+/** Every page marks its `<main>` busy until all the data it draws has
+ * arrived. No `<main>` exists before the page's route has loaded. */
 const waitForReady = (page) =>
-  page.waitForFunction(() => {
-    // `load` can fire before React mounts, when the tree has neither content
-    // nor skeleton yet — require real content in #root, not just its absence.
-    const root = document.getElementById("root");
-    return !!root?.firstElementChild && !root.querySelector(".skeleton");
-  });
+  page.waitForFunction(
+    () =>
+      document.querySelector("#root main")?.getAttribute("aria-busy") ===
+      "false",
+  );
 
 async function waitForServer(url, timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs;

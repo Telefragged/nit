@@ -350,7 +350,7 @@ export default function ReviewPage() {
   );
   // This change stays in the drafts read while a new subscription refills
   // the picked set, so its overlay never blinks out.
-  const draftsMap = useDrafts(
+  const { overlays: draftsMap, loading: overlaysLoading } = useDrafts(
     rowIds.includes(changeNumber) ? rowIds : [changeNumber, ...rowIds],
   );
   // The same read useDrafts makes for this change, for its error: an
@@ -790,18 +790,28 @@ export default function ReviewPage() {
     return map;
   }, [shownThreads, files, selected, against]);
 
+  // Busy until the stream has delivered the change and a member of its tag
+  // graph, and every read has its first answer. A read that this render enables
+  // already reports isLoading, so the page never looks idle between two
+  // reads that depend on each other.
+  const busy =
+    published === undefined ||
+    memberProjections.length === 0 ||
+    overlaysLoading ||
+    [repoQ, draftsQ, diffQ, portedQ].some((q) => q.isLoading);
+
   // The change's published projection arrives over the websocket (no fetch to
   // error on); a bad change number surfaces when its drafts read fails.
   if (draftsQ.isError) {
     return (
-      <main className="page">
+      <main className="page" aria-busy={false}>
         <ErrorPanel error={draftsQ.error} />
       </main>
     );
   }
   if (!change || !latest || !selectedRev) {
     return (
-      <main className="page">
+      <main className="page" aria-busy={busy}>
         <div className="skeleton" style={{ width: 320, height: 18 }} />
         <div className="skeleton" style={{ width: 200, marginTop: 10 }} />
         <div className="skeleton" style={{ marginTop: 24, height: 260 }} />
@@ -821,7 +831,7 @@ export default function ReviewPage() {
 
   return (
     <ReviewContext.Provider value={ctxValue}>
-      <main className="page-wide review-page">
+      <main className="page-wide review-page" aria-busy={busy}>
         <div className="review-header">
           <div className="review-header-main">
             <div className="crumb-line">
@@ -920,10 +930,8 @@ export default function ReviewPage() {
               }}
             />
           </aside>
-          {/* The resolved diff base, present only once the query for the
-              current range has settled — absent through the skeleton while a
-              base switch refetches. A deterministic gate for the screenshot
-              harness, which otherwise raced the refetch on a fixed timeout. */}
+          {/* The diff base of the rendered diff. It is absent while the
+              diff of the current range loads. */}
           <div
             className="diff-column"
             ref={diffColumnRef}

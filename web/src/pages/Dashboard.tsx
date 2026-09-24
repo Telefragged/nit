@@ -111,15 +111,20 @@ export default function Dashboard() {
       ),
     [graph],
   );
-  const overlays = useDrafts(activityIds);
+  const { overlays, loading: overlaysLoading } = useDrafts(activityIds);
   const activity = nodeActivity(changesQuery.data?.changes ?? [], overlays);
 
   const repo = repoQuery.data;
   useDocumentTitle(repo ? repoPath(repo.git_dir) : null);
   const error = changesQuery.error ?? historyQuery.error;
+  // A read that this render enables already reports isLoading, so the
+  // page never looks idle between the graph and its activity overlay.
+  const busy =
+    overlaysLoading ||
+    [repoQuery, changesQuery, historyQuery, tagsQuery].some((q) => q.isLoading);
 
   return (
-    <main className="page">
+    <main className="page" aria-busy={busy}>
       <h1 className="mono">{repo ? repoPath(repo.git_dir) : "Repository"}</h1>
       <p className="subtitle">
         <Link to="/" className="mono">
