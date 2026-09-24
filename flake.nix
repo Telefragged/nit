@@ -248,6 +248,14 @@
           dontFixup = true;
         };
 
+      # The public contract: the OpenAPI document the routes' utoipa
+      # annotations produce, written by `nit-contract` into one directory.
+      contractSnapshot =
+        pkgs:
+        pkgs.runCommand "nit-contract" { } ''
+          ${(cargoNixFor pkgs).workspaceMembers."nit-contract".build}/bin/nit-contract $out
+        '';
+
       # The shared change fold compiled to WebAssembly: nit-wasm built for
       # wasm32, then run through wasm-bindgen (`--target web`) into the JS
       # glue + `.wasm` the web imports. Offline and pinned like wireTypesTs; the
@@ -400,6 +408,7 @@
           inherit nit-web;
           nit = nitFor pkgs;
           default = nit;
+          contract = contractSnapshot pkgs;
         }
         // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           nit-static = nitFor pkgs.pkgsStatic;
@@ -506,6 +515,7 @@
               NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
             '';
           };
+          contract = contractSnapshot pkgs;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
             if ! diff -u ${./web/src/api/types.gen.ts} ${wireTypesTs pkgs}; then
               echo "web/src/api/types.gen.ts is stale — run: nix run .#gen-types" >&2
