@@ -99,6 +99,7 @@ fn revision_for(
     }))
 }
 
+#[utoipa::path(post, path = "/api/push", request_body = PushRequest, responses((status = 200, body = PushResult)))]
 pub(super) async fn push(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<PushRequest>,

@@ -18,6 +18,7 @@ use nit_types::domain::Lifecycle;
 use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, with_conn};
 use super::{anchor_of, change_detail_json, change_or_404, map_busy, snapshot_line_text};
 
+#[utoipa::path(post, path = "/api/changes/{id}/comments", params(("id" = ChangeNumber, Path)), request_body = NewComment, responses((status = 200, body = ThreadProjection)))]
 pub(super) async fn create_comment(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
@@ -109,6 +110,7 @@ fn set_lifecycle(
 ///
 /// `nit abandon`: a reviewer or author judgment, never automatic. Optional
 /// `message` records a reason. A no-op on an already-terminal change.
+#[utoipa::path(post, path = "/api/changes/{id}/abandon", params(("id" = ChangeNumber, Path)), request_body = AbandonRequest, responses((status = 200, body = ChangeDetail)))]
 pub(super) async fn abandon_change(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
@@ -132,6 +134,7 @@ pub(super) async fn abandon_change(
 /// `POST /api/changes/{id}/reopen` — reopens an abandoned change.
 ///
 /// Clears it back to its retained verdict status (`nit reopen`).
+#[utoipa::path(post, path = "/api/changes/{id}/reopen", params(("id" = ChangeNumber, Path)), responses((status = 200, body = ChangeDetail)))]
 pub(super) async fn reopen_change(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,

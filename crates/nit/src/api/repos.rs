@@ -29,6 +29,7 @@ fn repo_json(conn: &Connection, row: db::RepoRow) -> Result<Repo, Error> {
 /// `canonical_ref` must resolve to a commit
 /// — any git ref, e.g. `origin/main` (400 otherwise); nit never guesses it.
 /// 409 if the git dir is already registered.
+#[utoipa::path(post, path = "/api/repos", request_body = CreateRepo, responses((status = 200, body = Repo)))]
 pub(super) async fn create_repo(
     State(state): State<Arc<AppState>>,
     AppJson(req): AppJson<CreateRepo>,
@@ -74,6 +75,7 @@ pub(super) async fn create_repo(
 }
 
 /// Lists every registered repo with its open-change count (derived, never stored).
+#[utoipa::path(get, path = "/api/repos", responses((status = 200, body = RepoList)))]
 pub(super) async fn list_repos(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<RepoList>, Error> {
@@ -88,6 +90,7 @@ pub(super) async fn list_repos(
 }
 
 /// One repo by id; open-change count derived, never stored (404 if unknown).
+#[utoipa::path(get, path = "/api/repos/{id}", params(("id" = u64, Path)), responses((status = 200, body = Repo)))]
 pub(super) async fn get_repo(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,
@@ -101,6 +104,7 @@ pub(super) async fn get_repo(
 }
 
 /// Repoint a repo at a new git-common-dir after it moved on disk.
+#[utoipa::path(patch, path = "/api/repos/{id}", params(("id" = u64, Path)), request_body = RelocateRepo, responses((status = 200, body = Repo)))]
 pub(super) async fn relocate_repo(
     State(state): State<Arc<AppState>>,
     AppPath(repo_id): AppPath<u64>,

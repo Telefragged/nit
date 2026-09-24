@@ -14,7 +14,8 @@ use crate::gitscan;
 
 use super::{AppQuery, AppState, Error, MERGED_WINDOW, with_conn};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(super) struct HistoryQuery {
     repo: u64,
 }
@@ -23,6 +24,7 @@ pub(super) struct HistoryQuery {
 ///
 /// `nit_types::graph::RepoHistory` carries the walk's contract. `repo` is
 /// required — a walk has no cross-repo meaning; 404 if unknown.
+#[utoipa::path(get, path = "/api/history", params(HistoryQuery), responses((status = 200, body = RepoHistory)))]
 pub(super) async fn repo_history(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<HistoryQuery>,

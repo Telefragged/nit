@@ -19,6 +19,7 @@ use super::{AppState, with_conn};
 /// `WS /api/stream` — the client-driven change stream.
 ///
 /// `nit_types::events::Subscription` carries the contract.
+#[utoipa::path(get, path = "/api/stream", responses((status = 101, description = "A websocket of `StreamMessage` frames")))]
 pub(super) async fn stream(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,

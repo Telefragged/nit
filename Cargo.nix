@@ -3746,6 +3746,14 @@ rec {
             usesDefaultFeatures = false;
             features = [ "json" ];
           }
+          {
+            name = "utoipa";
+            packageId = "utoipa";
+          }
+          {
+            name = "utoipa-axum";
+            packageId = "utoipa-axum";
+          }
         ];
         devDependencies = [
           {
@@ -3922,6 +3930,17 @@ rec {
         features = {
           "loom" = [ "dep:loom" ];
         };
+      };
+      "paste" = rec {
+        crateName = "paste";
+        version = "1.0.15";
+        edition = "2018";
+        sha256 = "02pxffpdqkapy292harq6asfjvadgp1s005fip9ljfsn9fvxgh2p";
+        procMacro = true;
+        authors = [
+          "David Tolnay <dtolnay@gmail.com>"
+        ];
+
       };
       "percent-encoding" = rec {
         crateName = "percent-encoding";
@@ -6884,6 +6903,51 @@ rec {
           "yaml" = [ "serde_norway" "utoipa-gen?/yaml" ];
         };
         resolvedDefaultFeatures = [ "default" "macros" ];
+      };
+      "utoipa-axum" = rec {
+        crateName = "utoipa-axum";
+        version = "0.2.0";
+        edition = "2021";
+        sha256 = "181lha7i7885q5fqj0s5mjp1wfkapdfdqp8cxi4j916cpkjvl9bw";
+        libName = "utoipa_axum";
+        authors = [
+          "Juha Kukkonen <juha7kukkonen@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "axum";
+            packageId = "axum";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "paste";
+            packageId = "paste";
+          }
+          {
+            name = "tower-layer";
+            packageId = "tower-layer";
+          }
+          {
+            name = "tower-service";
+            packageId = "tower-service";
+          }
+          {
+            name = "utoipa";
+            packageId = "utoipa";
+            usesDefaultFeatures = false;
+            features = [ "macros" ];
+          }
+        ];
+        devDependencies = [
+          {
+            name = "axum";
+            packageId = "axum";
+            usesDefaultFeatures = false;
+            features = [ "json" ];
+          }
+        ];
+        features = {
+        };
       };
       "utoipa-gen" = rec {
         crateName = "utoipa-gen";

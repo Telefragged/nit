@@ -16,6 +16,7 @@ use super::views;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
 use super::{anchor_of, change_or_404, snapshot_line_text};
 
+#[utoipa::path(post, path = "/api/changes/{id}/drafts", params(("id" = ChangeNumber, Path)), request_body = NewDraft, responses((status = 200, body = Draft)))]
 pub(super) async fn create_draft(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
@@ -63,6 +64,7 @@ pub(super) async fn create_draft(
     .await
 }
 
+#[utoipa::path(patch, path = "/api/drafts/{id}", params(("id" = u64, Path)), request_body = EditDraft, responses((status = 200, body = Draft)))]
 pub(super) async fn edit_draft(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,
@@ -79,6 +81,7 @@ pub(super) async fn edit_draft(
     .await
 }
 
+#[utoipa::path(delete, path = "/api/drafts/{id}", params(("id" = u64, Path)), responses((status = 204)))]
 pub(super) async fn delete_draft(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<u64>,

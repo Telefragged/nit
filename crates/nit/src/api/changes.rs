@@ -35,6 +35,7 @@ use super::{AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, with_conn}
 use super::{append_to_change, change_detail_json, change_or_404, map_busy};
 
 /// Serves `GET /api/changes`: matching changes as folded projections.
+#[utoipa::path(get, path = "/api/changes", params(ChangeQuery), responses((status = 200, body = ChangeList)))]
 pub(super) async fn list_changes(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<ChangeQuery>,
@@ -47,7 +48,8 @@ pub(super) async fn list_changes(
     .await
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(super) struct LogQuery {
     repo: u64,
     #[serde(default)]
@@ -63,6 +65,7 @@ pub(super) struct LogQuery {
 /// `nit_types::log::Log` documents the query. This reads the log rows
 /// directly and never looks the repo up, so an unknown repo returns an
 /// empty log, not a 404.
+#[utoipa::path(get, path = "/api/log", params(LogQuery), responses((status = 200, body = Log)))]
 pub(super) async fn list_log(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<LogQuery>,
@@ -79,7 +82,8 @@ pub(super) async fn list_log(
     .await
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(super) struct ListTagsQuery {
     repo: u64,
     /// Repeated (`?status=pending&status=commented`); empty means every
@@ -94,6 +98,7 @@ pub(super) struct ListTagsQuery {
 /// because tag keys collide across repos and no union of them means
 /// anything. The read goes straight to the denormalized rows, so an
 /// unknown repo yields an empty list rather than a 404.
+#[utoipa::path(get, path = "/api/tags", params(ListTagsQuery), responses((status = 200, body = TagList)))]
 pub(super) async fn list_tags(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<ListTagsQuery>,
@@ -113,6 +118,7 @@ pub(super) async fn list_tags(
 /// The new tags lay over the ones the change carries, so a key they omit
 /// keeps its value. Tags that move no key append nothing, and none of
 /// this touches the change's revisions or its review status.
+#[utoipa::path(post, path = "/api/changes/{id}/tags", params(("id" = ChangeNumber, Path)), request_body = TagsRequest, responses((status = 200, body = ChangeDetail)))]
 pub(super) async fn tag_change(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
@@ -133,6 +139,7 @@ pub(super) async fn tag_change(
     .await
 }
 
+#[utoipa::path(get, path = "/api/changes/{id}", params(("id" = ChangeNumber, Path)), responses((status = 200, body = ChangeDetail)))]
 pub(super) async fn get_change_detail(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
@@ -148,6 +155,7 @@ pub(super) async fn get_change_detail(
 ///
 /// Drafts plus the draft decision. The change page reads this over REST
 /// and the folded projection over the websocket.
+#[utoipa::path(get, path = "/api/changes/{id}/drafts", params(("id" = ChangeNumber, Path)), responses((status = 200, body = ChangeDrafts)))]
 pub(super) async fn get_change_drafts(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
@@ -159,13 +167,16 @@ pub(super) async fn get_change_drafts(
     .await
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(super) struct DiffQuery {
     against: Option<RevisionNumber>,
     #[serde(flatten)]
+    #[param(ignore)]
     view: DiffView,
 }
 
+#[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/diff", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), DiffQuery, DiffView), responses((status = 200, body = Diff)))]
 pub(super) async fn revision_diff(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,
@@ -189,7 +200,8 @@ pub(super) async fn revision_diff(
     .await
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(super) struct LinesQuery {
     path: String,
     /// The file's name on the old side, when a rename made the two differ —
@@ -215,6 +227,7 @@ pub(super) struct LinesQuery {
 /// hunk; the client slices the gap it needs. The synthetic
 /// [`diff::COMMIT_MSG_PATH`] answers with the whole commit message, as
 /// [`revision_diff`] compares it.
+#[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/lines", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), LinesQuery), responses((status = 200, body = FileLines)))]
 pub(super) async fn revision_lines(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,
@@ -353,7 +366,8 @@ fn contained_diff(
     Ok(wire)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(super) struct PortedQuery {
     against: Option<RevisionNumber>,
     #[serde(default)]
@@ -366,6 +380,7 @@ pub(super) struct PortedQuery {
 /// and with `?against={m}` to `m` as well, `n`'s entries first.
 /// `?include_resolved=true` ports the resolved threads too. Entries for
 /// one revision are sorted by thread id.
+#[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/ported", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), PortedQuery), responses((status = 200, body = Vec<PortedComment>)))]
 pub(super) async fn ported_comments(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,

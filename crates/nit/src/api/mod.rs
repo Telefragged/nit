@@ -37,7 +37,6 @@ use axum::Json;
 use axum::Router;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, patch, post, put};
 use git2::Repository;
 
 use nit_types::changes::ChangeDetail;
@@ -55,53 +54,91 @@ pub use timer::sweep_once;
 
 /// Static UI serving is layered on top in [`app`].
 pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/api/health", get(health))
-        .route(
-            "/api/repos",
-            get(repos::list_repos).post(repos::create_repo),
-        )
-        .route(
-            "/api/repos/{id}",
-            get(repos::get_repo).patch(repos::relocate_repo),
-        )
-        .route("/api/push", post(push::push))
-        .route("/api/submit", post(reviews::submit))
-        .route("/api/changes", get(changes::list_changes))
-        .route("/api/tags", get(changes::list_tags))
-        .route("/api/log", get(changes::list_log))
-        .route("/api/history", get(history::repo_history))
-        .route("/api/changes/{id}", get(changes::get_change_detail))
-        .route(
-            "/api/changes/{id}/revisions/{n}/diff",
-            get(changes::revision_diff),
-        )
-        .route(
-            "/api/changes/{id}/revisions/{n}/lines",
-            get(changes::revision_lines),
-        )
-        .route(
-            "/api/changes/{id}/revisions/{n}/ported",
-            get(changes::ported_comments),
-        )
-        .route(
-            "/api/changes/{id}/drafts",
-            get(changes::get_change_drafts).post(drafts::create_draft),
-        )
-        .route("/api/changes/{id}/comments", post(comments::create_comment))
-        .route(
-            "/api/changes/{id}/decision",
-            put(reviews::set_draft_decision).delete(reviews::clear_decision),
-        )
-        .route("/api/changes/{id}/tags", post(changes::tag_change))
-        .route("/api/changes/{id}/abandon", post(comments::abandon_change))
-        .route("/api/changes/{id}/reopen", post(comments::reopen_change))
-        .route(
-            "/api/drafts/{id}",
-            patch(drafts::edit_draft).delete(drafts::delete_draft),
-        )
-        .route("/api/stream", get(stream::stream))
-        .with_state(state)
+    Router::from(routes().with_state(state))
+}
+
+/// The `OpenAPI` document for every `/api` route.
+#[must_use]
+pub fn openapi() -> utoipa::openapi::OpenApi {
+    routes().split_for_parts().1
+}
+
+// A schema that only a query parameter names is not collected from the
+// routes, so it is listed here.
+#[derive(utoipa::OpenApi)]
+#[openapi(
+    components(schemas(
+        nit_types::error::ApiError,
+        nit_types::domain::Tag,
+        nit_types::domain::DiffMode,
+        nit_types::domain::Whitespace,
+    )),
+    modifiers(&ErrorEnvelope)
+)]
+struct ApiDoc;
+
+/// Documents the `{"error": "..."}` envelope as every operation's default
+/// response, since every non-2xx response carries it.
+struct ErrorEnvelope;
+
+impl utoipa::Modify for ErrorEnvelope {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let error = utoipa::openapi::ResponseBuilder::new()
+            .description("The error envelope")
+            .content(
+                "application/json",
+                utoipa::openapi::ContentBuilder::new()
+                    .schema(Some(utoipa::openapi::Ref::from_schema_name("ApiError")))
+                    .build(),
+            )
+            .build();
+        for item in openapi.paths.paths.values_mut() {
+            for operation in [
+                &mut item.get,
+                &mut item.put,
+                &mut item.post,
+                &mut item.delete,
+                &mut item.patch,
+            ]
+            .into_iter()
+            .flatten()
+            {
+                operation
+                    .responses
+                    .responses
+                    .insert("default".to_string(), error.clone().into());
+            }
+        }
+    }
+}
+
+fn routes() -> utoipa_axum::router::OpenApiRouter<Arc<AppState>> {
+    use utoipa_axum::routes;
+    utoipa_axum::router::OpenApiRouter::with_openapi(<ApiDoc as utoipa::OpenApi>::openapi())
+        .routes(routes!(health))
+        .routes(routes!(repos::list_repos, repos::create_repo))
+        .routes(routes!(repos::get_repo, repos::relocate_repo))
+        .routes(routes!(push::push))
+        .routes(routes!(reviews::submit))
+        .routes(routes!(changes::list_changes))
+        .routes(routes!(changes::list_tags))
+        .routes(routes!(changes::list_log))
+        .routes(routes!(history::repo_history))
+        .routes(routes!(changes::get_change_detail))
+        .routes(routes!(changes::revision_diff))
+        .routes(routes!(changes::revision_lines))
+        .routes(routes!(changes::ported_comments))
+        .routes(routes!(changes::get_change_drafts, drafts::create_draft))
+        .routes(routes!(comments::create_comment))
+        .routes(routes!(
+            reviews::set_draft_decision,
+            reviews::clear_decision
+        ))
+        .routes(routes!(changes::tag_change))
+        .routes(routes!(comments::abandon_change))
+        .routes(routes!(comments::reopen_change))
+        .routes(routes!(drafts::edit_draft, drafts::delete_draft))
+        .routes(routes!(stream::stream))
 }
 
 /// The built web UI, compiled in when the build sets `NIT_WEB_DIST`.
@@ -222,6 +259,7 @@ fn map_busy(err: anyhow::Error) -> Error {
     }
 }
 
+#[utoipa::path(get, path = "/api/health", responses((status = 200, body = Health)))]
 async fn health() -> Json<Health> {
     Json(Health {
         status: "ok".to_string(),

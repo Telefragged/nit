@@ -115,6 +115,7 @@ fn publish_change(
 /// Overwrites the change's draft decision when there is one. Validated
 /// only as an enum; legality against the lifecycle is a submit-time concern
 /// (a draft is reviewer scratch).
+#[utoipa::path(put, path = "/api/changes/{id}/decision", params(("id" = ChangeNumber, Path)), request_body = DraftDecision, responses((status = 200, body = DraftDecision)))]
 pub(super) async fn set_draft_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
@@ -133,6 +134,7 @@ pub(super) async fn set_draft_decision(
 /// `DELETE /api/changes/{id}/decision` — discards the draft decision.
 ///
 /// 204; a no-op when nothing is drafted.
+#[utoipa::path(delete, path = "/api/changes/{id}/decision", params(("id" = ChangeNumber, Path)), responses((status = 204)))]
 pub(super) async fn clear_decision(
     State(state): State<Arc<AppState>>,
     AppPath(id): AppPath<ChangeNumber>,
@@ -153,6 +155,7 @@ pub(super) async fn clear_decision(
 /// change's current lifecycle is skipped into `errors` with its row kept;
 /// a published decision's row is deleted, so a re-submit finishes a torn
 /// batch without double-publishing.
+#[utoipa::path(post, path = "/api/submit", params(ChangeQuery), responses((status = 200, body = BatchSubmitResult)))]
 pub(super) async fn submit(
     State(state): State<Arc<AppState>>,
     AppQuery(q): AppQuery<ChangeQuery>,
