@@ -1,9 +1,8 @@
 // Screenshot harness — renders every page/state into PNGs so agents (and
 // humans) can see the UI. `npm run screenshots` from web/.
 //
-// Default mode: starts a vite dev server with VITE_MOCK=1 (canned fixtures,
-// no backend) and captures against it. Set NIT_BASE_URL to capture against
-// an already-running server (e.g. the real rust backend) instead.
+// Starts a vite dev server with VITE_MOCK=1 (canned fixtures, no backend)
+// and captures against it.
 //
 // The mock server binds a free ephemeral port by default, so parallel runs
 // (several agents, each in its own worktree) never race on a shared port;
@@ -638,26 +637,6 @@ const captures = [
   },
 ];
 
-/**
- * Against a real server (NIT_BASE_URL) the mock-fixture ids above don't
- * exist; discover what does and capture it generically. Detailed UI states
- * stay covered by mock mode — live mode verifies real backend data renders.
- */
-async function liveCaptures(baseUrl) {
-  const { repos } = await (await fetch(`${baseUrl}/api/repos`)).json();
-  const caps = [{ name: "live-dashboard", path: "/" }];
-  for (const repo of repos) {
-    caps.push({ name: `live-repo-${repo.id}`, path: `/repos/${repo.id}` });
-    const { changes } = await (
-      await fetch(`${baseUrl}/api/changes?repo=${repo.id}`)
-    ).json();
-    for (const c of changes.slice(0, 2)) {
-      caps.push({ name: `live-change-${c.id}`, path: `/changes/${c.id}` });
-    }
-  }
-  return caps;
-}
-
 /** Every page renders `.skeleton` placeholders until its data (in mock mode,
  * the lazily-imported fixture stream) lands, so an empty `.skeleton` set means
  * the page has settled into real content. This replaces Playwright's
@@ -687,32 +666,24 @@ async function waitForServer(url, timeoutMs = 120_000) {
 }
 
 async function main() {
-  let baseUrl = process.env.NIT_BASE_URL;
-  let server = null;
-
-  if (!baseUrl) {
-    const port = process.env.NIT_SCREENSHOT_PORT
-      ? Number(process.env.NIT_SCREENSHOT_PORT)
-      : await freePort();
-    baseUrl = `http://127.0.0.1:${port}`;
-    server = spawn(
-      resolve(webDir, "node_modules/.bin/vite"),
-      ["--port", String(port), "--strictPort"],
-      {
-        cwd: webDir,
-        env: { ...process.env, VITE_MOCK: "1" },
-        stdio: ["ignore", "pipe", "inherit"],
-      },
-    );
-    server.stdout.resume(); // drain, keep quiet
-  }
+  const port = process.env.NIT_SCREENSHOT_PORT
+    ? Number(process.env.NIT_SCREENSHOT_PORT)
+    : await freePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const server = spawn(
+    resolve(webDir, "node_modules/.bin/vite"),
+    ["--port", String(port), "--strictPort"],
+    {
+      cwd: webDir,
+      env: { ...process.env, VITE_MOCK: "1" },
+      stdio: ["ignore", "pipe", "inherit"],
+    },
+  );
+  server.stdout.resume(); // drain, keep quiet
 
   try {
     await waitForServer(baseUrl);
     mkdirSync(outDir, { recursive: true });
-    const list = process.env.NIT_BASE_URL
-      ? await liveCaptures(baseUrl)
-      : captures;
 
     // Chromium's namespace sandbox can't nest inside the nix build sandbox
     // (no user namespaces, no writable /dev/shm); the `web-screenshots`
@@ -747,7 +718,7 @@ async function main() {
     await waitForReady(warm);
     await warm.close();
 
-    for (const cap of list) {
+    for (const cap of captures) {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (err) => errors.push(String(err)));
@@ -780,7 +751,7 @@ async function main() {
     await browser.close();
     console.log(`done → ${outDir}`);
   } finally {
-    if (server) server.kill("SIGTERM");
+    server.kill("SIGTERM");
   }
 }
 
