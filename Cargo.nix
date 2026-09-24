@@ -3796,8 +3796,16 @@ rec {
             packageId = "anyhow";
           }
           {
+            name = "clap";
+            packageId = "clap";
+          }
+          {
             name = "nit";
             packageId = "nit";
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
           }
         ];
 

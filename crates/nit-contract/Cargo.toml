@@ -3,11 +3,13 @@ name = "nit-contract"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Writes nit's public contract: the OpenAPI document"
+description = "Writes nit's public contract: the OpenAPI document and the CLI syntax"
 
 [lints]
 workspace = true
 
 [dependencies]
 anyhow = "1"
+clap = "4"
 nit = { workspace = true }
+serde_json = "1"

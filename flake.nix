@@ -249,7 +249,8 @@
         };
 
       # The public contract: the OpenAPI document the routes' utoipa
-      # annotations produce, written by `nit-contract` into one directory.
+      # annotations produce and the CLI's clap syntax, written by
+      # `nit-contract` into one directory.
       contractSnapshot =
         pkgs:
         pkgs.runCommand "nit-contract" { } ''

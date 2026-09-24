@@ -1,0 +1,75 @@
+//! The `nit` command line: its arguments, and the dispatch to each
+//! subcommand.
+
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+
+use crate::{cli, server};
+
+#[derive(Parser)]
+#[command(
+    name = "nit",
+    about = "Commit-level code review for AI coding agents",
+    arg_required_else_help = true
+)]
+pub struct Args {
+    /// Print the client and server build versions; exit non-zero if the server
+    /// is unreachable. The canonical "is nit up / installed" check.
+    #[arg(short = 'V', long)]
+    version: bool,
+    #[command(subcommand)]
+    cmd: Option<Cmd>,
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// Run the review server and web UI
+    Serve(server::ServeArgs),
+    /// Push the cwd's checked-out commit (or [COMMIT]) for review (idempotent)
+    Push(cli::PushArgs),
+    /// Print one line per selected change: the branch's, or --tag
+    Status(cli::StatusArgs),
+    /// Print the selected changes' log
+    Log(cli::LogArgs),
+    /// Comment on a change (--change / --change-id): open a thread or reply (--thread)
+    Comment(cli::CommentArgs),
+    /// Mark a change abandoned (a reviewer or author judgment; reopen to revert)
+    Abandon(cli::AbandonArgs),
+    /// Reopen an abandoned change so a new revision can be pushed
+    Reopen(cli::ReopenArgs),
+    /// Inspect and manage registered repositories
+    Repo(cli::RepoArgs),
+    /// Follow the reviewer's entries and post each one to this session
+    Watch(cli::WatchArgs),
+    /// Install the Claude Code plugin that this build carries
+    InstallPlugin,
+}
+
+/// Runs the subcommand that `args` names.
+///
+/// # Errors
+///
+/// When the subcommand fails.
+pub fn run(args: Args) -> Result<()> {
+    if args.version {
+        cli::version();
+        return Ok(());
+    }
+    let Some(cmd) = args.cmd else {
+        // `arg_required_else_help` shows help for a bare `nit`; with `--version`
+        // handled above, nothing else reaches here.
+        return Ok(());
+    };
+    match cmd {
+        Cmd::Serve(args) => server::run(args),
+        Cmd::Push(args) => cli::push(args),
+        Cmd::Status(args) => cli::status(args),
+        Cmd::Log(args) => cli::log(args),
+        Cmd::Comment(args) => cli::comment(args),
+        Cmd::Abandon(args) => cli::abandon(args),
+        Cmd::Reopen(args) => cli::reopen(args),
+        Cmd::Repo(args) => cli::repo(args),
+        Cmd::Watch(args) => cli::watch(args),
+        Cmd::InstallPlugin => cli::install_plugin(),
+    }
+}

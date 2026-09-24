@@ -34,7 +34,8 @@ check fails a stale file.
 
 `nix build .#contract` builds the public contract. `openapi.json` is the
 OpenAPI document that the routes' `#[utoipa::path]` annotations produce, and
-the router registers its routes from the same annotations.
+the router registers its routes from the same annotations. `cli.json` is the
+syntax of every `nit` command: its flags, positionals and subcommands.
 
 The shared change fold is compiled to WebAssembly (`crates/nit-wasm`) for the
 event-driven change page. `gen-wasm` writes the glue + `.wasm` into

@@ -1165,7 +1165,9 @@ name = "nit-contract"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "nit",
+ "serde_json",
 ]
 
 [[package]]

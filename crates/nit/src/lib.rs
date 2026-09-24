@@ -14,6 +14,8 @@
 //! - [`api`] — the axum HTTP layer (wire contract: the `nit_types`
 //!   crate) plus the `nit serve` wiring.
 //! - [`cli`] — `nit push`/`status`/`log`/`comment`, thin clients of the API.
+//! - [`server`] — `nit serve`: the axum app on a listener and a database.
+//! - [`command`] — the `nit` command line and its dispatch.
 
 #![deny(clippy::unwrap_used)]
 
@@ -26,7 +28,9 @@ pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), env!("NIT_GIT_SUFFI
 
 pub mod api;
 pub mod cli;
+pub mod command;
 pub mod db;
 pub mod gitscan;
 pub mod hunks;
 pub mod review;
+pub mod server;

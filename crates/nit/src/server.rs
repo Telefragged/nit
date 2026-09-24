@@ -16,12 +16,17 @@ pub struct ServeArgs {
     pub db: Option<PathBuf>,
 }
 
+/// Serves the API and the web UI until Ctrl-C.
+///
+/// # Errors
+///
+/// When the database cannot be opened or the listener cannot bind.
 pub fn run(args: ServeArgs) -> Result<()> {
     let db_path = match args.db {
         Some(path) => path,
-        None => nit::db::default_db_path()?,
+        None => crate::db::default_db_path()?,
     };
-    if nit::api::WEB_UI.is_none() {
+    if crate::api::WEB_UI.is_none() {
         tracing::info!("built without NIT_WEB_DIST, so serving the API only");
     }
     tokio::runtime::Builder::new_multi_thread()
@@ -29,7 +34,7 @@ pub fn run(args: ServeArgs) -> Result<()> {
         .build()?
         .block_on(async {
             let listener = tokio::net::TcpListener::bind(args.listen).await?;
-            nit::api::serve_on(listener, db_path, shutdown_signal()).await
+            crate::api::serve_on(listener, db_path, shutdown_signal()).await
         })
 }
 
