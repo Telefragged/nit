@@ -553,6 +553,21 @@
           type = "app";
           program = "${genWasmApp pkgs}/bin/gen-wasm";
         };
+
+        bump-oasdiff = {
+          type = "app";
+          program = "${
+            pkgs.writeShellApplication {
+              name = "bump-oasdiff";
+              runtimeInputs = [
+                pkgs.curl
+                pkgs.git
+                pkgs.jq
+              ];
+              text = builtins.readFile ./semver/bump-oasdiff.sh;
+            }
+          }/bin/bump-oasdiff";
+        };
       });
 
       # `nix fmt` = the same whole-tree treefmt the devShell runs,
