@@ -18,9 +18,9 @@
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
@@ -28,11 +28,14 @@ use serde::Serialize;
 use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::events::{StreamMessage, Subscription};
 
+use crate::db::nit_data_dir;
+
 use super::client::{Client, Retry, ServerOpt, next_text, retry_delay, server_url};
 use super::format::render_entries;
 use super::log::dropped_by_incoming;
 use super::resolve::{SelectArgs, Selection};
 use super::snippet::Sources;
+use super::tags::session_id;
 
 /// What Claude Code calls the inbox socket it exports to every command.
 const SOCKET_VAR: &str = "CLAUDE_CODE_MESSAGING_SOCKET";
@@ -58,6 +61,12 @@ const QUIET: Duration = Duration::from_millis(200);
 
 /// The longest the watch delays a post while entries keep arriving.
 const CEILING: Duration = Duration::from_secs(1);
+
+/// How long a cursor lasts without a write before a watch deletes it.
+///
+/// Claude Code keeps a session for 30 days by default, so a session that
+/// can still resume finds its cursor.
+const CURSOR_LIFETIME: Duration = Duration::from_hours(30 * 24);
 
 #[derive(clap::Args)]
 pub struct WatchArgs {
@@ -262,13 +271,21 @@ struct Cursor {
 impl Cursor {
     /// The file this watch's cursor lives in.
     ///
+    /// Deletes every cursor older than [`CURSOR_LIFETIME`] first, because
+    /// each session leaves one behind.
+    ///
+    /// The cursors live in nit's data directory, because a session
+    /// outlives a reboot, and a sandbox gives each session its own
+    /// temporary directory.
+    ///
     /// # Errors
     ///
-    /// When the state directory can't be created.
-    fn open(socket: &std::path::Path, select: &SelectArgs) -> Result<Cursor> {
-        Ok(Cursor {
-            path: state_path(socket, select, "cursor")?,
-        })
+    /// When the data directory is unknown, or can't be created or cleaned.
+    fn open(inbox: &Path, select: &SelectArgs) -> Result<Cursor> {
+        let dir = nit_data_dir()?.join("watch");
+        let path = state_path(&dir, inbox, select, "cursor")?;
+        prune(&dir, SystemTime::now() - CURSOR_LIFETIME)?;
+        Ok(Cursor { path })
     }
 
     /// The stored cursor, or 0 when no watch has posted for this
@@ -385,17 +402,24 @@ fn harness_var(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|value| !value.is_empty())
 }
 
-/// One of the watch's state files, named for the inbox and the selection.
+/// One of the watch's state files in `dir`, named for the session and
+/// the selection.
+///
+/// The session is the harness session id, else the inbox. The harness
+/// names the inbox after its process, so a restarted session gets a new
+/// inbox, but it keeps its id.
 ///
 /// Two watches of different changes can share a session, and each gets
-/// files of its own. The files live in the temporary directory, because
-/// a session lasts no longer than the machine's uptime.
+/// files of its own.
 ///
 /// # Errors
 ///
-/// When the directory can't be created.
-fn state_path(socket: &std::path::Path, select: &SelectArgs, extension: &str) -> Result<PathBuf> {
-    let mut key = socket.as_os_str().as_encoded_bytes().to_vec();
+/// When `dir` can't be created.
+fn state_path(dir: &Path, inbox: &Path, select: &SelectArgs, extension: &str) -> Result<PathBuf> {
+    let mut key = match session_id() {
+        Some(id) => id.into_bytes(),
+        None => inbox.as_os_str().as_encoded_bytes().to_vec(),
+    };
     for tag in &select.tag {
         // The zero byte keeps one pair's end apart from the next one's
         // start, so two different selections cannot spell one key.
@@ -404,8 +428,7 @@ fn state_path(socket: &std::path::Path, select: &SelectArgs, extension: &str) ->
         key.push(0);
         key.extend_from_slice(tag.value().as_bytes());
     }
-    let dir = std::env::temp_dir().join("nit-watch");
-    std::fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
     Ok(dir.join(format!("{:016x}.{extension}", fnv1a(&key))))
 }
 
@@ -427,13 +450,15 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 ///
 /// The claim is an exclusive lock on the watch's own file. The operating
 /// system drops the lock when the process ends, so a watch that dies with
-/// its session leaves nothing stale behind.
+/// its session leaves nothing stale behind. The file lives in the
+/// temporary directory, because it matters only while a watch runs.
 ///
 /// # Errors
 ///
 /// When the lock file can't be created or read.
-fn lock(socket: &std::path::Path, select: &SelectArgs) -> Result<Option<File>> {
-    let path = state_path(socket, select, "lock")?;
+fn lock(inbox: &Path, select: &SelectArgs) -> Result<Option<File>> {
+    let dir = std::env::temp_dir().join("nit-watch");
+    let path = state_path(&dir, inbox, select, "lock")?;
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -450,13 +475,35 @@ fn lock(socket: &std::path::Path, select: &SelectArgs) -> Result<Option<File>> {
     }
 }
 
+/// Deletes the files in `dir` last written before `cutoff`.
+///
+/// # Errors
+///
+/// When `dir` can't be read, or a file can't be deleted.
+fn prune(dir: &Path, cutoff: SystemTime) -> Result<()> {
+    for entry in std::fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))? {
+        let entry = entry?;
+        if entry.metadata()?.modified()? >= cutoff {
+            continue;
+        }
+        match std::fs::remove_file(entry.path()) {
+            // Another watch, starting at the same moment, deleted it first.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            result => result.with_context(|| format!("delete {}", entry.path().display()))?,
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc::sync_channel;
 
     use nit_types::domain::{ChangeNumber, Tags, TagsPayload};
 
-    use super::{Cursor, LogEntry, LogPayload, fnv1a, next_run};
+    use std::time::{Duration, SystemTime};
+
+    use super::{Cursor, LogEntry, LogPayload, fnv1a, next_run, prune};
 
     fn entry(sequence: u64) -> LogEntry {
         LogEntry {
@@ -518,5 +565,21 @@ mod tests {
         let cursor = cursor(&dir);
         std::fs::write(&cursor.path, "").expect("truncate the cursor");
         assert!(cursor.read().is_err(), "an empty cursor reads as an error");
+    }
+
+    #[test]
+    fn prune_deletes_only_the_files_written_before_the_cutoff() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let cutoff = SystemTime::now() - Duration::from_mins(1);
+        let old = dir.path().join("old.cursor");
+        let fresh = dir.path().join("fresh.cursor");
+        std::fs::File::create(&old)
+            .and_then(|file| file.set_modified(cutoff - Duration::from_secs(1)))
+            .expect("write the old cursor");
+        std::fs::write(&fresh, "1").expect("write the fresh cursor");
+
+        prune(dir.path(), cutoff).expect("prune");
+        assert!(!old.exists(), "the old cursor is gone");
+        assert!(fresh.exists(), "the fresh cursor stays");
     }
 }

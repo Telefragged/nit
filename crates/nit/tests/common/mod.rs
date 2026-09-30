@@ -281,6 +281,10 @@ fn nit_command(server: &TestServer, repo: &GitRepo, args: &[&str]) -> std::proce
     cmd.args(args)
         .current_dir(repo.workdir())
         .env("NIT_SERVER", &server.base)
+        // The watch keeps its files in these directories, and a test
+        // must not see another test's files, or leave its own behind.
+        .env("XDG_DATA_HOME", repo.dir.path())
+        .env("TMPDIR", repo.dir.path())
         // The suite runs inside a harness of its own. Its session and its
         // inbox are not the ones a test means to drive.
         .env_remove("CLAUDE_CODE_SESSION_ID")

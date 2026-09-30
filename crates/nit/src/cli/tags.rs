@@ -49,12 +49,14 @@ fn branch_tag(repo: &Repository) -> Option<Tag> {
 
 /// `session-id=<the harness session>`, or `None` outside a harness.
 fn session_tag() -> Option<Tag> {
-    observed(
-        "session-id",
-        std::env::var(SESSION_ID_VAR)
-            .ok()
-            .filter(|id| !id.is_empty()),
-    )
+    observed("session-id", session_id())
+}
+
+/// The harness session, or `None` outside a harness.
+pub(crate) fn session_id() -> Option<String> {
+    std::env::var(SESSION_ID_VAR)
+        .ok()
+        .filter(|id| !id.is_empty())
 }
 
 /// `worktree=<the canonical workdir>`, or `None` for a bare repo.

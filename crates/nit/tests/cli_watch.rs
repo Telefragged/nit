@@ -7,14 +7,14 @@ mod common;
 
 use std::io::{BufRead, BufReader};
 use std::os::unix::net::UnixListener;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
 
 use serde_json::Value;
 
 use common::{
-    GitRepo, HANG, TestServer, change_by_label, first_repo_id, get_changes, msg, nit, nit_register,
-    nit_spawn, review,
+    GitRepo, HANG, TestServer, change_by_label, first_repo_id, get_changes, msg, nit, nit_env,
+    nit_register, nit_spawn, review,
 };
 
 /// A stand-in for the session's inbox socket.
@@ -27,8 +27,7 @@ struct Inbox {
 }
 
 impl Inbox {
-    fn bind(dir: &Path) -> Inbox {
-        let path = dir.join("inbox.sock");
+    fn bind(path: PathBuf) -> Inbox {
         let listener = UnixListener::bind(&path).expect("bind the inbox");
         let (tx, messages) = channel();
         std::thread::spawn(move || {
@@ -88,7 +87,7 @@ fn session() -> (GitRepo, TestServer, Inbox, u64) {
     let change_number = get_changes(&server, "")[0]["id"]
         .as_u64()
         .expect("the registered change");
-    let inbox = Inbox::bind(g.dir.path());
+    let inbox = Inbox::bind(g.dir.path().join("inbox.sock"));
     (g, server, inbox, change_number)
 }
 
@@ -168,12 +167,45 @@ fn a_second_watch_leaves_the_session_to_the_first() {
     // The first watch holds the lock once it has posted.
     inbox.next();
 
-    let (ok, out, err) = nit(&server, &g, &inbox.args());
+    assert_leaves_the_session(&server, &g, &inbox.args(), &[]);
+}
+
+/// A restarted session gets a new inbox but keeps its session id, and
+/// its watch keeps the files of the watch before it.
+#[test]
+fn a_watch_on_a_new_inbox_keeps_the_session() {
+    let (g, server, inbox, change_number) = session();
+    let session = [("CLAUDE_CODE_SESSION_ID", "sess-1")];
+
+    let _watch = nit_spawn(&server, &g, &by_branch(&inbox), &session);
+    review(&server, change_number, "request_changes", "fix the unwrap");
+    // The first watch holds the lock once it has posted.
+    inbox.next();
+
+    let restarted = Inbox::bind(g.dir.path().join("restarted.sock"));
+    assert_leaves_the_session(&server, &g, &by_branch(&restarted), &session);
+}
+
+/// Runs a second watch, and checks that it leaves the session to the
+/// watch that holds it.
+fn assert_leaves_the_session(
+    server: &TestServer,
+    g: &GitRepo,
+    args: &[&str],
+    env: &[(&str, &str)],
+) {
+    let (ok, out, err) = nit_env(server, g, args, env);
     assert!(ok, "the second watch failed: {err}");
     assert_eq!(
         out.as_str(),
         Some("another nit watch already holds this session")
     );
+}
+
+/// The watch arguments for `inbox`, reading by the branch, because the
+/// fixture's push carries no session tag.
+fn by_branch(inbox: &Inbox) -> Vec<&str> {
+    [&inbox.args()[..], &["--tag", "branch=feat"]].concat()
 }
 
 /// With nowhere to post, the watch says so rather than watching nothing.
