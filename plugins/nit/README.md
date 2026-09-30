@@ -29,16 +29,15 @@ nit".
 
 ## The watch — how the reviewer reaches the agent
 
-The agent starts `nit watch` in the background at the start of a session, the
-way the `/nit:lifecycle` skill tells it to. Every review, comment and lifecycle
-change from the reviewer then arrives in that session as a message, and the
-agent acts on it without a prompt from you.
+The plugin's `SessionStart` hook starts `nit watch` when a session starts. Every
+review, comment and lifecycle change from the reviewer then arrives in that
+session as a message, and the agent acts on it without a prompt from you.
 
 `nit watch` follows the changes the session pushed and posts each review to the
 session's own
 [inbox socket](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket).
-It runs as a child of the session, so it lives exactly as long as the session
-does, however long that session idles.
+The hook runs it as a child of the session, and no timeout applies to it. It
+exits when the session exits.
 
 ## Commands — things you initiate
 

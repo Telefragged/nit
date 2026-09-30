@@ -6,9 +6,9 @@
 //! Claude Code documents that socket and exports its path and token to
 //! every command it runs.
 //!
-//! The agent runs it as a background command and leaves it running, so it
-//! stays a child of the session. That is what lets the harness read the
-//! messages as the session's own, rather than as a peer's.
+//! The plugin's `SessionStart` hook starts it as a child of the session.
+//! That is what lets the harness read the messages as the session's own,
+//! rather than as a peer's.
 //!
 //! The follower reads the server on a thread of its own. It hands each
 //! batch of new entries to the posting loop over a channel, so that loop
@@ -30,11 +30,11 @@ use nit_types::events::{StreamMessage, Subscription};
 
 use crate::db::nit_data_dir;
 
-use super::client::{Client, Retry, ServerOpt, next_text, retry_delay, server_url};
+use super::client::{Client, Retry, ServerOpt, Unreachable, next_text, retry_delay, server_url};
 use super::format::render_entries;
 use super::log::dropped_by_incoming;
 use super::parent::exit_with_parent;
-use super::resolve::{SelectArgs, Selection};
+use super::resolve::{NotRegistered, SelectArgs, Selection};
 use super::snippet::Sources;
 use super::tags::session_id;
 
@@ -82,8 +82,9 @@ pub struct WatchArgs {
 
 /// Follows the session's changes and posts each new entry to its agent.
 ///
-/// Returns without watching when another watch holds this session, or
-/// when the checkout selects nothing to watch. Exits the process when
+/// Returns without watching when another watch holds this session, when
+/// the checkout selects nothing to watch, and, without output, when the
+/// server is down or has not registered the repo. Exits the process when
 /// its parent process exits.
 ///
 /// # Errors
@@ -99,13 +100,16 @@ pub fn watch(args: WatchArgs) -> Result<()> {
         println!("another nit watch already holds this session");
         return Ok(());
     };
+    let client = Client::new(server_url(args.server.server));
+    // The plugin starts a watch in every session, in every repo.
+    let selection = match args.select.resolve(&client, Retry::No) {
+        Ok(selection) => selection,
+        Err(e) if e.is::<Unreachable>() || e.is::<NotRegistered>() => return Ok(()),
+        Err(e) => return Err(e),
+    };
     // The parent is the session, or a shell that lives as long as it does.
     exit_with_parent()?;
     let cursor = Cursor::open(&inbox.path, &args.select)?;
-    let client = Client::new(server_url(args.server.server));
-    // The watch rides out a server restart for its whole life, so it
-    // waits for a server that is not up yet either.
-    let selection = args.select.resolve(&client, Retry::UntilUp)?;
 
     let (entries, batches) = sync_channel(QUEUE);
     let start = cursor.read()?;

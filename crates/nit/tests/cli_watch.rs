@@ -236,6 +236,42 @@ fn the_watch_exits_when_its_parent_exits() {
     .expect("the watch exits and closes stdout");
 }
 
+/// The plugin starts a watch in every repo, so a repo that the server has
+/// not registered ends the watch without output.
+#[test]
+fn watch_in_a_repo_the_server_has_not_registered_exits_quietly() {
+    let g = GitRepo::new();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let inbox = Inbox::bind(g.dir.path().join("inbox.sock"));
+
+    let (ok, out, err) = nit(&server, &g, &inbox.args());
+    assert!(ok, "{err}");
+    assert_eq!(out.as_str(), Some(""));
+    assert_eq!(err, "");
+}
+
+/// A server that is down ends the watch without output.
+#[test]
+fn watch_with_the_server_down_exits_quietly() {
+    let (g, server, inbox, _) = session();
+    // A socket that is bound but never listens: the kernel refuses every
+    // connection to its port, and no other socket can bind the port while
+    // this one is open.
+    let refusing = tokio::net::TcpSocket::new_v4().expect("a socket");
+    refusing
+        .bind("127.0.0.1:0".parse().expect("an address"))
+        .expect("bind a port");
+    let base = format!("http://{}", refusing.local_addr().expect("the port"));
+
+    let out = in_checkout(&mut Command::new(env!("CARGO_BIN_EXE_nit")), &server, &g)
+        .args(inbox.args())
+        .env("NIT_SERVER", &base)
+        .output()
+        .expect("run nit watch");
+    assert!(out.status.success(), "{out:?}");
+    assert!(out.stdout.is_empty() && out.stderr.is_empty(), "{out:?}");
+}
+
 /// With nowhere to post, the watch says so rather than watching nothing.
 #[test]
 fn watch_without_an_inbox_fails() {

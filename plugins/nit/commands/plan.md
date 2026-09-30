@@ -81,17 +81,12 @@ plan, answers each question on the line it sits on, and approves or requests
 changes — all in nit. Anchor as tightly as you can (range > line > change-level)
 per the `comment` skill.
 
-## 4. Park a monitor and wait — this is the gate
+## 4. End the turn and wait for the reviewer
 
 Pushing the plan and raising your questions is the move that, in plan mode,
-`ExitPlanMode` makes when it presents to the user and blocks. nit doesn't block
-you, so the discipline is yours: the chain is now open with nothing left to do
-but hear back — exactly the state where a watcher must be running. **Don't end
-the turn here.** Park a monitor on the plan's chain per the `lifecycle` skill
-("Watch for feedback with a monitor") and wait for the reviewer; that parked
-monitor is what replaces plan mode's approve/reject prompt. Ending the turn
-with the plan pushed and nothing watching leaves the reviewer's answers landing
-on nobody.
+`ExitPlanMode` makes when it presents to the user and blocks. nit does not block
+you. Write no code until the reviewer answers. End the turn. The watch that the plugin starts delivers the reviewer's answers as a
+message, per the `lifecycle` skill.
 
 ## 5. Refine, then implement — approval is _not_ a cue to land
 

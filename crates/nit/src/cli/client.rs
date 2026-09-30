@@ -54,13 +54,34 @@ pub(crate) enum CallError {
 impl CallError {
     fn into_error(self, base: &str) -> anyhow::Error {
         match self {
-            CallError::Unreachable(cause) => {
-                anyhow!("cannot reach the nit server at {base}: {cause} — is 'nit serve' running?")
+            CallError::Unreachable(cause) => Unreachable {
+                base: base.to_owned(),
+                cause,
             }
+            .into(),
             CallError::Fatal(err) => err,
         }
     }
 }
+
+/// The server did not answer.
+#[derive(Debug)]
+pub(crate) struct Unreachable {
+    base: String,
+    cause: anyhow::Error,
+}
+
+impl std::fmt::Display for Unreachable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "cannot reach the nit server at {}: {} — is 'nit serve' running?",
+            self.base, self.cause
+        )
+    }
+}
+
+impl std::error::Error for Unreachable {}
 
 fn classify(err: ureq::Error, path: &str) -> CallError {
     match err {

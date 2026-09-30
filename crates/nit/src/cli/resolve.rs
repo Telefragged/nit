@@ -128,9 +128,21 @@ fn cwd_repo(client: &Client, retry: Retry) -> Result<(u64, Repository)> {
         .iter()
         .find(|r| r.git_dir == git_dir)
         .map(|r| r.id)
-        .ok_or_else(|| anyhow!("repo not registered with nit — run 'nit push' first"))?;
+        .ok_or(NotRegistered)?;
     Ok((repo_id, repo))
 }
+
+/// The server has not registered the checkout's repo.
+#[derive(Debug)]
+pub(crate) struct NotRegistered;
+
+impl std::fmt::Display for NotRegistered {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("repo not registered with nit — run 'nit push' first")
+    }
+}
+
+impl std::error::Error for NotRegistered {}
 
 #[cfg(test)]
 mod tests {

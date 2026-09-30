@@ -8,7 +8,7 @@ disallowed-tools: AskUserQuestion
 
 An opinionated way to drive a change through nit: given a goal, carry it to
 completion on your own. Drive the mechanics with the **`lifecycle`** skill
-(push → monitor → answer feedback → land) and talk to the reviewer with the
+(push → wait → answer feedback → land) and talk to the reviewer with the
 **`comment`** skill. This command adds one rule on top.
 
 ## Never stop to ask

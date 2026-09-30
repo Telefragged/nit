@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exec nit watch",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

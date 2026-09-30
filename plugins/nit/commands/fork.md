@@ -7,7 +7,7 @@ disallowed-tools: AskUserQuestion
 # /nit:fork — build the alternatives in parallel
 
 An opinionated way to drive a change through nit. Each variation is driven with
-the **`lifecycle`** skill (push → monitor → land) and annotated with the
+the **`lifecycle`** skill (push → wait → land) and annotated with the
 **`comment`** skill. This command adds the forking rule.
 
 When you face a real fork — several approaches each worth building, with no

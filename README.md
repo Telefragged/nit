@@ -23,7 +23,7 @@ nit --version        # client + server build; non-zero exit if the server is dow
 Author loop (any tool that can run shell commands):
 
 ```sh
-nit watch            # background: post the reviewer's entries to this session
+nit watch            # background (the Claude Code plugin starts it): post reviews to this session
 nit push             # register the checked-out commit and its chain for review
 # fix → amend the commit (keep its Change-Id) → nit push → …
 # all approved → merge
@@ -54,7 +54,8 @@ tag feature=epic-saga
 
 `nit watch` follows the session, new commits included, and posts each review
 and lifecycle change to the agent that started it. It needs a harness that
-exports an inbox socket, or `--inbox <path>`.
+exports an inbox socket, or `--inbox <path>`. It exits when its parent process
+exits. In Claude Code, the `nit` plugin starts it from a `SessionStart` hook.
 
 Details for agents: the `nit` plugin's `lifecycle` and `comment` skills, and
 `nit --help`.
