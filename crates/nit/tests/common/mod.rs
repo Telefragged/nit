@@ -278,8 +278,19 @@ pub fn nit_env(
 /// The `nit` child every helper runs, configured but not spawned.
 fn nit_command(server: &TestServer, repo: &GitRepo, args: &[&str]) -> std::process::Command {
     let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_nit"));
-    cmd.args(args)
-        .current_dir(repo.workdir())
+    cmd.args(args);
+    in_checkout(&mut cmd, server, repo);
+    cmd
+}
+
+/// Runs `cmd` in the checkout, against the server, with the environment
+/// that [`nit_command`] gives `nit`.
+pub fn in_checkout<'a>(
+    cmd: &'a mut std::process::Command,
+    server: &TestServer,
+    repo: &GitRepo,
+) -> &'a mut std::process::Command {
+    cmd.current_dir(repo.workdir())
         .env("NIT_SERVER", &server.base)
         // The watch keeps its files in these directories, and a test
         // must not see another test's files, or leave its own behind.
@@ -289,8 +300,7 @@ fn nit_command(server: &TestServer, repo: &GitRepo, args: &[&str]) -> std::proce
         // inbox are not the ones a test means to drive.
         .env_remove("CLAUDE_CODE_SESSION_ID")
         .env_remove("CLAUDE_CODE_MESSAGING_SOCKET")
-        .env_remove("CLAUDE_CODE_MESSAGING_TOKEN");
-    cmd
+        .env_remove("CLAUDE_CODE_MESSAGING_TOKEN")
 }
 
 /// The child's stdout as JSON, or as a string when it is not JSON.

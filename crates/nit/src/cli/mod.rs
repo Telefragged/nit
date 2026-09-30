@@ -21,6 +21,7 @@ mod format;
 mod git;
 mod lifecycle;
 mod log;
+mod parent;
 mod plugin;
 mod push;
 mod repo;

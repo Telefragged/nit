@@ -33,6 +33,7 @@ use crate::db::nit_data_dir;
 use super::client::{Client, Retry, ServerOpt, next_text, retry_delay, server_url};
 use super::format::render_entries;
 use super::log::dropped_by_incoming;
+use super::parent::exit_with_parent;
 use super::resolve::{SelectArgs, Selection};
 use super::snippet::Sources;
 use super::tags::session_id;
@@ -82,7 +83,8 @@ pub struct WatchArgs {
 /// Follows the session's changes and posts each new entry to its agent.
 ///
 /// Returns without watching when another watch holds this session, or
-/// when the checkout selects nothing to watch.
+/// when the checkout selects nothing to watch. Exits the process when
+/// its parent process exits.
 ///
 /// # Errors
 ///
@@ -97,6 +99,8 @@ pub fn watch(args: WatchArgs) -> Result<()> {
         println!("another nit watch already holds this session");
         return Ok(());
     };
+    // The parent is the session, or a shell that lives as long as it does.
+    exit_with_parent()?;
     let cursor = Cursor::open(&inbox.path, &args.select)?;
     let client = Client::new(server_url(args.server.server));
     // The watch rides out a server restart for its whole life, so it

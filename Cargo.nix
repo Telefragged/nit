@@ -3406,7 +3406,7 @@ rec {
           "default" = [ "std" "general" "errno" ];
           "rustc-dep-of-std" = [ "core" "no_std" ];
         };
-        resolvedDefaultFeatures = [ "auxvec" "elf" "errno" "general" "ioctl" "no_std" ];
+        resolvedDefaultFeatures = [ "auxvec" "elf" "errno" "general" "ioctl" "no_std" "prctl" ];
       };
       "litemap" = rec {
         crateName = "litemap";
@@ -3658,6 +3658,11 @@ rec {
           {
             name = "rusqlite";
             packageId = "rusqlite";
+          }
+          {
+            name = "rustix";
+            packageId = "rustix";
+            features = [ "event" "process" ];
           }
           {
             name = "serde";
@@ -4584,7 +4589,7 @@ rec {
           "thread" = [ "linux-raw-sys/prctl" ];
           "use-libc" = [ "libc_errno" "libc" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "default" "fs" "std" "termios" ];
+        resolvedDefaultFeatures = [ "alloc" "default" "event" "fs" "process" "std" "termios" ];
       };
       "rustversion" = rec {
         crateName = "rustversion";

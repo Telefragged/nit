@@ -8,13 +8,14 @@ mod common;
 use std::io::{BufRead, BufReader};
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, channel};
 
 use serde_json::Value;
 
 use common::{
-    GitRepo, HANG, TestServer, change_by_label, first_repo_id, get_changes, msg, nit, nit_env,
-    nit_register, nit_spawn, review,
+    GitRepo, HANG, TestServer, change_by_label, first_repo_id, get_changes, in_checkout, msg, nit,
+    nit_env, nit_register, nit_spawn, review,
 };
 
 /// A stand-in for the session's inbox socket.
@@ -206,6 +207,33 @@ fn assert_leaves_the_session(
 /// fixture's push carries no session tag.
 fn by_branch(inbox: &Inbox) -> Vec<&str> {
     [&inbox.args()[..], &["--tag", "branch=feat"]].concat()
+}
+
+/// The watch exits when its parent exits. A watch that a hook starts must
+/// exit when its session ends.
+#[test]
+fn the_watch_exits_when_its_parent_exits() {
+    let (g, server, inbox, change_number) = session();
+    // The parent is a shell that exits when its stdin closes. The watch
+    // shares its stdout, so that pipe reaches EOF only once both exit.
+    let mut parent = in_checkout(&mut Command::new("sh"), &server, &g)
+        .args(["-c", r#""$@" & read _"#, "sh", env!("CARGO_BIN_EXE_nit")])
+        .args(inbox.args())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn the parent shell");
+    review(&server, change_number, "request_changes", "fix the unwrap");
+    // The watch is running once it has posted.
+    inbox.next();
+
+    drop(parent.stdin.take());
+    parent.wait().expect("the parent exits");
+    std::io::copy(
+        &mut parent.stdout.take().expect("stdout"),
+        &mut std::io::sink(),
+    )
+    .expect("the watch exits and closes stdout");
 }
 
 /// With nowhere to post, the watch says so rather than watching nothing.

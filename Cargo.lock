@@ -1138,6 +1138,7 @@ dependencies = [
  "mime_guess",
  "nit-types",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_html_form",
  "serde_json",
