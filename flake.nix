@@ -449,18 +449,10 @@
             installPhase = "touch $out";
           };
           # Also clippy-checks the test targets (lib/bins are linted in every
-          # build). Tests run here, not in `nix build`; the differential test
-          # shells out to `git rebase`, so it needs git and a committer identity
-          # the sandbox lacks. Rustdoc rides the same build
-          # (rustdocPostBuild): the docs render and the doc tests run.
+          # build). Tests run here, not in `nix build`. Rustdoc rides the same
+          # build (rustdocPostBuild): the docs render and the doc tests run.
           test = cargoNix.workspaceMembers."nit".build.override {
             runTests = true;
-            testInputs = [ pkgs.gitMinimal ];
-            testPreRun = ''
-              export HOME=$TMPDIR
-              export GIT_AUTHOR_NAME=nix GIT_AUTHOR_EMAIL=nix@build
-              export GIT_COMMITTER_NAME=nix GIT_COMMITTER_EMAIL=nix@build
-            '';
           };
           # Build and round-trip-test nit-types with NO optional features —
           # the no-feature baseline an optional feature (the server's
