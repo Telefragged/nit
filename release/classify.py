@@ -1,11 +1,13 @@
 """Classifies the contract changes between two releases.
 
-Usage: classify.py API_CHANGES OLD_CLI NEW_CLI CHANGES_OUT BUMP_OUT
+Usage: classify.py API_CHANGES OLD_CLI NEW_CLI CHANGES_OUT KIND_OUT
 
 API_CHANGES is `oasdiff changelog --format json` between the two OpenAPI
 documents. OLD_CLI and NEW_CLI are the two `cli.json` files. CHANGES_OUT
-receives one line per change, and BUMP_OUT the smallest bump that covers
-them: `major`, `minor` or `patch`.
+receives one line per change, and KIND_OUT the kind that covers them:
+`breaking` when a caller of the old contract can fail against the new
+one, `additive` when every old caller still works, and `none` when the
+contract is unchanged.
 """
 
 import json
@@ -21,8 +23,8 @@ def api_changes(changelog):
         # document's version is not bumped yet is not a change.
         if change["id"] == "api-version-not-bumped":
             continue
-        level = "major" if change["level"] == BREAKING else "minor"
-        yield level, f"{change['operation']} {change['path']}: {change['text']}"
+        kind = "breaking" if change["level"] == BREAKING else "additive"
+        yield kind, f"{change['operation']} {change['path']}: {change['text']}"
 
 
 def flatten(command, path="nit"):
@@ -60,19 +62,19 @@ def breaks_callers(old, new):
 def cli_changes(old_cli, new_cli):
     old, new = flatten(old_cli), flatten(new_cli)
     for key in sorted(old.keys() - new.keys()):
-        yield "major", f"removed {key}"
+        yield "breaking", f"removed {key}"
     for key in sorted(new.keys() - old.keys()):
         if new[key].get("required"):
-            yield "major", f"added required {key}"
+            yield "breaking", f"added required {key}"
         else:
-            yield "minor", f"added {key}"
+            yield "additive", f"added {key}"
     for key in sorted(old.keys() & new.keys()):
         if old[key] != new[key]:
-            level = "major" if breaks_callers(old[key], new[key]) else "minor"
-            yield level, f"changed {key}"
+            kind = "breaking" if breaks_callers(old[key], new[key]) else "additive"
+            yield kind, f"changed {key}"
 
 
-def main(api_path, old_cli_path, new_cli_path, changes_out, bump_out):
+def main(api_path, old_cli_path, new_cli_path, changes_out, kind_out):
     def load(path):
         with open(path) as f:
             return json.load(f)
@@ -82,11 +84,11 @@ def main(api_path, old_cli_path, new_cli_path, changes_out, bump_out):
         *cli_changes(load(old_cli_path), load(new_cli_path)),
     ]
     with open(changes_out, "w") as f:
-        f.writelines(f"{level}: {text}\n" for level, text in changes)
-    levels = {level for level, _ in changes}
-    bump = "major" if "major" in levels else "minor" if levels else "patch"
-    with open(bump_out, "w") as f:
-        f.write(f"{bump}\n")
+        f.writelines(f"{kind}: {text}\n" for kind, text in changes)
+    kinds = {kind for kind, _ in changes}
+    kind = "breaking" if "breaking" in kinds else "additive" if kinds else "none"
+    with open(kind_out, "w") as f:
+        f.write(f"{kind}\n")
 
 
 if __name__ == "__main__":
