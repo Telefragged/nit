@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { uiThread as ui } from "../api/fixtures/builders";
 import type { Anchor, Draft, ThreadProjection } from "../api/types";
 import type { CommentAnchor, UiThread } from "./comments";
 import {
@@ -51,17 +52,6 @@ const draft = (over: Partial<Draft> & { id: number }): Draft => ({
   resolved: false,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
-  ...over,
-});
-
-/** A UiThread built inline for the pending-state/count tests. */
-const ui = (over: Partial<UiThread> & { id: number | null }): UiThread => ({
-  revision: 1,
-  anchor: lineAnchor("new", 1),
-  resolved: false,
-  comments: [],
-  drafts: [],
-  created_at: "2026-01-01T00:00:00Z",
   ...over,
 });
 

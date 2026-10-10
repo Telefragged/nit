@@ -1,8 +1,22 @@
 // No state lives here — see ./data for the mutable store, ./index for the server.
 
+import type { UiThread } from "../../lib/comments";
 import { span } from "../../lib/diffview";
 import { COMMIT_MSG_PATH } from "../types";
 import type { Diff, DiffFile, Hunk, Line, Side } from "../types";
+
+/** A UI thread with no comments, on line 1 of src/main.rs at revision 1. */
+export const uiThread = (
+  over: Partial<UiThread> & { id: number | null },
+): UiThread => ({
+  revision: 1,
+  anchor: { line: { file: "src/main.rs", side: "new", at: { whole: 1 } } },
+  resolved: false,
+  comments: [],
+  drafts: [],
+  created_at: "2026-01-01T00:00:00Z",
+  ...over,
+});
 
 const NOW = Date.now();
 export const ago = (minutes: number) =>

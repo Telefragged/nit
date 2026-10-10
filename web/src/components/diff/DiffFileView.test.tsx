@@ -8,7 +8,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { msgFile } from "../../api/fixtures/builders";
+import { msgFile, uiThread } from "../../api/fixtures/builders";
 import type { DiffFile, LineAnchor } from "../../api/types";
 import type { UiThread } from "../../lib/comments";
 import { EXPAND_STEP } from "../../lib/useHunkExpansion";
@@ -289,17 +289,12 @@ describe("a file with lines on one side only", () => {
 });
 
 /** A published thread on `mixed`'s new side at revision `ctx.selected`. */
-const threadAt = (id: number, at: LineAnchor): UiThread => ({
-  id,
-  revision: 2,
-  anchor: { line: { file: "src/base.rs", side: "new", at } },
-  resolved: false,
-  comments: [
-    { body: "note", review_id: 1, created_at: "2026-01-01T00:00:00Z" },
-  ],
-  drafts: [],
-  created_at: "2026-01-01T00:00:00Z",
-});
+const threadAt = (id: number, at: LineAnchor): UiThread =>
+  uiThread({
+    id,
+    revision: 2,
+    anchor: { line: { file: "src/base.rs", side: "new", at } },
+  });
 
 /** Points at the one rendered thread, returning its wrapper. */
 const hoverThread = (container: HTMLElement) => {
