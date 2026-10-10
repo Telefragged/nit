@@ -2,14 +2,15 @@ name: CI
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 
 jobs:
   # Enumerate the commits to check: every commit the event introduces, oldest
-  # first. For a pull request that is base..head; for a push it is the range
-  # the push advanced (before..after), falling back to just the tip when the
-  # before-sha is unknown (e.g. a brand-new branch).
+  # first. For a pull request or a merge queue entry that is base..head; for a
+  # push it is the range the push advanced (before..after), falling back to
+  # just the tip when the before-sha is unknown (e.g. a brand-new branch).
   commits:
     runs-on: ubuntu-latest
     outputs:
@@ -20,7 +21,7 @@ jobs:
           fetch-depth: 0
       - id: list
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
@@ -61,6 +62,25 @@ jobs:
           save: ${{ matrix.sha == (github.event.pull_request.head.sha || github.sha) }}
       - run: nix build
       - run: nix flake check
+
+  # Checks the version against the contract changes since the last release,
+  # when the version differs from the newest release tag. It needs every tag
+  # and the commits they point at. A push to main runs the same check in the
+  # release workflow.
+  semver:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          save: false
+      - run: nix run .#release-check
 
   # Single stable status check — the name branch protection requires — green
   # only when every per-commit leg above passed (or there was nothing to
