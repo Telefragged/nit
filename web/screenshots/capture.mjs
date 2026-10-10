@@ -223,6 +223,18 @@ const applySetting = async (page, name) => {
 const captures = [
   // Main page: the repo registry, one row per repository.
   { name: "repos", path: "/" },
+  // The about dialog with the release check on: the mock's latest release
+  // is newer than its version, so the topbar button shows the red dot.
+  {
+    name: "about-release",
+    path: "/",
+    fullPage: false,
+    actions: async (page) => {
+      await clickNow(page.getByRole("button", { name: "About nit" }));
+      await clickNow(page.getByLabel("Check GitHub for new releases"));
+      await untilDom(page, () => !!document.querySelector(".about-dot"));
+    },
+  },
   // The repo dashboard: one change graph centered on main — open
   // changes ascending above the HEAD anchor, merged history descending and
   // fading below it. Repo 2 = quarry: two separate
@@ -393,7 +405,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Reply" }).first());
-      await expectOne(page.locator(".resolve-check"));
+      await expectOne(page.locator(".check-label"));
     },
   },
   // Drafted thread resolution: Reopen the

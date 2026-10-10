@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { Link, Outlet } from "react-router-dom";
+import About from "./components/About";
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
             MOCK
           </span>
         ) : null}
+        <About />
       </header>
       <Suspense fallback={null}>
         <Outlet />

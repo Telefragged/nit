@@ -89,7 +89,7 @@ export default function CommentEditor({
       />
       <div className="editor-actions">
         {showResolve ? (
-          <label className="resolve-check">
+          <label className="check-label">
             <input
               type="checkbox"
               checked={resolved}
