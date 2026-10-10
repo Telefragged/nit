@@ -160,3 +160,20 @@ regardless of size. The only exits are an explicit, up-front "skip nit" /
 Standing exemptions (same discipline, still green):
 
 - _(none yet)_
+
+## Releases
+
+A release starts from one edit: raise `workspace.package.version` in `Cargo.toml`. Then run `nix develop -c cargo check` to update `Cargo.lock` and `nix develop -c crate2nix generate` to update `Cargo.nix`, and open a PR. Run `nix run .#release-check` to see the result of the CI check before you push.
+
+The `semver` job runs `nix run .#release-check` on every PR and merge queue entry. When the version differs from the newest release tag, the script checks it against the contract changes since that tag (see "Verification"). Release tags are the bare version, for example `0.2.0`.
+
+After the merge, `.github/workflows/release.yml` runs the same check. When the commit is a release, it builds `.#nit-release`, creates the tag and the GitHub release, and uploads `nit-x86_64-linux` with its checksum and a build provenance attestation. To confirm that a binary came from that workflow, run:
+
+```sh
+gh attestation verify nit-x86_64-linux --repo Telefragged/nit
+```
+
+The repository settings carry two rulesets:
+
+- `main`: no direct push and no force push, the `nix` and `semver` jobs are required status checks, and the merge queue is on.
+- Tags `*.*.*`: no update and no deletion. A ruleset cannot exempt the workflow token, so tag creation stays open for the release workflow.
