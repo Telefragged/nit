@@ -564,7 +564,7 @@
                 pkgs.git
                 pkgs.jq
               ];
-              text = builtins.readFile ./semver/bump-oasdiff.sh;
+              text = builtins.readFile ./release/bump-oasdiff.sh;
             }
           }/bin/bump-oasdiff";
         };

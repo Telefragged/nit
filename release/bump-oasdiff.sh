@@ -1,8 +1,8 @@
-# Moves semver/oasdiff.json to the latest oasdiff release. Run from anywhere in
+# Moves release/oasdiff.json to the latest oasdiff release. Run from anywhere in
 # the repo: `nix run .#bump-oasdiff`.
 
 cd "$(git rev-parse --show-toplevel)"
-pin=semver/oasdiff.json
+pin=release/oasdiff.json
 
 tag=$(curl -fsSL https://api.github.com/repos/oasdiff/oasdiff/releases/latest |
   jq -r .tag_name)
@@ -14,7 +14,7 @@ jq -n --arg version "${tag#v}" --arg hash "$hash" \
   '{version: $version, hash: $hash, vendorHash: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}' \
   >"$pin"
 modules="with (builtins.getFlake \"$PWD\").inputs.nixpkgs.legacyPackages.\${builtins.currentSystem};
-  (callPackage $PWD/semver/oasdiff.nix { }).goModules"
+  (callPackage $PWD/release/oasdiff.nix { }).goModules"
 vendor_hash=$(nix build --impure --no-link --expr "$modules" 2>&1 |
   sed -n 's/^ *got: *//p' || true)
 if [ -z "$vendor_hash" ]; then

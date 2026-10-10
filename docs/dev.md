@@ -36,7 +36,7 @@ check fails a stale file.
 OpenAPI document that the routes' `#[utoipa::path]` annotations produce, and
 the router registers its routes from the same annotations. `cli.json` is the
 syntax of every `nit` command: its flags, positionals and subcommands.
-`nix build -f semver --argstr base <rev> '^*'` compares it with the
+`nix build -f release --argstr base <rev> '^*'` compares it with the
 contract at `base`, the last release. `result` holds the smallest version bump
 that covers the changes, and `result-changes` lists them. `nix run .#bump-oasdiff`
 moves the pinned oasdiff to its latest release.
