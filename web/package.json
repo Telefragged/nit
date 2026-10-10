@@ -1,7 +1,6 @@
 {
   "name": "nit-web",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "ensure-wasm": "test -e src/wasm/nit_wasm.js || gen-wasm",

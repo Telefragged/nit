@@ -113,6 +113,8 @@
         fi
       '';
 
+      cargoToml = fromTOML (builtins.readFile ./Cargo.toml);
+
       # Cargo.nix is generated — don't hand-edit (regen: docs/dev.md). Build
       # with our pinned rustc, not nixpkgs'; the virtual workspace has no
       # rootCrate, so callers select a member via `workspaceMembers."<name>"`.
@@ -122,7 +124,7 @@
         pkgs:
         let
           rustToolchain = rustToolchainFor pkgs.buildPackages;
-          lints = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.lints;
+          lints = cargoToml.workspace.lints;
         in
         pkgs.callPackage ./Cargo.nix {
           buildRustCrateForPkgs =
@@ -160,7 +162,7 @@
       # lint/test checks. System-independent, so it lives outside
       # forAllSystems.
       webArgs = {
-        version = "0.1.0";
+        inherit (cargoToml.workspace.package) version;
         src = ./web;
       };
 
@@ -172,7 +174,7 @@
           inherit (webArgs) src;
           inherit (pkgs) nodejs;
           name = "nit-web-npm-deps";
-          hash = "sha256-Rl776XatLeZZ5ACxgjuIPw9psh+r5RHpAicJOF+7YuQ=";
+          hash = "sha256-6BTJdmSYHG2Ni4cc0J0kxziq4A7Al7lAOIqmfcgjcaA=";
         };
 
       # The screenshot harness launches chromium and nothing else
