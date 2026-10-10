@@ -3,6 +3,9 @@
 use anyhow::Result;
 use clap::Parser;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
