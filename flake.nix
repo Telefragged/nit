@@ -559,6 +559,19 @@
           program = "${genWasmApp pkgs}/bin/gen-wasm";
         };
 
+        release-check = {
+          type = "app";
+          program = "${
+            pkgs.writeShellApplication {
+              name = "release-check";
+              runtimeInputs = [
+                pkgs.git
+                pkgs.taplo
+              ];
+              text = builtins.readFile ./release/check.sh;
+            }
+          }/bin/release-check";
+        };
         bump-oasdiff = {
           type = "app";
           program = "${
