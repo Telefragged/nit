@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# One run at a time, so two pushes cannot both publish the same version.
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          save: false
+      - id: check
+        run: nix run .#release-check
+      - if: steps.check.outputs.release == 'true'
+        run: |
+          nix build .#nit-release
+          cp result/bin/nit nit-x86_64-linux
+          sha256sum nit-x86_64-linux > nit-x86_64-linux.sha256
+      - if: steps.check.outputs.release == 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: nit-x86_64-linux
+      - if: steps.check.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          gh release create "$VERSION" --target "$GITHUB_SHA" --title "$VERSION" \
+            nit-x86_64-linux nit-x86_64-linux.sha256
