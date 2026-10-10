@@ -6,10 +6,11 @@
 // buttons its size warrants.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { msgFile } from "../../api/fixtures/builders";
-import type { DiffFile } from "../../api/types";
+import type { DiffFile, LineAnchor } from "../../api/types";
+import type { UiThread } from "../../lib/comments";
 import { EXPAND_STEP } from "../../lib/useHunkExpansion";
 import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
@@ -100,13 +101,17 @@ const mixed: DiffFile = {
   ],
 };
 
-const tree = (layout: "unified" | "split", file: DiffFile = mixed) => (
+const tree = (
+  layout: "unified" | "split",
+  file: DiffFile = mixed,
+  threads: UiThread[] = [],
+) => (
   <QueryClientProvider client={new QueryClient()}>
     <ReviewContext.Provider value={ctx}>
       <DiffFileView
         file={file}
         layout={layout}
-        threads={[]}
+        threads={threads}
         domId="file-0"
         collapsed={false}
         onToggle={() => undefined}
@@ -115,8 +120,11 @@ const tree = (layout: "unified" | "split", file: DiffFile = mixed) => (
   </QueryClientProvider>
 );
 
-const renderFile = (layout: "unified" | "split", file?: DiffFile) =>
-  render(tree(layout, file));
+const renderFile = (
+  layout: "unified" | "split",
+  file?: DiffFile,
+  threads?: UiThread[],
+) => render(tree(layout, file, threads));
 
 describe("rebase drift rendering", () => {
   it("tags only the drift line's code cells in unified layout", () => {
@@ -277,5 +285,56 @@ describe("a file with lines on one side only", () => {
   it("leaves a file with both sides split", () => {
     const { container } = renderFile("split");
     expect(container.querySelector(".diff-grid-split")).not.toBeNull();
+  });
+});
+
+/** A published thread on `mixed`'s new side at revision `ctx.selected`. */
+const threadAt = (id: number, at: LineAnchor): UiThread => ({
+  id,
+  revision: 2,
+  anchor: { line: { file: "src/base.rs", side: "new", at } },
+  resolved: false,
+  comments: [
+    { body: "note", review_id: 1, created_at: "2026-01-01T00:00:00Z" },
+  ],
+  drafts: [],
+  created_at: "2026-01-01T00:00:00Z",
+});
+
+/** Points at the one rendered thread, returning its wrapper. */
+const hoverThread = (container: HTMLElement) => {
+  const item = container.querySelector(".meta-item");
+  if (!item) throw new Error("no thread rendered");
+  fireEvent.mouseEnter(item);
+  return item;
+};
+
+describe("hovering a thread", () => {
+  it.each(["unified", "split"] as const)(
+    "tints its whole line while the pointer is over it (%s)",
+    (layout) => {
+      const { container } = renderFile(layout, mixed, [
+        threadAt(1, { whole: 3 }),
+      ]);
+      expect(container.querySelector(".line-hover")).toBeNull();
+      const item = hoverThread(container);
+      const code = container.querySelector(".code.line-hover");
+      expect(code?.textContent).toContain("body();");
+      fireEvent.mouseLeave(item);
+      expect(container.querySelector(".line-hover")).toBeNull();
+    },
+  );
+
+  it("brightens its selection instead of the line", () => {
+    const { container } = renderFile("unified", mixed, [
+      threadAt(1, {
+        selection: { start_line: 3, start_char: 4, end_line: 3, end_char: 8 },
+      }),
+    ]);
+    hoverThread(container);
+    expect(container.querySelector(".line-hover")).toBeNull();
+    expect(container.querySelector(".comment-range-active")?.textContent).toBe(
+      "body",
+    );
   });
 });

@@ -167,6 +167,25 @@ const revealContext = async (page, button) => {
 const untilResolutionDraft = (page) =>
   untilDom(page, () => !!document.querySelector(".comment-resolution-only"));
 
+/** Scrolls the one element `locator` names to the middle of the viewport. */
+const centerOn = async (page, locator) => {
+  await expectOne(locator);
+  await locator.evaluate((el) => {
+    el.scrollIntoView({ block: "center" });
+  });
+  await untilSpySettled(page);
+};
+
+/** Centers the inline thread holding `text`, points at it, and resolves
+ * once the tint `selector` names shows. */
+const hoverThread = async (page, text, selector) => {
+  await expandAllFiles(page);
+  const item = page.locator(".meta-item", { hasText: text });
+  await centerOn(page, item);
+  await item.hover({ force: true });
+  await untilDom(page, (sel) => !!document.querySelector(sel), selector);
+};
+
 /** File sections start collapsed; captures that show diff contents open
  * them all via the rail's toggle first. */
 const expandAllFiles = (page) =>
@@ -660,13 +679,24 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await expandAllFiles(page);
-      const thread = page.locator(".thread", { hasText: "ChaCha12" });
-      await expectOne(thread);
-      await thread.evaluate((el) => {
-        el.scrollIntoView({ block: "center" });
-      });
-      await untilSpySettled(page);
+      await centerOn(page, page.locator(".thread", { hasText: "ChaCha12" }));
     },
+  },
+  // Hovering a whole-line thread tints the line it hangs on.
+  {
+    name: "review-hover-line",
+    path: "/changes/11?against=0",
+    fullPage: false,
+    actions: (page) =>
+      hoverThread(page, "Locking the RNG mutex", ".line-hover"),
+  },
+  // Hovering a selection thread brightens its range.
+  {
+    name: "review-hover-range",
+    path: "/changes/11?against=0",
+    fullPage: false,
+    actions: (page) =>
+      hoverThread(page, "Generate-then-mark", ".comment-range-active"),
   },
   // Selecting diff text and pressing c: the inline editor opens on the
   // selection's last line with the pending range tinted "active".

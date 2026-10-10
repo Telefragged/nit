@@ -4,6 +4,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useMemo,
+  useState,
 } from "react";
 import { createDraft } from "../../api/client";
 import {
@@ -47,8 +48,8 @@ import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
 
-/** A commented char window to tint on one line; `active` is the open
- * editor's pending selection (brighter chrome). */
+/** A commented char window to tint on one line; `active` (brighter chrome)
+ * marks the open editor's pending selection or the hovered thread's range. */
 interface RangeMark {
   from: number;
   to: number;
@@ -227,6 +228,14 @@ export default function DiffFileView({
   const queryClient = useQueryClient();
   const lang = languageFor(file.path);
 
+  // The inline thread under the pointer, by `threadKey`. `line` is its
+  // `side:line` when it anchors a whole line; a selection thread tints its
+  // range instead.
+  const [hovered, setHovered] = useState<{
+    thread: string;
+    line: string | null;
+  } | null>(null);
+
   const expansion = useHunkExpansion(file, ctx);
   const { hunks } = expansion;
 
@@ -351,7 +360,12 @@ export default function DiffFileView({
       const range = anchorRange(at.anchor);
       if (!range) continue;
       const p = commentPlacement(at, ctx.selected, ctx.against);
-      if (p) paints.push({ side: p.side, range, active: false });
+      if (p)
+        paints.push({
+          side: p.side,
+          range,
+          active: threadKey(t) === hovered?.thread,
+        });
     }
     const et = ctx.editingTarget;
     const selected = et && targetRange(et);
@@ -359,7 +373,18 @@ export default function DiffFileView({
       paints.push({ side: et.side, range: selected, active: true });
     }
     return paints;
-  }, [threads, ctx.editingTarget, ctx.selected, ctx.against, file.path]);
+  }, [
+    threads,
+    hovered,
+    ctx.editingTarget,
+    ctx.selected,
+    ctx.against,
+    file.path,
+  ]);
+
+  /** The class suffix tinting a cell when it shows the hovered line. */
+  const lineHover = (side: Side, no: number | undefined) =>
+    no !== undefined && hovered?.line === `${side}:${no}` ? " line-hover" : "";
 
   /** The comment-range tints falling on `line`'s text in a cell showing
    * the given sides (unified cells show both; split cells one). */
@@ -385,7 +410,22 @@ export default function DiffFileView({
     const items: ReactNode[] = [];
     for (const t of inline.get(`${side}:${no}`) ?? []) {
       items.push(
-        <div className="meta-item" key={`t-${side}-${threadKey(t)}`}>
+        // The hover tint only points at the anchor; the line number beside
+        // the thread already tells a keyboard user where it hangs.
+        // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+        <div
+          className="meta-item"
+          key={`t-${side}-${threadKey(t)}`}
+          onMouseEnter={() => {
+            setHovered({
+              thread: threadKey(t),
+              line: anchorRange(shownAt(t).anchor) ? null : `${side}:${no}`,
+            });
+          }}
+          onMouseLeave={() => {
+            setHovered(null);
+          }}
+        >
           <CommentThread thread={t} />
         </div>,
       );
@@ -436,51 +476,53 @@ export default function DiffFileView({
   }
 
   function unifiedRows(hunk: Hunk) {
-    return hunk.lines.map((line, li) => (
-      <Fragment key={li}>
-        <div className="line-row">
-          <span className={`g ${line.kind}${driftClass(line)}`}>
-            {line.old ?? ""}
-          </span>
-          <span className={`g ${line.kind}${driftClass(line)}`}>
-            {line.new ?? ""}
-          </span>
-          <span
-            className={`code ${line.kind}${driftClass(line)}`}
-            data-old={line.old}
-            data-new={line.new}
-          >
-            <span className="sign">
-              {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}
+    return hunk.lines.map((line, li) => {
+      const cls = `${line.kind}${driftClass(line)}${
+        lineHover("old", line.old) || lineHover("new", line.new)
+      }`;
+      return (
+        <Fragment key={li}>
+          <div className="line-row">
+            <span className={`g ${cls}`}>{line.old ?? ""}</span>
+            <span className={`g ${cls}`}>{line.new ?? ""}</span>
+            <span
+              className={`code ${cls}`}
+              data-old={line.old}
+              data-new={line.new}
+            >
+              <span className="sign">
+                {line.kind === "add" ? "+" : line.kind === "del" ? "−" : " "}
+              </span>
+              <Code
+                text={line.text}
+                lang={lang}
+                marks={marks.get(line)}
+                rangeMarks={cellRangeMarks(line, ["old", "new"])}
+                className="code-text"
+              />
             </span>
-            <Code
-              text={line.text}
-              lang={lang}
-              marks={marks.get(line)}
-              rangeMarks={cellRangeMarks(line, ["old", "new"])}
-              className="code-text"
-            />
-          </span>
-        </div>
-        {unifiedMeta(line)}
-      </Fragment>
-    ));
+          </div>
+          {unifiedMeta(line)}
+        </Fragment>
+      );
+    });
   }
 
   /** One side of a split row: its gutter + code-half spans. The code cell
    * carries only data-{side} (never both) so lib/selection's sideOf
    * resolves a one-column drag to this side. */
   function sideCell(line: Line | null, side: "old" | "new") {
+    const cls = `${line ? line.kind : "void"}${driftClass(line)}${lineHover(
+      side,
+      line?.[side],
+    )}`;
     return (
       <>
-        <span
-          className={`g ${line ? line.kind : "void"}${driftClass(line)}`}
-          data-side={side}
-        >
+        <span className={`g ${cls}`} data-side={side}>
           {line?.[side] ?? ""}
         </span>
         <span
-          className={`code half ${line ? line.kind : "void"}${driftClass(line)}`}
+          className={`code half ${cls}`}
           data-side={side}
           data-old={side === "old" ? line?.old : undefined}
           data-new={side === "new" ? line?.new : undefined}

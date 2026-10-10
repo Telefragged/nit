@@ -192,6 +192,12 @@
   border-bottom-style: solid;
 }
 
+/* The line a hovered whole-line thread hangs on. An inset shadow paints
+   over the cell's add/del background without replacing it. */
+.line-hover {
+  box-shadow: inset 0 0 0 100vmax var(--amber-dim);
+}
+
 /* The "why c drafted nothing" bubble, hung under the selection it rejected
    (ReviewPage supplies the offset within the diff column) so the rule reads
    beside the lines that broke it. Inert to the pointer: the reviewer's next
