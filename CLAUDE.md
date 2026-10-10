@@ -14,8 +14,8 @@ trailer carries identity across rewrites.
    **hard-wrapped at 72 columns** — a one-line subject, then a body of
    72-column-wrapped prose, never a single long line (docs/dev.md "Commit &
    branch discipline"). No merge commits — an approved chain merges via the
-   approve action, rebase + fast-forward only (the `merge` skill,
-   `scripts/merge.sh`).
+   approve action, a GitHub PR merged by rebase (docs/dev.md "Merging
+   changes").
 3. **Every commit treefmt-clean** — `nix develop -c treefmt` before each
    commit, and re-format every rewritten commit after a rebase (not just
    the tip), especially after conflict resolution (docs/dev.md

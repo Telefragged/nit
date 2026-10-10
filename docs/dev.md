@@ -133,7 +133,7 @@ catches a skew and gives you the gallery in `result/`.
   `git -C <worktree>` — never an ambient cwd, which may have drifted back
   to the primary checkout. Commit there, drive the review loop, merge via
   the approve action, then `git worktree remove .worktrees/<slug>` and
-  `git branch -d track/<slug>`.
+  delete the branch ("Merging changes").
 
 - **Parallel chains stay independent**: never pre-merge in-flight branches
   into a shared integration branch — each is built and reviewed on its own,
@@ -142,14 +142,38 @@ catches a skew and gives you the gallery in `result/`.
 
 ## Merging changes — the nit review loop
 
-This repo dogfoods nit: push finished work as a chain, a human reviews it,
-and the approve action — `nix develop -c scripts/merge.sh`, the `merge`
-skill — merges it onto `main` (rebase if `main` moved, `nix flake check` on
-every commit, fast-forward merge; the lifecycle timer then marks the chain
-`merged`). Drive the loop with the `nit:lifecycle` skill, all the way to
-`merged`. Run the `nit` CLI from the build that matches the running server
-(normally `main`'s: `nit` on PATH, else `nix run '…?ref=main#nit'`), not
-your branch's binary.
+This repo dogfoods nit: push finished work as a chain, a human reviews it in
+nit, and the approve action merges it onto `main` through a GitHub PR. Drive
+the loop with the `nit:lifecycle` skill, all the way to `merged`. Run the
+`nit` CLI from the build that matches the running server (normally `main`'s:
+`nit` on PATH, else `nix run '…?ref=main#nit'`), not your branch's binary.
+
+`main` accepts no direct push. When every change in the chain is `approved`,
+the approve action is:
+
+1. Push the branch and open a PR:
+
+   ```sh
+   git push origin HEAD:track/<slug>
+   gh pr create --base main --head track/<slug>
+   ```
+
+   A push that changes `.github/workflows/` needs a token with the `workflow`
+   scope.
+
+2. Wait for the required checks, `nix` and `semver`
+   (`gh pr checks <pr> --watch --fail-fast`). If `main` moved, rebase the
+   chain onto it, `nit push`, and push the branch again.
+3. Merge the reviewed head:
+
+   ```sh
+   gh pr merge <pr> --rebase --match-head-commit "$(git rev-parse HEAD)"
+   ```
+
+4. Fast-forward the primary checkout's `main` to `origin/main`. nit marks
+   the chain `merged` when it finds the merged commits there. The rebase
+   merge gives each commit a new SHA, so delete the branch with
+   `git branch -D track/<slug>` once `git diff track/<slug> main` is empty.
 
 ### Review exemptions
 
@@ -165,7 +189,7 @@ Standing exemptions (same discipline, still green):
 
 A release starts from one edit: raise `workspace.package.version` in `Cargo.toml`. Then run `nix develop -c cargo check` to update `Cargo.lock` and `nix develop -c crate2nix generate` to update `Cargo.nix`, and open a PR. Run `nix run .#release-check` to see the result of the CI check before you push.
 
-The `semver` job runs `nix run .#release-check` on every PR and merge queue entry. When the version differs from the newest release tag, the script checks it against the contract changes since that tag (see "Verification"). Release tags are the bare version, for example `0.2.0`.
+The `semver` job runs `nix run .#release-check` on every PR. When the version differs from the newest release tag, the script checks it against the contract changes since that tag (see "Verification"). Release tags are the bare version, for example `0.2.0`.
 
 After the merge, `.github/workflows/release.yml` runs the same check. When the commit is a release, it builds `.#nit-release`, creates the tag and the GitHub release, and uploads `nit-x86_64-linux` with its checksum and a build provenance attestation. To confirm that a binary came from that workflow, run:
 
@@ -175,5 +199,5 @@ gh attestation verify nit-x86_64-linux --repo Telefragged/nit
 
 The repository settings carry two rulesets:
 
-- `main`: no direct push and no force push, the `nix` and `semver` jobs are required status checks, and the merge queue is on.
+- `main`: no direct push and no force push, the `nix` and `semver` jobs are required status checks, and a PR must be up to date with `main` before it merges. A repository owned by a personal account has no merge queue.
 - Tags `*.*.*`: no update and no deletion. A ruleset cannot exempt the workflow token, so tag creation stays open for the release workflow.
