@@ -75,9 +75,9 @@ jobs:
           skipPush: true
       - run: nix run .#release-check
 
-  # Single stable status check — the name branch protection requires — green
-  # only when every per-commit leg above passed (or there was nothing to
-  # check).
+  # The single, stable status check that branch protection requires. It
+  # passes only when every per-commit check job above passed, or when there
+  # was nothing to check.
   nix:
     if: always()
     needs: check
