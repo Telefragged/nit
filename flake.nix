@@ -120,13 +120,17 @@
       # rootCrate, so callers select a member via `workspaceMembers."<name>"`.
       # Our own crates (local `src`, not a crates.io `sha256`) compile with
       # clippy-driver under Cargo.toml's `[workspace.lints]`; deps stay plain.
+      # On Linux every crate links statically against musl, as the release
+      # binary does, so the checks test what ships. Darwin has no
+      # pkgsStatic and builds natively.
       cargoNixFor =
         pkgs:
         let
-          rustToolchain = rustToolchainFor pkgs.buildPackages;
+          cargoPkgs = if pkgs.stdenv.hostPlatform.isLinux then pkgs.pkgsStatic else pkgs;
+          rustToolchain = rustToolchainFor cargoPkgs.buildPackages;
           lints = cargoToml.workspace.lints;
         in
-        pkgs.callPackage ./Cargo.nix {
+        cargoPkgs.callPackage ./Cargo.nix {
           buildRustCrateForPkgs =
             p:
             let
@@ -397,27 +401,21 @@
             preBuild = injectWasm pkgs;
             installPhase = "cp -r dist $out";
           };
-          # Build only; tests live in the `test` check (the build/verify split).
-          # The crate's build.rs reads the git suffix, and it compiles in the
-          # web UI that NIT_WEB_DIST names.
-          nitFor =
-            cargoPkgs:
-            (cargoNixFor cargoPkgs).workspaceMembers."nit".build.overrideAttrs (_: {
-              NIT_GIT_SUFFIX = gitSuffix;
-              NIT_WEB_DIST = nit-web;
-            });
         in
         rec {
           inherit nit-web;
-          nit = nitFor pkgs;
+          # Build only; tests live in the `test` check (the build/verify split).
+          # The crate's build.rs reads the git suffix, and it compiles in the
+          # web UI that NIT_WEB_DIST names.
+          nit = (cargoNixFor pkgs).workspaceMembers."nit".build.overrideAttrs (_: {
+            NIT_GIT_SUFFIX = gitSuffix;
+            NIT_WEB_DIST = nit-web;
+          });
           default = nit;
-          contract = contractSnapshot pkgs;
-        }
-        // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux rec {
-          nit-static = nitFor pkgs.pkgsStatic;
           # The release drops the `+<sha>` suffix, so `nit --version` tells
           # a published release from a build of a git checkout.
-          nit-release = nit-static.overrideAttrs { NIT_GIT_SUFFIX = ""; };
+          nit-release = nit.overrideAttrs { NIT_GIT_SUFFIX = ""; };
+          contract = contractSnapshot pkgs;
         }
       );
 
@@ -521,9 +519,6 @@
             fi
             touch $out
           '';
-        }
-        // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          build-static = self.packages.${pkgs.system}.nit-static;
         }
       );
 
