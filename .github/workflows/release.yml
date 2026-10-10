@@ -19,11 +19,10 @@ jobs:
         with:
           fetch-depth: 0
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: nix-community/cache-nix-action@v7
+      - uses: cachix/cachix-action@v17
         with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          save: false
+          name: nit-ci-cache
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - id: check
         run: nix run .#release-check
       - if: steps.check.outputs.release == 'true'

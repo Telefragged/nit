@@ -47,19 +47,13 @@ jobs:
         with:
           ref: ${{ matrix.sha }}
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: nix-community/cache-nix-action@v7
+      # Only a push to main writes to the cache. Every other event only reads
+      # from it.
+      - uses: cachix/cachix-action@v17
         with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          # Loose headroom over the whole build+check closure so the pre-save
-          # GC keeps the cache intact. The closure only grows and the saved
-          # cache is compressed, so cap generously rather than chase an exact
-          # byte count that drifts.
-          gc-max-store-size: 15G
-          # Every leg restores, but only the tip writes back: the legs share
-          # one key, so parallel saves race to store the same entry, and the
-          # tip is the store future runs branch from.
-          save: ${{ matrix.sha == (github.event.pull_request.head.sha || github.sha) }}
+          name: nit-ci-cache
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skipPush: ${{ github.event_name != 'push' }}
       - run: nix build
       - run: nix flake check
 
@@ -75,11 +69,10 @@ jobs:
         with:
           fetch-depth: 0
       - uses: DeterminateSystems/nix-installer-action@main
-      - uses: nix-community/cache-nix-action@v7
+      - uses: cachix/cachix-action@v17
         with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'rust-toolchain.toml', 'Cargo.lock', 'web/package-lock.json') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          save: false
+          name: nit-ci-cache
+          skipPush: true
       - run: nix run .#release-check
 
   # Single stable status check — the name branch protection requires — green
