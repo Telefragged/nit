@@ -3337,6 +3337,27 @@ rec {
         };
         resolvedDefaultFeatures = [ "vendored" ];
       };
+      "libmimalloc-sys" = rec {
+        crateName = "libmimalloc-sys";
+        version = "0.1.49";
+        edition = "2018";
+        links = "mimalloc";
+        sha256 = "1sdqq31sbf8dbdng8fsyzl2c5xxphn6dvr6ggik6zhg18cpsaiba";
+        libName = "libmimalloc_sys";
+        authors = [
+          "Octavian Oncescu <octavonce@gmail.com>"
+        ];
+        buildDependencies = [
+          {
+            name = "cc";
+            packageId = "cc";
+          }
+        ];
+        features = {
+          "cty" = [ "dep:cty" ];
+          "extended" = [ "cty" ];
+        };
+      };
       "libsqlite3-sys" = rec {
         crateName = "libsqlite3-sys";
         version = "0.38.2";
@@ -3545,6 +3566,36 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
+      "mimalloc" = rec {
+        crateName = "mimalloc";
+        version = "0.1.52";
+        edition = "2018";
+        sha256 = "0qkqr4yga7fkyqwnn89d2xp346q54n4fpm91rzxd2jni52xkjh9d";
+        authors = [
+          "Octavian Oncescu <octavonce@gmail.com>"
+          "Vincent Rouillé <vincent@speedy37.fr>"
+          "Thom Chiovoloni <chiovolonit@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "libmimalloc-sys";
+            packageId = "libmimalloc-sys";
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "debug" = [ "libmimalloc-sys/debug" ];
+          "debug_in_debug" = [ "libmimalloc-sys/debug_in_debug" ];
+          "extended" = [ "libmimalloc-sys/extended" ];
+          "local_dynamic_tls" = [ "libmimalloc-sys/local_dynamic_tls" ];
+          "no_thp" = [ "libmimalloc-sys/no_thp" ];
+          "override" = [ "libmimalloc-sys/override" ];
+          "secure" = [ "libmimalloc-sys/secure" ];
+          "v2" = [ "libmimalloc-sys/v2" ];
+          "win_direct_tls" = [ "libmimalloc-sys/win_direct_tls" ];
+        };
+        resolvedDefaultFeatures = [ "default" ];
+      };
       "mime" = rec {
         crateName = "mime";
         version = "0.3.17";
@@ -3676,6 +3727,10 @@ rec {
           {
             name = "jiff";
             packageId = "jiff";
+          }
+          {
+            name = "mimalloc";
+            packageId = "mimalloc";
           }
           {
             name = "mime_guess";
