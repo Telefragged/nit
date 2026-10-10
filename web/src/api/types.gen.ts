@@ -119,6 +119,15 @@ export type LifecycleAction = "merged" | "abandoned" | "reopened";
  */
 export type Tags = { [key in string]: string };
 
+export type Health = {
+  status: string;
+  /**
+   * The server's semver version. A build of a git checkout appends
+   * `+<sha>`, and `+<sha>.dirty` for an uncommitted tree.
+   */
+  version: string;
+};
+
 export type Repo = {
   id: number;
   /**

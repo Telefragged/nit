@@ -45,6 +45,7 @@ fn write_wire_types() {
         crate::domain::Whitespace,
         crate::domain::LifecycleAction,
         crate::domain::Tags,
+        crate::health::Health,
         crate::repos::Repo,
         crate::repos::RepoList,
         crate::graph::ChangeGraph,
