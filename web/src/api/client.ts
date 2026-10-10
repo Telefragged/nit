@@ -1,6 +1,6 @@
-// The ONLY place fetch happens. Components go through these functions (via
-// react-query); when VITE_MOCK is set every call is answered by the
-// contract-true fixtures in ./fixtures instead of the network.
+// The ONLY place the nit API is fetched. Components go through these
+// functions (via react-query); when VITE_MOCK is set every call is answered
+// by the contract-true fixtures in ./fixtures instead of the network.
 
 import type {
   BatchSubmitResult,
@@ -15,6 +15,7 @@ import type {
   DraftDecision,
   EditDraft,
   FileLines,
+  Health,
   NewDraft,
   PortedComment,
   Repo,
@@ -65,6 +66,8 @@ async function request<T = void>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+export const getHealth = () => request<Health>("GET", "/health");
 
 export const listRepos = () => request<RepoList>("GET", "/repos");
 

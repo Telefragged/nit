@@ -79,3 +79,17 @@ select:focus {
   outline: none;
   border-color: var(--blue);
 }
+
+.check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.check-label input {
+  cursor: pointer;
+}

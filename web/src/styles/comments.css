@@ -207,21 +207,6 @@
   flex: 1;
 }
 
-/* gerrit-style resolve checkbox beside the editor's buttons */
-.resolve-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  color: var(--text-dim);
-  cursor: pointer;
-  user-select: none;
-}
-
-.resolve-check input {
-  cursor: pointer;
-}
-
 /* an empty-body draft that only drafts a resolve/reopen */
 .comment-resolution-only {
   font-size: 12px;

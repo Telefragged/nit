@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { DiffMode, Whitespace } from "../api/types";
+import { readSaved, writeSaved } from "./storage";
 
 const KEY = "nit.review-settings";
 
@@ -27,14 +28,7 @@ const DEFAULTS: ReviewSettings = {
 /** Each field falls back on its own, so a value this build does not know
  * costs that one knob rather than the whole page. */
 function load(): ReviewSettings {
-  let saved: Partial<ReviewSettings> | null = null;
-  try {
-    saved = JSON.parse(
-      localStorage.getItem(KEY) ?? "",
-    ) as Partial<ReviewSettings> | null;
-  } catch {
-    saved = null;
-  }
+  const saved = readSaved(KEY) as Partial<ReviewSettings> | null;
   return {
     mode: saved?.mode === "outline" ? "outline" : DEFAULTS.mode,
     layout: saved?.layout === "split" ? "split" : DEFAULTS.layout,
@@ -51,7 +45,7 @@ export function useReviewSettings(): [
   const [settings, setSettings] = useState(load);
   const save = useCallback((next: ReviewSettings) => {
     setSettings(next);
-    localStorage.setItem(KEY, JSON.stringify(next));
+    writeSaved(KEY, next);
   }, []);
   return [settings, save];
 }

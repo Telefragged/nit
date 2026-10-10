@@ -54,6 +54,59 @@
   padding: 1px 6px;
 }
 
+.about-button {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: var(--text-faint);
+  background: none;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.about-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.about-checked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.about-modal {
+  width: 360px;
+}
+
+.about-versions {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.about-versions dt {
+  color: var(--text-dim);
+}
+
+.about-versions dd {
+  margin: 0;
+  font-family: var(--mono);
+}
+
 /* ---------------------------------------------------------------- layout */
 
 .page {
