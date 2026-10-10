@@ -161,15 +161,19 @@ the approve action is:
    A push that changes `.github/workflows/` needs a token with the `workflow`
    scope.
 
-2. Wait for the required checks, `nix` and `semver`
-   (`gh pr checks <pr> --watch --fail-fast`). If `main` moved, rebase the
-   chain onto it, `nit push`, and push the branch again.
-3. Merge the reviewed head:
+2. Enable auto-merge on the reviewed head. GitHub merges the PR when the
+   required checks, `nix` and `semver`, pass:
 
    ```sh
-   gh pr merge <pr> --rebase --match-head-commit "$(git rev-parse HEAD)"
+   gh pr merge <pr> --auto --rebase --match-head-commit "$(git rev-parse HEAD)"
    ```
 
+3. Wait for the merge with `scripts/wait-pr.sh <pr>`. It checks the PR every
+   10 seconds. It exits 0 when the PR merged, and 1 when a check failed or
+   the branch is behind `main` or conflicts with it. In Claude Code, run it
+   in a background shell with a one-hour timeout. If the branch is behind
+   `main` or conflicts with it, rebase the chain onto `main`, `nit push`,
+   push the branch again, and repeat step 2.
 4. Fast-forward the primary checkout's `main` to `origin/main`. nit marks
    the chain `merged` when it finds the merged commits there. The rebase
    merge gives each commit a new SHA, so delete the branch with
