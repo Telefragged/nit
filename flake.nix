@@ -413,8 +413,11 @@
           default = nit;
           contract = contractSnapshot pkgs;
         }
-        // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+        // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux rec {
           nit-static = nitFor pkgs.pkgsStatic;
+          # The release drops the `+<sha>` suffix, so `nit --version` tells
+          # a published release from a build of a git checkout.
+          nit-release = nit-static.overrideAttrs { NIT_GIT_SUFFIX = ""; };
         }
       );
 

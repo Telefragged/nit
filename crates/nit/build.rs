@@ -19,7 +19,6 @@ use std::process::Command;
 fn main() {
     let suffix = std::env::var("NIT_GIT_SUFFIX")
         .ok()
-        .filter(|s| !s.is_empty())
         .or_else(git_suffix)
         .unwrap_or_default();
     println!("cargo:rustc-env=NIT_GIT_SUFFIX={suffix}");
