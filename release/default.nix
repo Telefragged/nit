@@ -1,7 +1,7 @@
 # The smallest semver bump that covers the contract changes since the
 # commit `base`, for a release to check before it merges:
 #
-#   nix build -f semver --argstr base "$(git rev-parse <tag>)" '^*'
+#   nix build -f release --argstr base "$(git rev-parse <tag>)" '^*'
 #
 # The `out` output holds the bump, `major`, `minor` or `patch`, and the
 # `changes` output one line per change that decided it. The HTTP API's

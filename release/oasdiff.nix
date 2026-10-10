@@ -1,4 +1,4 @@
-# oasdiff is not in nixpkgs; semver/default.nix diffs the OpenAPI documents
+# oasdiff is not in nixpkgs; release/default.nix diffs the OpenAPI documents
 # with it. `nix run .#bump-oasdiff` moves oasdiff.json to the latest
 # release.
 {
