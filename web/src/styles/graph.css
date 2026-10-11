@@ -2,8 +2,8 @@
    SVG rail (lanes + nodes) beside per-row change cards:
    GRAPH | CHANGE | STATUS | REV | ACTIVITY. */
 .change-graph {
-  /* Rows sit on the page background, like table.list; only the header (and the
-     border) is raised. */
+  /* Rows sit on the page background. Only the header and the border are
+     raised. */
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg);
@@ -101,7 +101,7 @@
   cursor: default;
 }
 
-/* Clickable rows highlight on hover (like the repo list), the rest stay flat. */
+/* Clickable rows highlight on hover, the rest stay flat. */
 .graph-row.is-clickable:hover {
   background: var(--bg-hover);
 }

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
-import { getChanges, getHistory, getRepo, getTags } from "../api/client";
+import { useParams } from "react-router-dom";
+import { getChanges, getHistory, getTags, listRepos } from "../api/client";
 import { repoGraph } from "../api/fold";
 import type { ChangeStatus } from "../api/types";
 import GraphTable from "../components/GraphTable";
@@ -63,12 +63,11 @@ export default function Dashboard() {
     if (remembered) chooseGroup(remembered);
   }, [groupBy, storageKey, chooseGroup]);
 
-  // The repo's path (its name) is fixed for the page's lifetime, so fetch it
-  // once by id — only the changes/history reads refetch as things land.
-  const repoQuery = useQuery({
-    queryKey: ["repo", id],
-    queryFn: () => getRepo(id),
-  });
+  const repo = useQuery({
+    queryKey: ["repos"],
+    queryFn: listRepos,
+    select: (data) => data.repos.find((r) => r.id === id),
+  }).data;
   const changesQuery = useQuery({
     queryKey: ["repo-changes", id, tag ?? null],
     queryFn: () =>
@@ -114,31 +113,16 @@ export default function Dashboard() {
   const { overlays, loading: overlaysLoading } = useDrafts(activityIds);
   const activity = nodeActivity(changesQuery.data?.changes ?? [], overlays);
 
-  const repo = repoQuery.data;
   useDocumentTitle(repo ? repoPath(repo.git_dir) : null);
   const error = changesQuery.error ?? historyQuery.error;
   // A read that this render enables already reports isLoading, so the
   // page never looks idle between the graph and its activity overlay.
   const busy =
     overlaysLoading ||
-    [repoQuery, changesQuery, historyQuery, tagsQuery].some((q) => q.isLoading);
+    [changesQuery, historyQuery, tagsQuery].some((q) => q.isLoading);
 
   return (
     <main className="page" aria-busy={busy}>
-      <h1 className="mono">{repo ? repoPath(repo.git_dir) : "Repository"}</h1>
-      <p className="subtitle">
-        <Link to="/" className="mono">
-          ← Repositories
-        </Link>{" "}
-        · change graph
-        {repo ? (
-          <>
-            {" "}
-            over <span className="mono">{repo.canonical_ref}</span>
-          </>
-        ) : null}
-        .
-      </p>
       <div className="graph-toolbar">
         <label>
           Group by

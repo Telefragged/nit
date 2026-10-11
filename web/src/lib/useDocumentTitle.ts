@@ -5,8 +5,8 @@ import { useEffect } from "react";
  *
  * A null context means the page has not loaded the thing it names yet, so
  * the tab keeps the plain product name. The tab returns to that name when
- * the page unmounts, which is what leaves a page that names nothing — the
- * repo list — with a plain `nit`.
+ * the page unmounts. A page that names nothing, such as the prompt to pick
+ * a repository, thus keeps the plain `nit`.
  */
 export function useDocumentTitle(context: string | null) {
   useEffect(() => {

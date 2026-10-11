@@ -912,7 +912,7 @@ export default function ReviewPage() {
           </div>
         </div>
 
-        <div className="review-layout">
+        <div className="sidebar-layout review-layout">
           <aside className="review-sidebar">
             <FileRail
               files={files}

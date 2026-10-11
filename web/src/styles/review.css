@@ -211,18 +211,12 @@
 /* layout: sidebar (file list) + diff column */
 
 .review-layout {
-  display: flex;
-  align-items: flex-start;
   padding: 12px 16px 0;
-  gap: 14px;
 }
 
 /* The sidebar is the one sticky, height-bounded column; the file tree
    sizes its scrollport against it. */
 .review-sidebar {
-  width: 270px;
-  flex: none;
-  position: sticky;
   top: 78px;
 
   /* Definite, not a max: the virtualized file tree below has no intrinsic
