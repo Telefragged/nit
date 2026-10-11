@@ -154,7 +154,7 @@ function Row({
   );
   return current ? (
     <div
-      className="tag-nav-row current"
+      className="tag-nav-row nav-row"
       aria-current="page"
       title={`${title} (this change)`}
     >
@@ -162,7 +162,7 @@ function Row({
     </div>
   ) : (
     <Link
-      className="tag-nav-row"
+      className="tag-nav-row nav-row"
       to={`/changes/${node.change_number}`}
       title={title}
     >

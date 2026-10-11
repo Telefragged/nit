@@ -171,14 +171,12 @@ describe("TagNav", () => {
       "/changes/10",
     ]);
 
-    // A div, not a link, so the current page never self-links; aria-current
-    // flags it for assistive tech.
+    // A div, not a link, so the current page never self-links.
     const current = must(
-      document.querySelector<HTMLElement>(".tag-nav-row.current"),
-      ".tag-nav-row.current",
+      document.querySelector<HTMLElement>('.tag-nav-row[aria-current="page"]'),
+      "the current row",
     );
     expect(current.tagName).toBe("DIV");
-    expect(current.getAttribute("aria-current")).toBe("page");
     expect(current.querySelector(".subj")?.textContent).toBe("second change");
     expect(current.querySelector(".unresolved-count")?.textContent).toBe(
       "2 open",

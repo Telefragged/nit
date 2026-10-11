@@ -8,7 +8,11 @@ import { ErrorPanel } from "./NotFound";
 function RepoLink({ repo }: { repo: Repo }) {
   const path = repoPath(repo.git_dir);
   return (
-    <NavLink className="repo-link" to={`/repos/${repo.id}`} title={path}>
+    <NavLink
+      className="repo-link nav-row"
+      to={`/repos/${repo.id}`}
+      title={path}
+    >
       <span className="repo-name">{path.slice(path.lastIndexOf("/") + 1)}</span>
       <span className="repo-open">
         {repo.open_changes} open{" "}
