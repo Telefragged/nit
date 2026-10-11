@@ -4,7 +4,8 @@ use axum::Json;
 use axum::extract::State;
 use git2::Repository;
 
-use nit_types::domain::ChangeNumber;
+use nit_types::domain::ChangeProjection;
+use nit_types::domain::Sha;
 use nit_types::domain::{LogPayload, RevisionPayload};
 use nit_types::push::{PushRequest, PushResult, PushedChange};
 
@@ -12,59 +13,43 @@ use crate::db;
 use crate::gitscan;
 use nit_types::domain::Lifecycle;
 
-use super::{AppJson, AppState, ChangeEntry, Error, append_to_change, with_conn};
-use super::{canonical_git_dir, map_busy};
+use super::{AppJson, AppState, Appends, Error, with_conn};
+use super::{canonical_git_dir, change_or_404};
 
-/// Bridges push pre-flight into the append phase.
-struct Target {
-    entry: Arc<ChangeEntry>,
-    change_number: ChangeNumber,
-}
-
-/// Resolves each walked commit to the change it revises.
-///
-/// This rejects a push onto a terminal change before the append phase. So
-/// a stack that carries one records no revision, rather than half of them.
+/// Rejects a new revision of a terminal change.
 ///
 /// # Errors
 ///
-/// 409 when a commit whose sha moved names an abandoned or merged change.
-fn resolve_targets(
-    state: &AppState,
-    conn: &rusqlite::Connection,
-    commits: &[gitscan::WalkedCommit],
-    change_numbers: Vec<ChangeNumber>,
-) -> Result<Vec<Target>, Error> {
-    let mut targets = Vec::with_capacity(commits.len());
-    for (wc, change_number) in commits.iter().zip(change_numbers) {
-        let entry = state
-            .change(conn, change_number)?
-            .ok_or_else(|| Error::internal("change vanished after upsert"))?;
-        let proj = entry.read();
-        let moves = proj
-            .latest_revision()
-            .is_none_or(|r| r.commit_sha != wc.commit_sha);
-        if moves && matches!(proj.lifecycle, Lifecycle::Abandoned) {
-            return Err(Error::conflict(format!(
-                "change {} is abandoned — run `nit reopen` before pushing a new revision",
-                wc.change_id
-            )));
-        }
-        // A Change-Id is never reused: without this gate a new revision
-        // would paint the merged overlay onto unreviewed content.
-        if moves && proj.is_merged() {
-            return Err(Error::conflict(format!(
-                "change {} is merged — new work needs its own Change-Id",
-                wc.change_id
-            )));
-        }
-        drop(proj);
-        targets.push(Target {
-            entry,
-            change_number,
-        });
+/// 409 when the sha of the commit changed and the change is abandoned or
+/// merged.
+fn check_revisable(change: &ChangeProjection, wc: &gitscan::WalkedCommit) -> Result<(), Error> {
+    let moves = change
+        .latest_revision()
+        .is_none_or(|r| r.commit_sha != wc.commit_sha);
+    if moves && matches!(change.lifecycle, Lifecycle::Abandoned) {
+        return Err(Error::conflict(format!(
+            "change {} is abandoned. Run `nit reopen` before you push a new revision",
+            wc.change_id
+        )));
     }
-    Ok(targets)
+    // Each Change-Id identifies a single change for its whole life. This
+    // check rejects a new revision of a merged change, because the merged
+    // overlay would mark the new revision as reviewed.
+    if moves && change.is_merged() {
+        return Err(Error::conflict(format!(
+            "change {} is merged. Give the new commit a new Change-Id",
+            wc.change_id
+        )));
+    }
+    Ok(())
+}
+
+/// The revision of a walked commit, computed before the write transaction.
+struct Candidate {
+    /// The commit sha of the latest revision that `revision_for` compared
+    /// against.
+    prior: Option<Sha>,
+    revision: Option<LogPayload>,
 }
 
 /// The revision one walked commit records, if its sha moved.
@@ -75,7 +60,7 @@ fn revision_for(
     repo: &Repository,
     walk: &gitscan::PushWalk,
     wc: &gitscan::WalkedCommit,
-    proj: &nit_types::domain::ChangeProjection,
+    proj: &ChangeProjection,
 ) -> Option<LogPayload> {
     let prior = proj.latest_revision();
     if prior.is_some_and(|r| r.commit_sha == wc.commit_sha) {
@@ -131,10 +116,6 @@ pub(super) async fn push(
             )));
         }
 
-        // Mint every change row in one transaction, and before anything is
-        // cached: the gate pass below resolves projections into the in-memory
-        // map, so a rollback under it would leave the map holding rows the
-        // database never got.
         let change_numbers = db::write(conn, |tx| {
             walk.commits
                 .iter()
@@ -142,26 +123,55 @@ pub(super) async fn push(
                 .collect::<anyhow::Result<Vec<_>>>()
         })?;
 
-        let targets = resolve_targets(&state, conn, &walk.commits, change_numbers)?;
-
-        for (wc, t) in walk.commits.iter().zip(&targets) {
-            let Some(new) = revision_for(&repo, &walk, wc, &t.entry.read()) else {
-                continue;
-            };
-            append_to_change(&state, conn, &t.entry, t.change_number, vec![new])
-                .map_err(map_busy)?;
-            gitscan::maintain_keep_refs(&repo, &t.entry.read());
-        }
-
-        let changes = targets
+        // The git comparison in `revision_for` runs before the write
+        // transaction. The transaction repeats the comparison under the
+        // write lock when another push changed the latest revision after the
+        // first comparison.
+        let candidates = walk
+            .commits
             .iter()
-            .map(|t| {
-                let proj = t.entry.read();
+            .zip(&change_numbers)
+            .map(|(wc, &number)| {
+                let change = change_or_404(conn, number)?;
+                Ok(Candidate {
+                    prior: change.latest_revision().map(|r| r.commit_sha.clone()),
+                    revision: revision_for(&repo, &walk, wc, &change),
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        // One transaction, so a stack that carries a terminal change
+        // records no revision, rather than half of them.
+        let mut appends = Appends::begin(conn)?;
+        let mut pushed = Vec::with_capacity(candidates.len());
+        for ((wc, &number), candidate) in walk.commits.iter().zip(&change_numbers).zip(candidates) {
+            let appended = appends.append(number, |change, _| {
+                check_revisable(change, wc)?;
+                let prior = change.latest_revision().map(|r| &r.commit_sha);
+                // If another push changed the latest revision after the
+                // first comparison, compare again.
+                let revision = if prior == candidate.prior.as_ref() {
+                    candidate.revision
+                } else {
+                    revision_for(&repo, &walk, wc, change)
+                };
+                Ok(revision.into_iter().collect())
+            })?;
+            pushed.push(appended);
+        }
+        appends.commit(&state)?;
+
+        let changes = pushed
+            .iter()
+            .map(|appended| {
+                if !appended.entries.is_empty() {
+                    gitscan::maintain_keep_refs(&repo, &appended.change);
+                }
                 PushedChange {
-                    change_number: t.change_number,
-                    change_id: proj.change_id.clone(),
-                    revision: proj.latest_revision_number(),
-                    status: proj.current_status(),
+                    change_number: appended.change.id,
+                    change_id: appended.change.change_id.clone(),
+                    revision: appended.change.latest_revision_number(),
+                    status: appended.change.current_status(),
                 }
             })
             .collect();

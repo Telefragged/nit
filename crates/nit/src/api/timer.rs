@@ -20,7 +20,7 @@ use crate::db;
 use crate::gitscan;
 use nit_types::domain::ChangeProjection;
 
-use super::{AppState, append_to_change, with_conn};
+use super::{AppState, append, with_conn};
 
 /// Interval between timer sweeps.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
@@ -82,7 +82,8 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         // First observation has no baseline -- no landings are detected;
         // landings that predate tracking are not this timer's concern.
         if let Some(since) = &recorded {
-            let Ok(changes) = state.repo_changes(conn, repo_id, &db::ChangeFilter::open()) else {
+            let Ok(changes) = crate::review::repo_changes(conn, repo_id, &db::ChangeFilter::open())
+            else {
                 continue;
             };
             // The sweep's working set -- looked up once per new commit.
@@ -105,22 +106,12 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
 
 /// The merge sweep's only lifecycle write.
 fn record_landing(state: &AppState, conn: &mut Connection, change_number: ChangeNumber, sha: Sha) {
-    let entry = match state.change(conn, change_number) {
-        Ok(Some(entry)) => entry,
-        Ok(None) => return,
-        Err(e) => {
-            tracing::warn!(
-                change_number = change_number.get(),
-                "merged change failed to load: {e:#}"
-            );
-            return;
-        }
-    };
     let new = LogPayload::lifecycle(LifecycleAction::Merged, Some(sha), None);
-    if let Err(e) = append_to_change(state, conn, &entry, change_number, vec![new]) {
+    if let Err(e) = append(state, conn, change_number, |_, _| Ok(vec![new])) {
         tracing::warn!(
             change_number = change_number.get(),
-            "lifecycle append failed: {e:#}"
+            "lifecycle append failed: {}",
+            e.message
         );
     }
 }

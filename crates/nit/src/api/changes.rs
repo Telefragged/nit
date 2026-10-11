@@ -13,6 +13,7 @@ use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList, ChangeQuery};
 use nit_types::changes::{TagList, TagsRequest};
 use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::ChangeProjection;
 use nit_types::domain::ChangeStatus;
 use nit_types::domain::PortedComment;
 use nit_types::domain::RevisionNumber;
@@ -31,8 +32,8 @@ use super::diff;
 use super::port;
 use super::rebase;
 use super::views;
-use super::{AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, with_conn};
-use super::{append_to_change, change_detail_json, change_or_404, map_busy};
+use super::{AppJson, AppPath, AppQuery, AppState, Error, with_conn};
+use super::{append, change_or_404};
 
 /// Serves `GET /api/changes`: matching changes as folded projections.
 #[utoipa::path(get, path = "/api/changes", params(ChangeQuery), responses((status = 200, body = ChangeList)))]
@@ -125,16 +126,14 @@ pub(super) async fn tag_change(
     AppJson(req): AppJson<TagsRequest>,
 ) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
-        let moves = {
-            let proj = entry.read();
-            !proj.tags.carries_all(&req.tags)
-        };
-        if moves {
-            let new = LogPayload::Tags(TagsPayload { tags: req.tags });
-            append_to_change(&state, conn, &entry, id, vec![new]).map_err(map_busy)?;
-        }
-        change_detail_json(conn, &entry)
+        let appended = append(&state, conn, id, |change, _| {
+            Ok(if change.tags.carries_all(&req.tags) {
+                Vec::new()
+            } else {
+                vec![LogPayload::Tags(TagsPayload { tags: req.tags })]
+            })
+        })?;
+        Ok(Json(views::build_change_detail(conn, &appended.change)?))
     })
     .await
 }
@@ -145,8 +144,10 @@ pub(super) async fn get_change_detail(
     AppPath(id): AppPath<ChangeNumber>,
 ) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
-        change_detail_json(conn, &entry)
+        Ok(Json(views::build_change_detail(
+            conn,
+            &change_or_404(conn, id)?,
+        )?))
     })
     .await
 }
@@ -161,7 +162,7 @@ pub(super) async fn get_change_drafts(
     AppPath(id): AppPath<ChangeNumber>,
 ) -> Result<Json<ChangeDrafts>, Error> {
     with_conn(state.pool(), move |conn| {
-        change_or_404(&state, conn, id)?;
+        change_or_404(conn, id)?;
         Ok(Json(views::change_overlay(conn, id)?))
     })
     .await
@@ -183,8 +184,8 @@ pub(super) async fn revision_diff(
     AppQuery(q): AppQuery<DiffQuery>,
 ) -> Result<Json<Diff>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
-        let revs = resolve_revs(&state, &entry, n, q.against)?;
+        let change = change_or_404(conn, id)?;
+        let revs = resolve_revs(&state, &change, n, q.against)?;
         let mut wire = contained_diff(&revs, 3, q.view, None)?;
         // After tagging: the message is not a git delta, so it is never drift.
         wire.files.insert(
@@ -234,8 +235,8 @@ pub(super) async fn revision_lines(
     AppQuery(q): AppQuery<LinesQuery>,
 ) -> Result<Json<FileLines>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
-        let revs = resolve_revs(&state, &entry, n, q.against)?;
+        let change = change_or_404(conn, id)?;
+        let revs = resolve_revs(&state, &change, n, q.against)?;
         let wanted = Wanted {
             path: q.path,
             old_path: q.old_path,
@@ -285,9 +286,6 @@ impl Wanted {
 }
 
 /// A revision and an optional interdiff counterpart.
-///
-/// Cloned out from under the projection read lock so the git work holds
-/// nothing live.
 struct Revs {
     git_dir: String,
     revision: RevisionProjection,
@@ -296,18 +294,18 @@ struct Revs {
 
 fn resolve_revs(
     state: &AppState,
-    entry: &ChangeEntry,
+    change: &ChangeProjection,
     n: RevisionNumber,
     against: Option<RevisionNumber>,
 ) -> Result<Revs, Error> {
-    let proj = entry.read();
     let find = |k: RevisionNumber| {
-        proj.revision(k)
+        change
+            .revision(k)
             .cloned()
             .ok_or_else(|| Error::not_found(format!("revision {k} not found")))
     };
     Ok(Revs {
-        git_dir: state.git_dir(proj.repo_id)?,
+        git_dir: state.git_dir(change.repo_id)?,
         revision: find(n)?,
         against: against.map(find).transpose()?,
     })
@@ -387,33 +385,32 @@ pub(super) async fn ported_comments(
     AppQuery(q): AppQuery<PortedQuery>,
 ) -> Result<Json<Vec<PortedComment>>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
-        let revs = resolve_revs(&state, &entry, n, q.against)?;
+        let change = change_or_404(conn, id)?;
+        let revs = resolve_revs(&state, &change, n, q.against)?;
         // Only a thread of an earlier revision can port to either target.
         let latest = revs
             .against
             .as_ref()
             .map_or(revs.revision.number, |m| m.number.max(revs.revision.number));
-        let (revisions, threads) = {
-            let proj = entry.read();
-            let threads: Vec<_> = proj
-                .threads
-                .iter()
-                .filter(|t| t.revision < latest && (q.include_resolved || !t.resolved))
-                .map(|t| ThreadOrigin {
-                    thread_id: t.id,
-                    revision: t.revision,
-                    anchor: t.anchor.clone(),
-                })
-                .collect();
-            (proj.revisions.clone(), threads)
-        };
+        let threads: Vec<_> = change
+            .threads
+            .iter()
+            .filter(|t| t.revision < latest && (q.include_resolved || !t.resolved))
+            .map(|t| ThreadOrigin {
+                thread_id: t.id,
+                revision: t.revision,
+                anchor: t.anchor.clone(),
+            })
+            .collect();
         let repo = open_repo(&revs.git_dir)?;
         let targets: Vec<_> = std::iter::once(&revs.revision)
             .chain(revs.against.as_ref())
             .collect();
         Ok(Json(port::port_threads(
-            &repo, &revisions, &targets, &threads,
+            &repo,
+            &change.revisions,
+            &targets,
+            &threads,
         )?))
     })
     .await

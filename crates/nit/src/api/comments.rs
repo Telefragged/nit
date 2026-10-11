@@ -15,8 +15,9 @@ use nit_types::domain::{CommentInput, LogPayload};
 
 use nit_types::domain::Lifecycle;
 
-use super::{AppJson, AppPath, AppState, ChangeEntry, Error, append_to_change, with_conn};
-use super::{anchor_of, change_detail_json, change_or_404, map_busy, snapshot_line_text};
+use super::views;
+use super::{AppJson, AppPath, AppState, Error, append, with_conn};
+use super::{anchor_of, change_or_404, snapshot_line_text};
 
 #[utoipa::path(post, path = "/api/changes/{id}/comments", params(("id" = ChangeNumber, Path)), request_body = NewComment, responses((status = 200, body = ThreadProjection)))]
 pub(super) async fn create_comment(
@@ -24,61 +25,65 @@ pub(super) async fn create_comment(
     AppPath(id): AppPath<ChangeNumber>,
     AppJson(req): AppJson<NewComment>,
 ) -> Result<Json<ThreadProjection>, Error> {
+    let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
+    if req.body.trim().is_empty() && !resolution_only {
+        return Err(Error::bad_request("an author comment must have a body"));
+    }
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
-        let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
-        if req.body.trim().is_empty() && !resolution_only {
-            return Err(Error::bad_request("an author comment needs a body"));
-        }
-        let comment = {
-            let proj = entry.read();
-            if let Some(tid) = req.thread_id {
-                if proj.thread(tid).is_none() {
-                    return Err(Error::bad_request("thread not found on this change"));
+        // A thread or a revision, once it exists, never goes away. So the
+        // decision holds at the commit, and its git read runs before the
+        // write transaction.
+        let change = change_or_404(conn, id)?;
+        let comment = if let Some(tid) = req.thread_id {
+            if change.thread(tid).is_none() {
+                return Err(Error::bad_request(format!(
+                    "thread {tid} is absent from change {id}"
+                )));
+            }
+            CommentInput {
+                thread_id: Some(tid),
+                revision: None,
+                anchor: None,
+                body: req.body,
+                resolved: req.resolved,
+            }
+        } else {
+            let mut anchor = anchor_of(req.anchor)?;
+            let number = match req.revision {
+                Some(r) => r,
+                None => {
+                    change
+                        .latest_revision()
+                        .ok_or_else(|| {
+                            Error::bad_request(format!("change {id} has zero revisions"))
+                        })?
+                        .number
                 }
-                CommentInput {
-                    thread_id: Some(tid),
-                    revision: None,
-                    anchor: None,
-                    body: req.body.clone(),
-                    resolved: req.resolved,
-                }
-            } else {
-                let mut anchor = anchor_of(req.anchor.clone())?;
-                let number = match req.revision {
-                    Some(r) => r,
-                    None => {
-                        proj.latest_revision()
-                            .ok_or_else(|| {
-                                Error::bad_request(format!("change {id} has no revisions"))
-                            })?
-                            .number
-                    }
-                };
-                let revision = proj
-                    .revision(number)
-                    .ok_or_else(|| Error::bad_request(format!("revision {number} not found")))?;
-                let git_dir = state.git_dir(proj.repo_id)?;
-                anchor.snapshot_line_text(snapshot_line_text(&git_dir, revision, &anchor));
-                CommentInput {
-                    thread_id: None,
-                    revision: Some(number),
-                    anchor: Some(anchor),
-                    body: req.body.clone(),
-                    resolved: req.resolved,
-                }
+            };
+            let revision = change.revision(number).ok_or_else(|| {
+                Error::bad_request(format!("revision {number} is absent from change {id}"))
+            })?;
+            let git_dir = state.git_dir(change.repo_id)?;
+            anchor.snapshot_line_text(snapshot_line_text(&git_dir, revision, &anchor));
+            CommentInput {
+                thread_id: None,
+                revision: Some(number),
+                anchor: Some(anchor),
+                body: req.body,
+                resolved: req.resolved,
             }
         };
-        let new = LogPayload::Comment(comment);
+        let appended = append(&state, conn, id, |_, _| {
+            Ok(vec![LogPayload::Comment(comment)])
+        })?;
         // A new thread's id is minted during the append, so read it back here.
-        let applied = append_to_change(&state, conn, &entry, id, vec![new]).map_err(map_busy)?;
-        let thread_id = match applied.first().map(|e| &e.payload) {
+        let thread_id = match appended.entries.first().map(|e| &e.payload) {
             Some(LogPayload::Comment(c)) => c.thread_id,
             _ => None,
         }
         .ok_or_else(|| Error::internal("comment append minted no thread"))?;
-        let proj = entry.read();
-        let thread = proj
+        let thread = appended
+            .change
             .thread(thread_id)
             .ok_or_else(|| Error::internal("thread vanished after fold"))?;
         Ok(Json(thread.clone()))
@@ -93,17 +98,19 @@ pub(super) async fn create_comment(
 fn set_lifecycle(
     state: &AppState,
     conn: &mut Connection,
-    entry: &ChangeEntry,
     id: ChangeNumber,
     guard: fn(&Lifecycle) -> bool,
     action: LifecycleAction,
     message: Option<String>,
 ) -> Result<Json<ChangeDetail>, Error> {
-    if guard(&entry.read().lifecycle) {
-        let new = LogPayload::lifecycle(action, None, message);
-        append_to_change(state, conn, entry, id, vec![new]).map_err(map_busy)?;
-    }
-    change_detail_json(conn, entry)
+    let appended = append(state, conn, id, |change, _| {
+        Ok(if guard(&change.lifecycle) {
+            vec![LogPayload::lifecycle(action, None, message)]
+        } else {
+            Vec::new()
+        })
+    })?;
+    Ok(Json(views::build_change_detail(conn, &appended.change)?))
 }
 
 /// `POST /api/changes/{id}/abandon` — marks a live change abandoned.
@@ -117,11 +124,9 @@ pub(super) async fn abandon_change(
     AppJson(req): AppJson<AbandonRequest>,
 ) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
         set_lifecycle(
             &state,
             conn,
-            &entry,
             id,
             |l| matches!(l, Lifecycle::Active),
             LifecycleAction::Abandoned,
@@ -140,11 +145,9 @@ pub(super) async fn reopen_change(
     AppPath(id): AppPath<ChangeNumber>,
 ) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
-        let entry = change_or_404(&state, conn, id)?;
         set_lifecycle(
             &state,
             conn,
-            &entry,
             id,
             |l| matches!(l, Lifecycle::Abandoned),
             LifecycleAction::Reopened,

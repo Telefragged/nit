@@ -1,13 +1,11 @@
 //! Shared server state.
 //!
-//! The in-memory fold of every **change's** log, the repo registry cache,
-//! the per-change append primitive, the server-wide event channel, and the
-//! API error type.
+//! The repo registry cache, the projection cache, the append primitive, the
+//! per-repo appended watch, and the API error type.
 //!
-//! The first read of a change replays its log into a
-//! [`ChangeProjection`]. [`append_to_change`] then keeps that projection
-//! current: it appends to the DB log and folds in lock-step under the
-//! change's projection write lock.
+//! The log is the only record of a change. A read replays it into a
+//! [`ChangeProjection`]. An append replays it inside the write transaction
+//! that extends it.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -19,7 +17,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use deadpool_sqlite::Pool;
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction, TransactionBehavior};
 use tokio::sync::watch;
 
 use nit_types::changes::ChangeQuery;
@@ -43,10 +41,9 @@ const EVENTS_BUFFER: usize = 1024;
 pub struct AppState {
     pool: Pool,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
-    changes: StdMutex<HashMap<ChangeNumber, Arc<ChangeEntry>>>,
     /// Every appended entry, for every change.
     ///
-    /// One channel keeps following orthogonal to a change's residency and
+    /// One channel carries the entries of every change, whatever its
     /// lifecycle. A follower filters on the repo and tags sent with each
     /// entry.
     events: Sender<Published>,
@@ -92,37 +89,14 @@ impl RepoState {
 
 /// One appended entry, as the event channel sends it to followers.
 ///
-/// `change` is the projection right after this entry was folded. It
+/// `change` is the projection after the last entry of its append was
+/// folded. It
 /// travels with the entry so a follower can filter and announce without
-/// reading the change, because reading the change takes a lock that an
-/// appender holds across a database commit.
+/// replaying the change.
 #[derive(Debug, Clone)]
 pub struct Published {
     pub entry: LogEntry,
     pub change: Arc<ChangeProjection>,
-}
-
-/// Per-change coordination.
-///
-/// Write-locking `proj` both serializes appenders and guards the fold; held
-/// only inside `spawn_blocking`, never across `.await`.
-pub struct ChangeEntry {
-    proj: StdRwLock<ChangeProjection>,
-}
-
-impl ChangeEntry {
-    fn new(proj: ChangeProjection) -> ChangeEntry {
-        ChangeEntry {
-            proj: StdRwLock::new(proj),
-        }
-    }
-
-    /// # Panics
-    ///
-    /// When the projection lock is poisoned.
-    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, ChangeProjection> {
-        self.proj.read().expect("projection lock poisoned")
-    }
 }
 
 impl AppState {
@@ -162,7 +136,6 @@ impl AppState {
         Ok(Arc::new(AppState {
             pool,
             repos: StdMutex::new(repos),
-            changes: StdMutex::new(HashMap::new()),
             events,
             events_keepalive: rx.deactivate(),
             next_id: AtomicU64::new(max_id + 1),
@@ -264,60 +237,6 @@ impl AppState {
         state
     }
 
-    /// The change's entry: the resident fold, else replayed from its log.
-    ///
-    /// The single way to reach a change — nothing reads the map directly,
-    /// so a change absent from it is a miss to serve, never a change to
-    /// skip. A brand-new change with no log entries folds to an empty
-    /// projection. Touches the DB only on a miss, so pass the caller's
-    /// pooled connection.
-    ///
-    /// The allocator was seeded past every fold-assigned id at startup and
-    /// mints the ones written since, so a replay here seeds nothing.
-    ///
-    /// # Errors
-    ///
-    /// When the DB read or replay fails.
-    ///
-    /// # Panics
-    ///
-    /// When the change map mutex is poisoned.
-    pub fn change(
-        &self,
-        conn: &Connection,
-        change_number: ChangeNumber,
-    ) -> anyhow::Result<Option<Arc<ChangeEntry>>> {
-        if let Some(existing) = self.cached(change_number) {
-            return Ok(Some(existing));
-        }
-        let Some(row) = db::get_change(conn, change_number)? else {
-            return Ok(None);
-        };
-        Ok(Some(self.resolve(conn, &row)?))
-    }
-
-    fn cached(&self, change_number: ChangeNumber) -> Option<Arc<ChangeEntry>> {
-        self.changes
-            .lock()
-            .expect("change map poisoned")
-            .get(&change_number)
-            .cloned()
-    }
-
-    /// Replays `row`'s log into the map, or returns what a concurrent
-    /// resolve of the same change already put there.
-    fn resolve(&self, conn: &Connection, row: &db::ChangeRow) -> anyhow::Result<Arc<ChangeEntry>> {
-        let entries = db::log_entries(conn, row.id)?;
-        let entry = Arc::new(ChangeEntry::new(review::replay_rows(row, &entries)?));
-        Ok(self
-            .changes
-            .lock()
-            .expect("change map poisoned")
-            .entry(row.id)
-            .or_insert(entry)
-            .clone())
-    }
-
     /// Returns the folds of the changes a query picks, as owned
     /// projections, ascending by change number within each repo.
     ///
@@ -333,34 +252,7 @@ impl AppState {
         let filter = db::ChangeFilter::from(query);
         let mut changes = Vec::new();
         for repo_id in repo_ids {
-            changes.extend(self.repo_changes(conn, repo_id, &filter)?);
-        }
-        Ok(changes)
-    }
-
-    /// Returns one repo's change folds as owned projections.
-    ///
-    /// The gather behind the bulk `GET /api/changes` read. `filter`
-    /// narrows in the database (the
-    /// denormalized `changes.status` column and `change_tags`), so nothing
-    /// resolves, replays or clones a change outside it.
-    ///
-    /// # Errors
-    ///
-    /// When enumerating or replaying a change fails.
-    pub fn repo_changes(
-        &self,
-        conn: &Connection,
-        repo_id: u64,
-        filter: &db::ChangeFilter,
-    ) -> anyhow::Result<Vec<ChangeProjection>> {
-        let mut changes: Vec<ChangeProjection> = Vec::new();
-        for row in db::repo_changes(conn, repo_id, filter)? {
-            let entry = match self.cached(row.id) {
-                Some(entry) => entry,
-                None => self.resolve(conn, &row)?,
-            };
-            changes.push(entry.read().clone());
+            changes.extend(review::repo_changes(conn, repo_id, &filter)?);
         }
         Ok(changes)
     }
@@ -384,137 +276,134 @@ impl AppState {
     }
 }
 
-/// Appends a batch of entries to one change, in one transaction.
-///
-/// Folds them in lock-step and returns the applied entries (with their
-/// minted `sequence`). See [`append_to_change_with`]; this is the no-extra-work
-/// case.
-///
-/// # Errors
-///
-/// See [`append_to_change_with`].
-pub fn append_to_change(
-    state: &AppState,
-    conn: &mut Connection,
-    entry: &ChangeEntry,
-    change_number: ChangeNumber,
-    news: Vec<LogPayload>,
-) -> anyhow::Result<Vec<LogEntry>> {
-    append_to_change_with(state, conn, entry, change_number, news, |_| Ok(()))
+/// The projection of a change after an append, and the entries that the
+/// append added.
+pub struct Appended {
+    pub change: ChangeProjection,
+    pub entries: Vec<LogEntry>,
 }
 
-/// Appends entries to one change, with `pre_commit` in-transaction.
+/// A write transaction that appends to the logs of one or more changes.
 ///
-/// `pre_commit` runs inside the **same** transaction first (e.g. draining
-/// drafts atomically with a `review` append). The change's projection write
-/// lock serializes appenders, so the committed-state `position` is consistent and
-/// applies happen in order — no reorder buffer needed. The lock spans the
-/// commit, so a reader can briefly stall behind an in-flight append;
-/// cross-change appends never contend.
-///
-/// The new entries are folded into a **clone** of the projection **before** the
-/// commit; a payload that won't fold errors out with nothing written, so the
-/// log can never get ahead of the projection. The clone that validated is then
-/// installed verbatim after the commit (no second fold). `pre_commit` and the
-/// appends share one transaction, so either both land or neither does.
-///
-/// # Errors
-///
-/// On a database failure (the projection is left untouched), a fold failure
-/// (nothing is written), or a `pre_commit` failure (the transaction rolls
-/// back).
-///
-/// # Panics
-///
-/// When the projection lock is poisoned.
-pub fn append_to_change_with(
-    state: &AppState,
-    conn: &mut Connection,
-    entry: &ChangeEntry,
-    change_number: ChangeNumber,
-    news: Vec<LogPayload>,
-    pre_commit: impl FnOnce(&rusqlite::Transaction) -> anyhow::Result<()>,
-) -> anyhow::Result<Vec<LogEntry>> {
-    if news.is_empty() {
-        return Ok(Vec::new());
-    }
-    // The write lock both serializes appenders and guards the fold; held
-    // across the commit so the log can never get ahead of the projection.
-    let mut proj = entry.proj.write().expect("projection lock poisoned");
-    let now = db::now_rfc3339();
+/// It opens with `BEGIN IMMEDIATE`, so it holds the database write lock
+/// before its first read. Each append replays the change and appends at
+/// its head. No other writer can move that head before the commit. The
+/// entries reach followers only after [`Appends::commit`].
+pub struct Appends<'c> {
+    tx: Transaction<'c>,
+    published: Vec<Published>,
+}
 
-    // Build the next projection on a clone and fold the new entries into it: a
-    // bad payload aborts here, before any write. The validated clone is then
-    // installed verbatim after the commit — one fold, not two, and the
-    // installed object is provably the one that validated (the fold ignores the
-    // global `sequence`, so the clone equals what re-folding the committed rows
-    // gives).
-    let mut next = proj.clone();
-    // The fold mints new-thread ids; the write lock makes that allocation
-    // race-free against a concurrent shared-change push.
-    let applied = db::write(conn, |tx| {
-        pre_commit(tx)?;
-        // Read the head inside the transaction that appends at it: split
-        // across two, a second appender can take the position between them.
-        let start = db::log_head(tx, change_number)?;
-        let prepared: Vec<LogEntry> = news
-            .into_iter()
-            .enumerate()
-            .map(|(k, payload)| {
-                review::fold(
-                    &mut next,
-                    LogEntry {
-                        change_number,
-                        sequence: 0,
-                        position: start + u64::try_from(k).expect("batch fits u64"),
-                        created_at: now.clone(),
-                        payload,
-                    },
-                )
-            })
-            .collect();
-        let mut applied = Vec::with_capacity(prepared.len());
-        for e in prepared {
-            let payload = review::payload_to_json(&e.payload)?;
+impl<'c> Appends<'c> {
+    /// Opens the write transaction.
+    ///
+    /// # Errors
+    ///
+    /// When another writer holds the database past the busy timeout.
+    pub fn begin(conn: &'c mut Connection) -> Result<Appends<'c>, Error> {
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        Ok(Appends {
+            tx,
+            published: Vec::new(),
+        })
+    }
+
+    /// Appends to a change the payloads that `new_payloads` returns for the
+    /// current projection of the change.
+    ///
+    /// `new_payloads` reads the change inside this transaction, so its
+    /// result stays valid until the commit. The fold allocates the ids of
+    /// new threads. The write lock makes that allocation race-free.
+    ///
+    /// # Errors
+    ///
+    /// 404 for a change number that is absent from the `changes` table, the
+    /// error that `new_payloads` returns, or a database failure. The caller
+    /// then drops the transaction. The drop rolls back every write in it.
+    pub fn append(
+        &mut self,
+        change_number: ChangeNumber,
+        new_payloads: impl FnOnce(&ChangeProjection, &Transaction) -> Result<Vec<LogPayload>, Error>,
+    ) -> Result<Appended, Error> {
+        let mut change = super::change_or_404(&self.tx, change_number)?;
+        let news = new_payloads(&change, &self.tx)?;
+        if news.is_empty() {
+            return Ok(Appended {
+                change,
+                entries: Vec::new(),
+            });
+        }
+        let retags = news.iter().any(|p| matches!(p, LogPayload::Tags(_)));
+        let now = db::now_rfc3339();
+        let start = change.entries_folded;
+        let mut entries = Vec::with_capacity(news.len());
+        for (position, payload) in (start..).zip(news) {
+            let entry = review::fold(
+                &mut change,
+                LogEntry {
+                    change_number,
+                    sequence: 0,
+                    position,
+                    created_at: now.clone(),
+                    payload,
+                },
+            );
+            let payload = review::payload_to_json(&entry.payload)?;
             let sequence = db::append_log(
-                tx,
+                &self.tx,
                 change_number,
-                e.position,
-                e.payload.kind().as_str(),
+                entry.position,
+                entry.payload.kind().as_str(),
                 &payload,
                 &now,
             )?;
-            applied.push(LogEntry { sequence, ..e });
+            entries.push(LogEntry { sequence, ..entry });
         }
-        // Re-stamp the denormalized status from the validated projection, in
-        // the same transaction as the appends.
-        db::update_change_status(tx, change_number, next.current_status())?;
-        // Only a `tags` entry moves the set, so every other append leaves the
-        // rows alone. A rewrite costs a delete plus an insert per tag, not the
-        // single UPDATE the status re-stamp costs.
-        if next.tags != proj.tags {
-            db::set_change_tags(tx, change_number, &next.tags)?;
+        // These writes update the denormalized columns that the change filter
+        // reads.
+        db::update_change_status(&self.tx, change_number, change.current_status())?;
+        if retags {
+            db::set_change_tags(&self.tx, change_number, &change.tags)?;
         }
-        Ok(applied)
-    })?;
-
-    // Install the validated projection after the durable commit, and publish to
-    // live followers while the write lock is still held. Only that lock orders
-    // two appenders on one change: publishing outside it, a follower could be
-    // handed an entry behind one that was folded after it, and a follower's own
-    // fold drops what arrives late. Publishing cannot block — an overflowing
-    // channel drops its oldest slot — so this stalls a reader of this change on
-    // memory, never on I/O.
-    *proj = next;
-    let change = Arc::new(proj.clone());
-    for e in &applied {
-        state.publish(Published {
-            entry: e.clone(),
-            change: Arc::clone(&change),
-        });
+        let snapshot = Arc::new(change.clone());
+        self.published.extend(entries.iter().map(|entry| Published {
+            entry: entry.clone(),
+            change: Arc::clone(&snapshot),
+        }));
+        Ok(Appended { change, entries })
     }
-    drop(proj);
-    Ok(applied)
+
+    /// Commits the transaction, then publishes its entries to followers.
+    ///
+    /// # Errors
+    ///
+    /// When the commit fails. Nothing is published then.
+    pub fn commit(self, state: &AppState) -> Result<(), Error> {
+        self.tx.commit()?;
+        for msg in self.published {
+            state.publish(msg);
+        }
+        Ok(())
+    }
+}
+
+/// Appends to a change in a separate transaction.
+///
+/// See [`Appends::append`].
+///
+/// # Errors
+///
+/// See [`Appends::append`] and [`Appends::commit`].
+pub fn append(
+    state: &AppState,
+    conn: &mut Connection,
+    change_number: ChangeNumber,
+    new_payloads: impl FnOnce(&ChangeProjection, &Transaction) -> Result<Vec<LogPayload>, Error>,
+) -> Result<Appended, Error> {
+    let mut appends = Appends::begin(conn)?;
+    let appended = appends.append(change_number, new_payloads)?;
+    appends.commit(state)?;
+    Ok(appended)
 }
 
 /// Runs blocking rusqlite/git2 work on a pooled connection.
@@ -657,9 +546,9 @@ where
 
 /// `SQLITE_BUSY/LOCKED` anywhere in an error chain.
 ///
-/// Cross-change write contention, not a broken database.
+/// The error means write contention, and the database itself is healthy.
 #[must_use]
-pub fn is_sqlite_busy(err: &anyhow::Error) -> bool {
+fn is_sqlite_busy(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| {
         cause.downcast_ref::<rusqlite::Error>().is_some_and(|e| {
             matches!(
@@ -672,13 +561,19 @@ pub fn is_sqlite_busy(err: &anyhow::Error) -> bool {
 
 impl From<anyhow::Error> for Error {
     fn from(err: anyhow::Error) -> Self {
-        Error::internal(format!("{err:#}"))
+        if is_sqlite_busy(&err) {
+            Error::unavailable(
+                "database is busy because another write is in progress. Retry the request",
+            )
+        } else {
+            Error::internal(format!("{err:#}"))
+        }
     }
 }
 
 impl From<rusqlite::Error> for Error {
     fn from(err: rusqlite::Error) -> Self {
-        Error::internal(format!("database error: {err}"))
+        anyhow::Error::from(err).context("database error").into()
     }
 }
 

@@ -809,13 +809,14 @@ pub fn log_head(conn: &Connection, change_number: ChangeNumber) -> Result<u64> {
 
 /// Appends one entry at `position`.
 ///
-/// `position` must equal the change's current head; the caller computes it
-/// under the change's projection write lock. Returns the global `sequence`
-/// `SQLite` minted for the entry.
+/// `position` must equal the change's current head. The caller reads that
+/// head in the same transaction. Returns the global `sequence` that
+/// `SQLite` assigned to the entry.
 ///
 /// # Errors
 ///
-/// On a database failure (including a `UNIQUE(change_number, position)` clash).
+/// On a database failure. A `UNIQUE(change_number, position)` violation is
+/// one such failure.
 pub fn append_log(
     tx: &Transaction,
     change_number: ChangeNumber,
