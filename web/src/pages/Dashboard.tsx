@@ -122,7 +122,7 @@ export default function Dashboard() {
     [changesQuery, historyQuery, tagsQuery].some((q) => q.isLoading);
 
   return (
-    <main className="page" aria-busy={busy}>
+    <main aria-busy={busy}>
       <div className="graph-toolbar">
         <label>
           Group by
