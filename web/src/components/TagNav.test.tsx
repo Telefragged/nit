@@ -181,7 +181,11 @@ describe("TagNav", () => {
     expect(current.querySelector(".unresolved-count")?.textContent).toBe(
       "2 open",
     );
-    expect(document.querySelectorAll(".unresolved-count")).toHaveLength(1);
+    expect(
+      [...document.querySelectorAll(".unresolved-count")].map(
+        (e) => e.textContent,
+      ),
+    ).toEqual(["", "2 open", ""]);
     // Nothing to expand: the whole graph fits the window.
     expect(document.querySelector(".tag-nav-all")).toBeNull();
   });
