@@ -52,7 +52,7 @@ export default function Repos() {
 /** The page beside the sidebar before the reviewer picks a repository. */
 export function NoRepo() {
   return (
-    <main className="page">
+    <main>
       <div className="empty-state">
         Pick a repository to see its change graph.
       </div>
