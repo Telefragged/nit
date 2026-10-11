@@ -310,11 +310,20 @@
   font-size: 10.5px;
 }
 
+/* The rows share the body's columns through subgrid, so each column lines
+   up across rows whatever its widest value. The absolute rail SVG takes no
+   cell. */
+.tag-nav .graph-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  column-gap: 6px;
+}
+
 /* The rail column is padding: the rail SVG paints over it. */
 .tag-nav-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 6px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   height: var(--row-h);
   padding: 0 8px 0 var(--rail-w);
@@ -331,6 +340,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tag-nav-row .rev,
+.tag-nav-row .num {
+  text-align: right;
 }
 
 .tag-nav-row .unresolved-count {

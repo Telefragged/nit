@@ -21,11 +21,11 @@ const WINDOW = 7;
  * The review header's graph of the changes that share a tag with the
  * current one: the tag graph (api/fold tagGraph) drawn as the dashboard's
  * rail beside one-line rows (status dot, subject, unresolved count,
- * revision), the current change highlighted and the others linking
- * through. The selector picks which of the current change's tag keys the
- * graph follows. At first the graph scrolls inside a seven-row window
- * centered on the current change, and "show all" grows the window to the
- * whole graph.
+ * revision, change number), the current change highlighted and the
+ * others linking through. The selector picks which of the current
+ * change's tag keys the graph follows. At first the graph scrolls inside
+ * a seven-row window centered on the current change, and "show all"
+ * grows the window to the whole graph.
  */
 export default function TagNav({
   tags,
@@ -145,8 +145,11 @@ function Row({
       <span className="unresolved-count" title="unresolved threads">
         {unresolved > 0 ? `${unresolved} open` : ""}
       </span>
-      <span className="mono dim">
+      <span className="rev mono dim">
         {node.revision === null ? "" : `r${node.revision}`}
+      </span>
+      <span className="num mono dim">
+        {node.change_number === null ? "" : `#${node.change_number}`}
       </span>
     </>
   );
