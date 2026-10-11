@@ -206,14 +206,10 @@ const applySetting = async (page, name) => {
   await clickNow(modal.getByRole("button", { name: "Apply" }));
   // Apply closes the modal in the commit that applies the setting. A
   // setting that is part of a read's key marks the page busy in that same
-  // commit, so an idle page without the modal shows the new setting.
-  await untilDom(
-    page,
-    () =>
-      !document.querySelector(".settings-modal") &&
-      document.querySelector("#root main")?.getAttribute("aria-busy") ===
-        "false",
-  );
+  // commit, so the page is ready with the new setting once it is idle
+  // after the modal closes.
+  await untilDom(page, () => !document.querySelector(".settings-modal"));
+  await untilReady(page);
 };
 
 /**
@@ -580,15 +576,13 @@ const captures = [
     actions: async (page) => {
       await openPicker(page, "Diff base");
       await clickNow(page.getByRole("option", { name: "r0 6 comments" }));
-      // data-diff-ready="0" shows that the r0 diff read succeeded, and an
-      // idle page shows that the other reads have answered too.
+      // data-diff-ready="0" shows that the r0 diff read succeeded. A ready
+      // page after it shows that the other reads have answered too.
       await untilDom(
         page,
-        () =>
-          !!document.querySelector('[data-diff-ready="0"]') &&
-          document.querySelector("#root main")?.getAttribute("aria-busy") ===
-            "false",
+        () => !!document.querySelector('[data-diff-ready="0"]'),
       );
+      await untilReady(page);
     },
   },
   {
