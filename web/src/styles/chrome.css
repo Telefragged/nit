@@ -230,24 +230,27 @@
   overflow-y: auto;
 }
 
+/* A row in a list of links: the repo sidebar, and the tag graph of the
+   review page. The row of the page on screen carries `aria-current`. */
+.nav-row {
+  border-radius: 4px;
+}
+
+.nav-row:hover {
+  background: var(--bg-hover);
+  text-decoration: none;
+}
+
+.nav-row[aria-current="page"] {
+  background: var(--blue-dim);
+}
+
 .repo-link {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: 8px;
   padding: 5px 8px;
-  border: 1px solid transparent;
-  border-radius: 4px;
   color: var(--text);
-}
-
-.repo-link:hover {
-  background: var(--bg-hover);
-  text-decoration: none;
-}
-
-.repo-link.active {
-  background: var(--blue-dim);
-  border-color: var(--blue);
 }
 
 .repo-name {
