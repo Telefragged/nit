@@ -54,7 +54,6 @@ jobs:
           name: nit-ci-cache
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           skipPush: ${{ github.event_name != 'push' }}
-      - run: nix build
       - run: nix flake check
 
   # Checks the version against the contract changes since the last release,
