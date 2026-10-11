@@ -427,7 +427,9 @@
           playwrightBrowsers = playwrightBrowsersFor pkgs;
         in
         {
-          build = self.packages.${pkgs.system}.nit;
+          # The release build carries no `+<sha>` suffix, so a commit that
+          # leaves the source unchanged reuses the cached build.
+          build = self.packages.${pkgs.system}.nit-release;
           # Compile the WebAssembly fold — surfaces a wasm32 build break or a
           # wasm-bindgen version skew independently of the web build.
           wasm-build = wasmPkg pkgs;
