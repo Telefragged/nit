@@ -790,24 +790,7 @@ pub struct LogRow {
     pub created_at: String,
 }
 
-/// `head` = number of entries for a change = position of its next entry.
-///
-/// # Errors
-///
-/// On a database failure.
-pub fn log_head(conn: &Connection, change_number: ChangeNumber) -> Result<u64> {
-    let max: Option<i64> = conn.query_row(
-        "SELECT MAX(position) FROM log WHERE change_number = ?1",
-        params![i64::try_from(change_number.get())?],
-        |r| r.get(0),
-    )?;
-    Ok(match max {
-        Some(m) => col_u64(m)? + 1,
-        None => 0,
-    })
-}
-
-/// Appends one entry at `position`.
+/// Appends an entry at `position`.
 ///
 /// `position` must equal the change's current head. The caller reads that
 /// head in the same transaction. Returns the global `sequence` that
@@ -1519,7 +1502,6 @@ mod tests {
     fn log_append_mints_sequence_and_position() {
         let mut conn = mem();
         let c = change(&mut conn);
-        assert_eq!(log_head(&conn, c).expect("head"), 0);
         let s0 = write(&mut conn, |tx| {
             append_log(tx, c, 0, "revision", r#"{"commit_sha":"a"}"#, "t0")
         })
@@ -1529,7 +1511,6 @@ mod tests {
         })
         .expect("append");
         assert!(s1 > s0, "sequence is monotone");
-        assert_eq!(log_head(&conn, c).expect("head"), 2);
         let entries = log_entries(&conn, c).expect("entries");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].kind, "revision");
