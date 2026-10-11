@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { Link, Outlet } from "react-router-dom";
 import About from "./components/About";
 
@@ -20,9 +19,7 @@ export default function App() {
         ) : null}
         <About />
       </header>
-      <Suspense fallback={null}>
-        <Outlet />
-      </Suspense>
+      <Outlet />
     </>
   );
 }

@@ -7,7 +7,7 @@ import { Route } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import { renderPage } from "../test/page";
 import Dashboard from "./Dashboard";
-import RepoList from "./RepoList";
+import Repos, { NoRepo } from "./Repos";
 import ReviewPage from "./ReviewPage";
 
 afterEach(() => {
@@ -19,8 +19,10 @@ const renderAt = (url: string) =>
   renderPage(
     url,
     <>
-      <Route path="/" element={<RepoList />} />
-      <Route path="/repos/:repoId" element={<Dashboard />} />
+      <Route path="/" element={<Repos />}>
+        <Route index element={<NoRepo />} />
+        <Route path="repos/:repoId" element={<Dashboard />} />
+      </Route>
       <Route path="/changes/:id" element={<ReviewPage />} />
     </>,
   );
@@ -36,7 +38,7 @@ describe("the document title", () => {
     expect(document.title).toBe("auth: rotate refresh tokens on use - nit");
   });
 
-  it("leaves the plain product name on the repo list", async () => {
+  it("leaves the plain product name before a repository is picked", async () => {
     await renderAt("/");
     expect(screen.getByText("/home/vetle/src/acme-runtime")).toBeTruthy();
     expect(document.title).toBe("nit");

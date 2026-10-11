@@ -96,13 +96,14 @@ const untilDom = (page, test, arg) =>
   );
 
 /** Every page marks its `<main>` busy until all the data it draws has
- * arrived. No `<main>` exists before the page's route has loaded. */
+ * arrived. The repo sidebar marks itself busy the same way. No `<main>`
+ * exists before the page's route has loaded. */
 const untilReady = (page) =>
   untilDom(
     page,
     () =>
-      document.querySelector("#root main")?.getAttribute("aria-busy") ===
-      "false",
+      !!document.querySelector("#root main") &&
+      !document.querySelector('#root [aria-busy="true"]'),
   );
 
 /** The scroll spy highlights, in the rail, the last file section whose top
@@ -221,7 +222,7 @@ const applySetting = async (page, name) => {
  * page or significant state is added.
  */
 const captures = [
-  // Main page: the repo registry, one row per repository.
+  // Main page: the repo sidebar beside a prompt to pick a repository.
   { name: "repos", path: "/" },
   // The about dialog with the release check on: the mock's latest release
   // is newer than its version, so the topbar button shows the red dot.
