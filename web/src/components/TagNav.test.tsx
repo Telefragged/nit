@@ -186,6 +186,7 @@ describe("TagNav", () => {
         (e) => e.textContent,
       ),
     ).toEqual(["", "2 open", ""]);
+    expect(current.querySelector(".num")?.textContent).toBe("#11");
     // Nothing to expand: the whole graph fits the window.
     expect(document.querySelector(".tag-nav-all")).toBeNull();
   });
