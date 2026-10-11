@@ -3,15 +3,16 @@
 //! The wire shapes are the shared [`nit_types`] crate (the contract,
 //! golden rule 4).
 //!
-//! - [`diff`] — diff JSON rendering and line-text snapshots.
-//! - [`views`] — the per-change folds + drafts → wire shapes.
-//! - [`state`] — the in-memory fold, the append primitive, errors.
+//! - [`diff`]: diff JSON rendering and line-text snapshots.
+//! - [`views`]: the per-change folds + drafts → wire shapes.
+//! - [`state`]: the append primitive, the per-repo appended watch, and the
+//!   errors.
 //!
 //! All rusqlite/git2 work runs off the async runtime; database work goes
-//! through a pooled connection ([`state::with_conn`]). Every appender to one
-//! change serializes through its projection write lock and folds in lock-step.
+//! through a pooled connection ([`state::with_conn`]). A read replays the
+//! change from its log. An append replays it inside its own write
+//! transaction ([`state::Appends`]).
 //! Merged detection runs in a background timer (`timer::run_lifecycle_timer`).
-//! There are no read-time scans.
 
 pub mod diff;
 mod port;
@@ -39,17 +40,15 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use git2::Repository;
 
-use nit_types::changes::ChangeDetail;
 use nit_types::domain::ChangeNumber;
+use nit_types::domain::ChangeProjection;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Side;
 use nit_types::domain::{Anchor, LineAnchor};
 use nit_types::health::Health;
 
-pub use state::{
-    AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change,
-    append_to_change_with, with_conn,
-};
+pub use state::{AppJson, AppPath, AppQuery, AppState, Error, with_conn};
+use state::{Appends, append};
 pub use timer::sweep_once;
 
 /// Static UI serving is layered on top in [`app`].
@@ -229,17 +228,12 @@ pub async fn serve_on_state(
     Ok(())
 }
 
-/// Loads from the DB log on a miss.
-///
-/// May replay one change off disk, so every caller must resolve inside
-/// [`with_conn`].
+/// Replays the change from its log, or 404s.
 fn change_or_404(
-    state: &Arc<AppState>,
     conn: &rusqlite::Connection,
     change_number: ChangeNumber,
-) -> Result<Arc<ChangeEntry>, Error> {
-    state
-        .change(conn, change_number)?
+) -> Result<ChangeProjection, Error> {
+    crate::review::load(conn, change_number)?
         .ok_or_else(|| Error::not_found(format!("change {change_number} not found")))
 }
 
@@ -249,14 +243,6 @@ fn canonical_git_dir(raw: &str) -> Result<String, Error> {
         .to_str()
         .ok_or_else(|| Error::bad_request("git dir is not valid UTF-8"))?
         .to_string())
-}
-
-fn map_busy(err: anyhow::Error) -> Error {
-    if state::is_sqlite_busy(&err) {
-        Error::unavailable("database is busy (another change is being written) — retry shortly")
-    } else {
-        err.into()
-    }
 }
 
 #[utoipa::path(get, path = "/api/health", responses((status = 200, body = Health)))]
@@ -272,18 +258,6 @@ async fn health() -> Json<Health> {
 /// A fixed depth, not a client knob. `pub` so the HTTP truncation test can
 /// build exactly this many commits.
 pub const MERGED_WINDOW: u64 = 5;
-
-/// Builds the `ChangeDetail` from one change's fold.
-///
-/// A pure single-change read. The shared tail of the three
-/// change-detail handlers.
-fn change_detail_json(
-    conn: &rusqlite::Connection,
-    entry: &ChangeEntry,
-) -> Result<Json<ChangeDetail>, Error> {
-    let change = entry.read();
-    Ok(Json(views::build_change_detail(conn, &change)?))
-}
 
 /// The anchor a request names, checked against the route's own rule.
 ///

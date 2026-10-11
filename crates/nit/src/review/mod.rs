@@ -102,6 +102,42 @@ fn entry_from_row(change_number: ChangeNumber, row: &db::LogRow) -> Result<LogEn
     })
 }
 
+/// Replays one change from its log.
+///
+/// `None` when no change has the number.
+///
+/// # Errors
+///
+/// On a database failure, or a log payload that fails to parse.
+pub fn load(conn: &rusqlite::Connection, change: ChangeNumber) -> Result<Option<ChangeProjection>> {
+    db::get_change(conn, change)?
+        .map(|row| load_row(conn, &row))
+        .transpose()
+}
+
+/// Replays the projections of one repo's changes that `filter` picks.
+///
+/// `filter` narrows in the database (the denormalized `changes.status`
+/// column and `change_tags`), so nothing replays a change outside it.
+///
+/// # Errors
+///
+/// On a database failure, or a log payload that fails to parse.
+pub fn repo_changes(
+    conn: &rusqlite::Connection,
+    repo_id: u64,
+    filter: &db::ChangeFilter,
+) -> Result<Vec<ChangeProjection>> {
+    db::repo_changes(conn, repo_id, filter)?
+        .iter()
+        .map(|row| load_row(conn, row))
+        .collect()
+}
+
+fn load_row(conn: &rusqlite::Connection, row: &db::ChangeRow) -> Result<ChangeProjection> {
+    replay_rows(row, &db::log_entries(conn, row.id)?)
+}
+
 /// Rebuilds a change's projection from its row and its log rows.
 ///
 /// The log rows are in ascending position order.

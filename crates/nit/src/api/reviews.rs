@@ -13,17 +13,14 @@ use nit_types::changes::ChangeQuery;
 use nit_types::decisions::{BatchSubmitResult, SubmitError};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::DraftDecision;
-use nit_types::domain::RevisionNumber;
 use nit_types::domain::{CommentInput, LogPayload, ReviewPayload};
 use nit_types::domain::{Decision, LifecycleAction, Verdict};
 
 use crate::db;
 use nit_types::domain::Lifecycle;
 
-use super::{
-    AppJson, AppPath, AppQuery, AppState, ChangeEntry, Error, append_to_change_with, with_conn,
-};
-use super::{change_or_404, map_busy};
+use super::change_or_404;
+use super::{AppJson, AppPath, AppQuery, AppState, Error, append, with_conn};
 
 /// One change's reviewer comment drafts as `CommentInput`s.
 ///
@@ -46,68 +43,84 @@ fn drafts_to_comments(
         .collect())
 }
 
-/// Publishes one reviewer `decision` for a change.
+/// Publishes the draft decision of a change.
 ///
-/// All in **one** per-change transaction: a `reopen` lifecycle (so a
-/// following review lands on a now-active change), then a `review` entry
-/// draining the change's comment drafts (the decision's verdict, or
-/// `comment` to carry draft comments when the decision is purely
-/// lifecycle), then an `abandon` lifecycle — whichever the decision calls
-/// for. The drained comment drafts and the change's `draft_reviews` row are
-/// deleted in the same transaction, so a half-published batch never strands
-/// work and a re-submit is idempotent. Called per change by the batch
-/// submit — the only publish path; the caller validates the target
-/// revision/lifecycle first.
+/// Returns `true` when the change had a draft decision.
+///
+/// The function appends these entries in **one** transaction for the
+/// change, in this order:
+///
+/// - A `reopen` lifecycle entry for a reopen decision. The review that
+///   follows then applies to an active change.
+/// - A `review` entry that contains the comment drafts of the change. Its
+///   verdict is the verdict of the decision. For a lifecycle decision with
+///   comment drafts, the verdict is `comment`.
+/// - An `abandon` lifecycle entry for an abandon decision.
+///
+/// The review targets the latest revision. The same transaction deletes
+/// the published comment drafts and the `draft_reviews` row of the change.
+/// Thus a failed batch keeps every draft of the failed change, and a second
+/// submit is idempotent.
+///
+/// # Errors
+///
+/// 409 when `decision_block` rejects the decision for the lifecycle of the
+/// change. Also a database failure.
 fn publish_change(
     conn: &mut rusqlite::Connection,
-    state: &Arc<AppState>,
-    entry: &ChangeEntry,
+    state: &AppState,
     change_number: ChangeNumber,
-    decision: Decision,
-    message: &str,
-    revision: RevisionNumber,
-) -> Result<(), Error> {
-    let comments = drafts_to_comments(conn, change_number)?;
-    let drained = !comments.is_empty();
-    let verdict = decision
-        .as_verdict()
-        .or_else(|| drained.then_some(Verdict::Comment));
+) -> Result<bool, Error> {
+    let appended = append(state, conn, change_number, |change, tx| {
+        let Some(draft) = db::get_draft_review(tx, change_number)? else {
+            return Ok(Vec::new());
+        };
+        let decision = draft.decision;
+        if let Some(reason) = decision_block(change.lifecycle, decision) {
+            return Err(Error::conflict(reason));
+        }
+        let comments = drafts_to_comments(tx, change_number)?;
+        let drained = !comments.is_empty();
+        let verdict = decision
+            .as_verdict()
+            .or_else(|| drained.then_some(Verdict::Comment));
 
-    let mut news: Vec<LogPayload> = Vec::new();
-    if decision.as_lifecycle() == Some(LifecycleAction::Reopened) {
-        news.push(LogPayload::lifecycle(LifecycleAction::Reopened, None, None));
-    }
-    if let Some(verdict) = verdict {
-        news.push(LogPayload::Review(ReviewPayload {
-            revision,
-            verdict,
-            // The cover message rides a real verdict; for a lifecycle decision
-            // it is the abandon reason, so the carrier `comment` review has none.
-            message: if decision.as_verdict().is_some() {
-                message.to_string()
-            } else {
-                String::new()
-            },
-            comments,
-        }));
-    }
-    if decision.as_lifecycle() == Some(LifecycleAction::Abandoned) {
-        let reason = (!message.trim().is_empty()).then(|| message.to_string());
-        news.push(LogPayload::lifecycle(
-            LifecycleAction::Abandoned,
-            None,
-            reason,
-        ));
-    }
-
-    append_to_change_with(state, conn, entry, change_number, news, |tx| {
+        let mut news: Vec<LogPayload> = Vec::new();
+        if decision.as_lifecycle() == Some(LifecycleAction::Reopened) {
+            news.push(LogPayload::lifecycle(LifecycleAction::Reopened, None, None));
+        }
+        if let Some(verdict) = verdict {
+            news.push(LogPayload::Review(ReviewPayload {
+                revision: change.latest_revision_number(),
+                verdict,
+                // A verdict decision stores the cover message on the review.
+                // For a lifecycle decision, the message is the abandon reason.
+                // Thus the `comment` review that contains the drafts gets an
+                // empty message.
+                message: if decision.as_verdict().is_some() {
+                    draft.message.clone()
+                } else {
+                    String::new()
+                },
+                comments,
+            }));
+        }
+        if decision.as_lifecycle() == Some(LifecycleAction::Abandoned) {
+            let reason = (!draft.message.trim().is_empty()).then_some(draft.message);
+            news.push(LogPayload::lifecycle(
+                LifecycleAction::Abandoned,
+                None,
+                reason,
+            ));
+        }
         if drained {
             db::delete_drafts_for_change(tx, change_number)?;
         }
-        db::delete_draft_review(tx, change_number)
-    })
-    .map_err(map_busy)?;
-    Ok(())
+        db::delete_draft_review(tx, change_number)?;
+        Ok(news)
+    })?;
+    // The closure appends at least one entry for every draft decision.
+    Ok(!appended.entries.is_empty())
 }
 
 /// `PUT /api/changes/{id}/decision` — sets the draft decision.
@@ -122,7 +135,7 @@ pub(super) async fn set_draft_decision(
     AppJson(req): AppJson<DraftDecision>,
 ) -> Result<Json<DraftDecision>, Error> {
     with_conn(state.pool(), move |conn| {
-        change_or_404(&state, conn, id)?;
+        change_or_404(conn, id)?;
         db::write(conn, |tx| {
             db::upsert_draft_review(tx, id, req.decision, &req.message)
         })?;
@@ -140,7 +153,7 @@ pub(super) async fn clear_decision(
     AppPath(id): AppPath<ChangeNumber>,
 ) -> Result<StatusCode, Error> {
     with_conn(state.pool(), move |conn| {
-        change_or_404(&state, conn, id)?;
+        change_or_404(conn, id)?;
         db::write(conn, |tx| db::delete_draft_review(tx, id))?;
         Ok(StatusCode::NO_CONTENT)
     })
@@ -167,33 +180,14 @@ pub(super) async fn submit(
         let mut errors = Vec::new();
         for repo_id in repo_ids {
             for row in db::repo_changes(conn, repo_id, &filter)? {
-                let Some(draft) = db::get_draft_review(conn, row.id)? else {
+                // `publish_change` opens a write transaction, so the loop calls it
+                // for a change that has a draft decision.
+                if db::get_draft_review(conn, row.id)?.is_none() {
                     continue; // leave its comment drafts
-                };
-                let Some(entry) = state.change(conn, row.id)? else {
-                    continue;
-                };
-                let (lifecycle, revision) = {
-                    let change = entry.read();
-                    (change.lifecycle, change.latest_revision_number())
-                };
-                if let Some(reason) = decision_block(lifecycle, draft.decision) {
-                    errors.push(SubmitError {
-                        change_number: row.id,
-                        message: reason.to_string(),
-                    });
-                    continue;
                 }
-                match publish_change(
-                    conn,
-                    &state,
-                    &entry,
-                    row.id,
-                    draft.decision,
-                    &draft.message,
-                    revision,
-                ) {
-                    Ok(()) => submitted += 1,
+                match publish_change(conn, &state, row.id) {
+                    Ok(true) => submitted += 1,
+                    Ok(false) => {}
                     Err(e) => errors.push(SubmitError {
                         change_number: row.id,
                         message: e.message,

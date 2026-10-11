@@ -42,16 +42,16 @@ storage concern onto every caller.
 ```rust
 // BAD — the append API speaks serialized JSON; each caller hand-builds it,
 // and a (kind, payload) that disagree still compiles.
-fn append_to_change(news: Vec<(LogKind, serde_json::Value)>) -> ...
+fn append(news: Vec<(LogKind, serde_json::Value)>) -> ...
 let payload = serde_json::to_value(CommentPayload { comment })?;
-append_to_change(conn, &entry, id, vec![(LogKind::Comment, payload)]);
+append(conn, id, vec![(LogKind::Comment, payload)]);
 ```
 
 ```rust
 // GOOD — the API takes a typed value and serializes internally; the kind is
 // derived from the variant, so the two cannot disagree.
-fn append_to_change(news: Vec<LogPayload>) -> ...
-append_to_change(conn, &entry, id, vec![LogPayload::Comment(CommentPayload { comment })]);
+fn append(news: Vec<LogPayload>) -> ...
+append(conn, id, vec![LogPayload::Comment(CommentPayload { comment })]);
 ```
 
 ## 2. A derived value consumers need — mint once, store in what you already have
