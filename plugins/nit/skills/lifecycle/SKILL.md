@@ -43,15 +43,15 @@ verdict is a reviewer's decision, and **Acting on status** below says what
 each one asks of you.
 
 Each wake is a doorbell: read the full picture with `nit status`, and
-use `nit log` for entry detail. Its positional argument selects by global `sequence`
-(the value every entry prints), not list position — a bare `N` reads only the
-entry whose sequence is `N`:
+use `nit log` for entry detail. It takes a change number, then the entries to
+print by `position`, the value that every entry prints after its change. A
+bare `N` reads only the entry at position `N`:
 
 ```sh
-nit log N..   # every entry from sequence N on (your session's changes)
+nit log 42 5..   # every entry of change 42 from position 5 on
 ```
 
-`..` (the default) reads everything. Act on all of it, and the watch delivers
+`..` (the default) reads every entry of the change. Act on all of it, and the watch delivers
 the next change by itself.
 
 ## Acting on status

@@ -5,7 +5,8 @@
 //!
 //! `nit push` walks the change-centric model: oldest-first, upsert each change
 //! by its `Change-Id`, append a revision iff the sha moved. `nit status`
-//! and `nit log` read the changes that carry the checkout's branch tag.
+//! reads the changes that carry the checkout's branch tag, and `nit log`
+//! reads a change by its number.
 
 mod common;
 
@@ -13,12 +14,21 @@ use std::io::Write;
 use std::process::Command;
 
 use common::{
-    GitRepo, TestServer, change_id, change_tags, first_repo_id, msg, nit, nit_env, nit_register,
+    GitRepo, TestServer, change_id, change_tags, first_repo_id, get_changes, msg, nit, nit_env,
+    nit_register,
 };
 
+/// The change number of the only change on the server.
+fn only_change(server: &TestServer) -> String {
+    get_changes(server, "")[0]["id"]
+        .as_u64()
+        .expect("the registered change")
+        .to_string()
+}
+
 /// `nit push` registers the changes it walks and prints their digest;
-/// `nit status`/`nit log` then read the change back by the worktree it was
-/// pushed from.
+/// `nit status` then reads the change back by the worktree it was pushed
+/// from, and `nit log` by its number.
 #[test]
 fn push_prints_digest_then_status_and_log_read_it_back() {
     let g = GitRepo::new();
@@ -49,7 +59,7 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
         "{status}"
     );
 
-    let (ok, log, stderr) = nit(&server, &g, &["log"]);
+    let (ok, log, stderr) = nit(&server, &g, &["log", &only_change(&server)]);
     assert!(ok, "{stderr}");
     let log = log.as_str().expect("log prints text");
     assert!(
@@ -80,7 +90,7 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
         "amend is revision 1: {push}"
     );
 
-    let (ok, log, stderr) = nit(&server, &g, &["log"]);
+    let (ok, log, stderr) = nit(&server, &g, &["log", &only_change(&server)]);
     assert!(ok, "{stderr}");
     let log = log.as_str().expect("log prints text");
     assert_eq!(
@@ -88,11 +98,18 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
         2,
         "two revision entries: {log}"
     );
+    let (ok, log, stderr) = nit(&server, &g, &["log", &only_change(&server), "1.."]);
+    assert!(ok, "{stderr}");
+    assert_eq!(
+        log.as_str().unwrap().matches("revision ").count(),
+        1,
+        "a range reads the entries from its start on: {log}"
+    );
 
     let (ok, push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
     assert!(push.as_str().is_some_and(|d| d.contains("r1")), "{push}");
-    let (_ok, log, _) = nit(&server, &g, &["log"]);
+    let (_ok, log, _) = nit(&server, &g, &["log", &only_change(&server)]);
     assert_eq!(
         log.as_str().unwrap().matches("revision ").count(),
         2,
@@ -235,7 +252,7 @@ fn comment_body_from_file_and_stdin() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    let (ok, log, stderr) = nit(&server, &g, &["log"]);
+    let (ok, log, stderr) = nit(&server, &g, &["log", &only_change(&server)]);
     assert!(ok, "{stderr}");
     let log = log.as_str().expect("log prints text");
     assert!(log.contains("a body from a **file**"), "{log}");

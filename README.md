@@ -30,7 +30,7 @@ nit push             # register the checked-out commit and its chain for review
 ```
 
 A push tags the changes it registers with the harness session, the worktree
-and the branch it ran from. `nit status` and `nit log` read by those tags:
+and the branch it ran from. `nit status` reads by those tags:
 the session by default, else the worktree, else the branch. So an agent
 never names a tag. `--tag` names any tag instead. `--tag` on a push adds
 your own, and any key you don't name keeps the value the change already

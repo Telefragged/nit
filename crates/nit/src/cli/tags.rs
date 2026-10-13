@@ -1,7 +1,7 @@
 //! The tags a checkout has.
 //!
-//! `nit push` puts them on the changes it registers. `nit status` and
-//! `nit log` read by one of them when the user gives no `--tag`.
+//! `nit push` puts them on the changes it registers. `nit status` reads
+//! by one of them when the user gives no `--tag`.
 
 use git2::Repository;
 use nit_types::domain::{Tag, Tags};

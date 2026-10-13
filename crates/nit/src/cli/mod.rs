@@ -4,9 +4,9 @@
 //! git repo. They print concise text for the author to act on; all review
 //! logic lives server-side.
 //!
-//! `nit status` and `nit log` read the changes that have a tag. The tag
-//! comes from `--tag`, or else from the checkout: its harness session,
-//! else its worktree, else its branch. `nit comment` names a change
+//! `nit status` reads the changes that have a tag. The tag comes from
+//! `--tag`, or else from the checkout: its harness session, else its
+//! worktree, else its branch. `nit log` and `nit comment` name a change
 //! directly.
 //! `nit watch` reads the same changes and then follows new entries on the
 //! websocket, posting each one to the session that runs it.
