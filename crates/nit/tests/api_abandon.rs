@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_post, member_id, msg, push, repo_log, status_at};
+use common::{GitRepo, TestServer, change_log, http_post, member_id, msg, push, status_at};
 use serde_json::json;
 
 #[test]
@@ -31,7 +31,7 @@ fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
         Some("abandoned")
     );
 
-    let log = repo_log(&server);
+    let log = change_log(&server, change_number);
     let abandoned = log
         .iter()
         .find(|e| e["kind"] == "lifecycle" && e["payload"]["action"] == "abandoned")

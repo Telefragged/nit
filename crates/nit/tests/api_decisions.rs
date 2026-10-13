@@ -202,7 +202,7 @@ fn batch_submit_abandon_decision_drains_and_records_reason() {
         "comment published"
     );
 
-    let log = repo_log(&server);
+    let log = change_log(&server, id);
     let abandoned = log
         .iter()
         .find(|e| e["kind"] == "lifecycle" && e["payload"]["action"] == "abandoned")

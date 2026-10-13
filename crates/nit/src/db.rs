@@ -818,44 +818,6 @@ fn map_log(row: &rusqlite::Row) -> rusqlite::Result<LogRow> {
     })
 }
 
-/// The entries with `after < sequence < before` of every change the
-/// filter matches, ascending by `sequence`, each with its change number.
-///
-/// A `None` bound means no bound on that side.
-///
-/// # Errors
-///
-/// On a database failure.
-pub fn log_between(
-    conn: &Connection,
-    repo_id: u64,
-    filter: &ChangeFilter,
-    after: Option<u64>,
-    before: Option<u64>,
-) -> Result<Vec<(ChangeNumber, LogRow)>> {
-    let (clauses, bound) = filter.clauses();
-    let sql = format!(
-        "SELECT change_number, sequence, position, kind, payload, created_at FROM log
-         WHERE (?1 IS NULL OR sequence > ?1) AND (?2 IS NULL OR sequence < ?2)
-           AND change_number IN (SELECT id FROM changes WHERE repo_id = ?3{clauses})
-         ORDER BY sequence"
-    );
-    let mut values: Vec<rusqlite::types::Value> = vec![
-        after.map(i64::try_from).transpose()?.into(),
-        before.map(i64::try_from).transpose()?.into(),
-        i64::try_from(repo_id)?.into(),
-    ];
-    values.extend(bound);
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt
-        .query_map(rusqlite::params_from_iter(values), |row| {
-            let change_number = ChangeNumber::new(col_u64(row.get("change_number")?)?);
-            Ok((change_number, map_log(row)?))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows)
-}
-
 /// One change's entries, position-ascending.
 ///
 /// # Errors
@@ -1295,56 +1257,6 @@ mod tests {
             vec![both]
         );
         assert!(matching(&[("feature", "other")]).is_empty());
-    }
-
-    #[test]
-    fn log_after_reads_the_matched_changes_in_sequence_order() {
-        let mut conn = mem();
-        let repo = repo(&mut conn, "/r/.git");
-        let tagged = change_in(&mut conn, repo.id, "I1");
-        let other = change_in(&mut conn, repo.id, "I2");
-        set_tags(&mut conn, tagged, &[("branch", "track/a")]);
-        let append = |conn: &mut Connection, number, position| {
-            write(conn, |tx| {
-                append_log(tx, number, position, "revision", "{}", "t")
-            })
-            .expect("append")
-        };
-        let first = append(&mut conn, tagged, 0);
-        append(&mut conn, other, 0);
-        let third = append(&mut conn, tagged, 1);
-
-        let filter = ChangeFilter {
-            tags: tags(&[("branch", "track/a")]),
-            ..ChangeFilter::default()
-        };
-        let read = |after, before| {
-            log_between(&conn, repo.id, &filter, after, before)
-                .expect("read")
-                .into_iter()
-                .map(|(number, row)| (number, row.sequence))
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(read(None, None), vec![(tagged, first), (tagged, third)]);
-        assert_eq!(
-            read(Some(first), None),
-            vec![(tagged, third)],
-            "`after` is exclusive"
-        );
-        assert_eq!(
-            read(None, Some(third)),
-            vec![(tagged, first)],
-            "`before` is exclusive"
-        );
-        assert!(read(Some(third), None).is_empty());
-
-        let whole_repo = ChangeFilter::default();
-        assert_eq!(
-            log_between(&conn, repo.id, &whole_repo, None, None)
-                .expect("read")
-                .len(),
-            3
-        );
     }
 
     #[test]

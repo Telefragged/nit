@@ -5,8 +5,8 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, a_change, abandon, change_id, change_ids, change_tags, first_repo_id,
-    get_changes, http_get, msg, push, repo_log, tag_change,
+    GitRepo, TestServer, a_change, abandon, change_id, change_ids, change_log, change_tags,
+    first_repo_id, get_changes, http_get, msg, push, tag_change,
 };
 use serde_json::{Value, json};
 
@@ -99,10 +99,7 @@ fn tags_that_move_no_key_append_nothing() {
 
 /// How many entries the change's log holds.
 fn log_len(server: &TestServer, change_number: u64) -> usize {
-    repo_log(server)
-        .iter()
-        .filter(|e| e["change_number"] == change_number)
-        .count()
+    change_log(server, change_number).len()
 }
 
 // A change nobody has heard of takes no tags.
