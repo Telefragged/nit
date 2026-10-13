@@ -1,10 +1,4 @@
-import {
-  type CSSProperties,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, useLayoutEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, Tags } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
@@ -23,9 +17,9 @@ const WINDOW = 7;
  * rail beside one-line rows (status dot, subject, unresolved count,
  * revision, change number), the current change highlighted and the
  * others linking through. The selector picks which of the current
- * change's tag keys the graph follows. At first the graph scrolls inside
- * a seven-row window centered on the current change, and "show all"
- * grows the window to the whole graph.
+ * change's tag keys the graph follows. Unless `expanded`, the graph
+ * scrolls inside a seven-row window centered on the current change.
+ * "show all" and "show less" ask the caller to flip `expanded`.
  */
 export default function TagNav({
   tags,
@@ -34,6 +28,8 @@ export default function TagNav({
   graph,
   activity,
   currentId,
+  expanded,
+  onExpandedChange,
 }: {
   /** The current change's tags: the keys the selector offers. */
   tags: Tags;
@@ -45,8 +41,10 @@ export default function TagNav({
   /** Per-change activity, keyed by change number: the unresolved count. */
   activity: Map<number, NodeActivity>;
   currentId: number;
+  /** Whether the graph shows every row instead of the scroll window. */
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const layout = useMemo(() => layoutGraph(graph, LAYOUT_DENSE), [graph]);
   const total = layout.nodes.length;
   const position = layout.nodes.findIndex(
@@ -85,7 +83,7 @@ export default function TagNav({
           <button
             className="linkish tag-nav-all"
             onClick={() => {
-              setExpanded((v) => !v);
+              onExpandedChange(!expanded);
             }}
           >
             {expanded ? "show less" : "show all"}
