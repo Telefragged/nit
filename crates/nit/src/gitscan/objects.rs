@@ -46,13 +46,18 @@ pub fn sha_patch_id(repo: &Repository, sha: &Sha) -> Option<String> {
 /// Keyed on the change, so a commit a prefix-merged ancestor still walks
 /// through keeps its objects.
 ///
-/// Deleting these refs is deferred on purpose — nothing prunes them, even
-/// for merged/abandoned changes. Over-pinning is fail-safe; dropping a ref
-/// can orphan objects the sha-walk, a vs-parent diff of retained history,
-/// or the timer's `fork_sha..canonical` walk still needs.
+/// The refs of a change live as long as the change. Dropping a ref
+/// earlier can orphan objects that the sha-walk, a vs-parent diff of
+/// retained history, or the timer's `fork_sha..canonical` walk still needs.
 #[must_use]
 pub fn keep_ref_name(change_number: ChangeNumber, revision_number: RevisionNumber) -> String {
-    format!("refs/nit/keep/{change_number}/{revision_number}")
+    format!("{}{revision_number}", keep_ref_prefix(change_number))
+}
+
+/// The prefix of the keep refs of every revision of a change.
+#[must_use]
+pub fn keep_ref_prefix(change_number: ChangeNumber) -> String {
+    format!("refs/nit/keep/{change_number}/")
 }
 
 /// Ensures the keep ref for a revision exists.
@@ -89,4 +94,24 @@ fn try_ensure_keep_ref(
         repo.reference(&name, oid, true, "nit: keep")?;
     }
     Ok(())
+}
+
+/// Deletes the keep refs of every revision of a change.
+///
+/// This is best-effort, like [`ensure_keep_ref`]. On a failure it logs a
+/// warning and leaves the remaining refs in place. Those refs still pin
+/// their objects.
+pub fn delete_keep_refs(repo: &Repository, change_number: ChangeNumber) {
+    let glob = format!("{}*", keep_ref_prefix(change_number));
+    let deleted = repo.references_glob(&glob).and_then(|refs| {
+        refs.collect::<Result<Vec<_>, _>>()?
+            .iter_mut()
+            .try_for_each(git2::Reference::delete)
+    });
+    if let Err(err) = deleted {
+        tracing::warn!(
+            change_number = change_number.get(),
+            "cannot delete keep refs: {err:#}"
+        );
+    }
 }

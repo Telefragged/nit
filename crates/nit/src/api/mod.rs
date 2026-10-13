@@ -13,6 +13,8 @@
 //! change from its log. An append replays it inside its own write
 //! transaction ([`state::Appends`]).
 //! Merged detection runs in a background timer (`timer::run_lifecycle_timer`).
+//! The collection of closed changes runs in a second timer
+//! (`gc::run_gc_timer`).
 
 pub mod diff;
 mod port;
@@ -24,6 +26,7 @@ pub mod views;
 mod changes;
 mod comments;
 mod drafts;
+mod gc;
 mod history;
 mod push;
 mod repos;
@@ -47,6 +50,7 @@ use nit_types::domain::Side;
 use nit_types::domain::{Anchor, LineAnchor};
 use nit_types::health::Health;
 
+pub use gc::collect_once;
 pub use state::{AppJson, AppPath, AppQuery, AppState, Error, with_conn};
 use state::{Appends, append};
 pub use timer::sweep_once;
@@ -180,7 +184,8 @@ pub fn app(state: Arc<AppState>, web_ui: Option<&'static include_dir::Dir<'stati
     })
 }
 
-/// Runs the background lifecycle timer alongside the server.
+/// Runs the background lifecycle and collection timers alongside the
+/// server.
 ///
 /// # Errors
 ///
@@ -194,19 +199,22 @@ pub async fn serve_on(
     let state = AppState::load(db_path).await?;
     tracing::info!("listening on http://{addr}");
     let timer = tokio::spawn(timer::run_lifecycle_timer(state.clone()));
+    let gc = tokio::spawn(gc::run_gc_timer(state.clone()));
     let res = serve_on_state(listener, state, WEB_UI, shutdown).await;
     timer.abort();
+    gc.abort();
     res
 }
 
 /// Serves `app` from a caller-owned [`AppState`].
 ///
 /// Runs until `shutdown` resolves. Unlike [`serve_on`] it spawns **no
-/// lifecycle timer**: the only sweeps are the ones the owner triggers
-/// through [`sweep_once`], so a test driving the state in-process never has
-/// a stray sweep land between its setup and a later assertion. Owning the
-/// state is also what lets that in-process driver act on the very
-/// projections the server reads, instead of going over the wire.
+/// timer**. The only sweeps and collections are the ones that the owner
+/// triggers through [`sweep_once`] and [`collect_once`]. Thus no sweep or
+/// collection runs between the setup of an in-process test and a later
+/// assertion. Owning the state is also what lets that in-process
+/// driver act on the very projections the server reads, instead of going
+/// over the wire.
 ///
 /// # Errors
 ///

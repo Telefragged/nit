@@ -541,6 +541,16 @@ pub fn sweep(server: &TestServer) {
         .block_on(nit::api::sweep_once(state));
 }
 
+/// Drives one collection of closed changes in-process, like [`sweep`].
+pub fn collect(server: &TestServer, cutoff: jiff::Timestamp) {
+    let state = server.state.as_ref().expect("state");
+    server
+        .rt
+        .as_ref()
+        .expect("runtime")
+        .block_on(nit::api::collect_once(state, cutoff));
+}
+
 /// How long the harness waits before it calls the suite hung: a child that
 /// never exits. Only a broken test reaches it, so it is far above anything
 /// a loaded machine needs.
