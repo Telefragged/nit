@@ -48,8 +48,7 @@ tag feature=epic-saga
 ```
 
 `GET /api/changes?repo={id}&tag=feature=epic-saga` selects on them
-(repeatable, exact key and value, every one must match),
-`GET /api/log?repo={id}&tag=…` reads their log as one, and
+(repeatable, exact key and value, every one must match), and
 `GET /api/tags?repo={id}` lists the keys and values in use.
 
 `nit watch` follows the session, new commits included, and posts each review

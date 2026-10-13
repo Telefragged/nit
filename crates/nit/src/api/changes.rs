@@ -19,7 +19,6 @@ use nit_types::domain::PortedComment;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
-use nit_types::domain::Tag;
 use nit_types::domain::ThreadOrigin;
 use nit_types::domain::{DiffMode, DiffView, Whitespace};
 use nit_types::domain::{LogPayload, TagsPayload};
@@ -45,40 +44,6 @@ pub(super) async fn list_changes(
         Ok(Json(ChangeList {
             changes: state.changes_matching(conn, q)?,
         }))
-    })
-    .await
-}
-
-#[derive(Deserialize, utoipa::IntoParams)]
-#[into_params(parameter_in = Query)]
-pub(super) struct LogQuery {
-    repo: u64,
-    #[serde(default)]
-    status: Vec<ChangeStatus>,
-    #[serde(default)]
-    tag: Vec<Tag>,
-    after: Option<u64>,
-    before: Option<u64>,
-}
-
-/// Serves `GET /api/log`: the entries of the changes a filter matches.
-///
-/// `nit_types::log::Log` documents the query. This reads the log rows
-/// directly and never looks the repo up, so an unknown repo returns an
-/// empty log, not a 404.
-#[utoipa::path(get, path = "/api/log", params(LogQuery), responses((status = 200, body = Log)))]
-pub(super) async fn list_log(
-    State(state): State<Arc<AppState>>,
-    AppQuery(q): AppQuery<LogQuery>,
-) -> Result<Json<Log>, Error> {
-    with_conn(state.pool(), move |conn| {
-        let filter = db::ChangeFilter {
-            statuses: q.status,
-            tags: q.tag.into_iter().collect(),
-            ..db::ChangeFilter::default()
-        };
-        let entries = review::entries_between(conn, q.repo, &filter, q.after, q.before)?;
-        Ok(Json(Log { entries }))
     })
     .await
 }

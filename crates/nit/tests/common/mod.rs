@@ -501,10 +501,9 @@ pub fn first_repo_id(server: &TestServer) -> u64 {
     repos["repos"][0]["id"].as_u64().expect("a repo")
 }
 
-/// Every entry of the first repo's log, in sequence order.
-pub fn repo_log(server: &TestServer) -> Vec<Value> {
-    let repo_id = first_repo_id(server);
-    let (st, log) = http_get(&server.url(&format!("/api/log?repo={repo_id}")));
+/// Every entry of a change, in position order.
+pub fn change_log(server: &TestServer, change_number: u64) -> Vec<Value> {
+    let (st, log) = http_get(&server.url(&format!("/api/changes/{change_number}/log")));
     assert_eq!(st, 200, "{log}");
     log["entries"].as_array().expect("entries").clone()
 }

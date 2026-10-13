@@ -121,7 +121,6 @@ fn routes() -> utoipa_axum::router::OpenApiRouter<Arc<AppState>> {
         .routes(routes!(reviews::submit))
         .routes(routes!(changes::list_changes))
         .routes(routes!(changes::list_tags))
-        .routes(routes!(changes::list_log))
         .routes(routes!(history::repo_history))
         .routes(routes!(changes::get_change_detail))
         .routes(routes!(changes::get_change_log))
