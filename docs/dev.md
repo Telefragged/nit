@@ -17,6 +17,9 @@ Checks verify a change, not a green build — `nix build` skips tests
   a driver/npm-pin skew fails here. Run
   one alone with `nix build .#checks.<system>.test` or
   `.#checks.<system>.web-test`.
+- `scripts/check-commits.sh <base>`: runs `nix flake check` on every
+  commit in `<base>..HEAD`, 8 at a time. CI runs the same checks on every
+  commit of a PR.
 
 The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
 change, regenerate it with `nix develop -c crate2nix generate` and commit it
