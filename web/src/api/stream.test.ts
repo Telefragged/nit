@@ -7,9 +7,12 @@ import type { StreamMessage } from "./types";
 describe("openStream (mock mode)", () => {
   it("projects on subscribe, then goes live", () => {
     const got: StreamMessage[] = [];
-    const handle = openStream((m) => {
-      got.push(m);
-    });
+    const handle = openStream(
+      (m) => {
+        got.push(m);
+      },
+      () => ({}),
+    );
     // Change 30 is the only change under its session.
     handle.subscribe({ query: { repo: 2, tag: ["session-id=ci-cache"] } });
     expect(got.map((m) => "projection" in m && m.projection.id)).toEqual([30]);

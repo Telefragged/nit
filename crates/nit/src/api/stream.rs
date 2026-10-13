@@ -1,6 +1,6 @@
-//! Events (WS `/api/stream`): the client-driven change stream.
+//! Events (WS `/api/stream`): the log of the changes that a query matches.
 
-use std::collections::HashSet;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axum::extract::State;
@@ -8,17 +8,15 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 
 use nit_types::domain::ChangeNumber;
-use nit_types::events::{StreamMessage, Subscription};
+use nit_types::events::{Start, StreamMessage, Subscription};
 
-use crate::db;
 use crate::review;
 
-use super::state::Published;
-use super::{AppState, with_conn};
+use super::{AppState, Error, with_conn};
 
-/// `WS /api/stream` — the client-driven change stream.
+/// `WS /api/stream`: the log of the changes that a query matches.
 ///
-/// `nit_types::events::Subscription` carries the contract.
+/// `nit_types::events::Subscription` documents the contract.
 #[utoipa::path(get, path = "/api/stream", responses((status = 101, description = "A websocket of `StreamMessage` frames")))]
 pub(super) async fn stream(
     ws: WebSocketUpgrade,
@@ -27,109 +25,90 @@ pub(super) async fn stream(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-/// What one socket follows.
-struct Watch {
-    repo: Option<u64>,
-    filter: db::ChangeFilter,
-    /// The highest sequence the socket has sent. The socket sends only
-    /// entries above it, so it never sends one twice.
-    after: u64,
-    /// The changes whose projection the socket has.
-    announced: HashSet<ChangeNumber>,
-}
-
-impl Watch {
-    /// Whether the socket sends this new entry. If so, moves `after` up to
-    /// it.
-    fn forwards(&mut self, published: &Published) -> bool {
-        let forwarded = published.entry.sequence > self.after
-            && self.repo.is_none_or(|r| r == published.change.repo_id)
-            && self.filter.matches(&published.change);
-        if forwarded {
-            self.after = published.entry.sequence;
-        }
-        forwarded
-    }
-}
-
-/// Drives one follower's socket.
+/// Runs the loop of a client socket.
 ///
-/// It holds one receiver on the server's event channel for its whole life,
-/// so a subscription is armed before it reads its opening frames. An entry
-/// written during that read arrives twice, once in the read and once on
-/// the channel, and `after` or the projection's `entries_folded` drops the
-/// second copy. An overflowed receiver closes the socket — the client
-/// reconnects and subscribes again.
+/// The socket reads the log after a subscription and after each update of
+/// the appended watch.
+///
+/// If a read fails, the loop closes the socket. The client then subscribes
+/// again.
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
-    let mut events = state.subscribe();
-    let mut watch: Option<Watch> = None;
+    let mut appended = state.appended_watch();
     let mut shutdown = state.shutdown_watch();
+    let mut subscription: Option<Subscription> = None;
     loop {
         tokio::select! {
             incoming = socket.recv() => {
                 let Some(Ok(msg)) = incoming else { break };
                 match msg {
                     Message::Text(text) => {
-                        let Ok(subscription) = serde_json::from_str::<Subscription>(&text) else {
+                        let Ok(next) = serde_json::from_str::<Subscription>(&text) else {
                             continue;
                         };
-                        match subscribe(&mut socket, &state, subscription).await {
-                            Ok(w) => watch = Some(w),
-                            Err(()) => break,
-                        }
+                        subscription = Some(next);
                     }
                     Message::Close(_) => break,
-                    _ => {}
+                    _ => continue,
                 }
             }
-            item = events.recv() => {
-                // Overflow (or a closed channel): this follower fell behind.
-                // Close the socket so it reconnects and re-reads the gap.
-                let Ok(published) = item else { break };
-                let Some(w) = watch.as_mut() else { continue };
-                if !w.forwards(&published) {
-                    continue;
-                }
-                let Published { entry, change } = published;
-                if w.announced.insert(entry.change_number)
-                    && send(&mut socket, &StreamMessage::Projection((*change).clone())).await.is_err()
-                {
-                    break;
-                }
-                if send(&mut socket, &StreamMessage::Entry(entry)).await.is_err() {
+            changed = appended.changed() => {
+                if changed.is_err() {
                     break;
                 }
             }
             // The only change to the shutdown signal is false → true.
             _ = shutdown.changed() => break,
         }
+        let Some(current) = subscription.take() else {
+            continue;
+        };
+        appended.borrow_and_update();
+        let Ok((messages, next)) = read(&state, current).await else {
+            break;
+        };
+        subscription = Some(next);
+        for message in messages {
+            if send(&mut socket, &message).await.is_err() {
+                return;
+            }
+        }
     }
 }
 
-/// Sends a subscription's opening frames and returns the watch that
-/// follows it; `Err(())` means the socket should close.
-async fn subscribe(
-    socket: &mut WebSocket,
+/// Returns the messages that the client of a subscription lacks, and the
+/// subscription with the positions after those messages.
+async fn read(
     state: &Arc<AppState>,
-    subscription: Subscription,
-) -> Result<Watch, ()> {
-    let frames = opening_frames(state, &subscription).await;
-    let mut watch = Watch {
-        repo: subscription.query.repo,
-        filter: db::ChangeFilter::from(subscription.query),
-        after: subscription.after.unwrap_or(0),
-        announced: HashSet::new(),
-    };
-    for frame in frames {
-        match &frame {
-            StreamMessage::Projection(proj) => {
-                watch.announced.insert(proj.id);
+    mut subscription: Subscription,
+) -> Result<(Vec<StreamMessage>, Subscription), Error> {
+    let st = Arc::clone(state);
+    with_conn(state.pool(), move |conn| {
+        let positions = &mut subscription.positions;
+        let mut left: BTreeMap<ChangeNumber, u64> = std::mem::take(positions);
+        let mut messages = Vec::new();
+        for change in st.changes_matching(conn, subscription.query.clone())? {
+            let from = match (left.remove(&change.id), subscription.start) {
+                (Some(next), _) => next,
+                (None, Start::Log) => 0,
+                (None, Start::Projection) => {
+                    positions.insert(change.id, change.entries_folded);
+                    messages.push(StreamMessage::Projection(change));
+                    continue;
+                }
+            };
+            positions.insert(change.id, from);
+            if from >= change.entries_folded {
+                continue;
             }
-            StreamMessage::Entry(entry) => watch.after = watch.after.max(entry.sequence),
+            for entry in review::entries_from(conn, change.id, from)? {
+                positions.insert(change.id, entry.position + 1);
+                messages.push(StreamMessage::Entry(entry));
+            }
         }
-        send(socket, &frame).await?;
-    }
-    Ok(watch)
+        messages.extend(left.into_keys().map(StreamMessage::Left));
+        Ok((messages, subscription))
+    })
+    .await
 }
 
 async fn send(socket: &mut WebSocket, msg: &StreamMessage) -> Result<(), ()> {
@@ -138,33 +117,4 @@ async fn send(socket: &mut WebSocket, msg: &StreamMessage) -> Result<(), ()> {
         .send(Message::Text(text.into()))
         .await
         .map_err(|_| ())
-}
-
-/// What a subscription sends first: the picked projections, then the
-/// stored entries past `after` when given.
-///
-/// Empty when the read fails. The socket then sends no opening frame, and
-/// it announces each picked change when it first meets one live.
-async fn opening_frames(state: &Arc<AppState>, subscription: &Subscription) -> Vec<StreamMessage> {
-    let st = state.clone();
-    let query = subscription.query.clone();
-    let after = subscription.after;
-    with_conn(state.pool(), move |conn| {
-        let repo_ids = st.repo_ids_matching(query.repo);
-        let mut frames: Vec<StreamMessage> = st
-            .changes_matching(conn, query.clone())?
-            .into_iter()
-            .map(StreamMessage::Projection)
-            .collect();
-        if let Some(after) = after {
-            let filter = db::ChangeFilter::from(query);
-            for repo_id in repo_ids {
-                let entries = review::entries_between(conn, repo_id, &filter, Some(after), None)?;
-                frames.extend(entries.into_iter().map(StreamMessage::Entry));
-            }
-        }
-        Ok(frames)
-    })
-    .await
-    .unwrap_or_default()
 }

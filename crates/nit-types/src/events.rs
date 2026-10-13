@@ -1,33 +1,66 @@
 //! Websocket messages over `WS /api/stream`.
 //!
-//! The client sends one [`Subscription`]; the server answers with
+//! The client sends a [`Subscription`]. The server answers with
 //! [`StreamMessage`] frames.
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 use crate::changes::ChangeQuery;
+use crate::domain::ChangeNumber;
 use crate::domain::ChangeProjection;
 use crate::domain::LogEntry;
 
-/// A client → server websocket message: what the socket follows.
+/// A client → server websocket message: the changes that the socket
+/// follows.
 ///
-/// The server first sends the [`ChangeProjection`] of every change
-/// `query` picks now, then the stored entries with `sequence > after`
-/// when `after` is given, then each new entry of a picked change. For a
-/// new entry, `status` is the change's status right after it. A change
-/// the socket meets for the first time, one that gets the tags from a
-/// `tags` entry, arrives as its projection and then the entry.
+/// The server keeps the position of each followed change. After the
+/// subscription and after each committed transaction, the server runs
+/// `query` again and compares the result with the positions:
 ///
-/// A socket holds one subscription. A second one replaces the first.
+/// - For a change that `query` matches for the first time, the server
+///   sends what `start` names.
+/// - For a followed change, the server sends each entry from its
+///   position on, in `position` order.
+/// - For a followed change that `query` no longer matches, the server
+///   sends `left`.
+///
+/// A socket holds one subscription. A second subscription replaces the
+/// first.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 pub struct Subscription {
     pub query: ChangeQuery,
-    /// Send the stored entries with a `sequence` greater than this.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub after: Option<u64>,
+    /// The changes that the client holds, each with the `position` of the
+    /// next entry that the client lacks.
+    ///
+    /// The position of a projection is its `entries_folded`. The server
+    /// sends the entries of these changes from the given position on.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<BTreeMap<ChangeNumber, u64>>", optional)
+    )]
+    pub positions: BTreeMap<ChangeNumber, u64>,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Start>", optional))]
+    pub start: Start,
+}
+
+/// How the server starts a matched change that the `positions` of a
+/// [`Subscription`] lack.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Start {
+    /// The projection of the change, then the entries after it.
+    #[default]
+    Projection,
+    /// Every entry of the change, from position 0.
+    Log,
 }
 
 /// A server → client websocket message. Externally tagged, `snake_case`.
@@ -36,11 +69,11 @@ pub struct Subscription {
 #[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum StreamMessage {
-    /// A picked change's folded projection, sent once, before its entries.
+    /// The projection of a change that the query matches, sent before the
+    /// entries of the change.
     Projection(ChangeProjection),
-    /// One entry of a picked change, stored or live.
-    ///
-    /// Its `position` is below the projection's `entries_folded` when the
-    /// projection already holds it.
+    /// An entry of a followed change, at the next position of the change.
     Entry(LogEntry),
+    /// A followed change that the query no longer matches.
+    Left(ChangeNumber),
 }

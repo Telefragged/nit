@@ -50,8 +50,8 @@ export function projection(changeNumber: number): ChangeProjection {
 type Listener = (msg: StreamMessage) => void;
 interface Sub {
   query: ChangeQuery | null;
-  /** The changes whose projection the subscriber has. */
-  announced: Set<number>;
+  /** The position of the next entry to send of each followed change. */
+  positions: Map<number, number>;
   listener: Listener;
 }
 const subs = new Set<Sub>();
@@ -76,11 +76,31 @@ export function picks(query: ChangeQuery, c: ChangeRecord): boolean {
   );
 }
 
-/** Sends the change's projection to a subscriber that has not got it. */
-function announce(sub: Sub, changeNumber: number) {
-  if (sub.announced.has(changeNumber)) return;
-  sub.announced.add(changeNumber);
-  sub.listener({ projection: projection(changeNumber) });
+/** Sends the messages that the subscriber lacks, in the order of the server
+ * read: the matched changes first, then `left`. The mock starts each new
+ * change at its projection, whatever `start` says. */
+function sync(sub: Sub) {
+  const query = sub.query;
+  if (query === null) return;
+  const left: number[] = [];
+  for (const c of changes) {
+    const held = sub.positions.get(c.id);
+    if (!picks(query, c)) {
+      if (held !== undefined) left.push(c.id);
+      continue;
+    }
+    const log = logFor(c.id);
+    sub.positions.set(c.id, log.length);
+    if (held === undefined) {
+      sub.listener({ projection: projection(c.id) });
+      continue;
+    }
+    for (const entry of log.slice(held)) sub.listener({ entry });
+  }
+  for (const id of left) {
+    sub.positions.delete(id);
+    sub.listener({ left: id });
+  }
 }
 
 export interface MockStream {
@@ -90,19 +110,22 @@ export interface MockStream {
 }
 
 /** Open a mock stream. A subscription ships the projection of every change
- * its query picks (folded from the synth log), then live appends arrive as
- * `entry` frames, behind the projection of a change the subscriber meets
- * for the first time. `after` is ignored: there is no backlog the
- * projections do not hold. */
+ * its query matches (folded from the synth log), and the entries from the
+ * positions of the changes that it holds on. Then each append sends what the
+ * server sends after a commit. */
 export function mockOpenStream(listener: Listener): MockStream {
-  const sub: Sub = { query: null, announced: new Set(), listener };
+  const sub: Sub = { query: null, positions: new Map(), listener };
   subs.add(sub);
   return {
     subscribe(subscription) {
       sub.query = subscription.query;
-      sub.announced.clear();
-      for (const c of changes)
-        if (picks(subscription.query, c)) announce(sub, c.id);
+      sub.positions = new Map(
+        Object.entries(subscription.positions ?? {}).map(([id, position]) => [
+          Number(id),
+          position,
+        ]),
+      );
+      sync(sub);
     },
     close() {
       subs.delete(sub);
@@ -110,9 +133,10 @@ export function mockOpenStream(listener: Listener): MockStream {
   };
 }
 
-/** Append one entry to a change's synth log and push it as a live `entry` frame
- * to its subscribers — the fixtures' analog of the server's append broadcast.
- * Drives the mock's own mutations (submit/abandon) and test event injection. */
+/** Append one entry to a change's synth log and send each subscriber the
+ * messages that it lacks. This is the fixtures' analog of a server commit,
+ * and it drives the mock's own mutations (submit/abandon) and test event
+ * injection. */
 export function mockAppend(
   change_number: number,
   created_at: string,
@@ -128,11 +152,6 @@ export function mockAppend(
   };
   log.push(entry);
   logs.set(change_number, log);
-  const c = changes.find((x) => x.id === change_number);
-  for (const sub of subs) {
-    if (sub.query === null || c === undefined || !picks(sub.query, c)) continue;
-    announce(sub, change_number);
-    sub.listener({ entry });
-  }
+  for (const sub of subs) sync(sub);
   return entry;
 }

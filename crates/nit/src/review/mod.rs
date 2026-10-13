@@ -79,10 +79,27 @@ pub fn entries_between(
         .collect()
 }
 
-/// A stored log row → the wire [`LogEntry`] the fold consumes.
+/// The entries of a change at or past `position`, ascending by position,
+/// as wire entries.
 ///
-/// The entry is what the server broadcasts too. The `change_number` is the
-/// caller's — a row knows only its own per-change coordinates.
+/// # Errors
+///
+/// On a database failure, or a stored row that is not an entry.
+pub fn entries_from(
+    conn: &rusqlite::Connection,
+    change: ChangeNumber,
+    position: u64,
+) -> Result<Vec<LogEntry>> {
+    db::log_entries_from(conn, change, position)?
+        .iter()
+        .map(|row| entry_from_row(change, row))
+        .collect()
+}
+
+/// Converts a stored log row into the wire [`LogEntry`] that the fold reads.
+///
+/// The stream sends this same entry. The caller passes the `change_number`,
+/// because a [`db::LogRow`] contains the per-change coordinates alone.
 ///
 /// # Errors
 ///

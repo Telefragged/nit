@@ -132,12 +132,13 @@ fn subscription_spells_its_query_like_the_change_list() {
             tag: vec![Tag::new("branch", "feat").expect("a tag")],
             ..ChangeQuery::default()
         },
-        after: Some(3),
+        positions: [(crate::domain::ChangeNumber::new(7), 3)].into(),
+        start: crate::events::Start::Log,
     };
     let json = serde_json::to_string(&msg).expect("serialize");
     assert_eq!(
         json,
-        r#"{"query":{"repo":1,"tag":["branch=feat"]},"after":3}"#
+        r#"{"query":{"repo":1,"tag":["branch=feat"]},"positions":{"7":3},"start":"log"}"#
     );
 }
 

@@ -549,12 +549,11 @@ pub const HANG: Duration = Duration::from_secs(20);
 
 pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 
-/// Subscribes the socket to the changes `query` picks: their projections,
-/// the stored entries past `after` when given, then live entries.
-pub fn ws_subscribe(server: &TestServer, query: &Value, after: Option<u64>) -> WsSock {
+/// Subscribes the socket with `subscription`, a JSON `Subscription`.
+pub fn ws_subscribe(server: &TestServer, subscription: &Value) -> WsSock {
     let url = format!("ws://{}/api/stream", server.addr);
     let (mut socket, _) = tungstenite::connect(&url).expect("ws connect");
-    let sub = json!({ "query": query, "after": after }).to_string();
+    let sub = subscription.to_string();
     socket
         .send(tungstenite::Message::Text(sub.into()))
         .expect("subscribe");
