@@ -18,7 +18,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use std::fmt::Write as _;
 
@@ -258,6 +258,26 @@ const MIGRATIONS: &[&str] = &[
     // `pending`, and an earlier startup pass reconciled every row that has
     // one.
     "UPDATE changes SET status = 'pending' WHERE status IS NULL;",
+    // v12: `AUTOINCREMENT` keeps a change number unique for the life of
+    // the database. Without it, SQLite gives the highest number again
+    // after the server deletes its row. A client that still holds the
+    // number then reads the new change as the old one. SQLite cannot add
+    // the keyword to an existing table, so this rebuilds `changes`. The
+    // copy sets `sqlite_sequence` to the highest number in use.
+    "
+    CREATE TABLE changes_new (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      repo_id    INTEGER NOT NULL REFERENCES repos(id),
+      change_id  TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      status     TEXT,
+      UNIQUE (repo_id, change_id)
+    );
+    INSERT INTO changes_new (id, repo_id, change_id, created_at, status)
+         SELECT id, repo_id, change_id, created_at, status FROM changes;
+    DROP TABLE changes;
+    ALTER TABLE changes_new RENAME TO changes;
+    ",
 ];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
@@ -271,15 +291,32 @@ pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
 fn migrate_to(conn: &mut Connection, upto: usize) -> Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     let version = usize::try_from(version).context("PRAGMA user_version is negative")?;
-    for (i, sql) in MIGRATIONS.iter().enumerate().take(upto).skip(version) {
-        write(conn, |tx| {
-            tx.execute_batch(sql)?;
-            tx.pragma_update(None, "user_version", i64::try_from(i + 1)?)?;
-            Ok(())
-        })
-        .with_context(|| format!("applying migration {}", i + 1))?;
-    }
-    Ok(())
+    // A migration that rebuilds a table drops it while other tables still
+    // reference it. Thus the foreign keys are off until the migrations
+    // end. SQLite ignores this pragma inside a transaction, so this
+    // function sets it outside each one.
+    conn.pragma_update(None, "foreign_keys", false)?;
+    let migrated = MIGRATIONS
+        .iter()
+        .enumerate()
+        .take(upto)
+        .skip(version)
+        .try_for_each(|(i, sql)| {
+            write(conn, |tx| {
+                tx.execute_batch(sql)?;
+                let violation: Option<String> = tx
+                    .query_row("PRAGMA foreign_key_check", [], |r| r.get(0))
+                    .optional()?;
+                if let Some(table) = violation {
+                    bail!("a row of {table} references a missing row");
+                }
+                tx.pragma_update(None, "user_version", i64::try_from(i + 1)?)?;
+                Ok(())
+            })
+            .with_context(|| format!("applying migration {}", i + 1))
+        });
+    conn.pragma_update(None, "foreign_keys", true)?;
+    migrated
 }
 
 /// Reads a column written from a `u64` back as `u64`.
@@ -1176,7 +1213,6 @@ mod tests {
 
     fn mem() -> Connection {
         let mut conn = Connection::open_in_memory().expect("in-memory db");
-        conn.pragma_update(None, "foreign_keys", "ON").expect("fk");
         migrate(&mut conn).expect("migrate");
         conn
     }
@@ -1376,6 +1412,23 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{table} row: {e}"));
             assert_eq!(drafted, 7);
         }
+    }
+
+    #[test]
+    fn v12_numbers_past_a_deleted_change() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        migrate_to(&mut conn, 11).expect("migrate to v11");
+        conn.execute_batch(
+            "INSERT INTO repos (id, git_dir, canonical_ref) VALUES (1, '/r/.git', 'main');
+             INSERT INTO changes (id, repo_id, change_id, created_at, status)
+                  VALUES (7, 1, 'Iabc', 't', 'merged');",
+        )
+        .expect("v11-shaped rows");
+        migrate(&mut conn).expect("migrate the rest");
+
+        conn.execute("DELETE FROM changes WHERE id = 7", [])
+            .expect("delete");
+        assert_eq!(change_in(&mut conn, 1, "Idef"), ChangeNumber::new(8));
     }
 
     #[test]
