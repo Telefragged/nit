@@ -79,8 +79,10 @@ pub fn entries_between(
         .collect()
 }
 
-/// The entries of a change at or past `position`, ascending by position,
-/// as wire entries.
+/// The entries of a change with `from <= position < to`, ascending by
+/// position, as wire entries.
+///
+/// A `None` end means no bound on that side.
 ///
 /// # Errors
 ///
@@ -88,9 +90,10 @@ pub fn entries_between(
 pub fn entries_from(
     conn: &rusqlite::Connection,
     change: ChangeNumber,
-    position: u64,
+    from: u64,
+    to: Option<u64>,
 ) -> Result<Vec<LogEntry>> {
-    db::log_entries_from(conn, change, position)?
+    db::log_entries_from(conn, change, from, to)?
         .iter()
         .map(|row| entry_from_row(change, row))
         .collect()

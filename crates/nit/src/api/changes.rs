@@ -85,6 +85,36 @@ pub(super) async fn list_log(
 
 #[derive(Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
+pub(super) struct ChangeLogQuery {
+    #[serde(default)]
+    from: u64,
+    to: Option<u64>,
+}
+
+/// Serves `GET /api/changes/{id}/log`: the entries of a change in a range
+/// of positions.
+///
+/// `nit_types::log::Log` documents the query. The handler reads the
+/// requested rows alone, and it folds nothing.
+#[utoipa::path(get, path = "/api/changes/{id}/log", params(("id" = ChangeNumber, Path), ChangeLogQuery), responses((status = 200, body = Log)))]
+pub(super) async fn get_change_log(
+    State(state): State<Arc<AppState>>,
+    AppPath(id): AppPath<ChangeNumber>,
+    AppQuery(q): AppQuery<ChangeLogQuery>,
+) -> Result<Json<Log>, Error> {
+    with_conn(state.pool(), move |conn| {
+        if db::get_change(conn, id)?.is_none() {
+            return Err(Error::not_found(format!("change {id} not found")));
+        }
+        Ok(Json(Log {
+            entries: review::entries_from(conn, id, q.from, q.to)?,
+        }))
+    })
+    .await
+}
+
+#[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub(super) struct ListTagsQuery {
     repo: u64,
     /// Repeated (`?status=pending&status=commented`); empty means every

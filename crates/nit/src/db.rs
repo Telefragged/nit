@@ -873,7 +873,10 @@ pub fn log_entries(conn: &Connection, change_number: ChangeNumber) -> Result<Vec
     Ok(rows)
 }
 
-/// The entries of a change at or past `position`, ascending by position.
+/// The entries of a change with `from <= position < to`, ascending by
+/// position.
+///
+/// A `None` end means no bound on that side.
 ///
 /// # Errors
 ///
@@ -881,17 +884,20 @@ pub fn log_entries(conn: &Connection, change_number: ChangeNumber) -> Result<Vec
 pub fn log_entries_from(
     conn: &Connection,
     change_number: ChangeNumber,
-    position: u64,
+    from: u64,
+    to: Option<u64>,
 ) -> Result<Vec<LogRow>> {
     let rows = conn
         .prepare(
             "SELECT sequence, position, kind, payload, created_at FROM log
-             WHERE change_number = ?1 AND position >= ?2 ORDER BY position",
+             WHERE change_number = ?1 AND position >= ?2 AND (?3 IS NULL OR position < ?3)
+             ORDER BY position",
         )?
         .query_map(
             params![
                 i64::try_from(change_number.get())?,
-                i64::try_from(position)?
+                i64::try_from(from)?,
+                to.map(i64::try_from).transpose()?
             ],
             map_log,
         )?

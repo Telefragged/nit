@@ -100,7 +100,7 @@ async fn read(
             if from >= change.entries_folded {
                 continue;
             }
-            for entry in review::entries_from(conn, change.id, from)? {
+            for entry in review::entries_from(conn, change.id, from, None)? {
                 positions.insert(change.id, entry.position + 1);
                 messages.push(StreamMessage::Entry(entry));
             }
