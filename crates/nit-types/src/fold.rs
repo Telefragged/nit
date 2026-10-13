@@ -249,7 +249,6 @@ mod tests {
     fn entry(position: u64, payload: LogPayload) -> LogEntry {
         LogEntry {
             change_number: ChangeNumber::new(1),
-            sequence: position,
             position,
             created_at: format!("t{position}"),
             payload,

@@ -271,16 +271,15 @@ impl LogPayload {
 
 /// One log entry.
 ///
-/// Belongs to one change; `sequence` totally orders the whole repo, `position`
-/// orders one change. The flattened [`LogPayload`] contributes the `kind`
-/// discriminant and the `payload` body.
+/// Belongs to one change, and `position` orders the entries of the change.
+/// The flattened [`LogPayload`] contributes the `kind` discriminant and the
+/// `payload` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 pub struct LogEntry {
     pub change_number: ChangeNumber,
     pub position: u64,
-    pub sequence: u64,
     pub created_at: String,
     #[serde(flatten)]
     pub payload: LogPayload,

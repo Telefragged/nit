@@ -162,7 +162,6 @@ mod tests {
             dropped_by_incoming(&LogEntry {
                 change_number: ChangeNumber::new(1),
                 position: 0,
-                sequence: 0,
                 created_at: String::new(),
                 payload,
             })

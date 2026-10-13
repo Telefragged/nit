@@ -9,9 +9,6 @@
 import type { CommentInput, LogEntry, LogPayload } from "../types";
 import type { ChangeRecord, ThreadRecord } from "./store";
 
-// Monotonic across all changes — the global `sequence` ordering of the real log.
-let sequence = 0;
-
 /** One thread comment → its wire `CommentInput`. The opening comment (index 0)
  * carries the anchor + explicit thread id; the last carries the rolled-up
  * `resolved` state, so the fold lands on the record's final value. */
@@ -42,7 +39,6 @@ export function synthLog(
     entries.push({
       change_number: change.id,
       position: entries.length,
-      sequence: sequence++,
       created_at,
       ...payload,
     });
