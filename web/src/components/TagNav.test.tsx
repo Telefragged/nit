@@ -78,7 +78,7 @@ const three: ChangeGraph = {
 const renderNav = (
   graph: ChangeGraph,
   currentId: number,
-  onSelectKey = vi.fn(),
+  { onSelectKey = vi.fn(), expanded = false, onExpandedChange = vi.fn() } = {},
 ) =>
   render(
     <MemoryRouter>
@@ -89,6 +89,8 @@ const renderNav = (
         graph={graph}
         activity={new Map([[11, activity(2)]])}
         currentId={currentId}
+        expanded={expanded}
+        onExpandedChange={onExpandedChange}
       />
     </MemoryRouter>,
   );
@@ -106,7 +108,7 @@ const subjects = () =>
 describe("TagNav", () => {
   it("shows the chosen key with its value, and offers the others", () => {
     const onSelectKey = vi.fn();
-    renderNav(three, 11, onSelectKey);
+    renderNav(three, 11, { onSelectKey });
     const head = screen.getByLabelText<HTMLButtonElement>("Tag");
     expect(head.disabled).toBe(false);
     expect(head.querySelector(".select-label")?.textContent).toBe("session-id");
@@ -149,6 +151,8 @@ describe("TagNav", () => {
           graph={{ history_truncated: false, nodes: [] }}
           activity={new Map()}
           currentId={11}
+          expanded={false}
+          onExpandedChange={vi.fn()}
         />
       </MemoryRouter>,
     );
@@ -201,12 +205,16 @@ describe("TagNav", () => {
     expect(scroll.scrollTop).toBe(2 * LAYOUT_DENSE.rowH);
   });
 
-  it("drops the height cap on request, and restores it", () => {
-    renderNav(chain(12), 16);
-    const scroll = scroller();
+  it("asks to expand from the window, and to collapse from the whole graph", () => {
+    const onExpandedChange = vi.fn();
+    renderNav(chain(12), 16, { onExpandedChange });
     fireEvent.click(screen.getByRole("button", { name: "show all" }));
-    expect(scroll.style.maxHeight).toBe("");
+    expect(onExpandedChange).toHaveBeenLastCalledWith(true);
+    cleanup();
+
+    renderNav(chain(12), 16, { expanded: true, onExpandedChange });
+    expect(scroller().style.maxHeight).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "show less" }));
-    expect(scroll.style.maxHeight).toBe(windowHeight);
+    expect(onExpandedChange).toHaveBeenLastCalledWith(false);
   });
 });

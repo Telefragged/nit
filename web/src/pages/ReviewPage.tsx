@@ -325,6 +325,9 @@ export default function ReviewPage() {
     setPreferredKey(key);
     localStorage.setItem(TAG_KEY, key);
   }, []);
+  // The skeleton unmounts TagNav while the next change loads, so its
+  // "show all" choice lives here to follow the reviewer between changes.
+  const [tagNavExpanded, setTagNavExpanded] = useState(false);
   const tags = published?.tags ?? {};
   const selectedTag = selectTag(tags, preferredKey);
   const tag =
@@ -876,6 +879,8 @@ export default function ReviewPage() {
             graph={graph}
             activity={activity}
             currentId={changeNumber}
+            expanded={tagNavExpanded}
+            onExpandedChange={setTagNavExpanded}
           />
         </div>
 
