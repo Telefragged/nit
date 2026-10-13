@@ -678,14 +678,13 @@ export type LogPayload =
 /**
  * One log entry.
  *
- * Belongs to one change; `sequence` totally orders the whole repo, `position`
- * orders one change. The flattened [`LogPayload`] contributes the `kind`
- * discriminant and the `payload` body.
+ * Belongs to one change, and `position` orders the entries of the change.
+ * The flattened [`LogPayload`] contributes the `kind` discriminant and the
+ * `payload` body.
  */
 export type LogEntry = {
   change_number: ChangeNumber;
   position: number;
-  sequence: number;
   created_at: string;
 } & (
   | { kind: "revision"; payload: RevisionPayload }

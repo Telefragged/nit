@@ -258,7 +258,6 @@ mod tests {
         let entry = LogEntry {
             change_number: change,
             position: 0,
-            sequence: 4,
             created_at: String::new(),
             payload: LogPayload::Review(ReviewPayload {
                 revision: RevisionNumber::new(1),

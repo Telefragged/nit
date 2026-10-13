@@ -7,7 +7,6 @@ import { changeId, shaOf as sha } from "./fixtures/builders";
 const revision: LogEntry = {
   change_number: 1,
   position: 0,
-  sequence: 0,
   created_at: "t0",
   kind: "revision",
   payload: {
@@ -21,7 +20,6 @@ const revision: LogEntry = {
 const review: LogEntry = {
   change_number: 1,
   position: 1,
-  sequence: 1,
   created_at: "t1",
   kind: "review",
   payload: {

@@ -348,7 +348,6 @@ mod tests {
         let entry = |payload| LogEntry {
             change_number: ChangeNumber::new(7),
             position: 0,
-            sequence: 0,
             created_at: String::new(),
             payload,
         };
@@ -390,10 +389,9 @@ mod tests {
     fn log_render_review_and_revision() {
         use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
         use nit_types::domain::{Side, Verdict};
-        let entry = |change_number, position, sequence, payload| LogEntry {
+        let entry = |change_number, position, payload| LogEntry {
             change_number,
             position,
-            sequence,
             created_at: String::new(),
             payload,
         };
@@ -410,7 +408,6 @@ mod tests {
         let review = entry(
             ChangeNumber::new(42),
             5,
-            12,
             LogPayload::Review(ReviewPayload {
                 revision: RevisionNumber::new(2),
                 verdict: Verdict::RequestChanges,
@@ -453,11 +450,10 @@ mod tests {
         );
 
         // A revision entry shows its short sha and subject — no minted number.
-        let revision = |position, sequence, name: &str, msg: &str| {
+        let revision = |position, name: &str, msg: &str| {
             entry(
                 ChangeNumber::new(42),
                 position,
-                sequence,
                 LogPayload::Revision(RevisionPayload {
                     commit_sha: sha(name),
                     parent_sha: sha(""),
@@ -469,14 +465,14 @@ mod tests {
         };
         assert_eq!(
             render_entry(
-                &revision(0, 3, "abcdef0123456789", "queue: first\n\nbody"),
+                &revision(0, "abcdef0123456789", "queue: first\n\nbody"),
                 &Sources::default()
             ),
             "change 42  position 0  revision abcdef012345  queue: first"
         );
         assert_eq!(
             render_entry(
-                &revision(6, 20, "1234567890abcdef", "queue: second"),
+                &revision(6, "1234567890abcdef", "queue: second"),
                 &Sources::default()
             ),
             "change 42  position 6  revision 1234567890ab  queue: second"

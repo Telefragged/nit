@@ -308,14 +308,13 @@ impl<'c> Appends<'c> {
                 &mut change,
                 LogEntry {
                     change_number,
-                    sequence: 0,
                     position,
                     created_at: now.clone(),
                     payload,
                 },
             );
             let payload = review::payload_to_json(&entry.payload)?;
-            let sequence = db::append_log(
+            db::append_log(
                 &self.tx,
                 change_number,
                 entry.position,
@@ -323,7 +322,7 @@ impl<'c> Appends<'c> {
                 &payload,
                 &now,
             )?;
-            entries.push(LogEntry { sequence, ..entry });
+            entries.push(entry);
         }
         // These writes update the denormalized columns that the change filter
         // reads.

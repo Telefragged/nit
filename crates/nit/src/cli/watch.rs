@@ -509,11 +509,10 @@ mod tests {
 
     use super::{Cursor, LogEntry, Positions, fnv1a, next_run, prune};
 
-    fn entry(sequence: u64) -> LogEntry {
+    fn entry(position: u64) -> LogEntry {
         LogEntry {
             change_number: ChangeNumber::new(1),
-            position: 0,
-            sequence,
+            position,
             created_at: String::new(),
             payload: LogPayload::Tags(TagsPayload { tags: Tags::new() }),
         }
@@ -547,8 +546,8 @@ mod tests {
         drop(entries);
 
         let run = next_run(&batches).expect("a run");
-        let sequences: Vec<u64> = run.iter().map(|e| e.sequence).collect();
-        assert_eq!(sequences, [1, 2, 3]);
+        let positions: Vec<u64> = run.iter().map(|e| e.position).collect();
+        assert_eq!(positions, [1, 2, 3]);
         assert!(next_run(&batches).is_none(), "the follower is gone");
     }
 

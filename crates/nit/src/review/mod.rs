@@ -94,7 +94,6 @@ fn entry_from_row(change_number: ChangeNumber, row: &db::LogRow) -> Result<LogEn
     Ok(LogEntry {
         change_number,
         position: row.position,
-        sequence: row.sequence,
         created_at: row.created_at.clone(),
         payload: payload_from_json(kind, &row.payload)
             .map_err(|e| anyhow!("log entry {}: bad payload: {e}", row.position))?,
