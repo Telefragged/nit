@@ -286,7 +286,7 @@ mod tests {
         // file does not hold keeps its anchor label.
         assert_eq!(
             render_entries(&[entry], &sources),
-            "sequence 4  change 7 r1  reviewer: request_changes\n\
+            "change 7  position 0  r1  reviewer: request_changes\n\
              \x20   t0\n\
              \x20         ╭▸ src/queue.rs:2:5\n\
              \x20         │\n\

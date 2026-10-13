@@ -1,27 +1,28 @@
-//! `nit log` — print the log of the selected changes.
+//! `nit log`: print the log of a change.
 //!
-//! Prints entries by global `sequence`. `nit watch` reads the same log
-//! and shares [`dropped_by_incoming`], the rule for which entries the
-//! author writes about their own work.
+//! Prints entries by `position`. `nit watch` shares
+//! [`dropped_by_incoming`], the rule for which entries the author writes
+//! about their own work.
+
+use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};
 
-use nit_types::domain::{LogEntry, LogPayload};
+use nit_types::domain::{ChangeNumber, LogEntry, LogPayload};
+use nit_types::log::Log;
 
 use super::client::{Client, Retry, ServerOpt, server_url};
 use super::format::{print_entries, print_oneline_entries};
-use super::resolve::SelectArgs;
 use super::snippet::Sources;
 
 #[derive(clap::Args)]
 pub struct LogArgs {
-    /// Which entries to print, by global `sequence`: `3`, `5..9`, `5..`,
-    /// `..9`, or `..` for all (the default). A range may include sequences
-    /// that belong to other changes; those print nothing.
+    /// The change number of the change to print.
+    pub change: ChangeNumber,
+    /// Which entries to print, by `position`: `3`, `5..9`, `5..`, `..9`, or
+    /// `..` for all (the default).
     #[arg(default_value = "..")]
     pub ranges: Vec<String>,
-    #[command(flatten)]
-    pub select: SelectArgs,
     /// Print the terse one-line-per-entry digest instead of the full rendering.
     #[arg(long)]
     pub oneline: bool,
@@ -33,11 +34,12 @@ pub struct LogArgs {
     pub server: ServerOpt,
 }
 
-/// Prints the selected changes' log entries by global `sequence`.
+/// Prints the log entries of a change by `position`.
 ///
 /// # Errors
 ///
-/// When a range is malformed or the server can't be reached.
+/// When a range is malformed, the change is unknown, or the CLI cannot
+/// reach the server.
 pub fn log(args: LogArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
     let ranges = args
@@ -45,11 +47,18 @@ pub fn log(args: LogArgs) -> Result<()> {
         .iter()
         .map(|s| LogRange::parse(s))
         .collect::<Result<Vec<_>>>()?;
-    let selection = args.select.resolve(&client, Retry::No)?;
-    let entries: Vec<LogEntry> = selection
-        .log(&client, None, Retry::No)?
-        .into_iter()
-        .filter(|e| ranges.iter().any(|r| r.contains(e.sequence)))
+    // Overlapping ranges read an entry twice, and the map keeps it once.
+    let mut by_position = BTreeMap::new();
+    for range in ranges {
+        let log: Log = client.get(&format!(
+            "/api/changes/{}/log?{}",
+            args.change,
+            range.query()
+        ))?;
+        by_position.extend(log.entries.into_iter().map(|e| (e.position, e)));
+    }
+    let entries: Vec<LogEntry> = by_position
+        .into_values()
         .filter(|e| !(args.incoming && dropped_by_incoming(e)))
         .collect();
     if args.oneline {
@@ -73,9 +82,9 @@ pub(super) fn dropped_by_incoming(entry: &LogEntry) -> bool {
     )
 }
 
-/// A parsed `nit log` selector over global `sequence`, half-open.
+/// A parsed `nit log` selector over `position`, half-open.
 ///
-/// `contains(sequence)` tests membership; a bare `N` is the singleton `[N, N+1)`.
+/// A bare `N` is the singleton `[N, N+1)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LogRange {
     Open { from: u64 },
@@ -107,10 +116,11 @@ impl LogRange {
         Ok(LogRange::Closed { from, to })
     }
 
-    fn contains(self, sequence: u64) -> bool {
+    /// The query string of `GET /api/changes/{id}/log` that reads the range.
+    fn query(self) -> String {
         match self {
-            LogRange::Open { from } => sequence >= from,
-            LogRange::Closed { from, to } => sequence >= from && sequence < to,
+            LogRange::Open { from } => format!("from={from}"),
+            LogRange::Closed { from, to } => format!("from={from}&to={to}"),
         }
     }
 }
@@ -139,18 +149,9 @@ mod tests {
     }
 
     #[test]
-    fn log_range_contains_by_seq() {
-        // A bare `N` is the singleton `[N, N+1)`.
-        assert!(LogRange::Closed { from: 3, to: 4 }.contains(3));
-        assert!(!LogRange::Closed { from: 3, to: 4 }.contains(2));
-        assert!(!LogRange::Closed { from: 3, to: 4 }.contains(4));
-        // Half-open: end excluded.
-        assert!(LogRange::Closed { from: 3, to: 6 }.contains(5));
-        assert!(!LogRange::Closed { from: 3, to: 6 }.contains(6));
-        // Open-ended matches every sequence at or past `from`.
-        assert!(!LogRange::Open { from: 2 }.contains(1));
-        assert!(LogRange::Open { from: 2 }.contains(2));
-        assert!(LogRange::Open { from: 2 }.contains(1000));
+    fn log_range_queries_its_bounds() {
+        assert_eq!(LogRange::Closed { from: 3, to: 4 }.query(), "from=3&to=4");
+        assert_eq!(LogRange::Open { from: 2 }.query(), "from=2");
     }
 
     #[test]

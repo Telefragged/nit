@@ -5,14 +5,11 @@
 
 use anyhow::{Result, anyhow, bail};
 use git2::Repository;
-use serde::Serialize;
 
 use nit_types::changes::{ChangeList, ChangeQuery};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
-use nit_types::domain::LogEntry;
 use nit_types::domain::{Tag, Tags};
-use nit_types::log::Log;
 use nit_types::repos::RepoList;
 
 use super::client::{Client, Retry};
@@ -28,21 +25,9 @@ pub(crate) struct Selection {
 impl Selection {
     /// Reads the selected changes, ascending by change number.
     pub(crate) fn changes(&self, client: &Client, retry: Retry) -> Result<Vec<ChangeProjection>> {
-        let query = self.query(None);
+        let query = self.query();
         let list: ChangeList = client.get_retry(&format!("/api/changes?{query}"), retry)?;
         Ok(list.changes)
-    }
-
-    /// Reads the selected changes' log entries with `sequence > after`.
-    pub(crate) fn log(
-        &self,
-        client: &Client,
-        after: Option<u64>,
-        retry: Retry,
-    ) -> Result<Vec<LogEntry>> {
-        let query = self.query(after);
-        let log: Log = client.get_retry(&format!("/api/log?{query}"), retry)?;
-        Ok(log.entries)
     }
 
     /// The query that picks the selected changes.
@@ -54,24 +39,13 @@ impl Selection {
         }
     }
 
-    /// The query string that selects the changes: the [`ChangeQuery`],
-    /// plus `after` when given.
+    /// The query string that selects the changes.
     ///
     /// Each value is percent-encoded, because a tag value may contain a
     /// space or an ampersand.
-    fn query(&self, after: Option<u64>) -> String {
-        #[derive(Serialize)]
-        struct Query {
-            #[serde(flatten)]
-            changes: ChangeQuery,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            after: Option<u64>,
-        }
-        let query = Query {
-            changes: self.change_query(),
-            after,
-        };
-        serde_html_form::to_string(&query).expect("a query of numbers and strings serializes")
+    fn query(&self) -> String {
+        serde_html_form::to_string(self.change_query())
+            .expect("a query of numbers and strings serializes")
     }
 }
 
@@ -156,13 +130,13 @@ mod tests {
             tags: tags(&[("branch", "track/a b"), ("worktree", "/w/x=y&z")]),
         };
         assert_eq!(
-            tagged.query(None),
+            tagged.query(),
             "repo=7&tag=branch%3Dtrack%2Fa+b&tag=worktree%3D%2Fw%2Fx%3Dy%26z"
         );
         let untagged = Selection {
             repo: 7,
             tags: Tags::new(),
         };
-        assert_eq!(untagged.query(Some(12)), "repo=7&after=12");
+        assert_eq!(untagged.query(), "repo=7");
     }
 }

@@ -50,12 +50,12 @@ impl ChangeTarget {
 
 /// The opt-in terse form (`--oneline`).
 ///
-/// One whitespace-separated line per entry keyed by its global `sequence`.
+/// One whitespace-separated line per entry keyed by its `position`.
 pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
     for e in entries {
         println!(
-            "sequence {}  {}  {}",
-            e.sequence,
+            "position {}  {}  {}",
+            e.position,
             e.payload.kind().as_str(),
             entry_summary(e)
         );
@@ -181,16 +181,16 @@ pub(crate) fn print_comment(thread: &ThreadProjection, change_number: ChangeNumb
 /// no revision number, and a reply names only its thread — a reply's anchor
 /// lives on the thread's opening entry.
 fn render_entry(entry: &LogEntry, sources: &Sources) -> String {
-    let sequence = entry.sequence;
+    let position = entry.position;
     let change = entry.change_number;
     match &entry.payload {
         LogPayload::Revision(p) => format!(
-            "sequence {sequence}  change {change}  revision {}  {}",
+            "change {change}  position {position}  revision {}  {}",
             short_sha(&p.commit_sha),
             subject_of(&p.message),
         ),
         LogPayload::Tags(p) => {
-            let mut out = format!("sequence {sequence}  change {change}  tags");
+            let mut out = format!("change {change}  position {position}  tags");
             for (key, value) in p.tags.iter() {
                 out.push('\n');
                 out.push_str(&indent(&format!("{key}: {value}"), 4));
@@ -199,7 +199,7 @@ fn render_entry(entry: &LogEntry, sources: &Sources) -> String {
         }
         LogPayload::Review(p) => {
             let mut out = format!(
-                "sequence {sequence}  change {change} r{}  reviewer: {}",
+                "change {change}  position {position}  r{}  reviewer: {}",
                 p.revision,
                 p.verdict.as_str()
             );
@@ -217,21 +217,21 @@ fn render_entry(entry: &LogEntry, sources: &Sources) -> String {
             let (anchor, body) = shown(c, sources.quote(change, c));
             let head = match comment_target(c.thread_id, anchor) {
                 Some(target) => {
-                    format!("sequence {sequence}  change {change}  comment on {target}")
+                    format!("change {change}  position {position}  comment on {target}")
                 }
-                None => format!("sequence {sequence}  change {change}  comment"),
+                None => format!("change {change}  position {position}  comment"),
             };
             format!("{head}\n{}", indent(&body, 4))
         }
         LogPayload::Lifecycle(p) => match &p.message {
             Some(m) if !m.is_empty() => {
                 format!(
-                    "sequence {sequence}  change {change}  {}: {m}",
+                    "change {change}  position {position}  {}: {m}",
                     p.action.as_str()
                 )
             }
             _ => format!(
-                "sequence {sequence}  change {change}  {}",
+                "change {change}  position {position}  {}",
                 p.action.as_str()
             ),
         },
@@ -441,7 +441,7 @@ mod tests {
         // the full form and the resolved marker sits on the anchor line.
         assert_eq!(
             render_entry(&review, &Sources::default()),
-            "sequence 12  change 42 r2  reviewer: request_changes\n\
+            "change 42  position 5  r2  reviewer: request_changes\n\
              \x20   Cover one.\n\
              \x20   Cover two.\n\
              \x20   t3  (change-level)\n\
@@ -472,14 +472,14 @@ mod tests {
                 &revision(0, 3, "abcdef0123456789", "queue: first\n\nbody"),
                 &Sources::default()
             ),
-            "sequence 3  change 42  revision abcdef012345  queue: first"
+            "change 42  position 0  revision abcdef012345  queue: first"
         );
         assert_eq!(
             render_entry(
                 &revision(6, 20, "1234567890abcdef", "queue: second"),
                 &Sources::default()
             ),
-            "sequence 20  change 42  revision 1234567890ab  queue: second"
+            "change 42  position 6  revision 1234567890ab  queue: second"
         );
     }
 
