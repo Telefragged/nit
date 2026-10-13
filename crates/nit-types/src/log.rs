@@ -6,6 +6,11 @@ use crate::domain::LogEntry;
 
 /// Log entries from several changes, ascending by global `sequence`.
 ///
+/// `GET /api/changes/{id}/log` returns the entries of a change, ascending
+/// by `position`. `from` and `to` select the entries with
+/// `from <= position < to`. Each is optional, so `?from=n` returns every
+/// entry from position `n` on.
+///
 /// `GET /api/log` returns the entries of every change a filter matches.
 /// `repo` is required. `status` and `tag` select changes exactly as they
 /// do on `GET /api/changes`. `after` and `before` are `sequence` bounds,
