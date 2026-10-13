@@ -529,10 +529,9 @@ fn map_change(row: &rusqlite::Row) -> rusqlite::Result<ChangeRow> {
 
 /// Upserts a change by `(repo_id, change_id)`.
 ///
-/// Returns its number. The `UNIQUE` index makes this idempotent and
-/// self-serializing — two pushes first-seeing the same trailer race one
-/// `INSERT … ON CONFLICT DO NOTHING`, the loser falls back to the
-/// `SELECT`, and both read the same id.
+/// Returns its number. The `UNIQUE` index makes this idempotent. A
+/// second upsert of the same `(repo_id, change_id)` returns the number
+/// that the first one inserted.
 ///
 /// # Errors
 ///

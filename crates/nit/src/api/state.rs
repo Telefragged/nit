@@ -20,7 +20,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 use tokio::sync::watch;
 
 use nit_types::changes::ChangeQuery;
-use nit_types::domain::ChangeNumber;
+use nit_types::domain::{ChangeId, ChangeNumber};
 use nit_types::domain::{LogEntry, LogPayload};
 use nit_types::error::ApiError;
 
@@ -248,8 +248,8 @@ pub struct Appended {
     pub entries: Vec<LogEntry>,
 }
 
-/// A write transaction that appends to the logs of one or more changes,
-/// or deletes changes.
+/// A write transaction that inserts changes, appends to the logs of
+/// changes, or deletes changes.
 ///
 /// It opens with `BEGIN IMMEDIATE`, so it holds the database write lock
 /// before its first read. Each append replays the change and appends at
@@ -270,6 +270,15 @@ impl<'c> Appends<'c> {
     pub fn begin(conn: &'c mut Connection) -> Result<Appends<'c>, Error> {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         Ok(Appends { tx, changed: false })
+    }
+
+    /// See [`db::upsert_change`].
+    ///
+    /// # Errors
+    ///
+    /// On a database failure.
+    pub fn upsert_change(&self, repo_id: u64, change_id: &ChangeId) -> Result<ChangeNumber, Error> {
+        Ok(db::upsert_change(&self.tx, repo_id, change_id)?)
     }
 
     /// Appends to a change the payloads that `new_payloads` returns for the

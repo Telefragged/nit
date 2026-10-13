@@ -11,8 +11,8 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, abandon, first_repo_id, http_get, http_post, member_id, msg, push, review,
-    status_at, sweep, tip_change,
+    GitRepo, TestServer, abandon, change_id, change_ids, first_repo_id, get_changes, http_get,
+    http_post, member_id, msg, push, review, status_at, sweep, tip_change,
 };
 use serde_json::json;
 
@@ -184,6 +184,31 @@ fn push_to_abandoned_change_409s_until_reopened() {
         tip_change(&res)["status"],
         "pending",
         "a content change resets status"
+    );
+}
+
+/// A rejected push records nothing, not even the new change below the
+/// abandoned one.
+#[test]
+fn push_rejected_at_an_abandoned_change_records_no_change() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{res}");
+    abandon(&server, member_id(&res, "I001"));
+
+    let new = g.commit(&[g.root], &msg("new", "I002"), &[("b.txt", "b\n")]);
+    let c1b = g.commit(&[new], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1b);
+    let (st, e) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 409, "{e}");
+
+    let repo_id = first_repo_id(&server);
+    assert_eq!(
+        change_ids(&get_changes(&server, &format!("?repo={repo_id}"))),
+        vec![change_id("I001")]
     );
 }
 

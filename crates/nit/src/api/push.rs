@@ -5,7 +5,6 @@ use axum::extract::State;
 use git2::Repository;
 
 use nit_types::domain::ChangeProjection;
-use nit_types::domain::Sha;
 use nit_types::domain::{LogPayload, RevisionPayload};
 use nit_types::push::{PushRequest, PushResult, PushedChange};
 
@@ -13,8 +12,7 @@ use crate::db;
 use crate::gitscan;
 use nit_types::domain::Lifecycle;
 
-use super::{AppJson, AppState, Appends, Error, with_conn};
-use super::{canonical_git_dir, change_or_404};
+use super::{AppJson, AppState, Appends, Error, canonical_git_dir, with_conn};
 
 /// Rejects a new revision of a terminal change.
 ///
@@ -42,14 +40,6 @@ fn check_revisable(change: &ChangeProjection, wc: &gitscan::WalkedCommit) -> Res
         )));
     }
     Ok(())
-}
-
-/// The revision of a walked commit, computed before the write transaction.
-struct Candidate {
-    /// The commit sha of the latest revision that `revision_for` compared
-    /// against.
-    prior: Option<Sha>,
-    revision: Option<LogPayload>,
 }
 
 /// The revision one walked commit records, if its sha moved.
@@ -116,46 +106,16 @@ pub(super) async fn push(
             )));
         }
 
-        let change_numbers = db::write(conn, |tx| {
-            walk.commits
-                .iter()
-                .map(|wc| db::upsert_change(tx, repo_row.id, &wc.change_id))
-                .collect::<anyhow::Result<Vec<_>>>()
-        })?;
-
-        // The git comparison in `revision_for` runs before the write
-        // transaction. The transaction repeats the comparison under the
-        // write lock when another push changed the latest revision after the
-        // first comparison.
-        let candidates = walk
-            .commits
-            .iter()
-            .zip(&change_numbers)
-            .map(|(wc, &number)| {
-                let change = change_or_404(conn, number)?;
-                Ok(Candidate {
-                    prior: change.latest_revision().map(|r| r.commit_sha.clone()),
-                    revision: revision_for(&repo, &walk, wc, &change),
-                })
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
-
-        // One transaction, so a stack that carries a terminal change
-        // records no revision, rather than half of them.
+        // One transaction, so a push rejected at a terminal change inserts
+        // no change and appends no revision. Without it, the changes before
+        // the terminal one would stay.
         let mut appends = Appends::begin(conn)?;
-        let mut pushed = Vec::with_capacity(candidates.len());
-        for ((wc, &number), candidate) in walk.commits.iter().zip(&change_numbers).zip(candidates) {
+        let mut pushed = Vec::with_capacity(walk.commits.len());
+        for wc in &walk.commits {
+            let number = appends.upsert_change(repo_row.id, &wc.change_id)?;
             let appended = appends.append(number, |change, _| {
                 check_revisable(change, wc)?;
-                let prior = change.latest_revision().map(|r| &r.commit_sha);
-                // If another push changed the latest revision after the
-                // first comparison, compare again.
-                let revision = if prior == candidate.prior.as_ref() {
-                    candidate.revision
-                } else {
-                    revision_for(&repo, &walk, wc, change)
-                };
-                Ok(revision.into_iter().collect())
+                Ok(revision_for(&repo, &walk, wc, change).into_iter().collect())
             })?;
             pushed.push(appended);
         }
