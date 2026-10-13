@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { StreamMessage } from "../types";
 import { changeId } from "./builders";
-import { mockAppend, mockOpenStream } from "./stream";
+import { logFor, mockAppend, mockOpenStream } from "./stream";
 
 describe("mock stream", () => {
   it("projects a change on subscribe, then delivers live appends", () => {
@@ -44,6 +44,30 @@ describe("mock stream", () => {
     expect(got.map((m) => ("projection" in m ? m.projection.id : -1))).toEqual([
       10, 11, 12,
     ]);
+    handle.close();
+  });
+
+  it("sends the entries past the held positions", () => {
+    const got: StreamMessage[] = [];
+    const handle = mockOpenStream((m) => got.push(m));
+    const last = logFor(11).length - 1;
+    handle.subscribe({ query: { change: 11 }, positions: { 11: last } });
+    expect(got.map((m) => "entry" in m && m.entry.position)).toEqual([last]);
+    handle.close();
+  });
+
+  it("sends left when a change stops matching", () => {
+    const got: StreamMessage[] = [];
+    const handle = mockOpenStream((m) => got.push(m));
+    handle.subscribe({
+      query: { change: 12, status: ["pending", "commented", "approved"] },
+    });
+    expect(got.map((m) => "projection" in m && m.projection.id)).toEqual([12]);
+    mockAppend(12, "t-live", {
+      kind: "lifecycle",
+      payload: { action: "abandoned", message: null },
+    });
+    expect(got.at(-1)).toEqual({ left: 12 });
     handle.close();
   });
 });

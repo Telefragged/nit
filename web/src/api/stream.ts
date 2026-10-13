@@ -1,8 +1,9 @@
 // The change-event websocket: the only place the web opens WS /api/stream.
 // Components go through openStream (via useChangeStream): the server sends a
-// ChangeProjection for every change the subscription picks, then their live
-// entries. When VITE_MOCK is set the fixtures drive it instead of the
-// network, mirroring how client.ts routes HTTP.
+// ChangeProjection for every change the subscription matches, then their
+// entries, and `left` for a change that stops matching. When VITE_MOCK is set
+// the fixtures drive it instead of the network, mirroring how client.ts routes
+// HTTP.
 
 import type { StreamMessage, Subscription } from "./types";
 
@@ -18,22 +19,28 @@ const mock = import.meta.env.VITE_MOCK
   ? await import("./fixtures/stream")
   : undefined;
 
-/** `onMessage` receives every `StreamMessage` frame the server writes — a
- * `projection` (a folded ChangeProjection) or an `entry` (one log entry);
- * the browser folds them. */
+/** `onMessage` receives every `StreamMessage` frame the server writes: a
+ * `projection` (a folded ChangeProjection), an `entry` (a log entry), or
+ * `left` (a change number). The browser folds them. `positions` returns the
+ * `positions` of each sent subscription: the changes that the browser holds,
+ * each at its `entries_folded`. */
 export function openStream(
   onMessage: (msg: StreamMessage) => void,
+  positions: () => Record<number, number>,
 ): StreamHandle {
-  return mock ? mock.mockOpenStream(onMessage) : openSocketStream(onMessage);
+  return mock
+    ? mock.mockOpenStream(onMessage)
+    : openSocketStream(onMessage, positions);
 }
 
-/** The real socket. A reconnect (the server closes the socket when a
- * follower overflows) re-sends the subscription, which re-reads every
- * projection, so no cursor is tracked. */
+/** The real socket. A reconnect sends the subscription again with the
+ * current `positions`, so the server sends the entries that the browser
+ * lacks. */
 function openSocketStream(
   onMessage: (msg: StreamMessage) => void,
+  positions: () => Record<number, number>,
 ): StreamHandle {
-  let wanted: Subscription | null = null;
+  let subscription: Subscription | null = null;
   let ws: WebSocket | null = null;
   let closed = false;
   let backoff = 0;
@@ -44,8 +51,8 @@ function openSocketStream(
   };
 
   const send = () => {
-    if (ws?.readyState !== WebSocket.OPEN || wanted === null) return;
-    ws.send(JSON.stringify(wanted));
+    if (ws?.readyState !== WebSocket.OPEN || subscription === null) return;
+    ws.send(JSON.stringify({ ...subscription, positions: positions() }));
   };
 
   const connect = () => {
@@ -75,8 +82,8 @@ function openSocketStream(
   connect();
 
   return {
-    subscribe(subscription) {
-      wanted = subscription;
+    subscribe(next) {
+      subscription = next;
       send();
     },
     close() {

@@ -696,30 +696,49 @@ export type LogEntry = {
 );
 
 /**
- * A client → server websocket message: what the socket follows.
+ * A client → server websocket message: the changes that the socket
+ * follows.
  *
- * The server first sends the [`ChangeProjection`] of every change
- * `query` picks now, then the stored entries with `sequence > after`
- * when `after` is given, then each new entry of a picked change. For a
- * new entry, `status` is the change's status right after it. A change
- * the socket meets for the first time, one that gets the tags from a
- * `tags` entry, arrives as its projection and then the entry.
+ * The server keeps the position of each followed change. After the
+ * subscription and after each committed transaction, the server runs
+ * `query` again and compares the result with the positions:
  *
- * A socket holds one subscription. A second one replaces the first.
+ * - For a change that `query` matches for the first time, the server
+ *   sends what `start` names.
+ * - For a followed change, the server sends each entry from its
+ *   position on, in `position` order.
+ * - For a followed change that `query` no longer matches, the server
+ *   sends `left`.
+ *
+ * A socket holds one subscription. A second subscription replaces the
+ * first.
  */
 export type Subscription = {
   query: ChangeQuery;
   /**
-   * Send the stored entries with a `sequence` greater than this.
+   * The changes that the client holds, each with the `position` of the
+   * next entry that the client lacks.
+   *
+   * The position of a projection is its `entries_folded`. The server
+   * sends the entries of these changes from the given position on.
    */
-  after?: number;
+  positions?: { [key in ChangeNumber]: number };
+  start?: Start;
 };
 
 /**
  * A server → client websocket message. Externally tagged, `snake_case`.
  */
 export type StreamMessage =
-  { projection: ChangeProjection } | { entry: LogEntry };
+  | { projection: ChangeProjection }
+  | { entry: LogEntry }
+  | { left: ChangeNumber };
+
+/**
+ * How the server starts a matched change that the `positions` of a
+ * [`Subscription`] lack.
+ */
+export type Start = "projection" | "log";
 
 /**
  * A change's terminal lifecycle, folded from its `lifecycle` entries.

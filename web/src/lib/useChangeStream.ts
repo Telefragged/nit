@@ -10,13 +10,14 @@ import type {
   Subscription,
 } from "../api/types";
 
-/** Keep the changes a subscription picks live over the websocket: hold each
+/** Keep the changes a subscription matches live over the websocket: hold each
  * one's ChangeProjection, fold its live tail with the shared wasm fold, and
  * write the published projection (revisions/threads/reviews) into the
- * ["change", id] react-query cache. Returns the picked changes' projections,
- * ascending by change number, as they arrive and as they advance. The
- * reviewer's drafts + draft decision are not log state, so they ride a
- * separate ["drafts", id] read (useDrafts); the page composes the two. */
+ * ["change", id] react-query cache. Returns the matched changes' projections,
+ * ascending by change number, as they arrive, as they advance, and as they
+ * leave. The reviewer's drafts + draft decision are not log state, so they
+ * ride a separate ["drafts", id] read (useDrafts); the page composes the
+ * two. */
 export function useChangeStream(
   subscription: Subscription | undefined,
 ): ChangeProjection[] {
@@ -27,6 +28,9 @@ export function useChangeStream(
   const [projections, setProjections] = useState<ChangeProjection[]>([]);
 
   useEffect(() => {
+    const list = () => {
+      setProjections([...projs.current.values()].sort((a, b) => a.id - b.id));
+    };
     const publish = (changeNumber: number) => {
       const proj = projs.current.get(changeNumber);
       if (!proj) return;
@@ -35,22 +39,32 @@ export function useChangeStream(
         ["change", changeNumber],
         changeDetail(proj),
       );
-      setProjections([...projs.current.values()].sort((a, b) => a.id - b.id));
+      list();
     };
-    const stream = openStream((msg: StreamMessage) => {
-      if ("projection" in msg) {
-        const id = msg.projection.id;
-        projs.current.set(id, msg.projection);
-        publish(id);
-        return;
-      }
-      const { change_number } = msg.entry;
-      const proj = projs.current.get(change_number);
-      // A live entry only ever follows its change's projection.
-      if (!proj) return;
-      projs.current.set(change_number, foldEntry(proj, msg.entry));
-      publish(change_number);
-    });
+    const stream = openStream(
+      (msg: StreamMessage) => {
+        if ("left" in msg) {
+          if (projs.current.delete(msg.left)) list();
+          return;
+        }
+        if ("projection" in msg) {
+          const id = msg.projection.id;
+          projs.current.set(id, msg.projection);
+          publish(id);
+          return;
+        }
+        const { change_number } = msg.entry;
+        const proj = projs.current.get(change_number);
+        // A live entry only ever follows its change's projection.
+        if (!proj) return;
+        projs.current.set(change_number, foldEntry(proj, msg.entry));
+        publish(change_number);
+      },
+      () =>
+        Object.fromEntries(
+          [...projs.current].map(([id, proj]) => [id, proj.entries_folded]),
+        ),
+    );
     handle.current = stream;
     return () => {
       stream.close();

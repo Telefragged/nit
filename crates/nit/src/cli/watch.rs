@@ -15,6 +15,7 @@
 //! can wait for the next entry with a deadline while the follower blocks
 //! on the websocket.
 
+use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::os::unix::net::UnixStream;
@@ -25,8 +26,8 @@ use std::time::{Duration, Instant, SystemTime};
 use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
 
-use nit_types::domain::{LogEntry, LogPayload};
-use nit_types::events::{StreamMessage, Subscription};
+use nit_types::domain::{ChangeNumber, LogEntry};
+use nit_types::events::{Start, StreamMessage, Subscription};
 
 use crate::db::nit_data_dir;
 
@@ -37,6 +38,9 @@ use super::parent::exit_with_parent;
 use super::resolve::{NotRegistered, SelectArgs, Selection};
 use super::snippet::Sources;
 use super::tags::session_id;
+
+/// The position of the next entry of each change.
+type Positions = BTreeMap<ChangeNumber, u64>;
 
 /// What Claude Code calls the inbox socket it exports to every command.
 const SOCKET_VAR: &str = "CLAUDE_CODE_MESSAGING_SOCKET";
@@ -112,19 +116,20 @@ pub fn watch(args: WatchArgs) -> Result<()> {
     let cursor = Cursor::open(&inbox.path, &args.select)?;
 
     let (entries, batches) = sync_channel(QUEUE);
-    let start = cursor.read()?;
+    let posted = cursor.read()?;
     let follower_client = client.clone();
+    let positions = posted.clone();
     let follower = std::thread::spawn(move || {
         Follower {
             client: follower_client,
             selection,
             entries,
-            cursor: start,
+            positions,
         }
         .run()
     });
 
-    deliver(&inbox, &batches, &cursor, &client)?;
+    deliver(&inbox, &batches, &cursor, posted, &client)?;
     match follower.join() {
         Ok(Err(e)) => Err(e),
         Ok(Ok(never)) => match never {},
@@ -147,11 +152,15 @@ fn deliver(
     inbox: &Inbox,
     batches: &Receiver<Vec<LogEntry>>,
     cursor: &Cursor,
+    mut posted: Positions,
     client: &Client,
 ) -> Result<()> {
     while let Some(run) = next_run(batches) {
         inbox.post(&run, &Sources::fetch(client, &run, Retry::UntilUp)?)?;
-        cursor.write(max_seq(&run))?;
+        for entry in &run {
+            posted.insert(entry.change_number, entry.position + 1);
+        }
+        cursor.write(&posted)?;
     }
     Ok(())
 }
@@ -179,62 +188,46 @@ struct Follower {
     client: Client,
     selection: Selection,
     entries: SyncSender<Vec<LogEntry>>,
-    /// The highest `sequence` seen. Entries above it are new.
-    cursor: u64,
+    /// The position of the next entry to receive of each followed change.
+    positions: Positions,
 }
 
 impl Follower {
-    /// A follower rides out a server restart.
-    const RETRY: Retry = Retry::UntilUp;
-
-    /// Sends the selection's entries past the cursor, then each new one
-    /// as it arrives. Returns only by failing.
+    /// Sends each new entry of the selection to the posting loop. Returns
+    /// only by failing.
     ///
-    /// It reads the log past the cursor and sends the new entries. Then
-    /// it opens a websocket and sends each entry the server writes. A
-    /// `tags` entry can be the first the socket sends for a change,
-    /// because the change got the tag with that entry, and its earlier
-    /// entries exist only in the log. So a `tags` frame makes it read the
-    /// log past the cursor again. A closed socket (a server restart) makes
-    /// it start over.
+    /// It subscribes with the positions that it holds, so the server sends
+    /// the entries from them on, and every entry of a change that it lacks. A
+    /// closed socket, for example on a server restart, makes it subscribe
+    /// again.
     ///
-    /// The author's own entries move the cursor but count as nothing
-    /// new, so only a review or a lifecycle change reaches the agent.
+    /// The author's own entries move the positions, and the follower
+    /// discards them. Thus the agent receives reviews and lifecycle
+    /// changes.
     ///
     /// # Errors
     ///
     /// When the server returns a malformed response, a fatal client
     /// error, or the posting loop is gone.
     fn run(mut self) -> Result<std::convert::Infallible> {
-        // A server that accepts the socket and then drops it, which an
-        // overflowed broadcast does, would otherwise spin the reconnect.
+        // A server can accept the socket and then close it at once, for
+        // example when its log read fails. The delay below spaces the
+        // reconnects for that case.
         let mut silent_reconnects = 0;
         loop {
-            let entries = self
-                .selection
-                .log(&self.client, Some(self.cursor), Self::RETRY)?;
-            self.send_new(entries)?;
-            // The socket sends only entries past the cursor, and the caller
-            // has taken everything up to it.
             let subscription = Subscription {
                 query: self.selection.change_query(),
-                after: Some(self.cursor),
+                positions: self.positions.clone(),
+                start: Start::Log,
             };
             let mut socket = self.client.ws_connect(&subscription)?;
             let mut sent_anything = false;
             while let Some(text) = next_text(&mut socket) {
                 sent_anything = true;
-                let Ok(StreamMessage::Entry(entry)) = serde_json::from_str::<StreamMessage>(&text)
-                else {
+                let Ok(message) = serde_json::from_str::<StreamMessage>(&text) else {
                     continue;
                 };
-                let entries = if matches!(entry.payload, LogPayload::Tags(_)) {
-                    self.selection
-                        .log(&self.client, Some(self.cursor), Self::RETRY)?
-                } else {
-                    vec![entry]
-                };
-                self.send_new(entries)?;
+                self.receive(message)?;
             }
             if sent_anything {
                 silent_reconnects = 0;
@@ -245,32 +238,36 @@ impl Follower {
         }
     }
 
-    /// Sends the entries past the cursor and moves the cursor past them.
-    fn send_new(&mut self, entries: Vec<LogEntry>) -> Result<()> {
-        let since = self.cursor;
-        self.cursor = max_seq(&entries).max(since);
-        let fresh: Vec<LogEntry> = entries
-            .into_iter()
-            .filter(|e| e.sequence > since)
-            .filter(|e| !dropped_by_incoming(e))
-            .collect();
-        if fresh.is_empty() {
+    /// Moves the position of the change of a new entry. Sends a new entry
+    /// of the reviewer to the posting loop.
+    ///
+    /// The follower keeps the position of a change that leaves the
+    /// selection. The server sends every entry of a change that matches
+    /// again, and the follower discards the entries that it received
+    /// before.
+    fn receive(&mut self, message: StreamMessage) -> Result<()> {
+        let StreamMessage::Entry(entry) = message else {
+            return Ok(());
+        };
+        let next = self.positions.entry(entry.change_number).or_default();
+        if entry.position < *next {
+            return Ok(());
+        }
+        *next = entry.position + 1;
+        if dropped_by_incoming(&entry) {
             return Ok(());
         }
         self.entries
-            .send(fresh)
+            .send(vec![entry])
             .map_err(|_| anyhow!("the watch stopped posting"))
     }
 }
 
-fn max_seq(entries: &[LogEntry]) -> u64 {
-    entries.iter().map(|e| e.sequence).max().unwrap_or(0)
-}
-
-/// The highest `sequence` the watch has posted, kept across restarts.
+/// The position of the next entry to post of each change, kept across
+/// restarts.
 ///
-/// A restarted watch resumes from it, rather than posting every entry
-/// the selection ever collected. It carries the lock's key, so the watch
+/// A restarted watch subscribes from these positions, so it posts no
+/// entry twice. It carries the lock's key, so the watch
 /// that holds the lock is the only one that writes it.
 struct Cursor {
     path: PathBuf,
@@ -291,26 +288,25 @@ impl Cursor {
     /// When the data directory is unknown, or can't be created or cleaned.
     fn open(inbox: &Path, select: &SelectArgs) -> Result<Cursor> {
         let dir = nit_data_dir()?.join("watch");
-        let path = state_path(&dir, inbox, select, "cursor")?;
+        let path = state_path(&dir, inbox, select, "positions")?;
         prune(&dir, SystemTime::now() - CURSOR_LIFETIME)?;
         Ok(Cursor { path })
     }
 
-    /// The stored cursor, or 0 when no watch has posted for this
+    /// The stored positions, or none when no watch has posted for this
     /// selection yet.
     ///
     /// # Errors
     ///
     /// When the file exists and can't be read or parsed, because
     /// starting over would repost entries the agent has seen.
-    fn read(&self) -> Result<u64> {
+    fn read(&self) -> Result<Positions> {
         let text = match std::fs::read_to_string(&self.path) {
             Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Positions::new()),
             Err(e) => return Err(e).with_context(|| format!("read {}", self.path.display())),
         };
-        text.trim()
-            .parse()
+        serde_json::from_str(&text)
             .with_context(|| format!("read the cursor in {}", self.path.display()))
     }
 
@@ -319,11 +315,11 @@ impl Cursor {
     /// # Errors
     ///
     /// When the file can't be written.
-    fn write(&self, sequence: u64) -> Result<()> {
+    fn write(&self, positions: &Positions) -> Result<()> {
         // Written beside the cursor and renamed, because the read refuses
         // a half-written one and no later watch would start.
         let staged = self.path.with_extension("new");
-        std::fs::write(&staged, sequence.to_string())
+        std::fs::write(&staged, serde_json::to_string(positions)?)
             .with_context(|| format!("write {}", staged.display()))?;
         std::fs::rename(&staged, &self.path).with_context(|| format!("rename {}", staged.display()))
     }
@@ -507,11 +503,11 @@ fn prune(dir: &Path, cutoff: SystemTime) -> Result<()> {
 mod tests {
     use std::sync::mpsc::sync_channel;
 
-    use nit_types::domain::{ChangeNumber, Tags, TagsPayload};
+    use nit_types::domain::{ChangeNumber, LogPayload, Tags, TagsPayload};
 
     use std::time::{Duration, SystemTime};
 
-    use super::{Cursor, LogEntry, LogPayload, fnv1a, next_run, prune};
+    use super::{Cursor, LogEntry, Positions, fnv1a, next_run, prune};
 
     fn entry(sequence: u64) -> LogEntry {
         LogEntry {
@@ -560,9 +556,10 @@ mod tests {
     fn the_cursor_reads_back_what_it_wrote() {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let cursor = cursor(&dir);
-        assert_eq!(cursor.read().expect("a missing cursor"), 0);
-        cursor.write(42).expect("write the cursor");
-        assert_eq!(cursor.read().expect("read the cursor"), 42);
+        assert_eq!(cursor.read().expect("a missing cursor"), Positions::new());
+        let positions = Positions::from([(ChangeNumber::new(7), 42)]);
+        cursor.write(&positions).expect("write the cursor");
+        assert_eq!(cursor.read().expect("read the cursor"), positions);
     }
 
     /// A half-written cursor stops the watch, rather than reading as 0

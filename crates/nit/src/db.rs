@@ -24,7 +24,6 @@ use std::fmt::Write as _;
 
 use nit_types::changes::ChangeQuery;
 use nit_types::domain::ChangeNumber;
-use nit_types::domain::ChangeProjection;
 use nit_types::domain::Tags;
 use nit_types::domain::{Anchor, CommentRange, LineAnchor};
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
@@ -620,19 +619,6 @@ impl ChangeFilter {
         }
     }
 
-    /// Whether the filter matches a change: the rule `clauses` spells for
-    /// SQL, for a reader that holds the projection and not the row.
-    #[must_use]
-    pub fn matches(&self, change: &ChangeProjection) -> bool {
-        (self.statuses.is_empty() || self.statuses.contains(&change.current_status()))
-            && change.tags.carries_all(&self.tags)
-            && self.change.is_none_or(|n| n == change.id)
-            && self
-                .change_id
-                .as_ref()
-                .is_none_or(|c| *c == change.change_id)
-    }
-
     /// The SQL `AND` clauses that apply this filter to a `changes` row,
     /// and the values to bind to them, in order.
     ///
@@ -883,6 +869,32 @@ pub fn log_entries(conn: &Connection, change_number: ChangeNumber) -> Result<Vec
              WHERE change_number = ?1 ORDER BY position",
         )?
         .query_map(params![change_number], map_log)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// The entries of a change at or past `position`, ascending by position.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn log_entries_from(
+    conn: &Connection,
+    change_number: ChangeNumber,
+    position: u64,
+) -> Result<Vec<LogRow>> {
+    let rows = conn
+        .prepare(
+            "SELECT sequence, position, kind, payload, created_at FROM log
+             WHERE change_number = ?1 AND position >= ?2 ORDER BY position",
+        )?
+        .query_map(
+            params![
+                i64::try_from(change_number.get())?,
+                i64::try_from(position)?
+            ],
+            map_log,
+        )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }

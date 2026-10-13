@@ -1,7 +1,7 @@
 //! Shared server state.
 //!
-//! The repo registry cache, the projection cache, the append primitive, the
-//! per-repo appended watch, and the API error type.
+//! The repo registry cache, the append primitive, the appended watch, and
+//! the API error type.
 //!
 //! The log is the only record of a change. A read replays it into a
 //! [`ChangeProjection`]. An append replays it inside the write transaction
@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 
-use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -30,25 +29,15 @@ use nit_types::domain::ChangeProjection;
 
 use crate::review;
 
-/// Live-event buffer.
-///
-/// The channel carries every change's entries, so this covers the server's
-/// traffic rather than one change's burst. A follower lagging more than this
-/// many entries behind is dropped from the stream and reconnects + re-reads
-/// the gap from the log (the log is the source of truth).
-const EVENTS_BUFFER: usize = 1024;
-
 pub struct AppState {
     pool: Pool,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
-    /// Every appended entry, for every change.
+    /// Receives a new value after each committed transaction that appended
+    /// an entry.
     ///
-    /// One channel carries the entries of every change, whatever its
-    /// lifecycle. A follower filters on the repo and tags sent with each
-    /// entry.
-    events: Sender<Published>,
-    /// A parked receiver so the channel never closes for lack of followers.
-    events_keepalive: InactiveReceiver<Published>,
+    /// A stream socket reads the log after each update, so the value is
+    /// unused.
+    appended: watch::Sender<()>,
     /// Process-global allocator for draft ids.
     ///
     /// Seeded past the `draft_comments` rows in use. Change numbers are
@@ -87,18 +76,6 @@ impl RepoState {
     }
 }
 
-/// One appended entry, as the event channel sends it to followers.
-///
-/// `change` is the projection after the last entry of its append was
-/// folded. It
-/// travels with the entry so a follower can filter and announce without
-/// replaying the change.
-#[derive(Debug, Clone)]
-pub struct Published {
-    pub entry: LogEntry,
-    pub change: Arc<ChangeProjection>,
-}
-
 impl AppState {
     /// Initializes the state from `db_path`.
     ///
@@ -128,36 +105,24 @@ impl AppState {
             .await
             .map_err(|e| anyhow::anyhow!("database init: {e}"))??;
         let (shutdown, _) = watch::channel(false);
-        let (mut events, rx) = async_broadcast::broadcast(EVENTS_BUFFER);
-        // A publisher (holding no async lock) must never stall on a slow
-        // follower; an overflowed follower reconnects and re-reads the gap from
-        // the log.
-        events.set_overflow(true);
         Ok(Arc::new(AppState {
             pool,
             repos: StdMutex::new(repos),
-            events,
-            events_keepalive: rx.deactivate(),
+            appended: watch::channel(()).0,
             next_id: AtomicU64::new(max_id + 1),
             shutdown,
         }))
     }
 
-    /// Publishes an entry to live followers.
+    /// Returns a receiver that changes after each committed transaction
+    /// that appended an entry.
     ///
-    /// Best-effort: with none, the channel is inactive and the message is
-    /// dropped (it is durable in the log).
-    pub fn publish(&self, msg: Published) {
-        let _ = self.events.try_broadcast(msg);
-    }
-
-    /// A subscription to the server's event stream, carrying every change.
-    ///
-    /// It sees only entries published after this call, so arming it
-    /// **before** reading a backlog leaves no gap for an append to slip
-    /// through.
-    pub fn subscribe(&self) -> Receiver<Published> {
-        self.events_keepalive.activate_cloned()
+    /// The caller calls `borrow_and_update` on the receiver **before** it
+    /// reads the log. Thus a commit during or after that read marks the
+    /// receiver as changed again.
+    #[must_use]
+    pub fn appended_watch(&self) -> watch::Receiver<()> {
+        self.appended.subscribe()
     }
 
     pub fn alloc_id(&self) -> u64 {
@@ -287,11 +252,12 @@ pub struct Appended {
 ///
 /// It opens with `BEGIN IMMEDIATE`, so it holds the database write lock
 /// before its first read. Each append replays the change and appends at
-/// its head. No other writer can move that head before the commit. The
-/// entries reach followers only after [`Appends::commit`].
+/// its head. No other writer can move that head before the commit.
+/// [`Appends::commit`] changes the appended watch after the commit.
 pub struct Appends<'c> {
     tx: Transaction<'c>,
-    published: Vec<Published>,
+    /// Whether an append of this transaction added an entry.
+    appended: bool,
 }
 
 impl<'c> Appends<'c> {
@@ -304,7 +270,7 @@ impl<'c> Appends<'c> {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         Ok(Appends {
             tx,
-            published: Vec::new(),
+            appended: false,
         })
     }
 
@@ -365,23 +331,20 @@ impl<'c> Appends<'c> {
         if retags {
             db::set_change_tags(&self.tx, change_number, &change.tags)?;
         }
-        let snapshot = Arc::new(change.clone());
-        self.published.extend(entries.iter().map(|entry| Published {
-            entry: entry.clone(),
-            change: Arc::clone(&snapshot),
-        }));
+        self.appended = true;
         Ok(Appended { change, entries })
     }
 
-    /// Commits the transaction, then publishes its entries to followers.
+    /// Commits the transaction, then changes the appended watch when the
+    /// transaction added an entry.
     ///
     /// # Errors
     ///
-    /// When the commit fails. Nothing is published then.
+    /// When the commit fails. The watch then stays unchanged.
     pub fn commit(self, state: &AppState) -> Result<(), Error> {
         self.tx.commit()?;
-        for msg in self.published {
-            state.publish(msg);
+        if self.appended {
+            state.appended.send_replace(());
         }
         Ok(())
     }

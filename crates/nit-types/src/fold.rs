@@ -6,7 +6,7 @@
 //!
 //! Pure over `nit_types` alone: no database, no storage serialization, no event
 //! publishing. The server's db/storage adapters (`crate::review`) feed it wire
-//! `LogEntry`s and store/broadcast the entries it returns; the same code folds
+//! `LogEntry`s and store the entries it returns; the same code folds
 //! the websocket stream client-side once compiled to WebAssembly.
 //!
 //! Fold-assigned ids: a review's id is its `review` entry's `position` — a log
@@ -17,7 +17,7 @@
 //! too: [`fold`] takes an entry by value and, via
 //! [`ChangeProjection::mint_thread_id`], fills a new-thread comment's `thread_id` from
 //! `next_thread_id` and returns the entry with the id written into its payload,
-//! so the caller stores and broadcasts that one value. `next_thread_id` is the
+//! so the caller stores that one value. `next_thread_id` is the
 //! single source of truth — the only field minting touches — so a concurrent
 //! shared-change push can't duplicate an id, and replay (ids already set) just
 //! advances it. The fold therefore requires entries in ascending `position` order.
@@ -42,7 +42,7 @@ use crate::domain::{CommentInput, LifecyclePayload, LogEntry, LogPayload, Revisi
 /// Applies one wire entry to a change's projection.
 ///
 /// Mints any new-thread ids into the entry's typed payload and returns
-/// the id-bearing entry (the server stores and broadcasts that one).
+/// the id-bearing entry (the server stores that one).
 pub fn fold(change: &mut ChangeProjection, mut entry: LogEntry) -> LogEntry {
     // Idempotent across the projection/live overlap: an entry already folded into
     // this projection (its position below the high-water mark) leaves it untouched,

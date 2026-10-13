@@ -295,37 +295,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
-      "async-broadcast" = rec {
-        crateName = "async-broadcast";
-        version = "0.7.2";
-        edition = "2021";
-        sha256 = "0ckmqcwyqwbl2cijk1y4r0vy60i89gqc86ijrxzz5f2m4yjqfnj3";
-        libName = "async_broadcast";
-        authors = [
-          "Stjepan Glavina <stjepang@gmail.com>"
-          "Yoshua Wuyts <yoshuawuyts@gmail.com>"
-          "Zeeshan Ali Khan <zeeshanak@gnome.org>"
-        ];
-        dependencies = [
-          {
-            name = "event-listener";
-            packageId = "event-listener";
-          }
-          {
-            name = "event-listener-strategy";
-            packageId = "event-listener-strategy";
-          }
-          {
-            name = "futures-core";
-            packageId = "futures-core";
-          }
-          {
-            name = "pin-project-lite";
-            packageId = "pin-project-lite";
-          }
-        ];
-
-      };
       "atomic-waker" = rec {
         crateName = "atomic-waker";
         version = "1.1.2";
@@ -1598,68 +1567,6 @@ rec {
         features = {
           "default" = [ "std" ];
           "std" = [ "libc/std" ];
-        };
-        resolvedDefaultFeatures = [ "default" "std" ];
-      };
-      "event-listener" = rec {
-        crateName = "event-listener";
-        version = "5.4.2";
-        edition = "2021";
-        sha256 = "1lk9sv7r07l58jk263s18896l55mx9jv0g1rm4hj2mpi3paas8ss";
-        libName = "event_listener";
-        authors = [
-          "Stjepan Glavina <stjepang@gmail.com>"
-          "John Nunley <dev@notgull.net>"
-        ];
-        dependencies = [
-          {
-            name = "parking";
-            packageId = "parking";
-            optional = true;
-            target = { target, features }: (!(builtins.elem "wasm" target."family"));
-          }
-          {
-            name = "pin-project-lite";
-            packageId = "pin-project-lite";
-          }
-        ];
-        features = {
-          "critical-section" = [ "dep:critical-section" ];
-          "default" = [ "std" ];
-          "loom" = [ "parking?/loom" "dep:loom" ];
-          "parking" = [ "dep:parking" ];
-          "portable-atomic" = [ "portable-atomic-util" "portable_atomic_crate" ];
-          "portable-atomic-util" = [ "dep:portable-atomic-util" ];
-          "portable_atomic_crate" = [ "dep:portable_atomic_crate" ];
-          "std" = [ "parking" ];
-        };
-        resolvedDefaultFeatures = [ "default" "parking" "std" ];
-      };
-      "event-listener-strategy" = rec {
-        crateName = "event-listener-strategy";
-        version = "0.5.4";
-        edition = "2021";
-        sha256 = "14rv18av8s7n8yixg38bxp5vg2qs394rl1w052by5npzmbgz7scb";
-        libName = "event_listener_strategy";
-        authors = [
-          "John Nunley <dev@notgull.net>"
-        ];
-        dependencies = [
-          {
-            name = "event-listener";
-            packageId = "event-listener";
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "pin-project-lite";
-            packageId = "pin-project-lite";
-          }
-        ];
-        features = {
-          "default" = [ "std" ];
-          "loom" = [ "event-listener/loom" ];
-          "portable-atomic" = [ "event-listener/portable-atomic" ];
-          "std" = [ "event-listener/std" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
@@ -3691,10 +3598,6 @@ rec {
             packageId = "anyhow";
           }
           {
-            name = "async-broadcast";
-            packageId = "async-broadcast";
-          }
-          {
             name = "axum";
             packageId = "axum";
             features = [ "ws" ];
@@ -4013,19 +3916,6 @@ rec {
         features = {
         };
         resolvedDefaultFeatures = [ "default" ];
-      };
-      "parking" = rec {
-        crateName = "parking";
-        version = "2.2.1";
-        edition = "2018";
-        sha256 = "1fnfgmzkfpjd69v4j9x737b1k8pnn054bvzcn5dm3pkgq595d3gk";
-        authors = [
-          "Stjepan Glavina <stjepang@gmail.com>"
-          "The Rust Project Developers"
-        ];
-        features = {
-          "loom" = [ "dep:loom" ];
-        };
       };
       "paste" = rec {
         crateName = "paste";
