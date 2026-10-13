@@ -557,6 +557,50 @@ pub fn upsert_change(tx: &Transaction, repo_id: u64, change_id: &ChangeId) -> Re
     Ok(ChangeNumber::new(col_u64(id)?))
 }
 
+/// Deletes every closed change whose last log entry is older than `cutoff`.
+///
+/// It also deletes every row that references a deleted change. It returns
+/// the repo id and the number of each deleted change, ordered by repo.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn delete_closed_changes(
+    tx: &Transaction,
+    cutoff: jiff::Timestamp,
+) -> Result<Vec<(u64, ChangeNumber)>> {
+    let closed: Vec<ChangeStatus> = ChangeStatus::ALL
+        .into_iter()
+        .filter(|s| s.is_terminal())
+        .collect();
+    let mut sql = String::from(
+        "SELECT c.repo_id, c.id FROM changes c JOIN log l ON l.change_number = c.id WHERE TRUE",
+    );
+    let mut values = Vec::new();
+    push_status_filter(&mut sql, &mut values, "c.status", &closed);
+    // Every `created_at` comes from `now_rfc3339`, so the text order is
+    // the time order.
+    sql.push_str(" GROUP BY c.id HAVING MAX(l.created_at) < ? ORDER BY c.repo_id");
+    values.push(cutoff.to_string().into());
+    let deleted = tx
+        .prepare(&sql)?
+        .query_map(rusqlite::params_from_iter(values), |r| {
+            Ok((col_u64(r.get(0)?)?, ChangeNumber::new(col_u64(r.get(1)?)?)))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for &(_, number) in &deleted {
+        let number = i64::try_from(number.get())?;
+        for table in ["log", "draft_comments", "draft_reviews", "change_tags"] {
+            tx.execute(
+                &format!("DELETE FROM {table} WHERE change_number = ?1"),
+                [number],
+            )?;
+        }
+        tx.execute("DELETE FROM changes WHERE id = ?1", [number])?;
+    }
+    Ok(deleted)
+}
+
 /// Returns the number a `Change-Id` names in one repo, if any.
 ///
 /// The point-read behind history enrichment (`GET /api/history`).

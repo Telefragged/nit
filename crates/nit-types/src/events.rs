@@ -74,6 +74,7 @@ pub enum StreamMessage {
     Projection(ChangeProjection),
     /// An entry of a followed change, at the next position of the change.
     Entry(LogEntry),
-    /// A followed change that the query no longer matches.
+    /// A followed change that the query no longer matches, or that the
+    /// server deleted.
     Left(ChangeNumber),
 }

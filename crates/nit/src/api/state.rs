@@ -33,7 +33,7 @@ pub struct AppState {
     pool: Pool,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
     /// Receives a new value after each committed transaction that appended
-    /// an entry.
+    /// an entry or deleted a change.
     ///
     /// A stream socket reads the log after each update, so the value is
     /// unused.
@@ -115,7 +115,7 @@ impl AppState {
     }
 
     /// Returns a receiver that changes after each committed transaction
-    /// that appended an entry.
+    /// that appended an entry or deleted a change.
     ///
     /// The caller calls `borrow_and_update` on the receiver **before** it
     /// reads the log. Thus a commit during or after that read marks the
@@ -248,7 +248,8 @@ pub struct Appended {
     pub entries: Vec<LogEntry>,
 }
 
-/// A write transaction that appends to the logs of one or more changes.
+/// A write transaction that appends to the logs of one or more changes,
+/// or deletes changes.
 ///
 /// It opens with `BEGIN IMMEDIATE`, so it holds the database write lock
 /// before its first read. Each append replays the change and appends at
@@ -256,8 +257,8 @@ pub struct Appended {
 /// [`Appends::commit`] changes the appended watch after the commit.
 pub struct Appends<'c> {
     tx: Transaction<'c>,
-    /// Whether an append of this transaction added an entry.
-    appended: bool,
+    /// Whether this transaction added an entry or deleted a change.
+    changed: bool,
 }
 
 impl<'c> Appends<'c> {
@@ -268,10 +269,7 @@ impl<'c> Appends<'c> {
     /// When another writer holds the database past the busy timeout.
     pub fn begin(conn: &'c mut Connection) -> Result<Appends<'c>, Error> {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        Ok(Appends {
-            tx,
-            appended: false,
-        })
+        Ok(Appends { tx, changed: false })
     }
 
     /// Appends to a change the payloads that `new_payloads` returns for the
@@ -330,19 +328,38 @@ impl<'c> Appends<'c> {
         if retags {
             db::set_change_tags(&self.tx, change_number, &change.tags)?;
         }
-        self.appended = true;
+        self.changed = true;
         Ok(Appended { change, entries })
     }
 
+    /// Deletes every closed change whose last log entry is older than
+    /// `cutoff`.
+    ///
+    /// See [`db::delete_closed_changes`]. The write lock holds from the
+    /// read to the commit. Thus a change that a concurrent append reopens
+    /// stays.
+    ///
+    /// # Errors
+    ///
+    /// On a database failure.
+    pub fn delete_closed_changes(
+        &mut self,
+        cutoff: jiff::Timestamp,
+    ) -> Result<Vec<(u64, ChangeNumber)>, Error> {
+        let deleted = db::delete_closed_changes(&self.tx, cutoff)?;
+        self.changed |= !deleted.is_empty();
+        Ok(deleted)
+    }
+
     /// Commits the transaction, then changes the appended watch when the
-    /// transaction added an entry.
+    /// transaction added an entry or deleted a change.
     ///
     /// # Errors
     ///
     /// When the commit fails. The watch then stays unchanged.
     pub fn commit(self, state: &AppState) -> Result<(), Error> {
         self.tx.commit()?;
-        if self.appended {
+        if self.changed {
             state.appended.send_replace(());
         }
         Ok(())
