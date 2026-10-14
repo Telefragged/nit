@@ -253,15 +253,15 @@ button.rail-toggle,
   color: var(--text);
 }
 
-.rail-added :is(.rail-name, .rail-status) {
+.rail-added :is(.rail-name, .rail-status, .rail-icon) {
   color: var(--green);
 }
 
-.rail-deleted :is(.rail-name, .rail-status) {
+.rail-deleted :is(.rail-name, .rail-status, .rail-icon) {
   color: var(--red);
 }
 
-.rail-renamed :is(.rail-name, .rail-status) {
+.rail-renamed :is(.rail-name, .rail-status, .rail-icon) {
   color: var(--blue);
 }
 
@@ -277,12 +277,19 @@ button.rail-toggle,
 .rail-chevron {
   display: block;
   margin: 0 auto;
-  fill: none;
-  stroke: var(--text-dim);
-  stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  color: var(--text-dim);
   transition: transform 0.1s;
+}
+
+/* An icon takes the color of its row's name: a file's status color, and
+   the brighter foreground of a folder. */
+.rail-icon {
+  flex: none;
+  margin-right: 5px;
+}
+
+.rail-thread .rail-icon {
+  color: var(--amber);
 }
 
 .rail-chevron.open {
@@ -296,7 +303,7 @@ button.rail-toggle,
 }
 
 .rail-toggle-chevron:hover .rail-chevron {
-  stroke: var(--text);
+  color: var(--text);
 }
 
 .rail-name:hover:not(:disabled) {
