@@ -46,7 +46,7 @@ describe("the shared wasm fold", () => {
     expect(detail.revisions).toHaveLength(1);
     // Revision numbers are minted in the fold, not carried in the entry.
     expect(detail.revisions[0]?.number).toBe(0);
-    expect(detail.reviews).toHaveLength(0);
+    expect(detail.revisions[0]?.status).toBe("pending");
     // Drafts/decision are not log state.
     expect(detail.drafts).toEqual([]);
     expect(detail.draft_decision).toBeNull();
@@ -62,12 +62,11 @@ describe("the shared wasm fold", () => {
 
     const advanced = foldEntry(projection, review);
     expect(advanced.entries_folded).toBe(2);
-    expect(changeDetail(advanced).reviews).toHaveLength(1);
-    expect(changeDetail(advanced).reviews[0]?.verdict).toBe("approve");
+    expect(changeDetail(advanced).revisions[0]?.status).toBe("approved");
 
     // Re-delivering an entry the projection already covered is a no-op.
     const replayed = foldEntry(advanced, review);
     expect(replayed.entries_folded).toBe(2);
-    expect(changeDetail(replayed).reviews).toHaveLength(1);
+    expect(changeDetail(replayed).revisions[0]?.status).toBe("approved");
   });
 });

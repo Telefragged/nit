@@ -12,7 +12,7 @@ import type {
 
 /** Keep the changes a subscription matches live over the websocket: hold each
  * one's ChangeProjection, fold its live tail with the shared wasm fold, and
- * write the published projection (revisions/threads/reviews) into the
+ * write the published projection (revisions/threads/tags) into the
  * ["change", id] react-query cache. Returns the matched changes' projections,
  * ascending by change number, as they arrive, as they advance, and as they
  * leave. The reviewer's drafts + draft decision are not log state, so they

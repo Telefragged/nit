@@ -15,21 +15,24 @@ describe("synthLog fidelity", () => {
   for (const change of changes) {
     it(`folds back to change ${change.id}'s published state`, () => {
       const recThreads = threads.filter((t) => t.change_number === change.id);
+      const log = synthLog(change, recThreads);
       const folded = changeDetail(
         replayProjection({
           id: change.id,
           repo_id: change.repo_id,
           change_id: change.change_id,
-          entries: synthLog(change, recThreads),
+          entries: log,
         }),
       );
 
       expect(folded.revisions.map((r) => r.commit_sha)).toEqual(
         change.revisions.map((r) => r.commit_sha),
       );
-      expect(sortById(folded.reviews).map((r) => [r.id, r.verdict])).toEqual(
-        sortById(change.reviews).map((r) => [r.id, r.verdict]),
-      );
+      expect(
+        log.flatMap((e) =>
+          e.kind === "review" ? [[e.position, e.payload.verdict]] : [],
+        ),
+      ).toEqual(sortById(change.reviews).map((r) => [r.id, r.verdict]));
 
       const shape = (t: {
         id: number;

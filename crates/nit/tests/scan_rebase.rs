@@ -5,7 +5,10 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_get, member_id, msg, push, review, status_at, tip_change};
+use common::{
+    GitRepo, TestServer, http_get, member_id, msg, published_reviews, push, review, status_at,
+    tip_change,
+};
 use serde_json::Value;
 
 fn change_detail(server: &TestServer, change_number: u64) -> Value {
@@ -76,7 +79,8 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     assert_eq!(revs[1]["commit_sha"], c2r.to_string());
     assert_eq!(revs[1]["parent_sha"], c1r.to_string());
     assert_eq!(
-        detail["reviews"][0]["revision"], 0,
+        published_reviews(&server, tip_id)[0]["revision"],
+        0,
         "the verdict stays anchored to revision 0"
     );
     assert_eq!(latest_status(&server, tip_id), "approved");

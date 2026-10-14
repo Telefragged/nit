@@ -15,7 +15,6 @@ use crate::domain::Sha;
 use crate::domain::Tag;
 use crate::domain::Tags;
 use crate::domain::ThreadProjection;
-use crate::domain::Verdict;
 
 /// The query that picks changes: `GET /api/changes` and `POST /api/submit`.
 ///
@@ -82,7 +81,6 @@ pub struct ChangeDetail {
     pub threads: Vec<ThreadProjection>,
     /// All revisions.
     pub drafts: Vec<Draft>,
-    pub reviews: Vec<Review>,
     pub draft_decision: Option<DraftDecision>,
 }
 
@@ -115,18 +113,6 @@ pub struct Revision {
     ///
     /// The last revision's is the change's status.
     pub status: ChangeStatus,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(utoipa::ToSchema)]
-pub struct Review {
-    pub id: u64,
-    pub revision: RevisionNumber,
-    pub verdict: Verdict,
-    /// Cover message.
-    pub message: String,
-    pub created_at: String,
 }
 
 /// `POST /api/changes/{id}/tags` request: the tags to put on a change.

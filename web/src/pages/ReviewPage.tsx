@@ -234,7 +234,7 @@ export default function ReviewPage() {
     : undefined;
 
   // The change page is event-driven: the published projection (revisions,
-  // threads, reviews) is folded from the change-event websocket into the
+  // threads, tags) is folded from the change-event websocket into the
   // ["change", id] cache by `useChangeStream` (below). This query only reads
   // that cache (skipToken — never fetches). The diff, the repo, and the
   // reviewer's drafts/draft decision are not in the log, so they stay REST; `change` composes the published projection with the drafts

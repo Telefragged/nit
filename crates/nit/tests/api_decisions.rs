@@ -73,12 +73,7 @@ fn draft_surfaces_then_clears() {
     assert_eq!(st, 204);
 
     // Staging is not a publish.
-    assert!(
-        detail(&server, id)["reviews"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert!(published_reviews(&server, id).is_empty());
     assert_eq!(status_at(&server, id), "pending");
 }
 
@@ -136,9 +131,10 @@ fn batch_submit_publishes_verdict_and_drains_comments() {
         d["drafts"].as_array().unwrap().is_empty(),
         "comments drained"
     );
-    assert_eq!(d["reviews"].as_array().unwrap().len(), 1);
-    assert_eq!(d["reviews"][0]["verdict"], "request_changes");
-    assert_eq!(d["reviews"][0]["message"], "a nit");
+    let reviews = published_reviews(&server, id);
+    assert_eq!(reviews.len(), 1);
+    assert_eq!(reviews[0]["verdict"], "request_changes");
+    assert_eq!(reviews[0]["message"], "a nit");
     assert_eq!(
         d["threads"].as_array().unwrap().len(),
         1,
@@ -168,7 +164,7 @@ fn batch_submit_leaves_undecided_comment_only_change() {
         1,
         "comment kept as draft"
     );
-    assert!(d["reviews"].as_array().unwrap().is_empty());
+    assert!(published_reviews(&server, id).is_empty());
     assert_eq!(status_at(&server, id), "pending");
 }
 
@@ -278,11 +274,7 @@ fn batch_submit_is_idempotent() {
     draft(&server, id, "approve", "lgtm");
     assert_eq!(submit_change(&server, id)["submitted"], 1);
     assert_eq!(submit_change(&server, id)["submitted"], 0);
-    assert_eq!(
-        detail(&server, id)["reviews"].as_array().unwrap().len(),
-        1,
-        "no double review"
-    );
+    assert_eq!(published_reviews(&server, id).len(), 1, "no double review");
     assert_eq!(status_at(&server, id), "approved");
 }
 
@@ -344,7 +336,8 @@ fn batch_submit_publishes_at_latest_revision() {
 
     let d = detail(&server, id);
     assert_eq!(
-        d["reviews"][0]["revision"], 1,
+        published_reviews(&server, id)[0]["revision"],
+        1,
         "published at the latest revision"
     );
     assert_eq!(d["revisions"][1]["status"], "approved");

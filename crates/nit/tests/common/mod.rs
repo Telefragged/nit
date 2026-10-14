@@ -508,6 +508,15 @@ pub fn change_log(server: &TestServer, change_number: u64) -> Vec<Value> {
     log["entries"].as_array().expect("entries").clone()
 }
 
+/// The payload of every `review` entry of a change, in position order.
+pub fn published_reviews(server: &TestServer, change_number: u64) -> Vec<Value> {
+    change_log(server, change_number)
+        .into_iter()
+        .filter(|e| e["kind"] == "review")
+        .map(|e| e["payload"].clone())
+        .collect()
+}
+
 /// Find a change's number by its Change-Id in a `PushResult`.
 pub fn member_id(value: &Value, label: &str) -> u64 {
     let key = change_id(label);
