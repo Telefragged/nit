@@ -66,7 +66,7 @@ fn review_drains_drafts_and_sets_status() {
     let pre = detail(&server, id);
     assert_eq!(pre["drafts"].as_array().unwrap().len(), 2, "still drafts");
     assert!(pre["threads"].as_array().unwrap().is_empty(), "unpublished");
-    assert!(pre["reviews"].as_array().unwrap().is_empty());
+    assert!(published_reviews(&server, id).is_empty());
 
     // Review submit is the only publish path; drafts drain into one review entry.
     let out = review(&server, id, "request_changes", "a few nits");
@@ -78,10 +78,11 @@ fn review_drains_drafts_and_sets_status() {
         "drafts drained"
     );
     assert_eq!(post["threads"].as_array().unwrap().len(), 2);
-    assert_eq!(post["reviews"].as_array().unwrap().len(), 1);
-    assert_eq!(post["reviews"][0]["revision"], 0);
-    assert_eq!(post["reviews"][0]["verdict"], "request_changes");
-    assert_eq!(post["reviews"][0]["message"], "a few nits");
+    let reviews = published_reviews(&server, id);
+    assert_eq!(reviews.len(), 1);
+    assert_eq!(reviews[0]["revision"], 0);
+    assert_eq!(reviews[0]["verdict"], "request_changes");
+    assert_eq!(reviews[0]["message"], "a few nits");
     // The review verdict is the change's status.
     assert_eq!(
         status_at(&server, id, None).as_deref(),
@@ -454,9 +455,8 @@ fn agent_comment_opens_thread_without_review_status() {
         "author comment has no review"
     );
 
-    let d = detail(&server, id);
     assert!(
-        d["reviews"].as_array().unwrap().is_empty(),
+        published_reviews(&server, id).is_empty(),
         "no review created"
     );
     assert_eq!(status_at(&server, id, None).as_deref(), Some("pending"));

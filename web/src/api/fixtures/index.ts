@@ -19,7 +19,6 @@ import type {
   Decision,
   Line,
   Repo,
-  Review,
   DraftDecision,
   TagList,
   Verdict,
@@ -34,6 +33,7 @@ import type {
   AuthoredRevision,
   ChangeRecord,
   DraftRecord,
+  Review,
 } from "./store";
 
 let nextDraftId = 200;
@@ -229,7 +229,7 @@ function repoHistory(repoId: number) {
   return { commits, truncated: repo.history.length > MERGED_WINDOW + 1 };
 }
 
-// The published view (revisions/threads/reviews) folds the change's single
+// The published view (revisions, threads, tags) folds the change's single
 // synth log — the same source the websocket projection folds — so a mutation that
 // appends to the log shows up identically over REST and the stream. The
 // reviewer's drafts and draft decision are not log state, so overlay them.

@@ -332,7 +332,6 @@ export type ChangeDetail = {
    * All revisions.
    */
   drafts: Array<Draft>;
-  reviews: Array<Review>;
   draft_decision: DraftDecision | null;
 };
 
@@ -367,17 +366,6 @@ export type Revision = {
    * The last revision's is the change's status.
    */
   status: ChangeStatus;
-};
-
-export type Review = {
-  id: number;
-  revision: RevisionNumber;
-  verdict: Verdict;
-  /**
-   * Cover message.
-   */
-  message: string;
-  created_at: string;
 };
 
 /**

@@ -27,7 +27,7 @@
 //! the live tail at the boundary, and [`fold`] skips any entry below it, so the
 //! arm/projection overlap is idempotent, never doubled.
 
-use crate::changes::{ChangeDetail, Review, Revision};
+use crate::changes::{ChangeDetail, Revision};
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
 use crate::domain::ChangeStatus;
@@ -197,17 +197,6 @@ fn revision_view(revision: &RevisionProjection, status: ChangeStatus) -> Revisio
     }
 }
 
-#[must_use]
-pub fn review_view(review: &ReviewProjection) -> Review {
-    Review {
-        id: review.id,
-        revision: review.revision,
-        verdict: review.verdict,
-        message: review.message.clone(),
-        created_at: review.created_at.clone(),
-    }
-}
-
 /// The published projection of a change as the wire [`ChangeDetail`].
 ///
 /// Minus the reviewer's drafts and draft decision: mutable scratch
@@ -228,7 +217,6 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
         tags: change.tags.clone(),
         threads: change.threads.clone(),
         drafts: Vec::new(),
-        reviews: change.reviews.iter().map(review_view).collect(),
         draft_decision: None,
     }
 }

@@ -6,9 +6,10 @@ import type {
   ChangeStatus,
   DiffFile,
   PortedComment,
-  Review,
   Revision,
+  RevisionNumber,
   ThreadComment,
+  Verdict,
 } from "../types";
 
 /** A file authored in ./data may omit either total, which ./index fills
@@ -23,6 +24,16 @@ export type AuthoredFile = Omit<DiffFile, "old_total" | "new_total"> & {
 export type AuthoredRevision = Omit<Revision, "subject" | "status">;
 interface AuthoredDiff {
   files: AuthoredFile[];
+}
+
+/** A published review as authored in ./data. The synth log writes it as a
+ * `review` entry. */
+export interface Review {
+  id: number;
+  revision: RevisionNumber;
+  verdict: Verdict;
+  message: string;
+  created_at: string;
 }
 
 export interface ChangeRecord {
