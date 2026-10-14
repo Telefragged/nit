@@ -45,9 +45,7 @@ function idle(client: QueryClient): Promise<void> {
  * starts nothing.
  *
  * react-query's notify queue runs on a zero-delay task, after every queued
- * microtask. So an awaited fetch's continuation and the file tree's Preact
- * render have run when a round ends, and a call with nothing in flight
- * still commits the tree's repaint. */
+ * microtask. So an awaited fetch's continuation has run when a round ends. */
 async function settle(client: QueryClient): Promise<void> {
   do await act(() => idle(client));
   while (busy(client));

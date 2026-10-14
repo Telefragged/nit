@@ -102,12 +102,6 @@ catches a skew and gives you the gallery in `result/`.
 - Frontend: tsc-clean always; test break-prone logic (diff rendering,
   comment anchoring) with vitest (`npm test`), which runs as the `web-test`
   flake check.
-- The sidebar file tree renders into a shadow root, so `screen` queries and
-  `getByTitle` never reach its rows: query
-  `document.querySelector("file-tree-container").shadowRoot` for
-  `[data-item-path="…"]`. The tree repaints in a microtask after the event
-  that changes it, so await the `settle` that `renderPage`
-  (`web/src/test/page.tsx`) returns before you read its rows.
 - A fresh `.worktrees/*` checkout has no `web/node_modules`; run
   `cd web && nix develop -c npm ci` before any web check.
 
