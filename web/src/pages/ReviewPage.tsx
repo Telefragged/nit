@@ -99,7 +99,7 @@ import { useReviewSettings } from "../lib/reviewSettings";
 import { patchParams, useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
 import { targetLine, type DraftTarget, type ReviewCtx } from "./reviewContext";
-import { ReviewContext, sameTarget } from "./reviewContext";
+import { REVEAL, ReviewContext, sameTarget } from "./reviewContext";
 
 const TAG_KEY = "nit.review-tag";
 
@@ -869,7 +869,9 @@ export default function ReviewPage() {
   const moves =
     link !== null &&
     location.state !== QUIET &&
-    (navigationType === NavigationType.Push || !sameLink(link, revealed.link));
+    (navigationType === NavigationType.Push ||
+      location.state === REVEAL ||
+      !sameLink(link, revealed.link));
   if (location.key !== revealed.key) {
     if (!moves) {
       setRevealed({ link, key: location.key });

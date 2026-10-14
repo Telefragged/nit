@@ -65,6 +65,10 @@ export interface ReviewCtx {
   setEditorDirty: (dirty: boolean) => void;
 }
 
+/** The location state of a link that moves the view to its place, even
+ * when the page already shows that link. */
+export const REVEAL = "reveal";
+
 export const ReviewContext = createContext<ReviewCtx | null>(null);
 
 export function useReview(): ReviewCtx {

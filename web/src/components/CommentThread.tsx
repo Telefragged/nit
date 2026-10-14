@@ -7,7 +7,7 @@ import type { UiThread } from "../lib/comments";
 import { anchorKind, pendingResolved, rangeSince } from "../lib/comments";
 import { linksThread } from "../lib/diffLink";
 import { timeAgo } from "../lib/time";
-import { useReview } from "../pages/reviewContext";
+import { REVEAL, useReview } from "../pages/reviewContext";
 import CommentEditor from "./CommentEditor";
 import Markdown from "./Markdown";
 
@@ -18,7 +18,7 @@ function CommentTime({ at, thread }: { at: string; thread: number | null }) {
   if (thread === null)
     return <span className="comment-time">{timeAgo(at)}</span>;
   return (
-    <Link className="comment-time" to={linkHref({ thread })}>
+    <Link className="comment-time" to={linkHref({ thread })} state={REVEAL}>
       {timeAgo(at)}
     </Link>
   );
