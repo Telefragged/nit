@@ -54,6 +54,9 @@ nit log 42 5..   # every entry of change 42 from position 5 on
 `..` (the default) reads every entry of the change. Act on all of it, and the watch delivers
 the next change by itself.
 
+When you tell the user about a comment or a line under review, link it. The
+`comment` skill's **Link to a place in the review** gives the format.
+
 ## Acting on status
 
 `nit status` prints one line per change in your session — its number, its
