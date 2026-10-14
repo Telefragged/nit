@@ -717,6 +717,17 @@ describe("links to a comment thread", () => {
     expect(scrolled).toEqual([thread(70)]);
   });
 
+  it("ports a resolved thread while the setting shows open threads only", async () => {
+    // Thread 71 is resolved on r0 line 22, and ports to r1 line 30.
+    await renderReview("/changes/11?against=base&thread=71");
+
+    const at = thread(71).closest(".meta-row")?.previousElementSibling;
+    expect(at?.querySelector(".code")?.getAttribute("data-new")).toBe("30");
+    expect(scrolled).toEqual([thread(71)]);
+    // Thread 75 is resolved too, and stays hidden.
+    expect(document.querySelector('[data-thread="75"]')).toBeNull();
+  });
+
   it("shows a thread the range has no place for beside its file's lines", async () => {
     // Thread 75 sits on r0 line 21 and has no ported place at r1.
     await renderReview("/changes/11?against=base&thread=75");

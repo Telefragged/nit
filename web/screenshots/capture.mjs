@@ -375,6 +375,14 @@ const captures = [
   // Collapsed-by-default file sections: only the synthetic commit message
   // starts expanded, the code files are header-only rows.
   { name: "review-files-collapsed", path: "/changes/11?against=base" },
+  // A link to thread 71, resolved on r0. The setting shows open threads
+  // only, but the page ports the linked thread to its r1 line, scrolls to
+  // it, and marks it.
+  {
+    name: "review-linked-thread",
+    path: "/changes/11?against=base&thread=71",
+    fullPage: false,
+  },
   // A link to lines 21-23 of rotate.rs: the page expands the file, scrolls
   // the first linked line into view, and tints the linked span. The pointer
   // rests on the header, so its file link shows.

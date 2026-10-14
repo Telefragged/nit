@@ -268,6 +268,7 @@ export default function ReviewPage() {
   const changeNumber = Number(id);
   const [searchParams, updateParams] = useUrlParams();
   const link = useMemo(() => parseLink(searchParams), [searchParams]);
+  const linkedId = linkedThread(link);
   const location = useLocation();
   const navigationType = useNavigationType();
 
@@ -618,34 +619,39 @@ export default function ReviewPage() {
     [threads],
   );
 
-  // The ported comments of the shown range. The key carries the earlier
-  // threads and their resolution, so a thread opened or resolved since
-  // refetches under either setting; the anchors themselves change only
-  // with the revisions.
+  // The ported comments of the shown range, resolved threads included, so
+  // the setting and the link filter them without a refetch. The key
+  // carries the earlier threads, so a thread published since refetches;
+  // the anchors themselves change only with the revisions. A linked thread
+  // ports even when it is resolved and the setting hides resolved threads:
+  // the reviewer followed a link to that one thread.
   const includeResolved = settings.ported === "all";
   const portKey = useMemo(
     () =>
       threads
         .filter((t) => t.id !== null && t.revision < selected)
-        .map((t) => (t.resolved ? `${t.id}r` : t.id))
+        .map((t) => t.id)
         .join(","),
     [threads, selected],
   );
   const portedQ = useQuery({
-    queryKey: [
-      "ported",
-      changeNumber,
-      selected,
-      against ?? null,
-      includeResolved,
-      portKey,
-    ],
-    queryFn: () => getPorted(changeNumber, selected, against, includeResolved),
+    queryKey: ["ported", changeNumber, selected, against ?? null, portKey],
+    queryFn: () => getPorted(changeNumber, selected, against),
     enabled: published !== undefined && selected > 0,
   });
+  const ported = useMemo(() => {
+    const all = portedQ.data ?? [];
+    if (includeResolved) return all;
+    const resolved = new Set(
+      threads.filter((t) => t.resolved).map((t) => t.id),
+    );
+    return all.filter(
+      (p) => p.thread_id === linkedId || !resolved.has(p.thread_id),
+    );
+  }, [portedQ.data, includeResolved, threads, linkedId]);
   const shownThreads = useMemo(
-    () => portThreads(threads, portedQ.data ?? [], selected, against),
-    [threads, portedQ.data, selected, against],
+    () => portThreads(threads, ported, selected, against),
+    [threads, ported, selected, against],
   );
 
   const navigate = useNavigate();
