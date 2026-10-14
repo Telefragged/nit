@@ -825,6 +825,20 @@ describe("links to a comment thread", () => {
     expect(thread(73).classList).toContain("thread-linked");
   });
 
+  it("links a thread from the time of its comment", async () => {
+    let search = "";
+    function LocationProbe() {
+      search = useLocation().search;
+      return null;
+    }
+    await renderReview("/changes/11?against=base", <LocationProbe />);
+    toggleSection(2);
+
+    fireEvent.click(must(thread(73).querySelector("a.comment-time"), "time"));
+    expect(new URLSearchParams(search).get("thread")).toBe("73");
+    expect(scrolled).toEqual([thread(73)]);
+  });
+
   it("scrolls to a thread on the whole change", async () => {
     await renderReview("/changes/10?thread=70");
 

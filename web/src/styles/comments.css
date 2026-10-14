@@ -51,6 +51,12 @@
 
 .comment-time {
   color: var(--text-faint);
+  text-decoration: none;
+}
+
+a.comment-time:hover {
+  color: var(--blue);
+  text-decoration: underline;
 }
 
 .comment-tools {
