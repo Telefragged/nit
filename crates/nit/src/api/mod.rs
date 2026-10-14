@@ -41,7 +41,6 @@ use axum::Json;
 use axum::Router;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::serve::ListenerExt;
 use git2::Repository;
 
 use nit_types::domain::ChangeNumber;
@@ -231,14 +230,6 @@ pub async fn serve_on_state(
         shutdown.await;
         st.begin_shutdown();
     };
-    // A websocket sends the backlog of a log as many small frames. With
-    // Nagle's algorithm on, the kernel holds each small frame until the
-    // client acknowledges the previous one.
-    let listener = listener.tap_io(|tcp| {
-        if let Err(err) = tcp.set_nodelay(true) {
-            tracing::warn!("cannot set TCP_NODELAY: {err}");
-        }
-    });
     axum::serve(listener, app(state, web_ui))
         .with_graceful_shutdown(shutdown)
         .await?;
