@@ -147,20 +147,17 @@ export const getFileLines = (
 
 /** The threads of earlier revisions at their place in `revision`'s trees
  * and, over the same range as `getDiff`, in `against`'s: `revision`'s
- * entries first. Only the unresolved ones unless `includeResolved`. */
+ * entries first. The resolved threads are included. */
 export const getPorted = (
   changeNumber: number,
   revision: number,
   against?: number,
-  includeResolved = false,
 ) => {
-  const q = new URLSearchParams();
+  const q = new URLSearchParams({ include_resolved: "true" });
   if (against !== undefined) q.set("against", String(against));
-  if (includeResolved) q.set("include_resolved", "true");
-  const query = q.size > 0 ? `?${q}` : "";
   return request<PortedComment[]>(
     "GET",
-    `/changes/${changeNumber}/revisions/${revision}/ported${query}`,
+    `/changes/${changeNumber}/revisions/${revision}/ported?${q}`,
   );
 };
 
