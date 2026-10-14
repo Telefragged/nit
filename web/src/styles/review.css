@@ -319,6 +319,21 @@ button.rail-toggle,
   text-align: left;
 }
 
+/* A file name keeps its extension whole: only the stem ellipsizes. */
+.rail-file .rail-name {
+  display: flex;
+}
+
+/* The stem's width rounds down to whole characters of the monospace font,
+   so its ellipsis ends flush against the extension. `--ext` is the length
+   of the extension. */
+.rail-stem {
+  min-width: 0;
+  max-width: round(down, calc(100% - var(--ext) * 1ch), 1ch);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .rail-counts {
   flex: none;
   display: flex;

@@ -8,6 +8,7 @@ import {
   pairLines,
   rangeSliceOnLine,
   skipped,
+  splitExtension,
   treeOrder,
 } from "./diffview";
 
@@ -287,5 +288,20 @@ describe("oneSided", () => {
 
   it("is false while both sides carry lines", () => {
     expect(oneSided({ old_total: 3, new_total: 4 })).toBe(false);
+  });
+});
+
+describe("splitExtension", () => {
+  it("splits before the last dot", () => {
+    expect(splitExtension("fileTree.test.ts")).toEqual([
+      "fileTree.test",
+      ".ts",
+    ]);
+  });
+
+  it("keeps a dotfile, a name with no dot and a long extension whole", () => {
+    expect(splitExtension(".gitignore")).toEqual([".gitignore", ""]);
+    expect(splitExtension("Makefile")).toEqual(["Makefile", ""]);
+    expect(splitExtension("a.verylongpart")).toEqual(["a.verylongpart", ""]);
   });
 });

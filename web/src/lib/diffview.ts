@@ -55,6 +55,17 @@ export function statusLetter(file: DiffFile): string {
   return STATUS_LETTER[fileStatus(file)];
 }
 
+/** Splits a file name before its extension.
+ *
+ * The extension is empty when the name has no dot after its first
+ * character, or when the part after the last dot is longer than 10
+ * characters. */
+export function splitExtension(name: string): [stem: string, ext: string] {
+  const dot = name.lastIndexOf(".");
+  if (dot < 1 || name.length - dot > 11) return [name, ""];
+  return [name.slice(0, dot), name.slice(dot)];
+}
+
 /** Whole-diff totals for the file-rail title. The synthetic /COMMIT_MSG
  * entry is excluded from the count and the sums alike — it is not a file,
  * and its message churn would distort the code totals. Binary files count
