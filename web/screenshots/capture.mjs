@@ -375,6 +375,19 @@ const captures = [
   // Collapsed-by-default file sections: only the synthetic commit message
   // starts expanded, the code files are header-only rows.
   { name: "review-files-collapsed", path: "/changes/11?against=base" },
+  // A link to lines 21-23 of rotate.rs: the page expands the file, scrolls
+  // the first linked line into view, and tints the linked span. The pointer
+  // rests on the header, so its file link shows.
+  {
+    name: "review-linked-lines",
+    path: "/changes/11?against=base&file=src/auth/rotate.rs&line=21-23",
+    fullPage: false,
+    actions: async (page) => {
+      await page
+        .locator('section[data-diff-path="src/auth/rotate.rs"] .file-header')
+        .hover();
+    },
+  },
   // Mixed state via a rail click: the selected file expands and is
   // scrolled to; its collapsed neighbor stays collapsed.
   {

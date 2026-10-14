@@ -198,6 +198,28 @@
   box-shadow: inset 0 0 0 100vmax var(--amber-dim);
 }
 
+/* A line number is a link to its line. It reads as a plain number until
+   the pointer reaches it. */
+.line-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.line-link:hover {
+  color: var(--blue);
+}
+
+/* The lines the page's URL links to. The inset shadow tints the cell like
+   .line-hover. The blue tint is different from the amber of a comment. */
+.linked {
+  box-shadow: inset 0 0 0 100vmax var(--blue-dim);
+}
+
+.g.linked {
+  color: var(--blue);
+}
+
 /* The "why c drafted nothing" bubble, hung under the selection it rejected
    (ReviewPage supplies the offset within the diff column) so the rule reads
    beside the lines that broke it. Inert to the pointer: the reviewer's next

@@ -420,6 +420,24 @@
   font-weight: 400;
 }
 
+/* The link to a file shows while the pointer is on its header, or while
+   the link holds the keyboard focus. */
+.file-link {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  text-decoration: none;
+  opacity: 0;
+}
+
+.file-header:hover .file-link,
+.file-link:focus-visible {
+  opacity: 1;
+}
+
+.file-link:hover {
+  color: var(--blue);
+}
+
 .fcounts {
   font-size: 11.5px;
 }
