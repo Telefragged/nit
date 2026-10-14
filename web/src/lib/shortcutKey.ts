@@ -1,3 +1,14 @@
+/** Whether a click is the plain click that the page handles itself: the
+ * main button, with no command, control or alt key. Shift is left to the
+ * caller. The browser handles any other click, for example a ctrl-click
+ * that opens a new tab. */
+export const plainClick = (e: {
+  button: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+}) => e.button === 0 && !e.ctrlKey && !e.metaKey && !e.altKey;
+
 /** The shortcut a keypress stands for: `n`, `shift+n`, `[`, and so on.
  *
  * Returns null when the keypress drives no shortcut — a command, control or

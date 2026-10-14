@@ -85,6 +85,22 @@ function sideOf(first: HTMLElement, last: HTMLElement): Side | null {
   return null;
 }
 
+/** The line a code cell shows, with its file and side. A unified cell
+ * that shows both sides reads as the new side. Null when `node` is not in
+ * a code cell that shows a line. */
+export function cellLine(
+  node: Element,
+): { file: string; side: Side; line: number } | null {
+  const cell = cellOf(node);
+  const file = cell
+    ?.closest("section[data-diff-path]")
+    ?.getAttribute("data-diff-path");
+  if (!cell || !file) return null;
+  const side: Side = cell.dataset.new === undefined ? "old" : "new";
+  const line = Number(cell.dataset[side]);
+  return Number.isInteger(line) && line > 0 ? { file, side, line } : null;
+}
+
 /** Why a selection inside the diff maps to no target — surfaced to the
  * user by the `c` handler. Selections with no commentable cells at all
  * (outside the diff) return null instead and stay silent. */

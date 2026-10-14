@@ -709,6 +709,35 @@ describe("links to a file or its lines", () => {
     expect(scrolled).toEqual([]);
   });
 
+  it("links a line whose code is clicked, and stretches the span on shift", async () => {
+    await renderReview(rotate, <LocationProbe />);
+    const params = () => new URLSearchParams(search);
+
+    fireEvent.click(newCode(23));
+    expect(params().get("line")).toBe("23");
+    fireEvent.click(newCode(25), { shiftKey: true });
+    expect(params().get("line")).toBe("23-25");
+
+    // The removed line 21 shows only on the old side.
+    fireEvent.click(
+      must(
+        byPath("src/auth/rotate.rs").querySelector('.code[data-old="21"]'),
+        "old 21",
+      ),
+    );
+    expect([params().get("line"), params().get("side")]).toEqual(["21", "old"]);
+  });
+
+  it("keeps the link when a click ends a text selection", async () => {
+    await renderReview(`${rotate}&line=22`, <LocationProbe />);
+
+    const range = document.createRange();
+    range.selectNodeContents(newCode(24));
+    select(range);
+    fireEvent.click(newCode(24));
+    expect(new URLSearchParams(search).get("line")).toBe("22");
+  });
+
   it("links a line from the keyboard", async () => {
     await renderReview(rotate, <LocationProbe />);
 

@@ -48,6 +48,7 @@ import {
 } from "../../lib/diffview";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
 import { scrollBehavior } from "../../lib/scrollspy";
+import { plainClick } from "../../lib/shortcutKey";
 import { selectionAnchorSide } from "../../lib/selection";
 import { EXPAND_STEP, useHunkExpansion } from "../../lib/useHunkExpansion";
 import {
@@ -115,16 +116,6 @@ const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
 /** Class suffix marking a rebase-drift line, so its gutter and code cell
  * render contained. */
 const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
-
-/** Whether a click on a link is the plain click that the page handles
- * itself. The browser handles any other click, for example a ctrl-click
- * that opens a new tab. */
-const plainClick = (e: ReactMouseEvent, allowShift = false) =>
-  e.button === 0 &&
-  !e.ctrlKey &&
-  !e.metaKey &&
-  !e.altKey &&
-  (allowShift || !e.shiftKey);
 
 /** One reveal button, floating over a separator; `kind` is both its class
  * suffix and which lines it takes. */
@@ -481,7 +472,7 @@ export default function DiffFileView({
           lines: { side, start: no, end: no },
         })}
         onMouseDown={(e) => {
-          if (!plainClick(e, true)) return;
+          if (!plainClick(e)) return;
           // Keeps the browser from dragging the link or selecting text.
           e.preventDefault();
           const span = clickLink(ctx.link, file.path, side, no, e.shiftKey);
@@ -501,7 +492,7 @@ export default function DiffFileView({
           );
         }}
         onClick={(e) => {
-          if (!plainClick(e, true)) return;
+          if (!plainClick(e)) return;
           e.preventDefault();
           // A click from the keyboard has no mousedown before it, so it
           // links the line here.
@@ -747,7 +738,7 @@ export default function DiffFileView({
           onClick={(e) => {
             // The header around the link toggles the section on a click.
             e.stopPropagation();
-            if (!plainClick(e)) return;
+            if (!plainClick(e) || e.shiftKey) return;
             e.preventDefault();
             ctx.selectLink({ file: file.path, lines: null });
           }}

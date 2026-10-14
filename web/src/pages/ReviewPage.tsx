@@ -74,6 +74,7 @@ import {
 } from "../lib/comments";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import {
+  clickLink,
   fileLink,
   linkedThread,
   linksThread,
@@ -86,9 +87,13 @@ import { displayPath, fileAt, fileDomId, treeOrder } from "../lib/diffview";
 import { highlight } from "../lib/highlight";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt, scrollBehavior } from "../lib/scrollspy";
-import { shortcutKey } from "../lib/shortcutKey";
+import { plainClick, shortcutKey } from "../lib/shortcutKey";
 import type { SelectionMiss } from "../lib/selection";
-import { selectionAnchorSide, selectionTarget } from "../lib/selection";
+import {
+  cellLine,
+  selectionAnchorSide,
+  selectionTarget,
+} from "../lib/selection";
 import { timeAgo } from "../lib/time";
 import { useChangeStream } from "../lib/useChangeStream";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
@@ -777,6 +782,35 @@ export default function ReviewPage() {
       document.removeEventListener("selectionchange", onSelectionChange);
     };
   }, []);
+
+  // A click on a line's code links the line, as a click on its number
+  // does. A shift-click extends the linked span. A click that ends a text
+  // selection leaves the link alone. A shift-press would extend the text
+  // selection from the caret, so the mousedown handler cancels it.
+  useEffect(() => {
+    const lineOf = (e: MouseEvent) =>
+      e.target instanceof Element &&
+      diffColumnRef.current?.contains(e.target) === true
+        ? cellLine(e.target)
+        : null;
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.shiftKey && plainClick(e) && lineOf(e)) e.preventDefault();
+    };
+    const onClick = (e: MouseEvent) => {
+      const at = lineOf(e);
+      if (at === null || !plainClick(e)) return;
+      if (document.getSelection()?.isCollapsed === false) return;
+      ctxValue.selectLink(
+        clickLink(link, at.file, at.side, at.line, e.shiftKey),
+      );
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("click", onClick);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("click", onClick);
+    };
+  }, [link, ctxValue]);
 
   // A miss answers one selection, so it stands until the reviewer starts
   // another. `selectstart`, not `selectionchange`: the latter also fires
