@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { createDraft, deleteDraft, updateDraft } from "../api/client";
 import type { Draft, ThreadComment } from "../api/types";
 import type { UiThread } from "../lib/comments";
@@ -10,15 +11,34 @@ import { useReview } from "../pages/reviewContext";
 import CommentEditor from "./CommentEditor";
 import Markdown from "./Markdown";
 
+/** When a comment was written. In a published thread it links to the
+ * thread, and following that link scrolls the page to it. */
+function CommentTime({ at, thread }: { at: string; thread: number | null }) {
+  const { linkHref } = useReview();
+  if (thread === null)
+    return <span className="comment-time">{timeAgo(at)}</span>;
+  return (
+    <Link className="comment-time" to={linkHref({ thread })}>
+      {timeAgo(at)}
+    </Link>
+  );
+}
+
 /** A published comment, read-only: it has no id/state/resolved and is never
  * editable (only the reviewer's own drafts are). */
-function PublishedComment({ comment }: { comment: ThreadComment }) {
+function PublishedComment({
+  comment,
+  thread,
+}: {
+  comment: ThreadComment;
+  thread: number | null;
+}) {
   const role = comment.review_id !== null ? "reviewer" : "author";
   return (
     <div className="comment">
       <div className="comment-head">
         <span className={`byline byline-${role}`}>{role.toUpperCase()}</span>
-        <span className="comment-time">{timeAgo(comment.created_at)}</span>
+        <CommentTime at={comment.created_at} thread={thread} />
       </div>
       <div className="comment-body">
         <Markdown text={comment.body} />
@@ -32,9 +52,11 @@ function PublishedComment({ comment }: { comment: ThreadComment }) {
 function DraftComment({
   draft,
   changeNumber,
+  thread,
 }: {
   draft: Draft;
   changeNumber: number;
+  thread: number | null;
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -64,7 +86,7 @@ function DraftComment({
       <div className="comment-head">
         <span className="byline byline-reviewer">REVIEWER</span>
         <span className="badge badge-amber">DRAFT</span>
-        <span className="comment-time">{timeAgo(draft.created_at)}</span>
+        <CommentTime at={draft.created_at} thread={thread} />
         {!editing ? (
           <span className="comment-tools">
             <button
@@ -176,10 +198,15 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
       data-thread={thread.id ?? undefined}
     >
       {thread.comments.map((c, i) => (
-        <PublishedComment key={i} comment={c} />
+        <PublishedComment key={i} comment={c} thread={thread.id} />
       ))}
       {thread.drafts.map((d) => (
-        <DraftComment key={d.id} draft={d} changeNumber={changeNumber} />
+        <DraftComment
+          key={d.id}
+          draft={d}
+          changeNumber={changeNumber}
+          thread={thread.id}
+        />
       ))}
       {editor ? (
         <CommentEditor
