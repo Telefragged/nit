@@ -322,7 +322,7 @@ a.comment-time:hover {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-raised);
-  margin-bottom: 6px;
+  margin-bottom: 14px;
   font-size: 12px;
 }
 
