@@ -1,10 +1,20 @@
 import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import { Link } from "react-router-dom";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { highlight } from "../lib/highlight";
 
 const plugins = [remarkGfm, remarkBreaks];
+
+/** The path, query and fragment of `href` when it points into this app,
+ * else null. */
+function localPath(href: string): string | null {
+  const url = new URL(href, window.location.href);
+  return url.origin === window.location.origin
+    ? url.pathname + url.search + url.hash
+    : null;
+}
 
 const components: Components = {
   code({ className, children, ...props }) {
@@ -31,10 +41,20 @@ const components: Components = {
       />
     );
   },
-  a({ children, ...props }) {
-    // A comment link must never navigate away from the review.
+  a({ children, href, ...props }) {
+    // A link into nit itself, for example one to a line under review,
+    // navigates in this tab. Any other link opens a new tab, so it never
+    // navigates away from the review.
+    const to = href === undefined ? null : localPath(href);
+    if (to !== null) {
+      return (
+        <Link {...props} to={to}>
+          {children}
+        </Link>
+      );
+    }
     return (
-      <a {...props} target="_blank" rel="noopener noreferrer">
+      <a {...props} href={href} target="_blank" rel="noopener noreferrer">
         {children}
       </a>
     );
