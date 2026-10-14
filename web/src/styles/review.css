@@ -342,6 +342,13 @@
   overflow: clip;
   margin-bottom: 14px;
   background: var(--bg);
+}
+
+/* A file, a linked line, and a linked thread all land just below the
+   sticky file header. */
+.file-section,
+.line-row .code,
+[data-thread] {
   scroll-margin-top: 116px;
 }
 

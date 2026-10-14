@@ -270,8 +270,8 @@ export default function DiffFileView({
   useLayoutEffect(() => {
     const section = sectionRef.current;
     if (reveal === null || collapsed || section === null) return;
-    const scroll = (to: Element, block: ScrollLogicalPosition) => {
-      to.scrollIntoView({ behavior: scrollBehavior(), block });
+    const scroll = (to: Element) => {
+      to.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
       onRevealed();
     };
     const lines = reveal.lines;
@@ -279,7 +279,7 @@ export default function DiffFileView({
       lines &&
       section.querySelector(`.code[data-${lines.side}="${lines.start}"]`);
     if (line) {
-      scroll(line, "center");
+      scroll(line);
     } else if (lines && expandable && gapAsked.current !== reveal) {
       // After the gap opens, the new hunks render the line. This effect
       // then runs again and scrolls to the line.
@@ -287,10 +287,10 @@ export default function DiffFileView({
       void revealLine(lines.side, lines.start)
         .catch(() => false)
         .then((found) => {
-          if (!found) scroll(section, "start");
+          if (!found) scroll(section);
         });
     } else if (gapAsked.current !== reveal) {
-      scroll(section, "start");
+      scroll(section);
     }
   }, [reveal, collapsed, onRevealed, hunks, expandable, revealLine]);
 
