@@ -854,6 +854,13 @@ describe("links to a comment thread", () => {
     expect(scrolled).toEqual([thread(73)]);
   });
 
+  it("scrolls to the linked thread again when its link is followed again", async () => {
+    await renderReview("/changes/11?against=base&thread=73");
+
+    fireEvent.click(must(thread(73).querySelector("a.comment-time"), "time"));
+    expect(scrolled).toEqual([thread(73), thread(73)]);
+  });
+
   it("scrolls to a thread on the whole change", async () => {
     await renderReview("/changes/10?thread=70");
 
