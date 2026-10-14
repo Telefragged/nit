@@ -17,15 +17,16 @@ export function patchParams(
 /** The page's query string, and a stable writer that patches it in place.
  *
  * The patch applies as `patchParams` applies it. The write replaces the history
- * entry, so a selector change adds no back-button stop. */
+ * entry, so a selector change adds no back-button stop. `state` becomes the
+ * new location's state. */
 export function useUrlParams(): [
   URLSearchParams,
-  (patch: Record<string, string | null>) => void,
+  (patch: Record<string, string | null>, state?: unknown) => void,
 ] {
   const [params, setParams] = useSearchParams();
   const update = useCallback(
-    (patch: Record<string, string | null>) => {
-      setParams((prev) => patchParams(prev, patch), { replace: true });
+    (patch: Record<string, string | null>, state?: unknown) => {
+      setParams((prev) => patchParams(prev, patch), { replace: true, state });
     },
     [setParams],
   );

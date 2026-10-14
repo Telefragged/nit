@@ -697,3 +697,33 @@ describe("links to a file or its lines", () => {
     ]);
   });
 });
+
+describe("links to a comment thread", () => {
+  const thread = (id: number) =>
+    must(document.querySelector(`[data-thread="${id}"]`), `thread ${id}`);
+
+  it("expands the thread's file, scrolls to the thread, and marks it", async () => {
+    // Thread 73 is open on store.rs at r0, and ports to the file at r1.
+    await renderReview("/changes/11?against=base&thread=73");
+
+    expect(isExpanded(byPath("src/auth/store.rs"))).toBe(true);
+    expect(scrolled).toEqual([thread(73)]);
+    expect(thread(73).classList).toContain("thread-linked");
+  });
+
+  it("scrolls to a thread on the whole change", async () => {
+    await renderReview("/changes/10?thread=70");
+
+    expect(scrolled).toEqual([thread(70)]);
+  });
+
+  it("shows a thread the range has no place for beside its file's lines", async () => {
+    // Thread 75 sits on r0 line 21 and has no ported place at r1.
+    await renderReview("/changes/11?against=base&thread=75");
+
+    expect(
+      thread(75).closest('[data-threads="displaced"]')?.closest("section"),
+    ).toBe(byPath("src/auth/rotate.rs"));
+    expect(scrolled).toEqual([thread(75)]);
+  });
+});

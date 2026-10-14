@@ -47,7 +47,7 @@ export const placementLine = (at: LineAnchor): number =>
   "whole" in at ? at.whole : at.selection.end_line;
 
 /** The side a line anchor reads. Off a line, the side is `new`. */
-const anchorSide = (a: Anchor): Side => lineOf(a)?.side ?? "new";
+export const anchorSide = (a: Anchor): Side => lineOf(a)?.side ?? "new";
 
 /** The selection inside the line, if the anchor holds one. */
 export const anchorRange = (a: Anchor): CommentRange | null => {

@@ -11,6 +11,10 @@ export function displayPath(path: string): string {
   return path === COMMIT_MSG_PATH ? "Commit message" : path;
 }
 
+/** The file of `files` at `path`, under its new path or its old one. */
+export const fileAt = (files: readonly DiffFile[], path: string) =>
+  files.find((f) => f.path === path || f.old_path === path);
+
 /** DOM id of a file section, by its index in the diff. The scrollspy and
  * rail navigation use it to find and scroll sections. */
 export function fileDomId(index: number): string {

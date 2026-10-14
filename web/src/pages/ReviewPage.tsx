@@ -74,12 +74,15 @@ import {
 } from "../lib/comments";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import {
+  fileLink,
+  linkedThread,
+  linksThread,
   linkParams,
   parseLink,
   sameLink,
   type DiffLink,
 } from "../lib/diffLink";
-import { displayPath, fileDomId, treeOrder } from "../lib/diffview";
+import { displayPath, fileAt, fileDomId, treeOrder } from "../lib/diffview";
 import { highlight } from "../lib/highlight";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt, scrollBehavior } from "../lib/scrollspy";
@@ -97,6 +100,9 @@ import { targetLine, type DraftTarget, type ReviewCtx } from "./reviewContext";
 import { ReviewContext, sameTarget } from "./reviewContext";
 
 const TAG_KEY = "nit.review-tag";
+
+/** The location state of a navigation that must not move the view. */
+const QUIET = "quiet";
 
 /** The tag the sidebar follows: the reviewer's last key when the change
  * carries it, else `session-id`, else the first key. Null only when the
@@ -449,29 +455,27 @@ export default function ReviewPage() {
     setExpanded(defaultExpanded());
   }
 
-  // The link the view last moved to, and the navigation that moved it. A
-  // link moves the view once: when it first appears, and again when a
-  // click on a link pushes it anew. Any other rewrite of the URL, such as
-  // a revision switch, leaves the view where the reviewer put it.
-  const revealed = useRef<{ link: DiffLink | null; key: string }>({
-    link: null,
-    key: "",
-  });
-  // The link the file section it names still has to scroll to.
-  const [pendingReveal, setPendingReveal] = useState<DiffLink | null>(null);
+  // The link of the last navigation that the page handled, and the
+  // location key of that navigation. A link moves the view when it first
+  // appears, and again when a click on a link pushes it anew. Any other
+  // rewrite of the URL, for example a revision switch, leaves the view
+  // where the reviewer put it. A quiet navigation (`selectLink`) also
+  // leaves the view in place.
+  const [revealed, setRevealed] = useState<{
+    link: DiffLink | null;
+    key: string;
+  }>({ link: null, key: "" });
+  // The link that the page still has to scroll to. A file section scrolls
+  // to a file link and then clears it. The page scrolls to a thread link,
+  // and `scrolledThread` records that scroll. Each reveal stores a fresh
+  // object, so a repeat of one link scrolls again.
+  const [pending, setPending] = useState<DiffLink | null>(null);
   const onRevealed = useCallback(() => {
-    setPendingReveal(null);
+    setPending(null);
   }, []);
-  useEffect(() => {
-    if (link === null || !files.some((f) => f.path === link.file)) return;
-    const last = revealed.current;
-    const pushed =
-      navigationType === NavigationType.Push && location.key !== last.key;
-    if (sameLink(link, last.link) && !pushed) return;
-    revealed.current = { link, key: location.key };
-    setExpanded((cur) => expand(cur, link.file));
-    setPendingReveal(link);
-  }, [link, files, location.key, navigationType]);
+  const scrolledThread = useRef<DiffLink | null>(null);
+  const pendingFile = fileLink(pending);
+  const pendingThread = linkedThread(pending);
 
   /** Reveal a file: activate + expand it, then scroll to it. The expansion
    * is committed with flushSync first, because scrollIntoView positions
@@ -560,8 +564,7 @@ export default function ReviewPage() {
       linkHref: (to: DiffLink) =>
         `?${patchParams(searchParams, linkParams(to)).toString()}`,
       selectLink: (to: DiffLink) => {
-        revealed.current = { ...revealed.current, link: to };
-        updateParams(linkParams(to));
+        updateParams(linkParams(to), QUIET);
       },
       editingTarget,
       // Moving or clearing the target unmounts the inline CommentEditor and
@@ -834,15 +837,57 @@ export default function ReviewPage() {
       const at = shownAt(t);
       const path = anchorFile(at.anchor);
       if (path === null) continue;
-      if (!threadInRange(at, selected, against)) continue;
-      const file = files.find((f) => f.path === path || f.old_path === path);
+      // The linked thread shows even outside the range, so the page can
+      // always scroll to it.
+      const shown = threadInRange(at, selected, against);
+      if (!shown && !linksThread(link, t.id)) continue;
+      const file = fileAt(files, path);
       const key = file ? file.path : path;
       const list = map.get(key) ?? [];
       list.push(t);
       map.set(key, list);
     }
     return map;
-  }, [shownThreads, files, selected, against]);
+  }, [shownThreads, files, selected, against, link]);
+
+  // Adjust-during-render, like `shownChange` above: the file a link names
+  // expands in the same render that reads the link, so it never paints
+  // collapsed. A file link waits for the diff to list its file. A thread
+  // link also waits for the ported places, because they decide where the
+  // thread renders.
+  const moves =
+    link !== null &&
+    location.state !== QUIET &&
+    (navigationType === NavigationType.Push || !sameLink(link, revealed.link));
+  if (location.key !== revealed.key) {
+    if (!moves) {
+      setRevealed({ link, key: location.key });
+    } else {
+      const linked = fileLink(link);
+      const thread =
+        linked === null && diffQ.isSuccess && !portedQ.isFetching
+          ? shownThreads.find((t) => linksThread(link, t.id))
+          : undefined;
+      const path =
+        linked?.file ?? (thread ? anchorFile(shownAt(thread).anchor) : null);
+      const file = path === null ? undefined : fileAt(files, path);
+      if (linked !== null ? file !== undefined : thread !== undefined) {
+        setRevealed({ link, key: location.key });
+        if (file) setExpanded((cur) => expand(cur, file.path));
+        setPending({ ...link });
+      }
+    }
+  }
+
+  // A layout effect, so the scroll lands before the expanded file paints
+  // at its old offset.
+  useLayoutEffect(() => {
+    if (pendingThread === null || scrolledThread.current === pending) return;
+    const el = document.querySelector(`[data-thread="${pendingThread}"]`);
+    if (el === null) return;
+    el.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+    scrolledThread.current = pending;
+  }, [pending, pendingThread, expanded]);
 
   // Busy until the stream has delivered the change and a member of its tag
   // graph, and every read has its first answer. A read that this render enables
@@ -1050,9 +1095,7 @@ export default function ReviewPage() {
                   threads={threadsByFile.get(file.path) ?? []}
                   domId={fileDomId(i)}
                   collapsed={!expanded.has(file.path)}
-                  reveal={
-                    pendingReveal?.file === file.path ? pendingReveal : null
-                  }
+                  reveal={pendingFile?.file === file.path ? pendingFile : null}
                   onRevealed={onRevealed}
                   onToggle={() => {
                     if (
