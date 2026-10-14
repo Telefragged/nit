@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { LineAnchor, Side, Whitespace } from "../api/types";
+import type { DiffLink } from "../lib/diffLink";
 import { placementLine, type DiffRange } from "../lib/comments";
 
 /** Anchor of the draft editor currently open in the diff. */
@@ -46,6 +47,12 @@ export interface ReviewCtx {
   /** Shows a diff range the page computed for a thread (`rangeSince`). It
    * runs the same draft-editor guard as the range selects. */
   showRange: (range: DiffRange) => void;
+  /** The place the page's URL links to, or null. */
+  link: DiffLink | null;
+  /** The URL of this page with `link` in place of the current one. */
+  linkHref: (link: DiffLink) => string;
+  /** Writes `link` into the URL without moving the view. */
+  selectLink: (link: DiffLink) => void;
   editingTarget: DraftTarget | null;
   /** Guarded: moving or clearing the target unmounts the inline editor, so
    * this confirms first while `editorDirty` is set, returning whether the

@@ -5,7 +5,7 @@
 
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { Route, useLocation } from "react-router-dom";
+import { Link, Route, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FILE_TREE_TAG_NAME } from "@pierre/trees";
 import { COMMIT_MSG_PATH } from "../api/types";
@@ -23,6 +23,8 @@ afterEach(cleanup);
  * the expansion commit would see (and target) the pre-reflow layout. The
  * rail scrolls its own port by scrollTop, so it never lands here. */
 let scrollCalls: { id: string; expandedAtCall: boolean }[];
+/** Every element the page scrolled into view, in order. */
+let scrolled: Element[];
 
 beforeEach(() => {
   // jsdom lays nothing out, so the spy's rAF sample reads every section at
@@ -32,7 +34,9 @@ beforeEach(() => {
   // here it just wins. No layout, no scroll to spy on: drop the frame.
   window.requestAnimationFrame = () => 0;
   scrollCalls = [];
+  scrolled = [];
   Element.prototype.scrollIntoView = function (this: Element) {
+    scrolled.push(this);
     scrollCalls.push({
       id: this.id,
       expandedAtCall: this.querySelector(".diff-grid") !== null,
@@ -611,5 +615,69 @@ describe("file-anchored threads", () => {
     );
     expect(group.querySelector(".line-excerpt")).toBeNull();
     expect(store.querySelector('[data-threads="displaced"]')).toBeNull();
+  });
+});
+
+describe("links to a file or its lines", () => {
+  const rotate = "/changes/11?against=base&file=src/auth/rotate.rs";
+  let search = "";
+  function LocationProbe() {
+    search = useLocation().search;
+    return null;
+  }
+  /** The new-side line number `no` in rotate.rs, as its gutter link. The
+   * new gutter sits just before the code cell in either layout. */
+  const newLine = (no: number) =>
+    must(
+      byPath("src/auth/rotate.rs")
+        .querySelector(`.code[data-new="${no}"]`)
+        ?.previousElementSibling?.querySelector(".line-link"),
+      `line link ${no}`,
+    );
+  const linkedNew = () =>
+    [...byPath("src/auth/rotate.rs").querySelectorAll(".code.linked")].map(
+      (c) => c.getAttribute("data-new"),
+    );
+
+  it("expands the linked file and scrolls its first linked line into view", async () => {
+    await renderReview(`${rotate}&line=21-23`);
+
+    expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0]?.getAttribute("data-new")).toBe("21");
+    expect(linkedNew()).toEqual(["21", "22", "23"]);
+  });
+
+  it("scrolls to the file when the link names no lines", async () => {
+    await renderReview(rotate);
+
+    expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
+    expect(scrolled).toEqual([byPath("src/auth/rotate.rs")]);
+  });
+
+  it("links a clicked line number without scrolling, and stretches the span on shift", async () => {
+    await renderReview(rotate, <LocationProbe />);
+    scrolled = [];
+
+    fireEvent.click(newLine(22));
+    expect(new URLSearchParams(search).get("line")).toBe("22");
+    fireEvent.click(newLine(24), { shiftKey: true });
+    expect(new URLSearchParams(search).get("line")).toBe("22-24");
+    expect(linkedNew()).toEqual(["22", "23", "24"]);
+    expect(scrolled).toEqual([]);
+  });
+
+  it("scrolls again each time a link to the same place is followed", async () => {
+    const to = `${rotate}&line=25`;
+    await renderReview(to, <Link to={to}>follow</Link>);
+    expect(scrolled).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("link", { name: "follow" }));
+    fireEvent.click(screen.getByRole("link", { name: "follow" }));
+    expect(scrolled.map((el) => el.getAttribute("data-new"))).toEqual([
+      "25",
+      "25",
+      "25",
+    ]);
   });
 });

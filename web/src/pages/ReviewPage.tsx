@@ -13,7 +13,14 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  NavigationType,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useParams,
+} from "react-router-dom";
 import {
   createDraft,
   getChangeDrafts,
@@ -66,10 +73,16 @@ import {
   type UiThread,
 } from "../lib/comments";
 import { confirmDiscard } from "../lib/confirmDiscard";
+import {
+  linkParams,
+  parseLink,
+  sameLink,
+  type DiffLink,
+} from "../lib/diffLink";
 import { displayPath, fileDomId, treeOrder } from "../lib/diffview";
 import { highlight } from "../lib/highlight";
 import { repoPath } from "../lib/repo";
-import { activeIndexAt } from "../lib/scrollspy";
+import { activeIndexAt, scrollBehavior } from "../lib/scrollspy";
 import { shortcutKey } from "../lib/shortcutKey";
 import type { SelectionMiss } from "../lib/selection";
 import { selectionAnchorSide, selectionTarget } from "../lib/selection";
@@ -78,7 +91,7 @@ import { useChangeStream } from "../lib/useChangeStream";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
 import { useDrafts } from "../lib/useDrafts";
 import { useReviewSettings } from "../lib/reviewSettings";
-import { useUrlParams } from "../lib/useUrlParams";
+import { patchParams, useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
 import { targetLine, type DraftTarget, type ReviewCtx } from "./reviewContext";
 import { ReviewContext, sameTarget } from "./reviewContext";
@@ -248,6 +261,9 @@ export default function ReviewPage() {
   const { id } = useParams();
   const changeNumber = Number(id);
   const [searchParams, updateParams] = useUrlParams();
+  const link = useMemo(() => parseLink(searchParams), [searchParams]);
+  const location = useLocation();
+  const navigationType = useNavigationType();
 
   const revisionParam = searchParams.get("revision")
     ? Number(searchParams.get("revision"))
@@ -433,6 +449,30 @@ export default function ReviewPage() {
     setExpanded(defaultExpanded());
   }
 
+  // The link the view last moved to, and the navigation that moved it. A
+  // link moves the view once: when it first appears, and again when a
+  // click on a link pushes it anew. Any other rewrite of the URL, such as
+  // a revision switch, leaves the view where the reviewer put it.
+  const revealed = useRef<{ link: DiffLink | null; key: string }>({
+    link: null,
+    key: "",
+  });
+  // The link the file section it names still has to scroll to.
+  const [pendingReveal, setPendingReveal] = useState<DiffLink | null>(null);
+  const onRevealed = useCallback(() => {
+    setPendingReveal(null);
+  }, []);
+  useEffect(() => {
+    if (link === null || !files.some((f) => f.path === link.file)) return;
+    const last = revealed.current;
+    const pushed =
+      navigationType === NavigationType.Push && location.key !== last.key;
+    if (sameLink(link, last.link) && !pushed) return;
+    revealed.current = { link, key: location.key };
+    setExpanded((cur) => expand(cur, link.file));
+    setPendingReveal(link);
+  }, [link, files, location.key, navigationType]);
+
   /** Reveal a file: activate + expand it, then scroll to it. The expansion
    * is committed with flushSync first, because scrollIntoView positions
    * against the layout at call time and expanding a section reflows
@@ -447,9 +487,7 @@ export default function ReviewPage() {
         if (path !== undefined) setExpanded((cur) => expand(cur, path));
       });
       document.getElementById(fileDomId(index))?.scrollIntoView({
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
+        behavior: scrollBehavior(),
         block: "start",
       });
     },
@@ -518,6 +556,13 @@ export default function ReviewPage() {
           revision: String(to),
         });
       },
+      link,
+      linkHref: (to: DiffLink) =>
+        `?${patchParams(searchParams, linkParams(to)).toString()}`,
+      selectLink: (to: DiffLink) => {
+        revealed.current = { ...revealed.current, link: to };
+        updateParams(linkParams(to));
+      },
       editingTarget,
       // Moving or clearing the target unmounts the inline CommentEditor and
       // destroys its draft, so this is a discard path: confirm while dirty.
@@ -548,6 +593,9 @@ export default function ReviewPage() {
       latestRevision,
       whitespace,
       switchRange,
+      link,
+      searchParams,
+      updateParams,
       editingTarget,
     ],
   );
@@ -1002,6 +1050,10 @@ export default function ReviewPage() {
                   threads={threadsByFile.get(file.path) ?? []}
                   domId={fileDomId(i)}
                   collapsed={!expanded.has(file.path)}
+                  reveal={
+                    pendingReveal?.file === file.path ? pendingReveal : null
+                  }
+                  onRevealed={onRevealed}
                   onToggle={() => {
                     if (
                       !confirmEditorCollapse(

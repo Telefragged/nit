@@ -3,7 +3,9 @@ import {
   Fragment,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { createDraft } from "../../api/client";
@@ -25,6 +27,7 @@ import {
   threadKey,
   type UiThread,
 } from "../../lib/comments";
+import { clickLink, linksLine, type DiffLink } from "../../lib/diffLink";
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
@@ -37,6 +40,7 @@ import {
   statusLetter,
 } from "../../lib/diffview";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
+import { scrollBehavior } from "../../lib/scrollspy";
 import { selectionAnchorSide } from "../../lib/selection";
 import { EXPAND_STEP, useHunkExpansion } from "../../lib/useHunkExpansion";
 import {
@@ -104,6 +108,16 @@ const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
 /** Class suffix marking a rebase-drift line, so its gutter and code cell
  * render contained. */
 const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
+
+/** Whether a click on a link is the plain click that the page handles
+ * itself. The browser handles any other click, for example a ctrl-click
+ * that opens a new tab. */
+const plainClick = (e: ReactMouseEvent, allowShift = false) =>
+  e.button === 0 &&
+  !e.ctrlKey &&
+  !e.metaKey &&
+  !e.altKey &&
+  (allowShift || !e.shiftKey);
 
 /** One reveal button, floating over a separator; `kind` is both its class
  * suffix and which lines it takes. */
@@ -208,7 +222,12 @@ function HunkSeparator({
  * under the right column, old-side under the left. Collapsible: when
  * collapsed only the header row renders
  * (inline threads included — the rail's counts still signal them); the
- * header click toggles. */
+ * header click toggles.
+ *
+ * A line number links to its line. A shift-click on a line number extends
+ * the linked span. `reveal` is the link that the section scrolls to: its
+ * first linked line, or the section itself when the link names no lines.
+ * The section calls `onRevealed` after it scrolls. */
 export default function DiffFileView({
   file,
   layout,
@@ -216,6 +235,8 @@ export default function DiffFileView({
   domId,
   collapsed,
   onToggle,
+  reveal,
+  onRevealed,
 }: {
   file: DiffFile;
   layout: "unified" | "split";
@@ -223,6 +244,8 @@ export default function DiffFileView({
   domId: string;
   collapsed: boolean;
   onToggle: () => void;
+  reveal: DiffLink | null;
+  onRevealed: () => void;
 }) {
   const ctx = useReview();
   const queryClient = useQueryClient();
@@ -238,6 +261,23 @@ export default function DiffFileView({
 
   const expansion = useHunkExpansion(file, ctx);
   const { hunks } = expansion;
+
+  const sectionRef = useRef<HTMLElement>(null);
+  // A layout effect, so the scroll lands before the expanded section paints
+  // at its old offset.
+  useLayoutEffect(() => {
+    const section = sectionRef.current;
+    if (reveal === null || collapsed || section === null) return;
+    const lines = reveal.lines;
+    const line =
+      lines &&
+      section.querySelector(`.code[data-${lines.side}="${lines.start}"]`);
+    (line ?? section).scrollIntoView({
+      behavior: scrollBehavior(),
+      block: line ? "center" : "start",
+    });
+    onRevealed();
+  }, [reveal, collapsed, onRevealed]);
 
   // Side-by-side would leave one of a one-sided file's columns blank and
   // squeeze its text into the half beside it.
@@ -386,6 +426,31 @@ export default function DiffFileView({
   const lineHover = (side: Side, no: number | undefined) =>
     no !== undefined && hovered?.line === `${side}:${no}` ? " line-hover" : "";
 
+  /** The class suffix marking a cell that shows a linked line. */
+  const lineLinked = (side: Side, no: number | undefined) =>
+    linksLine(ctx.link, file.path, side, no) ? " linked" : "";
+
+  /** A gutter's line number, as a link to its line. */
+  function lineNumber(side: Side, no: number | undefined): ReactNode {
+    if (no === undefined) return "";
+    return (
+      <a
+        className="line-link"
+        href={ctx.linkHref({
+          file: file.path,
+          lines: { side, start: no, end: no },
+        })}
+        onClick={(e) => {
+          if (!plainClick(e, true)) return;
+          e.preventDefault();
+          ctx.selectLink(clickLink(ctx.link, file.path, side, no, e.shiftKey));
+        }}
+      >
+        {no}
+      </a>
+    );
+  }
+
   /** The comment-range tints falling on `line`'s text in a cell showing
    * the given sides (unified cells show both; split cells one). */
   function cellRangeMarks(
@@ -479,12 +544,12 @@ export default function DiffFileView({
     return hunk.lines.map((line, li) => {
       const cls = `${line.kind}${driftClass(line)}${
         lineHover("old", line.old) || lineHover("new", line.new)
-      }`;
+      }${lineLinked("old", line.old) || lineLinked("new", line.new)}`;
       return (
         <Fragment key={li}>
           <div className="line-row">
-            <span className={`g ${cls}`}>{line.old ?? ""}</span>
-            <span className={`g ${cls}`}>{line.new ?? ""}</span>
+            <span className={`g ${cls}`}>{lineNumber("old", line.old)}</span>
+            <span className={`g ${cls}`}>{lineNumber("new", line.new)}</span>
             <span
               className={`code ${cls}`}
               data-old={line.old}
@@ -512,14 +577,15 @@ export default function DiffFileView({
    * carries only data-{side} (never both) so lib/selection's sideOf
    * resolves a one-column drag to this side. */
   function sideCell(line: Line | null, side: "old" | "new") {
+    const no = line?.[side];
     const cls = `${line ? line.kind : "void"}${driftClass(line)}${lineHover(
       side,
-      line?.[side],
-    )}`;
+      no,
+    )}${lineLinked(side, no)}`;
     return (
       <>
         <span className={`g ${cls}`} data-side={side}>
-          {line?.[side] ?? ""}
+          {lineNumber(side, no)}
         </span>
         <span
           className={`code half ${cls}`}
@@ -557,6 +623,7 @@ export default function DiffFileView({
 
   return (
     <section
+      ref={sectionRef}
       className={`file-section ${collapsed ? "collapsed" : ""}`}
       id={domId}
       data-diff-path={file.path}
@@ -588,6 +655,23 @@ export default function DiffFileView({
             displayPath(file.path)
           )}
         </span>
+        <a
+          className="file-link"
+          href={ctx.linkHref({ file: file.path, lines: null })}
+          title="Link to this file"
+          onClick={(e) => {
+            // The header around the link toggles the section on a click.
+            e.stopPropagation();
+            if (!plainClick(e)) return;
+            e.preventDefault();
+            ctx.selectLink({ file: file.path, lines: null });
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          #
+        </a>
         <span className="spacer" />
         {file.binary ? (
           <span className="dim">binary</span>

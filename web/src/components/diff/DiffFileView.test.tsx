@@ -24,6 +24,9 @@ const ctx: ReviewCtx = {
   latestRevision: 2,
   whitespace: "compare",
   showRange: () => undefined,
+  link: null,
+  linkHref: () => "",
+  selectLink: () => undefined,
   editingTarget: null,
   setEditingTarget: () => false,
   setEditorDirty: () => undefined,
@@ -115,6 +118,8 @@ const tree = (
         domId="file-0"
         collapsed={false}
         onToggle={() => undefined}
+        reveal={null}
+        onRevealed={() => undefined}
       />
     </ReviewContext.Provider>
   </QueryClientProvider>

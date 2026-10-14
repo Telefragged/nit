@@ -18,3 +18,8 @@ export function activeIndexAt(
   }
   return active;
 }
+
+/** Smooth scrolling, unless the reviewer asks the system for reduced
+ * motion. */
+export const scrollBehavior = (): ScrollBehavior =>
+  matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
