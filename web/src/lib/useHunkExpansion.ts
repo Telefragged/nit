@@ -1,7 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getFileLines } from "../api/client";
-import { COMMIT_MSG_PATH, type DiffFile, type Line } from "../api/types";
+import {
+  COMMIT_MSG_PATH,
+  type DiffFile,
+  type Line,
+  type Side,
+} from "../api/types";
 import { gapLines } from "./diffview";
 import type { ReviewCtx } from "../pages/reviewContext";
 
@@ -19,7 +24,8 @@ export const EXPAND_STEP = 10;
  * into hunk i-1, `up` from its bottom into hunk i.
  *
  * Returns the spliced `hunks`, whether the file is expandable, the `expand`
- * action, and `busyAt` to check a given end/separator's in-flight state. */
+ * and `revealLine` actions, and `busyAt` to check a given end/separator's
+ * in-flight state. */
 export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
   const queryClient = useQueryClient();
   const expandable = file.path !== COMMIT_MSG_PATH;
@@ -134,7 +140,23 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
     }
   }
 
+  /** Reveals all of the gap that hides line `no` on `side`. Resolves to
+   * whether a gap held the line. */
+  async function revealLine(side: Side, no: number): Promise<boolean> {
+    const lines = await loadWhole();
+    if (!lines || fileRef.current !== file) return false;
+    for (let sep = 0; sep <= file.hunks.length; sep++) {
+      const gap = gapLines(lines, file.hunks[sep - 1], file.hunks[sep], file);
+      if (gap.some((line) => line[side] === no)) {
+        // The top gap has no hunk above it to reveal down from.
+        await expand(sep > 0 ? "down" : "up", sep, Infinity);
+        return true;
+      }
+    }
+    return false;
+  }
+
   const busyAt = (end: "down" | "up", sep: number) => busy.has(`${end}:${sep}`);
 
-  return { hunks, expandable, expand, busyAt };
+  return { hunks, expandable, expand, revealLine, busyAt };
 }
