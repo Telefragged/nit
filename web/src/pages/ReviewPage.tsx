@@ -898,7 +898,7 @@ export default function ReviewPage() {
     if (pendingThread === null || scrolledThread.current === pending) return;
     const el = document.querySelector(`[data-thread="${pendingThread}"]`);
     if (el === null) return;
-    el.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+    el.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     scrolledThread.current = pending;
   }, [pending, pendingThread, expanded]);
 
