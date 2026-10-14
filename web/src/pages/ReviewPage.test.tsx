@@ -648,6 +648,22 @@ describe("links to a file or its lines", () => {
     expect(linkedNew()).toEqual(["21", "22", "23"]);
   });
 
+  it("opens the gap that hides the linked line, then scrolls to it", async () => {
+    const { settle } = await renderReview(`${rotate}&line=5`);
+    await settle();
+
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0]?.getAttribute("data-new")).toBe("5");
+    expect(linkedNew()).toEqual(["5"]);
+  });
+
+  it("scrolls to the file when no gap holds the linked line", async () => {
+    const { settle } = await renderReview(`${rotate}&line=9999`);
+    await settle();
+
+    expect(scrolled).toEqual([byPath("src/auth/rotate.rs")]);
+  });
+
   it("scrolls to the file when the link names no lines", async () => {
     await renderReview(rotate);
 

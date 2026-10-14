@@ -263,21 +263,38 @@ export default function DiffFileView({
   const { hunks } = expansion;
 
   const sectionRef = useRef<HTMLElement>(null);
+  // The last reveal for which the effect opened a gap. The effect opens a
+  // gap only once per reveal.
+  const gapAsked = useRef<DiffLink | null>(null);
+  const { expandable, revealLine } = expansion;
   // A layout effect, so the scroll lands before the expanded section paints
   // at its old offset.
   useLayoutEffect(() => {
     const section = sectionRef.current;
     if (reveal === null || collapsed || section === null) return;
+    const scroll = (to: Element, block: ScrollLogicalPosition) => {
+      to.scrollIntoView({ behavior: scrollBehavior(), block });
+      onRevealed();
+    };
     const lines = reveal.lines;
     const line =
       lines &&
       section.querySelector(`.code[data-${lines.side}="${lines.start}"]`);
-    (line ?? section).scrollIntoView({
-      behavior: scrollBehavior(),
-      block: line ? "center" : "start",
-    });
-    onRevealed();
-  }, [reveal, collapsed, onRevealed]);
+    if (line) {
+      scroll(line, "center");
+    } else if (lines && expandable && gapAsked.current !== reveal) {
+      // After the gap opens, the new hunks render the line. This effect
+      // then runs again and scrolls to the line.
+      gapAsked.current = reveal;
+      void revealLine(lines.side, lines.start)
+        .catch(() => false)
+        .then((found) => {
+          if (!found) scroll(section, "start");
+        });
+    } else if (gapAsked.current !== reveal) {
+      scroll(section, "start");
+    }
+  }, [reveal, collapsed, onRevealed, hunks, expandable, revealLine]);
 
   // Side-by-side would leave one of a one-sided file's columns blank and
   // squeeze its text into the half beside it.
