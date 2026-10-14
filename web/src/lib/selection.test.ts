@@ -5,7 +5,12 @@
 // the element structure, classes and data attributes matter here.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { selectionAnchorSide, selectionTarget } from "./selection";
+import {
+  cellLine,
+  linesRange,
+  selectionAnchorSide,
+  selectionTarget,
+} from "./selection";
 
 interface RowSpec {
   old?: number;
@@ -325,5 +330,43 @@ describe("selectionTarget, split layout", () => {
       document.body.appendChild(loose);
       expect(selectionAnchorSide(loose.firstChild)).toBeNull();
     });
+  });
+});
+
+describe("linked lines", () => {
+  const rows: RowSpec[] = [
+    { old: 4, new: 4, text: "fn a() {" },
+    { old: 5, text: "    gone();" },
+    { new: 5, text: "    added();" },
+    { old: 6, new: 6, text: "}" },
+  ];
+
+  it("reads a cell's line, on the new side where the cell shows both", () => {
+    const section = mountUnified([rows]);
+    const cells = section.querySelectorAll(".code-text");
+    expect([...cells].map((c) => cellLine(c))).toEqual([
+      { file: "src/a.rs", side: "new", line: 4 },
+      { file: "src/a.rs", side: "old", line: 5 },
+      { file: "src/a.rs", side: "new", line: 5 },
+      { file: "src/a.rs", side: "new", line: 6 },
+    ]);
+  });
+
+  it("spans whole lines on the side the link names", () => {
+    mountUnified([rows]);
+    const range = linesRange("src/a.rs", "old", 4, 6);
+    if (range === null) throw new Error("no range");
+    expect(selectionTarget(range, "old")).toEqual({
+      file: "src/a.rs",
+      side: "old",
+      at: {
+        selection: { start_line: 4, start_char: 0, end_line: 6, end_char: 1 },
+      },
+    });
+  });
+
+  it("finds no range when an end line does not render", () => {
+    mountUnified([rows]);
+    expect(linesRange("src/a.rs", "new", 4, 9)).toBeNull();
   });
 });
