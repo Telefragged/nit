@@ -9,6 +9,12 @@
   font-family: var(--sans);
 }
 
+/* The thread the page's URL links to, in the blue of linked lines. */
+.thread-linked {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+
 .thread-draft {
   border-style: dashed;
   border-color: rgb(210 153 34 / 55%);

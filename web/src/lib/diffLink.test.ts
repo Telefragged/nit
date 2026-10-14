@@ -17,12 +17,22 @@ describe("parseLink", () => {
     });
   });
 
+  it("reads a thread before a file", () => {
+    expect(parse("thread=42&file=a.rs")).toEqual({ thread: 42 });
+    expect(parse("thread=x&file=a.rs")).toEqual({ file: "a.rs", lines: null });
+  });
+
   it("links the whole file when the line is malformed", () => {
     expect(parse("file=a.rs&line=x")).toEqual({ file: "a.rs", lines: null });
   });
 
   it("is the inverse of linkParams", () => {
-    for (const query of ["file=a.rs", "file=a.rs&line=7", "file=a&line=4-9"]) {
+    for (const query of [
+      "file=a.rs",
+      "file=a.rs&line=7",
+      "file=a&line=4-9",
+      "thread=42",
+    ]) {
       const link = parse(query);
       if (link === null) throw new Error(query);
       const params = new URLSearchParams();

@@ -4,6 +4,7 @@ import { createDraft, deleteDraft, updateDraft } from "../api/client";
 import type { Draft, ThreadComment } from "../api/types";
 import type { UiThread } from "../lib/comments";
 import { anchorKind, pendingResolved, rangeSince } from "../lib/comments";
+import { linksThread } from "../lib/diffLink";
 import { timeAgo } from "../lib/time";
 import { useReview } from "../pages/reviewContext";
 import CommentEditor from "./CommentEditor";
@@ -131,7 +132,7 @@ interface ThreadEditor {
 export default function CommentThread({ thread }: { thread: UiThread }) {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<ThreadEditor | null>(null);
-  const { changeNumber, selected, against, latestRevision, showRange } =
+  const { changeNumber, selected, against, latestRevision, showRange, link } =
     useReview();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["drafts", changeNumber] });
@@ -168,7 +169,12 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
     anchorKind(thread.ported.anchor) !== "line";
 
   return (
-    <div className={`thread ${isDraftThread ? "thread-draft" : ""}`}>
+    <div
+      className={`thread${isDraftThread ? " thread-draft" : ""}${
+        linksThread(link, thread.id) ? " thread-linked" : ""
+      }`}
+      data-thread={thread.id ?? undefined}
+    >
       {thread.comments.map((c, i) => (
         <PublishedComment key={i} comment={c} />
       ))}

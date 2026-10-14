@@ -20,6 +20,7 @@ import {
   anchorKind,
   anchorLineText,
   anchorRange,
+  anchorSide,
   commentCountLabel,
   commentPlacement,
   draftAnchor,
@@ -27,7 +28,7 @@ import {
   threadKey,
   type UiThread,
 } from "../../lib/comments";
-import { clickLink, linksLine, type DiffLink } from "../../lib/diffLink";
+import { clickLink, linksLine, type FileLink } from "../../lib/diffLink";
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
@@ -244,7 +245,7 @@ export default function DiffFileView({
   domId: string;
   collapsed: boolean;
   onToggle: () => void;
-  reveal: DiffLink | null;
+  reveal: FileLink | null;
   onRevealed: () => void;
 }) {
   const ctx = useReview();
@@ -265,7 +266,7 @@ export default function DiffFileView({
   const sectionRef = useRef<HTMLElement>(null);
   // The last reveal for which the effect opened a gap. The effect opens a
   // gap only once per reveal.
-  const gapAsked = useRef<DiffLink | null>(null);
+  const gapAsked = useRef<FileLink | null>(null);
   const { expandable, revealLine } = expansion;
   // A layout effect, so the scroll lands before the expanded section paints
   // at its old offset.
@@ -341,7 +342,11 @@ export default function DiffFileView({
       continue;
     }
     const p = commentPlacement(at, ctx.selected, ctx.against);
-    if (!p) continue;
+    if (!p) {
+      // Only the linked thread arrives without a column in the range.
+      displaced.push({ t, side: anchorSide(at.anchor) });
+      continue;
+    }
     const key = `${p.side}:${p.line}`;
     if (present.has(key)) {
       const list = inline.get(key) ?? [];
