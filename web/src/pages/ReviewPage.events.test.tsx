@@ -50,22 +50,53 @@ describe("event-driven change page", () => {
     expect(revHead().textContent).toBe("r1 3 comments");
   });
 
-  it("folds a review published over the websocket into the page", async () => {
+  it("lists the change log and appends a live entry to it", async () => {
     await renderReview("/changes/12");
-    expect(screen.queryByText("folded-live cover note")).toBeNull();
+    const rows = () => document.querySelectorAll(".change-log .log-row");
+    const before = rows().length;
+    expect(before).toBeGreaterThan(0);
+
+    act(() => {
+      mockAppend(12, "2026-06-28T00:00:00.000Z", {
+        kind: "tags",
+        payload: { tags: { "session-id": "live-tag" } },
+      });
+    });
+
+    expect(rows().length).toBe(before + 1);
+    // Change 12 carries a session-id already, so the entry replaces it.
+    expect(rows()[before]?.textContent).toContain("+1 −1 tags");
+    expect(rows()[before]?.textContent).toContain("+ session-id=live-tag");
+  });
+
+  it("names the status a pushed revision reset", async () => {
+    await renderReview("/changes/12");
+    const rows = () => document.querySelectorAll(".change-log .log-row");
 
     act(() => {
       mockAppend(12, "2026-06-28T00:00:00.000Z", {
         kind: "review",
         payload: {
           revision: 0,
-          verdict: "comment",
-          message: "folded-live cover note",
+          verdict: "approve",
+          message: "ship it",
           comments: [],
+        },
+      });
+      mockAppend(12, "2026-06-28T00:01:00.000Z", {
+        kind: "revision",
+        payload: {
+          commit_sha: sha("c12r1"),
+          parent_sha: sha("c12r0"),
+          fork_sha: sha("base"),
+          message: "c12 v2\n\nChange-Id: I12",
+          resets_status: true,
         },
       });
     });
 
-    expect(screen.getByText("folded-live cover note")).toBeTruthy();
+    expect(rows()[rows().length - 1]?.textContent).toContain(
+      "status reset to PENDING",
+    );
   });
 });

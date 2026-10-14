@@ -57,38 +57,6 @@
   flex-wrap: wrap;
 }
 
-.reviews-strip {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.review-item {
-  display: flex;
-  gap: 9px;
-  align-items: baseline;
-  font-size: 12px;
-}
-
-.review-item .review-message {
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 640px;
-}
-
-.review-item .review-message.expanded {
-  white-space: pre-wrap;
-  overflow: visible;
-  text-overflow: clip;
-}
-
-.review-item .review-more {
-  flex: none;
-}
-
 /* diffbar */
 
 .diffbar {
@@ -219,9 +187,11 @@
 .review-sidebar {
   top: 78px;
 
-  /* Definite, not a max: the virtualized file tree below has no intrinsic
-     height and sizes its scrollport against this one. */
-  height: calc(100vh - 140px);
+  /* The virtualized file tree below has no intrinsic height. It sizes its
+     scrollport against this one. A stretched height is definite, so the
+     rail ends with the diff column and the change log starts below both. */
+  align-self: stretch;
+  max-height: calc(100vh - 140px);
   display: flex;
   flex-direction: column;
 }

@@ -285,14 +285,15 @@ const captures = [
   },
   // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
   { name: "review-interdiff", path: "/changes/11?against=0" },
-  // Long review cover message expanded via the "more" toggle. Viewport-only
-  // so the header text stays at full resolution.
+  // The change log below the files, every row opened.
   {
-    name: "review-cover-expanded",
+    name: "review-log",
     path: "/changes/11?against=0",
-    fullPage: false,
     actions: async (page) => {
-      await clickNow(page.locator(".review-item .review-more"));
+      await page.evaluate(() => {
+        for (const row of document.querySelectorAll(".change-log details"))
+          row.open = true;
+      });
     },
   },
   // The tag graph at the right of the header: the changes that share the

@@ -1,9 +1,9 @@
 // The change-event websocket: the only place the web opens WS /api/stream.
-// Components go through openStream (via useChangeStream): the server sends a
-// ChangeProjection for every change the subscription matches, then their
-// entries, and `left` for a change that stops matching. When VITE_MOCK is set
-// the fixtures drive it instead of the network, mirroring how client.ts routes
-// HTTP.
+// Components go through openStream (via useChangeStream or useChangeLog): the
+// server starts every change the subscription matches with a ChangeProjection
+// or its whole log, then sends its entries, and `left` for a change that
+// stops matching. When VITE_MOCK is set the fixtures drive it instead of the
+// network, mirroring how client.ts routes HTTP.
 
 import type { StreamMessage, Subscription } from "./types";
 

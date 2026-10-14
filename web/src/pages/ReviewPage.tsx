@@ -29,18 +29,12 @@ import {
   getRepo,
 } from "../api/client";
 import { tagGraph } from "../api/fold";
-import type {
-  ChangeDetail,
-  Review,
-  Revision,
-  Subscription,
-  Tags,
-} from "../api/types";
-import { verdictStatus } from "../api/verdict";
+import type { ChangeDetail, Revision, Subscription, Tags } from "../api/types";
 import { StatusChip } from "../components/badges";
 
 import TagNav from "../components/TagNav";
 import CommentEditor from "../components/CommentEditor";
+import ChangeLog from "../components/ChangeLog";
 import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
 import FileRail from "../components/diff/FileRail";
@@ -95,7 +89,9 @@ import {
   selectionAnchorSide,
   selectionTarget,
 } from "../lib/selection";
+import { shortSha } from "../lib/sha";
 import { timeAgo } from "../lib/time";
+import { useChangeLog } from "../lib/useChangeLog";
 import { useChangeStream } from "../lib/useChangeStream";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
 import { useDrafts } from "../lib/useDrafts";
@@ -224,51 +220,6 @@ function DiffRangeSelect({
   );
 }
 
-/** One published review line; long cover messages get a more/less toggle. */
-function ReviewItem({ review }: { review: Review }) {
-  const [expanded, setExpanded] = useState(false);
-  const [truncated, setTruncated] = useState(false);
-  const msgRef = useRef<HTMLSpanElement>(null);
-  useLayoutEffect(() => {
-    const el = msgRef.current;
-    if (el) setTruncated(el.scrollWidth > el.clientWidth);
-  }, [review.message]);
-  return (
-    <div className="review-item">
-      <StatusChip status={verdictStatus[review.verdict]} />
-      <span className="mono dim">r{review.revision}</span>
-      <span
-        ref={msgRef}
-        className={`review-message ${expanded ? "expanded" : ""}`}
-      >
-        {review.message}
-      </span>
-      {truncated || expanded ? (
-        <button
-          className="linkish review-more"
-          onClick={() => {
-            setExpanded((v) => !v);
-          }}
-        >
-          {expanded ? "less" : "more"}
-        </button>
-      ) : null}
-      <span className="dim">{timeAgo(review.created_at)}</span>
-    </div>
-  );
-}
-
-function ReviewsStrip({ change }: { change: ChangeDetail }) {
-  if (change.reviews.length === 0) return null;
-  return (
-    <div className="reviews-strip">
-      {change.reviews.map((review) => (
-        <ReviewItem review={review} key={review.id} />
-      ))}
-    </div>
-  );
-}
-
 export default function ReviewPage() {
   const { id } = useParams();
   const changeNumber = Number(id);
@@ -295,6 +246,8 @@ export default function ReviewPage() {
     queryFn: skipToken,
   });
   const published = publishedQ.data;
+  // Opened beside the stream, not after it, so the log loads in parallel.
+  const log = useChangeLog(changeNumber, published);
 
   // The repo behind this change — the crumb shows its path. Fetched by id once
   // the projection arrives; skipToken holds the hook's place until then.
@@ -1009,19 +962,14 @@ export default function ReviewPage() {
             <div className="meta-line">
               <span className="dim">
                 commit{" "}
-                <span className="mono">
-                  {selectedRev.commit_sha.slice(0, 12)}
-                </span>
+                <span className="mono">{shortSha(selectedRev.commit_sha)}</span>
               </span>
               <span className="dim">
                 parent{" "}
-                <span className="mono">
-                  {selectedRev.parent_sha.slice(0, 12)}
-                </span>
+                <span className="mono">{shortSha(selectedRev.parent_sha)}</span>
               </span>
               <span className="dim">{timeAgo(selectedRev.created_at)}</span>
             </div>
-            <ReviewsStrip change={change} />
           </div>
           <TagNav
             tags={tags}
@@ -1208,6 +1156,8 @@ export default function ReviewPage() {
             ) : null}
           </div>
         </div>
+
+        <ChangeLog feed={log} threads={change.threads} />
 
         <ReviewBar
           change={change}
