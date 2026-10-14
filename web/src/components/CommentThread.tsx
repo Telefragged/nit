@@ -26,7 +26,7 @@ function CommentTime({ at, thread }: { at: string; thread: number | null }) {
 
 /** A published comment, read-only: it has no id/state/resolved and is never
  * editable (only the reviewer's own drafts are). */
-function PublishedComment({
+export function PublishedComment({
   comment,
   thread,
 }: {

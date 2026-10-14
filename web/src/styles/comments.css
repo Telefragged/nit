@@ -312,6 +312,91 @@ a.comment-time:hover {
   margin: 6px 0 0 24px;
 }
 
+/* change log */
+
+.change-log {
+  margin: 18px 16px 14px;
+}
+
+.log-row {
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.log-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 10px;
+}
+
+summary.log-line {
+  cursor: pointer;
+}
+
+summary.log-line:hover {
+  background: var(--bg-hover);
+}
+
+.log-kind {
+  flex: none;
+  width: 84px;
+  color: var(--text-faint);
+}
+
+.log-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-time {
+  flex: none;
+  margin-left: auto;
+}
+
+.log-detail {
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  background: var(--bg);
+  padding: 8px 10px 10px 104px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.log-thread {
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  margin-top: 4px;
+  max-width: 760px;
+}
+
+.log-message {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.log-tags {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.log-added {
+  color: var(--green);
+}
+
+.log-removed {
+  color: var(--red);
+}
+
 /* review bar + reply modal */
 
 .reply-modal-hint {

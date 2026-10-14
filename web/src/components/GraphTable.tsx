@@ -4,6 +4,7 @@ import type { ChangeGraph, GraphNode } from "../api/types";
 import { type NodeActivity, revisionActivity } from "../lib/comments";
 import type { GraphLayout, LaidEdge, LaidNode } from "../lib/graphLayout";
 import { layoutGraph } from "../lib/graphLayout";
+import { shortSha } from "../lib/sha";
 import { useRowNav } from "../lib/useRowNav";
 import { StatusChip } from "./badges";
 
@@ -45,8 +46,6 @@ function BreakMark({
 // module only paints the computed coordinates and the row content. The
 // rail is its own component, so a page can draw the same rail beside rows
 // of its own.
-
-const shortSha = (sha: string): string => sha.slice(0, 12);
 
 /** The CSS modifier for a node's ring, matching branch-edge colors (not
  * review status, which lives in the STATUS column). */

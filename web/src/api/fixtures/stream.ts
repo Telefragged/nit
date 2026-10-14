@@ -8,6 +8,7 @@ import type {
   ChangeQuery,
   LogEntry,
   LogPayload,
+  Start,
   StreamMessage,
   Subscription,
 } from "../types";
@@ -46,6 +47,7 @@ export function projection(changeNumber: number): ChangeProjection {
 type Listener = (msg: StreamMessage) => void;
 interface Sub {
   query: ChangeQuery | null;
+  start: Start;
   /** The position of the next entry to send of each followed change. */
   positions: Map<number, number>;
   listener: Listener;
@@ -73,8 +75,7 @@ export function picks(query: ChangeQuery, c: ChangeRecord): boolean {
 }
 
 /** Sends the messages that the subscriber lacks, in the order of the server
- * read: the matched changes first, then `left`. The mock starts each new
- * change at its projection, whatever `start` says. */
+ * read: the matched changes first, then `left`. */
 function sync(sub: Sub) {
   const query = sub.query;
   if (query === null) return;
@@ -87,11 +88,11 @@ function sync(sub: Sub) {
     }
     const log = logFor(c.id);
     sub.positions.set(c.id, log.length);
-    if (held === undefined) {
+    if (held === undefined && sub.start === "projection") {
       sub.listener({ projection: projection(c.id) });
       continue;
     }
-    for (const entry of log.slice(held)) sub.listener({ entry });
+    for (const entry of log.slice(held ?? 0)) sub.listener({ entry });
   }
   for (const id of left) {
     sub.positions.delete(id);
@@ -110,11 +111,17 @@ export interface MockStream {
  * positions of the changes that it holds on. Then each append sends what the
  * server sends after a commit. */
 export function mockOpenStream(listener: Listener): MockStream {
-  const sub: Sub = { query: null, positions: new Map(), listener };
+  const sub: Sub = {
+    query: null,
+    start: "projection",
+    positions: new Map(),
+    listener,
+  };
   subs.add(sub);
   return {
     subscribe(subscription) {
       sub.query = subscription.query;
+      sub.start = subscription.start ?? "projection";
       sub.positions = new Map(
         Object.entries(subscription.positions ?? {}).map(([id, position]) => [
           Number(id),

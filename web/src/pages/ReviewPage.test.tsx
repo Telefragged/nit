@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { Link, Route, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FILE_TREE_TAG_NAME } from "@pierre/trees";
+import { logFor } from "../api/fixtures/stream";
 import { COMMIT_MSG_PATH } from "../api/types";
 import { renderPage } from "../test/page";
 import ReviewPage from "./ReviewPage";
@@ -263,6 +264,20 @@ describe("change navigation", () => {
     fireEvent.keyDown(window, { key: "N" });
     await settle();
     expect(shown()).toEqual([12]);
+  });
+
+  it("lists the log of each change that it navigates to", async () => {
+    const { settle } = await renderReview();
+    const rows = () => document.querySelectorAll(".change-log .log-row").length;
+    expect(rows()).toBe(logFor(11).length);
+
+    fireEvent.keyDown(window, { key: "n" });
+    await settle();
+    expect(rows()).toBe(logFor(12).length);
+
+    fireEvent.keyDown(window, { key: "N", shiftKey: true });
+    await settle();
+    expect(rows()).toBe(logFor(11).length);
   });
 });
 
