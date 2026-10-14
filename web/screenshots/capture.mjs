@@ -144,6 +144,13 @@ const clickNow = async (locator) => {
   await locator.click({ force: true });
 };
 
+/** Clicks the code of the one line `locator` names, and waits until the
+ * page links that line, so a following `c` comments on it. */
+const linkLine = async (page, locator) => {
+  await clickNow(locator);
+  await untilDom(page, () => !!document.querySelector(".code.linked"));
+};
+
 /** Types `text` into the one element `locator` names. */
 const fillNow = async (locator, text) => {
   await expectOne(locator);
@@ -640,20 +647,10 @@ const captures = [
     path: "/changes/11?against=base",
     actions: async (page) => {
       await expandAllFiles(page);
-      // Caret on a line + c → plain line-comment editor (clicking a line no
-      // longer comments; selecting text — collapsed here — then c is the
-      // only path).
-      await page.evaluate(() => {
-        const code = [...document.querySelectorAll(".code .code-text")].find(
-          (t) => t.textContent.includes("self.store.revoke_family"),
-        );
-        const range = document.createRange();
-        range.selectNodeContents(code);
-        range.collapse(true);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      });
+      await linkLine(
+        page,
+        page.locator(".code-text", { hasText: "self.store.revoke_family" }),
+      );
       await page.keyboard.press("c");
       await fillNow(
         page.locator("textarea"),
@@ -668,17 +665,10 @@ const captures = [
     path: "/changes/11?against=base",
     actions: async (page) => {
       await expandAllFiles(page);
-      await page.evaluate(() => {
-        const code = [...document.querySelectorAll(".code .code-text")].find(
-          (t) => t.textContent.includes("self.store.revoke_family"),
-        );
-        const range = document.createRange();
-        range.selectNodeContents(code);
-        range.collapse(true);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      });
+      await linkLine(
+        page,
+        page.locator(".code-text", { hasText: "self.store.revoke_family" }),
+      );
       await page.keyboard.press("c");
       await fillNow(
         page.locator("textarea"),
@@ -763,27 +753,22 @@ const captures = [
       );
     },
   },
-  // Commenting on the OLD column of an interdiff: r0 → r1 side-by-side, a
-  // caret on the pre-change signature (left column) + c opens the editor
-  // there. Previously blocked ("old side of an interdiff isn't
-  // commentable"); now it anchors a new-side comment on r0 (lib/comments).
+  // Commenting on the OLD column of an interdiff: r0 → r1 side-by-side. A
+  // click on the pre-change signature (left column) and then c open the
+  // editor there, and the editor anchors a new-side comment on r0
+  // (lib/comments).
   {
     name: "review-old-side-draft",
     path: "/changes/11?against=0",
     actions: async (page) => {
       await expandAllFiles(page);
       await applySetting(page, "Side-by-side");
-      await page.evaluate(() => {
-        const oldCell = [
-          ...document.querySelectorAll('.code[data-side="old"] .code-text'),
-        ].find((t) => t.textContent.includes("pub fn rotate"));
-        const range = document.createRange();
-        range.selectNodeContents(oldCell);
-        range.collapse(true);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      });
+      await linkLine(
+        page,
+        page.locator('.code[data-side="old"] .code-text', {
+          hasText: "pub fn rotate",
+        }),
+      );
       await page.keyboard.press("c");
       await fillNow(
         page.locator("textarea"),

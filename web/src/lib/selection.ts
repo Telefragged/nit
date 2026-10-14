@@ -101,6 +101,27 @@ export function cellLine(
   return Number.isInteger(line) && line > 0 ? { file, side, line } : null;
 }
 
+/** A range over lines `start` through `end` on one side of `file`'s
+ * section: from the start of the first line to the end of the last. Null
+ * when either end line does not render. */
+export function linesRange(
+  file: string,
+  side: Side,
+  start: number,
+  end: number,
+): Range | null {
+  const section = [
+    ...document.querySelectorAll("section[data-diff-path]"),
+  ].find((s) => s.getAttribute("data-diff-path") === file);
+  const first = section?.querySelector(`.code[data-${side}="${start}"]`);
+  const last = section?.querySelector(`.code[data-${side}="${end}"]`);
+  if (!first || !last) return null;
+  const range = document.createRange();
+  range.setStart(first, 0);
+  range.setEnd(last, last.childNodes.length);
+  return range;
+}
+
 /** Why a selection inside the diff maps to no target — surfaced to the
  * user by the `c` handler. Selections with no commentable cells at all
  * (outside the diff) return null instead and stay silent. */
@@ -142,9 +163,13 @@ export function selectionAnchorSide(anchor: Node | null): Side | null {
  * selection inside a single cell degrades to a plain line comment on that
  * cell — gerrit's `c`-on-a-line. A selection ending before a line's first
  * character ends on the previous line.
+ *
+ * `side` overrides the side that `sideOf` reads from the boundary cells.
+ * Where both boundary cells show both sides, `sideOf` reads the new side.
  */
 export function selectionTarget(
   range: Range,
+  side?: Side,
 ): DraftTarget | SelectionMiss | null {
   const swept = sweptCells(range);
   const firstSwept = swept[0];
@@ -153,8 +178,8 @@ export function selectionTarget(
   const startCell = cellOf(range.startContainer) ?? firstSwept;
   const endCell = cellOf(range.endContainer) ?? lastSwept;
 
-  const side = sideOf(startCell, endCell);
-  if (side === null) return { miss: "mixed-sides" };
+  side ??= sideOf(startCell, endCell) ?? undefined;
+  if (side === undefined) return { miss: "mixed-sides" };
 
   const cells = swept.filter((c) => c.dataset[side] !== undefined);
   const firstCell = cells[0];

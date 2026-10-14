@@ -91,6 +91,7 @@ import { plainClick, shortcutKey } from "../lib/shortcutKey";
 import type { SelectionMiss } from "../lib/selection";
 import {
   cellLine,
+  linesRange,
   selectionAnchorSide,
   selectionTarget,
 } from "../lib/selection";
@@ -675,11 +676,14 @@ export default function ReviewPage() {
 
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
   // expanded, then scrolled), n / shift+n next/previous change, r the latest
-  // revision, c comments on the selected diff text, a opens the reply modal.
+  // revision, c comments on the selected text or else the linked lines, a
+  // opens the reply modal.
   // All inert while a modal is open — a showModal() dialog owns the keyboard
   // (Escape arrives as its cancel event), but window listeners still fire, so
-  // the open dialog itself is the gate.
-  useEffect(() => {
+  // the open dialog itself is the gate. A layout effect, so the listener
+  // reads the link of the commit that marks the linked lines: a c pressed
+  // once they show comments on them.
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (document.querySelector("dialog[open]")) return;
       const key = shortcutKey(e);
@@ -701,18 +705,31 @@ export default function ReviewPage() {
         // comment editor — the latest revision is where they already are.
         if (selected !== latestRevision) onRight(latestRevision);
       } else if (key === "c") {
-        // Draft a comment on the selected diff text (gerrit's c) — or on
-        // the caret's line when the selection is collapsed.
+        // Draft a comment on the selected diff text (gerrit's c), or else
+        // on the linked lines: one line whole, several from the start of
+        // the first to the end of the last.
         const sel = document.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
-        const range = sel.getRangeAt(0);
-        const result = selectionTarget(range);
+        const linked = fileLink(link);
+        let range: Range | null = null;
+        let result: DraftTarget | SelectionMiss | null = null;
+        if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+          range = sel.getRangeAt(0);
+          result = selectionTarget(range);
+        } else if (linked?.lines) {
+          const { side, start, end } = linked.lines;
+          if (start === end) {
+            result = { file: linked.file, side, at: { whole: start } };
+          } else {
+            range = linesRange(linked.file, side, start, end);
+            result = range && selectionTarget(range, side);
+          }
+        }
         if (!result) return;
         // preventDefault, or the keystroke lands in the editor's textarea.
         e.preventDefault();
         if ("miss" in result) {
           const col = diffColumnRef.current?.getBoundingClientRect();
-          if (col) {
+          if (col && range) {
             setSelectionMiss({
               ...result,
               ...missAnchor(range, col),
@@ -723,7 +740,7 @@ export default function ReviewPage() {
         }
         // The editor renders its own range highlight; the DOM selection
         // would just shout over it. Keep it on a declined discard.
-        if (ctxValue.setEditingTarget(result)) sel.removeAllRanges();
+        if (ctxValue.setEditingTarget(result)) sel?.removeAllRanges();
       } else if (key === "a") {
         // preventDefault, or the keystroke's own text insertion lands in
         // the cover-message textarea the opening modal focuses.
@@ -754,6 +771,7 @@ export default function ReviewPage() {
     selected,
     latestRevision,
     onRight,
+    link,
   ]);
 
   // Side-by-side selection paint: tag the diff column with the side the
@@ -1039,7 +1057,7 @@ export default function ReviewPage() {
             </button>
             <span
               className="kbd-hint"
-              title="Keyboard: [ and ] switch files, n and shift+n switch changes, r shows the latest revision, c comments on the selected diff text, a opens the reply dialog"
+              title="Keyboard: [ and ] switch files, n and shift+n switch changes, r shows the latest revision, c comments on the selected text or else the linked lines, a opens the reply dialog"
             >
               <kbd>[</kbd>
               <kbd>]</kbd> files · <kbd>n</kbd>

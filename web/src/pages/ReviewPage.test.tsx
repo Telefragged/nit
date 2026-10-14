@@ -332,16 +332,12 @@ describe("collapse with an open dirty comment editor", () => {
     vi.restoreAllMocks();
   });
 
-  /** Leaves a dirty draft open on section(1); needs a manual caret + 'c'
-   * because clicking a line doesn't open an editor (see lib/selection). */
+  /** Leaves a dirty draft open on section(1): a click links its first
+   * line, and c comments on the linked line. */
   async function openDirtyEditor() {
     await renderReview();
     toggleSection(1);
-    const code = must(section(1).querySelector(".code-text"), ".code-text");
-    const range = document.createRange();
-    range.selectNodeContents(code);
-    range.collapse(true);
-    select(range);
+    fireEvent.click(must(section(1).querySelector(".code"), ".code"));
     fireEvent.keyDown(window, { key: "c" });
     fireEvent.change(must(section(1).querySelector("textarea"), "textarea"), {
       target: { value: "half-typed nit" },
@@ -726,6 +722,62 @@ describe("links to a file or its lines", () => {
       ),
     );
     expect([params().get("line"), params().get("side")]).toEqual(["21", "old"]);
+  });
+
+  /** The text the open editor marks in rotate.rs, by new-side line. A
+   * line's mark is split at each syntax token. */
+  const markedText = () => {
+    const lines = new Map<string, string>();
+    for (const m of byPath("src/auth/rotate.rs").querySelectorAll(
+      ".comment-range-active",
+    )) {
+      const no = m.closest(".code")?.getAttribute("data-new") ?? "";
+      lines.set(no, (lines.get(no) ?? "") + m.textContent);
+    }
+    return lines;
+  };
+
+  it("comments with c on one linked line", async () => {
+    await renderReview(`${rotate}&line=22`);
+
+    fireEvent.keyDown(window, { key: "c" });
+    const editor = must(
+      byPath("src/auth/rotate.rs").querySelector("textarea"),
+      "editor",
+    );
+    expect(
+      editor
+        .closest(".meta-row")
+        ?.previousElementSibling?.querySelector(".code")
+        ?.getAttribute("data-new"),
+    ).toBe("22");
+    // A whole-line comment marks no text range.
+    expect(document.querySelector(".comment-range-active")).toBeNull();
+  });
+
+  it("comments with c on linked lines as a range over their whole text", async () => {
+    await renderReview(`${rotate}&line=22-24`);
+
+    fireEvent.keyDown(window, { key: "c" });
+    const marked = markedText();
+    expect([...marked.keys()]).toEqual(["22", "23", "24"]);
+    for (const [no, text] of marked) {
+      expect(text).toBe(
+        newCode(Number(no)).querySelector(".code-text")?.textContent,
+      );
+    }
+  });
+
+  it("comments with c on selected text before the linked lines", async () => {
+    await renderReview(`${rotate}&line=22`);
+    const range = document.createRange();
+    range.selectNodeContents(
+      must(newCode(24).querySelector(".code-text"), "code text"),
+    );
+    select(range);
+
+    fireEvent.keyDown(window, { key: "c" });
+    expect([...markedText().keys()]).toEqual(["24"]);
   });
 
   it("keeps the link when a click ends a text selection", async () => {
