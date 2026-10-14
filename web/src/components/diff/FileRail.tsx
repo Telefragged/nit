@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -21,6 +22,7 @@ import { anchorAt, shownAt, type UiThread } from "../../lib/comments";
 import {
   diffTotals,
   fileStatus,
+  splitExtension,
   statusLetter,
   treePaths,
 } from "../../lib/diffview";
@@ -145,6 +147,7 @@ export default function FileRail({
     );
     const open = openFiles.has(file.path);
     const FileIcon = FILE_ICON[fileStatus(file)];
+    const [stem, ext] = splitExtension(name);
     return (
       <li key={file.path}>
         <div
@@ -175,7 +178,13 @@ export default function FileRail({
               onSelect(index);
             }}
           >
-            {name}
+            <span
+              className="rail-stem"
+              style={{ "--ext": ext.length } as CSSProperties}
+            >
+              {stem}
+            </span>
+            {ext}
           </button>
           <Counts
             file={file}
