@@ -319,7 +319,7 @@ a.comment-time:hover {
 }
 
 .log-row {
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-raised);
   margin-bottom: 6px;
