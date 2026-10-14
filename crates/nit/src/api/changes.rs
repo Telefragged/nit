@@ -363,16 +363,13 @@ fn contained_diff(
 #[into_params(parameter_in = Query)]
 pub(super) struct PortedQuery {
     against: Option<RevisionNumber>,
-    #[serde(default)]
-    include_resolved: bool,
 }
 
 /// `GET /api/changes/{id}/revisions/{n}/ported`.
 ///
-/// Ports every unresolved thread of a revision earlier than `n` to `n`,
-/// and with `?against={m}` to `m` as well, `n`'s entries first.
-/// `?include_resolved=true` ports the resolved threads too. Entries for
-/// one revision are sorted by thread id.
+/// Ports every thread of a revision earlier than `n` to `n`, resolved or
+/// not, and with `?against={m}` to `m` as well, `n`'s entries first.
+/// Entries for one revision are sorted by thread id.
 #[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/ported", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), PortedQuery), responses((status = 200, body = Vec<PortedComment>)))]
 pub(super) async fn ported_comments(
     State(state): State<Arc<AppState>>,
@@ -390,7 +387,7 @@ pub(super) async fn ported_comments(
         let threads: Vec<_> = change
             .threads
             .iter()
-            .filter(|t| t.revision < latest && (q.include_resolved || !t.resolved))
+            .filter(|t| t.revision < latest)
             .map(|t| ThreadOrigin {
                 thread_id: t.id,
                 revision: t.revision,
