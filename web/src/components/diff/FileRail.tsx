@@ -5,6 +5,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  ChevronRight,
+  File,
+  FileMinus,
+  FilePlus,
+  Folder,
+  MessageSquare,
+  type LucideIcon,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import type { DiffFile } from "../../api/types";
 import { COMMIT_MSG_PATH } from "../../api/types";
@@ -55,18 +64,23 @@ function Counts({
   );
 }
 
+/** The icon of a file row: an added or deleted file says so. */
+const FILE_ICON: Record<ReturnType<typeof fileStatus>, LucideIcon> = {
+  added: FilePlus,
+  deleted: FileMinus,
+  message: File,
+  modified: File,
+  renamed: File,
+};
+
 /** The mark of a row that holds other rows: a chevron that points right
  * when closed and down when open. */
 const Chevron = ({ open }: { open: boolean }) => (
-  <svg
+  <ChevronRight
     className={open ? "rail-chevron open" : "rail-chevron"}
-    viewBox="0 0 16 16"
-    width="12"
-    height="12"
+    size={14}
     aria-hidden
-  >
-    <polyline points="6 3.5 10.5 8 6 12.5" />
-  </svg>
+  />
 );
 
 /** The left padding of a row `depth` levels down the tree. */
@@ -130,6 +144,7 @@ export default function FileRail({
       (t): t is UiThread & { id: number } => t.id !== null,
     );
     const open = openFiles.has(file.path);
+    const FileIcon = FILE_ICON[fileStatus(file)];
     return (
       <li key={file.path}>
         <div
@@ -153,6 +168,7 @@ export default function FileRail({
           ) : (
             <span className="rail-toggle" />
           )}
+          <FileIcon className="rail-icon" size={14} aria-hidden />
           <button
             className="rail-name"
             onClick={() => {
@@ -178,6 +194,7 @@ export default function FileRail({
                   style={indent(depth + 1)}
                 >
                   <span className="rail-toggle" />
+                  <MessageSquare className="rail-icon" size={14} aria-hidden />
                   <span className="rail-name">{threadLines(t)}</span>
                   <span className="rail-counts">r{shownAt(t).revision}</span>
                 </Link>
@@ -205,6 +222,7 @@ export default function FileRail({
           <span className="rail-toggle rail-toggle-chevron">
             <Chevron open={open} />
           </span>
+          <Folder className="rail-icon" size={14} aria-hidden />
           {node.name.replaceAll("/", " / ")}
         </button>
         {open ? (
