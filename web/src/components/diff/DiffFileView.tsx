@@ -28,7 +28,13 @@ import {
   threadKey,
   type UiThread,
 } from "../../lib/comments";
-import { clickLink, linksLine, type FileLink } from "../../lib/diffLink";
+import {
+  clickLink,
+  linksLine,
+  sameLink,
+  type FileLink,
+  type LinkSpan,
+} from "../../lib/diffLink";
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
@@ -448,11 +454,23 @@ export default function DiffFileView({
   const lineHover = (side: Side, no: number | undefined) =>
     no !== undefined && hovered?.line === `${side}:${no}` ? " line-hover" : "";
 
+  // The span a drag over the line numbers marks. The page writes the span
+  // to the URL only on release, so a drag does not rewrite the history
+  // entry once per row. The router reads the new URL in a later render, so
+  // the span stays until the link matches it. If the span cleared earlier,
+  // the old link would show in between.
+  const [drag, setDrag] = useState<LinkSpan | null>(null);
+  if (drag && sameLink(ctx.link, drag)) setDrag(null);
+  // The drag as the pointer events read it: the fixed end, and the span.
+  const dragRef = useRef<{ anchor: number; span: LinkSpan } | null>(null);
+
   /** The class suffix marking a cell that shows a linked line. */
   const lineLinked = (side: Side, no: number | undefined) =>
-    linksLine(ctx.link, file.path, side, no) ? " linked" : "";
+    linksLine(drag ?? ctx.link, file.path, side, no) ? " linked" : "";
 
-  /** A gutter's line number, as a link to its line. */
+  /** A gutter's line number, as a link to its line. A press starts a span
+   * at the line, or with shift extends the linked span. A drag over other
+   * rows moves the far end of the span. */
   function lineNumber(side: Side, no: number | undefined): ReactNode {
     if (no === undefined) return "";
     return (
@@ -462,16 +480,61 @@ export default function DiffFileView({
           file: file.path,
           lines: { side, start: no, end: no },
         })}
+        onMouseDown={(e) => {
+          if (!plainClick(e, true)) return;
+          // Keeps the browser from dragging the link or selecting text.
+          e.preventDefault();
+          const span = clickLink(ctx.link, file.path, side, no, e.shiftKey);
+          const { start, end } = span.lines;
+          dragRef.current = { anchor: start === no ? end : start, span };
+          setDrag(span);
+          document.addEventListener("mouseover", dragOver);
+          document.addEventListener(
+            "mouseup",
+            () => {
+              document.removeEventListener("mouseover", dragOver);
+              const done = dragRef.current?.span;
+              dragRef.current = null;
+              if (done) ctx.selectLink(done);
+            },
+            { once: true },
+          );
+        }}
         onClick={(e) => {
           if (!plainClick(e, true)) return;
           e.preventDefault();
-          ctx.selectLink(clickLink(ctx.link, file.path, side, no, e.shiftKey));
+          // A click from the keyboard has no mousedown before it, so it
+          // links the line here.
+          if (e.detail === 0) {
+            ctx.selectLink(
+              clickLink(ctx.link, file.path, side, no, e.shiftKey),
+            );
+          }
         }}
       >
         {no}
       </a>
     );
   }
+
+  /** Moves the dragged span's far end to the row of this file under the
+   * pointer. */
+  const dragOver = (e: MouseEvent) => {
+    const cur = dragRef.current;
+    if (cur === null || !(e.target instanceof Element)) return;
+    const { side } = cur.span.lines;
+    const row = e.target.closest(".line-row");
+    if (row === null || !sectionRef.current?.contains(row)) return;
+    const no = Number(
+      row.querySelector(`.code[data-${side}]`)?.getAttribute(`data-${side}`),
+    );
+    if (!no) return;
+    const start = Math.min(cur.anchor, no);
+    const end = Math.max(cur.anchor, no);
+    if (start === cur.span.lines.start && end === cur.span.lines.end) return;
+    cur.span = { file: file.path, lines: { side, start, end } };
+    setDrag(cur.span);
+  };
 
   /** The comment-range tints falling on `line`'s text in a cell showing
    * the given sides (unified cells show both; split cells one). */

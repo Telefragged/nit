@@ -625,6 +625,12 @@ describe("links to a file or its lines", () => {
     search = useLocation().search;
     return null;
   }
+  /** The code cell of new-side line `no` in rotate.rs. */
+  const newCode = (no: number) =>
+    must(
+      byPath("src/auth/rotate.rs").querySelector(`.code[data-new="${no}"]`),
+      `code ${no}`,
+    );
   /** The new-side line number `no` in rotate.rs, as its gutter link. The
    * new gutter sits just before the code cell in either layout. */
   const newLine = (no: number) =>
@@ -675,12 +681,39 @@ describe("links to a file or its lines", () => {
     await renderReview(rotate, <LocationProbe />);
     scrolled = [];
 
-    fireEvent.click(newLine(22));
+    const press = (no: number, shiftKey = false) => {
+      fireEvent.mouseDown(newLine(no), { shiftKey });
+      fireEvent.mouseUp(document);
+    };
+    press(22);
     expect(new URLSearchParams(search).get("line")).toBe("22");
-    fireEvent.click(newLine(24), { shiftKey: true });
+    press(24, true);
     expect(new URLSearchParams(search).get("line")).toBe("22-24");
     expect(linkedNew()).toEqual(["22", "23", "24"]);
     expect(scrolled).toEqual([]);
+  });
+
+  it("links the span a drag over the rows marks, once the button is released", async () => {
+    await renderReview(rotate, <LocationProbe />);
+    scrolled = [];
+
+    fireEvent.mouseDown(newLine(25));
+    // The pointer moves over the code of each row, not only its number.
+    fireEvent.mouseOver(newCode(23));
+    fireEvent.mouseOver(newCode(22));
+    expect(linkedNew()).toEqual(["22", "23", "24", "25"]);
+    expect(new URLSearchParams(search).get("line")).toBeNull();
+
+    fireEvent.mouseUp(document);
+    expect(new URLSearchParams(search).get("line")).toBe("22-25");
+    expect(scrolled).toEqual([]);
+  });
+
+  it("links a line from the keyboard", async () => {
+    await renderReview(rotate, <LocationProbe />);
+
+    fireEvent.click(newLine(22));
+    expect(new URLSearchParams(search).get("line")).toBe("22");
   });
 
   it("scrolls again each time a link to the same place is followed", async () => {

@@ -15,6 +15,9 @@ export interface FileLink {
   lines: LineSpan | null;
 }
 
+/** A file link that names a span of lines. */
+export type LinkSpan = FileLink & { lines: LineSpan };
+
 /** A comment thread that a link points at, by its id. */
 interface ThreadLink {
   thread: number;
@@ -115,7 +118,7 @@ export function clickLink(
   side: Side,
   no: number,
   extend: boolean,
-): FileLink {
+): LinkSpan {
   const linked = fileLink(current);
   const cur = linked?.file === file ? linked.lines : null;
   const anchor =
