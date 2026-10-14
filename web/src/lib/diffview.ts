@@ -1,8 +1,8 @@
 // Pure diff-presentation logic, kept out of components so it stays testable.
 
-import { prepareFileTreeInput } from "@pierre/trees";
 import type { CommentRange, DiffFile, Hunk, Line, Side } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
+import { buildTree, fileOrder } from "./fileTree";
 import { intraline_marks } from "./wasm";
 
 /** Display label for a diff path: the synthetic /COMMIT_MSG file reads
@@ -21,35 +21,38 @@ export function fileDomId(index: number): string {
   return `file-${index}`;
 }
 
+/** The paths of `files` for `buildTree`. The commit message is not a
+ * file, so it has no path in the tree. */
+export const treePaths = (files: readonly DiffFile[]) =>
+  files.map((f) => (f.path === COMMIT_MSG_PATH ? null : f.path));
+
 /** The diff in tree order: the commit message first (it is not a file),
- * then the order the rail's tree itself renders — directories before
- * files, natural digit runs, case-insensitive. Git emits deltas in plain
- * path order, which interleaves directories and files, so the sections
- * would otherwise scroll in an order the rail never reads. */
+ * then the order of `buildTree`. Git emits deltas in plain path order,
+ * which interleaves directories and files, so the sections would
+ * otherwise scroll in an order the rail never reads. */
 export function treeOrder(files: DiffFile[]): DiffFile[] {
-  const rank = new Map(
-    prepareFileTreeInput(
-      files.filter((f) => f.path !== COMMIT_MSG_PATH).map((f) => f.path),
-    ).paths.map((path, index) => [path, index]),
-  );
-  return [...files].sort((a, b) => {
-    if (a.path === COMMIT_MSG_PATH) return -1;
-    if (b.path === COMMIT_MSG_PATH) return 1;
-    return (rank.get(a.path) ?? 0) - (rank.get(b.path) ?? 0);
-  });
+  const message = files.filter((f) => f.path === COMMIT_MSG_PATH);
+  const order = fileOrder(buildTree(treePaths(files)));
+  return [...message, ...order.flatMap((i) => files[i] ?? [])];
 }
 
-const STATUS_LETTER: Record<DiffFile["status"], string> = {
+/** The status a file shows. The commit message is not an added file, so
+ * it shows `message`. */
+export const fileStatus = (file: DiffFile) =>
+  file.path === COMMIT_MSG_PATH ? "message" : file.status;
+
+const STATUS_LETTER: Record<ReturnType<typeof fileStatus>, string> = {
   added: "A",
   deleted: "D",
+  message: "",
   modified: "M",
   renamed: "R",
 };
 
-/** Status letter for a file's stat box. The commit message is not an
- * added file: it gets none (its empty box keeps flex alignment). */
+/** Status letter for a file's stat box. The commit message gets none (its
+ * empty box keeps flex alignment). */
 export function statusLetter(file: DiffFile): string {
-  return file.path === COMMIT_MSG_PATH ? "" : STATUS_LETTER[file.status];
+  return STATUS_LETTER[fileStatus(file)];
 }
 
 /** Whole-diff totals for the file-rail title. The synthetic /COMMIT_MSG

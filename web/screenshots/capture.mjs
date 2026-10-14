@@ -60,9 +60,7 @@ const serve = (dir) =>
   });
 
 /** The page half of `untilDom`: resolves once `test(arg)` holds. It runs
- * the test now, then after each DOM mutation, and never on a timer. The
- * file rail renders into a shadow root, which an observer of the document
- * does not see, so the observer also watches that root once it exists. */
+ * the test now, then after each DOM mutation, and never on a timer. */
 function observe(test, arg) {
   return new Promise((resolve) => {
     const options = {
@@ -72,13 +70,7 @@ function observe(test, arg) {
       characterData: true,
     };
     const observer = new MutationObserver(check);
-    let rail = null;
     function check() {
-      const root = document.querySelector("file-tree-container")?.shadowRoot;
-      if (root && root !== rail) {
-        rail = root;
-        observer.observe(root, options);
-      }
       if (!test(arg)) return;
       observer.disconnect();
       resolve();
@@ -118,13 +110,8 @@ const untilSpySettled = (page) =>
     const path = sections
       .filter((s) => s.getBoundingClientRect().top <= line)
       .at(-1)?.dataset.diffPath;
-    const selected = document
-      .querySelector("file-tree-container")
-      ?.shadowRoot?.querySelector('[data-item-selected="true"]');
-    return (
-      (selected?.dataset.itemPath ?? null) ===
-      (path === "/COMMIT_MSG" ? "Commit message" : (path ?? null))
-    );
+    const selected = document.querySelector('.rail-row[aria-current="true"]');
+    return (selected?.dataset.path ?? null) === (path ?? null);
   });
 
 /** Checks that `locator` names exactly one element. Each step acts on what
@@ -296,6 +283,26 @@ const captures = [
       });
     },
   },
+  // The rail with the threads of store.rs opened under it.
+  {
+    name: "review-rail-threads",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      await clickNow(
+        page.getByRole("button", { name: "comments on store.rs" }),
+      );
+    },
+  },
+  // The pointer on a folder row of the rail.
+  {
+    name: "review-rail-folder-hover",
+    path: "/changes/11?against=base",
+    actions: async (page) => {
+      const dir = page.locator(".rail-dir", { hasText: "src / auth" });
+      await expectOne(dir);
+      await dir.hover();
+    },
+  },
   // The tag graph at the right of the header: the changes that share the
   // selected tag at their latest revisions, the current one highlighted.
   {
@@ -410,7 +417,9 @@ const captures = [
     name: "review-files-mixed",
     path: "/changes/11?against=base",
     actions: async (page) => {
-      await clickNow(page.locator('[data-item-path="src/auth/store.rs"]'));
+      await clickNow(
+        page.locator('.rail-row[data-path="src/auth/store.rs"] .rail-name'),
+      );
       await untilSpySettled(page);
     },
   },

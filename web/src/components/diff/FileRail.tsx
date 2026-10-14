@@ -1,42 +1,90 @@
-import { useLayoutEffect, useMemo, useRef } from "react";
-import { FileTree, useFileTree } from "@pierre/trees/react";
-import { preparePresortedFileTreeInput } from "@pierre/trees";
-import type { FileTreeRowDecoration, GitStatusEntry } from "@pierre/trees";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Link } from "react-router-dom";
 import type { DiffFile } from "../../api/types";
 import { COMMIT_MSG_PATH } from "../../api/types";
-import type { UiThread } from "../../lib/comments";
-import { diffTotals, displayPath } from "../../lib/diffview";
+import { anchorAt, shownAt, type UiThread } from "../../lib/comments";
+import {
+  diffTotals,
+  fileStatus,
+  statusLetter,
+  treePaths,
+} from "../../lib/diffview";
+import { buildTree, type TreeNode } from "../../lib/fileTree";
+import { REVEAL, useReview } from "../../pages/reviewContext";
 
-/** The row's trailing lane: draft and published comment counts, then the
- * +/- churn. Binary files carry no churn. */
-function decorate(file: DiffFile, threads: UiThread[]): FileTreeRowDecoration {
-  const drafts = threads.filter((t) => t.id === null).length;
-  const published = threads.filter((t) => t.id !== null).length;
-  const parts = [
-    ...(drafts > 0 ? [{ text: `${drafts}d`, color: "var(--amber)" }] : []),
-    ...(published > 0 ? [{ text: `${published}c` }] : []),
-    ...(file.binary
-      ? [{ text: "bin", color: "var(--text-faint)" }]
-      : [
-          { text: `+${file.additions}`, color: "var(--green)" },
-          { text: `−${file.deletions}`, color: "var(--red)" },
-        ]),
-    // The lane collapses an ordinary space between parts, so they join on
-    // a non-breaking one.
-  ].map((p, i) => (i === 0 ? p : { ...p, text: `\u00a0${p.text}` }));
-  return {
-    text: parts.map((p) => p.text).join(""),
-    // A renamed file shows only its new path; the old one is the tooltip.
-    ...(file.old_path ? { title: `${file.old_path} → ${file.path}` } : {}),
-    parts,
-  };
+/** Where in its file the diff shows a thread. */
+function threadLines(t: UiThread): string {
+  const at = anchorAt(shownAt(t).anchor);
+  if (at === null) return "file";
+  if ("whole" in at) return `line ${at.whole}`;
+  const { start_line, start_char, end_line, end_char } = at.selection;
+  return `range ${start_line}:${start_char}-${end_line}:${end_char}`;
 }
 
-/** Left rail: the diff as a directory tree, each file's status in the git
- * lane and its comment counts and +/- churn in the decoration lane.
- * Selecting a file expands its section and scrolls to it. The title row
- * toggles all sections at once — the only bulk affordance, which a long
- * diff needs since every file starts collapsed. */
+/** The row's trailing lane: draft and published comment counts, the +/-
+ * churn, then the status letter. Binary files carry no churn. */
+function Counts({
+  file,
+  drafts,
+  published,
+}: {
+  file: DiffFile;
+  drafts: number;
+  published: number;
+}) {
+  return (
+    <span className="rail-counts">
+      {drafts > 0 ? <span className="rail-drafts">{drafts}d</span> : null}
+      {published > 0 ? <span>{published}c</span> : null}
+      {file.binary ? (
+        <span className="dim">bin</span>
+      ) : (
+        <>
+          <span className="plus">+{file.additions}</span>
+          <span className="minus">−{file.deletions}</span>
+        </>
+      )}
+      <span className="rail-status">{statusLetter(file)}</span>
+    </span>
+  );
+}
+
+/** The mark of a row that holds other rows: a chevron that points right
+ * when closed and down when open. */
+const Chevron = ({ open }: { open: boolean }) => (
+  <svg
+    className={open ? "rail-chevron open" : "rail-chevron"}
+    viewBox="0 0 16 16"
+    width="12"
+    height="12"
+    aria-hidden
+  >
+    <polyline points="6 3.5 10.5 8 6 12.5" />
+  </svg>
+);
+
+/** The left padding of a row `depth` levels down the tree. */
+const indent = (depth: number) => ({ paddingLeft: depth * 12 + 4 });
+
+/** `set` with `key` added, or removed when it holds it. */
+function flip(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
+  const next = new Set(set);
+  if (!next.delete(key)) next.add(key);
+  return next;
+}
+
+/** Left rail: the diff as a directory tree, each file with its status, its
+ * comment counts and its +/- churn. Selecting a file expands its section
+ * and scrolls to it. A file with published threads opens to a row per
+ * thread, and each row links to its thread. The title row toggles all
+ * sections at once. A long diff needs this bulk toggle, because every
+ * file starts collapsed. */
 export default function FileRail({
   files,
   threadsByFile,
@@ -52,119 +100,119 @@ export default function FileRail({
   allExpanded: boolean;
   onToggleAll: () => void;
 }) {
-  // The tree is path-keyed throughout — rows, status entries and every
-  // callback — so the diff is indexed by the path each file rides under
-  // once, here. The paths go over presorted: `files` arrives in tree order
-  // (`treeOrder`) and the tree renders them in the order it is given, so
-  // the rail cannot drift from the sections it navigates.
-  const tree = useMemo(() => {
-    const byPath = new Map<string, { file: DiffFile; index: number }>();
-    const gitStatus: GitStatusEntry[] = [];
-    files.forEach((file, index) => {
-      const path = displayPath(file.path);
-      byPath.set(path, { file, index });
-      if (file.path !== COMMIT_MSG_PATH) {
-        gitStatus.push({ path, status: file.status });
-      }
-    });
-    const paths = [...byPath.keys()];
-    return {
-      byPath,
-      gitStatus,
-      paths,
-      input: preparePresortedFileTreeInput(paths),
-    };
-  }, [files]);
-
-  const activePath =
-    activeIndex === null ? null : (tree.paths[activeIndex] ?? null);
-
-  // The tree captures its callbacks once, when the model is built, so they
-  // reach the current props through this ref rather than a stale closure.
-  // Published ahead of every effect below, which repaint against it. All of
-  // them are layout effects: the rail repaints in the commit that changes
-  // what it shows, so no frame paints it a step behind the diff.
-  const live = useRef({ tree, threadsByFile, onSelect, activePath });
+  const { linkHref } = useReview();
+  const message = files.findIndex((f) => f.path === COMMIT_MSG_PATH);
+  const tree = useMemo(() => buildTree(treePaths(files)), [files]);
+  const [closedDirs, setClosedDirs] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [openFiles, setOpenFiles] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  // Keep the active row visible in the rail's own scrollport. A row that is
+  // already visible stays put, so a click does not move the rail.
+  const port = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    live.current = { tree, threadsByFile, onSelect, activePath };
-  });
+    const el = port.current;
+    const row = el?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!el || !row) return;
+    if (row.offsetTop < el.scrollTop) el.scrollTop = row.offsetTop;
+    const bottom = row.offsetTop + row.offsetHeight;
+    if (bottom > el.scrollTop + el.clientHeight)
+      el.scrollTop = bottom - el.clientHeight;
+  }, [activeIndex]);
 
-  const { model } = useFileTree({
-    preparedInput: tree.input,
-    gitStatus: tree.gitStatus,
-    itemHeight: 22,
-    density: 0.8,
-    initialExpansion: "open",
-    flattenEmptyDirectories: true,
-    // The lane ships as `flex: 1 1 0`, so a long filename leaves it no
-    // width to grow into and the counts clip from the left — "+17 −17"
-    // renders as "−17", or vanishes. Growing but never shrinking makes the
-    // name ellipsize instead, which it is already built to do.
-    //
-    // The tree dots every directory holding a changed descendant, which in
-    // a diff is every directory it draws — a mark carrying no information.
-    // Only the icon goes; the lane keeps its width so the file statuses
-    // below stay in one column.
-    unsafeCSS: `
-      [data-item-section="decoration"] { flex: 1 0 auto; }
-      [data-item-section="git"] [data-icon-name="file-tree-icon-dot"] {
-        display: none;
-      }
-      /* Directories are the tree's scaffolding, and the files under them
-         read in the dim grey of an unremarkable modification, so they
-         take the brighter foreground to stay legible as structure. */
-      [data-item-type="folder"] [data-item-section="content"] {
-        color: var(--text);
-      }
-    `,
-    onSelectionChange: ([path]) => {
-      // The selection pushed below echoes back here; reporting it would
-      // reveal the file a second time.
-      if (path === undefined || path === live.current.activePath) return;
-      const hit = live.current.tree.byPath.get(path);
-      if (hit) live.current.onSelect(hit.index);
-    },
-    renderRowDecoration: ({ row }) => {
-      const hit = live.current.tree.byPath.get(row.path);
-      return hit
-        ? decorate(
-            hit.file,
-            live.current.threadsByFile.get(hit.file.path) ?? [],
-          )
-        : null;
-    },
-  });
+  const fileRows = (index: number, name: string, depth: number) => {
+    const file = files[index];
+    if (!file) return null;
+    const threads = threadsByFile.get(file.path) ?? [];
+    const published = threads.filter(
+      (t): t is UiThread & { id: number } => t.id !== null,
+    );
+    const open = openFiles.has(file.path);
+    return (
+      <li key={file.path}>
+        <div
+          className={`rail-row rail-file rail-${fileStatus(file)}`}
+          data-path={file.path}
+          aria-current={index === activeIndex ? "true" : undefined}
+          title={file.old_path ? `${file.old_path} → ${file.path}` : undefined}
+          style={indent(depth)}
+        >
+          {published.length > 0 ? (
+            <button
+              className="rail-toggle rail-toggle-chevron"
+              aria-expanded={open}
+              aria-label={`comments on ${name}`}
+              onClick={() => {
+                setOpenFiles((cur) => flip(cur, file.path));
+              }}
+            >
+              <Chevron open={open} />
+            </button>
+          ) : (
+            <span className="rail-toggle" />
+          )}
+          <button
+            className="rail-name"
+            onClick={() => {
+              onSelect(index);
+            }}
+          >
+            {name}
+          </button>
+          <Counts
+            file={file}
+            drafts={threads.length - published.length}
+            published={published.length}
+          />
+        </div>
+        {open ? (
+          <ul>
+            {published.map((t) => (
+              <li key={t.id}>
+                <Link
+                  className="rail-row rail-thread"
+                  to={linkHref({ thread: t.id })}
+                  state={REVEAL}
+                  style={indent(depth + 1)}
+                >
+                  <span className="rail-toggle" />
+                  <span className="rail-name">{threadLines(t)}</span>
+                  <span className="rail-counts">r{shownAt(t).revision}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </li>
+    );
+  };
 
-  // A new diff: swap the rows and their status lane. The reset repaints, so
-  // the decorations come with it — but it also re-expands every directory,
-  // which is why comment traffic cannot ride this path.
-  useLayoutEffect(() => {
-    model.resetPaths({ preparedInput: tree.input });
-    model.setGitStatus(tree.gitStatus);
-  }, [model, tree]);
-
-  // Comment counts sit in the decoration lane, which no tree state tracks,
-  // so their repaint is ours to force. Rendering without the mounted host
-  // would build a detached one, so between mounts (StrictMode remounts the
-  // tree) leave it to the tree's own mount render.
-  useLayoutEffect(() => {
-    const host = model.getFileTreeContainer();
-    if (host) model.render({ fileTreeContainer: host });
-  }, [model, threadsByFile]);
-
-  // Selection is the rail's active-file highlight, driven by the page's
-  // scroll spy as much as by clicks here. `tree` is a dependency because
-  // resetting the paths drops the selection with them.
-  useLayoutEffect(() => {
-    for (const path of model.getSelectedPaths()) {
-      if (path !== activePath) model.getItem(path)?.deselect();
-    }
-    const item = activePath === null ? null : model.getItem(activePath);
-    item?.select();
-    // Keep it visible in the tree's own scrollport; already-visible rows
-    // stay put, so clicks don't jump the rail.
-    if (item) model.scrollToPath(item.getPath(), { offset: "nearest" });
-  }, [model, activePath, tree]);
+  const nodeRows = (node: TreeNode, depth: number): ReactNode => {
+    if (node.kind === "file") return fileRows(node.index, node.name, depth);
+    const open = !closedDirs.has(node.path);
+    return (
+      <li key={node.path}>
+        <button
+          className="rail-row rail-dir"
+          aria-expanded={open}
+          style={indent(depth)}
+          onClick={() => {
+            setClosedDirs((cur) => flip(cur, node.path));
+          }}
+        >
+          <span className="rail-toggle rail-toggle-chevron">
+            <Chevron open={open} />
+          </span>
+          {node.name.replaceAll("/", " / ")}
+        </button>
+        {open ? (
+          <ul>{node.children.map((c) => nodeRows(c, depth + 1))}</ul>
+        ) : null}
+      </li>
+    );
+  };
 
   const totals = diffTotals(files);
   return (
@@ -186,7 +234,12 @@ export default function FileRail({
           </button>
         ) : null}
       </div>
-      <FileTree className="rail-tree" model={model} />
+      <div className="rail-tree" ref={port}>
+        <ul>
+          {message === -1 ? null : fileRows(message, "Commit message", 0)}
+          {tree.map((n) => nodeRows(n, 0))}
+        </ul>
+      </div>
     </>
   );
 }

@@ -196,36 +196,136 @@
   flex-direction: column;
 }
 
-/* The @pierre/trees host. It renders in a shadow root and scrolls itself,
-   so the rail's palette and metrics reach it only as custom properties —
-   which inherit through the boundary. */
+/* `position: relative` makes this scrollport the offsetParent of each row.
+   The rail then compares a row's `offsetTop` with `scrollTop` directly. */
 .rail-tree {
   flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
+  position: relative;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
 
-  --trees-font-family-override: var(--mono);
-  --trees-font-size-override: 11.5px;
-  --trees-accent-override: var(--blue);
-  --trees-fg-override: var(--text-dim);
-  --trees-fg-muted-override: var(--text-faint);
+.rail-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 
-  /* The page's own colour, not `transparent`: the truncation ellipsis is
-     painted over the end of the name and masks it with this, so a
-     see-through backdrop leaves the two overlapping. */
-  --trees-bg-override: var(--bg);
-  --trees-bg-muted-override: var(--bg-hover);
-  --trees-selected-bg-override: var(--blue-dim);
-  --trees-selected-fg-override: var(--text);
-  --trees-border-color-override: var(--border);
-  --trees-indent-guide-bg-override: var(--border);
-  --trees-git-added-color-override: var(--green);
+.rail-row,
+button.rail-toggle,
+.rail-name {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
 
-  /* The tree tints the filename with its status color, so grey here is
-     what leaves a modified row reading like an untouched one. */
-  --trees-git-modified-color-override: var(--text-dim);
-  --trees-git-deleted-color-override: var(--red);
-  --trees-git-renamed-color-override: var(--blue);
-  --trees-padding-inline-override: 0;
+.rail-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 22px;
+  padding-right: 4px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.rail-row:hover {
+  background: var(--bg-hover);
+  text-decoration: none;
+}
+
+.rail-row[aria-current="true"] {
+  background: var(--blue-dim);
+  color: var(--text);
+}
+
+/* A modified file keeps the dim grey of `.rail-row`, so a directory takes
+   the brighter foreground to stand apart from it. */
+.rail-dir {
+  color: var(--text);
+}
+
+.rail-added :is(.rail-name, .rail-status) {
+  color: var(--green);
+}
+
+.rail-deleted :is(.rail-name, .rail-status) {
+  color: var(--red);
+}
+
+.rail-renamed :is(.rail-name, .rail-status) {
+  color: var(--blue);
+}
+
+.rail-toggle {
+  flex: none;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 3px;
+  border-radius: 3px;
+}
+
+.rail-chevron {
+  display: block;
+  margin: 0 auto;
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.1s;
+}
+
+.rail-chevron.open {
+  transform: rotate(90deg);
+}
+
+/* A row lights up under the pointer too, so the chevron takes a stronger
+   fill to stand out from it. */
+.rail-toggle-chevron:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.rail-toggle-chevron:hover .rail-chevron {
+  stroke: var(--text);
+}
+
+.rail-name:hover:not(:disabled) {
+  background: none;
+}
+
+/* The name gives way to the counts: it ellipsizes, and they never clip. */
+.rail-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.rail-counts {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.rail-drafts {
+  color: var(--amber);
+}
+
+.rail-status {
+  width: 1ch;
+  font-weight: 600;
 }
 
 .rail-title {

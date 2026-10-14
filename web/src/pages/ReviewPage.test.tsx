@@ -7,7 +7,6 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { Link, Route, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FILE_TREE_TAG_NAME } from "@pierre/trees";
 import { logFor } from "../api/fixtures/stream";
 import { COMMIT_MSG_PATH } from "../api/types";
 import { renderPage } from "../test/page";
@@ -96,18 +95,14 @@ const queryPath = (path: string) =>
 const byPath = (path: string): HTMLElement =>
   must(queryPath(path), `section for ${path}`);
 
-/** The rail renders into a shadow root, out of reach of `screen`. */
-const railQuery = (selector: string): Element | null =>
-  document
-    .querySelector(FILE_TREE_TAG_NAME)
-    ?.shadowRoot?.querySelector(selector) ?? null;
-
 const railRow = (path: string): Element | null =>
-  railQuery(`[data-item-path="${path}"]`);
+  document.querySelector(`.rail-row[data-path="${path}"] .rail-name`);
 
-/** The path of the rail's active row — the tree's selection. */
+/** The path of the rail's active row. */
 const railActive = (): string | null =>
-  railQuery('[aria-selected="true"]')?.getAttribute("data-item-path") ?? null;
+  document
+    .querySelector('.rail-row[aria-current="true"]')
+    ?.getAttribute("data-path") ?? null;
 
 describe("collapsed-by-default file sections", () => {
   it("starts with every file collapsed except the commit message", async () => {
@@ -123,7 +118,7 @@ describe("collapsed-by-default file sections", () => {
   });
 
   it("toggles a section from its header without scrolling", async () => {
-    const { settle } = await renderReview();
+    await renderReview();
 
     const header = must(
       section(1).querySelector(".file-header"),
@@ -135,13 +130,12 @@ describe("collapsed-by-default file sections", () => {
     expect(isExpanded(section(1))).toBe(false);
     // The active file never moved.
     expect(scrollCalls).toEqual([]);
-    await settle();
     expect(railRow("src/auth/rotate.rs")).not.toBeNull();
     expect(railActive()).toBeNull();
   });
 
   it("rail click expands the target and scrolls only after the expansion is committed", async () => {
-    const { settle } = await renderReview();
+    await renderReview();
 
     // layout-shift case: expanded content sits above the collapsed target.
     expect(isExpanded(section(0))).toBe(true);
@@ -151,15 +145,13 @@ describe("collapsed-by-default file sections", () => {
     fireEvent.click(must(railRow("src/auth/store.rs"), "rail row"));
 
     expect(scrollCalls).toEqual([{ id: "file-2", expandedAtCall: true }]);
-    // …and the rail follows the reveal once the tree repaints.
-    await settle();
     expect(railActive()).toBe("src/auth/store.rs");
     expect(isExpanded(section(2))).toBe(true);
     expect(isExpanded(section(1))).toBe(false);
   });
 
   it("the ] key reveals the next file like a rail click", async () => {
-    const { settle } = await renderReview();
+    await renderReview();
 
     fireEvent.keyDown(window, { key: "]" }); // already expanded (not the regression-guard case)
     fireEvent.keyDown(window, { key: "]" }); // was collapsed — this is the regression-guard case
@@ -168,13 +160,12 @@ describe("collapsed-by-default file sections", () => {
       { id: "file-0", expandedAtCall: true },
       { id: "file-1", expandedAtCall: true },
     ]);
-    await settle();
     expect(railActive()).toBe("src/auth/rotate.rs");
     expect(isExpanded(section(1))).toBe(true);
   });
 
   it("expand all / collapse all flips every section", async () => {
-    const { settle } = await renderReview();
+    await renderReview();
 
     fireEvent.click(screen.getByRole("button", { name: "expand all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(true);
@@ -182,7 +173,6 @@ describe("collapsed-by-default file sections", () => {
     fireEvent.click(screen.getByRole("button", { name: "collapse all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(false);
     expect(scrollCalls).toEqual([]);
-    await settle();
     expect(railRow("src/auth/rotate.rs")).not.toBeNull();
     expect(railActive()).toBeNull();
   });
@@ -859,6 +849,35 @@ describe("links to a comment thread", () => {
 
     fireEvent.click(must(thread(73).querySelector("a.comment-time"), "time"));
     expect(scrolled).toEqual([thread(73), thread(73)]);
+  });
+
+  it("opens a file in the rail to its threads, and opens the clicked one", async () => {
+    let search = "";
+    function LocationProbe() {
+      search = useLocation().search;
+      return null;
+    }
+    await renderReview("/changes/11?against=base", <LocationProbe />);
+    const row = () => screen.queryByRole("link", { name: /^file\s*r1$/ });
+    expect(row()).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "comments on store.rs" }),
+    );
+    fireEvent.click(must(row(), "the row of thread 73"));
+    expect(new URLSearchParams(search).get("thread")).toBe("73");
+    expect(scrolled.at(-1)).toBe(thread(73));
+  });
+
+  it("names a thread on a range by its first and last character", async () => {
+    await renderReview("/changes/11?against=base");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "comments on rotate.rs" }),
+    );
+    expect(
+      screen.getByRole("link", { name: /^range \d+:8-\d+:50/ }),
+    ).toBeDefined();
   });
 
   it("scrolls to a thread on the whole change", async () => {
