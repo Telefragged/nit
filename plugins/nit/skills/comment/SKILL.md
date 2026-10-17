@@ -68,18 +68,22 @@ thread. Put one in a comment body to point the reviewer at code you refer to,
 and in the chat whenever you mention a comment or a line under review.
 
 ```
-<server>/changes/<number>?revision=<n>&file=<path>              # a file
-<server>/changes/<number>?revision=<n>&file=<path>&line=42      # one line
-<server>/changes/<number>?revision=<n>&file=<path>&line=42-50   # a span
-<server>/changes/<number>?thread=<thread-id>                    # a thread
+/changes/<number>?revision=<n>&file=<path>              # a file
+/changes/<number>?revision=<n>&file=<path>&line=42      # one line
+/changes/<number>?revision=<n>&file=<path>&line=42-50   # a span
+/changes/<number>?thread=<thread-id>                    # a thread
 ```
 
-`<server>` is the nit server, `$NIT_SERVER` or `http://127.0.0.1:8877`.
 `<number>` is the change number and `<n>` the revision, both as `nit status`
 prints them. Line numbers count from 1 on the new side. Add `&side=old` for
 the old side, and `&against=<m>` to show the interdiff from revision `m`.
 Write the link as markdown, so the text names the place:
-`[src/queue.rs:42](http://127.0.0.1:8877/changes/7?revision=2&file=src/queue.rs&line=42)`.
+`[src/queue.rs:42](/changes/7?revision=2&file=src/queue.rs&line=42)`.
+
+In a comment body, write the path as shown, without a server. The review page
+opens it on the server that the reviewer reads, whatever its address. In the
+chat there is no page to resolve the path against. Put the server in front of
+the path there: `$NIT_SERVER` or `http://127.0.0.1:8877`.
 
 ## Keep the conversation in nit, not the chat
 
