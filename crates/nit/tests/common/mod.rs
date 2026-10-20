@@ -354,6 +354,13 @@ pub fn http_put(url: &str, body: &Value) -> (u16, Value) {
     read(agent().put(url).send_json(body).unwrap())
 }
 
+/// A GET whose body is bytes: (status, headers, body).
+pub fn http_get_bytes(url: &str) -> (u16, ureq::http::HeaderMap, Vec<u8>) {
+    let mut response = agent().get(url).call().unwrap();
+    let body = response.body_mut().read_to_vec().unwrap();
+    (response.status().as_u16(), response.headers().clone(), body)
+}
+
 pub fn http_put_bytes(url: &str, body: &[u8]) -> (u16, Value) {
     read(agent().put(url).send(body).unwrap())
 }

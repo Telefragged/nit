@@ -12,16 +12,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use axum::Json;
 use axum::body::Body;
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
+use axum::response::IntoResponse;
 use futures_util::StreamExt;
 use nit_types::attachments::UploadedAttachment;
-use nit_types::domain::AttachmentHash;
+use nit_types::changes::ChangeDetail;
+use nit_types::domain::{AttachPayload, AttachmentHash, ChangeNumber, LogPayload};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
+use tokio_util::io::ReaderStream;
 
 use crate::db;
 
-use super::{AppState, Error, with_conn};
+use super::{AppJson, AppPath, AppState, Error, append, views, with_conn};
 
 /// The largest upload the store accepts, in bytes.
 const MAX_SIZE: u64 = 64 * 1024 * 1024;
@@ -140,4 +143,91 @@ pub(super) async fn upload(
     })
     .await?;
     Ok(Json(UploadedAttachment { hash }))
+}
+
+/// `POST /api/changes/{id}/attachments` — puts a stored blob on a revision.
+///
+/// The request is the entry it appends.
+///
+/// Any revision of the change takes an attachment, not only the latest.
+/// A name the revision already holds with the same hash appends nothing.
+/// A revision or a blob that does not exist is a 404, and so is a blob
+/// that a collection deleted before the attach: upload it again.
+#[utoipa::path(post, path = "/api/changes/{id}/attachments", params(("id" = ChangeNumber, Path)), request_body = AttachPayload, responses((status = 200, body = ChangeDetail)))]
+pub(super) async fn attach(
+    State(state): State<Arc<AppState>>,
+    AppPath(id): AppPath<ChangeNumber>,
+    AppJson(req): AppJson<AttachPayload>,
+) -> Result<Json<ChangeDetail>, Error> {
+    with_conn(state.pool(), move |conn| {
+        let appended = append(&state, conn, id, |change, tx| {
+            let Some(revision) = change.revision(req.revision) else {
+                return Err(Error::not_found(format!(
+                    "change {id} has no revision {}",
+                    req.revision
+                )));
+            };
+            if revision
+                .attachments
+                .iter()
+                .any(|a| a.name == req.name && a.hash == req.hash)
+            {
+                return Ok(Vec::new());
+            }
+            if !db::attachment_exists(tx, &req.hash)? {
+                return Err(Error::not_found(format!(
+                    "no attachment {}: upload it first",
+                    req.hash
+                )));
+            }
+            db::relate_change_attachment(tx, id, &req.hash)?;
+            Ok(vec![LogPayload::Attach(req)])
+        })?;
+        Ok(Json(views::build_change_detail(conn, &appended.change)?))
+    })
+    .await
+}
+
+/// `GET /api/attachments/{hash}/{name}` — the bytes of a blob.
+///
+/// `name` is a file name, typically the last segment of an
+/// [`AttachmentName`](nit_types::domain::AttachmentName). It only selects
+/// the `Content-Type`. The bytes for a hash never change, so the response
+/// can be cached forever. The sandbox policy runs an HTML page in a
+/// separate origin, so its scripts cannot call the API.
+#[utoipa::path(get, path = "/api/attachments/{hash}/{name}", params(("hash" = AttachmentHash, Path), ("name" = String, Path)), responses((status = 200, body = Vec<u8>)))]
+pub(super) async fn download(
+    State(state): State<Arc<AppState>>,
+    AppPath((hash, name)): AppPath<(AttachmentHash, String)>,
+) -> Result<impl IntoResponse, Error> {
+    let file = match tokio::fs::File::open(state.blobs().path(&hash)).await {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::not_found(format!("no attachment {hash}")));
+        }
+        Err(e) => return Err(io_error(e)),
+    };
+    let size = file.metadata().await.map_err(io_error)?.len();
+    let mime = mime_guess::from_path(&name).first_or_octet_stream();
+    let content_type = if mime.type_() == mime_guess::mime::TEXT {
+        format!("{mime}; charset=utf-8")
+    } else {
+        mime.to_string()
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CONTENT_LENGTH, size.to_string()),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+            (
+                header::CONTENT_SECURITY_POLICY,
+                "sandbox allow-scripts".to_string(),
+            ),
+            (
+                header::CACHE_CONTROL,
+                "public, max-age=31536000, immutable".to_string(),
+            ),
+        ],
+        Body::from_stream(ReaderStream::new(file)),
+    ))
 }

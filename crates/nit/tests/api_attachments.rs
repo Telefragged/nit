@@ -2,10 +2,49 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, http_put_bytes};
+use common::{
+    GitRepo, TestServer, a_change, change_log, http_get_bytes, http_post, http_put_bytes, msg,
+};
+use serde_json::{Value, json};
 
 fn server(g: &GitRepo) -> TestServer {
     TestServer::start(g.dir.path().join("nit.sqlite3"), None)
+}
+
+/// A server with one change of one revision, and that change's number.
+fn server_with_change(g: &GitRepo) -> (TestServer, u64) {
+    let a = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    g.branch("feat", a);
+    let server = server(g);
+    let change_number = a_change(&server, g, "feat");
+    (server, change_number)
+}
+
+fn upload(server: &TestServer, body: &[u8]) -> String {
+    let (st, uploaded) = http_put_bytes(&server.url("/api/attachments"), body);
+    assert_eq!(st, 200, "{uploaded}");
+    uploaded["hash"].as_str().expect("hash").to_string()
+}
+
+fn attach(
+    server: &TestServer,
+    change_number: u64,
+    revision: u64,
+    name: &str,
+    hash: &str,
+) -> (u16, Value) {
+    http_post(
+        &server.url(&format!("/api/changes/{change_number}/attachments")),
+        &json!({ "revision": revision, "name": name, "hash": hash }),
+    )
+}
+
+fn attach_entries(server: &TestServer, change_number: u64) -> Vec<Value> {
+    change_log(server, change_number)
+        .into_iter()
+        .filter(|e| e["kind"] == "attach")
+        .map(|e| e["payload"].clone())
+        .collect()
 }
 
 /// An upload answers the BLAKE3 hash of the body and stores the bytes
@@ -58,4 +97,107 @@ fn upload_over_the_limit_is_413() {
         .filter(|e| e.as_ref().expect("entry").file_name() != ".tmp")
         .count();
     assert_eq!(blobs, 0);
+}
+
+/// An attach appends an entry naming the revision, the name and the hash.
+#[test]
+fn attach_appends_an_attach_entry() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let hash = upload(&server, b"# Plan\n");
+
+    let (st, res) = attach(&server, change_number, 0, "plan/attachments.md", &hash);
+
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(
+        attach_entries(&server, change_number),
+        [json!({ "revision": 0, "name": "plan/attachments.md", "hash": hash })]
+    );
+}
+
+/// Attaching the name and hash a revision already holds appends nothing.
+/// Attaching other bytes under that name appends a replacement.
+#[test]
+fn attach_of_the_held_name_and_hash_appends_nothing() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let first = upload(&server, b"one");
+    let second = upload(&server, b"two");
+
+    attach(&server, change_number, 0, "out.txt", &first);
+    let (st, res) = attach(&server, change_number, 0, "out.txt", &first);
+    assert_eq!(st, 200, "{res}");
+    attach(&server, change_number, 0, "out.txt", &second);
+
+    let hashes: Vec<Value> = attach_entries(&server, change_number)
+        .into_iter()
+        .map(|p| p["hash"].clone())
+        .collect();
+    assert_eq!(hashes, [json!(first), json!(second)]);
+}
+
+/// A hash the store never received is a 404.
+#[test]
+fn attach_of_an_unknown_blob_is_404() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+
+    let (st, res) = attach(&server, change_number, 0, "out.txt", &"0".repeat(64));
+
+    assert_eq!(st, 404, "{res}");
+    assert!(attach_entries(&server, change_number).is_empty());
+}
+
+/// A revision the change does not have is a 404.
+#[test]
+fn attach_to_a_missing_revision_is_404() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let hash = upload(&server, b"x");
+
+    let (st, res) = attach(&server, change_number, 1, "out.txt", &hash);
+
+    assert_eq!(st, 404, "{res}");
+}
+
+/// A name that is not a relative path is a 400.
+#[test]
+fn attach_under_an_absolute_name_is_400() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let hash = upload(&server, b"x");
+
+    let (st, res) = attach(&server, change_number, 0, "/etc/passwd", &hash);
+
+    assert_eq!(st, 400, "{res}");
+}
+
+/// A download returns the bytes with a content type from the name, and with
+/// a sandbox policy for HTML pages.
+#[test]
+fn download_serves_the_bytes_typed_by_the_name() {
+    let g = GitRepo::new();
+    let server = server(&g);
+    let hash = upload(&server, b"<p>hi</p>");
+
+    let (st, headers, body) =
+        http_get_bytes(&server.url(&format!("/api/attachments/{hash}/page.html")));
+
+    assert_eq!(st, 200);
+    assert_eq!(body, b"<p>hi</p>");
+    assert_eq!(headers["content-type"], "text/html; charset=utf-8");
+    assert_eq!(headers["content-security-policy"], "sandbox allow-scripts");
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+}
+
+/// A hash the store does not hold is a 404.
+#[test]
+fn download_of_an_unknown_blob_is_404() {
+    let g = GitRepo::new();
+    let server = server(&g);
+
+    let (st, _, _) =
+        http_get_bytes(&server.url(&format!("/api/attachments/{}/a.png", "0".repeat(64))));
+
+    assert_eq!(st, 404);
 }
