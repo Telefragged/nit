@@ -3578,7 +3578,7 @@ rec {
       };
       "nit" = rec {
         crateName = "nit";
-        version = "0.2.0";
+        version = "0.3.0";
         edition = "2024";
         crateBin = [
           {
@@ -3737,7 +3737,7 @@ rec {
       };
       "nit-contract" = rec {
         crateName = "nit-contract";
-        version = "0.2.0";
+        version = "0.3.0";
         edition = "2024";
         crateBin = [
           {
@@ -3769,7 +3769,7 @@ rec {
       };
       "nit-types" = rec {
         crateName = "nit-types";
-        version = "0.2.0";
+        version = "0.3.0";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/nit-types; };
         libName = "nit_types";
@@ -3813,7 +3813,7 @@ rec {
       };
       "nit-wasm" = rec {
         crateName = "nit-wasm";
-        version = "0.2.0";
+        version = "0.3.0";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/nit-wasm; };
         libName = "nit_wasm";type = [ "cdylib" ];
