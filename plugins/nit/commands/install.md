@@ -21,8 +21,11 @@ framed until you reach it.
 
 Ask the user (AskUserQuestion) how they want `nit` available:
 
-- **Install to PATH** — run `nix profile add github:Telefragged/nit`. After
-  this, `nit` is a normal command anywhere. Best when nit is used often.
+- **Install to PATH** — on x86_64 Linux, run
+  `curl -fsSL https://github.com/Telefragged/nit/releases/latest/download/install.sh | sh`.
+  With nix, run `nix profile add github:Telefragged/nit`, or use the
+  home-manager module that the README shows. After this, `nit` is a normal
+  command anywhere. Best when nit is used often.
 - **Run on demand** — no install; invoke `nix run github:Telefragged/nit -- <args>`
   each time (e.g. `nix run github:Telefragged/nit -- push`). Best
   for a one-off or to avoid touching the user's profile.

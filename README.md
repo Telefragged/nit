@@ -8,6 +8,30 @@ feedback, amends the reviewed commit in place and pushes again — the
 `Change-Id:` trailer keeps its identity, the rewrite becomes a new
 revision. Merged or abandoned changes drop off the dashboard on their own.
 
+## Install
+
+On x86_64 Linux, install the latest release into `~/.local/bin`:
+
+```sh
+curl -fsSL https://github.com/Telefragged/nit/releases/latest/download/install.sh | sh
+```
+
+The script adds `~/.local/bin` to `PATH` in your shell startup files, and it installs the Claude Code plugin when Claude Code is installed. `nit update` installs the latest release again. A running `nit serve` restarts on the new build, and each `nit watch` follows it.
+
+With nix, use the home-manager module:
+
+```nix
+# flake.nix
+inputs.nit.url = "github:Telefragged/nit";
+
+# home-manager configuration
+imports = [ inputs.nit.homeManagerModules.default ];
+programs.nit.enable = true; # nit on PATH, and the Claude Code plugin
+services.nit.enable = true; # nit serve as a systemd user service
+```
+
+To update, run `nix flake update nit` and switch. The switch restarts the server, and each `nit watch` follows it.
+
 ## Run
 
 ```sh
