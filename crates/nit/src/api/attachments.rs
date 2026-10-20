@@ -76,8 +76,8 @@ impl Blobs {
     /// When the database or the store directory fails.
     pub(super) async fn collect(&self, state: &AppState, cutoff: Timestamp) -> anyhow::Result<()> {
         let older = std::time::SystemTime::from(cutoff);
-        for (path, _) in files_older_than(&self.dir.join(".tmp"), older)? {
-            remove(&path);
+        for (path, _) in files_older_than(&self.dir.join(".tmp"), older).await? {
+            remove(&path).await;
         }
         let _moving = self.moves.lock().await;
         let deleted = with_conn(state.pool(), move |conn| {
@@ -89,9 +89,10 @@ impl Blobs {
         .await
         .map_err(|e| anyhow::anyhow!(e.message))?;
         for hash in &deleted {
-            remove(&self.path(hash));
+            remove(&self.path(hash)).await;
         }
-        let files: Vec<(PathBuf, AttachmentHash)> = files_older_than(&self.dir, older)?
+        let files: Vec<(PathBuf, AttachmentHash)> = files_older_than(&self.dir, older)
+            .await?
             .into_iter()
             .filter_map(|(path, name)| Some((path, AttachmentHash::new(name).ok()?)))
             .collect();
@@ -107,7 +108,7 @@ impl Blobs {
         .await
         .map_err(|e| anyhow::anyhow!(e.message))?;
         for path in rowless {
-            remove(&path);
+            remove(&path).await;
         }
         Ok(())
     }
@@ -160,9 +161,9 @@ impl Blobs {
 struct Staged(Option<PathBuf>);
 
 impl Staged {
-    fn install(mut self, to: &Path) -> Result<(), Error> {
+    async fn install(mut self, to: &Path) -> Result<(), Error> {
         let from = self.0.take().expect("a staged file stays until installed");
-        std::fs::rename(from, to).map_err(io_error)
+        tokio::fs::rename(from, to).await.map_err(io_error)
     }
 }
 
@@ -175,14 +176,14 @@ impl Drop for Staged {
 }
 
 /// The files in `dir` last modified before `older`, with their names.
-fn files_older_than(
+async fn files_older_than(
     dir: &Path,
     older: std::time::SystemTime,
 ) -> std::io::Result<Vec<(PathBuf, String)>> {
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let meta = entry.metadata()?;
+    let mut entries = tokio::fs::read_dir(dir).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let meta = entry.metadata().await?;
         if meta.is_file()
             && meta.modified()? < older
             && let Ok(name) = entry.file_name().into_string()
@@ -193,8 +194,8 @@ fn files_older_than(
     Ok(files)
 }
 
-fn remove(path: &Path) {
-    if let Err(e) = std::fs::remove_file(path)
+async fn remove(path: &Path) {
+    if let Err(e) = tokio::fs::remove_file(path).await
         && e.kind() != std::io::ErrorKind::NotFound
     {
         tracing::warn!("deleting {}: {e}", path.display());
@@ -222,7 +223,7 @@ pub(super) async fn upload(
     // A blob of these bytes is already in place, and the staged copy is
     // deleted on drop.
     if !tokio::fs::try_exists(&path).await.map_err(io_error)? {
-        staged.install(&path)?;
+        staged.install(&path).await?;
     }
     let stored = hash.clone();
     with_conn(state.pool(), move |conn| {
