@@ -328,3 +328,67 @@ fn attachments_carry_forward_by_name() {
     );
     assert_eq!(attach_entries(&server, change_number).len(), 3);
 }
+
+fn comment_on_line(server: &TestServer, change_number: u64, file: &str, line: u64) {
+    let (st, thread) = http_post(
+        &server.url(&format!("/api/changes/{change_number}/comments")),
+        &json!({
+            "body": "here",
+            "revision": 0,
+            "anchor": { "line": { "file": file, "side": "new", "at": { "whole": line } } },
+        }),
+    );
+    assert_eq!(st, 200, "{thread}");
+}
+
+fn ported_anchors(server: &TestServer, change_number: u64, revision: u64) -> Vec<Value> {
+    let (st, ported) = http_get(&server.url(&format!(
+        "/api/changes/{change_number}/revisions/{revision}/ported"
+    )));
+    assert_eq!(st, 200, "{ported}");
+    ported
+        .as_array()
+        .expect("ported")
+        .iter()
+        .map(|p| p["anchor"].clone())
+        .collect()
+}
+
+/// A thread on a text attachment shifts through the edits between the
+/// versions that two revisions show.
+#[test]
+fn a_thread_on_an_attachment_ports_through_its_edits() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let before = upload(&server, b"a\nb\nc\n");
+    attach(&server, change_number, 0, "notes.txt", &before);
+    comment_on_line(&server, change_number, "/attachments/notes.txt", 2);
+    amend(&server, &g);
+    let after = upload(&server, b"new\na\nb\nc\n");
+    attach(&server, change_number, 1, "notes.txt", &after);
+
+    assert_eq!(
+        ported_anchors(&server, change_number, 1),
+        [
+            json!({ "line": { "file": "/attachments/notes.txt", "side": "new", "at": { "whole": 3 } } })
+        ]
+    );
+}
+
+/// A thread on an attachment that carries forward keeps its line.
+#[test]
+fn a_thread_on_a_carried_attachment_keeps_its_line() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let notes = upload(&server, b"a\nb\n");
+    attach(&server, change_number, 0, "notes.txt", &notes);
+    comment_on_line(&server, change_number, "/attachments/notes.txt", 2);
+    amend(&server, &g);
+
+    assert_eq!(
+        ported_anchors(&server, change_number, 1),
+        [
+            json!({ "line": { "file": "/attachments/notes.txt", "side": "new", "at": { "whole": 2 } } })
+        ]
+    );
+}

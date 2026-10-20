@@ -400,7 +400,8 @@ pub(super) async fn ported_comments(
             .collect();
         Ok(Json(port::port_threads(
             &repo,
-            &change.revisions,
+            state.blobs(),
+            &change,
             &targets,
             &threads,
         )?))
