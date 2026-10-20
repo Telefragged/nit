@@ -64,7 +64,12 @@ pub(super) async fn create_comment(
                 Error::bad_request(format!("revision {number} is absent from change {id}"))
             })?;
             let git_dir = state.git_dir(change.repo_id)?;
-            anchor.snapshot_line_text(snapshot_line_text(&git_dir, revision, &anchor));
+            anchor.snapshot_line_text(snapshot_line_text(
+                state.blobs(),
+                &git_dir,
+                revision,
+                &anchor,
+            ));
             CommentInput {
                 thread_id: None,
                 revision: Some(number),

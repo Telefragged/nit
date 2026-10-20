@@ -273,14 +273,18 @@ pub const MERGED_WINDOW: u64 = 5;
 
 /// The anchor a request names, checked against the route's own rule.
 ///
-/// The synthetic commit-message file is the route's own rule. The server
-/// renders that file and never diffs it, so it has no old side.
+/// The synthetic commit-message and attachment files are the route's own
+/// rule. The server renders those files and never diffs them, so they
+/// have no old side.
 fn anchor_of(anchor: Option<Anchor>) -> Result<Anchor, Error> {
     let anchor = anchor.unwrap_or(Anchor::Change);
-    if anchor.file() == Some(diff::COMMIT_MSG_PATH) && anchor.side() == Side::Old {
-        return Err(Error::bad_request(
-            "/COMMIT_MSG has no old side — comment with side \"new\"",
-        ));
+    if let Some(file) = anchor.file()
+        && (file == diff::COMMIT_MSG_PATH || diff::attachment_name(file).is_some())
+        && anchor.side() == Side::Old
+    {
+        return Err(Error::bad_request(format!(
+            "{file} has no old side — comment with side \"new\""
+        )));
     }
     Ok(anchor)
 }
@@ -300,6 +304,7 @@ pub(super) fn hangs_under(anchor: &Anchor) -> Option<u64> {
 }
 
 fn snapshot_line_text(
+    blobs: &attachments::Blobs,
     git_dir: &str,
     revision: &RevisionProjection,
     anchor: &Anchor,
@@ -307,6 +312,13 @@ fn snapshot_line_text(
     let side = anchor.side();
     match (anchor.file(), hangs_under(anchor)) {
         (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&revision.message, line),
+        (Some(file), Some(line)) if let Some(name) = diff::attachment_name(file) => {
+            let attachment = revision
+                .attachments
+                .iter()
+                .find(|a| a.name.as_str() == name)?;
+            diff::nth_line(&blobs.text(&attachment.hash)?, line)
+        }
         (Some(file), Some(line)) => {
             let sha = if side == Side::Old {
                 &revision.parent_sha

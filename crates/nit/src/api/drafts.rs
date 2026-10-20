@@ -44,7 +44,12 @@ pub(super) async fn create_draft(
             None => None,
         };
         let git_dir = state.git_dir(proj.repo_id)?;
-        anchor.snapshot_line_text(snapshot_line_text(&git_dir, revision, &anchor));
+        anchor.snapshot_line_text(snapshot_line_text(
+            state.blobs(),
+            &git_dir,
+            revision,
+            &anchor,
+        ));
         let draft_id = state.alloc_id();
         let new = db::NewDraft {
             change_number: id,

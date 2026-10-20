@@ -21,6 +21,17 @@ use crate::hunks::{self, wire_line};
 /// real file.
 pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
 
+/// The reserved prefix of an attachment's synthetic path.
+///
+/// Like [`COMMIT_MSG_PATH`], it cannot collide with a tree file.
+pub const ATTACHMENT_PREFIX: &str = "/attachments/";
+
+/// The name of the attachment that `path` names, if it names one.
+#[must_use]
+pub fn attachment_name(path: &str) -> Option<&str> {
+    path.strip_prefix(ATTACHMENT_PREFIX)
+}
+
 /// The tree of the commit `sha` names, when everything resolves.
 #[must_use]
 pub fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Option<Tree<'r>> {

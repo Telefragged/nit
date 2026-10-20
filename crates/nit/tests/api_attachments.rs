@@ -273,3 +273,24 @@ fn collect_deletes_stray_files() {
     assert!(!temp.exists());
     assert!(!rowless.exists());
 }
+
+/// A comment on a line of a text attachment snapshots that line.
+#[test]
+fn comment_on_an_attachment_line_snapshots_its_text() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let text = upload(&server, b"first\nsecond\n");
+    attach(&server, change_number, 0, "notes.txt", &text);
+
+    let (st, thread) = http_post(
+        &server.url(&format!("/api/changes/{change_number}/comments")),
+        &json!({
+            "body": "why?",
+            "revision": 0,
+            "anchor": { "line": { "file": "/attachments/notes.txt", "side": "new", "at": { "whole": 2 } } },
+        }),
+    );
+
+    assert_eq!(st, 200, "{thread}");
+    assert_eq!(thread["anchor"]["line"]["line_text"], "second");
+}
