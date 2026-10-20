@@ -225,6 +225,21 @@ impl Client {
             .map_err(|e| e.into_error(&self.base))
     }
 
+    /// Streams `file` as the body of a PUT.
+    pub(crate) fn put_file<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        file: std::fs::File,
+    ) -> Result<T> {
+        let url = format!("{}{path}", self.base);
+        self.agent
+            .put(&url)
+            .send(file)
+            .map_err(|e| classify(e, path))
+            .and_then(|response| Self::read(response, path))
+            .map_err(|e| e.into_error(&self.base))
+    }
+
     fn get_raw<T: DeserializeOwned>(&self, path: &str) -> Result<T, CallError> {
         let url = format!("{}{path}", self.base);
         let response = self.agent.get(&url).call().map_err(|e| classify(e, path))?;
