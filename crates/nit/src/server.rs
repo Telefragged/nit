@@ -18,6 +18,9 @@ pub struct ServeArgs {
 
 /// Serves the API and the web UI until Ctrl-C.
 ///
+/// On Linux, an update that replaces the binary restarts the server on
+/// the new build.
+///
 /// # Errors
 ///
 /// When the database cannot be opened or the listener cannot bind.
@@ -28,6 +31,13 @@ pub fn run(args: ServeArgs) -> Result<()> {
     };
     if crate::api::WEB_UI.is_none() {
         tracing::info!("built without NIT_WEB_DIST, so serving the API only");
+    }
+    // The server works without the restart, for example when the user has
+    // used up their inotify instances.
+    if let Err(e) = crate::exe::exec_on_update() {
+        tracing::warn!(
+            "failed to set up inotify, so the server will not restart on a new build: {e:#}"
+        );
     }
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
