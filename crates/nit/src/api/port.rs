@@ -7,7 +7,10 @@
 //! by what the edits above them inserted or deleted, and lines an edit
 //! rewrote demote to the file (gerrit's `BestPositionOnConflict`). No
 //! anchor is ever discarded. The commit message is not in any tree, so its
-//! anchors shift through the edits between the two messages instead.
+//! anchors shift through the edits between the two messages instead. An
+//! attachment is not in any tree either. Its anchors shift through the
+//! edits between the attachments of its name that the two revisions show,
+//! and demote to the change when the later revision shows none.
 //!
 //! The tree diff is bounded to the anchored files, so the cost follows the
 //! threads and not the repository; the price is that a rename whose new
@@ -19,9 +22,11 @@ use anyhow::{Context, Result};
 use git2::{Delta, Repository, Tree};
 
 use nit_types::domain::{
-    Anchor, CommentRange, LineAnchor, PortedComment, RevisionProjection, Side, ThreadOrigin,
+    Anchor, ChangeProjection, CommentRange, EffectiveAttachment, LineAnchor, PortedComment,
+    RevisionProjection, Side, ThreadOrigin,
 };
 
+use super::attachments::Blobs;
 use super::diff;
 use super::position::{self, Edit, Span};
 
@@ -30,7 +35,7 @@ use super::position::{self, Edit, Span};
 /// Every thread of `threads` written on a revision before a target comes
 /// back at the place its anchor maps to in that target's trees. The
 /// entries of one target are sorted by thread id, and the targets keep
-/// the order given. `revisions` must hold every revision such a thread
+/// the order given. `change` must hold every revision such a thread
 /// names.
 ///
 /// # Errors
@@ -38,7 +43,8 @@ use super::position::{self, Edit, Span};
 /// When a revision or tree is missing, or git cannot diff or read.
 pub fn port_threads(
     repo: &Repository,
-    revisions: &[RevisionProjection],
+    blobs: &Blobs,
+    change: &ChangeProjection,
     targets: &[&RevisionProjection],
     threads: &[ThreadOrigin],
 ) -> Result<Vec<PortedComment>> {
@@ -50,9 +56,8 @@ pub fn port_threads(
         |sha| diff::commit_tree(repo, sha).with_context(|| format!("tree for {sha} missing"));
     let mut ported: Vec<Vec<PortedComment>> = vec![Vec::new(); targets.len()];
     for (k, threads) in by_source {
-        let source = revisions
-            .iter()
-            .find(|r| r.number == k)
+        let source = change
+            .revision(k)
             .with_context(|| format!("revision {k} missing"))?;
         let later: Vec<(usize, &RevisionProjection)> = targets
             .iter()
@@ -66,6 +71,37 @@ pub fn port_threads(
         let (messages, in_trees): (Vec<_>, Vec<_>) = threads
             .into_iter()
             .partition(|t| t.anchor.file() == Some(diff::COMMIT_MSG_PATH));
+        let (attached, in_trees): (Vec<_>, Vec<_>) = in_trees
+            .into_iter()
+            .partition(|t| t.anchor.file().and_then(diff::attachment_name).is_some());
+        // One diff per attachment and target: every thread on an attachment
+        // shifts through the same edits.
+        let mut by_name: BTreeMap<&str, Vec<&ThreadOrigin>> = BTreeMap::new();
+        for thread in attached {
+            if let Some(name) = thread.anchor.file().and_then(diff::attachment_name) {
+                by_name.entry(name).or_default().push(thread);
+            }
+        }
+        for &(i, target) in &later {
+            for (name, threads) in &by_name {
+                // A revision that shows no attachment of the name moves its
+                // threads to the change.
+                let to = change.attachment_at(target.number, name);
+                let edits = to
+                    .as_ref()
+                    .and_then(|to| attachment_edits(blobs, change.attachment_at(k, name), to));
+                ported[i].extend(threads.iter().map(|thread| PortedComment {
+                    thread_id: thread.thread_id,
+                    revision: target.number,
+                    anchor: match (&to, thread.anchor.file()) {
+                        (Some(_), Some(file)) => {
+                            port_in_file(&thread.anchor, file, edits.as_deref())
+                        }
+                        _ => Anchor::Change,
+                    },
+                }));
+            }
+        }
         if !messages.is_empty() {
             for &(i, target) in &later {
                 let edits =
@@ -205,6 +241,25 @@ enum FileDelta {
         old_oid: git2::Oid,
         new_oid: git2::Oid,
     },
+}
+
+/// The edits between the versions of one attachment that two revisions
+/// show.
+///
+/// `None` when the lines cannot be mapped: a version is not text, or the
+/// earlier revision shows none.
+fn attachment_edits(
+    blobs: &Blobs,
+    from: Option<EffectiveAttachment>,
+    to: &EffectiveAttachment,
+) -> Option<Vec<Edit>> {
+    let from = from?;
+    if from.hash == to.hash {
+        return Some(Vec::new());
+    }
+    let old = blobs.text(&from.hash)?;
+    let new = blobs.text(&to.hash)?;
+    Some(position::buffer_edits(old.as_bytes(), new.as_bytes()))
 }
 
 /// `anchor` under `path`, its lines shifted through `edits`.
