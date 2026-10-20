@@ -354,6 +354,10 @@ pub fn http_put(url: &str, body: &Value) -> (u16, Value) {
     read(agent().put(url).send_json(body).unwrap())
 }
 
+pub fn http_put_bytes(url: &str, body: &[u8]) -> (u16, Value) {
+    read(agent().put(url).send(body).unwrap())
+}
+
 pub fn http_delete(url: &str) -> (u16, Value) {
     read(agent().delete(url).call().unwrap())
 }

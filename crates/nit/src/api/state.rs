@@ -31,6 +31,7 @@ use crate::review;
 
 pub struct AppState {
     pool: Pool,
+    blobs: super::attachments::Blobs,
     repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
     /// Receives a new value after each committed transaction that appended
     /// an entry or deleted a change.
@@ -88,6 +89,7 @@ impl AppState {
     /// When the pool fails to build, or the schema migration fails.
     pub async fn load(db_path: PathBuf) -> anyhow::Result<Arc<Self>> {
         let pool = db::pool(&db_path)?;
+        let blobs = super::attachments::Blobs::open(db_path.with_file_name("attachments"))?;
         let conn = pool
             .get()
             .await
@@ -107,6 +109,7 @@ impl AppState {
         let (shutdown, _) = watch::channel(false);
         Ok(Arc::new(AppState {
             pool,
+            blobs,
             repos: StdMutex::new(repos),
             appended: watch::channel(()).0,
             next_id: AtomicU64::new(max_id + 1),
@@ -123,6 +126,12 @@ impl AppState {
     #[must_use]
     pub fn appended_watch(&self) -> watch::Receiver<()> {
         self.appended.subscribe()
+    }
+
+    /// The attachment store, beside the database file.
+    #[must_use]
+    pub(super) fn blobs(&self) -> &super::attachments::Blobs {
+        &self.blobs
     }
 
     pub fn alloc_id(&self) -> u64 {

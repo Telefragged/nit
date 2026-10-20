@@ -23,6 +23,7 @@ use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use std::fmt::Write as _;
 
 use nit_types::changes::ChangeQuery;
+use nit_types::domain::AttachmentHash;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::Tags;
 use nit_types::domain::{Anchor, CommentRange, LineAnchor};
@@ -277,6 +278,21 @@ const MIGRATIONS: &[&str] = &[
          SELECT id, repo_id, change_id, created_at, status FROM changes;
     DROP TABLE changes;
     ALTER TABLE changes_new RENAME TO changes;
+    ",
+    // v13: attachments. A blob row records a file in the attachment
+    // store, named by its hash. A relation table per owner ties a blob to
+    // the owner's lifespan, so the collection deletes a blob that no
+    // relation names.
+    "
+    CREATE TABLE attachments (
+      hash       TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE change_attachments (
+      change_number INTEGER NOT NULL REFERENCES changes(id),
+      hash          TEXT NOT NULL REFERENCES attachments(hash),
+      PRIMARY KEY (change_number, hash)
+    );
     ",
 ];
 
@@ -598,6 +614,23 @@ pub fn delete_closed_changes(
         tx.execute("DELETE FROM changes WHERE id = ?1", [number])?;
     }
     Ok(deleted)
+}
+
+/// Records a stored blob.
+///
+/// For a blob already recorded, it sets `created_at` to `now`, so that
+/// the blob counts as new again.
+///
+/// # Errors
+///
+/// When the write fails.
+pub fn upsert_attachment(conn: &Connection, hash: &AttachmentHash, now: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO attachments (hash, created_at) VALUES (?1, ?2)
+         ON CONFLICT (hash) DO UPDATE SET created_at = excluded.created_at",
+        params![hash.as_str(), now],
+    )?;
+    Ok(())
 }
 
 /// Returns the number a `Change-Id` names in one repo, if any.
