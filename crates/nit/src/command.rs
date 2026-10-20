@@ -17,6 +17,9 @@ pub struct Args {
     /// is unreachable. The canonical "is nit up / installed" check.
     #[arg(short = 'V', long)]
     version: bool,
+    /// Print this build's version only, without contacting the server
+    #[arg(long)]
+    client_version: bool,
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
@@ -53,6 +56,10 @@ enum Cmd {
 pub fn run(args: Args) -> Result<()> {
     if args.version {
         cli::version();
+        return Ok(());
+    }
+    if args.client_version {
+        println!("{}", crate::VERSION);
         return Ok(());
     }
     let Some(cmd) = args.cmd else {
