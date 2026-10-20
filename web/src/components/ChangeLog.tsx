@@ -259,9 +259,11 @@ export default function ChangeLog({
   return (
     <section className="change-log">
       <div className="thread-group-title">History</div>
-      {notes.map((note) => (
-        <NoteRow key={note.entry.position} note={note} threads={threads} />
-      ))}
+      <div className="log-rows">
+        {notes.map((note) => (
+          <NoteRow key={note.entry.position} note={note} threads={threads} />
+        ))}
+      </div>
     </section>
   );
 }
