@@ -30,6 +30,7 @@ use nit_types::domain::{ChangeNumber, LogEntry};
 use nit_types::events::{Start, StreamMessage, Subscription};
 
 use crate::db::nit_data_dir;
+use crate::exe;
 
 use super::client::{Client, Retry, ServerOpt, Unreachable, next_text, retry_delay, server_url};
 use super::format::render_entries;
@@ -119,12 +120,15 @@ pub fn watch(args: WatchArgs) -> Result<()> {
     let posted = cursor.read()?;
     let follower_client = client.clone();
     let positions = posted.clone();
+    let follower_inbox = inbox.clone();
     let follower = std::thread::spawn(move || {
         Follower {
             client: follower_client,
+            inbox: follower_inbox,
             selection,
             entries,
             positions,
+            warned: None,
         }
         .run()
     });
@@ -186,10 +190,13 @@ fn next_run(batches: &Receiver<Vec<LogEntry>>) -> Option<Vec<LogEntry>> {
 /// The selection being followed, and where its new entries go.
 struct Follower {
     client: Client,
+    inbox: Inbox,
     selection: Selection,
     entries: SyncSender<Vec<LogEntry>>,
     /// The position of the next entry to receive of each followed change.
     positions: Positions,
+    /// The last server version that this watch told the agent about.
+    warned: Option<String>,
 }
 
 impl Follower {
@@ -199,7 +206,8 @@ impl Follower {
     /// It subscribes with the positions that it holds, so the server sends
     /// the entries from them on, and every entry of a change that it lacks. A
     /// closed socket, for example on a server restart, makes it subscribe
-    /// again.
+    /// again, and on each connection it first matches the server's version
+    /// (see [`Follower::match_server`]).
     ///
     /// The author's own entries move the positions, and the follower
     /// discards them. Thus the agent receives reviews and lifecycle
@@ -221,6 +229,7 @@ impl Follower {
                 start: Start::Log,
             };
             let mut socket = self.client.ws_connect(&subscription)?;
+            self.match_server()?;
             let mut sent_anything = false;
             while let Some(text) = next_text(&mut socket) {
                 sent_anything = true;
@@ -236,6 +245,46 @@ impl Follower {
                 silent_reconnects += 1;
             }
         }
+    }
+
+    /// Replaces this watch with the build of nit that the server runs.
+    ///
+    /// An update replaces the binary and then restarts the server, which
+    /// closes the socket. So when this watch connects to a server of
+    /// another version, the binary it started from is the newer build. It
+    /// re-executes that binary, which subscribes from the cursor, so it
+    /// posts no entry twice and loses none.
+    ///
+    /// When that binary reports another version too, the watch tells the
+    /// agent, once per server version, and keeps running.
+    ///
+    /// # Errors
+    ///
+    /// When the exec or the message to the agent fails.
+    fn match_server(&mut self) -> Result<()> {
+        let Some(server) = self.client.server_version() else {
+            return Ok(());
+        };
+        if server == crate::VERSION {
+            return Ok(());
+        }
+        if let Some(path) = exe::invoked()
+            && exe::version_of(&path).as_ref() == Some(&server)
+        {
+            let err = exe::exec(&path);
+            return Err(err).with_context(|| format!("run {}", path.display()));
+        }
+        if self.warned.as_ref() == Some(&server) {
+            return Ok(());
+        }
+        self.inbox.send(&format!(
+            "nit sent this, not another Claude session. This session's nit \
+             watch runs nit {}, but the server runs nit {server}. Tell the user \
+             to install nit {server} and restart this session.",
+            crate::VERSION,
+        ))?;
+        self.warned = Some(server);
+        Ok(())
     }
 
     /// Moves the position of the change of a new entry. Sends a new entry
@@ -326,6 +375,7 @@ impl Cursor {
 }
 
 /// The session's inbox: where to post, and what proves who posts.
+#[derive(Clone)]
 struct Inbox {
     path: PathBuf,
     /// The opening line of every connection, built once.
@@ -385,7 +435,11 @@ impl Inbox {
     /// The connection opens only now, because the harness drops one that
     /// sends no complete line within 30 seconds.
     fn post(&self, entries: &[LogEntry], sources: &Sources) -> Result<()> {
-        let text = format!("{LEAD}\n\n{}", render_entries(entries, sources));
+        self.send(&format!("{LEAD}\n\n{}", render_entries(entries, sources)))
+    }
+
+    /// Posts `text` as one message.
+    fn send(&self, text: &str) -> Result<()> {
         let mut socket = UnixStream::connect(&self.path)
             .with_context(|| format!("connect to {}", self.path.display()))?;
         if let Some(auth) = &self.auth {
@@ -393,7 +447,7 @@ impl Inbox {
         }
         let post = serde_json::to_vec(&Post {
             kind: "user",
-            message: Body { content: &text },
+            message: Body { content: text },
         })?;
         socket.write_all(&post)?;
         socket.write_all(b"\n")?;

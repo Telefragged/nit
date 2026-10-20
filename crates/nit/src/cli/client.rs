@@ -151,6 +151,11 @@ impl Client {
         }
     }
 
+    /// The server's version, probed as [`server_version`] does.
+    pub(crate) fn server_version(&self) -> Option<String> {
+        server_version(&self.base)
+    }
+
     pub(crate) fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         self.get_raw(path).map_err(|e| e.into_error(&self.base))
     }
