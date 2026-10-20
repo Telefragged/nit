@@ -367,6 +367,7 @@ mod tests {
             message: keyed("subject", key),
             resets_status: true,
             created_at: "t0".to_string(),
+            attachments: vec![],
         });
         proj
     }

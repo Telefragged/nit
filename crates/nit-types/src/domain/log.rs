@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Anchor;
+use super::AttachPayload;
 use super::ChangeNumber;
 use super::CommentRange;
 use super::LineAnchor;
@@ -21,6 +22,7 @@ pub enum LogKind {
     Comment,
     Lifecycle,
     Tags,
+    Attach,
 }
 
 impl LogKind {
@@ -33,6 +35,7 @@ impl LogKind {
             LogKind::Comment => "comment",
             LogKind::Lifecycle => "lifecycle",
             LogKind::Tags => "tags",
+            LogKind::Attach => "attach",
         }
     }
 }
@@ -47,6 +50,7 @@ impl std::str::FromStr for LogKind {
             "comment" => Ok(LogKind::Comment),
             "lifecycle" => Ok(LogKind::Lifecycle),
             "tags" => Ok(LogKind::Tags),
+            "attach" => Ok(LogKind::Attach),
             other => Err(format!("unknown log entry kind {other:?}")),
         }
     }
@@ -239,6 +243,7 @@ pub enum LogPayload {
     Comment(CommentInput),
     Lifecycle(LifecyclePayload),
     Tags(TagsPayload),
+    Attach(AttachPayload),
 }
 
 impl LogPayload {
@@ -251,6 +256,7 @@ impl LogPayload {
             LogPayload::Comment(_) => LogKind::Comment,
             LogPayload::Lifecycle(_) => LogKind::Lifecycle,
             LogPayload::Tags(_) => LogKind::Tags,
+            LogPayload::Attach(_) => LogKind::Attach,
         }
     }
 

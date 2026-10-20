@@ -363,6 +363,7 @@ mod tests {
             message: format!("subject {name}"),
             resets_status: true,
             created_at: "t0".to_string(),
+            attachments: vec![],
         }
     }
 
