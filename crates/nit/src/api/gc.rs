@@ -1,7 +1,8 @@
-//! The background collection of closed changes.
+//! The background collection of closed changes and of unreferenced blobs.
 //!
 //! Deletes each closed change once its last log entry is older than
-//! [`RETENTION`].
+//! [`RETENTION`], then each blob that no change links to once it is older
+//! than [`ATTACHMENT_GRACE`].
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,6 +20,12 @@ const INTERVAL: Duration = Duration::from_hours(1);
 /// How long a closed change stays after its last log entry.
 const RETENTION: SignedDuration = SignedDuration::from_hours(30 * 24);
 
+/// How long a blob that no change links to stays after its upload.
+///
+/// An author attaches an upload right away, so this only has to be longer
+/// than the time between the two requests.
+const ATTACHMENT_GRACE: SignedDuration = SignedDuration::from_hours(1);
+
 /// Collects closed changes at startup, then once each [`INTERVAL`].
 ///
 /// No event marks the moment that a change becomes old enough, so the
@@ -27,6 +34,7 @@ pub(super) async fn run_gc_timer(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_watch();
     loop {
         collect_once(&state, Timestamp::now() - RETENTION).await;
+        collect_attachments_once(&state, Timestamp::now() - ATTACHMENT_GRACE).await;
         tokio::select! {
             () = tokio::time::sleep(INTERVAL) => {}
             _ = shutdown.wait_for(|&s| s) => break,
@@ -66,5 +74,15 @@ pub async fn collect_once(state: &Arc<AppState>, cutoff: Timestamp) {
     .await;
     if let Err(e) = collected {
         tracing::warn!("collecting closed changes failed: {}", e.message);
+    }
+}
+
+/// Deletes every blob that no change links to and that is older than
+/// `cutoff`.
+///
+/// A failure is logged as a warning, never returned.
+pub async fn collect_attachments_once(state: &Arc<AppState>, cutoff: Timestamp) {
+    if let Err(e) = state.blobs().collect(state, cutoff).await {
+        tracing::warn!("collecting attachments failed: {e:#}");
     }
 }

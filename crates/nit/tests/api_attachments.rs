@@ -3,8 +3,10 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, a_change, change_log, http_get_bytes, http_post, http_put_bytes, msg,
+    GitRepo, TestServer, a_change, abandon, change_log, collect, collect_attachments,
+    http_get_bytes, http_post, http_put_bytes, msg,
 };
+use jiff::{SignedDuration, Timestamp};
 use serde_json::{Value, json};
 
 fn server(g: &GitRepo) -> TestServer {
@@ -200,4 +202,74 @@ fn download_of_an_unknown_blob_is_404() {
         http_get_bytes(&server.url(&format!("/api/attachments/{}/a.png", "0".repeat(64))));
 
     assert_eq!(st, 404);
+}
+
+fn later() -> Timestamp {
+    Timestamp::now() + SignedDuration::from_hours(1)
+}
+
+fn stored(g: &GitRepo, hash: &str) -> bool {
+    g.dir.path().join("attachments").join(hash).exists()
+}
+
+/// A collection deletes a blob that no change links to, and a later attach
+/// of it is a 404.
+#[test]
+fn collect_deletes_an_unheld_blob() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let hash = upload(&server, b"orphan");
+
+    collect_attachments(&server, later());
+
+    assert!(!stored(&g, &hash));
+    let (st, res) = attach(&server, change_number, 0, "out.txt", &hash);
+    assert_eq!(st, 404, "{res}");
+}
+
+/// A blob uploaded after the cutoff stays.
+#[test]
+fn collect_keeps_a_blob_newer_than_the_cutoff() {
+    let g = GitRepo::new();
+    let server = server(&g);
+    let cutoff = Timestamp::now();
+    let hash = upload(&server, b"fresh");
+
+    collect_attachments(&server, cutoff);
+
+    assert!(stored(&g, &hash));
+}
+
+/// A blob that a change links to stays until the change is collected.
+#[test]
+fn collect_frees_a_blob_with_its_change() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let hash = upload(&server, b"held");
+    attach(&server, change_number, 0, "out.txt", &hash);
+
+    collect_attachments(&server, later());
+    assert!(stored(&g, &hash), "the open change holds the blob");
+
+    abandon(&server, change_number);
+    collect(&server, later());
+    collect_attachments(&server, later());
+    assert!(!stored(&g, &hash), "the collected change freed the blob");
+}
+
+/// A collection deletes a temp file and a blob file that has no row.
+#[test]
+fn collect_deletes_stray_files() {
+    let g = GitRepo::new();
+    let server = server(&g);
+    let store = g.dir.path().join("attachments");
+    let temp = store.join(".tmp").join("stray");
+    let rowless = store.join("1".repeat(64));
+    std::fs::write(&temp, b"partial").expect("temp");
+    std::fs::write(&rowless, b"rowless").expect("rowless");
+
+    collect_attachments(&server, later());
+
+    assert!(!temp.exists());
+    assert!(!rowless.exists());
 }
