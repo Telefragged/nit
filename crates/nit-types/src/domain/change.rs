@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::AttachmentProjection;
 use super::ChangeId;
 use super::ChangeNumber;
 use super::ChangeStatus;
@@ -39,6 +40,10 @@ pub struct RevisionProjection {
     /// `false` for a pure rebase — the revision inherits the prior status.
     pub resets_status: bool,
     pub created_at: String,
+    /// The attachments put on this revision itself, in the order they
+    /// were first attached.
+    #[serde(default)]
+    pub attachments: Vec<AttachmentProjection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

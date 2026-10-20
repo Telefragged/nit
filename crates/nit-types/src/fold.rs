@@ -37,7 +37,10 @@ use crate::domain::{
     Anchor, ChangeProjection, Lifecycle, LifecycleAction, ReviewProjection, RevisionProjection,
     ThreadComment, ThreadProjection,
 };
-use crate::domain::{CommentInput, LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
+use crate::domain::{
+    AttachPayload, AttachmentProjection, CommentInput, LifecyclePayload, LogEntry, LogPayload,
+    RevisionPayload,
+};
 
 /// Applies one wire entry to a change's projection.
 ///
@@ -78,6 +81,7 @@ pub fn fold(change: &mut ChangeProjection, mut entry: LogEntry) -> LogEntry {
         }
         LogPayload::Lifecycle(p) => fold_lifecycle(change, p),
         LogPayload::Tags(p) => change.tags.overlay(&p.tags),
+        LogPayload::Attach(p) => fold_attach(change, p),
     }
     entry
 }
@@ -94,7 +98,25 @@ fn fold_revision(change: &mut ChangeProjection, p: &RevisionPayload, now: &str) 
         message: p.message.clone(),
         resets_status: p.resets_status,
         created_at: now.to_string(),
+        attachments: Vec::new(),
     });
+}
+
+fn fold_attach(change: &mut ChangeProjection, p: &AttachPayload) {
+    let Some(revision) = usize::try_from(p.revision.get())
+        .ok()
+        .and_then(|i| change.revisions.get_mut(i))
+    else {
+        return;
+    };
+    let attachment = AttachmentProjection {
+        name: p.name.clone(),
+        hash: p.hash.clone(),
+    };
+    match revision.attachments.iter_mut().find(|a| a.name == p.name) {
+        Some(held) => *held = attachment,
+        None => revision.attachments.push(attachment),
+    }
 }
 
 fn fold_lifecycle(change: &mut ChangeProjection, p: &LifecyclePayload) {
@@ -228,6 +250,7 @@ mod tests {
 
     use super::*;
     use crate::domain::TagsPayload;
+    use crate::domain::{AttachmentHash, AttachmentName};
     use crate::testing::{change_id, sha, tags};
 
     fn empty() -> ChangeProjection {
@@ -411,6 +434,40 @@ mod tests {
             LogPayload::lifecycle(LifecycleAction::Abandoned, None, None),
         ]);
         assert_eq!(c.current_status(), ChangeStatus::Abandoned);
+    }
+
+    fn attach(revision: u64, name: &str, byte: char) -> LogPayload {
+        LogPayload::Attach(AttachPayload {
+            revision: RevisionNumber::new(revision),
+            name: AttachmentName::new(name).expect("name"),
+            hash: AttachmentHash::new(byte.to_string().repeat(64)).expect("hash"),
+        })
+    }
+
+    #[test]
+    fn an_attach_replaces_the_same_name_on_its_revision() {
+        let c = folded(vec![
+            revision("A", "base", "base", true),
+            revision("B", "base", "base", true),
+            attach(0, "plan.md", 'a'),
+            attach(0, "shot.png", 'b'),
+            attach(0, "plan.md", 'c'),
+            attach(1, "plan.md", 'd'),
+        ]);
+        let held = |n: u64| -> Vec<(String, char)> {
+            c.revisions[usize::try_from(n).expect("index")]
+                .attachments
+                .iter()
+                .map(|a| {
+                    (
+                        a.name.to_string(),
+                        a.hash.as_str().chars().next().expect("hex"),
+                    )
+                })
+                .collect()
+        };
+        assert_eq!(held(0), [("plan.md".into(), 'c'), ("shot.png".into(), 'b')]);
+        assert_eq!(held(1), [("plan.md".into(), 'd')]);
     }
 
     #[test]

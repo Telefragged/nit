@@ -651,6 +651,18 @@ export type LifecyclePayload = {
 };
 
 /**
+ * An `attach` entry: one attachment put on one revision.
+ *
+ * An entry that names an attachment the revision already holds replaces
+ * it.
+ */
+export type AttachPayload = {
+  revision: RevisionNumber;
+  name: AttachmentName;
+  hash: AttachmentHash;
+};
+
+/**
  * A log entry's payload as a closed union tagged by `kind`.
  *
  * Flattened into [`LogEntry`], the adjacent tag produces the wire's
@@ -661,7 +673,8 @@ export type LogPayload =
   | { kind: "review"; payload: ReviewPayload }
   | { kind: "comment"; payload: CommentInput }
   | { kind: "lifecycle"; payload: LifecyclePayload }
-  | { kind: "tags"; payload: TagsPayload };
+  | { kind: "tags"; payload: TagsPayload }
+  | { kind: "attach"; payload: AttachPayload };
 
 /**
  * One log entry.
@@ -680,6 +693,7 @@ export type LogEntry = {
   | { kind: "comment"; payload: CommentInput }
   | { kind: "lifecycle"; payload: LifecyclePayload }
   | { kind: "tags"; payload: TagsPayload }
+  | { kind: "attach"; payload: AttachPayload }
 );
 
 /**
@@ -761,6 +775,31 @@ export type Anchor =
  */
 export type LineAnchor = { whole: number } | { selection: CommentRange };
 
+/**
+ * The BLAKE3 hash of an attachment's bytes: 64 lowercase hex characters.
+ *
+ * It names the bytes, so two attachments with equal hashes hold the
+ * same content.
+ */
+export type AttachmentHash = string;
+
+/**
+ * The name an attachment carries on a revision: a relative path.
+ *
+ * Its segments are separated by `/`. Within one revision a name
+ * identifies one attachment, and across revisions it pairs the versions
+ * of one attachment. The path gives no other meaning to the name.
+ */
+export type AttachmentName = string;
+
+/**
+ * One attachment of a revision, as the fold leaves it.
+ */
+export type AttachmentProjection = {
+  name: AttachmentName;
+  hash: AttachmentHash;
+};
+
 export type RevisionProjection = {
   /**
    * 0-based, minted in the fold.
@@ -775,6 +814,11 @@ export type RevisionProjection = {
    */
   resets_status: boolean;
   created_at: string;
+  /**
+   * The attachments put on this revision itself, in the order they
+   * were first attached.
+   */
+  attachments: Array<AttachmentProjection>;
 };
 
 /**

@@ -31,6 +31,10 @@
 //!
 //! **Revision** — one version of a change.
 //!
+//! **Attachment** — a file a revision carries beside its commit, under
+//! a name that is a relative path. Its bytes are named by their hash, so
+//! the same bytes can sit on many revisions.
+//!
 //! **Tag** — a `key: value` label set on a change. A `tags` entry
 //! stands on its own, so a key keeps its value until a later entry names
 //! it again and labelling costs no revision. Tags correlate changes that
@@ -99,6 +103,7 @@
 //! A reviewer chooses the first two. The last two are derived, and
 //! nobody sets them by hand.
 
+mod attachment;
 mod change;
 mod conversation;
 mod identity;
@@ -108,6 +113,7 @@ mod rendering;
 mod tag;
 mod verdict;
 
+pub use attachment::*;
 pub use change::*;
 pub use conversation::*;
 pub use identity::*;

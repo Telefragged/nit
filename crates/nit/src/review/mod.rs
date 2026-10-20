@@ -37,6 +37,7 @@ pub(crate) fn payload_to_json(payload: &LogPayload) -> Result<String> {
         LogPayload::Comment(p) => serde_json::to_string(p),
         LogPayload::Lifecycle(p) => serde_json::to_string(p),
         LogPayload::Tags(p) => serde_json::to_string(p),
+        LogPayload::Attach(p) => serde_json::to_string(p),
     }
     .map_err(Into::into)
 }
@@ -55,6 +56,7 @@ pub(crate) fn payload_from_json(kind: LogKind, json: &str) -> Result<LogPayload>
         LogKind::Comment => LogPayload::Comment(serde_json::from_str(json)?),
         LogKind::Lifecycle => LogPayload::Lifecycle(serde_json::from_str(json)?),
         LogKind::Tags => LogPayload::Tags(serde_json::from_str(json)?),
+        LogKind::Attach => LogPayload::Attach(serde_json::from_str(json)?),
     })
 }
 

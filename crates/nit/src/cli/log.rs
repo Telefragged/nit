@@ -72,13 +72,16 @@ pub fn log(args: LogArgs) -> Result<()> {
 /// Whether `--incoming` drops this log entry.
 ///
 /// It drops the entries the author writes about their own work: a
-/// `revision`, a `comment`, a set of `tags`. Reviews and every lifecycle
+/// `revision`, a `comment`, a set of `tags`, an `attach`. Reviews and every lifecycle
 /// change reach the reader, `merged` included, because the merge ends
 /// the author's work on the change.
 pub(super) fn dropped_by_incoming(entry: &LogEntry) -> bool {
     matches!(
         entry.payload,
-        LogPayload::Revision(_) | LogPayload::Comment(_) | LogPayload::Tags(_)
+        LogPayload::Revision(_)
+            | LogPayload::Comment(_)
+            | LogPayload::Tags(_)
+            | LogPayload::Attach(_)
     )
 }
 

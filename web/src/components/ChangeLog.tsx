@@ -242,6 +242,19 @@ const NoteRow = memo(function NoteRow({
           )}
         </Row>
       );
+    case "attach": {
+      const p = entry.payload;
+      return (
+        <Row
+          entry={entry}
+          summary={
+            <>
+              attached <span className="mono">{p.name}</span> to r{p.revision}
+            </>
+          }
+        />
+      );
+    }
   }
 });
 

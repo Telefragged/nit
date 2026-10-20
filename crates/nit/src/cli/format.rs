@@ -83,6 +83,7 @@ fn entry_summary(entry: &LogEntry) -> String {
         },
         LogPayload::Lifecycle(p) => format!("change {change} {}", p.action.as_str()),
         LogPayload::Tags(p) => format!("change {change} tagged ({})", p.tags.len()),
+        LogPayload::Attach(p) => format!("change {change} r{} attached {}", p.revision, p.name),
     }
 }
 
@@ -197,6 +198,10 @@ fn render_entry(entry: &LogEntry, sources: &Sources) -> String {
             }
             out
         }
+        LogPayload::Attach(p) => format!(
+            "change {change}  position {position}  r{}  attach {}  {}",
+            p.revision, p.name, p.hash,
+        ),
         LogPayload::Review(p) => {
             let mut out = format!(
                 "change {change}  position {position}  r{}  reviewer: {}",
@@ -491,6 +496,7 @@ mod tests {
             message: message.to_string(),
             resets_status: true,
             created_at: String::new(),
+            attachments: vec![],
         };
         let thread = |revision: u64, resolved: bool| ThreadProjection {
             id: 0,
