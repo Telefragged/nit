@@ -318,12 +318,16 @@ a.comment-time:hover {
   margin: 18px 16px 14px;
 }
 
-.log-row {
+.log-rows {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-raised);
-  margin-bottom: 14px;
+  overflow: hidden;
   font-size: 12px;
+}
+
+.log-row + .log-row {
+  border-top: 1px solid var(--border);
 }
 
 .log-line {
@@ -361,7 +365,6 @@ summary.log-line:hover {
 
 .log-detail {
   border-top: 1px solid var(--border);
-  border-radius: 0 0 6px 6px;
   background: var(--bg);
   padding: 8px 10px 10px 104px;
   display: flex;
