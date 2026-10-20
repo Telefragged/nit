@@ -4,7 +4,7 @@ mod common;
 
 use common::{
     GitRepo, TestServer, a_change, abandon, change_log, collect, collect_attachments, http_get,
-    http_get_bytes, http_post, http_put_bytes, msg,
+    http_get_bytes, http_post, http_put_bytes, msg, nit,
 };
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Value, json};
@@ -391,4 +391,44 @@ fn a_thread_on_a_carried_attachment_keeps_its_line() {
             json!({ "line": { "file": "/attachments/notes.txt", "side": "new", "at": { "whole": 2 } } })
         ]
     );
+}
+
+/// `nit attach` uploads a file and attaches it to the latest revision,
+/// named by its path from the repository root.
+#[test]
+fn nit_attach_names_the_file_by_its_path_from_the_root() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let dir = g.workdir().join("web/screenshots");
+    std::fs::create_dir_all(&dir).expect("dir");
+    std::fs::write(dir.join("review.png"), b"png").expect("file");
+    let change = change_number.to_string();
+
+    let (ok, _, stderr) = nit(
+        &server,
+        &g,
+        &["attach", "web/screenshots/review.png", "--change", &change],
+    );
+
+    assert!(ok, "{stderr}");
+    assert_eq!(
+        attach_entries(&server, change_number),
+        [json!({
+            "revision": 0,
+            "name": "web/screenshots/review.png",
+            "hash": blake3::hash(b"png").to_hex().to_string(),
+        })]
+    );
+}
+
+/// `nit attach` needs the change named.
+#[test]
+fn nit_attach_requires_the_change() {
+    let g = GitRepo::new();
+    let (server, _) = server_with_change(&g);
+    std::fs::write(g.workdir().join("out.txt"), b"x").expect("file");
+
+    let (ok, _, _) = nit(&server, &g, &["attach", "out.txt"]);
+
+    assert!(!ok);
 }

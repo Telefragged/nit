@@ -1,6 +1,6 @@
 //! Thin CLI clients of the HTTP API, run by coding agents.
 //!
-//! `nit push` / `status` / `log` / `comment` / `reopen`, run from inside a
+//! `nit push` / `status` / `log` / `comment` / `attach` / `reopen`, run from inside a
 //! git repo. They print concise text for the author to act on; all review
 //! logic lives server-side.
 //!
@@ -15,6 +15,7 @@
 //! `tags` the checkout's tags, `resolve` the selection, `format` digests)
 //! plus one module per subcommand group.
 
+mod attach;
 mod client;
 mod comment;
 mod format;
@@ -33,6 +34,7 @@ mod update;
 mod version;
 mod watch;
 
+pub use attach::{AttachArgs, attach};
 pub use comment::{CommentArgs, comment};
 pub use lifecycle::{AbandonArgs, ReopenArgs, abandon, reopen};
 pub use log::{LogArgs, log};
