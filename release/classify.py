@@ -24,7 +24,9 @@ def api_changes(changelog):
         if change["id"] == "api-version-not-bumped":
             continue
         kind = "breaking" if change["level"] == BREAKING else "additive"
-        yield kind, f"{change['operation']} {change['path']}: {change['text']}"
+        # A change to a shared schema belongs to no operation.
+        where = " ".join(change[key] for key in ("operation", "path") if key in change)
+        yield kind, f"{where or change['section']}: {change['text']}"
 
 
 def flatten(command, path="nit"):
