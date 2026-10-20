@@ -605,7 +605,13 @@ pub fn delete_closed_changes(
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for &(_, number) in &deleted {
         let number = i64::try_from(number.get())?;
-        for table in ["log", "draft_comments", "draft_reviews", "change_tags"] {
+        for table in [
+            "log",
+            "draft_comments",
+            "draft_reviews",
+            "change_tags",
+            "change_attachments",
+        ] {
             tx.execute(
                 &format!("DELETE FROM {table} WHERE change_number = ?1"),
                 [number],
@@ -647,6 +653,27 @@ pub fn attachment_exists(conn: &Connection, hash: &AttachmentHash) -> Result<boo
         )
         .optional()?
         .is_some())
+}
+
+/// Deletes every blob row that no relation names and that is older than
+/// `cutoff`, and returns the hashes of the deleted rows.
+///
+/// # Errors
+///
+/// When the write fails, or a stored hash is malformed.
+pub fn delete_unrelated_attachments(
+    tx: &Transaction,
+    cutoff: jiff::Timestamp,
+) -> Result<Vec<AttachmentHash>> {
+    tx.prepare(
+        "DELETE FROM attachments
+          WHERE created_at < ?1
+            AND hash NOT IN (SELECT hash FROM change_attachments)
+         RETURNING hash",
+    )?
+    .query_map([cutoff.to_string()], |r| r.get::<_, String>(0))?
+    .map(|hash| Ok(AttachmentHash::new(hash?)?))
+    .collect()
 }
 
 /// Ties a blob to a change's lifespan.

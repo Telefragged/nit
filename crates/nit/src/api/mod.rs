@@ -51,7 +51,7 @@ use nit_types::domain::Side;
 use nit_types::domain::{Anchor, LineAnchor};
 use nit_types::health::Health;
 
-pub use gc::collect_once;
+pub use gc::{collect_attachments_once, collect_once};
 pub use state::{AppJson, AppPath, AppQuery, AppState, Error, with_conn};
 use state::{Appends, append};
 pub use timer::sweep_once;

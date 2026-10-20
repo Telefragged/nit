@@ -15,9 +15,11 @@ use axum::extract::State;
 use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use futures_util::StreamExt;
+use jiff::Timestamp;
 use nit_types::attachments::UploadedAttachment;
 use nit_types::changes::ChangeDetail;
 use nit_types::domain::{AttachPayload, AttachmentHash, ChangeNumber, LogPayload};
+use rusqlite::TransactionBehavior;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use tokio_util::io::ReaderStream;
@@ -59,6 +61,55 @@ impl Blobs {
 
     fn path(&self, hash: &AttachmentHash) -> PathBuf {
         self.dir.join(hash.as_str())
+    }
+
+    /// Deletes the blobs that no change links to, once they are older than
+    /// `cutoff`.
+    ///
+    /// It deletes the temp files of uploads that never finished, the
+    /// blob rows that no relation names together with their files, and
+    /// the blob files that have no row. A file without a row is what a
+    /// crash between a row's deletion and its file's deletion leaves.
+    ///
+    /// # Errors
+    ///
+    /// When the database or the store directory fails.
+    pub(super) async fn collect(&self, state: &AppState, cutoff: Timestamp) -> anyhow::Result<()> {
+        let older = std::time::SystemTime::from(cutoff);
+        for (path, _) in files_older_than(&self.dir.join(".tmp"), older)? {
+            remove(&path);
+        }
+        let _moving = self.moves.lock().await;
+        let deleted = with_conn(state.pool(), move |conn| {
+            let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let deleted = db::delete_unrelated_attachments(&tx, cutoff)?;
+            tx.commit()?;
+            Ok(deleted)
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!(e.message))?;
+        for hash in &deleted {
+            remove(&self.path(hash));
+        }
+        let files: Vec<(PathBuf, AttachmentHash)> = files_older_than(&self.dir, older)?
+            .into_iter()
+            .filter_map(|(path, name)| Some((path, AttachmentHash::new(name).ok()?)))
+            .collect();
+        let rowless = with_conn(state.pool(), move |conn| {
+            let mut rowless = Vec::new();
+            for (path, hash) in files {
+                if !db::attachment_exists(conn, &hash)? {
+                    rowless.push(path);
+                }
+            }
+            Ok(rowless)
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!(e.message))?;
+        for path in rowless {
+            remove(&path);
+        }
+        Ok(())
     }
 
     /// Streams `body` into a temp file, hashing it on the way.
@@ -110,6 +161,33 @@ impl Drop for Staged {
         if let Some(path) = self.0.take() {
             let _ = std::fs::remove_file(path);
         }
+    }
+}
+
+/// The files in `dir` last modified before `older`, with their names.
+fn files_older_than(
+    dir: &Path,
+    older: std::time::SystemTime,
+) -> std::io::Result<Vec<(PathBuf, String)>> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let meta = entry.metadata()?;
+        if meta.is_file()
+            && meta.modified()? < older
+            && let Ok(name) = entry.file_name().into_string()
+        {
+            files.push((entry.path(), name));
+        }
+    }
+    Ok(files)
+}
+
+fn remove(path: &Path) {
+    if let Err(e) = std::fs::remove_file(path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!("deleting {}: {e}", path.display());
     }
 }
 
