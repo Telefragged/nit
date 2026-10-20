@@ -46,6 +46,8 @@ enum Cmd {
     Watch(cli::WatchArgs),
     /// Install the Claude Code plugin that this build carries
     InstallPlugin,
+    /// Install the latest release over this nit
+    Update,
 }
 
 /// Runs the subcommand that `args` names.
@@ -78,5 +80,6 @@ pub fn run(args: Args) -> Result<()> {
         Cmd::Repo(args) => cli::repo(args),
         Cmd::Watch(args) => cli::watch(args),
         Cmd::InstallPlugin => cli::install_plugin(),
+        Cmd::Update => cli::update(),
     }
 }
