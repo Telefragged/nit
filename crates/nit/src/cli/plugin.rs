@@ -26,17 +26,17 @@ static PLUGIN: include_dir::Dir = include_dir::include_dir!("$NIT_PLUGIN_DIR");
 /// Installs this build's plugin into the store and registers it with Claude
 /// Code.
 ///
+/// Prints a note and writes nothing when Claude Code is not installed,
+/// that is, when it has no config directory or `claude` is not on `PATH`.
+///
 /// # Errors
 ///
-/// When Claude Code has no config directory, before anything is written.
-/// When a write to the store fails, or when `claude` is missing or fails.
+/// When a write to the store fails, or when `claude` fails.
 pub fn install_plugin() -> Result<()> {
-    let config = claude_config_dir()?;
-    ensure!(
-        config.is_dir(),
-        "Claude Code was not found at {}",
-        config.display()
-    );
+    if !claude_config_dir()?.is_dir() || crate::exe::on_path("claude").is_none() {
+        println!("Claude Code is not installed, so the nit plugin was not installed");
+        return Ok(());
+    }
     let current = install_to(&crate::db::nit_data_dir()?.join("claude-plugin"))?;
     run(Command::new("claude")
         .args(["plugin", "marketplace", "add"])
