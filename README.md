@@ -75,6 +75,24 @@ tag feature=epic-saga
 (repeatable, exact key and value, every one must match), and
 `GET /api/tags?repo={id}` lists the keys and values in use.
 
+`nit attach <file> --change <number>` puts a file that is not in the commit
+on a change: a plan, a screenshot, a command's output, a rendered page. The
+review page lists attachments below the commit's files, and renders Markdown,
+images and HTML. An attachment carries forward to later revisions until a new
+version under the same name replaces it, and attaching unchanged bytes adds
+nothing. So a hook may attach a build's artifacts after every push. For
+example, a Claude Code `PostToolUse` hook on `Bash`:
+
+```sh
+#!/bin/sh
+# Attaches the web screenshots to HEAD's change after each `nit push`.
+jq -e '.tool_input.command | test("\\bnit push\\b")' >/dev/null || exit 0
+id=$(git log -1 --format='%(trailers:key=Change-Id,valueonly)')
+for file in screenshots/*.png; do
+  nit attach "$file" --change-id "$id"
+done
+```
+
 `nit watch` follows the session, new commits included, and posts each review
 and lifecycle change to the agent that started it. It needs a harness that
 exports an inbox socket, or `--inbox <path>`. It exits when its parent process

@@ -30,6 +30,27 @@ checked-out commit. Report the first push so the reviewer knows review has
 started. Keep the commits small and don't ration them; the reviewer is never
 blocked by more commits.
 
+## Attach artifacts
+
+An artifact that is not in the commit still belongs in review when the
+reviewer needs it to judge the change. Examples are a plan, a screenshot of a
+UI change, the output of a command whose format changed, or a rendered page.
+Attach it to the change:
+
+```sh
+nit attach screenshots/review.png --change 42
+```
+
+`--change` (or `--change-id`) is required. The attachment goes on the change's
+latest revision, unless `--revision` names another. Its name is the file's
+path from the repository root, unless `--name` gives another. The review page
+renders Markdown, images and HTML, and shows other text as lines that take
+line comments.
+
+An attachment carries forward to later revisions until you attach a new
+version under the same name. Attach again after a push only when the artifact
+changed. Attaching unchanged bytes adds nothing.
+
 ## Watch for feedback
 
 The plugin starts `nit watch` when the session starts, so you do not start it.
