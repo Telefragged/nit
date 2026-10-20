@@ -40,4 +40,4 @@ jobs:
           VERSION: ${{ steps.check.outputs.version }}
         run: |
           gh release create "$VERSION" --target "$GITHUB_SHA" --title "$VERSION" \
-            nit-x86_64-linux nit-x86_64-linux.sha256
+            nit-x86_64-linux nit-x86_64-linux.sha256 crates/nit/install.sh
