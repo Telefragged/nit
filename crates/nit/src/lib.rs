@@ -30,6 +30,7 @@ pub mod api;
 pub mod cli;
 pub mod command;
 pub mod db;
+pub(crate) mod exe;
 pub mod gitscan;
 pub mod hunks;
 pub mod review;
