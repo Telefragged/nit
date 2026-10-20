@@ -14,6 +14,7 @@
 //! `Side` is feature-gated off) and never `serde_json::Value` — so a future
 //! web build can share these types without pulling in the server.
 
+pub mod attachments;
 pub mod changes;
 pub mod comments;
 pub mod decisions;

@@ -23,6 +23,7 @@ pub mod rebase;
 pub mod state;
 pub mod views;
 
+mod attachments;
 mod changes;
 mod comments;
 mod drafts;
@@ -119,6 +120,7 @@ fn routes() -> utoipa_axum::router::OpenApiRouter<Arc<AppState>> {
     use utoipa_axum::routes;
     utoipa_axum::router::OpenApiRouter::with_openapi(<ApiDoc as utoipa::OpenApi>::openapi())
         .routes(routes!(health))
+        .routes(routes!(attachments::upload))
         .routes(routes!(repos::list_repos, repos::create_repo))
         .routes(routes!(repos::get_repo, repos::relocate_repo))
         .routes(routes!(push::push))

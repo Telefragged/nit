@@ -295,6 +295,21 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "arrayvec" = rec {
+        crateName = "arrayvec";
+        version = "0.7.8";
+        edition = "2018";
+        sha256 = "0mmd8lrijbvg1qp4c5zis5dq41a3mjv2rb6bxkyj9kwaw2k6gyyk";
+        authors = [
+          "bluss"
+        ];
+        features = {
+          "borsh" = [ "dep:borsh" ];
+          "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
+          "zeroize" = [ "dep:zeroize" ];
+        };
+      };
       "atomic-waker" = rec {
         crateName = "atomic-waker";
         version = "1.1.2";
@@ -617,6 +632,54 @@ rec {
         };
         resolvedDefaultFeatures = [ "std" ];
       };
+      "blake3" = rec {
+        crateName = "blake3";
+        version = "1.8.7";
+        edition = "2024";
+        sha256 = "1bi7m95sggkkcmlyiykflbb37v84cgzkm283r1yrfxhzq57lb7kd";
+        authors = [
+          "Jack O'Connor <oconnor663@gmail.com>"
+          "Samuel Neves"
+        ];
+        dependencies = [
+          {
+            name = "arrayvec";
+            packageId = "arrayvec";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "cfg-if";
+            packageId = "cfg-if";
+          }
+          {
+            name = "constant_time_eq";
+            packageId = "constant_time_eq";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "cpufeatures";
+            packageId = "cpufeatures 0.3.1";
+            target = { target, features }: (("x86" == target."arch" or null) || ("x86_64" == target."arch" or null));
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "cc";
+            packageId = "cc";
+          }
+        ];
+        features = {
+          "default" = [ "std" ];
+          "digest" = [ "dep:digest" ];
+          "mmap" = [ "std" "dep:memmap2" ];
+          "rayon" = [ "dep:rayon-core" ];
+          "serde" = [ "dep:serde" ];
+          "std" = [ "constant_time_eq/std" ];
+          "traits-preview" = [ "dep:digest" ];
+          "zeroize" = [ "dep:zeroize" "arrayvec/zeroize" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" ];
+      };
       "block-buffer 0.10.4" = rec {
         crateName = "block-buffer";
         version = "0.10.4";
@@ -905,6 +968,19 @@ rec {
         features = {
           "arbitrary" = [ "dep:arbitrary" ];
         };
+      };
+      "constant_time_eq" = rec {
+        crateName = "constant_time_eq";
+        version = "0.4.2";
+        edition = "2024";
+        sha256 = "16zamq60dq80k3rqlzh9j9cpjhishmh924lnwbplgrnmkkvfylix";
+        authors = [
+          "Cesar Eduardo Barros <cesarb@cesarb.eti.br>"
+        ];
+        features = {
+          "default" = [ "std" ];
+        };
+        resolvedDefaultFeatures = [ "std" ];
       };
       "cookie" = rec {
         crateName = "cookie";
@@ -3603,6 +3679,10 @@ rec {
             features = [ "ws" ];
           }
           {
+            name = "blake3";
+            packageId = "blake3";
+          }
+          {
             name = "clap";
             packageId = "clap";
             features = [ "derive" ];
@@ -3610,6 +3690,11 @@ rec {
           {
             name = "deadpool-sqlite";
             packageId = "deadpool-sqlite";
+          }
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
           }
           {
             name = "git2";
@@ -3672,7 +3757,7 @@ rec {
           {
             name = "tokio";
             packageId = "tokio";
-            features = [ "macros" "net" "rt-multi-thread" "signal" "sync" "time" ];
+            features = [ "fs" "io-util" "macros" "net" "rt-multi-thread" "signal" "sync" "time" ];
           }
           {
             name = "tracing";
@@ -5706,7 +5791,7 @@ rec {
           "tracing" = [ "dep:tracing" ];
           "windows-sys" = [ "dep:windows-sys" ];
         };
-        resolvedDefaultFeatures = [ "bytes" "default" "io-util" "libc" "macros" "mio" "net" "rt" "rt-multi-thread" "signal" "signal-hook-registry" "socket2" "sync" "time" "tokio-macros" "windows-sys" ];
+        resolvedDefaultFeatures = [ "bytes" "default" "fs" "io-util" "libc" "macros" "mio" "net" "rt" "rt-multi-thread" "signal" "signal-hook-registry" "socket2" "sync" "time" "tokio-macros" "windows-sys" ];
       };
       "tokio-macros" = rec {
         crateName = "tokio-macros";
