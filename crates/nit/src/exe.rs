@@ -50,3 +50,53 @@ pub(crate) fn version_of(path: &Path) -> Option<String> {
 pub(crate) fn exec(path: &Path) -> std::io::Error {
     Command::new(path).args(std::env::args_os().skip(1)).exec()
 }
+
+/// Re-executes this process once an update renames a new build over its
+/// binary.
+///
+/// On Linux, a thread of its own reads the inotify events of the
+/// binary's directory. The new build must report another version, so a
+/// reinstall of the same release and a build that does not run both
+/// leave this process running. It does nothing on other systems.
+///
+/// # Errors
+///
+/// When the binary cannot be found or inotify cannot start.
+pub(crate) fn exec_on_update() -> anyhow::Result<()> {
+    cfg_select! {
+        target_os = "linux" => {
+            use std::mem::MaybeUninit;
+
+            use rustix::fs::inotify::{CreateFlags, Reader, WatchFlags, add_watch, init};
+            use rustix::io::Errno;
+
+            // The binary, which an update replaces. A nix store path never
+            // changes, so a nix install never restarts here.
+            let path = std::env::current_exe()?;
+            let inotify = init(CreateFlags::CLOEXEC)?;
+            // The install script renames the new build into place, and a
+            // binary that runs cannot be written over.
+            add_watch(&inotify, path.parent().unwrap_or(&path), WatchFlags::MOVED_TO)?;
+            std::thread::spawn(move || {
+                let mut buf = [MaybeUninit::uninit(); 4096];
+                let mut events = Reader::new(&inotify, &mut buf);
+                loop {
+                    match events.next() {
+                        Ok(_) if version_of(&path).is_some_and(|v| v != crate::VERSION) => {
+                            tracing::info!("restarting on the new build at {}", path.display());
+                            let err = exec(&path);
+                            tracing::error!("cannot run {}: {err}", path.display());
+                        }
+                        Ok(_) | Err(Errno::INTR) => {}
+                        Err(err) => {
+                            tracing::error!("stopped reading inotify events for {}: {err}", path.display());
+                            return;
+                        }
+                    }
+                }
+            });
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}

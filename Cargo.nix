@@ -3650,7 +3650,7 @@ rec {
           {
             name = "rustix";
             packageId = "rustix";
-            features = [ "event" "process" ];
+            features = [ "event" "fs" "process" ];
           }
           {
             name = "serde";
