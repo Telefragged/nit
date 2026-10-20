@@ -29,6 +29,7 @@ mod resolve;
 mod snippet;
 mod status;
 mod tags;
+mod update;
 mod version;
 mod watch;
 
@@ -39,5 +40,6 @@ pub use plugin::install_plugin;
 pub use push::{PushArgs, push};
 pub use repo::{RepoArgs, repo};
 pub use status::{StatusArgs, status};
+pub use update::update;
 pub use version::version;
 pub use watch::{WatchArgs, watch};
