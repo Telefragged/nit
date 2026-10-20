@@ -1,4 +1,4 @@
-//! Uploading attachments and putting them on revisions.
+//! Uploading attachments.
 
 use serde::{Deserialize, Serialize};
 

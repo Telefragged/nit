@@ -121,6 +121,8 @@ fn routes() -> utoipa_axum::router::OpenApiRouter<Arc<AppState>> {
     utoipa_axum::router::OpenApiRouter::with_openapi(<ApiDoc as utoipa::OpenApi>::openapi())
         .routes(routes!(health))
         .routes(routes!(attachments::upload))
+        .routes(routes!(attachments::download))
+        .routes(routes!(attachments::attach))
         .routes(routes!(repos::list_repos, repos::create_repo))
         .routes(routes!(repos::get_repo, repos::relocate_repo))
         .routes(routes!(push::push))

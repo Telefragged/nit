@@ -633,6 +633,41 @@ pub fn upsert_attachment(conn: &Connection, hash: &AttachmentHash, now: &str) ->
     Ok(())
 }
 
+/// Whether the store records a blob with this hash.
+///
+/// # Errors
+///
+/// When the read fails.
+pub fn attachment_exists(conn: &Connection, hash: &AttachmentHash) -> Result<bool> {
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM attachments WHERE hash = ?1",
+            [hash.as_str()],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
+}
+
+/// Ties a blob to a change's lifespan.
+///
+/// A blob the change already holds stays tied once.
+///
+/// # Errors
+///
+/// When the write fails.
+pub fn relate_change_attachment(
+    tx: &Transaction,
+    change_number: ChangeNumber,
+    hash: &AttachmentHash,
+) -> Result<()> {
+    tx.execute(
+        "INSERT OR IGNORE INTO change_attachments (change_number, hash) VALUES (?1, ?2)",
+        params![i64::try_from(change_number.get())?, hash.as_str()],
+    )?;
+    Ok(())
+}
+
 /// Returns the number a `Change-Id` names in one repo, if any.
 ///
 /// The point-read behind history enrichment (`GET /api/history`).
