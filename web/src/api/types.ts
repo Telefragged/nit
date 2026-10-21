@@ -9,3 +9,15 @@ export type * from "./types.gen";
  * reviewable file, listed first in every diff.
  */
 export const COMMIT_MSG_PATH = "/COMMIT_MSG";
+
+/**
+ * Reserved prefix of an attachment's synthetic diff path: an attachment
+ * named `plan.md` is the file `/attachments/plan.md`. A git path never
+ * starts with `/`, so it cannot collide with a tracked file.
+ */
+export const ATTACHMENT_PREFIX = "/attachments/";
+
+/** The largest attachment that shows as lines, in bytes. The server reads
+ * no larger blob as text, so a thread on a line of one could not keep its
+ * line text or port. */
+export const MAX_TEXT_SIZE = 1024 * 1024;

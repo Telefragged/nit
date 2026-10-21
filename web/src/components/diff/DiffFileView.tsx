@@ -11,7 +11,6 @@ import {
 import { createDraft } from "../../api/client";
 import {
   type CommentRange,
-  type DiffFile,
   type Hunk,
   type Line,
   type Side,
@@ -46,6 +45,7 @@ import {
   skipped,
   statusLetter,
 } from "../../lib/diffview";
+import { renderedKind, type ReviewFile } from "../../lib/attachments";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
 import { scrollBehavior } from "../../lib/scrollspy";
 import { plainClick } from "../../lib/shortcutKey";
@@ -59,6 +59,8 @@ import {
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
+import AttachmentView from "./AttachmentView";
+import StatusMark from "./StatusMark";
 
 /** A commented char window to tint on one line; `active` (brighter chrome)
  * marks the open editor's pending selection or the hovered thread's range. */
@@ -236,7 +238,7 @@ export default function DiffFileView({
   reveal,
   onRevealed,
 }: {
-  file: DiffFile;
+  file: ReviewFile;
   layout: "unified" | "split";
   threads: UiThread[];
   domId: string;
@@ -696,6 +698,7 @@ export default function DiffFileView({
   }
 
   const letter = statusLetter(file);
+  const attachmentKind = renderedKind(file);
 
   return (
     <section
@@ -720,7 +723,7 @@ export default function DiffFileView({
       >
         <span className="fchevron">{collapsed ? "▸" : "▾"}</span>
         <span className={letter ? `fstat fstat-${letter}` : "fstat"}>
-          {letter}
+          <StatusMark file={file} />
         </span>
         <span className="fpath">
           {file.old_path ? (
@@ -749,7 +752,11 @@ export default function DiffFileView({
           #
         </a>
         <span className="spacer" />
-        {file.binary ? (
+        {file.attachment ? (
+          file.attachment.revision === ctx.selected ? null : (
+            <span className="dim">attached to r{file.attachment.revision}</span>
+          )
+        ) : file.binary ? (
           <span className="dim">binary</span>
         ) : (
           <span className="fcounts">
@@ -797,7 +804,9 @@ export default function DiffFileView({
             </div>
           ) : null}
 
-          {file.binary ? (
+          {attachmentKind ? (
+            <AttachmentView file={file} kind={attachmentKind} />
+          ) : file.binary ? (
             <div className="diff-note">Binary file — contents not shown</div>
           ) : hunks.length === 0 ? (
             <div className="diff-note">No changed lines to show</div>

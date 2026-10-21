@@ -16,18 +16,19 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { DiffFile } from "../../api/types";
-import { COMMIT_MSG_PATH } from "../../api/types";
+import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../../api/types";
+import type { ReviewFile } from "../../lib/attachments";
 import { anchorAt, shownAt, type UiThread } from "../../lib/comments";
 import {
+  attachmentPaths,
   diffTotals,
   fileStatus,
   splitExtension,
-  statusLetter,
   treePaths,
 } from "../../lib/diffview";
 import { buildTree, type TreeNode } from "../../lib/fileTree";
 import { REVEAL, useReview } from "../../pages/reviewContext";
+import StatusMark from "./StatusMark";
 
 /** Where in its file the diff shows a thread. */
 function threadLines(t: UiThread): string {
@@ -39,21 +40,31 @@ function threadLines(t: UiThread): string {
 }
 
 /** The row's trailing lane: draft and published comment counts, the +/-
- * churn, then the status letter. Binary files carry no churn. */
+ * churn, then the status letter. Binary files carry no churn. An
+ * attachment carries no churn either, because nothing diffs it. It shows
+ * a paperclip for its status, and the revision it carries forward from
+ * when that is not the one on screen. */
 function Counts({
   file,
   drafts,
   published,
 }: {
-  file: DiffFile;
+  file: ReviewFile;
   drafts: number;
   published: number;
 }) {
+  const { selected } = useReview();
+  const from = file.attachment?.revision;
   return (
     <span className="rail-counts">
       {drafts > 0 ? <span className="rail-drafts">{drafts}d</span> : null}
       {published > 0 ? <span>{published}c</span> : null}
-      {file.binary ? (
+      {from !== undefined && from !== selected ? (
+        <span className="dim" title={`attached to r${from}`}>
+          r{from}
+        </span>
+      ) : null}
+      {file.attachment ? null : file.binary ? (
         <span className="dim">bin</span>
       ) : (
         <>
@@ -61,7 +72,9 @@ function Counts({
           <span className="minus">−{file.deletions}</span>
         </>
       )}
-      <span className="rail-status">{statusLetter(file)}</span>
+      <span className="rail-status">
+        <StatusMark file={file} />
+      </span>
     </span>
   );
 }
@@ -69,6 +82,7 @@ function Counts({
 /** The icon of a file row: an added or deleted file says so. */
 const FILE_ICON: Record<ReturnType<typeof fileStatus>, LucideIcon> = {
   added: FilePlus,
+  attachment: File,
   deleted: FileMinus,
   message: File,
   modified: File,
@@ -96,7 +110,8 @@ function flip(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
 }
 
 /** Left rail: the diff as a directory tree, each file with its status, its
- * comment counts and its +/- churn. Selecting a file expands its section
+ * comment counts and its +/- churn. The attachments follow in a tree of
+ * their own, grouped by the directories in their names. Selecting a file expands its section
  * and scrolls to it. A file with published threads opens to a row per
  * thread, and each row links to its thread. The title row toggles all
  * sections at once. A long diff needs this bulk toggle, because every
@@ -109,7 +124,7 @@ export default function FileRail({
   allExpanded,
   onToggleAll,
 }: {
-  files: DiffFile[];
+  files: ReviewFile[];
   threadsByFile: Map<string, UiThread[]>;
   activeIndex: number | null;
   onSelect: (index: number) => void;
@@ -119,6 +134,7 @@ export default function FileRail({
   const { linkHref } = useReview();
   const message = files.findIndex((f) => f.path === COMMIT_MSG_PATH);
   const tree = useMemo(() => buildTree(treePaths(files)), [files]);
+  const attachments = useMemo(() => buildTree(attachmentPaths(files)), [files]);
   const [closedDirs, setClosedDirs] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -215,17 +231,24 @@ export default function FileRail({
     );
   };
 
-  const nodeRows = (node: TreeNode, depth: number): ReactNode => {
+  // `scope` keeps a directory of the attachments apart from a directory of
+  // the commit's tree with the same path.
+  const nodeRows = (
+    node: TreeNode,
+    depth: number,
+    scope: string,
+  ): ReactNode => {
     if (node.kind === "file") return fileRows(node.index, node.name, depth);
-    const open = !closedDirs.has(node.path);
+    const key = scope + node.path;
+    const open = !closedDirs.has(key);
     return (
-      <li key={node.path}>
+      <li key={key}>
         <button
           className="rail-row rail-dir"
           aria-expanded={open}
           style={indent(depth)}
           onClick={() => {
-            setClosedDirs((cur) => flip(cur, node.path));
+            setClosedDirs((cur) => flip(cur, key));
           }}
         >
           <span className="rail-toggle rail-toggle-chevron">
@@ -235,7 +258,7 @@ export default function FileRail({
           {node.name.replaceAll("/", " / ")}
         </button>
         {open ? (
-          <ul>{node.children.map((c) => nodeRows(c, depth + 1))}</ul>
+          <ul>{node.children.map((c) => nodeRows(c, depth + 1, scope))}</ul>
         ) : null}
       </li>
     );
@@ -264,7 +287,11 @@ export default function FileRail({
       <div className="rail-tree" ref={port}>
         <ul>
           {message === -1 ? null : fileRows(message, "Commit message", 0)}
-          {tree.map((n) => nodeRows(n, 0))}
+          {tree.map((n) => nodeRows(n, 0, ""))}
+          {attachments.length > 0 ? (
+            <li className="rail-section">Attachments</li>
+          ) : null}
+          {attachments.map((n) => nodeRows(n, 0, ATTACHMENT_PREFIX))}
         </ul>
       </div>
     </>

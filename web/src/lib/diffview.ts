@@ -1,14 +1,19 @@
 // Pure diff-presentation logic, kept out of components so it stays testable.
 
 import type { CommentRange, DiffFile, Hunk, Line, Side } from "../api/types";
-import { COMMIT_MSG_PATH } from "../api/types";
+import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../api/types";
+import type { ReviewFile } from "./attachments";
 import { buildTree, fileOrder } from "./fileTree";
 import { intraline_marks } from "./wasm";
 
 /** Display label for a diff path: the synthetic /COMMIT_MSG file reads
- * "Commit message" (gerrit-style); real paths are themselves. */
+ * "Commit message" (gerrit-style), an attachment reads its name, and real
+ * paths are themselves. */
 export function displayPath(path: string): string {
-  return path === COMMIT_MSG_PATH ? "Commit message" : path;
+  if (path === COMMIT_MSG_PATH) return "Commit message";
+  return path.startsWith(ATTACHMENT_PREFIX)
+    ? path.slice(ATTACHMENT_PREFIX.length)
+    : path;
 }
 
 /** The file of `files` at `path`, under its new path or its old one. */
@@ -21,28 +26,44 @@ export function fileDomId(index: number): string {
   return `file-${index}`;
 }
 
-/** The paths of `files` for `buildTree`. The commit message is not a
- * file, so it has no path in the tree. */
-export const treePaths = (files: readonly DiffFile[]) =>
-  files.map((f) => (f.path === COMMIT_MSG_PATH ? null : f.path));
+/** The paths of `files` for `buildTree`. The commit message and the
+ * attachments are not in the commit's tree, so they have no path in it. */
+export const treePaths = (files: readonly ReviewFile[]) =>
+  files.map((f) =>
+    f.path === COMMIT_MSG_PATH || f.attachment ? null : f.path,
+  );
+
+/** The attachment names of `files` for `buildTree`, `null` for the rest. */
+export const attachmentPaths = (files: readonly ReviewFile[]) =>
+  files.map((f) => f.attachment?.name ?? null);
 
 /** The diff in tree order: the commit message first (it is not a file),
- * then the order of `buildTree`. Git emits deltas in plain path order,
+ * then the order of `buildTree`, then the attachments in the order of
+ * their own tree. Git emits deltas in plain path order,
  * which interleaves directories and files, so the sections would
  * otherwise scroll in an order the rail never reads. */
-export function treeOrder(files: DiffFile[]): DiffFile[] {
+export function treeOrder<F extends ReviewFile>(files: F[]): F[] {
   const message = files.filter((f) => f.path === COMMIT_MSG_PATH);
-  const order = fileOrder(buildTree(treePaths(files)));
+  const order = [
+    ...fileOrder(buildTree(treePaths(files))),
+    ...fileOrder(buildTree(attachmentPaths(files))),
+  ];
   return [...message, ...order.flatMap((i) => files[i] ?? [])];
 }
 
 /** The status a file shows. The commit message is not an added file, so
- * it shows `message`. */
-export const fileStatus = (file: DiffFile) =>
-  file.path === COMMIT_MSG_PATH ? "message" : file.status;
+ * it shows `message`, and an attachment is not one of the commit's files,
+ * so it shows `attachment`. */
+export const fileStatus = (file: ReviewFile) =>
+  file.path === COMMIT_MSG_PATH
+    ? "message"
+    : file.attachment
+      ? "attachment"
+      : file.status;
 
 const STATUS_LETTER: Record<ReturnType<typeof fileStatus>, string> = {
   added: "A",
+  attachment: "",
   deleted: "D",
   message: "",
   modified: "M",
@@ -51,7 +72,7 @@ const STATUS_LETTER: Record<ReturnType<typeof fileStatus>, string> = {
 
 /** Status letter for a file's stat box. The commit message gets none (its
  * empty box keeps flex alignment). */
-export function statusLetter(file: DiffFile): string {
+export function statusLetter(file: ReviewFile): string {
   return STATUS_LETTER[fileStatus(file)];
 }
 
@@ -70,7 +91,7 @@ export function splitExtension(name: string): [stem: string, ext: string] {
  * entry is excluded from the count and the sums alike — it is not a file,
  * and its message churn would distort the code totals. Binary files count
  * as files but contribute 0/0. */
-export function diffTotals(files: DiffFile[]): {
+export function diffTotals(files: ReviewFile[]): {
   count: number;
   additions: number;
   deletions: number;
@@ -79,7 +100,7 @@ export function diffTotals(files: DiffFile[]): {
   let additions = 0;
   let deletions = 0;
   for (const file of files) {
-    if (file.path === COMMIT_MSG_PATH) continue;
+    if (file.path === COMMIT_MSG_PATH || file.attachment) continue;
     count++;
     additions += file.additions;
     deletions += file.deletions;
