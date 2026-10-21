@@ -244,7 +244,8 @@ pub(super) async fn upload(
 /// The request is the entry it appends.
 ///
 /// Any revision of the change takes an attachment, not only the latest.
-/// A name the revision already holds with the same hash appends nothing.
+/// A name the revision already shows with the same hash appends nothing,
+/// whether the revision holds it or it carries forward.
 /// A revision or a blob that does not exist is a 404, and so is a blob
 /// that a collection deleted before the attach: upload it again.
 #[utoipa::path(post, path = "/api/changes/{id}/attachments", params(("id" = ChangeNumber, Path)), request_body = AttachPayload, responses((status = 200, body = ChangeDetail)))]
@@ -255,16 +256,15 @@ pub(super) async fn attach(
 ) -> Result<Json<ChangeDetail>, Error> {
     with_conn(state.pool(), move |conn| {
         let appended = append(&state, conn, id, |change, tx| {
-            let Some(revision) = change.revision(req.revision) else {
+            if change.revision(req.revision).is_none() {
                 return Err(Error::not_found(format!(
                     "change {id} has no revision {}",
                     req.revision
                 )));
-            };
-            if revision
-                .attachments
-                .iter()
-                .any(|a| a.name == req.name && a.hash == req.hash)
+            }
+            if change
+                .attachment_at(req.revision, req.name.as_str())
+                .is_some_and(|a| a.hash == req.hash)
             {
                 return Ok(Vec::new());
             }

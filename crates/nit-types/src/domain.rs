@@ -33,7 +33,8 @@
 //!
 //! **Attachment** — a file a revision carries beside its commit, under
 //! a name that is a relative path. Its bytes are named by their hash, so
-//! the same bytes can sit on many revisions.
+//! the same bytes can sit on many revisions. A later revision shows it too
+//! ([`EffectiveAttachment`]).
 //!
 //! **Tag** — a `key: value` label set on a change. A `tags` entry
 //! stands on its own, so a key keeps its value until a later entry names

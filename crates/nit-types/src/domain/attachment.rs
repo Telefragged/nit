@@ -174,3 +174,18 @@ pub struct AttachmentProjection {
     pub name: AttachmentName,
     pub hash: AttachmentHash,
 }
+
+/// An attachment as one revision shows it.
+///
+/// A revision shows, for each name, the attachment of the latest revision
+/// at or below it that holds that name. So an attachment carries forward
+/// until a later revision replaces it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
+pub struct EffectiveAttachment {
+    pub name: AttachmentName,
+    pub hash: AttachmentHash,
+    /// The revision that holds it, at or below the one that shows it.
+    pub revision: RevisionNumber,
+}

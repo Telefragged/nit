@@ -92,6 +92,7 @@ fn write_wire_types() {
         crate::domain::AttachmentHash,
         crate::domain::AttachmentName,
         crate::domain::AttachmentProjection,
+        crate::domain::EffectiveAttachment,
         crate::domain::RevisionProjection,
         crate::domain::ThreadComment,
         crate::domain::ThreadProjection,

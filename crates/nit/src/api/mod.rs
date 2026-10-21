@@ -306,6 +306,7 @@ pub(super) fn hangs_under(anchor: &Anchor) -> Option<u64> {
 fn snapshot_line_text(
     blobs: &attachments::Blobs,
     git_dir: &str,
+    change: &ChangeProjection,
     revision: &RevisionProjection,
     anchor: &Anchor,
 ) -> Option<String> {
@@ -313,10 +314,7 @@ fn snapshot_line_text(
     match (anchor.file(), hangs_under(anchor)) {
         (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&revision.message, line),
         (Some(file), Some(line)) if let Some(name) = diff::attachment_name(file) => {
-            let attachment = revision
-                .attachments
-                .iter()
-                .find(|a| a.name.as_str() == name)?;
+            let attachment = change.attachment_at(revision.number, name)?;
             diff::nth_line(&blobs.text(&attachment.hash)?, line)
         }
         (Some(file), Some(line)) => {
