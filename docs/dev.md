@@ -88,7 +88,13 @@ cd web && nix develop -c npm run screenshots
 ```
 
 It covers detailed states (drafts, 409s, interdiff); add a capture with
-every new page or state. The npm `@playwright/test` version must match
+every new page or state. Each capture also writes `screenshots/<name>.html`:
+the same state as one file, with its CSS inlined and its scripts removed.
+Attach it to a UI change so that the reviewer reads the page in nit:
+
+````sh
+nit attach screenshots/review-attachments.html --change <number>
+``` The npm `@playwright/test` version must match
 `pkgs.playwright-driver` (the devShell sets `$PLAYWRIGHT_DRIVER_VERSION`) —
 the `web-screenshots` flake check runs it in the sandbox and its
 output _is_ the PNGs, so `nix build .#checks.<system>.web-screenshots` both
@@ -123,14 +129,14 @@ catches a skew and gives you the gallery in `result/`.
 
   ```sh
   git worktree add .worktrees/<slug> -b track/<slug> main
-  ```
+````
 
-  Address the worktree explicitly — absolute paths,
-  `cargo --manifest-path <worktree>/crates/nit/Cargo.toml`,
-  `git -C <worktree>` — never an ambient cwd, which may have drifted back
-  to the primary checkout. Commit there, drive the review loop, merge via
-  the approve action, then `git worktree remove .worktrees/<slug>` and
-  delete the branch ("Merging changes").
+Address the worktree explicitly — absolute paths,
+`cargo --manifest-path <worktree>/crates/nit/Cargo.toml`,
+`git -C <worktree>` — never an ambient cwd, which may have drifted back
+to the primary checkout. Commit there, drive the review loop, merge via
+the approve action, then `git worktree remove .worktrees/<slug>` and
+delete the branch ("Merging changes").
 
 - **Parallel chains stay independent**: never pre-merge in-flight branches
   into a shared integration branch — each is built and reviewed on its own,
