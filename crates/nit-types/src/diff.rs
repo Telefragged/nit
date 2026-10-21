@@ -4,6 +4,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{FileStatus, LineKind};
 
+/// The reserved path of a diff's synthetic file for the revision's commit
+/// message.
+///
+/// Git tree paths cannot start with `/`, so it can never collide with a
+/// real file.
+pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
+
+/// The reserved prefix of an attachment's path: a thread on the attachment
+/// `plan.md` anchors at the file `/attachments/plan.md`.
+///
+/// Like [`COMMIT_MSG_PATH`], it cannot collide with a tree file.
+pub const ATTACHMENT_PREFIX: &str = "/attachments/";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]

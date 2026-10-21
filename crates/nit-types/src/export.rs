@@ -1,5 +1,6 @@
 //! Drift guard for `web/src/api/types.gen.ts`: with the `ts` feature this test
-//! concatenates every web-facing wire type's ts-rs declaration into one module
+//! concatenates every web-facing wire type's ts-rs declaration, and the wire's
+//! constants, into one module
 //! and writes it where the `gen-types` app / `types-drift` check ask (the
 //! `TYPES_GEN_OUT` env var). The exact TS shapes come from the types' own
 //! `ts`/`serde` attributes and their doc-comments, so a term defined on a wire
@@ -99,5 +100,24 @@ fn write_wire_types() {
         crate::domain::ReviewProjection,
         crate::domain::ChangeProjection,
     );
+    for (name, value) in [
+        (
+            "diff::COMMIT_MSG_PATH",
+            format!("{:?}", crate::diff::COMMIT_MSG_PATH),
+        ),
+        (
+            "diff::ATTACHMENT_PREFIX",
+            format!("{:?}", crate::diff::ATTACHMENT_PREFIX),
+        ),
+        (
+            "attachments::MAX_TEXT_SIZE",
+            crate::attachments::MAX_TEXT_SIZE.to_string(),
+        ),
+    ] {
+        let short = name.rsplit("::").next().unwrap_or(name);
+        out.push_str(&format!(
+            "/** `crate::{name}`. */\nexport const {short} = {value};\n\n"
+        ));
+    }
     std::fs::write(path, out).expect("write types.gen.ts");
 }
