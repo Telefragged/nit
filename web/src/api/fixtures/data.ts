@@ -825,6 +825,14 @@ const change12: ChangeRecord = {
       fork_sha: parent10,
       message: msg12r1,
       created_at: ago(90),
+      // One attachment of each kind. The screenshot harness serves the
+      // bytes behind each hash (ATTACHMENT_BLOBS in capture.mjs).
+      attachments: [
+        { name: "out/nit-log.txt", hash: "a".repeat(64) },
+        { name: "plan/rotation.md", hash: "b".repeat(64) },
+        { name: "openapi/index.html", hash: "c".repeat(64) },
+        { name: "web/screenshots/flow.svg", hash: "d".repeat(64) },
+      ],
     },
   ],
   reviews: [],

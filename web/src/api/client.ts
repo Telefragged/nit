@@ -14,6 +14,7 @@ import type {
   Draft,
   DraftDecision,
   EditDraft,
+  EffectiveAttachment,
   FileLines,
   Health,
   NewDraft,
@@ -24,6 +25,7 @@ import type {
   TagList,
   Whitespace,
 } from "./types";
+import { MAX_TEXT_SIZE } from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -181,3 +183,26 @@ export const clearDecision = (changeNumber: number) =>
  * latest revision. */
 export const submitDecisions = (query: ChangeQuery) =>
   request<BatchSubmitResult>("POST", `/submit?${changeQuery(query)}`);
+
+/** The URL of an attachment's bytes. The server picks the content type
+ * from the name's last segment. */
+export const attachmentUrl = (attachment: EffectiveAttachment) =>
+  `/api/attachments/${attachment.hash}/${encodeURIComponent(attachment.name.split("/").at(-1) ?? "")}`;
+
+/** An attachment's content as text, or null when it is not UTF-8 or is
+ * larger than `MAX_TEXT_SIZE`. Its bytes never change, so a read is good
+ * forever. */
+export async function getAttachmentText(
+  attachment: EffectiveAttachment,
+): Promise<string | null> {
+  const res = await fetch(attachmentUrl(attachment));
+  if (!res.ok)
+    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+  const bytes = await res.arrayBuffer();
+  if (bytes.byteLength > MAX_TEXT_SIZE) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}

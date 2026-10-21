@@ -28,7 +28,7 @@ function commentInput(
 }
 
 /** A change's records → its log, ascending by `position`: every revision, its
- * tags, then the reviews and author comments that opened and answered its
+ * attachments, its tags, then the reviews and author comments that opened and answered its
  * threads, in time order, then a terminal lifecycle entry. */
 export function synthLog(
   change: ChangeRecord,
@@ -56,6 +56,14 @@ export function synthLog(
         resets_status: true,
       },
     });
+  }
+  for (const r of change.revisions) {
+    for (const a of r.attachments ?? []) {
+      add(r.created_at, {
+        kind: "attach",
+        payload: { revision: r.number, name: a.name, hash: a.hash },
+      });
+    }
   }
   if (change.tags) {
     const tip = change.revisions[change.revisions.length - 1];

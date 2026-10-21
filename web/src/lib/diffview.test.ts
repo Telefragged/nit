@@ -11,6 +11,7 @@ import {
   splitExtension,
   treeOrder,
 } from "./diffview";
+import type { ReviewFile } from "./attachments";
 
 const ctx = (old: number, nw: number, text = "ctx"): Line => ({
   kind: "context",
@@ -272,6 +273,16 @@ describe("treeOrder", () => {
       COMMIT_MSG_PATH,
       "a.rs",
     ]);
+  });
+
+  it("puts the attachments after the commit's files, in their own tree", () => {
+    const attached = (name: string): ReviewFile => ({
+      ...file(`/attachments/${name}`),
+      attachment: { name, hash: "a".repeat(64), revision: 0 },
+    });
+    expect(
+      paths([attached("z.md"), attached("plan/a.md"), file("b.rs")]),
+    ).toEqual(["b.rs", "/attachments/plan/a.md", "/attachments/z.md"]);
   });
 
   it("leaves the caller's array alone", () => {

@@ -593,3 +593,41 @@ button.rail-toggle,
   font-size: 12px;
   text-align: center;
 }
+
+/* attachments: their own group below the commit's files in the rail, and
+   a rendered body in place of lines in the diff (AttachmentView.tsx) */
+.rail-section {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-faint);
+  padding: 10px 8px 4px;
+}
+
+/* The paperclip is wider than the 1ch lane. Packed to the right, it
+   overflows to the left, where it adds no horizontal scroll to the rail. */
+.rail-status:has(svg) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.attachment {
+  display: block;
+  padding: 12px;
+}
+
+.attachment-image img {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.attachment-frame {
+  width: 100%;
+  height: 70vh;
+  padding: 0;
+  border: none;
+  background: #fff;
+}

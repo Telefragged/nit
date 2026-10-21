@@ -3,6 +3,7 @@
 
 import type {
   Anchor,
+  AttachmentProjection,
   ChangeStatus,
   DiffFile,
   PortedComment,
@@ -19,12 +20,13 @@ export type AuthoredFile = Omit<DiffFile, "old_total" | "new_total"> & {
   old_total?: number;
   new_total?: number;
 };
-/** A revision as authored in ./data: its subject and status are folded,
- * never written. */
+/** A revision as authored in ./data: its subject, status and shown
+ * attachments are folded, never written. `attachments` are the ones put on
+ * this revision itself, which the synth log writes as `attach` entries. */
 export type AuthoredRevision = Omit<
   Revision,
   "subject" | "status" | "attachments"
->;
+> & { attachments?: AttachmentProjection[] };
 interface AuthoredDiff {
   files: AuthoredFile[];
 }

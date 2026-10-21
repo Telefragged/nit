@@ -1,6 +1,7 @@
 import {
   skipToken,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -23,6 +24,7 @@ import {
 } from "react-router-dom";
 import {
   createDraft,
+  getAttachmentText,
   getChangeDrafts,
   getDiff,
   getPorted,
@@ -66,6 +68,7 @@ import {
   type DiffRange,
   type UiThread,
 } from "../lib/comments";
+import { attachmentFile, readsText, type ReviewFile } from "../lib/attachments";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import {
   clickLink,
@@ -396,9 +399,39 @@ export default function ReviewPage() {
     enabled: published !== undefined,
     retry: false,
   });
+  // The list of attachments comes from the projection, so a new attachment
+  // appears as soon as the stream delivers its attach entry. The page reads
+  // only their bytes, by hash, and the bytes for a hash never change.
+  const shownAttachments = useMemo(
+    () =>
+      published?.revisions.find((r) => r.number === selected)?.attachments ??
+      [],
+    [published, selected],
+  );
+  const textReads = useQueries({
+    queries: shownAttachments.filter(readsText).map((attachment) => ({
+      queryKey: ["attachment", attachment.hash],
+      queryFn: () => getAttachmentText(attachment),
+      staleTime: Infinity,
+    })),
+  });
+  const attachmentFiles = useMemo(() => {
+    const texts = new Map(
+      shownAttachments
+        .filter(readsText)
+        .map((a, i) => [a.hash, textReads[i]?.data ?? null] as const),
+    );
+    return shownAttachments.map((a) =>
+      attachmentFile(a, texts.get(a.hash) ?? null),
+    );
+  }, [shownAttachments, textReads]);
   // Tree order, not git's: the rail renders the same list as a tree, and
   // the sections below must scroll in the order it reads (`treeOrder`).
-  const files = useMemo(() => treeOrder(diffQ.data?.files ?? []), [diffQ.data]);
+  const files = useMemo(
+    () =>
+      treeOrder<ReviewFile>([...(diffQ.data?.files ?? []), ...attachmentFiles]),
+    [diffQ.data, attachmentFiles],
+  );
 
   // Collapsed-by-default file sections, keyed by file path so the
   // reviewer's open files survive revision/base switches; only another
@@ -910,7 +943,7 @@ export default function ReviewPage() {
     published === undefined ||
     memberProjections.length === 0 ||
     overlaysLoading ||
-    [repoQ, draftsQ, diffQ, portedQ].some((q) => q.isLoading);
+    [repoQ, draftsQ, diffQ, portedQ, ...textReads].some((q) => q.isLoading);
 
   // The change's published projection arrives over the websocket (no fetch to
   // error on); a bad change number surfaces when its drafts read fails.

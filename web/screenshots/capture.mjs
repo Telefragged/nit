@@ -206,6 +206,52 @@ const applySetting = async (page, name) => {
   await untilReady(page);
 };
 
+/** The bytes behind each attachment of change 12. */
+const ATTACHMENT_BLOBS = {
+  ["a".repeat(64)]: {
+    contentType: "text/plain; charset=utf-8",
+    body: [
+      "change 12  position 0  revision 3f2a9c1  auth: document rotation",
+      "change 12  position 1  r0  attach plan/rotation.md",
+      "change 12  position 2  r0  attach web/screenshots/flow.svg",
+      "",
+    ].join("\n"),
+  },
+  ["b".repeat(64)]: {
+    contentType: "text/markdown; charset=utf-8",
+    body: [
+      "# Rotation plan",
+      "",
+      "1. Issue a successor token in the same **family** on every use.",
+      "2. Revoke the whole family when a rotated token comes back.",
+      "",
+      "| Step | Owner |",
+      "| ---- | ----- |",
+      "| Schema | storage |",
+      "| Endpoint | api |",
+      "",
+    ].join("\n"),
+  },
+  ["c".repeat(64)]: {
+    contentType: "text/html; charset=utf-8",
+    body:
+      "<!doctype html><body style='font-family:sans-serif;padding:16px'>" +
+      "<h2>POST /auth/refresh</h2><p>Rotates a refresh token.</p>" +
+      "<p id='js'>scripts did not run</p>" +
+      "<script>document.getElementById('js').textContent = 'scripts ran in the sandbox';</script>",
+  },
+  ["d".repeat(64)]: {
+    contentType: "image/svg+xml",
+    body:
+      "<svg xmlns='http://www.w3.org/2000/svg' width='360' height='120'>" +
+      "<rect x='10' y='30' width='100' height='60' rx='8' fill='#4f8cff'/>" +
+      "<rect x='250' y='30' width='100' height='60' rx='8' fill='#33b074'/>" +
+      "<path d='M112 60 H246' stroke='#888' stroke-width='3'/>" +
+      "<text x='60' y='65' text-anchor='middle' fill='#fff'>token</text>" +
+      "<text x='300' y='65' text-anchor='middle' fill='#fff'>successor</text></svg>",
+  },
+};
+
 /**
  * Page states to capture. `actions` runs after load to put the page into a
  * specific state (toggles, editors, error paths). Add an entry whenever a
@@ -385,6 +431,44 @@ const captures = [
         ),
       );
       await untilSpySettled(page);
+    },
+  },
+  // Attachments: their own group under the commit's files in the rail,
+  // and each kind rendered in its section. The HTML page runs its script
+  // inside the sandbox.
+  {
+    name: "review-attachments",
+    path: "/changes/12?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      // The Markdown section shows either the rendered text or, when its
+      // read failed, the binary note. Waiting for either one fails a bad
+      // read here, instead of waiting forever for the text.
+      const plan = '[data-diff-path="/attachments/plan/rotation.md"]';
+      await untilDom(
+        page,
+        (sel) =>
+          !!document
+            .querySelector(sel)
+            ?.querySelector(".attachment-markdown, .diff-note"),
+        plan,
+      );
+      await expectOne(page.locator(`${plan} .attachment-markdown`));
+      await page
+        .locator(".attachment-image img")
+        .evaluate((img) => img.decode());
+      const frame = await (
+        await page.locator(".attachment-frame").elementHandle()
+      ).contentFrame();
+      // The page's script runs while the document parses, so its text is
+      // final by the load event.
+      await frame.waitForLoadState("load");
+      const ran = await frame.evaluate(
+        () => document.getElementById("js")?.textContent,
+      );
+      if (ran !== "scripts ran in the sandbox") {
+        throw new Error(`the HTML attachment's script did not run: ${ran}`);
+      }
     },
   },
   // Collapsed-by-default file sections: only the synthetic commit message
@@ -864,10 +948,21 @@ async function main() {
     // on a starved CI runner. The CI job bounds a hang.
     context.setDefaultTimeout(0);
     // Keep captures order-independent (e.g. the persisted diff layout).
-    await context.addInitScript(() => localStorage.clear());
+    // A sandboxed attachment frame has no storage to clear, and reading it
+    // there throws.
+    await context.addInitScript(() => {
+      if (window === window.top) localStorage.clear();
+    });
 
     for (const cap of captures) {
       const page = await context.newPage();
+      await page.route("**/api/attachments/**", (route) => {
+        const hash = new URL(route.request().url()).pathname.split("/")[3];
+        const blob = ATTACHMENT_BLOBS[hash];
+        return blob
+          ? route.fulfill({ contentType: blob.contentType, body: blob.body })
+          : route.fulfill({ status: 404 });
+      });
       const errors = [];
       page.on("pageerror", (err) => errors.push(String(err)));
       try {
