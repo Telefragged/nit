@@ -1,6 +1,6 @@
 ---
 name: install
-description: Set nit up for this project — make the nit CLI reachable (install to PATH or run on demand), verify the server, ensure commits get a Change-Id, then record the project's approve action in CLAUDE.md/AGENTS.md so agents drive every change through review. Use on "set up nit", "install nit", or first-time onboarding of a repo to nit.
+description: Set nit up for this project — verify the server, ensure commits get a Change-Id, then record the project's approve action in CLAUDE.md/AGENTS.md so agents drive every change through review. Use on "set up nit", "install nit", or first-time onboarding of a repo to nit.
 ---
 
 # /nit:install — onboard this project to nit
@@ -13,34 +13,10 @@ and route everything through `nit comment`.
 the decisions into one upfront plan or a single multi-question prompt. Do a
 step, and when it needs a choice ask exactly one AskUserQuestion for it, wait
 for the answer, act on it, then move to the next step. Later steps depend on
-earlier answers — the CLI choice threads through every command below, the file
-you write depends on the scope you pick — so a question often can't even be
-framed until you reach it.
+earlier answers — the file you write depends on the scope you pick — so a
+question often can't even be framed until you reach it.
 
-## 1. Make the `nit` CLI reachable
-
-Ask the user (AskUserQuestion) how they want `nit` available:
-
-- **Install to PATH** — on x86_64 Linux, run
-  `curl -fsSL https://github.com/Telefragged/nit/releases/latest/download/install.sh | sh`.
-  With nix, run `nix profile add github:Telefragged/nit`, or use the
-  home-manager module that the README shows. After this, `nit` is a normal
-  command anywhere. Best when nit is used often.
-- **Run on demand** — no install; invoke `nix run github:Telefragged/nit -- <args>`
-  each time (e.g. `nix run github:Telefragged/nit -- push`). Best
-  for a one-off or to avoid touching the user's profile.
-
-Carry the choice through the rest of setup: everywhere below that says `nit`,
-the on-demand path is `nix run github:Telefragged/nit --`.
-
-Verify it resolves:
-
-```sh
-nit --version                              # PATH install
-nix run github:Telefragged/nit -- --version   # on demand
-```
-
-## 2. Confirm the server is up
+## 1. Confirm the server is up
 
 A push needs a running server. Check it (don't start one — the server and its
 database belong to the user):
@@ -49,11 +25,10 @@ database belong to the user):
 curl -fsS "${NIT_SERVER:-http://127.0.0.1:8877}/api/health"
 ```
 
-If it's down, tell the user to start it (`nit serve`, or
-`nix run github:Telefragged/nit -- serve`) and point `$NIT_SERVER` at it if
-it's not on the default `http://127.0.0.1:8877`.
+If it's down, tell the user to start it (`nit serve`) and point `$NIT_SERVER`
+at it if it's not on the default `http://127.0.0.1:8877`.
 
-## 3. Register the repo
+## 2. Register the repo
 
 A repo must be registered before anything can be pushed — a `nit push` into an
 unregistered repo is rejected (404). Register it once, pinning its canonical
@@ -71,7 +46,7 @@ branch, `main`/`master`, `git symbolic-ref refs/remotes/origin/HEAD`) and offer
 them as the suggested options, but the choice is the user's. A 409 means the
 repo is already registered — nothing to do.
 
-## 4. Choose where agent instructions live
+## 3. Choose where agent instructions live
 
 Steps 5 and 6 record nit's conventions into agent config — the Change-Id
 convention (when you document it rather than hook it) and the approve action.
@@ -91,7 +66,7 @@ a Claude Code plugin installs at:
 At the **User** scope, the `<base>` branch and approve action recorded later
 are still this project's — flag that they describe the repo you ran setup in.
 
-## 5. Make sure commits get a Change-Id
+## 4. Make sure commits get a Change-Id
 
 nit identifies a change by a `Change-Id` trailer on its commit — the stable
 id that survives amends and rebases — so every pushed commit needs one. It
@@ -126,7 +101,7 @@ If nothing adds one, ask the user (AskUserQuestion) which they'd prefer:
   ```
 
 - **Document it in the agent instructions** — if a hook isn't wanted, append
-  to the file you chose in step 4 that every commit needs a `Change-Id: I…`
+  to the file you chose in step 3 that every commit needs a `Change-Id: I…`
   trailer in its final trailer block (no blank line splitting that block),
   generated with:
 
@@ -134,14 +109,14 @@ If nothing adds one, ask the user (AskUserQuestion) which they'd prefer:
   python3 -c 'import secrets; print("I"+secrets.token_hex(20))'
   ```
 
-## 6. Record the approve action
+## 5. Record the approve action
 
 Ask the user (AskUserQuestion) for this project's **approve action**: the
 steps to take once a change reaches the `approved` state — how this project
 lands approved work (e.g. rebase-and-fast-forward, merge the PR, run a deploy
 script). This is project-specific; nit does not prescribe it.
 
-Then append a short section to the file you chose in step 4, so every agent
+Then append a short section to the file you chose in step 3, so every agent
 knows to route work through review (filling in `<base>` with the registered
 canonical ref and their approve action verbatim):
 
@@ -164,9 +139,8 @@ it.
 <the approve action the user described>
 ```
 
-## 7. Confirm
+## 6. Confirm
 
-Report back: how `nit` is reachable, whether the server answered, that the
-repo is registered (and its canonical ref), how Change-Ids are provided, and
-which file you wrote the approve action into. Suggest the user try `/nit:goal`
-on their next change.
+Report back: whether the server answered, that the repo is registered (and
+its canonical ref), how Change-Ids are provided, and which file you wrote the
+approve action into. Suggest the user try `/nit:goal` on their next change.
