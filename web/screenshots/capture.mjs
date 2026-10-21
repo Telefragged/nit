@@ -9,7 +9,8 @@
 // NIT_SCREENSHOT_PORT to pin it when a stable URL is wanted.
 //
 // Output: <repo root>/screenshots/*.png (gitignored), or
-// $NIT_SCREENSHOT_OUT_DIR when set.
+// $NIT_SCREENSHOT_OUT_DIR when set. Each capture also writes a static
+// <name>.html of the same state, ready to attach to a change in nit.
 //
 // Browsers come from the nix devShell ($PLAYWRIGHT_BROWSERS_PATH); the
 // @playwright/test npm version is pinned to the driver version. Never run
@@ -24,6 +25,7 @@ import {
   mkdtempSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -161,6 +163,45 @@ const revealContext = async (page, button) => {
  * fixtures seed none, so it can only be the one the capture saved. */
 const untilResolutionDraft = (page) =>
   untilDom(page, () => !!document.querySelector(".comment-resolution-only"));
+
+/** The page half of a capture's `.html`: the DOM with every stylesheet
+ * inlined and every script removed. The file then renders on its own, for
+ * example as a nit attachment, and nothing on it responds to input. An
+ * embedded image or page carries its content too, as a `data:` URL or a
+ * `srcdoc`, because the file has no server to fetch it from. */
+async function snapshot() {
+  const css = [...document.styleSheets]
+    .map((sheet) => [...sheet.cssRules].map((rule) => rule.cssText).join("\n"))
+    .join("\n");
+  const doc = document.documentElement.cloneNode(true);
+  doc
+    .querySelectorAll(
+      "script, style, link[rel=stylesheet], link[rel=modulepreload]",
+    )
+    .forEach((el) => el.remove());
+  const style = document.createElement("style");
+  style.textContent = css;
+  doc.querySelector("head").append(style);
+  const fetchOk = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`snapshot: ${url} answered ${res.status}`);
+    return res;
+  };
+  for (const img of doc.querySelectorAll("img[src]:not([src^='data:'])")) {
+    const blob = await (await fetchOk(img.getAttribute("src"))).blob();
+    img.src = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+  for (const frame of doc.querySelectorAll("iframe[src]")) {
+    frame.srcdoc = await (await fetchOk(frame.getAttribute("src"))).text();
+    frame.removeAttribute("src");
+  }
+  return "<!doctype html>\n" + doc.outerHTML;
+}
 
 /** Scrolls the one element `locator` names to the middle of the viewport. */
 const centerOn = async (page, locator) => {
@@ -973,6 +1014,12 @@ async function main() {
         err.message = `capture ${cap.name}: ${err.message}`;
         throw err;
       }
+      // Before the full-page style below, so the snapshot keeps the review
+      // bar fixed as the page has it.
+      writeFileSync(
+        resolve(outDir, `${cap.name}.html`),
+        await page.evaluate(snapshot),
+      );
       // Fixed elements repeat confusingly in full-page captures; pin the
       // review bar to the end of the document instead. Viewport captures
       // keep it fixed so bar + modal render as they really stack.
