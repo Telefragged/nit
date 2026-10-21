@@ -15,16 +15,7 @@ use nit_types::domain::{DiffView, FileStatus, LineKind};
 
 use crate::hunks::{self, wire_line};
 
-/// The reserved synthetic diff path for the revision's commit message.
-///
-/// Git tree paths cannot start with `/`, so it can never collide with a
-/// real file.
-pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
-
-/// The reserved prefix of an attachment's synthetic path.
-///
-/// Like [`COMMIT_MSG_PATH`], it cannot collide with a tree file.
-pub const ATTACHMENT_PREFIX: &str = "/attachments/";
+pub use nit_types::diff::{ATTACHMENT_PREFIX, COMMIT_MSG_PATH};
 
 /// The name of the attachment that `path` names, if it names one.
 #[must_use]
