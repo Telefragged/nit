@@ -67,6 +67,7 @@ pub(super) async fn create_comment(
             anchor.snapshot_line_text(snapshot_line_text(
                 state.blobs(),
                 &git_dir,
+                &change,
                 revision,
                 &anchor,
             ));

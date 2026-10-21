@@ -10,6 +10,7 @@ use crate::domain::ChangeProjection;
 use crate::domain::ChangeStatus;
 use crate::domain::Draft;
 use crate::domain::DraftDecision;
+use crate::domain::EffectiveAttachment;
 use crate::domain::RevisionNumber;
 use crate::domain::Sha;
 use crate::domain::Tag;
@@ -113,6 +114,8 @@ pub struct Revision {
     ///
     /// The last revision's is the change's status.
     pub status: ChangeStatus,
+    /// The attachments this revision shows, ordered by name.
+    pub attachments: Vec<EffectiveAttachment>,
 }
 
 /// `POST /api/changes/{id}/tags` request: the tags to put on a change.

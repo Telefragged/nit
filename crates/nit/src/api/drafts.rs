@@ -47,6 +47,7 @@ pub(super) async fn create_draft(
         anchor.snapshot_line_text(snapshot_line_text(
             state.blobs(),
             &git_dir,
+            &proj,
             revision,
             &anchor,
         ));

@@ -21,7 +21,10 @@ export type AuthoredFile = Omit<DiffFile, "old_total" | "new_total"> & {
 };
 /** A revision as authored in ./data: its subject and status are folded,
  * never written. */
-export type AuthoredRevision = Omit<Revision, "subject" | "status">;
+export type AuthoredRevision = Omit<
+  Revision,
+  "subject" | "status" | "attachments"
+>;
 interface AuthoredDiff {
   files: AuthoredFile[];
 }

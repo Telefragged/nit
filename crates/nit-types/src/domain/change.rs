@@ -7,6 +7,7 @@ use super::ChangeId;
 use super::ChangeNumber;
 use super::ChangeStatus;
 use super::CommentInput;
+use super::EffectiveAttachment;
 use super::RevisionNumber;
 use super::Sha;
 use super::Tags;
@@ -137,6 +138,72 @@ impl ChangeProjection {
     #[must_use]
     pub fn revision(&self, number: RevisionNumber) -> Option<&RevisionProjection> {
         self.revisions.get(usize::try_from(number.get()).ok()?)
+    }
+
+    /// The attachments that revision `number` shows, ordered by name.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::{
+    ///     AttachmentHash, AttachmentName, AttachmentProjection, ChangeId, ChangeNumber,
+    ///     ChangeProjection, RevisionNumber, RevisionProjection, Sha,
+    /// };
+    ///
+    /// let sha = Sha::new("a".repeat(40)).unwrap();
+    ///
+    /// let attachment = |name: &str, byte: &str| AttachmentProjection {
+    ///     name: AttachmentName::new(name).unwrap(),
+    ///     hash: AttachmentHash::new(byte.repeat(64)).unwrap(),
+    /// };
+    /// let revision = |n: u64, attachments| RevisionProjection {
+    ///     number: RevisionNumber::new(n),
+    ///     commit_sha: sha.clone(),
+    ///     parent_sha: sha.clone(),
+    ///     fork_sha: sha.clone(),
+    ///     message: String::new(),
+    ///     resets_status: true,
+    ///     created_at: String::new(),
+    ///     attachments,
+    /// };
+    /// let change_id = ChangeId::new(format!("I{}", "1".repeat(40))).unwrap();
+    /// let mut change = ChangeProjection::new(ChangeNumber::new(1), 1, change_id);
+    /// change.revisions = vec![
+    ///     revision(0, vec![attachment("plan.md", "a"), attachment("shot.png", "b")]),
+    ///     revision(1, vec![attachment("plan.md", "c")]),
+    /// ];
+    ///
+    /// let shown: Vec<(String, u64)> = change
+    ///     .effective_attachments(RevisionNumber::new(1))
+    ///     .into_iter()
+    ///     .map(|a| (a.name.to_string(), a.revision.get()))
+    ///     .collect();
+    /// assert_eq!(shown, [("plan.md".into(), 1), ("shot.png".into(), 0)]);
+    /// ```
+    #[must_use]
+    pub fn effective_attachments(&self, number: RevisionNumber) -> Vec<EffectiveAttachment> {
+        let mut by_name = std::collections::BTreeMap::new();
+        for revision in self.revisions.iter().take_while(|r| r.number <= number) {
+            for a in &revision.attachments {
+                by_name.insert(
+                    a.name.clone(),
+                    EffectiveAttachment {
+                        name: a.name.clone(),
+                        hash: a.hash.clone(),
+                        revision: revision.number,
+                    },
+                );
+            }
+        }
+        by_name.into_values().collect()
+    }
+
+    /// The attachment named `name` that revision `number` shows.
+    #[must_use]
+    pub fn attachment_at(&self, number: RevisionNumber, name: &str) -> Option<EffectiveAttachment> {
+        self.effective_attachments(number)
+            .into_iter()
+            .find(|a| a.name.as_str() == name)
     }
 
     #[must_use]

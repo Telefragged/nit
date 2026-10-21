@@ -366,6 +366,10 @@ export type Revision = {
    * The last revision's is the change's status.
    */
   status: ChangeStatus;
+  /**
+   * The attachments this revision shows, ordered by name.
+   */
+  attachments: Array<EffectiveAttachment>;
 };
 
 /**
@@ -798,6 +802,22 @@ export type AttachmentName = string;
 export type AttachmentProjection = {
   name: AttachmentName;
   hash: AttachmentHash;
+};
+
+/**
+ * An attachment as one revision shows it.
+ *
+ * A revision shows, for each name, the attachment of the latest revision
+ * at or below it that holds that name. So an attachment carries forward
+ * until a later revision replaces it.
+ */
+export type EffectiveAttachment = {
+  name: AttachmentName;
+  hash: AttachmentHash;
+  /**
+   * The revision that holds it, at or below the one that shows it.
+   */
+  revision: RevisionNumber;
 };
 
 export type RevisionProjection = {

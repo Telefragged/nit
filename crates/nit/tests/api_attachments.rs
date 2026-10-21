@@ -3,7 +3,7 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, a_change, abandon, change_log, collect, collect_attachments,
+    GitRepo, TestServer, a_change, abandon, change_log, collect, collect_attachments, http_get,
     http_get_bytes, http_post, http_put_bytes, msg,
 };
 use jiff::{SignedDuration, Timestamp};
@@ -293,4 +293,38 @@ fn comment_on_an_attachment_line_snapshots_its_text() {
 
     assert_eq!(st, 200, "{thread}");
     assert_eq!(thread["anchor"]["line"]["line_text"], "second");
+}
+
+fn amend(server: &TestServer, g: &GitRepo) {
+    let amended = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "b\n")]);
+    g.branch("feat", amended);
+    a_change(server, g, "feat");
+}
+
+/// A later revision shows an attachment until it holds another one of the
+/// same name. Attaching what a revision already shows appends nothing.
+#[test]
+fn attachments_carry_forward_by_name() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let plan = upload(&server, b"plan r0");
+    let shot = upload(&server, b"shot r0");
+    attach(&server, change_number, 0, "plan.md", &plan);
+    attach(&server, change_number, 0, "shot.png", &shot);
+    amend(&server, &g);
+    let replan = upload(&server, b"plan r1");
+    attach(&server, change_number, 1, "plan.md", &replan);
+    attach(&server, change_number, 1, "shot.png", &shot);
+
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_number}")));
+
+    assert_eq!(st, 200, "{detail}");
+    assert_eq!(
+        detail["revisions"][1]["attachments"],
+        json!([
+            { "name": "plan.md", "hash": replan, "revision": 1 },
+            { "name": "shot.png", "hash": shot, "revision": 0 },
+        ])
+    );
+    assert_eq!(attach_entries(&server, change_number).len(), 3);
 }
