@@ -124,7 +124,11 @@ fn routes() -> utoipa_axum::router::OpenApiRouter<Arc<AppState>> {
         .routes(routes!(attachments::attach))
         .routes(routes!(gc::gc))
         .routes(routes!(repos::list_repos, repos::create_repo))
-        .routes(routes!(repos::get_repo, repos::relocate_repo))
+        .routes(routes!(
+            repos::get_repo,
+            repos::relocate_repo,
+            repos::remove_repo
+        ))
         .routes(routes!(push::push))
         .routes(routes!(reviews::submit))
         .routes(routes!(changes::list_changes))

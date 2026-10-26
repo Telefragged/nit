@@ -1,9 +1,11 @@
-//! Repo endpoints: create, list, fetch, and relocate registered repos.
+//! Repo endpoints: create, list, fetch, relocate, and remove registered
+//! repos.
 
 use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
+use axum::http::StatusCode;
 use git2::Repository;
 use rusqlite::Connection;
 
@@ -11,9 +13,10 @@ use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
 
 use crate::db;
 use crate::gitscan;
+use crate::gitscan::objects;
 
 use super::canonical_git_dir;
-use super::{AppJson, AppPath, AppState, Error, with_conn};
+use super::{AppJson, AppPath, AppState, Appends, Error, with_conn};
 
 fn repo_json(conn: &Connection, row: db::RepoRow) -> Result<Repo, Error> {
     Ok(Repo {
@@ -137,6 +140,36 @@ pub(super) async fn relocate_repo(
         };
         state.ensure_repo(&row);
         Ok(Json(repo_json(conn, row)?))
+    })
+    .await
+}
+
+/// Deletes a repo and each of its changes (404 if unknown).
+///
+/// The attachments of the deleted changes stay until the next `POST
+/// /api/gc`.
+#[utoipa::path(delete, path = "/api/repos/{id}", params(("id" = u64, Path)), responses((status = 204)))]
+pub(super) async fn remove_repo(
+    State(state): State<Arc<AppState>>,
+    AppPath(repo_id): AppPath<u64>,
+) -> Result<StatusCode, Error> {
+    with_conn(state.pool(), move |conn| {
+        let mut appends = Appends::begin(conn)?;
+        if !appends.delete_repo(repo_id)? {
+            return Err(Error::not_found(format!("repo {repo_id} not found")));
+        }
+        appends.commit(&state)?;
+        // This deletes the refs only after the commit. A crash between the
+        // two can leave extra refs that pin objects. It never leaves a
+        // change without its objects.
+        if let Some(repo) = state
+            .repo_state(repo_id)
+            .and_then(|r| Repository::open(r.git_dir()).ok())
+        {
+            objects::delete_all_keep_refs(&repo);
+        }
+        state.forget_repo(repo_id);
+        Ok(StatusCode::NO_CONTENT)
     })
     .await
 }

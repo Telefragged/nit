@@ -54,10 +54,13 @@ pub fn keep_ref_name(change_number: ChangeNumber, revision_number: RevisionNumbe
     format!("{}{revision_number}", keep_ref_prefix(change_number))
 }
 
+/// The prefix of every keep ref.
+const KEEP_REF_ROOT: &str = "refs/nit/keep/";
+
 /// The prefix of the keep refs of every revision of a change.
 #[must_use]
 pub fn keep_ref_prefix(change_number: ChangeNumber) -> String {
-    format!("refs/nit/keep/{change_number}/")
+    format!("{KEEP_REF_ROOT}{change_number}/")
 }
 
 /// Ensures the keep ref for a revision exists.
@@ -102,16 +105,25 @@ fn try_ensure_keep_ref(
 /// warning and leaves the remaining refs in place. Those refs still pin
 /// their objects.
 pub fn delete_keep_refs(repo: &Repository, change_number: ChangeNumber) {
-    let glob = format!("{}*", keep_ref_prefix(change_number));
-    let deleted = repo.references_glob(&glob).and_then(|refs| {
-        refs.collect::<Result<Vec<_>, _>>()?
-            .iter_mut()
-            .try_for_each(git2::Reference::delete)
-    });
-    if let Err(err) = deleted {
+    if let Err(err) = delete_refs(repo, &format!("{}*", keep_ref_prefix(change_number))) {
         tracing::warn!(
             change_number = change_number.get(),
             "cannot delete keep refs: {err:#}"
         );
     }
+}
+
+/// Deletes the keep refs of every change, as [`delete_keep_refs`] does
+/// for one.
+pub fn delete_all_keep_refs(repo: &Repository) {
+    if let Err(err) = delete_refs(repo, &format!("{KEEP_REF_ROOT}*")) {
+        tracing::warn!("cannot delete keep refs: {err:#}");
+    }
+}
+
+fn delete_refs(repo: &Repository, glob: &str) -> Result<(), git2::Error> {
+    repo.references_glob(glob)?
+        .collect::<Result<Vec<_>, _>>()?
+        .iter_mut()
+        .try_for_each(git2::Reference::delete)
 }
