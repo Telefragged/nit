@@ -42,7 +42,16 @@ nix develop          # devShell with the full toolchain
 ```sh
 nit serve            # review UI + API on http://127.0.0.1:8877
 nit --version        # client + server build; non-zero exit if the server is down
+nit gc               # delete old closed changes and unused attachments
 ```
+
+The server deletes old data only on a `POST /api/gc` request, and
+`nit gc` sends that request. The server then deletes each merged or
+abandoned change whose last entry is older than `--retention-days` (30 by
+default), and each attachment that no change links to. `nit gc` prints how
+many changes and attachments the server deleted, and the total size of
+those attachments. Run it from a scheduler, for example a systemd timer or
+cron.
 
 Author loop (any tool that can run shell commands):
 
