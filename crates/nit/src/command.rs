@@ -44,6 +44,8 @@ enum Cmd {
     Reopen(cli::ReopenArgs),
     /// Inspect and manage registered repositories
     Repo(cli::RepoArgs),
+    /// Delete old closed changes and unreferenced attachments
+    Gc(cli::GcArgs),
     /// Follow the reviewer's entries and post each one to this session
     Watch(cli::WatchArgs),
     /// Install the Claude Code plugin that this build carries
@@ -81,6 +83,7 @@ pub fn run(args: Args) -> Result<()> {
         Cmd::Abandon(args) => cli::abandon(args),
         Cmd::Reopen(args) => cli::reopen(args),
         Cmd::Repo(args) => cli::repo(args),
+        Cmd::Gc(args) => cli::gc(args),
         Cmd::Watch(args) => cli::watch(args),
         Cmd::InstallPlugin => cli::install_plugin(),
         Cmd::Update => cli::update(),

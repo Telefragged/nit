@@ -2314,6 +2314,23 @@ rec {
         ];
 
       };
+      "humansize" = rec {
+        crateName = "humansize";
+        version = "2.1.3";
+        edition = "2021";
+        sha256 = "1msxd1akb3dydsa8qs461sds9krwnn31szvqgaq93p4x0ad1rdbc";
+        authors = [
+          "Leopold Arkham <leopold.arkham@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "libm";
+            packageId = "libm";
+          }
+        ];
+        features = {
+        };
+      };
       "hybrid-array" = rec {
         crateName = "hybrid-array";
         version = "0.4.15";
@@ -3320,6 +3337,23 @@ rec {
         };
         resolvedDefaultFeatures = [ "vendored" ];
       };
+      "libm" = rec {
+        crateName = "libm";
+        version = "0.2.16";
+        edition = "2021";
+        sha256 = "10brh0a3qjmbzkr5mf5xqi887nhs5y9layvnki89ykz9xb1wxlmn";
+        authors = [
+          "Alex Crichton <alex@alexcrichton.com>"
+          "Amanieu d'Antras <amanieu@gmail.com>"
+          "Jorge Aparicio <japaricious@gmail.com>"
+          "Trevor Gross <tg@trevorgross.com>"
+        ];
+        features = {
+          "default" = [ "arch" ];
+          "unstable" = [ "unstable-intrinsics" "unstable-float" ];
+        };
+        resolvedDefaultFeatures = [ "arch" "default" ];
+      };
       "libmimalloc-sys" = rec {
         crateName = "libmimalloc-sys";
         version = "0.1.49";
@@ -3702,6 +3736,10 @@ rec {
             packageId = "git2";
             usesDefaultFeatures = false;
             features = [ "vendored-libgit2" ];
+          }
+          {
+            name = "humansize";
+            packageId = "humansize";
           }
           {
             name = "imara-diff";

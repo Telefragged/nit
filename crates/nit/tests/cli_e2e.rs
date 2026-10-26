@@ -306,6 +306,35 @@ fn reopen_an_abandoned_change() {
     assert!(push.as_str().is_some_and(|d| d.contains("Ia")), "{push}");
 }
 
+/// `nit gc` prints what the server deleted. A change closed within the
+/// retention is not deleted.
+#[test]
+fn gc_prints_what_it_deleted() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (ok, _push, stderr) = nit_register(&server, &g);
+    assert!(ok, "{stderr}");
+    let (ok, _, stderr) = nit(&server, &g, &["abandon", "--change-id", &change_id("Ia")]);
+    assert!(ok, "{stderr}");
+
+    let (ok, report, stderr) = nit(&server, &g, &["gc", "--retention-days", "1"]);
+
+    assert!(ok, "{stderr}");
+    assert_eq!(
+        report.as_str(),
+        Some("closed changes deleted: 0\nattachments deleted: 0 (0 B)"),
+        "{report}"
+    );
+    assert_eq!(
+        get_changes(&server, "").len(),
+        1,
+        "the change is not deleted"
+    );
+}
+
 /// Push fails when any commit lacks a `Change-Id` — the all-or-nothing walk rejects the branch.
 #[test]
 fn push_without_change_number_fails_with_a_helpful_message() {
