@@ -31,6 +31,25 @@ use super::{AppJson, AppPath, AppState, Error, append, views, with_conn};
 /// The largest upload the store accepts, in bytes.
 const MAX_SIZE: u64 = 64 * 1024 * 1024;
 
+/// What a collection of the blob store deleted.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Collected {
+    /// The number of deleted files.
+    pub files: u64,
+    /// The total size of the deleted files, in bytes.
+    pub bytes: u64,
+}
+
+/// Each item is the size of one deleted file.
+impl Extend<u64> for Collected {
+    fn extend<I: IntoIterator<Item = u64>>(&mut self, sizes: I) {
+        for size in sizes {
+            self.files += 1;
+            self.bytes += size;
+        }
+    }
+}
+
 /// The directory of blob files, one per [`AttachmentHash`].
 pub struct Blobs {
     dir: PathBuf,
@@ -74,10 +93,15 @@ impl Blobs {
     /// # Errors
     ///
     /// When the database or the store directory fails.
-    pub(super) async fn collect(&self, state: &AppState, cutoff: Timestamp) -> anyhow::Result<()> {
+    pub(super) async fn collect(
+        &self,
+        state: &AppState,
+        cutoff: Timestamp,
+    ) -> anyhow::Result<Collected> {
         let older = std::time::SystemTime::from(cutoff);
+        let mut collected = Collected::default();
         for (path, _) in files_older_than(&self.dir.join(".tmp"), older).await? {
-            remove(&path).await;
+            collected.extend(remove(&path).await);
         }
         let _moving = self.moves.lock().await;
         let deleted = with_conn(state.pool(), move |conn| {
@@ -89,7 +113,7 @@ impl Blobs {
         .await
         .map_err(|e| anyhow::anyhow!(e.message))?;
         for hash in &deleted {
-            remove(&self.path(hash)).await;
+            collected.extend(remove(&self.path(hash)).await);
         }
         let files: Vec<(PathBuf, AttachmentHash)> = files_older_than(&self.dir, older)
             .await?
@@ -108,9 +132,9 @@ impl Blobs {
         .await
         .map_err(|e| anyhow::anyhow!(e.message))?;
         for path in rowless {
-            remove(&path).await;
+            collected.extend(remove(&path).await);
         }
-        Ok(())
+        Ok(collected)
     }
 
     /// The blob's content, when it is UTF-8 text of at most
@@ -194,11 +218,22 @@ async fn files_older_than(
     Ok(files)
 }
 
-async fn remove(path: &Path) {
-    if let Err(e) = tokio::fs::remove_file(path).await
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        tracing::warn!("deleting {}: {e}", path.display());
+/// Deletes the file at `path` and returns its size in bytes.
+///
+/// It returns `None` when the file is gone or cannot be deleted.
+async fn remove(path: &Path) -> Option<u64> {
+    let removed = async {
+        let size = tokio::fs::metadata(path).await?.len();
+        tokio::fs::remove_file(path).await?;
+        Ok::<_, std::io::Error>(size)
+    };
+    match removed.await {
+        Ok(size) => Some(size),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            tracing::warn!("deleting {}: {e}", path.display());
+            None
+        }
     }
 }
 

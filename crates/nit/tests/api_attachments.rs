@@ -7,6 +7,7 @@ use common::{
     http_get_bytes, http_post, http_put_bytes, msg, nit,
 };
 use jiff::{SignedDuration, Timestamp};
+use nit::api::Collected;
 use serde_json::{Value, json};
 
 fn server(g: &GitRepo) -> TestServer {
@@ -220,8 +221,9 @@ fn collect_deletes_an_unheld_blob() {
     let (server, change_number) = server_with_change(&g);
     let hash = upload(&server, b"orphan");
 
-    collect_attachments(&server, later());
+    let collected = collect_attachments(&server, later());
 
+    assert_eq!(collected, Collected { files: 1, bytes: 6 });
     assert!(!stored(&g, &hash));
     let (st, res) = attach(&server, change_number, 0, "out.txt", &hash);
     assert_eq!(st, 404, "{res}");
@@ -266,10 +268,18 @@ fn collect_deletes_stray_files() {
     let temp = store.join(".tmp").join("stray");
     let rowless = store.join("1".repeat(64));
     std::fs::write(&temp, b"partial").expect("temp");
-    std::fs::write(&rowless, b"rowless").expect("rowless");
+    std::fs::write(&rowless, b"rowless file").expect("rowless");
 
-    collect_attachments(&server, later());
+    let collected = collect_attachments(&server, later());
 
+    assert_eq!(
+        collected,
+        Collected {
+            files: 2,
+            bytes: 19
+        },
+        "a temp file counts as an attachment"
+    );
     assert!(!temp.exists());
     assert!(!rowless.exists());
 }

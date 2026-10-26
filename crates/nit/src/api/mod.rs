@@ -13,8 +13,6 @@
 //! change from its log. An append replays it inside its own write
 //! transaction ([`state::Appends`]).
 //! Merged detection runs in a background timer (`timer::run_lifecycle_timer`).
-//! The collection of closed changes runs in a second timer
-//! (`gc::run_gc_timer`).
 
 pub mod diff;
 mod port;
@@ -51,7 +49,8 @@ use nit_types::domain::Side;
 use nit_types::domain::{Anchor, LineAnchor};
 use nit_types::health::Health;
 
-pub use gc::{collect_attachments_once, collect_once};
+pub use attachments::Collected;
+pub use gc::{collect_attachments, collect_changes};
 pub use state::{AppJson, AppPath, AppQuery, AppState, Error, with_conn};
 use state::{Appends, append};
 pub use timer::sweep_once;
@@ -123,6 +122,7 @@ fn routes() -> utoipa_axum::router::OpenApiRouter<Arc<AppState>> {
         .routes(routes!(attachments::upload))
         .routes(routes!(attachments::download))
         .routes(routes!(attachments::attach))
+        .routes(routes!(gc::gc))
         .routes(routes!(repos::list_repos, repos::create_repo))
         .routes(routes!(repos::get_repo, repos::relocate_repo))
         .routes(routes!(push::push))
@@ -188,8 +188,7 @@ pub fn app(state: Arc<AppState>, web_ui: Option<&'static include_dir::Dir<'stati
     })
 }
 
-/// Runs the background lifecycle and collection timers alongside the
-/// server.
+/// Runs the background lifecycle timer alongside the server.
 ///
 /// # Errors
 ///
@@ -203,22 +202,19 @@ pub async fn serve_on(
     let state = AppState::load(db_path).await?;
     tracing::info!("listening on http://{addr}");
     let timer = tokio::spawn(timer::run_lifecycle_timer(state.clone()));
-    let gc = tokio::spawn(gc::run_gc_timer(state.clone()));
     let res = serve_on_state(listener, state, WEB_UI, shutdown).await;
     timer.abort();
-    gc.abort();
     res
 }
 
 /// Serves `app` from a caller-owned [`AppState`].
 ///
 /// Runs until `shutdown` resolves. Unlike [`serve_on`] it spawns **no
-/// timer**. The only sweeps and collections are the ones that the owner
-/// triggers through [`sweep_once`] and [`collect_once`]. Thus no sweep or
-/// collection runs between the setup of an in-process test and a later
-/// assertion. Owning the state is also what lets that in-process
-/// driver act on the very projections the server reads, instead of going
-/// over the wire.
+/// timer**. The only sweeps are the ones that the owner triggers through
+/// [`sweep_once`]. Thus no sweep runs between the setup of an in-process
+/// test and a later assertion. Owning the state is also what lets that
+/// in-process driver act on the very projections the server reads,
+/// instead of going over the wire.
 ///
 /// # Errors
 ///
