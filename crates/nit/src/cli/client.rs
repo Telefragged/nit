@@ -225,6 +225,17 @@ impl Client {
             .map_err(|e| e.into_error(&self.base))
     }
 
+    pub(crate) fn delete(&self, path: &str) -> Result<()> {
+        let url = format!("{}{path}", self.base);
+        self.agent
+            .delete(&url)
+            .call()
+            .map_err(|e| classify(e, path))
+            .and_then(|response| Self::success(response, path))
+            .map(drop)
+            .map_err(|e| e.into_error(&self.base))
+    }
+
     /// Streams `file` as the body of a PUT.
     pub(crate) fn put_file<T: DeserializeOwned>(
         &self,
@@ -277,9 +288,21 @@ impl Client {
     }
 
     fn read<T: DeserializeOwned>(
-        mut response: ureq::http::Response<ureq::Body>,
+        response: ureq::http::Response<ureq::Body>,
         path: &str,
     ) -> Result<T, CallError> {
+        Self::success(response, path)?
+            .body_mut()
+            .read_json::<T>()
+            .map_err(|e| classify(e, path))
+    }
+
+    /// Returns `response` when its status is a success, else the error
+    /// envelope that it carries.
+    fn success(
+        mut response: ureq::http::Response<ureq::Body>,
+        path: &str,
+    ) -> Result<ureq::http::Response<ureq::Body>, CallError> {
         let status = response.status();
         if !status.is_success() {
             let message = response
@@ -291,10 +314,7 @@ impl Client {
                 status.as_u16()
             )));
         }
-        response
-            .body_mut()
-            .read_json::<T>()
-            .map_err(|e| classify(e, path))
+        Ok(response)
     }
 }
 
