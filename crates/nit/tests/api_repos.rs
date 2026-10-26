@@ -14,7 +14,7 @@ mod common;
 
 use common::{
     GitRepo, TestServer, create_repo, http_delete, http_get, http_patch, http_post, member_id, msg,
-    push, sweep,
+    nit, push, sweep,
 };
 use serde_json::json;
 
@@ -396,6 +396,24 @@ fn remove_unknown_repo_is_404() {
     let (st, _) = http_delete(&server.url("/api/repos/9999"));
 
     assert_eq!(st, 404);
+}
+
+#[test]
+fn nit_repo_remove_cli() {
+    let g = GitRepo::new();
+    let one = g.commit(&[g.root], &msg("core: one", "Ir1"), &[("a.rs", "a\n")]);
+    g.branch("feat", one);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, _) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200);
+    let id = first_repo(&server);
+
+    let (ok, out, stderr) = nit(&server, &g, &["repo", "remove", &g.git_dir()]);
+
+    assert!(ok, "{stderr}");
+    assert_eq!(out, json!(format!("repo {id} removed")));
+    let (_, list) = http_get(&server.url("/api/repos"));
+    assert_eq!(list["repos"], json!([]));
 }
 
 #[test]

@@ -25,6 +25,8 @@ pub enum RepoCmd {
     List,
     /// Repoint a repo at its new location after moving it on disk
     Move(RepoMoveArgs),
+    /// Delete a repo and all of its changes
+    Remove(RepoRemoveArgs),
 }
 
 #[derive(clap::Args)]
@@ -43,6 +45,13 @@ pub struct RepoMoveArgs {
     pub to: PathBuf,
 }
 
+#[derive(clap::Args)]
+pub struct RepoRemoveArgs {
+    /// The repo's path, exactly as `nit repo list` prints its `git_dir`
+    /// (or that path with the `/.git` dropped).
+    pub path: String,
+}
+
 /// `nit repo` dispatch.
 ///
 /// # Errors
@@ -59,6 +68,7 @@ pub fn repo(args: RepoArgs) -> Result<()> {
             Ok(())
         }
         RepoCmd::Move(a) => repo_move(&a, args.server.server),
+        RepoCmd::Remove(a) => repo_remove(&a, args.server.server),
     }
 }
 
@@ -96,22 +106,34 @@ fn repo_create(args: &RepoCreateArgs, server: Option<String>) -> Result<()> {
 fn repo_move(args: &RepoMoveArgs, server: Option<String>) -> Result<()> {
     let client = Client::new(server_url(server));
     let to = repo_git_dir(&args.to)?;
-    let from = args.from.trim_end_matches('/');
-    let list: RepoList = client.get("/api/repos")?;
-    let id = list
-        .repos
-        .iter()
-        .find(|r| {
-            r.git_dir == from
-                || r.git_dir
-                    .strip_suffix("/.git")
-                    .is_some_and(|root| root == from)
-        })
-        .map(|r| r.id)
-        .ok_or_else(|| {
-            anyhow!("no repo registered at '{from}' — run 'nit repo list' to see the exact paths")
-        })?;
+    let id = registered_repo_id(&client, &args.from)?;
     let updated: Repo = client.patch(&format!("/api/repos/{id}"), &RelocateRepo { git_dir: to })?;
     println!("repo {} moved  {}", updated.id, updated.git_dir);
     Ok(())
+}
+
+fn repo_remove(args: &RepoRemoveArgs, server: Option<String>) -> Result<()> {
+    let client = Client::new(server_url(server));
+    let id = registered_repo_id(&client, &args.path)?;
+    client.delete(&format!("/api/repos/{id}"))?;
+    println!("repo {id} removed");
+    Ok(())
+}
+
+/// Returns the id of the repo registered at `path`.
+fn registered_repo_id(client: &Client, path: &str) -> Result<u64> {
+    let path = path.trim_end_matches('/');
+    let list: RepoList = client.get("/api/repos")?;
+    list.repos
+        .iter()
+        .find(|r| {
+            r.git_dir == path
+                || r.git_dir
+                    .strip_suffix("/.git")
+                    .is_some_and(|root| root == path)
+        })
+        .map(|r| r.id)
+        .ok_or_else(|| {
+            anyhow!("no repo registered at '{path}' — run 'nit repo list' to see the exact paths")
+        })
 }
