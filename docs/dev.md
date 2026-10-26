@@ -164,6 +164,10 @@ the approve action is:
    A push that changes `.github/workflows/` needs a token with the `workflow`
    scope.
 
+   Write the PR title and body for a reader on GitHub. nit runs locally, so
+   that reader cannot see its reviews, changes, or threads. Do not mention
+   nit or the review in the PR. Describe what the chain changes and why.
+
 2. Enable auto-merge on the reviewed head. GitHub merges the PR when the
    required checks, `nix` and `semver`, pass:
 
