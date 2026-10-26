@@ -211,6 +211,18 @@ impl AppState {
         state
     }
 
+    /// Drops a repo from the registry cache.
+    ///
+    /// # Panics
+    ///
+    /// When the repo map mutex is poisoned.
+    pub fn forget_repo(&self, repo_id: u64) {
+        self.repos
+            .lock()
+            .expect("repo map poisoned")
+            .remove(&repo_id);
+    }
+
     /// Returns the folds of the changes a query picks, as owned
     /// projections, ascending by change number within each repo.
     ///
@@ -366,6 +378,17 @@ impl<'c> Appends<'c> {
     ) -> Result<Vec<(u64, ChangeNumber)>, Error> {
         let deleted = db::delete_closed_changes(&self.tx, cutoff)?;
         self.changed |= !deleted.is_empty();
+        Ok(deleted)
+    }
+
+    /// See [`db::delete_repo`].
+    ///
+    /// # Errors
+    ///
+    /// On a database failure.
+    pub fn delete_repo(&mut self, repo_id: u64) -> Result<bool, Error> {
+        let deleted = db::delete_repo(&self.tx, repo_id)?;
+        self.changed |= deleted;
         Ok(deleted)
     }
 

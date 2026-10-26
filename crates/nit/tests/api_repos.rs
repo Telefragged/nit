@@ -7,12 +7,14 @@
 //! `GET /api/changes?repo={id}` scopes the change list to one repo, and
 //! `PATCH /api/repos/{id}`
 //! (≡ `nit repo move`) repoints a repo after a disk move (404 unknown, 400
-//! unresolvable, 409 collision).
+//! unresolvable, 409 collision). `DELETE /api/repos/{id}` (≡ `nit repo
+//! remove`) deletes a repo and its changes (404 unknown).
 
 mod common;
 
 use common::{
-    GitRepo, TestServer, create_repo, http_get, http_patch, http_post, member_id, msg, push, sweep,
+    GitRepo, TestServer, create_repo, http_delete, http_get, http_patch, http_post, member_id, msg,
+    push, sweep,
 };
 use serde_json::json;
 
@@ -357,6 +359,43 @@ fn nit_repo_move_cli() {
 
     let (_, list) = http_get(&server.url("/api/repos"));
     assert_eq!(list["repos"][0]["git_dir"].as_str().unwrap(), new_git_dir);
+}
+
+/// Removing a repo deletes the repo, its changes and their keep refs. The
+/// git dir can then be registered again.
+#[test]
+fn remove_repo_deletes_the_repo_and_its_changes() {
+    let g = GitRepo::new();
+    let one = g.commit(&[g.root], &msg("core: one", "Ir1"), &[("a.rs", "a\n")]);
+    let two = g.commit(&[one], &msg("core: two", "Ir2"), &[("b.rs", "b\n")]);
+    g.branch("feat", two);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, res) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{res}");
+    let change_number = member_id(&res, "Ir1");
+    let id = first_repo(&server);
+
+    let (st, _) = http_delete(&server.url(&format!("/api/repos/{id}")));
+
+    assert_eq!(st, 204);
+    let (st, _) = http_get(&server.url(&format!("/api/repos/{id}")));
+    assert_eq!(st, 404, "the repo is deleted");
+    let (st, _) = http_get(&server.url(&format!("/api/changes/{change_number}")));
+    assert_eq!(st, 404, "the change is deleted");
+    let keep_refs = g.repo.references_glob("refs/nit/*").expect("glob").count();
+    assert_eq!(keep_refs, 0, "the keep refs are deleted");
+    let (st, res) = create_repo(&server, &g, "main");
+    assert_eq!(st, 200, "the git dir can be registered again: {res}");
+}
+
+#[test]
+fn remove_unknown_repo_is_404() {
+    let g = GitRepo::new();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+
+    let (st, _) = http_delete(&server.url("/api/repos/9999"));
+
+    assert_eq!(st, 404);
 }
 
 #[test]

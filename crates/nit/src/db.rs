@@ -605,13 +605,7 @@ pub fn delete_closed_changes(
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for &(_, number) in &deleted {
         let number = i64::try_from(number.get())?;
-        for table in [
-            "log",
-            "draft_comments",
-            "draft_reviews",
-            "change_tags",
-            "change_attachments",
-        ] {
+        for table in CHANGE_TABLES {
             tx.execute(
                 &format!("DELETE FROM {table} WHERE change_number = ?1"),
                 [number],
@@ -621,6 +615,37 @@ pub fn delete_closed_changes(
     }
     Ok(deleted)
 }
+
+/// Deletes a repo, its changes, and every row that references them.
+///
+/// It returns whether a repo had the id.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn delete_repo(tx: &Transaction, id: u64) -> Result<bool> {
+    let id = i64::try_from(id)?;
+    for table in CHANGE_TABLES {
+        tx.execute(
+            &format!(
+                "DELETE FROM {table}
+                  WHERE change_number IN (SELECT id FROM changes WHERE repo_id = ?1)"
+            ),
+            [id],
+        )?;
+    }
+    tx.execute("DELETE FROM changes WHERE repo_id = ?1", [id])?;
+    Ok(tx.execute("DELETE FROM repos WHERE id = ?1", [id])? > 0)
+}
+
+/// The tables whose rows reference a change through `change_number`.
+const CHANGE_TABLES: [&str; 5] = [
+    "log",
+    "draft_comments",
+    "draft_reviews",
+    "change_tags",
+    "change_attachments",
+];
 
 /// Records a stored blob.
 ///
