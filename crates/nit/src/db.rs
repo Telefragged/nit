@@ -1,12 +1,14 @@
 //! `SQLite` persistence layer.
 //!
-//! This module's docs are the schema contract. Six tables: the `repos`
+//! This module's docs are the schema contract. Eight tables: the `repos`
 //! registry, the `changes` identity registry and its denormalized
 //! `change_tags`, the append-only event `log` (keyed on the change, with a
-//! global `sequence`), and the reviewer's `draft_comments` and
-//! `draft_reviews`. All reviewable state is the fold of the per-change logs
-//! (`crate::review`), held in memory and rebuilt by replay. Nothing in the
-//! log is ever mutated or deleted.
+//! global `sequence`), the reviewer's `draft_comments` and
+//! `draft_reviews`, and the `attachments` blobs with the
+//! `change_attachments` that link them to changes. All reviewable state is
+//! the fold of the per-change logs (`crate::review`), held in memory and
+//! rebuilt by replay. A log entry is never mutated, and it is deleted only
+//! together with its change.
 //!
 //! [`pool`] hands out connections with the pragmas applied (WAL,
 //! `busy_timeout`, foreign keys ON); `PRAGMA user_version` migrations run
