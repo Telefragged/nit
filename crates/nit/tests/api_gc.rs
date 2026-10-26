@@ -1,4 +1,4 @@
-//! The collection of closed changes (`nit::api::collect_once`).
+//! The collection of closed changes (`nit::api::collect_changes`).
 
 mod common;
 
@@ -40,8 +40,9 @@ fn collect_deletes_closed_changes_and_their_keep_refs() {
     abandon(&server, abandoned);
     assert_eq!(keep_refs(&g, abandoned), 1);
 
-    collect(&server, Timestamp::now() + SignedDuration::from_hours(1));
+    let deleted = collect(&server, Timestamp::now() + SignedDuration::from_hours(1));
 
+    assert_eq!(deleted, 2);
     for gone in [merged, abandoned] {
         let (st, _) = http_get(&server.url(&format!("/api/changes/{gone}")));
         assert_eq!(st, 404, "change {gone} is deleted");
@@ -63,8 +64,9 @@ fn collect_keeps_a_change_closed_after_the_cutoff() {
     let cutoff = Timestamp::now();
     abandon(&server, change_number);
 
-    collect(&server, cutoff);
+    let deleted = collect(&server, cutoff);
 
+    assert_eq!(deleted, 0);
     let (st, _) = http_get(&server.url(&format!("/api/changes/{change_number}")));
     assert_eq!(st, 200, "the change stays");
 }

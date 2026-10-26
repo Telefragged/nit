@@ -561,24 +561,28 @@ pub fn sweep(server: &TestServer) {
         .block_on(nit::api::sweep_once(state));
 }
 
-/// Drives one collection of closed changes in-process, like [`sweep`].
-pub fn collect(server: &TestServer, cutoff: jiff::Timestamp) {
+/// Drives one collection of closed changes in-process, like [`sweep`], and
+/// returns the number of deleted changes.
+pub fn collect(server: &TestServer, cutoff: jiff::Timestamp) -> u64 {
     let state = server.state.as_ref().expect("state");
     server
         .rt
         .as_ref()
         .expect("runtime")
-        .block_on(nit::api::collect_once(state, cutoff));
+        .block_on(nit::api::collect_changes(state, cutoff))
+        .expect("collect changes")
 }
 
-/// Drives one collection of attachments in-process, like [`sweep`].
-pub fn collect_attachments(server: &TestServer, cutoff: jiff::Timestamp) {
+/// Drives one collection of attachments in-process, like [`sweep`], and
+/// returns what it deleted.
+pub fn collect_attachments(server: &TestServer, cutoff: jiff::Timestamp) -> nit::api::Collected {
     let state = server.state.as_ref().expect("state");
     server
         .rt
         .as_ref()
         .expect("runtime")
-        .block_on(nit::api::collect_attachments_once(state, cutoff));
+        .block_on(nit::api::collect_attachments(state, cutoff))
+        .expect("collect attachments")
 }
 
 /// How long the harness waits before it calls the suite hung: a child that

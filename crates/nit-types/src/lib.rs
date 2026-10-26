@@ -23,6 +23,7 @@ pub mod domain;
 pub mod error;
 pub mod events;
 pub mod fold;
+pub mod gc;
 pub mod graph;
 pub mod health;
 pub mod log;
