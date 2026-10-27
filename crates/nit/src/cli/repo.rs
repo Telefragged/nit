@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 
-use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
+use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList, SetCanonicalRef};
 
 use super::client::{Client, ServerOpt, server_url};
 use super::format::{aligned_row, column_widths};
@@ -25,6 +25,8 @@ pub enum RepoCmd {
     List,
     /// Repoint a repo at its new location after moving it on disk
     Move(RepoMoveArgs),
+    /// Point a repo at a new canonical ref at the same commit
+    SetRef(RepoSetRefArgs),
     /// Delete a repo and all of its changes
     Remove(RepoRemoveArgs),
 }
@@ -46,6 +48,16 @@ pub struct RepoMoveArgs {
 }
 
 #[derive(clap::Args)]
+pub struct RepoSetRefArgs {
+    /// The repo's path, exactly as `nit repo list` prints its `git_dir`
+    /// (or that path with the `/.git` dropped).
+    pub path: String,
+    /// The new canonical ref. It must resolve to the commit that nit last
+    /// recorded for the current canonical ref.
+    pub canonical_ref: String,
+}
+
+#[derive(clap::Args)]
 pub struct RepoRemoveArgs {
     /// The repo's path, exactly as `nit repo list` prints its `git_dir`
     /// (or that path with the `/.git` dropped).
@@ -57,7 +69,7 @@ pub struct RepoRemoveArgs {
 /// # Errors
 ///
 /// Per subcommand: server unreachable, the cwd not a git repo (`create`), or
-/// an unresolvable path (`move`).
+/// an unresolvable path (`move`), or a ref at another commit (`set-ref`).
 pub fn repo(args: RepoArgs) -> Result<()> {
     match args.cmd {
         RepoCmd::Create(a) => repo_create(&a, args.server.server),
@@ -68,6 +80,7 @@ pub fn repo(args: RepoArgs) -> Result<()> {
             Ok(())
         }
         RepoCmd::Move(a) => repo_move(&a, args.server.server),
+        RepoCmd::SetRef(a) => repo_set_ref(&a, args.server.server),
         RepoCmd::Remove(a) => repo_remove(&a, args.server.server),
     }
 }
@@ -109,6 +122,20 @@ fn repo_move(args: &RepoMoveArgs, server: Option<String>) -> Result<()> {
     let id = registered_repo_id(&client, &args.from)?;
     let updated: Repo = client.patch(&format!("/api/repos/{id}"), &RelocateRepo { git_dir: to })?;
     println!("repo {} moved  {}", updated.id, updated.git_dir);
+    Ok(())
+}
+
+fn repo_set_ref(args: &RepoSetRefArgs, server: Option<String>) -> Result<()> {
+    let client = Client::new(server_url(server));
+    let id = registered_repo_id(&client, &args.path)?;
+    let body = SetCanonicalRef {
+        canonical_ref: args.canonical_ref.clone(),
+    };
+    let updated: Repo = client.put(&format!("/api/repos/{id}/canonical-ref"), &body)?;
+    println!(
+        "repo {}  canonical_ref={}",
+        updated.id, updated.canonical_ref
+    );
     Ok(())
 }
 

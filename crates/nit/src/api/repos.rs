@@ -1,5 +1,5 @@
-//! Repo endpoints: create, list, fetch, relocate, and remove registered
-//! repos.
+//! Repo endpoints: create, list, fetch, relocate, retarget, and remove
+//! registered repos.
 
 use std::sync::Arc;
 
@@ -9,7 +9,8 @@ use axum::http::StatusCode;
 use git2::Repository;
 use rusqlite::Connection;
 
-use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList};
+use nit_types::domain::Sha;
+use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList, SetCanonicalRef};
 
 use crate::db;
 use crate::gitscan;
@@ -25,6 +26,20 @@ fn repo_json(conn: &Connection, row: db::RepoRow) -> Result<Repo, Error> {
         canonical_ref: row.canonical_ref,
         open_changes: db::count_changes(conn, row.id, &db::ChangeFilter::open())?,
     })
+}
+
+/// Resolves `canonical_ref` to the commit it names (400 if it names none).
+fn resolve_ref(repo: &Repository, canonical_ref: &str) -> Result<Sha, Error> {
+    let commit = repo
+        .revparse_single(canonical_ref)
+        .and_then(|o| o.peel_to_commit())
+        .map_err(|e| {
+            Error::bad_request(format!(
+                "cannot resolve '{canonical_ref}' to a commit — name an existing git ref: {}",
+                e.message()
+            ))
+        })?;
+    Ok(gitscan::sha_of(commit.id()))
 }
 
 /// Registers a repo (`nit repo create`) with its canonical ref.
@@ -51,16 +66,7 @@ pub(super) async fn create_repo(
                 existing.id
             )));
         }
-        let base_commit = repo
-            .revparse_single(&req.canonical_ref)
-            .and_then(|o| o.peel_to_commit())
-            .map_err(|e| {
-                Error::bad_request(format!(
-                    "cannot resolve '{}' to a commit — name an existing git ref: {}",
-                    req.canonical_ref,
-                    e.message()
-                ))
-            })?;
+        let head = resolve_ref(&repo, &req.canonical_ref)?;
         // The row and its baseline are one registration. The baseline seeds
         // the merge timer at the canonical ref's current HEAD, so the first
         // merge after registration shows up in a delta scan rather than
@@ -68,7 +74,7 @@ pub(super) async fn create_repo(
         // that on a crash between them.
         let row = db::write(conn, |tx| {
             let row = db::create_repo(tx, &canonical, &req.canonical_ref)?;
-            db::update_repo_canonical_head(tx, row.id, &gitscan::sha_of(base_commit.id()))?;
+            db::update_repo_canonical_head(tx, row.id, &head)?;
             Ok(row)
         })?;
         Ok(Json(repo_json(conn, row)?))
@@ -133,6 +139,46 @@ pub(super) async fn relocate_repo(
         db::write(conn, |tx| db::update_repo_git_dir(tx, repo_id, &canonical))?;
         let row = db::RepoRow {
             git_dir: canonical,
+            ..existing
+        };
+        Ok(Json(repo_json(conn, row)?))
+    })
+    .await
+}
+
+/// Points a repo at a new canonical ref (`nit repo set-ref`).
+///
+/// `nit_types::repos::SetCanonicalRef` carries the contract. 409 if the new
+/// ref resolves to another commit, 400 if it resolves to none, 404 if the
+/// repo is unknown.
+#[utoipa::path(put, path = "/api/repos/{id}/canonical-ref", params(("id" = u64, Path)), request_body = SetCanonicalRef, responses((status = 200, body = Repo)))]
+pub(super) async fn set_canonical_ref(
+    State(state): State<Arc<AppState>>,
+    AppPath(repo_id): AppPath<u64>,
+    AppJson(req): AppJson<SetCanonicalRef>,
+) -> Result<Json<Repo>, Error> {
+    with_conn(state.pool(), move |conn| {
+        let existing = db::get_repo(conn, repo_id)?
+            .ok_or_else(|| Error::not_found(format!("repo {repo_id} not found")))?;
+        let repo = Repository::open(&existing.git_dir)
+            .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
+        let head = resolve_ref(&repo, &req.canonical_ref)?;
+        if !db::write(conn, |tx| {
+            db::update_repo_canonical_ref(tx, repo_id, &req.canonical_ref, &head)
+        })? {
+            let recorded = existing
+                .canonical_head
+                .as_ref()
+                .map_or_else(|| "no commit yet".to_string(), gitscan::short_sha);
+            return Err(Error::conflict(format!(
+                "'{}' resolves to {}, but nit recorded '{}' at {recorded} — the new ref must point at the same commit",
+                req.canonical_ref,
+                gitscan::short_sha(&head),
+                existing.canonical_ref,
+            )));
+        }
+        let row = db::RepoRow {
+            canonical_ref: req.canonical_ref,
             ..existing
         };
         Ok(Json(repo_json(conn, row)?))

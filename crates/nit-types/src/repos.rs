@@ -40,3 +40,13 @@ pub struct CreateRepo {
 pub struct RelocateRepo {
     pub git_dir: String,
 }
+
+/// `PUT /api/repos/{id}/canonical-ref` request (this is `nit repo set-ref`).
+///
+/// Points a repo at a new canonical ref. The new ref must resolve to the
+/// canonical HEAD that nit last recorded for the repo. Thus no change has
+/// merged on one ref but not on the other.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct SetCanonicalRef {
+    pub canonical_ref: String,
+}

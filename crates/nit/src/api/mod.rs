@@ -129,6 +129,7 @@ fn routes() -> utoipa_axum::router::OpenApiRouter<Arc<AppState>> {
             repos::relocate_repo,
             repos::remove_repo
         ))
+        .routes(routes!(repos::set_canonical_ref))
         .routes(routes!(push::push))
         .routes(routes!(reviews::submit))
         .routes(routes!(changes::list_changes))
