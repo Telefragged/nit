@@ -594,8 +594,7 @@ button.rail-toggle,
   text-align: center;
 }
 
-/* attachments: their own group below the commit's files in the rail, and
-   a rendered body in place of lines in the diff (AttachmentView.tsx) */
+/* attachments: their own group below the commit's files in the rail */
 .rail-section {
   font-size: 10px;
   font-weight: 600;
@@ -613,18 +612,19 @@ button.rail-toggle,
   justify-content: flex-end;
 }
 
-.attachment {
+/* a file rendered in place of its lines (RenderedView.tsx) */
+.rendered {
   display: block;
   padding: 12px;
 }
 
-.attachment-image img {
+.rendered-image img {
   display: block;
   max-width: 100%;
   margin: 0 auto;
 }
 
-.attachment-frame {
+.rendered-frame {
   width: 100%;
   height: 70vh;
   padding: 0;

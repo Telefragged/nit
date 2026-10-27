@@ -6,13 +6,19 @@
 // buttons its size warrants.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { msgFile, uiThread } from "../../api/fixtures/builders";
+import {
+  add,
+  ctx as both,
+  del,
+  msgFile,
+  uiThread,
+} from "../../api/fixtures/builders";
 import type { DiffFile, LineAnchor } from "../../api/types";
 import { attachmentFile } from "../../lib/attachments";
 import type { UiThread } from "../../lib/comments";
-import { EXPAND_STEP } from "../../lib/useHunkExpansion";
+import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
 import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
 
@@ -109,8 +115,9 @@ const tree = (
   layout: "unified" | "split",
   file: DiffFile = mixed,
   threads: UiThread[] = [],
+  client = new QueryClient(),
 ) => (
-  <QueryClientProvider client={new QueryClient()}>
+  <QueryClientProvider client={client}>
     <ReviewContext.Provider value={ctx}>
       <DiffFileView
         file={file}
@@ -355,5 +362,62 @@ describe("a rendered attachment", () => {
     expect(
       container.querySelector('[data-threads="displaced"] [data-thread]'),
     ).not.toBeNull();
+  });
+
+  it("renders from its own lines, without a read", () => {
+    const file = attachmentFile(
+      { name: "plan.md", hash: "a".repeat(64), revision: 2 },
+      "# Plan",
+    );
+    const { container } = renderFile("unified", file);
+    expect(container.querySelector(".rendered-markdown h1")?.textContent).toBe(
+      "Plan",
+    );
+  });
+});
+
+describe("a Markdown file", () => {
+  const doc: DiffFile = {
+    path: "docs/a.md",
+    status: "modified",
+    binary: false,
+    additions: 1,
+    deletions: 1,
+    old_total: 3,
+    new_total: 3,
+    hunks: [
+      {
+        old_start: 3,
+        old_lines: 1,
+        new_start: 3,
+        new_lines: 1,
+        header: "",
+        lines: [del(3, "old *text*"), add(3, "new *text*")],
+      },
+    ],
+  };
+
+  it("renders the whole file, not only the diff", () => {
+    const client = new QueryClient();
+    client.setQueryData(fileLinesQuery(ctx, doc).queryKey, {
+      lines: [
+        both(1, 1, "# Title"),
+        both(2, 2, ""),
+        ...(doc.hunks[0]?.lines ?? []),
+      ],
+    });
+    const { container } = render(tree("unified", doc, [], client));
+    expect(container.querySelector(".diff-grid")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Rendered" }));
+    expect(container.querySelector(".diff-grid")).toBeNull();
+    expect(container.querySelector(".rendered-markdown h1")?.textContent).toBe(
+      "Title",
+    );
+    expect(container.querySelector(".rendered-markdown em")?.textContent).toBe(
+      "text",
+    );
+    expect(
+      container.querySelector(".rendered-markdown")?.textContent,
+    ).not.toContain("old");
   });
 });

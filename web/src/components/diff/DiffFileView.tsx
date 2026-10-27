@@ -45,8 +45,9 @@ import {
   skipped,
   statusLetter,
 } from "../../lib/diffview";
-import { renderedKind, type ReviewFile } from "../../lib/attachments";
+import type { ReviewFile } from "../../lib/attachments";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
+import { renderedKind } from "../../lib/rendered";
 import { scrollBehavior } from "../../lib/scrollspy";
 import { plainClick } from "../../lib/shortcutKey";
 import { selectionAnchorSide } from "../../lib/selection";
@@ -59,7 +60,8 @@ import {
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
-import AttachmentView from "./AttachmentView";
+import Seg, { type SegOption } from "../Seg";
+import RenderedView from "./RenderedView";
 import StatusMark from "./StatusMark";
 
 /** A commented char window to tint on one line; `active` (brighter chrome)
@@ -111,6 +113,14 @@ function Code({
   // Highlight.js escapes its input; nothing user-controlled is injected raw.
   return <span className={className} dangerouslySetInnerHTML={inner} />;
 }
+
+/** How a file section shows a file that renders: as lines, or rendered. */
+type View = "raw" | "rendered";
+
+const VIEW_OPTIONS: SegOption<View>[] = [
+  { value: "raw", label: "Raw", title: "The lines of the diff" },
+  { value: "rendered", label: "Rendered", title: "The whole file, rendered" },
+];
 
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
   a.file === file && a.side === side && targetLine(a) === line;
@@ -261,7 +271,13 @@ export default function DiffFileView({
 
   const expansion = useHunkExpansion(file, ctx);
   const { hunks } = expansion;
-  const attachmentKind = renderedKind(file);
+
+  const kind = renderedKind(file);
+  const [view, setView] = useState<View>(file.attachment ? "rendered" : "raw");
+  // Only the raw view shows the line that a link names.
+  if (view === "rendered" && reveal?.lines) setView("raw");
+  // A file without lines has only its rendered view.
+  const showRendered = kind !== null && (file.binary || view === "rendered");
 
   const sectionRef = useRef<HTMLElement>(null);
   // The last reveal for which the effect opened a gap. The effect opens a
@@ -313,18 +329,18 @@ export default function DiffFileView({
     return map;
   }, [hunks]);
 
-  // The lines that a thread can show under. A rendered attachment shows
-  // no line rows.
+  // The lines that a thread can show under. The rendered view shows no
+  // line rows.
   const present = useMemo(() => {
     const set = new Set<string>();
-    for (const hunk of attachmentKind ? [] : hunks) {
+    for (const hunk of showRendered ? [] : hunks) {
       for (const line of hunk.lines) {
         if (line.old !== undefined) set.add(`old:${line.old}`);
         if (line.new !== undefined) set.add(`new:${line.new}`);
       }
     }
     return set;
-  }, [hunks, attachmentKind]);
+  }, [hunks, showRendered]);
 
   // Bucket each thread by where its anchor lands in the current diff
   // range. A thread pinned to a revision that
@@ -713,8 +729,12 @@ export default function DiffFileView({
         className="file-header"
         role="button"
         tabIndex={0}
-        onClick={onToggle}
+        onClick={(e) => {
+          // A click on a link or a button in the header is the control's.
+          if (!(e.target as Element).closest("a, button")) onToggle();
+        }}
         onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             onToggle();
@@ -741,19 +761,30 @@ export default function DiffFileView({
           href={ctx.linkHref({ file: file.path, lines: null })}
           title="Link to this file"
           onClick={(e) => {
-            // The header around the link toggles the section on a click.
-            e.stopPropagation();
             if (!plainClick(e) || e.shiftKey) return;
             e.preventDefault();
             ctx.selectLink({ file: file.path, lines: null });
-          }}
-          onKeyDown={(e) => {
-            e.stopPropagation();
           }}
         >
           #
         </a>
         <span className="spacer" />
+        {kind !== null && !file.binary ? (
+          <Seg
+            value={view}
+            options={VIEW_OPTIONS}
+            onChange={(next) => {
+              // The rendered view has no lines to hold an open editor.
+              if (
+                next === "rendered" &&
+                ctx.editingTarget?.file === file.path &&
+                !ctx.setEditingTarget(null)
+              )
+                return;
+              setView(next);
+            }}
+          />
+        ) : null}
         {file.attachment ? (
           file.attachment.revision === ctx.selected ? null : (
             <span className="dim">attached to r{file.attachment.revision}</span>
@@ -806,8 +837,8 @@ export default function DiffFileView({
             </div>
           ) : null}
 
-          {attachmentKind ? (
-            <AttachmentView file={file} kind={attachmentKind} />
+          {showRendered ? (
+            <RenderedView file={file} kind={kind} />
           ) : file.binary ? (
             <div className="diff-note">Binary file — contents not shown</div>
           ) : hunks.length === 0 ? (
