@@ -94,9 +94,10 @@ tag feature=epic-saga
 `nit attach <file> --change <number>` puts a file that is not in the commit
 on a change: a plan, a screenshot, a command's output, a rendered page. The
 review page lists attachments below the commit's files, and renders Markdown,
-images and HTML. An attachment carries forward to later revisions until a new
-version under the same name replaces it, and attaching unchanged bytes adds
-nothing. So a hook may attach a build's artifacts after every push. For
+images and HTML. A toggle on a Markdown or HTML file, attached or in the
+commit, switches between its lines and the rendered whole file. An attachment
+carries forward to later revisions until a new version under the same name
+replaces it, and attaching unchanged bytes adds nothing. So a hook may attach a build's artifacts after every push. For
 example, a Claude Code `PostToolUse` hook on `Bash`:
 
 ```sh

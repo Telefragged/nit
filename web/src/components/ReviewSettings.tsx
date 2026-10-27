@@ -1,15 +1,10 @@
 import { useState } from "react";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import Modal from "./Modal";
+import Seg, { type SegOption } from "./Seg";
 import type { ReviewSettings } from "../lib/reviewSettings";
 
-interface Option<T> {
-  value: T;
-  label: string;
-  title: string;
-}
-
-const MODE_OPTIONS: Option<ReviewSettings["mode"]>[] = [
+const MODE_OPTIONS: SegOption<ReviewSettings["mode"]>[] = [
   {
     value: "full",
     label: "Full",
@@ -22,7 +17,7 @@ const MODE_OPTIONS: Option<ReviewSettings["mode"]>[] = [
   },
 ];
 
-const LAYOUT_OPTIONS: Option<ReviewSettings["layout"]>[] = [
+const LAYOUT_OPTIONS: SegOption<ReviewSettings["layout"]>[] = [
   {
     value: "unified",
     label: "Unified",
@@ -35,7 +30,7 @@ const LAYOUT_OPTIONS: Option<ReviewSettings["layout"]>[] = [
   },
 ];
 
-const PORTED_OPTIONS: Option<ReviewSettings["ported"]>[] = [
+const PORTED_OPTIONS: SegOption<ReviewSettings["ported"]>[] = [
   {
     value: "open",
     label: "Open",
@@ -48,7 +43,7 @@ const PORTED_OPTIONS: Option<ReviewSettings["ported"]>[] = [
   },
 ];
 
-const WHITESPACE_OPTIONS: Option<ReviewSettings["whitespace"]>[] = [
+const WHITESPACE_OPTIONS: SegOption<ReviewSettings["whitespace"]>[] = [
   {
     value: "compare",
     label: "Compare",
@@ -64,32 +59,17 @@ const WHITESPACE_OPTIONS: Option<ReviewSettings["whitespace"]>[] = [
 /** One knob: a label and a segmented control over its options. */
 function Knob<T extends string>({
   label,
-  value,
-  options,
-  onChange,
+  ...seg
 }: {
   label: string;
   value: T;
-  options: Option<T>[];
+  options: SegOption<T>[];
   onChange: (next: T) => void;
 }) {
   return (
     <div className="settings-knob">
       <span>{label}</span>
-      <span className="seg">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            className={value === option.value ? "active" : ""}
-            title={option.title}
-            onClick={() => {
-              onChange(option.value);
-            }}
-          >
-            {option.label}
-          </button>
-        ))}
-      </span>
+      <Seg {...seg} />
     </div>
   );
 }

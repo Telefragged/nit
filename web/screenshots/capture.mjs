@@ -491,15 +491,13 @@ const captures = [
         (sel) =>
           !!document
             .querySelector(sel)
-            ?.querySelector(".attachment-markdown, .diff-note"),
+            ?.querySelector(".rendered-markdown, .diff-note"),
         plan,
       );
-      await expectOne(page.locator(`${plan} .attachment-markdown`));
-      await page
-        .locator(".attachment-image img")
-        .evaluate((img) => img.decode());
+      await expectOne(page.locator(`${plan} .rendered-markdown`));
+      await page.locator(".rendered-image img").evaluate((img) => img.decode());
       const frame = await (
-        await page.locator(".attachment-frame").elementHandle()
+        await page.locator(".rendered-frame").elementHandle()
       ).contentFrame();
       // The page's script runs while the document parses, so its text is
       // final by the load event.
@@ -510,6 +508,27 @@ const captures = [
       if (ran !== "scripts ran in the sandbox") {
         throw new Error(`the HTML attachment's script did not run: ${ran}`);
       }
+    },
+  },
+  // A Markdown file of the commit in its rendered view. The view shows
+  // the whole file, not only the lines that the diff shows.
+  {
+    name: "review-rendered",
+    path: "/changes/12?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      const doc = 'section[data-diff-path="docs/auth-rotation.md"]';
+      await clickNow(
+        page
+          .locator(doc)
+          .getByRole("button", { name: "Rendered", exact: true }),
+      );
+      await untilDom(
+        page,
+        (sel) => !!document.querySelector(sel),
+        `${doc} .rendered-markdown h2`,
+      );
+      await centerOn(page, page.locator(`${doc} .file-header`));
     },
   },
   // Collapsed-by-default file sections: only the synthetic commit message

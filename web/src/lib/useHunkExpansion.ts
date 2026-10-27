@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getFileLines } from "../api/client";
 import {
@@ -7,8 +7,44 @@ import {
   type Line,
   type Side,
 } from "../api/types";
-import { gapLines } from "./diffview";
+import { gapLines, skipped } from "./diffview";
 import type { ReviewCtx } from "../pages/reviewContext";
+
+/** Whether `file`'s hunks hold all of its lines, with no gap above,
+ * between or below them. */
+const holdsWholeFile = (file: DiffFile) =>
+  [...file.hunks, undefined].every(
+    (hunk, i) => skipped(file.hunks[i - 1], hunk, file) === 0,
+  );
+
+/** The query for the whole of `file` as diff lines. It reads the trees and
+ * the whitespace mode of the diff on screen. A file whose hunks hold all
+ * of its lines needs no read. */
+export const fileLinesQuery = (ctx: ReviewCtx, file: DiffFile) =>
+  queryOptions({
+    queryKey: [
+      "lines",
+      ctx.changeNumber,
+      ctx.selected,
+      ctx.against ?? null,
+      ctx.whitespace,
+      file.path,
+      file.old_path ?? null,
+    ],
+    queryFn: () =>
+      getFileLines(
+        ctx.changeNumber,
+        ctx.selected,
+        file,
+        ctx.against,
+        ctx.whitespace,
+      ),
+    initialData: holdsWholeFile(file)
+      ? { lines: file.hunks.flatMap((hunk) => hunk.lines) }
+      : undefined,
+    // A revision's trees never change, so neither does the file.
+    staleTime: Infinity,
+  });
 
 /** Lines revealed per click of a context-expand button. */
 export const EXPAND_STEP = 10;
@@ -85,25 +121,7 @@ export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
   async function loadWhole(): Promise<readonly Line[] | null> {
     if (whole) return whole;
     const { lines } = await queryClient.query({
-      queryKey: [
-        "lines",
-        ctx.changeNumber,
-        ctx.selected,
-        ctx.against ?? null,
-        ctx.whitespace,
-        file.path,
-        file.old_path ?? null,
-      ],
-      queryFn: () =>
-        getFileLines(
-          ctx.changeNumber,
-          ctx.selected,
-          file,
-          ctx.against,
-          ctx.whitespace,
-        ),
-      // A revision's trees never change, so neither does the file.
-      staleTime: Infinity,
+      ...fileLinesQuery(ctx, file),
       // To retry a failed reveal, the reviewer clicks the button again.
       retry: false,
     });

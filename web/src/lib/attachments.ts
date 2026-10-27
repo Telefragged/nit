@@ -2,52 +2,16 @@
 
 import type { DiffFile, EffectiveAttachment, Line } from "../api/types";
 import { ATTACHMENT_PREFIX } from "../api/types";
-import { splitExtension } from "./diffview";
+import { kindOf } from "./rendered";
 
 /** A file the review page shows: a file of the diff, or an attachment
  * the page built from the revision's attachments. */
 export type ReviewFile = DiffFile & { attachment?: EffectiveAttachment };
 
-/** How an attachment renders in place of lines. */
-export type RenderedKind = "markdown" | "html" | "image";
-
-const KIND_BY_EXTENSION: Record<string, RenderedKind> = {
-  ".md": "markdown",
-  ".markdown": "markdown",
-  ".html": "html",
-  ".htm": "html",
-  ".png": "image",
-  ".jpg": "image",
-  ".jpeg": "image",
-  ".gif": "image",
-  ".webp": "image",
-  ".avif": "image",
-  ".svg": "image",
-};
-
-const kindOf = (name: string): RenderedKind | undefined =>
-  KIND_BY_EXTENSION[
-    splitExtension(name.split("/").at(-1) ?? "")[1].toLowerCase()
-  ];
-
-/** Whether the page reads the attachment's text: to show its lines, or
- * to render it as Markdown. An image or an HTML page renders from its
- * URL. */
-export const readsText = (attachment: EffectiveAttachment) => {
-  const kind = kindOf(attachment.name);
-  return kind === undefined || kind === "markdown";
-};
-
-/** How an attachment renders, by its name's extension, or null when it
- * shows as a file does: as lines, or as a binary note. Markdown renders
- * from the file's lines, so Markdown without lines shows the binary
- * note. */
-export function renderedKind(file: ReviewFile): RenderedKind | null {
-  if (!file.attachment) return null;
-  const kind = kindOf(file.attachment.name);
-  if (kind === undefined || (kind === "markdown" && file.binary)) return null;
-  return kind;
-}
+/** Whether the page reads the attachment's text, to show its lines. An
+ * image renders from its URL alone. */
+export const readsText = (attachment: EffectiveAttachment) =>
+  kindOf(attachment.name) !== "image";
 
 /** The file the page shows for an attachment. `text` is its content, or
  * null when it is not text. Text shows as one all-added hunk, like a new
