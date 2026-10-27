@@ -370,6 +370,22 @@ const captures = [
       });
     },
   },
+  // Scrolled so that the change log is in view below the files. The file
+  // rail stays pinned, because its last row is still above the log.
+  {
+    name: "review-log-scrolled",
+    path: "/changes/11?against=0",
+    fullPage: false,
+    actions: async (page) => {
+      await page.evaluate(() => {
+        const log = document.querySelector(".change-log");
+        window.scrollTo(
+          0,
+          window.scrollY + log.getBoundingClientRect().top - innerHeight / 2,
+        );
+      });
+    },
+  },
   // The rail with the threads of store.rs opened under it.
   {
     name: "review-rail-threads",
