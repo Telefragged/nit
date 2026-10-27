@@ -498,6 +498,28 @@ pub fn update_repo_git_dir(tx: &Transaction, id: u64, git_dir: &str) -> Result<(
     Ok(())
 }
 
+/// Points a repo at a new canonical ref if its recorded canonical HEAD is
+/// `head`.
+///
+/// Returns whether the repo changed. The guard and the write are one
+/// statement, so a merge sweep cannot record a new HEAD between them.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn update_repo_canonical_ref(
+    tx: &Transaction,
+    id: u64,
+    canonical_ref: &str,
+    head: &Sha,
+) -> Result<bool> {
+    let updated = tx.execute(
+        "UPDATE repos SET canonical_ref = ?1 WHERE id = ?2 AND canonical_head = ?3",
+        params![canonical_ref, i64::try_from(id)?, head.as_str()],
+    )?;
+    Ok(updated == 1)
+}
+
 /// Records the canonical-branch HEAD the merge timer reconciled against.
 ///
 /// The next sweep then scans only newer commits.

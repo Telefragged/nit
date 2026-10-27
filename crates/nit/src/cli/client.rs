@@ -225,6 +225,11 @@ impl Client {
             .map_err(|e| e.into_error(&self.base))
     }
 
+    pub(crate) fn put<B: Serialize, T: DeserializeOwned>(&self, path: &str, body: &B) -> Result<T> {
+        let url = format!("{}{path}", self.base);
+        Self::send_raw(self.agent.put(&url), path, body).map_err(|e| e.into_error(&self.base))
+    }
+
     pub(crate) fn delete(&self, path: &str) -> Result<()> {
         let url = format!("{}{path}", self.base);
         self.agent
@@ -277,7 +282,7 @@ impl Client {
 
     /// Sends a JSON body on a built request.
     ///
-    /// The verb-agnostic half of [`post_raw`]/[`patch_raw`].
+    /// The verb-agnostic half of each request that has a JSON body.
     fn send_raw<B: Serialize, T: DeserializeOwned>(
         req: ureq::RequestBuilder<ureq::typestate::WithBody>,
         path: &str,

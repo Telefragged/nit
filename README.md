@@ -56,6 +56,10 @@ cron.
 On `nit repo remove <path>`, the server deletes a repo and all of its
 changes at once. It deletes their attachments on the next `nit gc`.
 
+`nit repo set-ref <path> <ref>` points a repo at a new canonical ref, for
+example from `main` to `origin/main`. The new ref must resolve to the
+commit that nit last recorded for the current canonical ref.
+
 Author loop (any tool that can run shell commands):
 
 ```sh

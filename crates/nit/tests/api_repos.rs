@@ -7,14 +7,17 @@
 //! `GET /api/changes?repo={id}` scopes the change list to one repo, and
 //! `PATCH /api/repos/{id}`
 //! (≡ `nit repo move`) repoints a repo after a disk move (404 unknown, 400
-//! unresolvable, 409 collision). `DELETE /api/repos/{id}` (≡ `nit repo
-//! remove`) deletes a repo and its changes (404 unknown).
+//! unresolvable, 409 collision). `PUT /api/repos/{id}/canonical-ref` (≡
+//! `nit repo set-ref`) points a repo at a new canonical ref at the recorded
+//! canonical HEAD (404 unknown, 400 unresolvable, 409 another commit).
+//! `DELETE /api/repos/{id}` (≡ `nit repo remove`) deletes a repo and its
+//! changes (404 unknown).
 
 mod common;
 
 use common::{
-    GitRepo, TestServer, create_repo, http_delete, http_get, http_patch, http_post, member_id, msg,
-    nit, push, sweep,
+    GitRepo, TestServer, create_repo, http_delete, http_get, http_patch, http_post, http_put,
+    member_id, msg, nit, push, sweep,
 };
 use serde_json::json;
 
@@ -359,6 +362,85 @@ fn nit_repo_move_cli() {
 
     let (_, list) = http_get(&server.url("/api/repos"));
     assert_eq!(list["repos"][0]["git_dir"].as_str().unwrap(), new_git_dir);
+}
+
+/// After the switch, the merge sweep tracks the new ref and ignores the
+/// old one.
+#[test]
+fn set_canonical_ref_moves_merge_tracking_to_the_new_ref() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Is1"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    g.branch("trunk", g.root);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, _) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200);
+    let id = first_repo(&server);
+
+    let (st, repo) = http_put(
+        &server.url(&format!("/api/repos/{id}/canonical-ref")),
+        &json!({"canonical_ref": "trunk"}),
+    );
+
+    assert_eq!(st, 200, "{repo}");
+    assert_eq!(repo["canonical_ref"], "trunk");
+    assert_eq!(repo_base(&server, id), "trunk");
+    g.branch("main", c1);
+    sweep(&server);
+    assert_eq!(open_changes(&server, id), 1, "main is no longer tracked");
+    g.branch("trunk", c1);
+    sweep(&server);
+    assert_eq!(open_changes(&server, id), 0, "the merge on trunk counts");
+}
+
+#[test]
+fn set_canonical_ref_rejects_a_ref_at_another_commit() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Is2"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, _) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200);
+    let id = first_repo(&server);
+    let url = server.url(&format!("/api/repos/{id}/canonical-ref"));
+
+    let (st, res) = http_put(&url, &json!({"canonical_ref": "feat"}));
+    assert_eq!(st, 409, "{res}");
+    let (st, res) = http_put(&url, &json!({"canonical_ref": "no-such-ref"}));
+    assert_eq!(st, 400, "{res}");
+    let (st, _) = http_put(
+        &server.url("/api/repos/9999/canonical-ref"),
+        &json!({"canonical_ref": "main"}),
+    );
+    assert_eq!(st, 404);
+    assert_eq!(repo_base(&server, id), "main");
+}
+
+#[test]
+fn nit_repo_set_ref_cli() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: one", "Is3"), &[("a.rs", "a\n")]);
+    g.branch("feat", c1);
+    g.branch("trunk", g.root);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, _) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200);
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_nit"))
+        .args(["repo", "set-ref", &g.git_dir(), "trunk"])
+        .current_dir(g.dir.path())
+        .env("NIT_SERVER", &server.base)
+        .output()
+        .expect("running nit repo set-ref");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("canonical_ref=trunk"), "{stdout}");
+    assert_eq!(repo_base(&server, first_repo(&server)), "trunk");
 }
 
 /// Removing a repo deletes the repo, its changes and their keep refs. The
