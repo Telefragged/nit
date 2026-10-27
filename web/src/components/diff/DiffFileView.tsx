@@ -261,6 +261,7 @@ export default function DiffFileView({
 
   const expansion = useHunkExpansion(file, ctx);
   const { hunks } = expansion;
+  const attachmentKind = renderedKind(file);
 
   const sectionRef = useRef<HTMLElement>(null);
   // The last reveal for which the effect opened a gap. The effect opens a
@@ -312,16 +313,18 @@ export default function DiffFileView({
     return map;
   }, [hunks]);
 
+  // The lines that a thread can show under. A rendered attachment shows
+  // no line rows.
   const present = useMemo(() => {
     const set = new Set<string>();
-    for (const hunk of hunks) {
+    for (const hunk of attachmentKind ? [] : hunks) {
       for (const line of hunk.lines) {
         if (line.old !== undefined) set.add(`old:${line.old}`);
         if (line.new !== undefined) set.add(`new:${line.new}`);
       }
     }
     return set;
-  }, [hunks]);
+  }, [hunks, attachmentKind]);
 
   // Bucket each thread by where its anchor lands in the current diff
   // range. A thread pinned to a revision that
@@ -698,7 +701,6 @@ export default function DiffFileView({
   }
 
   const letter = statusLetter(file);
-  const attachmentKind = renderedKind(file);
 
   return (
     <section

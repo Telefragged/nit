@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { msgFile, uiThread } from "../../api/fixtures/builders";
 import type { DiffFile, LineAnchor } from "../../api/types";
+import { attachmentFile } from "../../lib/attachments";
 import type { UiThread } from "../../lib/comments";
 import { EXPAND_STEP } from "../../lib/useHunkExpansion";
 import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
@@ -336,5 +337,23 @@ describe("hovering a thread", () => {
     expect(container.querySelector(".comment-range-active")?.textContent).toBe(
       "body",
     );
+  });
+});
+
+describe("a rendered attachment", () => {
+  it("lists a line's thread above the rendered file", () => {
+    const file = attachmentFile(
+      { name: "plan.md", hash: "a".repeat(64), revision: 2 },
+      "# Plan",
+    );
+    const thread = uiThread({
+      id: 1,
+      revision: 2,
+      anchor: { line: { file: file.path, side: "new", at: { whole: 1 } } },
+    });
+    const { container } = renderFile("unified", file, [thread]);
+    expect(
+      container.querySelector('[data-threads="displaced"] [data-thread]'),
+    ).not.toBeNull();
   });
 });
