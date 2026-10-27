@@ -186,11 +186,6 @@
    sizes its scrollport against it. */
 .review-sidebar {
   top: 78px;
-
-  /* The virtualized file tree below has no intrinsic height. It sizes its
-     scrollport against this one. A stretched height is definite, so the
-     rail ends with the diff column and the change log starts below both. */
-  align-self: stretch;
   max-height: calc(100vh - 140px);
   display: flex;
   flex-direction: column;
