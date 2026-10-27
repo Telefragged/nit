@@ -60,22 +60,20 @@ pub async fn sweep_once(state: &Arc<AppState>) {
 /// commits for landings, append `lifecycle{merged}`, and record the new HEAD
 /// as the baseline. The baseline lives only in the DB (`repos.canonical_head`) —
 /// the single source of truth — so a repo whose branch is unchanged costs
-/// one ref resolution and one indexed row read.
+/// one ref resolution.
 fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
-    for repo_id in state.repo_ids() {
-        let Some(repo_state) = state.repo_state(repo_id) else {
+    let Ok(repos) = db::all_repos(conn) else {
+        return;
+    };
+    for repo_row in repos {
+        let repo_id = repo_row.id;
+        let Ok(repo) = Repository::open(&repo_row.git_dir) else {
             continue;
         };
-        let Ok(repo) = Repository::open(repo_state.git_dir()) else {
+        let Some(head) = gitscan::resolve_head(&repo, &repo_row.canonical_ref) else {
             continue;
         };
-        let Some(head) = gitscan::resolve_head(&repo, &repo_state.canonical_ref) else {
-            continue;
-        };
-        let recorded = db::get_repo(conn, repo_id)
-            .ok()
-            .flatten()
-            .and_then(|r| r.canonical_head);
+        let recorded = repo_row.canonical_head;
         if recorded.as_ref() == Some(&head) {
             continue;
         }

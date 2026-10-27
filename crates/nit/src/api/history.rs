@@ -30,13 +30,12 @@ pub(super) async fn repo_history(
     AppQuery(q): AppQuery<HistoryQuery>,
 ) -> Result<Json<RepoHistory>, Error> {
     with_conn(state.pool(), move |conn| {
-        let repo_state = state
-            .repo_state(q.repo)
+        let repo_row = db::get_repo(conn, q.repo)?
             .ok_or_else(|| Error::not_found(format!("no such repo: {}", q.repo)))?;
-        let repo = Repository::open(repo_state.git_dir())
+        let repo = Repository::open(&repo_row.git_dir)
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
         let (walked, truncated) =
-            gitscan::canonical_history(&repo, &repo_state.canonical_ref, MERGED_WINDOW)
+            gitscan::canonical_history(&repo, &repo_row.canonical_ref, MERGED_WINDOW)
                 .map_err(Error::internal)?;
         let mut commits = Vec::with_capacity(walked.len());
         for c in walked {

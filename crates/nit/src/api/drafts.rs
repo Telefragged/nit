@@ -12,6 +12,7 @@ use nit_types::domain::Draft;
 
 use crate::db;
 
+use super::state::git_dir;
 use super::views;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
 use super::{anchor_of, change_or_404, snapshot_line_text};
@@ -43,7 +44,7 @@ pub(super) async fn create_draft(
             }
             None => None,
         };
-        let git_dir = state.git_dir(proj.repo_id)?;
+        let git_dir = git_dir(conn, proj.repo_id)?;
         anchor.snapshot_line_text(snapshot_line_text(
             state.blobs(),
             &git_dir,

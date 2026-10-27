@@ -20,6 +20,7 @@ use crate::db;
 use nit_types::domain::Lifecycle;
 
 use super::change_or_404;
+use super::state::repo_ids_matching;
 use super::{AppJson, AppPath, AppQuery, AppState, Error, append, with_conn};
 
 /// One change's reviewer comment drafts as `CommentInput`s.
@@ -174,7 +175,7 @@ pub(super) async fn submit(
     AppQuery(q): AppQuery<ChangeQuery>,
 ) -> Result<Json<BatchSubmitResult>, Error> {
     with_conn(state.pool(), move |conn| {
-        let repo_ids = state.repo_ids_matching(q.repo);
+        let repo_ids = repo_ids_matching(conn, q.repo)?;
         let filter = db::ChangeFilter::from(q);
         let mut submitted = 0u64;
         let mut errors = Vec::new();

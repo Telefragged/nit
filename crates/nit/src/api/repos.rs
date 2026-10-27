@@ -71,7 +71,6 @@ pub(super) async fn create_repo(
             db::update_repo_canonical_head(tx, row.id, &gitscan::sha_of(base_commit.id()))?;
             Ok(row)
         })?;
-        state.ensure_repo(&row);
         Ok(Json(repo_json(conn, row)?))
     })
     .await
@@ -133,12 +132,9 @@ pub(super) async fn relocate_repo(
         }
         db::write(conn, |tx| db::update_repo_git_dir(tx, repo_id, &canonical))?;
         let row = db::RepoRow {
-            id: repo_id,
             git_dir: canonical,
-            canonical_ref: existing.canonical_ref,
-            canonical_head: existing.canonical_head,
+            ..existing
         };
-        state.ensure_repo(&row);
         Ok(Json(repo_json(conn, row)?))
     })
     .await
@@ -154,21 +150,19 @@ pub(super) async fn remove_repo(
     AppPath(repo_id): AppPath<u64>,
 ) -> Result<StatusCode, Error> {
     with_conn(state.pool(), move |conn| {
+        let not_found = || Error::not_found(format!("repo {repo_id} not found"));
+        let row = db::get_repo(conn, repo_id)?.ok_or_else(not_found)?;
         let mut appends = Appends::begin(conn)?;
         if !appends.delete_repo(repo_id)? {
-            return Err(Error::not_found(format!("repo {repo_id} not found")));
+            return Err(not_found());
         }
         appends.commit(&state)?;
         // This deletes the refs only after the commit. A crash between the
         // two can leave extra refs that pin objects. It never leaves a
         // change without its objects.
-        if let Some(repo) = state
-            .repo_state(repo_id)
-            .and_then(|r| Repository::open(r.git_dir()).ok())
-        {
+        if let Ok(repo) = Repository::open(&row.git_dir) {
             objects::delete_all_keep_refs(&repo);
         }
-        state.forget_repo(repo_id);
         Ok(StatusCode::NO_CONTENT)
     })
     .await
