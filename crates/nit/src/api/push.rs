@@ -90,7 +90,6 @@ pub(super) async fn push(
                 "repo at {canonical} is not registered — run `nit repo create`"
             ))
         })?;
-        state.ensure_repo(&repo_row);
         let base = repo_row.canonical_ref.clone();
 
         let walk = gitscan::walk_push(&canonical, &base, &req.tip).map_err(Error::bad_request)?;

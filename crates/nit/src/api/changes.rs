@@ -7,6 +7,7 @@ use std::sync::Arc;
 use axum::Json;
 use axum::extract::State;
 use git2::{Repository, Tree};
+use rusqlite::Connection;
 use serde::Deserialize;
 
 use nit_types::changes::{ChangeDetail, ChangeDrafts, ChangeList, ChangeQuery};
@@ -30,6 +31,7 @@ use crate::review;
 use super::diff;
 use super::port;
 use super::rebase;
+use super::state::{changes_matching, git_dir};
 use super::views;
 use super::{AppJson, AppPath, AppQuery, AppState, Error, with_conn};
 use super::{append, change_or_404};
@@ -42,7 +44,7 @@ pub(super) async fn list_changes(
 ) -> Result<Json<ChangeList>, Error> {
     with_conn(state.pool(), move |conn| {
         Ok(Json(ChangeList {
-            changes: state.changes_matching(conn, q)?,
+            changes: changes_matching(conn, q)?,
         }))
     })
     .await
@@ -180,7 +182,7 @@ pub(super) async fn revision_diff(
 ) -> Result<Json<Diff>, Error> {
     with_conn(state.pool(), move |conn| {
         let change = change_or_404(conn, id)?;
-        let revs = resolve_revs(&state, &change, n, q.against)?;
+        let revs = resolve_revs(conn, &change, n, q.against)?;
         let mut wire = contained_diff(&revs, 3, q.view, None)?;
         // After tagging: the message is not a git delta, so it is never drift.
         wire.files.insert(
@@ -231,7 +233,7 @@ pub(super) async fn revision_lines(
 ) -> Result<Json<FileLines>, Error> {
     with_conn(state.pool(), move |conn| {
         let change = change_or_404(conn, id)?;
-        let revs = resolve_revs(&state, &change, n, q.against)?;
+        let revs = resolve_revs(conn, &change, n, q.against)?;
         let wanted = Wanted {
             path: q.path,
             old_path: q.old_path,
@@ -288,7 +290,7 @@ struct Revs {
 }
 
 fn resolve_revs(
-    state: &AppState,
+    conn: &Connection,
     change: &ChangeProjection,
     n: RevisionNumber,
     against: Option<RevisionNumber>,
@@ -300,7 +302,7 @@ fn resolve_revs(
             .ok_or_else(|| Error::not_found(format!("revision {k} not found")))
     };
     Ok(Revs {
-        git_dir: state.git_dir(change.repo_id)?,
+        git_dir: git_dir(conn, change.repo_id)?,
         revision: find(n)?,
         against: against.map(find).transpose()?,
     })
@@ -378,7 +380,7 @@ pub(super) async fn ported_comments(
 ) -> Result<Json<Vec<PortedComment>>, Error> {
     with_conn(state.pool(), move |conn| {
         let change = change_or_404(conn, id)?;
-        let revs = resolve_revs(&state, &change, n, q.against)?;
+        let revs = resolve_revs(conn, &change, n, q.against)?;
         // Only a thread of an earlier revision can port to either target.
         let latest = revs
             .against

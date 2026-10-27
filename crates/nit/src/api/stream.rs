@@ -12,6 +12,7 @@ use nit_types::events::{Start, StreamMessage, Subscription};
 
 use crate::review;
 
+use super::state::changes_matching;
 use super::{AppState, Error, with_conn};
 
 /// `WS /api/stream`: the log of the changes that a query matches.
@@ -81,12 +82,11 @@ async fn read(
     state: &Arc<AppState>,
     mut subscription: Subscription,
 ) -> Result<(Vec<StreamMessage>, Subscription), Error> {
-    let st = Arc::clone(state);
     with_conn(state.pool(), move |conn| {
         let positions = &mut subscription.positions;
         let mut left: BTreeMap<ChangeNumber, u64> = std::mem::take(positions);
         let mut messages = Vec::new();
-        for change in st.changes_matching(conn, subscription.query.clone())? {
+        for change in changes_matching(conn, subscription.query.clone())? {
             let from = match (left.remove(&change.id), subscription.start) {
                 (Some(next), _) => next,
                 (None, Start::Log) => 0,

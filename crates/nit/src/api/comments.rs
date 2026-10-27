@@ -15,6 +15,7 @@ use nit_types::domain::{CommentInput, LogPayload};
 
 use nit_types::domain::Lifecycle;
 
+use super::state::git_dir;
 use super::views;
 use super::{AppJson, AppPath, AppState, Error, append, with_conn};
 use super::{anchor_of, change_or_404, snapshot_line_text};
@@ -63,7 +64,7 @@ pub(super) async fn create_comment(
             let revision = change.revision(number).ok_or_else(|| {
                 Error::bad_request(format!("revision {number} is absent from change {id}"))
             })?;
-            let git_dir = state.git_dir(change.repo_id)?;
+            let git_dir = git_dir(conn, change.repo_id)?;
             anchor.snapshot_line_text(snapshot_line_text(
                 state.blobs(),
                 &git_dir,

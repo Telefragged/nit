@@ -1,16 +1,14 @@
 //! Shared server state.
 //!
-//! The repo registry cache, the append primitive, the appended watch, and
-//! the API error type.
+//! The append primitive, the appended watch, and the API error type.
 //!
 //! The log is the only record of a change. A read replays it into a
 //! [`ChangeProjection`]. An append replays it inside the write transaction
 //! that extends it.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -32,7 +30,6 @@ use crate::review;
 pub struct AppState {
     pool: Pool,
     blobs: super::attachments::Blobs,
-    repos: StdMutex<HashMap<u64, Arc<RepoState>>>,
     /// Receives a new value after each committed transaction that appended
     /// an entry or deleted a change.
     ///
@@ -48,39 +45,10 @@ pub struct AppState {
     shutdown: watch::Sender<bool>,
 }
 
-/// Cached repo registry entry.
-///
-/// `git_dir` is in an `RwLock` because `nit repo move` repoints it in-place.
-/// The merge timer's baseline is not cached here — it lives only in
-/// `repos.canonical_head` (the merge sweep's cursor, `crate::api::timer`).
-pub struct RepoState {
-    pub canonical_ref: String,
-    pub git_dir: StdRwLock<String>,
-}
-
-impl RepoState {
-    fn new(row: &db::RepoRow) -> RepoState {
-        RepoState {
-            canonical_ref: row.canonical_ref.clone(),
-            git_dir: StdRwLock::new(row.git_dir.clone()),
-        }
-    }
-
-    /// The current git-common-dir.
-    ///
-    /// # Panics
-    ///
-    /// When the git-dir lock is poisoned.
-    #[must_use]
-    pub fn git_dir(&self) -> String {
-        self.git_dir.read().expect("git_dir lock poisoned").clone()
-    }
-}
-
 impl AppState {
     /// Initializes the state from `db_path`.
     ///
-    /// Migrates the schema and caches the repo registry.
+    /// Migrates the schema.
     /// Seeds the id allocator above every draft id in use to prevent reuse
     /// after restart.
     ///
@@ -94,15 +62,10 @@ impl AppState {
             .get()
             .await
             .map_err(|e| anyhow::anyhow!("database pool: {e}"))?;
-        let (repos, max_id) = conn
+        let max_id = conn
             .interact(|conn| -> anyhow::Result<_> {
                 db::migrate(conn)?;
-                let max_id = db::max_draft_id(conn)?;
-                let repos: HashMap<u64, Arc<RepoState>> = db::all_repos(conn)?
-                    .into_iter()
-                    .map(|r| (r.id, Arc::new(RepoState::new(&r))))
-                    .collect();
-                Ok((repos, max_id))
+                db::max_draft_id(conn)
             })
             .await
             .map_err(|e| anyhow::anyhow!("database init: {e}"))??;
@@ -110,7 +73,6 @@ impl AppState {
         Ok(Arc::new(AppState {
             pool,
             blobs,
-            repos: StdMutex::new(repos),
             appended: watch::channel(()).0,
             next_id: AtomicU64::new(max_id + 1),
             shutdown,
@@ -149,117 +111,56 @@ impl AppState {
         self.shutdown.subscribe()
     }
 
-    /// The cached repo state, if loaded.
-    ///
-    /// # Panics
-    ///
-    /// When the repo map mutex is poisoned.
-    pub fn repo_state(&self, repo_id: u64) -> Option<Arc<RepoState>> {
-        self.repos
-            .lock()
-            .expect("repo map poisoned")
-            .get(&repo_id)
-            .cloned()
-    }
-
-    /// The git-common-dir of a loaded repo (the read-side git work needs it).
-    ///
-    /// # Errors
-    ///
-    /// When the repo is not in the registry cache.
-    pub fn git_dir(&self, repo_id: u64) -> Result<String, Error> {
-        Ok(self
-            .repo_state(repo_id)
-            .ok_or_else(|| Error::internal("repo not loaded"))?
-            .git_dir())
-    }
-
-    /// Loaded repo ids, ascending.
-    ///
-    /// # Panics
-    ///
-    /// When the repo map mutex is poisoned.
-    pub fn repo_ids(&self) -> Vec<u64> {
-        let mut ids: Vec<u64> = self
-            .repos
-            .lock()
-            .expect("repo map poisoned")
-            .keys()
-            .copied()
-            .collect();
-        ids.sort_unstable();
-        ids
-    }
-
-    /// Cache (or refresh the git dir of) a repo's registry row.
-    ///
-    /// # Panics
-    ///
-    /// When the repo map mutex is poisoned.
-    pub fn ensure_repo(&self, row: &db::RepoRow) -> Arc<RepoState> {
-        let mut map = self.repos.lock().expect("repo map poisoned");
-        if let Some(existing) = map.get(&row.id) {
-            existing
-                .git_dir
-                .write()
-                .expect("git_dir lock poisoned")
-                .clone_from(&row.git_dir);
-            return existing.clone();
-        }
-        let state = Arc::new(RepoState::new(row));
-        map.insert(row.id, state.clone());
-        state
-    }
-
-    /// Drops a repo from the registry cache.
-    ///
-    /// # Panics
-    ///
-    /// When the repo map mutex is poisoned.
-    pub fn forget_repo(&self, repo_id: u64) {
-        self.repos
-            .lock()
-            .expect("repo map poisoned")
-            .remove(&repo_id);
-    }
-
-    /// Returns the folds of the changes a query picks, as owned
-    /// projections, ascending by change number within each repo.
-    ///
-    /// # Errors
-    ///
-    /// When enumerating or replaying a change fails.
-    pub fn changes_matching(
-        &self,
-        conn: &Connection,
-        query: ChangeQuery,
-    ) -> anyhow::Result<Vec<ChangeProjection>> {
-        let repo_ids = self.repo_ids_matching(query.repo);
-        let filter = db::ChangeFilter::from(query);
-        let mut changes = Vec::new();
-        for repo_id in repo_ids {
-            changes.extend(review::repo_changes(conn, repo_id, &filter)?);
-        }
-        Ok(changes)
-    }
-
-    /// Returns the repo ids a `?repo=` filter admits.
-    ///
-    /// An unknown id admits none, so a list read filters to empty rather
-    /// than 404ing.
-    #[must_use]
-    pub fn repo_ids_matching(&self, repo: Option<u64>) -> Vec<u64> {
-        self.repo_ids()
-            .into_iter()
-            .filter(|&id| repo.is_none_or(|r| r == id))
-            .collect()
-    }
-
     /// A handle to the connection pool (cheaply cloned — it is `Arc`-backed).
     #[must_use]
     pub fn pool(&self) -> Pool {
         self.pool.clone()
     }
+}
+
+/// Returns the git-common-dir of a registered repo.
+///
+/// # Errors
+///
+/// When no repo has the id, or the read fails.
+pub fn git_dir(conn: &Connection, repo_id: u64) -> Result<String, Error> {
+    Ok(db::get_repo(conn, repo_id)?
+        .ok_or_else(|| Error::internal(format!("repo {repo_id} not registered")))?
+        .git_dir)
+}
+
+/// Returns the folds of the changes a query picks, as owned
+/// projections, ascending by change number within each repo.
+///
+/// # Errors
+///
+/// When enumerating or replaying a change fails.
+pub fn changes_matching(
+    conn: &Connection,
+    query: ChangeQuery,
+) -> anyhow::Result<Vec<ChangeProjection>> {
+    let repo_ids = repo_ids_matching(conn, query.repo)?;
+    let filter = db::ChangeFilter::from(query);
+    let mut changes = Vec::new();
+    for repo_id in repo_ids {
+        changes.extend(review::repo_changes(conn, repo_id, &filter)?);
+    }
+    Ok(changes)
+}
+
+/// Returns the repo ids a `?repo=` filter admits.
+///
+/// An unknown id has no changes, so a list read filters to empty rather
+/// than 404ing.
+///
+/// # Errors
+///
+/// When reading the registry fails.
+pub fn repo_ids_matching(conn: &Connection, repo: Option<u64>) -> anyhow::Result<Vec<u64>> {
+    Ok(match repo {
+        Some(id) => vec![id],
+        None => db::all_repos(conn)?.into_iter().map(|r| r.id).collect(),
+    })
 }
 
 /// The projection of a change after an append, and the entries that the

@@ -12,6 +12,7 @@ use git2::Repository;
 use jiff::{SignedDuration, Timestamp};
 use nit_types::gc::{DEFAULT_RETENTION_DAYS, GcReport, GcRequest};
 
+use crate::db;
 use crate::gitscan::objects;
 
 use super::attachments::Collected;
@@ -65,9 +66,10 @@ pub async fn collect_changes(state: &Arc<AppState>, cutoff: Timestamp) -> Result
         // two can leave extra refs that pin objects. It never leaves a
         // change without its objects.
         for repo_changes in deleted.chunk_by(|a, b| a.0 == b.0) {
-            let Some(repo) = st
-                .repo_state(repo_changes[0].0)
-                .and_then(|r| Repository::open(r.git_dir()).ok())
+            let Some(repo) = db::get_repo(conn, repo_changes[0].0)
+                .ok()
+                .flatten()
+                .and_then(|r| Repository::open(r.git_dir).ok())
             else {
                 continue;
             };
