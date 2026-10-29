@@ -275,7 +275,8 @@ pub const MERGED_WINDOW: u64 = 5;
 /// The anchor a request names, checked against the route's own rule.
 ///
 /// The synthetic commit-message and attachment files are the route's own
-/// rule. The server renders those files and never diffs them, so they
+/// rule. An anchor's old side is the revision's parent, and the parent
+/// holds no commit message or attachment of this change. So these files
 /// have no old side.
 fn anchor_of(anchor: Option<Anchor>) -> Result<Anchor, Error> {
     let anchor = anchor.unwrap_or(Anchor::Change);
