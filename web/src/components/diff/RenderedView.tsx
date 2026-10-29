@@ -5,7 +5,7 @@ import { displayPath } from "../../lib/diffview";
 import { sideText, type RenderedKind } from "../../lib/rendered";
 import { fileLinesQuery } from "../../lib/useHunkExpansion";
 import { useReview } from "../../pages/reviewContext";
-import Markdown from "../Markdown";
+import Document from "../Document";
 
 /** The rendered body of a file, in place of its lines. It renders the
  * whole file, however little of it the diff shows. An HTML page runs in
@@ -46,8 +46,8 @@ export default function RenderedView({
   const text = sideText(lines, file.status === "deleted" ? "old" : "new");
   if (kind === "html") return frame({ srcDoc: text });
   return (
-    <div className="rendered rendered-markdown comment-body">
-      <Markdown text={text} />
+    <div className="rendered rendered-markdown">
+      <Document text={text} />
     </div>
   );
 }
