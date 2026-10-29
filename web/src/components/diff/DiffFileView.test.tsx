@@ -10,13 +10,13 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   add,
+  attachedFile,
   ctx as both,
   del,
   msgFile,
   uiThread,
 } from "../../api/fixtures/builders";
 import type { DiffFile, LineAnchor } from "../../api/types";
-import { attachmentFile } from "../../lib/attachments";
 import type { UiThread } from "../../lib/comments";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
 import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
@@ -30,6 +30,7 @@ const ctx: ReviewCtx = {
   against: 1,
   latestRevision: 2,
   whitespace: "compare",
+  attachKey: "",
   showRange: () => undefined,
   link: null,
   linkHref: () => "",
@@ -349,10 +350,7 @@ describe("hovering a thread", () => {
 
 describe("a rendered attachment", () => {
   it("lists a line's thread above the rendered file", () => {
-    const file = attachmentFile(
-      { name: "plan.md", hash: "a".repeat(64), revision: 2 },
-      "# Plan",
-    );
+    const file = attachedFile("plan.md", "# Plan", 2);
     const thread = uiThread({
       id: 1,
       revision: 2,
@@ -365,10 +363,7 @@ describe("a rendered attachment", () => {
   });
 
   it("renders from its own lines, without a read", () => {
-    const file = attachmentFile(
-      { name: "plan.md", hash: "a".repeat(64), revision: 2 },
-      "# Plan",
-    );
+    const file = attachedFile("plan.md", "# Plan", 2);
     const { container } = renderFile("unified", file);
     expect(container.querySelector(".rendered-markdown h1")?.textContent).toBe(
       "Plan",

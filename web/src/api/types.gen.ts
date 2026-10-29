@@ -920,6 +920,3 @@ export const COMMIT_MSG_PATH = "/COMMIT_MSG";
 
 /** `crate::diff::ATTACHMENT_PREFIX`. */
 export const ATTACHMENT_PREFIX = "/attachments/";
-
-/** `crate::attachments::MAX_TEXT_SIZE`. */
-export const MAX_TEXT_SIZE = 1048576;

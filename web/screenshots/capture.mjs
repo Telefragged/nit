@@ -32,6 +32,8 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
+// The bytes behind each attachment of change 12.
+import ATTACHMENT_BLOBS from "../src/api/fixtures/blobs.json" with { type: "json" };
 
 const webDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = process.env.NIT_SCREENSHOT_OUT_DIR
@@ -247,52 +249,6 @@ const applySetting = async (page, name) => {
   await untilReady(page);
 };
 
-/** The bytes behind each attachment of change 12. */
-const ATTACHMENT_BLOBS = {
-  ["a".repeat(64)]: {
-    contentType: "text/plain; charset=utf-8",
-    body: [
-      "change 12  position 0  revision 3f2a9c1  auth: document rotation",
-      "change 12  position 1  r0  attach plan/rotation.md",
-      "change 12  position 2  r0  attach web/screenshots/flow.svg",
-      "",
-    ].join("\n"),
-  },
-  ["b".repeat(64)]: {
-    contentType: "text/markdown; charset=utf-8",
-    body: [
-      "# Rotation plan",
-      "",
-      "1. Issue a successor token in the same **family** on every use.",
-      "2. Revoke the whole family when a rotated token comes back.",
-      "",
-      "| Step | Owner |",
-      "| ---- | ----- |",
-      "| Schema | storage |",
-      "| Endpoint | api |",
-      "",
-    ].join("\n"),
-  },
-  ["c".repeat(64)]: {
-    contentType: "text/html; charset=utf-8",
-    body:
-      "<!doctype html><body style='font-family:sans-serif;padding:16px'>" +
-      "<h2>POST /auth/refresh</h2><p>Rotates a refresh token.</p>" +
-      "<p id='js'>scripts did not run</p>" +
-      "<script>document.getElementById('js').textContent = 'scripts ran in the sandbox';</script>",
-  },
-  ["d".repeat(64)]: {
-    contentType: "image/svg+xml",
-    body:
-      "<svg xmlns='http://www.w3.org/2000/svg' width='360' height='120'>" +
-      "<rect x='10' y='30' width='100' height='60' rx='8' fill='#4f8cff'/>" +
-      "<rect x='250' y='30' width='100' height='60' rx='8' fill='#33b074'/>" +
-      "<path d='M112 60 H246' stroke='#888' stroke-width='3'/>" +
-      "<text x='60' y='65' text-anchor='middle' fill='#fff'>token</text>" +
-      "<text x='300' y='65' text-anchor='middle' fill='#fff'>successor</text></svg>",
-  },
-};
-
 /**
  * Page states to capture. `actions` runs after load to put the page into a
  * specific state (toggles, editors, error paths). Add an entry whenever a
@@ -498,18 +454,7 @@ const captures = [
     path: "/changes/12?against=base",
     actions: async (page) => {
       await expandAllFiles(page);
-      // The Markdown section shows either the rendered text or, when its
-      // read failed, the binary note. Waiting for either one fails a bad
-      // read here, instead of waiting forever for the text.
       const plan = '[data-diff-path="/attachments/plan/rotation.md"]';
-      await untilDom(
-        page,
-        (sel) =>
-          !!document
-            .querySelector(sel)
-            ?.querySelector(".rendered-markdown, .diff-note"),
-        plan,
-      );
       await expectOne(page.locator(`${plan} .rendered-markdown`));
       await page.locator(".rendered-image img").evaluate((img) => img.decode());
       const frame = await (
@@ -1036,7 +981,10 @@ async function main() {
         const hash = new URL(route.request().url()).pathname.split("/")[3];
         const blob = ATTACHMENT_BLOBS[hash];
         return blob
-          ? route.fulfill({ contentType: blob.contentType, body: blob.body })
+          ? route.fulfill({
+              contentType: blob.contentType,
+              body: blob.body,
+            })
           : route.fulfill({ status: 404 });
       });
       const errors = [];

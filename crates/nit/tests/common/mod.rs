@@ -338,6 +338,17 @@ fn read(mut response: ureq::http::Response<ureq::Body>) -> (u16, Value) {
     (status, value)
 }
 
+/// Look a file up by its new path in a `Diff`.
+pub fn by_path(diff: &Value, p: &str) -> Value {
+    diff["files"]
+        .as_array()
+        .expect("files array")
+        .iter()
+        .find(|f| f["path"] == p)
+        .unwrap_or_else(|| panic!("no file {p} in {diff}"))
+        .clone()
+}
+
 pub fn http_get(url: &str) -> (u16, Value) {
     read(agent().get(url).call().unwrap())
 }

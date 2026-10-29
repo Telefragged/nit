@@ -1,21 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { attachmentFile } from "./attachments";
+import { addedFile } from "../api/fixtures/builders";
+import { reviewFiles } from "./attachments";
 
-describe("attachmentFile", () => {
-  const attachment = { name: "out.log", hash: "a".repeat(64), revision: 0 };
+describe("reviewFiles", () => {
+  const plan = { name: "plan.md", hash: "a".repeat(64), revision: 0 };
 
-  it("shows text as one all-added hunk, without a line for the last newline", () => {
-    const file = attachmentFile(attachment, "one\ntwo\n");
-    expect(file.binary).toBe(false);
-    expect(file.hunks[0]?.lines.map((l) => [l.new, l.text])).toEqual([
-      [1, "one"],
-      [2, "two"],
-    ]);
+  it("joins an attachment file to the attachment of its name", () => {
+    const [file] = reviewFiles(
+      [addedFile("/attachments/plan.md", "# Plan")],
+      [plan],
+    );
+    expect(file?.attachment).toEqual(plan);
   });
 
-  it("shows no text as a binary file", () => {
-    const file = attachmentFile(attachment, null);
-    expect(file.binary).toBe(true);
-    expect(file.hunks).toEqual([]);
+  it("joins no attachment to a file of the commit", () => {
+    const [file] = reviewFiles([addedFile("plan.md", "# Plan")], [plan]);
+    expect(file?.attachment).toBeUndefined();
   });
 });

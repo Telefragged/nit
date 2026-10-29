@@ -44,6 +44,9 @@ export interface ReviewCtx {
   /** How the diff on screen compares whitespace. A reveal reads the file
    * the same way, so a revealed line matches the hunks around it. */
   whitespace: Whitespace;
+  /** The hashes of the attachments that the two revisions show. An attach
+   * entry changes it, and the attachments' lines with it. */
+  attachKey: string;
   /** Shows a diff range the page computed for a thread (`rangeSince`). It
    * runs the same draft-editor guard as the range selects. */
   showRange: (range: DiffRange) => void;

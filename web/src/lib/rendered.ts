@@ -22,7 +22,7 @@ const KIND_BY_EXTENSION: Record<string, RenderedKind> = {
 };
 
 /** The kind of a file, by the extension of its path's last segment. */
-export const kindOf = (path: string): RenderedKind | undefined =>
+const kindOf = (path: string): RenderedKind | undefined =>
   KIND_BY_EXTENSION[
     splitExtension(path.split("/").at(-1) ?? "")[1].toLowerCase()
   ];

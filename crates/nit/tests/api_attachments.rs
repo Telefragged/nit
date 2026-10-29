@@ -3,8 +3,8 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, a_change, abandon, change_log, collect, collect_attachments, http_get,
-    http_get_bytes, http_post, http_put_bytes, msg, nit,
+    GitRepo, TestServer, a_change, abandon, by_path, change_log, collect, collect_attachments,
+    http_get, http_get_bytes, http_post, http_put_bytes, msg, nit,
 };
 use jiff::{SignedDuration, Timestamp};
 use nit::api::Collected;
@@ -401,6 +401,134 @@ fn a_thread_on_a_carried_attachment_keeps_its_line() {
             json!({ "line": { "file": "/attachments/notes.txt", "side": "new", "at": { "whole": 2 } } })
         ]
     );
+}
+
+/// The file at `path` of the diff of `revision`, with `query` appended.
+fn diff_file(
+    server: &TestServer,
+    change_number: u64,
+    revision: u64,
+    query: &str,
+    path: &str,
+) -> Value {
+    let (st, diff) = http_get(&server.url(&format!(
+        "/api/changes/{change_number}/revisions/{revision}/diff{query}"
+    )));
+    assert_eq!(st, 200, "{diff}");
+    by_path(&diff, path)
+}
+
+/// Each line of a diff file, as its kind, old number, new number and text.
+fn lines(file: &Value) -> Vec<(String, Value, Value, String)> {
+    file["hunks"]
+        .as_array()
+        .expect("hunks")
+        .iter()
+        .flat_map(|h| h["lines"].as_array().expect("lines").clone())
+        .map(|l| {
+            (
+                l["kind"].as_str().expect("kind").to_string(),
+                l["old"].clone(),
+                l["new"].clone(),
+                l["text"].as_str().expect("text").to_string(),
+            )
+        })
+        .collect()
+}
+
+/// Against its parent, a revision's diff shows each attachment as an
+/// added file, and an attachment that is not text as a binary one.
+#[test]
+fn the_diff_shows_the_attachments_as_added_files() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let notes = upload(&server, b"a\nb\n");
+    let shot = upload(&server, b"\x89PNG\x00\xff");
+    attach(&server, change_number, 0, "notes.txt", &notes);
+    attach(&server, change_number, 0, "shot.png", &shot);
+
+    let notes = diff_file(&server, change_number, 0, "", "/attachments/notes.txt");
+    let shot = diff_file(&server, change_number, 0, "", "/attachments/shot.png");
+
+    assert_eq!(notes["status"], "added");
+    assert_eq!(
+        lines(&notes),
+        [
+            ("add".into(), Value::Null, json!(1), "a".into()),
+            ("add".into(), Value::Null, json!(2), "b".into()),
+        ]
+    );
+    assert_eq!(shot["binary"], true);
+    assert_eq!(shot["hunks"], json!([]));
+}
+
+/// An interdiff compares the attachment that each revision shows. An
+/// attachment that carries forward unchanged shows as all context.
+#[test]
+fn an_interdiff_compares_the_attachments_of_the_two_revisions() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let before = upload(&server, b"a\nb\n");
+    let kept = upload(&server, b"kept\n");
+    attach(&server, change_number, 0, "notes.txt", &before);
+    attach(&server, change_number, 0, "kept.txt", &kept);
+    amend(&server, &g);
+    let after = upload(&server, b"a\nB\n");
+    attach(&server, change_number, 1, "notes.txt", &after);
+
+    let notes = diff_file(
+        &server,
+        change_number,
+        1,
+        "?against=0",
+        "/attachments/notes.txt",
+    );
+    let kept = diff_file(
+        &server,
+        change_number,
+        1,
+        "?against=0",
+        "/attachments/kept.txt",
+    );
+
+    assert_eq!(notes["status"], "modified");
+    assert_eq!(
+        lines(&notes),
+        [
+            ("context".into(), json!(1), json!(1), "a".into()),
+            ("del".into(), json!(2), Value::Null, "b".into()),
+            ("add".into(), Value::Null, json!(2), "B".into()),
+        ]
+    );
+    assert_eq!(
+        lines(&kept),
+        [("context".into(), json!(1), json!(1), "kept".into())]
+    );
+}
+
+/// `/lines` serves the whole attachment, as the interdiff compares it.
+#[test]
+fn lines_of_an_attachment() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let before = upload(&server, b"a\nb\nc\nd\ne\nf\ng\nh\n");
+    attach(&server, change_number, 0, "notes.txt", &before);
+    amend(&server, &g);
+    let after = upload(&server, b"a\nb\nc\nd\ne\nf\ng\nH\n");
+    attach(&server, change_number, 1, "notes.txt", &after);
+
+    let (st, whole) = http_get(&server.url(&format!(
+        "/api/changes/{change_number}/revisions/1/lines?path=/attachments/notes.txt&against=0"
+    )));
+
+    assert_eq!(st, 200, "{whole}");
+    let texts: Vec<&str> = whole["lines"]
+        .as_array()
+        .expect("lines")
+        .iter()
+        .map(|l| l["text"].as_str().expect("text"))
+        .collect();
+    assert_eq!(texts, ["a", "b", "c", "d", "e", "f", "g", "h", "H"]);
 }
 
 /// `nit attach` uploads a file and attaches it to the latest revision,

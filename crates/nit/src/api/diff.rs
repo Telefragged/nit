@@ -10,9 +10,10 @@ use anyhow::Result;
 use git2::{Delta, Repository, Tree};
 
 use nit_types::diff::{Diff, DiffFile, Hunk, Line};
-use nit_types::domain::Sha;
+use nit_types::domain::{AttachmentHash, Sha};
 use nit_types::domain::{DiffView, FileStatus, LineKind};
 
+use super::attachments::Blobs;
 use crate::hunks::{self, wire_line};
 
 pub use nit_types::diff::{ATTACHMENT_PREFIX, COMMIT_MSG_PATH};
@@ -259,33 +260,70 @@ pub(super) fn stats(hunks: &[Hunk]) -> (u64, u64) {
 /// The synthetic [`COMMIT_MSG_PATH`] entry at the front of every diff.
 ///
 /// Vs parent (`old: None`) the whole message as one all-`add` hunk;
-/// interdiff a real line diff `old → new`, identical messages rendered as
-/// a single all-`context` hunk so the message stays visible and
-/// commentable. `context` is the count of unchanged lines around a change.
+/// interdiff a real line diff `old → new`. `context` is the count of
+/// unchanged lines around a change.
 #[must_use]
 pub fn commit_msg_file(old: Option<&str>, new: &str, context: u32) -> DiffFile {
-    let mut file = DiffFile {
-        path: COMMIT_MSG_PATH.to_string(),
+    let mut file = outside_tree(COMMIT_MSG_PATH.to_string(), old.is_some(), true);
+    fill_text(
+        &mut file,
+        old.unwrap_or_default(),
+        new,
+        context,
+        DiffView::default(),
+    );
+    file
+}
+
+/// The entry for the attachment `name`, from its blob on each side.
+///
+/// `None` is a side that does not show the attachment. The entry is
+/// binary when either side is not text.
+pub(super) fn attachment_file(
+    blobs: &Blobs,
+    name: &str,
+    old: Option<&AttachmentHash>,
+    new: Option<&AttachmentHash>,
+    context: u32,
+    view: DiffView,
+) -> DiffFile {
+    let path = format!("{ATTACHMENT_PREFIX}{name}");
+    let mut file = outside_tree(path, old.is_some(), new.is_some());
+    let text = |hash: Option<&AttachmentHash>| hash.map_or(Some(String::new()), |h| blobs.text(h));
+    if let (Some(old), Some(new)) = (text(old), text(new)) {
+        fill_text(&mut file, &old, &new, context, view);
+    }
+    file
+}
+
+/// A binary entry, with no lines yet, for a file outside the trees.
+///
+/// `old` and `new` say which sides hold the file.
+fn outside_tree(path: String, old: bool, new: bool) -> DiffFile {
+    let status = match (old, new) {
+        (false, _) => FileStatus::Added,
+        (_, false) => FileStatus::Deleted,
+        _ => FileStatus::Modified,
+    };
+    DiffFile {
+        path,
         old_path: None,
-        status: if old.is_some() {
-            FileStatus::Modified
-        } else {
-            FileStatus::Added
-        },
+        status,
         binary: true,
         additions: 0,
         deletions: 0,
         old_total: 0,
         new_total: 0,
         hunks: Vec::new(),
-    };
-    fill_lines(
-        &mut file,
-        old.unwrap_or_default().as_bytes(),
-        new.as_bytes(),
-        context,
-        DiffView::default(),
-    );
+    }
+}
+
+/// Fills `file` with the lines of `old → new`.
+///
+/// Identical texts render as a single all-`context` hunk, so the file
+/// stays visible and commentable.
+fn fill_text(file: &mut DiffFile, old: &str, new: &str, context: u32, view: DiffView) {
+    fill_lines(file, old.as_bytes(), new.as_bytes(), context, view);
     if file.hunks.is_empty() && !new.is_empty() {
         let lines: Vec<Line> = new
             .lines()
@@ -309,7 +347,6 @@ pub fn commit_msg_file(old: Option<&str>, new: &str, context: u32) -> DiffFile {
             lines,
         });
     }
-    file
 }
 
 /// Line `line` (1-based) of `text`, `None` out of range.

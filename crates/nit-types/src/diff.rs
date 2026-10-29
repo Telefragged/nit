@@ -11,8 +11,9 @@ use crate::domain::{FileStatus, LineKind};
 /// real file.
 pub const COMMIT_MSG_PATH: &str = "/COMMIT_MSG";
 
-/// The reserved prefix of an attachment's path: a thread on the attachment
-/// `plan.md` anchors at the file `/attachments/plan.md`.
+/// The reserved prefix of an attachment's path: a diff lists the
+/// attachment `plan.md` as the file `/attachments/plan.md`, and a thread
+/// on that attachment anchors at that file.
 ///
 /// Like [`COMMIT_MSG_PATH`], it cannot collide with a tree file.
 pub const ATTACHMENT_PREFIX: &str = "/attachments/";
