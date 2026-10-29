@@ -613,6 +613,143 @@ button.rail-toggle,
   padding: 12px;
 }
 
+/* A Markdown file reads as a page, not as a comment: body-sized text,
+   headings that step down in size, and room between blocks. */
+.rendered-markdown {
+  max-width: 920px;
+  padding: 16px 24px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.rendered-markdown > :first-child {
+  margin-top: 0;
+}
+
+.rendered-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.rendered-markdown p,
+.rendered-markdown ul,
+.rendered-markdown ol,
+.rendered-markdown pre,
+.rendered-markdown blockquote,
+.rendered-markdown table {
+  margin: 0 0 14px;
+}
+
+.rendered-markdown h1,
+.rendered-markdown h2,
+.rendered-markdown h3,
+.rendered-markdown h4,
+.rendered-markdown h5,
+.rendered-markdown h6 {
+  margin: 24px 0 12px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.rendered-markdown h1 {
+  font-size: 1.9em;
+}
+
+.rendered-markdown h2 {
+  font-size: 1.45em;
+}
+
+.rendered-markdown h1,
+.rendered-markdown h2 {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rendered-markdown h3 {
+  font-size: 1.2em;
+}
+
+.rendered-markdown h4 {
+  font-size: 1em;
+}
+
+.rendered-markdown h5,
+.rendered-markdown h6 {
+  font-size: 0.9em;
+  color: var(--text-dim);
+}
+
+.rendered-markdown ul,
+.rendered-markdown ol {
+  padding-left: 2em;
+}
+
+.rendered-markdown li + li {
+  margin-top: 4px;
+}
+
+.rendered-markdown code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.rendered-markdown pre {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  line-height: 1.45;
+}
+
+.rendered-markdown pre code {
+  font-size: 12.5px;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.rendered-markdown blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 14px;
+  color: var(--text-dim);
+}
+
+.rendered-markdown table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.rendered-markdown th,
+.rendered-markdown td {
+  border: 1px solid var(--border-strong);
+  padding: 5px 12px;
+}
+
+.rendered-markdown th {
+  background: var(--bg-raised);
+  font-weight: 600;
+}
+
+.rendered-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border-strong);
+  margin: 20px 0;
+}
+
+.rendered-markdown img {
+  max-width: 100%;
+}
+
+.rendered-markdown a {
+  color: var(--blue);
+}
+
 .rendered-image img {
   display: block;
   max-width: 100%;
