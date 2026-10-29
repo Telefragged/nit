@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { blockAt, parseBlocks } from "./document";
+import { add, ctx as both, del } from "../api/fixtures/builders";
+import { blockAt, parseBlocks, renderDoc } from "./document";
 
 const doc = [
   "# Plan", // 1
@@ -70,5 +71,48 @@ describe("blockAt", () => {
 
   it("places a line past the end under the last block", () => {
     expect(blockAt(blocks, 40)?.lines).toEqual([9, 11]);
+  });
+});
+
+describe("renderDoc", () => {
+  /** Each row as the first source line of its blocks: `=n` for a block
+   * that stays, `-n` and `+n` for a removed and an added one. */
+  const shape = (lines: Parameters<typeof renderDoc>[0]) =>
+    renderDoc(lines).rows.map((row) =>
+      "same" in row
+        ? `=${row.same.lines[0]}`
+        : [
+            ...row.removed.map((b) => `-${b.lines[0]}`),
+            ...row.added.map((b) => `+${b.lines[0]}`),
+          ].join(" "),
+    );
+
+  it("puts a removed block above the block that replaces it", () => {
+    const rows = shape([
+      both(1, 1, "# Title"),
+      both(2, 2, ""),
+      del(3, "old"),
+      add(3, "new"),
+      both(4, 4, ""),
+      both(5, 5, "end"),
+    ]);
+    expect(rows).toEqual(["=1", "-3 +3", "=5"]);
+  });
+
+  it("changes both sides of a block that loses one of its lines", () => {
+    const rows = shape([both(1, 1, "one"), del(2, "two"), both(3, 2, "three")]);
+    expect(rows).toEqual(["-1 +1"]);
+  });
+
+  it("matches a block that stays with its old side", () => {
+    const doc = renderDoc([del(1, "gone"), both(2, 1, ""), both(3, 2, "kept")]);
+    const kept = doc.rows.at(-1);
+    expect(kept && "same" in kept && kept.old?.lines).toEqual([3, 3]);
+  });
+
+  it("renders the one side of a file with no changes", () => {
+    const doc = renderDoc([add(1, "# New"), add(2, "")], "new");
+    expect(doc.rows).toHaveLength(1);
+    expect(doc.old).toEqual([]);
   });
 });

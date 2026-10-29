@@ -421,7 +421,7 @@ describe("a Markdown file", () => {
     ],
   };
 
-  it("renders the whole file, not only the diff", () => {
+  it("renders the whole file, with the changed blocks marked", () => {
     const client = new QueryClient();
     client.setQueryData(fileLinesQuery(ctx, doc).queryKey, {
       lines: [
@@ -437,11 +437,11 @@ describe("a Markdown file", () => {
     expect(container.querySelector(".rendered-markdown h1")?.textContent).toBe(
       "Title",
     );
-    expect(container.querySelector(".rendered-markdown em")?.textContent).toBe(
-      "text",
+    expect(container.querySelector(".doc-removed")?.textContent).toBe(
+      "3old text",
     );
-    expect(
-      container.querySelector(".rendered-markdown")?.textContent,
-    ).not.toContain("old");
+    expect(container.querySelector(".doc-added")?.textContent).toBe(
+      "3new text",
+    );
   });
 });

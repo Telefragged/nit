@@ -253,8 +253,12 @@ export type Totals = Pick<DiffFile, "old_total" | "new_total">;
  * deletion, or a commit message read against its parent. A binary file
  * declares no lines on either side, so it answers true as well. */
 export function oneSided(file: Totals): boolean {
-  return file.old_total === 0 || file.new_total === 0;
+  return onlySide(file) !== undefined;
 }
+
+/** The one side that a file with one side has, else undefined. */
+export const onlySide = (file: Totals): Side | undefined =>
+  file.old_total === 0 ? "new" : file.new_total === 0 ? "old" : undefined;
 
 /** The file's line count on `side`. */
 const total = (file: Totals, side: Side) =>

@@ -492,6 +492,27 @@ const captures = [
       await centerOn(page, page.locator(`${doc} .file-header`));
     },
   },
+  // The same file side by side: each removed block sits left of the
+  // block that replaces it.
+  {
+    name: "review-rendered-split",
+    path: "/changes/12?against=base",
+    actions: async (page) => {
+      await expandAllFiles(page);
+      await applySetting(page, "Side-by-side");
+      const doc = 'section[data-diff-path="docs/auth-rotation.md"]';
+      await clickNow(
+        page
+          .locator(doc)
+          .getByRole("button", { name: "Rendered", exact: true }),
+      );
+      await untilDom(
+        page,
+        (sel) => !!document.querySelector(sel),
+        `${doc} .doc-split .doc-removed`,
+      );
+    },
+  },
   // Collapsed-by-default file sections: only the synthetic commit message
   // starts expanded, the code files are header-only rows.
   { name: "review-files-collapsed", path: "/changes/11?against=base" },
