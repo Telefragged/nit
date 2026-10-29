@@ -660,6 +660,49 @@ button.rail-toggle,
   margin: 4px 0 14px;
 }
 
+/* A block that the diff adds or removes. Its padding replaces the
+   margins of its content, so the tint covers the gap around the text,
+   and a bar marks its left edge. */
+.doc-added,
+.doc-removed {
+  padding-block: 6px;
+  background-repeat: no-repeat;
+  background-size: 3px 100%;
+}
+
+.rendered-markdown :is(.doc-added, .doc-removed) > :last-child {
+  margin-block: 0;
+}
+
+.rendered-markdown :is(.doc-added, .doc-removed) > .doc-gutter {
+  top: 6px;
+}
+
+.doc-added {
+  background-color: var(--add-bg);
+  background-image: linear-gradient(var(--green), var(--green));
+}
+
+.doc-removed {
+  background-color: var(--del-bg);
+  background-image: linear-gradient(var(--red), var(--red));
+}
+
+/* Side by side, the old side's blocks sit in the left column of each
+   row, and the new side's in the right. */
+.rendered-markdown.doc-split {
+  max-width: none;
+}
+
+.doc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.doc-col + .doc-col {
+  border-left: 1px solid var(--border);
+}
+
 /* An item of a list renders as a list of its own, so the items of one
    list sit close and only the last keeps the gap below the list. */
 .rendered-markdown .doc-item {

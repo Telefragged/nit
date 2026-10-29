@@ -40,6 +40,7 @@ import {
   displayPath,
   intralineMarks,
   oneSided,
+  onlySide,
   pairLines,
   rangeSliceOnLine,
   type RowPair,
@@ -47,9 +48,15 @@ import {
   statusLetter,
 } from "../../lib/diffview";
 import type { ReviewFile } from "../../lib/attachments";
-import { blockAt, type Block, parseBlocks } from "../../lib/document";
+import {
+  blockAt,
+  type Block,
+  renderDoc,
+  type RenderedDoc,
+  rowBlocks,
+} from "../../lib/document";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
-import { renderedKind, sideText } from "../../lib/rendered";
+import { renderedKind } from "../../lib/rendered";
 import { scrollBehavior } from "../../lib/scrollspy";
 import { plainClick } from "../../lib/shortcutKey";
 import { selectionAnchorSide } from "../../lib/selection";
@@ -288,26 +295,23 @@ export default function DiffFileView({
   // A file without lines has only its rendered view.
   const showRendered = kind !== null && (file.binary || view === "rendered");
 
-  // The blocks of a rendered Markdown file, on the side that it renders.
-  const docSide: Side = file.status === "deleted" ? "old" : "new";
+  // A rendered Markdown file, as blocks. A file with one side renders
+  // that side with no changes.
   const showDoc = showRendered && kind === "markdown";
   const whole = useQuery({ ...fileLinesQuery(ctx, file), enabled: showDoc });
-  const blocks = useMemo(
-    () =>
-      showDoc && whole.data
-        ? parseBlocks(sideText(whole.data.lines, docSide))
-        : null,
-    [showDoc, whole.data, docSide],
+  const docOnly = onlySide(file);
+  const doc = useMemo(
+    () => (showDoc && whole.data ? renderDoc(whole.data.lines, docOnly) : null),
+    [showDoc, whole.data, docOnly],
   );
   /** The line that a thread on `line` of `side` shows under: the last line
    * of its block in a rendered Markdown file, else the line itself. */
   const shownLine = useCallback(
     (side: Side, line: number) => {
-      const block =
-        blocks && side === docSide ? blockAt(blocks, line) : undefined;
+      const block = doc ? blockAt(doc[side], line) : undefined;
       return block?.lines[1] ?? line;
     },
-    [blocks, docSide],
+    [doc],
   );
 
   const sectionRef = useRef<HTMLElement>(null);
@@ -327,7 +331,7 @@ export default function DiffFileView({
     const lines = reveal.lines;
     if (showDoc) {
       // The rendered file scrolls to the block that holds the line.
-      if (blocks === null) return;
+      if (doc === null) return;
       const end = lines && shownLine(lines.side, lines.start);
       scroll(
         section.querySelector(
@@ -361,7 +365,7 @@ export default function DiffFileView({
     expandable,
     revealLine,
     showDoc,
-    blocks,
+    doc,
     shownLine,
   ]);
 
@@ -382,12 +386,14 @@ export default function DiffFileView({
   }, [hunks]);
 
   // The lines that a thread can show under. A rendered Markdown file
-  // shows its threads under the last line of each block. Any other
-  // rendered view shows no line rows.
+  // shows its threads under the last line of each block it shows. Any
+  // other rendered view shows no line rows.
   const present = useMemo(() => {
     const set = new Set<string>();
-    for (const block of blocks ?? []) {
-      if (block.at) set.add(`${docSide}:${block.lines[1]}`);
+    for (const row of doc?.rows ?? []) {
+      for (const [side, block] of rowBlocks(row)) {
+        if (block.at) set.add(`${side}:${block.lines[1]}`);
+      }
     }
     for (const hunk of showRendered ? [] : hunks) {
       for (const line of hunk.lines) {
@@ -396,7 +402,7 @@ export default function DiffFileView({
       }
     }
     return set;
-  }, [blocks, docSide, hunks, showRendered]);
+  }, [doc, hunks, showRendered]);
 
   // Bucket each thread by where its anchor lands in the current diff
   // range. A thread pinned to a revision that
@@ -641,9 +647,7 @@ export default function DiffFileView({
             setHovered({
               thread: threadKey(t),
               line:
-                anchorRange(shownAt(t).anchor) && !blocks
-                  ? null
-                  : `${side}:${no}`,
+                anchorRange(shownAt(t).anchor) && !doc ? null : `${side}:${no}`,
             });
           }}
           onMouseLeave={() => {
@@ -778,28 +782,79 @@ export default function DiffFileView({
     ));
   }
 
-  /** The rows of a rendered Markdown file: each block, then the threads
-   * and the editor on it. */
-  function documentRows(doc: readonly Block[], side: Side) {
-    return doc.map((block, bi) => {
-      const [start, end] = block.lines;
-      const items = block.at ? metaItems(side, end) : [];
-      return (
-        <Fragment key={bi}>
-          <DocBlock
-            file={file.path}
-            block={block}
-            side={side}
-            tint={
-              block.at
-                ? lineHover(side, end) + lineLinked(side, start, end)
-                : ""
-            }
-          />
-          {items.length > 0 ? (
-            <div className="meta-row doc-meta">{items}</div>
-          ) : null}
+  /** The thread and editor items on a block. */
+  const blockItems = (side: Side, block: Block | undefined) =>
+    block?.at ? metaItems(side, block.lines[1]) : [];
+
+  /** A block, then `items` under it: by default, the threads and the
+   * editor on the block. `change` is its class suffix in a diff. */
+  const docItem = (
+    key: string,
+    block: Block,
+    side: Side,
+    change = "",
+    items = blockItems(side, block),
+  ) => {
+    const [start, end] = block.lines;
+    return (
+      <Fragment key={key}>
+        <DocBlock
+          file={file.path}
+          block={block}
+          side={side}
+          tint={
+            change +
+            (block.at
+              ? lineHover(side, end) + lineLinked(side, start, end)
+              : "")
+          }
+        />
+        {items.length > 0 ? (
+          <div className="meta-row doc-meta">{items}</div>
+        ) : null}
+      </Fragment>
+    );
+  };
+
+  /** The rows of a rendered Markdown file. Side by side, the old side's
+   * blocks sit left of the new side's. Unified, a removed block shows
+   * above the block that replaces it, and a block that the diff leaves
+   * as it was holds the threads of both sides. */
+  function documentRows({ rows }: RenderedDoc) {
+    const split = rendered === "split";
+    const pair = (key: number, left: ReactNode, right: ReactNode) =>
+      split ? (
+        <div className="doc-row" key={key}>
+          <div className="doc-col">{left}</div>
+          <div className="doc-col">{right}</div>
+        </div>
+      ) : (
+        <Fragment key={key}>
+          {left}
+          {right}
         </Fragment>
+      );
+    return rows.map((row, ri) => {
+      if (!("same" in row)) {
+        return pair(
+          ri,
+          row.removed.map((b, i) => docItem(`r${i}`, b, "old", " doc-removed")),
+          row.added.map((b, i) => docItem(`a${i}`, b, "new", " doc-added")),
+        );
+      }
+      if (split) {
+        return pair(
+          ri,
+          row.old && docItem("old", row.old, "old"),
+          docItem("new", row.same, row.side),
+        );
+      }
+      return docItem(
+        String(ri),
+        row.same,
+        row.side,
+        "",
+        rowBlocks(row).flatMap(([side, b]) => blockItems(side, b)),
       );
     });
   }
@@ -925,9 +980,13 @@ export default function DiffFileView({
           ) : null}
 
           {showDoc ? (
-            blocks ? (
-              <div className="rendered rendered-markdown">
-                {documentRows(blocks, docSide)}
+            doc ? (
+              <div
+                className={`rendered rendered-markdown${
+                  rendered === "split" ? " doc-split" : ""
+                }`}
+              >
+                {documentRows(doc)}
               </div>
             ) : (
               <div className="diff-note">
