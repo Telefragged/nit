@@ -41,9 +41,8 @@ function threadLines(t: UiThread): string {
 
 /** The row's trailing lane: draft and published comment counts, the +/-
  * churn, then the status letter. Binary files carry no churn. An
- * attachment carries no churn either, because nothing diffs it. It shows
- * a paperclip for its status, and the revision it carries forward from
- * when that is not the one on screen. */
+ * attachment shows a paperclip for its status, and the revision it
+ * carries forward from when that is not the one on screen. */
 function Counts({
   file,
   drafts,
@@ -64,7 +63,7 @@ function Counts({
           r{from}
         </span>
       ) : null}
-      {file.attachment ? null : file.binary ? (
+      {file.binary ? (
         <span className="dim">bin</span>
       ) : (
         <>

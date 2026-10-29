@@ -109,10 +109,6 @@ fn write_wire_types() {
             "diff::ATTACHMENT_PREFIX",
             format!("{:?}", crate::diff::ATTACHMENT_PREFIX),
         ),
-        (
-            "attachments::MAX_TEXT_SIZE",
-            crate::attachments::MAX_TEXT_SIZE.to_string(),
-        ),
     ] {
         let short = name.rsplit("::").next().unwrap_or(name);
         out.push_str(&format!(

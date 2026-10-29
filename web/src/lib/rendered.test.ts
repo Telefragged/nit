@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { add, ctx, del } from "../api/fixtures/builders";
-import { attachmentFile, type ReviewFile } from "./attachments";
+import { add, attachedFile, ctx, del } from "../api/fixtures/builders";
+import type { ReviewFile } from "./attachments";
 import { renderedKind, sideText } from "./rendered";
 
 const file = (path: string, binary: boolean): ReviewFile => ({
@@ -14,11 +14,10 @@ const file = (path: string, binary: boolean): ReviewFile => ({
   hunks: [],
 });
 
-const attached = (name: string, binary: boolean) =>
-  attachmentFile(
-    { name, hash: "a".repeat(64), revision: 0 },
-    binary ? null : "",
-  );
+const attached = (name: string, binary: boolean): ReviewFile => ({
+  ...attachedFile(name, ""),
+  binary,
+});
 
 describe("renderedKind", () => {
   it("reads the kind from the extension, in any case", () => {

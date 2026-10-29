@@ -7,6 +7,7 @@ import {
   type Line,
   type Side,
 } from "../api/types";
+import type { ReviewFile } from "./attachments";
 import { gapLines, skipped } from "./diffview";
 import type { ReviewCtx } from "../pages/reviewContext";
 
@@ -17,10 +18,11 @@ const holdsWholeFile = (file: DiffFile) =>
     (hunk, i) => skipped(file.hunks[i - 1], hunk, file) === 0,
   );
 
-/** The query for the whole of `file` as diff lines. It reads the trees and
- * the whitespace mode of the diff on screen. A file whose hunks hold all
- * of its lines needs no read. */
-export const fileLinesQuery = (ctx: ReviewCtx, file: DiffFile) =>
+/** The query for the whole of `file` as diff lines. It reads the trees,
+ * or for an attachment the attachments that the diff compares, and the
+ * whitespace mode of the diff on screen. A file whose hunks hold all of
+ * its lines needs no read. */
+export const fileLinesQuery = (ctx: ReviewCtx, file: ReviewFile) =>
   queryOptions({
     queryKey: [
       "lines",
@@ -30,6 +32,7 @@ export const fileLinesQuery = (ctx: ReviewCtx, file: DiffFile) =>
       ctx.whitespace,
       file.path,
       file.old_path ?? null,
+      file.attachment ? ctx.attachKey : null,
     ],
     queryFn: () =>
       getFileLines(
@@ -42,7 +45,8 @@ export const fileLinesQuery = (ctx: ReviewCtx, file: DiffFile) =>
     initialData: holdsWholeFile(file)
       ? { lines: file.hunks.flatMap((hunk) => hunk.lines) }
       : undefined,
-    // A revision's trees never change, so neither does the file.
+    // A revision's trees never change, and the key carries the attachment
+    // hashes, so the file for a key never changes.
     staleTime: Infinity,
   });
 
@@ -62,7 +66,7 @@ export const EXPAND_STEP = 10;
  * Returns the spliced `hunks`, whether the file is expandable, the `expand`
  * and `revealLine` actions, and `busyAt` to check a given end/separator's
  * in-flight state. */
-export function useHunkExpansion(file: DiffFile, ctx: ReviewCtx) {
+export function useHunkExpansion(file: ReviewFile, ctx: ReviewCtx) {
   const queryClient = useQueryClient();
   const expandable = file.path !== COMMIT_MSG_PATH;
   const [whole, setWhole] = useState<readonly Line[] | null>(null);

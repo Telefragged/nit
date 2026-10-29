@@ -1,7 +1,6 @@
 import {
   skipToken,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -24,7 +23,6 @@ import {
 } from "react-router-dom";
 import {
   createDraft,
-  getAttachmentText,
   getChangeDrafts,
   getDiff,
   getPorted,
@@ -68,7 +66,7 @@ import {
   type DiffRange,
   type UiThread,
 } from "../lib/comments";
-import { attachmentFile, readsText, type ReviewFile } from "../lib/attachments";
+import { reviewFiles } from "../lib/attachments";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import {
   clickLink,
@@ -386,51 +384,35 @@ export default function ReviewPage() {
   const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}:${mode}:${whitespace}`;
   if (selectionMiss && selectionMiss.diff !== diffKey) setSelectionMiss(null);
 
-  const diffQ = useQuery({
-    queryKey: [
-      "diff",
-      changeNumber,
-      selected,
-      against ?? null,
-      mode,
-      whitespace,
-    ],
-    queryFn: () => getDiff(changeNumber, selected, against, mode, whitespace),
-    enabled: published !== undefined,
-    retry: false,
-  });
-  // The list of attachments comes from the projection, so a new attachment
-  // appears as soon as the stream delivers its attach entry. The page reads
-  // only their bytes, by hash, and the bytes for a hash never change.
   const shownAttachments = useMemo(
     () =>
       published?.revisions.find((r) => r.number === selected)?.attachments ??
       [],
     [published, selected],
   );
-  const textReads = useQueries({
-    queries: shownAttachments.filter(readsText).map((attachment) => ({
-      queryKey: ["attachment", attachment.hash],
-      queryFn: () => getAttachmentText(attachment),
-      staleTime: Infinity,
-    })),
+  // The diff holds the attachments of both revisions, so the key carries
+  // them, and an attach entry from the stream refetches the diff. The page
+  // keeps the old diff on screen until the new one arrives.
+  const attachKey = (published?.revisions ?? [])
+    .filter((r) => r.number === selected || r.number === against)
+    .flatMap((r) => r.attachments.map((a) => a.hash))
+    .join(",");
+  const diffView = [changeNumber, selected, against ?? null, mode, whitespace];
+  const diffQ = useQuery({
+    queryKey: ["diff", ...diffView, attachKey],
+    queryFn: () => getDiff(changeNumber, selected, against, mode, whitespace),
+    enabled: published !== undefined,
+    retry: false,
+    placeholderData: (previous, query) =>
+      diffView.every((part, i) => query?.queryKey[i + 1] === part)
+        ? previous
+        : undefined,
   });
-  const attachmentFiles = useMemo(() => {
-    const texts = new Map(
-      shownAttachments
-        .filter(readsText)
-        .map((a, i) => [a.hash, textReads[i]?.data ?? null] as const),
-    );
-    return shownAttachments.map((a) =>
-      attachmentFile(a, texts.get(a.hash) ?? null),
-    );
-  }, [shownAttachments, textReads]);
   // Tree order, not git's: the rail renders the same list as a tree, and
   // the sections below must scroll in the order it reads (`treeOrder`).
   const files = useMemo(
-    () =>
-      treeOrder<ReviewFile>([...(diffQ.data?.files ?? []), ...attachmentFiles]),
-    [diffQ.data, attachmentFiles],
+    () => treeOrder(reviewFiles(diffQ.data?.files ?? [], shownAttachments)),
+    [diffQ.data, shownAttachments],
   );
 
   // Collapsed-by-default file sections, keyed by file path so the
@@ -547,6 +529,7 @@ export default function ReviewPage() {
       against,
       latestRevision,
       whitespace,
+      attachKey,
       showRange: ({ against: from, selected: to }: DiffRange) => {
         switchRange({
           against: from === undefined ? null : String(from),
@@ -588,6 +571,7 @@ export default function ReviewPage() {
       against,
       latestRevision,
       whitespace,
+      attachKey,
       switchRange,
       link,
       searchParams,
@@ -943,7 +927,7 @@ export default function ReviewPage() {
     published === undefined ||
     memberProjections.length === 0 ||
     overlaysLoading ||
-    [repoQ, draftsQ, diffQ, portedQ, ...textReads].some((q) => q.isLoading);
+    [repoQ, draftsQ, diffQ, portedQ].some((q) => q.isLoading);
 
   // The change's published projection arrives over the websocket (no fetch to
   // error on); a bad change number surfaces when its drafts read fails.

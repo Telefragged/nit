@@ -23,10 +23,12 @@ import type {
   TagList,
   Verdict,
 } from "../types";
+import { ATTACHMENT_PREFIX } from "../types";
 import { placementLine } from "../../lib/comments";
 import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, picks, projection } from "./stream";
-import { diffKey, sideEnd } from "./builders";
+import { addedFile, diffKey, sideEnd } from "./builders";
+import blobs from "./blobs.json";
 import { changes, draftReviews, drafts, repos } from "./data";
 import type {
   AuthoredFile,
@@ -406,6 +408,12 @@ export function mockRequest(
       old_total: sideEnd(f, "old"),
       new_total: sideEnd(f, "new"),
     }));
+    // Each attachment the revision shows, as added whatever the diff base:
+    // the fixtures attach to no revision that an interdiff compares.
+    for (const a of changeDetail(c).revisions[number]?.attachments ?? []) {
+      const blob = blobs[a.hash as keyof typeof blobs];
+      files.push(addedFile(ATTACHMENT_PREFIX + a.name, blob.body));
+    }
     return structuredClone({ files });
   }
 

@@ -1,8 +1,9 @@
 // No state lives here — see ./data for the mutable store, ./index for the server.
 
+import type { ReviewFile } from "../../lib/attachments";
 import type { UiThread } from "../../lib/comments";
 import { span } from "../../lib/diffview";
-import { COMMIT_MSG_PATH } from "../types";
+import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../types";
 import type { Diff, DiffFile, Hunk, Line, Side } from "../types";
 
 /** A UI thread with no comments, on line 1 of src/main.rs at revision 1. */
@@ -86,11 +87,12 @@ export function sideEnd(
   return declared ?? (last ? span(last, side)[1] : 0);
 }
 
-/** The /COMMIT_MSG entry of a vs-parent diff: the whole message, all-add. */
-export function msgFile(message: string): DiffFile {
-  const lines = message.replace(/\n$/, "").split("\n");
+/** The entry of a vs-parent diff for a file outside the tree: the whole
+ * text, all-add. */
+export function addedFile(path: string, text: string): DiffFile {
+  const lines = text.replace(/\n$/, "").split("\n");
   return {
-    path: COMMIT_MSG_PATH,
+    path,
     status: "added",
     binary: false,
     additions: lines.length,
@@ -109,6 +111,20 @@ export function msgFile(message: string): DiffFile {
     ],
   };
 }
+
+/** The /COMMIT_MSG entry of a vs-parent diff: the whole message, all-add. */
+export const msgFile = (message: string) => addedFile(COMMIT_MSG_PATH, message);
+
+/** The review file of the attachment `name` against the parent: its text
+ * all-add. */
+export const attachedFile = (
+  name: string,
+  text: string,
+  revision = 0,
+): ReviewFile => ({
+  ...addedFile(ATTACHMENT_PREFIX + name, text),
+  attachment: { name, hash: "a".repeat(64), revision },
+});
 
 export const diffKey = (revision: number, against?: number) =>
   against === undefined ? `r${revision}` : `r${against}..r${revision}`;

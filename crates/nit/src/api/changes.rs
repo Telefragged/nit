@@ -1,7 +1,7 @@
 //! Change endpoints: the change list and log, the change detail, its tags,
 //! and the revision diff (incl. interdiff).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use axum::Json;
@@ -184,7 +184,27 @@ pub(super) async fn revision_diff(
         let change = change_or_404(conn, id)?;
         let revs = resolve_revs(conn, &change, n, q.against)?;
         let mut wire = contained_diff(&revs, 3, q.view, None)?;
-        // After tagging: the message is not a git delta, so it is never drift.
+        // After tagging: the message and the attachments are not git
+        // deltas, so they are never drift.
+        let shown = |r: Option<&RevisionProjection>| -> BTreeMap<_, _> {
+            r.map(|r| change.effective_attachments(r.number))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|a| (a.name, a.hash))
+                .collect()
+        };
+        let (old, new) = (shown(revs.against.as_ref()), shown(Some(&revs.revision)));
+        let names: BTreeSet<_> = old.keys().chain(new.keys()).collect();
+        wire.files.extend(names.into_iter().map(|name| {
+            diff::attachment_file(
+                state.blobs(),
+                name.as_str(),
+                old.get(name),
+                new.get(name),
+                3,
+                q.view,
+            )
+        }));
         wire.files.insert(
             0,
             diff::commit_msg_file(
@@ -223,8 +243,8 @@ pub(super) struct LinesQuery {
 /// the **same** `old → new` trees and drift tagging as [`revision_diff`],
 /// so a revealed line carries the exact kind/drift it would inside a
 /// hunk; the client slices the gap it needs. The synthetic
-/// [`diff::COMMIT_MSG_PATH`] answers with the whole commit message, as
-/// [`revision_diff`] compares it.
+/// [`diff::COMMIT_MSG_PATH`] and attachment files answer with their whole
+/// text, as [`revision_diff`] compares it.
 #[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/lines", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), LinesQuery), responses((status = 200, body = FileLines)))]
 pub(super) async fn revision_lines(
     State(state): State<Arc<AppState>>,
@@ -247,6 +267,19 @@ pub(super) async fn revision_lines(
                 revs.against.as_ref().map(|a| a.message.as_str()),
                 &revs.revision.message,
                 u32::MAX,
+            ))
+        } else if let Some(name) = diff::attachment_name(&wanted.path) {
+            let hash = |r: Option<&RevisionProjection>| {
+                r.and_then(|r| change.attachment_at(r.number, name))
+                    .map(|a| a.hash)
+            };
+            Some(diff::attachment_file(
+                state.blobs(),
+                name,
+                hash(revs.against.as_ref()).as_ref(),
+                hash(Some(&revs.revision)).as_ref(),
+                u32::MAX,
+                view,
             ))
         } else {
             contained_diff(&revs, u32::MAX, view, Some(&wanted))?

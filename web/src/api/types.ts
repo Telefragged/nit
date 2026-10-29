@@ -3,4 +3,4 @@
 // one import point.
 
 export type * from "./types.gen";
-export { ATTACHMENT_PREFIX, COMMIT_MSG_PATH, MAX_TEXT_SIZE } from "./types.gen";
+export { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "./types.gen";

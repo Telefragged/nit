@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, change_id, http_get, lines, msg, push, tip_change};
+use common::{GitRepo, TestServer, by_path, change_id, http_get, lines, msg, push, tip_change};
 use serde_json::{Value, json};
 
 /// Revision 0 of the tip change lives here after the first push.
@@ -15,17 +15,6 @@ fn tip_change_number(push_result: &Value) -> u64 {
     tip_change(push_result)["change_number"]
         .as_u64()
         .expect("a tip change")
-}
-
-/// Look a file up by its new path in a `Diff`.
-fn by_path(diff: &Value, p: &str) -> Value {
-    diff["files"]
-        .as_array()
-        .expect("files array")
-        .iter()
-        .find(|f| f["path"] == p)
-        .unwrap_or_else(|| panic!("no file {p} in {diff}"))
-        .clone()
 }
 
 /// A revision-0 diff against parent: `/COMMIT_MSG` leads (status added), a

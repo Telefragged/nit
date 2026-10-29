@@ -16,7 +16,7 @@ use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use futures_util::StreamExt;
 use jiff::Timestamp;
-use nit_types::attachments::{MAX_TEXT_SIZE, UploadedAttachment};
+use nit_types::attachments::UploadedAttachment;
 use nit_types::changes::ChangeDetail;
 use nit_types::domain::{AttachPayload, AttachmentHash, ChangeNumber, LogPayload};
 use rusqlite::TransactionBehavior;
@@ -30,6 +30,13 @@ use super::{AppJson, AppPath, AppState, Error, append, views, with_conn};
 
 /// The largest upload the store accepts, in bytes.
 const MAX_SIZE: u64 = 64 * 1024 * 1024;
+
+/// The largest attachment that reads as text, in bytes.
+///
+/// The server snapshots a line and ports a thread only on text this size
+/// or smaller. A larger attachment is binary in a diff, so no thread
+/// anchors on a line the server could not read.
+const MAX_TEXT_SIZE: u64 = 1024 * 1024;
 
 /// What a collection of the blob store deleted.
 #[derive(Debug, Default, PartialEq, Eq)]
