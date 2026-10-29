@@ -92,19 +92,22 @@ export const linkedThread = (link: DiffLink | null): number | null =>
 export const linksThread = (link: DiffLink | null, id: number | null) =>
   id !== null && id === linkedThread(link);
 
-/** Whether `link` covers line `no` on `side` of `file`. */
+/** Whether `link` covers any of lines `no` through `end` on `side` of
+ * `file`. `end` defaults to `no`, one line. */
 export const linksLine = (
   link: DiffLink | null,
   file: string,
   side: Side,
   no: number | undefined,
+  end = no,
 ) => {
   const linked = fileLink(link);
   const lines = linked?.file === file ? linked.lines : null;
   return (
     no !== undefined &&
+    end !== undefined &&
     lines?.side === side &&
-    no >= lines.start &&
+    end >= lines.start &&
     no <= lines.end
   );
 };

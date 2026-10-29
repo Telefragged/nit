@@ -4,10 +4,12 @@
 // every commentable code cell is a `.code` with `data-old`/`data-new`
 // line-number attributes (whichever sides exist for that cell), and the
 // line's text — sign and gutters excluded — lives inside a `.code-text`
-// span within the cell.
+// span within the cell. A block of a rendered Markdown file is a
+// `.doc-block` with `data-side`, `data-start` and `data-end` lines, and
+// its comment anchor as JSON in `data-anchor`.
 
-import type { Side } from "../api/types";
-import type { DraftTarget } from "../pages/reviewContext";
+import type { LineAnchor, Side } from "../api/types";
+import { sameTarget, type DraftTarget } from "../pages/reviewContext";
 
 /** `Range.intersectsNode`, hand-rolled so jsdom tests and the browser run
  * the same code: overlap is strict (touching at a boundary is not
@@ -21,9 +23,35 @@ function intersects(range: Range, node: Node): boolean {
   );
 }
 
+/** The element that `node` is, or the element that holds it. */
+const elementOf = (node: Node) =>
+  node instanceof Element ? node : node.parentElement;
+
 const cellOf = (node: Node): HTMLElement | null =>
-  (node instanceof Element ? node : node.parentElement)?.closest(".code") ??
-  null;
+  elementOf(node)?.closest(".code") ?? null;
+
+/** The path of the file whose section holds `el`. */
+const pathOf = (el: Element | null | undefined) =>
+  el?.closest("section[data-diff-path]")?.getAttribute("data-diff-path");
+
+/** The section of `file`. */
+const sectionOf = (file: string) =>
+  [...document.querySelectorAll("section[data-diff-path]")].find(
+    (s) => s.getAttribute("data-diff-path") === file,
+  );
+
+/** The draft target of the rendered Markdown block that holds `node`, or
+ * null outside a block that takes comments. */
+function blockTarget(node: Node): DraftTarget | null {
+  const block = elementOf(node)?.closest<HTMLElement>(
+    ".doc-block[data-anchor]",
+  );
+  const file = pathOf(block);
+  const side = block?.dataset.side;
+  const anchor = block?.dataset.anchor;
+  if (!file || !anchor || (side !== "old" && side !== "new")) return null;
+  return { file, side, at: JSON.parse(anchor) as LineAnchor };
+}
 
 /** The code-text span of a cell — null also for an *empty* line, whose
  * span holds only the zero-width-space row-height placeholder: it is not
@@ -92,9 +120,7 @@ export function cellLine(
   node: Element,
 ): { file: string; side: Side; line: number } | null {
   const cell = cellOf(node);
-  const file = cell
-    ?.closest("section[data-diff-path]")
-    ?.getAttribute("data-diff-path");
+  const file = pathOf(cell);
   if (!cell || !file) return null;
   const side: Side = cell.dataset.new === undefined ? "old" : "new";
   const line = Number(cell.dataset[side]);
@@ -102,19 +128,22 @@ export function cellLine(
 }
 
 /** A range over lines `start` through `end` on one side of `file`'s
- * section: from the start of the first line to the end of the last. Null
- * when either end line does not render. */
+ * section: from the start of the first line to the end of the last, or
+ * over the rendered Markdown block that spans exactly those lines. Null
+ * when neither renders. */
 export function linesRange(
   file: string,
   side: Side,
   start: number,
   end: number,
 ): Range | null {
-  const section = [
-    ...document.querySelectorAll("section[data-diff-path]"),
-  ].find((s) => s.getAttribute("data-diff-path") === file);
-  const first = section?.querySelector(`.code[data-${side}="${start}"]`);
-  const last = section?.querySelector(`.code[data-${side}="${end}"]`);
+  const section = sectionOf(file);
+  const block = section?.querySelector(
+    `.doc-block[data-side="${side}"][data-start="${start}"][data-end="${end}"]`,
+  );
+  const first =
+    block ?? section?.querySelector(`.code[data-${side}="${start}"]`);
+  const last = block ?? section?.querySelector(`.code[data-${side}="${end}"]`);
   if (!first || !last) return null;
   const range = document.createRange();
   range.setStart(first, 0);
@@ -162,7 +191,8 @@ export function selectionAnchorSide(anchor: Node | null): Side | null {
  * that column's contiguous lines. A collapsed
  * selection inside a single cell degrades to a plain line comment on that
  * cell — gerrit's `c`-on-a-line. A selection ending before a line's first
- * character ends on the previous line.
+ * character ends on the previous line. A selection inside one block of
+ * a rendered Markdown file drafts on the whole block.
  *
  * `side` overrides the side that `sideOf` reads from the boundary cells.
  * Where both boundary cells show both sides, `sideOf` reads the new side.
@@ -174,7 +204,11 @@ export function selectionTarget(
   const swept = sweptCells(range);
   const firstSwept = swept[0];
   const lastSwept = swept[swept.length - 1];
-  if (firstSwept === undefined || lastSwept === undefined) return null;
+  if (firstSwept === undefined || lastSwept === undefined) {
+    const start = blockTarget(range.startContainer);
+    const end = blockTarget(range.endContainer);
+    return start && end && sameTarget(start, end) ? start : null;
+  }
   const startCell = cellOf(range.startContainer) ?? firstSwept;
   const endCell = cellOf(range.endContainer) ?? lastSwept;
 

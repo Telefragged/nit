@@ -1,8 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Fragment,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -46,12 +47,17 @@ import {
   statusLetter,
 } from "../../lib/diffview";
 import type { ReviewFile } from "../../lib/attachments";
+import { blockAt, type Block, parseBlocks } from "../../lib/document";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
-import { renderedKind } from "../../lib/rendered";
+import { renderedKind, sideText } from "../../lib/rendered";
 import { scrollBehavior } from "../../lib/scrollspy";
 import { plainClick } from "../../lib/shortcutKey";
 import { selectionAnchorSide } from "../../lib/selection";
-import { EXPAND_STEP, useHunkExpansion } from "../../lib/useHunkExpansion";
+import {
+  EXPAND_STEP,
+  fileLinesQuery,
+  useHunkExpansion,
+} from "../../lib/useHunkExpansion";
 import {
   targetLine,
   targetRange,
@@ -61,6 +67,7 @@ import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
 import Seg, { type SegOption } from "../Seg";
+import DocBlock from "./DocBlock";
 import RenderedView from "./RenderedView";
 import StatusMark from "./StatusMark";
 
@@ -274,10 +281,34 @@ export default function DiffFileView({
 
   const kind = renderedKind(file);
   const [view, setView] = useState<View>(file.attachment ? "rendered" : "raw");
-  // Only the raw view shows the line that a link names.
-  if (view === "rendered" && reveal?.lines) setView("raw");
+  // Of the rendered views, only Markdown shows the line that a link names.
+  if (view === "rendered" && kind !== "markdown" && reveal?.lines) {
+    setView("raw");
+  }
   // A file without lines has only its rendered view.
   const showRendered = kind !== null && (file.binary || view === "rendered");
+
+  // The blocks of a rendered Markdown file, on the side that it renders.
+  const docSide: Side = file.status === "deleted" ? "old" : "new";
+  const showDoc = showRendered && kind === "markdown";
+  const whole = useQuery({ ...fileLinesQuery(ctx, file), enabled: showDoc });
+  const blocks = useMemo(
+    () =>
+      showDoc && whole.data
+        ? parseBlocks(sideText(whole.data.lines, docSide))
+        : null,
+    [showDoc, whole.data, docSide],
+  );
+  /** The line that a thread on `line` of `side` shows under: the last line
+   * of its block in a rendered Markdown file, else the line itself. */
+  const shownLine = useCallback(
+    (side: Side, line: number) => {
+      const block =
+        blocks && side === docSide ? blockAt(blocks, line) : undefined;
+      return block?.lines[1] ?? line;
+    },
+    [blocks, docSide],
+  );
 
   const sectionRef = useRef<HTMLElement>(null);
   // The last reveal for which the effect opened a gap. The effect opens a
@@ -294,6 +325,17 @@ export default function DiffFileView({
       onRevealed();
     };
     const lines = reveal.lines;
+    if (showDoc) {
+      // The rendered file scrolls to the block that holds the line.
+      if (blocks === null) return;
+      const end = lines && shownLine(lines.side, lines.start);
+      scroll(
+        section.querySelector(
+          `.doc-block[data-side="${lines?.side}"][data-end="${end}"]`,
+        ) ?? section,
+      );
+      return;
+    }
     const line =
       lines &&
       section.querySelector(`.code[data-${lines.side}="${lines.start}"]`);
@@ -311,7 +353,17 @@ export default function DiffFileView({
     } else if (gapAsked.current !== reveal) {
       scroll(section);
     }
-  }, [reveal, collapsed, onRevealed, hunks, expandable, revealLine]);
+  }, [
+    reveal,
+    collapsed,
+    onRevealed,
+    hunks,
+    expandable,
+    revealLine,
+    showDoc,
+    blocks,
+    shownLine,
+  ]);
 
   // Side-by-side would leave one of a one-sided file's columns blank and
   // squeeze its text into the half beside it.
@@ -329,10 +381,14 @@ export default function DiffFileView({
     return map;
   }, [hunks]);
 
-  // The lines that a thread can show under. The rendered view shows no
-  // line rows.
+  // The lines that a thread can show under. A rendered Markdown file
+  // shows its threads under the last line of each block. Any other
+  // rendered view shows no line rows.
   const present = useMemo(() => {
     const set = new Set<string>();
+    for (const block of blocks ?? []) {
+      if (block.at) set.add(`${docSide}:${block.lines[1]}`);
+    }
     for (const hunk of showRendered ? [] : hunks) {
       for (const line of hunk.lines) {
         if (line.old !== undefined) set.add(`old:${line.old}`);
@@ -340,7 +396,7 @@ export default function DiffFileView({
       }
     }
     return set;
-  }, [hunks, showRendered]);
+  }, [blocks, docSide, hunks, showRendered]);
 
   // Bucket each thread by where its anchor lands in the current diff
   // range. A thread pinned to a revision that
@@ -365,7 +421,7 @@ export default function DiffFileView({
       displaced.push({ t, side: anchorSide(at.anchor) });
       continue;
     }
-    const key = `${p.side}:${p.line}`;
+    const key = `${p.side}:${shownLine(p.side, p.line)}`;
     if (present.has(key)) {
       const list = inline.get(key) ?? [];
       list.push(t);
@@ -476,9 +532,10 @@ export default function DiffFileView({
   // The drag as the pointer events read it: the fixed end, and the span.
   const dragRef = useRef<{ anchor: number; span: LinkSpan } | null>(null);
 
-  /** The class suffix marking a cell that shows a linked line. */
-  const lineLinked = (side: Side, no: number | undefined) =>
-    linksLine(drag ?? ctx.link, file.path, side, no) ? " linked" : "";
+  /** The class suffix marking a cell that shows a linked line, or a
+   * block that holds one of lines `no` through `end`. */
+  const lineLinked = (side: Side, no: number | undefined, end = no) =>
+    linksLine(drag ?? ctx.link, file.path, side, no, end) ? " linked" : "";
 
   /** A gutter's line number, as a link to its line. A press starts a span
    * at the line, or with shift extends the linked span. A drag over other
@@ -579,9 +636,14 @@ export default function DiffFileView({
           className="meta-item"
           key={`t-${side}-${threadKey(t)}`}
           onMouseEnter={() => {
+            // A block has no text to tint a selection on, so the whole
+            // block tints.
             setHovered({
               thread: threadKey(t),
-              line: anchorRange(shownAt(t).anchor) ? null : `${side}:${no}`,
+              line:
+                anchorRange(shownAt(t).anchor) && !blocks
+                  ? null
+                  : `${side}:${no}`,
             });
           }}
           onMouseLeave={() => {
@@ -716,6 +778,32 @@ export default function DiffFileView({
     ));
   }
 
+  /** The rows of a rendered Markdown file: each block, then the threads
+   * and the editor on it. */
+  function documentRows(doc: readonly Block[], side: Side) {
+    return doc.map((block, bi) => {
+      const [start, end] = block.lines;
+      const items = block.at ? metaItems(side, end) : [];
+      return (
+        <Fragment key={bi}>
+          <DocBlock
+            file={file.path}
+            block={block}
+            side={side}
+            tint={
+              block.at
+                ? lineHover(side, end) + lineLinked(side, start, end)
+                : ""
+            }
+          />
+          {items.length > 0 ? (
+            <div className="meta-row doc-meta">{items}</div>
+          ) : null}
+        </Fragment>
+      );
+    });
+  }
+
   const letter = statusLetter(file);
 
   return (
@@ -774,9 +862,8 @@ export default function DiffFileView({
             value={view}
             options={VIEW_OPTIONS}
             onChange={(next) => {
-              // The rendered view has no lines to hold an open editor.
+              // The other view may have no place for an open editor.
               if (
-                next === "rendered" &&
                 ctx.editingTarget?.file === file.path &&
                 !ctx.setEditingTarget(null)
               )
@@ -837,7 +924,17 @@ export default function DiffFileView({
             </div>
           ) : null}
 
-          {showRendered ? (
+          {showDoc ? (
+            blocks ? (
+              <div className="rendered rendered-markdown">
+                {documentRows(blocks, docSide)}
+              </div>
+            ) : (
+              <div className="diff-note">
+                {whole.isError ? "The file did not load" : "Loading the file…"}
+              </div>
+            )
+          ) : showRendered && kind !== "markdown" ? (
             <RenderedView file={file} kind={kind} />
           ) : file.binary ? (
             <div className="diff-note">Binary file — contents not shown</div>

@@ -5,17 +5,17 @@ import { displayPath } from "../../lib/diffview";
 import { sideText, type RenderedKind } from "../../lib/rendered";
 import { fileLinesQuery } from "../../lib/useHunkExpansion";
 import { useReview } from "../../pages/reviewContext";
-import Document from "../Document";
 
-/** The rendered body of a file, in place of its lines. It renders the
- * whole file, however little of it the diff shows. An HTML page runs in
- * a sandbox with a separate origin, so its scripts cannot call the API. */
+/** The rendered body of an image or an HTML page, in place of its lines.
+ * It renders the whole file, however little of it the diff shows. An
+ * HTML page runs in a sandbox with a separate origin, so its scripts
+ * cannot call the API. */
 export default function RenderedView({
   file,
   kind,
 }: {
   file: ReviewFile;
-  kind: RenderedKind;
+  kind: Exclude<RenderedKind, "markdown">;
 }) {
   const ctx = useReview();
   const url = file.attachment && attachmentUrl(file.attachment);
@@ -35,7 +35,7 @@ export default function RenderedView({
       {...source}
     />
   );
-  if (kind === "html" && url !== undefined) return frame({ src: url });
+  if (url !== undefined) return frame({ src: url });
   const lines = whole.data?.lines;
   if (lines === undefined)
     return (
@@ -43,11 +43,7 @@ export default function RenderedView({
         {whole.isError ? "The file did not load" : "Loading the file…"}
       </div>
     );
-  const text = sideText(lines, file.status === "deleted" ? "old" : "new");
-  if (kind === "html") return frame({ srcDoc: text });
-  return (
-    <div className="rendered rendered-markdown">
-      <Document text={text} />
-    </div>
-  );
+  return frame({
+    srcDoc: sideText(lines, file.status === "deleted" ? "old" : "new"),
+  });
 }

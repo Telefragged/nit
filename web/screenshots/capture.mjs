@@ -773,6 +773,25 @@ const captures = [
       );
     },
   },
+  // A draft on one block of a rendered Markdown attachment: its line
+  // number links the block, and c opens the editor under it.
+  {
+    name: "review-rendered-draft",
+    path: "/changes/12?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await expandAllFiles(page);
+      const plan = '[data-diff-path="/attachments/plan/rotation.md"]';
+      await clickNow(page.locator(`${plan} .doc-block[data-start="3"] > a`));
+      await untilDom(page, () => !!document.querySelector(".doc-block.linked"));
+      await page.keyboard.press("c");
+      await fillNow(
+        page.locator(`${plan} textarea`),
+        "Should the successor keep the expiry of the token it replaces?",
+      );
+      await centerOn(page, page.locator(`${plan} textarea`));
+    },
+  },
   // Autosize: the inline editor grows to fit a multi-line draft instead of
   // scrolling inside its default min-height box (useAutosize).
   {
