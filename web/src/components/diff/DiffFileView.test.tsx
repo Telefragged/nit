@@ -117,9 +117,10 @@ const tree = (
   file: DiffFile = mixed,
   threads: UiThread[] = [],
   client = new QueryClient(),
+  value = ctx,
 ) => (
   <QueryClientProvider client={client}>
-    <ReviewContext.Provider value={ctx}>
+    <ReviewContext.Provider value={value}>
       <DiffFileView
         file={file}
         layout={layout}
@@ -349,17 +350,45 @@ describe("hovering a thread", () => {
 });
 
 describe("a rendered attachment", () => {
-  it("lists a line's thread above the rendered file", () => {
-    const file = attachedFile("plan.md", "# Plan", 2);
-    const thread = uiThread({
+  const plan = attachedFile("plan.md", "# Plan\n\nStep one\nand two.\n", 2);
+  const threadOn = (at: LineAnchor) =>
+    uiThread({
       id: 1,
       revision: 2,
-      anchor: { line: { file: file.path, side: "new", at: { whole: 1 } } },
+      anchor: { line: { file: plan.path, side: "new", at } },
     });
-    const { container } = renderFile("unified", file, [thread]);
-    expect(
-      container.querySelector('[data-threads="displaced"] [data-thread]'),
-    ).not.toBeNull();
+  /** The source lines of the block that the one thread shows under. */
+  const threadBlock = (container: HTMLElement) => {
+    const block = container.querySelector(".meta-row")?.previousElementSibling;
+    return block instanceof HTMLElement
+      ? [block.dataset.start, block.dataset.end]
+      : null;
+  };
+
+  it("shows a line's thread under the block that holds the line", () => {
+    const { container } = renderFile("unified", plan, [threadOn({ whole: 4 })]);
+    expect(threadBlock(container)).toEqual(["3", "4"]);
+    expect(container.querySelector('[data-threads="displaced"]')).toBeNull();
+  });
+
+  it("shows a thread on a blank line under the block above", () => {
+    const { container } = renderFile("unified", plan, [threadOn({ whole: 2 })]);
+    expect(threadBlock(container)).toEqual(["1", "1"]);
+  });
+
+  it("opens the editor under the block it drafts on", () => {
+    const at: LineAnchor = {
+      selection: { start_line: 3, start_char: 0, end_line: 4, end_char: 8 },
+    };
+    const { container } = render(
+      tree("unified", plan, [], undefined, {
+        ...ctx,
+        editingTarget: { file: plan.path, side: "new", at },
+      }),
+    );
+    const block = container.querySelector('.doc-block[data-end="4"]');
+    expect(block?.getAttribute("data-anchor")).toBe(JSON.stringify(at));
+    expect(block?.nextElementSibling?.querySelector("textarea")).not.toBeNull();
   });
 
   it("renders from its own lines, without a read", () => {

@@ -616,19 +616,54 @@ button.rail-toggle,
 /* A Markdown file reads as a page, not as a comment: body-sized text,
    headings that step down in size, and room between blocks. */
 .rendered-markdown {
-  max-width: 920px;
-  padding: 16px 24px;
+  max-width: 980px;
+  padding: 16px 24px 16px 0;
   font-size: 14.5px;
   line-height: 1.6;
   color: var(--text);
 }
 
-.rendered-markdown > :first-child {
+/* A block of the file, with its first line number in the gutter to its
+   left. The gutter sits out of the flow, so the margins of adjacent
+   blocks still collapse. */
+.doc-block {
+  position: relative;
+  padding-left: 60px;
+}
+
+.rendered-markdown .doc-gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 44px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 22px;
+  color: var(--text-faint);
+}
+
+.rendered-markdown .doc-gutter:hover,
+.doc-block.linked .doc-gutter {
+  color: var(--blue);
+}
+
+.rendered-markdown > .doc-block:first-child > :last-child {
   margin-top: 0;
 }
 
-.rendered-markdown > :last-child {
+.rendered-markdown > .doc-block:last-child > :last-child {
   margin-bottom: 0;
+}
+
+.doc-meta {
+  margin: 4px 0 14px;
+}
+
+/* An item of a list renders as a list of its own, so the items of one
+   list sit close and only the last keeps the gap below the list. */
+.rendered-markdown .doc-item {
+  margin-bottom: 4px;
 }
 
 .rendered-markdown p,
@@ -682,10 +717,6 @@ button.rail-toggle,
 .rendered-markdown ul,
 .rendered-markdown ol {
   padding-left: 2em;
-}
-
-.rendered-markdown li + li {
-  margin-top: 4px;
 }
 
 .rendered-markdown code {

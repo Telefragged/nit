@@ -42,9 +42,10 @@ export const fileLinesQuery = (ctx: ReviewCtx, file: ReviewFile) =>
         ctx.against,
         ctx.whitespace,
       ),
-    initialData: holdsWholeFile(file)
-      ? { lines: file.hunks.flatMap((hunk) => hunk.lines) }
-      : undefined,
+    initialData: () =>
+      holdsWholeFile(file)
+        ? { lines: file.hunks.flatMap((hunk) => hunk.lines) }
+        : undefined,
     // A revision's trees never change, and the key carries the attachment
     // hashes, so the file for a key never changes.
     staleTime: Infinity,

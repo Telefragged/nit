@@ -370,3 +370,43 @@ describe("linked lines", () => {
     expect(linesRange("src/a.rs", "new", 4, 9)).toBeNull();
   });
 });
+
+describe("a rendered Markdown block", () => {
+  const anchor = {
+    selection: { start_line: 3, start_char: 0, end_line: 4, end_char: 8 },
+  };
+  const mountDoc = () => {
+    const section = document.createElement("section");
+    section.setAttribute("data-diff-path", "docs/a.md");
+    section.innerHTML =
+      `<div class="doc-block" data-side="new" data-start="1" data-end="1"` +
+      ` data-anchor='{"whole":1}'><h1>Title</h1></div>` +
+      `<div class="doc-block" data-side="new" data-start="3" data-end="4"` +
+      ` data-anchor='${JSON.stringify(anchor)}'><p>Some <em>text</em></p></div>`;
+    document.body.appendChild(section);
+    return section;
+  };
+  const target = { file: "docs/a.md", side: "new", at: anchor };
+
+  it("takes a comment on the whole block for a selection inside it", () => {
+    const em = mountDoc().querySelector("em")?.firstChild;
+    if (!em) throw new Error("no text");
+    expect(selectionTarget(rangeOf(em, 0, em, 2))).toEqual(target);
+  });
+
+  it("takes no comment for a selection across two blocks", () => {
+    const section = mountDoc();
+    const h1 = section.querySelector("h1")?.firstChild;
+    const em = section.querySelector("em")?.firstChild;
+    if (!h1 || !em) throw new Error("no text");
+    expect(selectionTarget(rangeOf(h1, 0, em, 2))).toBeNull();
+  });
+
+  it("takes a comment on the block whose lines a link names", () => {
+    mountDoc();
+    const range = linesRange("docs/a.md", "new", 3, 4);
+    if (range === null) throw new Error("no range");
+    expect(selectionTarget(range, "new")).toEqual(target);
+    expect(linesRange("docs/a.md", "new", 3, 3)).toBeNull();
+  });
+});
