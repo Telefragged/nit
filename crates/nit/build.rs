@@ -27,8 +27,10 @@ fn main() {
         println!("cargo::rustc-cfg=nit_web_ui");
     }
     if std::env::var_os("NIT_PLUGIN_DIR").is_none() {
-        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../plugins/nit");
-        println!("cargo:rustc-env=NIT_PLUGIN_DIR={dir}");
+        // Read at run time: cargo reuses a compiled build script across a
+        // move of the checkout, so `env!` would keep the old path.
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+        println!("cargo:rustc-env=NIT_PLUGIN_DIR={manifest}/../../plugins/nit");
     }
 }
 
