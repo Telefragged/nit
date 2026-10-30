@@ -148,7 +148,7 @@ fn attach_of_an_unknown_blob_is_404() {
     let (st, res) = attach(&server, change_number, 0, "out.txt", &"0".repeat(64));
 
     assert_eq!(st, 404, "{res}");
-    assert!(attach_entries(&server, change_number).is_empty());
+    assert_eq!(attach_entries(&server, change_number), Vec::<Value>::new());
 }
 
 /// A revision the change does not have is a 404.

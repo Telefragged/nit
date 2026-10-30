@@ -8,6 +8,8 @@
 //! `TYPES_GEN_OUT`
 //! means a no-op, so `cargo test --features ts` stays read-only.
 
+use std::fmt::Write as _;
+
 use ts_rs::{Config, TS};
 
 #[test]
@@ -101,19 +103,15 @@ fn write_wire_types() {
         crate::domain::ChangeProjection,
     );
     for (name, value) in [
-        (
-            "diff::COMMIT_MSG_PATH",
-            format!("{:?}", crate::diff::COMMIT_MSG_PATH),
-        ),
-        (
-            "diff::ATTACHMENT_PREFIX",
-            format!("{:?}", crate::diff::ATTACHMENT_PREFIX),
-        ),
+        ("diff::COMMIT_MSG_PATH", crate::diff::COMMIT_MSG_PATH),
+        ("diff::ATTACHMENT_PREFIX", crate::diff::ATTACHMENT_PREFIX),
     ] {
         let short = name.rsplit("::").next().unwrap_or(name);
-        out.push_str(&format!(
-            "/** `crate::{name}`. */\nexport const {short} = {value};\n\n"
-        ));
+        write!(
+            out,
+            "/** `crate::{name}`. */\nexport const {short} = {value:?};\n\n"
+        )
+        .unwrap();
     }
     std::fs::write(path, out).expect("write types.gen.ts");
 }

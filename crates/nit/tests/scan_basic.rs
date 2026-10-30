@@ -181,7 +181,7 @@ fn merge_commit_rejects_the_push() {
         "{e}"
     );
     // All-or-nothing: c1 alone would push fine, but the merge commit voids it too.
-    assert!(all_changes(&server).is_empty());
+    assert_eq!(all_changes(&server), Vec::<serde_json::Value>::new());
 }
 
 #[test]
@@ -202,7 +202,7 @@ fn already_merged_commit_rejects_the_push() {
         "{e}"
     );
     // All-or-nothing: the already-merged push records no changes either.
-    assert!(all_changes(&server).is_empty());
+    assert_eq!(all_changes(&server), Vec::<serde_json::Value>::new());
 }
 
 #[test]

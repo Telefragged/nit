@@ -327,7 +327,7 @@ mod tests {
             &[edit((0, 0), (0, 2))],
             &[edit((0, 0), (0, 2))],
         );
-        assert!(old.is_empty()); // a pure insertion has no old-side line
+        assert_eq!(old, []); // a pure insertion has no old-side line
         assert_eq!(new, vec![span(5, 6)]); // new index 5 == line 6
 
         // Property 10: the change edits the same line the base moved → not drift.

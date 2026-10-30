@@ -73,7 +73,7 @@ fn draft_surfaces_then_clears() {
     assert_eq!(st, 204);
 
     // Staging is not a publish.
-    assert!(published_reviews(&server, id).is_empty());
+    assert_eq!(published_reviews(&server, id), Vec::<Value>::new());
     assert_eq!(status_at(&server, id), "pending");
 }
 
@@ -123,7 +123,7 @@ fn batch_submit_publishes_verdict_and_drains_comments() {
 
     let out = submit_change(&server, id);
     assert_eq!(out["submitted"], 1);
-    assert!(out["errors"].as_array().unwrap().is_empty());
+    assert_eq!(out["errors"], json!([]));
 
     let d = detail(&server, id);
     assert_eq!(d["draft_decision"], Value::Null, "decision cleared");
@@ -164,7 +164,7 @@ fn batch_submit_leaves_undecided_comment_only_change() {
         1,
         "comment kept as draft"
     );
-    assert!(published_reviews(&server, id).is_empty());
+    assert_eq!(published_reviews(&server, id), Vec::<Value>::new());
     assert_eq!(status_at(&server, id), "pending");
 }
 
@@ -309,7 +309,7 @@ fn batch_submit_publishes_every_tagged_change() {
 
     let out = submit(&server, "tag=session-id=s1");
     assert_eq!(out["submitted"], 2);
-    assert!(out["errors"].as_array().unwrap().is_empty());
+    assert_eq!(out["errors"], json!([]));
     assert_eq!(status_at(&server, id_a), "approved");
     assert_eq!(status_at(&server, id_b), "changes_requested");
     assert_eq!(status_at(&server, id_c), "pending", "outside the tag");

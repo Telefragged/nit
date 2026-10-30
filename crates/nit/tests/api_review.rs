@@ -66,7 +66,7 @@ fn review_drains_drafts_and_sets_status() {
     let pre = detail(&server, id);
     assert_eq!(pre["drafts"].as_array().unwrap().len(), 2, "still drafts");
     assert!(pre["threads"].as_array().unwrap().is_empty(), "unpublished");
-    assert!(published_reviews(&server, id).is_empty());
+    assert_eq!(published_reviews(&server, id), Vec::<Value>::new());
 
     // Review submit is the only publish path; drafts drain into one review entry.
     let out = review(&server, id, "request_changes", "a few nits");

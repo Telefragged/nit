@@ -104,7 +104,7 @@ fn repos_list_shape_canonical_ref_and_scoped_changes() {
 
     let (st, none) = http_get(&server.url("/api/changes?repo=9999"));
     assert_eq!(st, 200);
-    assert!(none["changes"].as_array().unwrap().is_empty());
+    assert_eq!(none["changes"], json!([]));
 }
 
 #[test]

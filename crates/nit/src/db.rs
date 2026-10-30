@@ -1446,7 +1446,7 @@ mod tests {
 
         let matching = |pair| matching_tags(&conn, repo.id, &[pair]);
         assert_eq!(matching(("branch", "track/b")), vec![id]);
-        assert!(matching(("branch", "track/a")).is_empty());
+        assert_eq!(matching(("branch", "track/a")), []);
         assert!(
             matching(("feature", "epic")).is_empty(),
             "a key the second write left out is gone, not carried"
@@ -1479,7 +1479,7 @@ mod tests {
             matching(&[("branch", "track/a"), ("feature", "epic")]),
             vec![both]
         );
-        assert!(matching(&[("feature", "other")]).is_empty());
+        assert_eq!(matching(&[("feature", "other")]), []);
     }
 
     #[test]

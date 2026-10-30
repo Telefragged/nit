@@ -1,7 +1,7 @@
 # Single source of truth for the Rust toolchain. rust-overlay reads this
 # in flake.nix (devShell + build); rustup honours it for non-nix users.
 [toolchain]
-channel = "1.96.0"
+channel = "1.99.1"
 profile = "minimal"
 components = ["clippy", "rustfmt", "rust-src", "rust-analyzer"]
 # nit-wasm compiles the shared fold to WebAssembly for the web (flake.nix
