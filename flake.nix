@@ -178,7 +178,7 @@
           inherit (webArgs) src;
           inherit (pkgs) nodejs;
           name = "nit-web-npm-deps";
-          hash = "sha256-hLvw1wzGUqiBVABHob0YW9QNPxFa/6JKFoeoQiBcIP0=";
+          hash = "sha256-eSZ3+UIcMkkPxTAKFRZzeYznIM+H41JOl/jBdENBkIE=";
         };
 
       # The screenshot harness launches chromium and nothing else
