@@ -71,7 +71,10 @@ fn unknown_repo_filters_to_empty() {
     let (st, res) = push(&server, &g, "topic-a", "main");
     assert_eq!(st, 200, "{res}");
 
-    assert!(get_changes(&server, "?repo=999").is_empty());
+    assert_eq!(
+        get_changes(&server, "?repo=999"),
+        Vec::<serde_json::Value>::new()
+    );
 }
 
 #[test]

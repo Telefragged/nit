@@ -157,7 +157,7 @@ pub(super) mod tests {
             vec![span(2, 3)]
         );
         // A position inside the edit is dropped.
-        assert!(project_clipped(&span(6, 7), &[edit((5, 8), (5, 8))]).is_empty());
+        assert_eq!(project_clipped(&span(6, 7), &[edit((5, 8), (5, 8))]), []);
     }
 
     #[test]

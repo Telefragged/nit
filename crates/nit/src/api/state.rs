@@ -448,20 +448,22 @@ pub struct AppQuery<T>(pub T);
 
 impl<S, T> axum::extract::FromRequestParts<S> for AppQuery<T>
 where
-    T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned + Send,
     S: Send + Sync,
 {
     type Rejection = Error;
 
-    async fn from_request_parts(
+    fn from_request_parts(
         parts: &mut axum::http::request::Parts,
         _state: &S,
-    ) -> Result<Self, Self::Rejection> {
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
         // serde_html_form, not axum's serde_urlencoded-backed Query: a
         // repeated key (`?status=a&status=b`) deserializes into a Vec.
-        serde_html_form::from_str(parts.uri.query().unwrap_or_default())
-            .map(AppQuery)
-            .map_err(|e| Error::bad_request(format!("invalid query string: {e}")))
+        std::future::ready(
+            serde_html_form::from_str(parts.uri.query().unwrap_or_default())
+                .map(AppQuery)
+                .map_err(|e| Error::bad_request(format!("invalid query string: {e}"))),
+        )
     }
 }
 
