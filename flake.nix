@@ -429,7 +429,7 @@
         {
           # The release build carries no `+<sha>` suffix, so a commit that
           # leaves the source unchanged reuses the cached build.
-          build = self.packages.${pkgs.system}.nit-release;
+          build = self.packages.${pkgs.stdenv.hostPlatform.system}.nit-release;
           # Compile the WebAssembly fold — surfaces a wasm32 build break or a
           # wasm-bindgen version skew independently of the web build.
           wasm-build = wasmPkg pkgs;
@@ -444,7 +444,7 @@
           treefmt = pkgs.stdenvNoCC.mkDerivation {
             name = "treefmt-check";
             src = self;
-            nativeBuildInputs = [ self.formatter.${pkgs.system} ];
+            nativeBuildInputs = [ self.formatter.${pkgs.stdenv.hostPlatform.system} ];
             buildPhase = "HOME=$TMPDIR treefmt --ci --tree-root .";
             installPhase = "touch $out";
           };
