@@ -12,6 +12,8 @@ web/src/wasm/
 result
 result-*
 .direnv/
+# The build closure that scripts/mito-on-update.sh roots
+/.gcroot
 
 # Screenshot harness output
 /screenshots
