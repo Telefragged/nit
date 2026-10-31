@@ -69,7 +69,7 @@ import {
 import { reviewFiles } from "../lib/attachments";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import {
-  clickLink,
+  pressLink,
   fileLink,
   linkedThread,
   linksThread,
@@ -789,7 +789,7 @@ export default function ReviewPage() {
       if (at === null || !plainClick(e)) return;
       if (document.getSelection()?.isCollapsed === false) return;
       ctxValue.selectLink(
-        clickLink(link, at.file, at.side, at.line, e.shiftKey),
+        pressLink(link, at.file, at.side, [at.line, at.line], e.shiftKey).span,
       );
     };
     document.addEventListener("mousedown", onMouseDown);

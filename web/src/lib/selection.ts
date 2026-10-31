@@ -9,6 +9,7 @@
 // its comment anchor as JSON in `data-anchor`.
 
 import type { LineAnchor, Side } from "../api/types";
+import type { Lines } from "./diffLink";
 import { sameTarget, type DraftTarget } from "../pages/reviewContext";
 
 /** `Range.intersectsNode`, hand-rolled so jsdom tests and the browser run
@@ -125,6 +126,19 @@ export function cellLine(
   const side: Side = cell.dataset.new === undefined ? "old" : "new";
   const line = Number(cell.dataset[side]);
   return Number.isInteger(line) && line > 0 ? { file, side, line } : null;
+}
+
+/** The lines on `side` of the row that holds `el`, as the row's line
+ * number names them (components/diff/LineLink): one line of the diff, or
+ * the lines of a rendered Markdown block. Null outside a row with a line
+ * number on that side. */
+export function rowLines(el: Element, side: Side): Lines | null {
+  const number = el
+    .closest(".line-row, .doc-block")
+    ?.querySelector<HTMLElement>(`.line-link[data-side="${side}"]`);
+  return number
+    ? [Number(number.dataset.start), Number(number.dataset.end)]
+    : null;
 }
 
 /** A range over lines `start` through `end` on one side of `file`'s
