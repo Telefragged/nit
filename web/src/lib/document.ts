@@ -134,6 +134,9 @@ export interface RenderedDoc {
   old: Block[];
   new: Block[];
   rows: DocRow[];
+  /** The changed blocks that only a rebase changed, with none of the
+   * author's edits. */
+  drift: Set<Block>;
 }
 
 /** The blocks that `row` shows, each with its side, the old side first. */
@@ -157,19 +160,26 @@ const other = (side: Side): Side => (side === "old" ? "new" : "old");
 export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
   const parse = (side: Side) =>
     only === other(side) ? [] : parseBlocks(sideText(lines, side));
-  const doc: RenderedDoc = { old: parse("old"), new: parse("new"), rows: [] };
+  const doc: RenderedDoc = {
+    old: parse("old"),
+    new: parse("new"),
+    rows: [],
+    drift: new Set(),
+  };
   if (only) {
     doc.rows = doc[only].map((same) => ({ side: only, same }));
     return doc;
   }
 
   // Where each line sits in the diff, whether the diff adds or removes
-  // it, and the line of context that it matches on the other side.
+  // it, whether the author did, and the line of context that it matches
+  // on the other side.
   const pos = {
     old: new Map<number, number>(),
     new: new Map<number, number>(),
   };
   const edited = { old: new Set<number>(), new: new Set<number>() };
+  const authored = { old: new Set<number>(), new: new Set<number>() };
   const match = {
     old: new Map<number, number>(),
     new: new Map<number, number>(),
@@ -177,8 +187,13 @@ export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
   for (const [i, line] of lines.entries()) {
     if (line.old !== undefined) pos.old.set(line.old, i);
     if (line.new !== undefined) pos.new.set(line.new, i);
-    if (line.kind === "del" && line.old !== undefined) edited.old.add(line.old);
-    if (line.kind === "add" && line.new !== undefined) edited.new.add(line.new);
+    const mark = (side: Side, n: number | undefined) => {
+      if (n === undefined) return;
+      edited[side].add(n);
+      if (!line.drift) authored[side].add(n);
+    };
+    if (line.kind === "del") mark("old", line.old);
+    if (line.kind === "add") mark("new", line.new);
     if (
       line.kind === "context" &&
       line.old !== undefined &&
@@ -193,10 +208,13 @@ export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
     const b = blockAt(doc[side], n);
     return b && n <= b.lines[1] ? b : undefined;
   };
-  const editedBlocks = {
-    old: new Set([...edited.old].map((n) => holder("old", n))),
-    new: new Set([...edited.new].map((n) => holder("new", n))),
-  };
+  /** The blocks that hold one of `lines`, on each side. */
+  const blocksOf = (lines: Record<Side, Set<number>>) => ({
+    old: new Set([...lines.old].map((n) => holder("old", n))),
+    new: new Set([...lines.new].map((n) => holder("new", n))),
+  });
+  const editedBlocks = blocksOf(edited);
+  const authoredBlocks = blocksOf(authored);
   /** The other side's blocks that the lines of `block` match. */
   const partners = (side: Side, { lines: [start, end] }: Block) => {
     const found = new Set<Block>();
@@ -207,10 +225,17 @@ export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
     }
     return [...found];
   };
+  /** Whether `block` is one of `blocks`, or its lines match one of them
+   * on the other side. */
+  const touches = (
+    blocks: Record<Side, Set<Block | undefined>>,
+    side: Side,
+    block: Block,
+  ) =>
+    blocks[side].has(block) ||
+    partners(side, block).some((b) => blocks[other(side)].has(b));
   const changed = (side: Side, block: Block) =>
-    block.at !== null &&
-    (editedBlocks[side].has(block) ||
-      partners(side, block).some((b) => editedBlocks[other(side)].has(b)));
+    block.at !== null && touches(editedBlocks, side, block);
 
   // The new side's blocks, and the old side's changed ones, in diff
   // order. A removed block goes before an added block at the same place.
@@ -239,6 +264,7 @@ export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
       doc.rows.push(run);
     }
     (side === "old" ? run.removed : run.added).push(block);
+    if (!touches(authoredBlocks, side, block)) doc.drift.add(block);
   }
   return doc;
 }

@@ -155,7 +155,8 @@
   color: var(--purple);
 }
 
-.code.drift .code-text {
+.code.drift .code-text,
+.rendered-markdown .drift > :last-child {
   opacity: 0.6;
 }
 

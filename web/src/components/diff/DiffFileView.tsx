@@ -885,10 +885,15 @@ export default function DiffFileView({
       }
       const { index: ri, row } = item;
       if (!("same" in row)) {
+        const drift = (b: Block) => (doc.drift.has(b) ? " drift" : "");
         return pair(
           ri,
-          row.removed.map((b, i) => docItem(`r${i}`, b, "old", " doc-removed")),
-          row.added.map((b, i) => docItem(`a${i}`, b, "new", " doc-added")),
+          row.removed.map((b, i) =>
+            docItem(`r${i}`, b, "old", ` doc-removed${drift(b)}`),
+          ),
+          row.added.map((b, i) =>
+            docItem(`a${i}`, b, "new", ` doc-added${drift(b)}`),
+          ),
         );
       }
       if (split) {
