@@ -688,6 +688,18 @@ button.rail-toggle,
   background-image: linear-gradient(var(--red), var(--red));
 }
 
+/* A block that only a rebase changed takes the drift colors of the raw
+   view. Its text dims with the raw view's drift lines (diff.css). */
+.doc-added.drift {
+  background-color: var(--drift-add-bg);
+  background-image: linear-gradient(var(--blue), var(--blue));
+}
+
+.doc-removed.drift {
+  background-color: var(--drift-del-bg);
+  background-image: linear-gradient(var(--purple), var(--purple));
+}
+
 /* A run of unchanged blocks that the rendered diff hides. A click shows
    them. */
 .doc-gap {

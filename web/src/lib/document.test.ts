@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { add, ctx as both, del } from "../api/fixtures/builders";
+import { add, ctx as both, del, drift } from "../api/fixtures/builders";
 import {
   blockAt,
   type DocRow,
@@ -114,6 +114,35 @@ describe("renderDoc", () => {
     const doc = renderDoc([del(1, "gone"), both(2, 1, ""), both(3, 2, "kept")]);
     const kept = doc.rows.at(-1);
     expect(kept && "same" in kept && kept.old?.lines).toEqual([3, 3]);
+  });
+
+  it("marks a block that only a rebase changed as drift", () => {
+    const doc = renderDoc([
+      drift(del(1, "base")),
+      drift(add(1, "moved base")),
+      both(2, 2, ""),
+      del(3, "mine"),
+      add(3, "my edit"),
+    ]);
+    const changed = doc.rows.flatMap((row) =>
+      "same" in row ? [] : [...row.removed, ...row.added],
+    );
+    expect(changed.map((b) => [b.lines[0], doc.drift.has(b)])).toEqual([
+      [1, true],
+      [3, false],
+      [1, true],
+      [3, false],
+    ]);
+  });
+
+  it("keeps the author's colors for a block with drift and an edit", () => {
+    const doc = renderDoc([
+      drift(del(1, "base")),
+      drift(add(1, "moved base")),
+      del(2, "mine"),
+      add(2, "my edit"),
+    ]);
+    expect(doc.drift.size).toBe(0);
   });
 
   it("renders the one side of a file with no changes", () => {
