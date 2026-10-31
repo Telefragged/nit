@@ -7,7 +7,8 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import type { Line, LineAnchor, Side } from "../api/types";
+import type { Line, Side } from "../api/types";
+import type { Lines } from "./diffLink";
 import { sideText } from "./rendered";
 
 /** One block of a rendered Markdown file: a top-level element, or one
@@ -15,12 +16,15 @@ import { sideText } from "./rendered";
 export interface Block {
   /** The element to render. An item renders inside a list of its own. */
   node: Element;
-  /** The source lines of the block, whole, as a comment anchors to them.
-   * Null for an element that no source line holds, such as the list of
+  /** Whether source lines hold the block, so that it takes comments.
+   * False for an element that no source line holds, such as the list of
    * footnotes. */
-  at: LineAnchor | null;
+  fromSource: boolean;
   /** The first and last source line of the block. */
-  lines: [number, number];
+  lines: Lines;
+  /** The length of the block's last source line, where a comment that
+   * ends on the block ends. */
+  endChar: number;
 }
 
 const processor = unified().use(remarkParse).use(remarkGfm).use(remarkRehype);
@@ -84,20 +88,13 @@ export function parseBlocks(text: string): Block[] {
     // An unclosed code fence runs to the end of the file, past its last
     // line of text.
     while (end > start && !lines[end - 1]) end--;
-    const at: LineAnchor | null =
-      pos === undefined
-        ? null
-        : start === end
-          ? { whole: start }
-          : {
-              selection: {
-                start_line: start,
-                start_char: 0,
-                end_line: end,
-                end_char: lines[end - 1]?.length ?? 0,
-              },
-            };
-    blocks.push({ node, at, lines: [start, end] });
+    const endChar = lines[end - 1]?.length ?? 0;
+    blocks.push({
+      node,
+      fromSource: pos !== undefined,
+      lines: [start, end],
+      endChar,
+    });
   }
   return blocks;
 }
@@ -113,11 +110,11 @@ export function blockAt(blocks: readonly Block[], line: number) {
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
     const b = blocks[mid];
-    if (b?.at && b.lines[0] <= line) lo = mid + 1;
+    if (b?.fromSource && b.lines[0] <= line) lo = mid + 1;
     else hi = mid;
   }
   const found = blocks[Math.max(lo - 1, 0)];
-  return found?.at ? found : undefined;
+  return found?.fromSource ? found : undefined;
 }
 
 /** A row of a rendered Markdown file. */
@@ -235,7 +232,7 @@ export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
     blocks[side].has(block) ||
     partners(side, block).some((b) => blocks[other(side)].has(b));
   const changed = (side: Side, block: Block) =>
-    block.at !== null && touches(editedBlocks, side, block);
+    block.fromSource && touches(editedBlocks, side, block);
 
   // The new side's blocks, and the old side's changed ones, in diff
   // order. A removed block goes before an added block at the same place.

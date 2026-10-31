@@ -794,17 +794,19 @@ const captures = [
       );
     },
   },
-  // A draft on one block of a rendered Markdown attachment: its line
-  // number links the block, and c opens the editor under it.
+  // A draft on two blocks of a rendered Markdown attachment: the link
+  // names both blocks' lines, and c opens the editor under the last.
   {
     name: "review-rendered-draft",
-    path: "/changes/12?against=base",
+    path: "/changes/12?against=base&file=/attachments/plan/rotation.md&line=3-4",
     fullPage: false,
     actions: async (page) => {
-      await expandAllFiles(page);
       const plan = '[data-diff-path="/attachments/plan/rotation.md"]';
-      await clickNow(page.locator(`${plan} .doc-block[data-start="3"] > a`));
-      await untilDom(page, () => !!document.querySelector(".doc-block.linked"));
+      await untilDom(
+        page,
+        (sel) => document.querySelectorAll(sel).length === 2,
+        `${plan} .doc-block.linked`,
+      );
       await page.keyboard.press("c");
       await fillNow(
         page.locator(`${plan} textarea`),

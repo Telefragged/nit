@@ -414,8 +414,28 @@ describe("a rendered attachment", () => {
       }),
     );
     const block = container.querySelector('.doc-block[data-end="4"]');
-    expect(block?.getAttribute("data-anchor")).toBe(JSON.stringify(at));
+    expect(block?.getAttribute("data-end-char")).toBe("8");
     expect(block?.nextElementSibling?.querySelector("textarea")).not.toBeNull();
+  });
+
+  it("links the blocks from the pressed number to the one under the pointer", () => {
+    const linked: DiffLink[] = [];
+    const { container } = render(
+      tree("unified", plan, [], undefined, {
+        ...ctx,
+        selectLink: (to) => linked.push(to),
+      }),
+    );
+    const [title, steps] = container.querySelectorAll(".doc-block");
+    const number = title?.querySelector(".line-link");
+    if (!number || !steps) throw new Error("no blocks");
+    fireEvent.mouseDown(number);
+    fireEvent.mouseOver(steps);
+    expect(steps.classList).toContain("linked");
+    fireEvent.mouseUp(document);
+    expect(linked).toEqual([
+      { file: plan.path, lines: { side: "new", start: 1, end: 4 } },
+    ]);
   });
 
   it("renders from its own lines, without a read", () => {
