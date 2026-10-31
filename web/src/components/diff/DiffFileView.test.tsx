@@ -17,7 +17,7 @@ import {
   uiThread,
 } from "../../api/fixtures/builders";
 import type { DiffFile, LineAnchor } from "../../api/types";
-import type { DiffLink } from "../../lib/diffLink";
+import type { DiffLink, LinkSpan } from "../../lib/diffLink";
 import type { UiThread } from "../../lib/comments";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
 import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
@@ -416,6 +416,28 @@ describe("a rendered attachment", () => {
     const block = container.querySelector('.doc-block[data-end="4"]');
     expect(block?.getAttribute("data-end-char")).toBe("8");
     expect(block?.nextElementSibling?.querySelector("textarea")).not.toBeNull();
+  });
+
+  it("marks the linked part, or else the block that the link overlaps", () => {
+    const table = attachedFile("t.md", "| A | B |\n|---|---|\n| x | y |\n", 2);
+    const shown = (lines: LinkSpan["lines"]) => {
+      const { container } = render(
+        tree("unified", table, [], undefined, {
+          ...ctx,
+          link: { file: table.path, lines },
+        }),
+      );
+      const marked = [...container.querySelectorAll(".linked")].map(
+        (el) => el.tagName,
+      );
+      cleanup();
+      return marked;
+    };
+    expect(shown({ side: "new", start: 3, end: 3, chars: [6, 7] })).toEqual([
+      "TD",
+    ]);
+    expect(shown({ side: "new", start: 3, end: 3 })).toEqual(["TR"]);
+    expect(shown({ side: "new", start: 2, end: 2 })).toEqual(["DIV"]);
   });
 
   it("links the blocks from the pressed number to the one under the pointer", () => {

@@ -4,9 +4,11 @@ import { add, ctx as both, del, drift } from "../api/fixtures/builders";
 import {
   blockAt,
   type DocRow,
+  linkedPart,
   parseBlocks,
   renderDoc,
   shownRows,
+  withClasses,
 } from "./document";
 
 const doc = [
@@ -98,6 +100,38 @@ describe("parseBlocks", () => {
     const [p] = parseBlocks("[x](javascript:alert(1))");
     const link = p?.node.children[0];
     expect(link?.type === "element" && link.properties.href).toBe("");
+  });
+});
+
+describe("linkedPart", () => {
+  const [table] = parseBlocks("| A | B |\n|---|---|\n| x | y |");
+  if (!table) throw new Error("no table");
+  const linked = (start: number, end: number, chars?: [number, number]) =>
+    linkedPart(table, { start, end, ...(chars && { chars }) })?.node?.tagName;
+
+  it("marks the part with exactly the linked lines and characters", () => {
+    expect(linked(3, 3, [6, 7])).toBe("td");
+    expect(linked(3, 3)).toBe("tr");
+  });
+
+  it("marks the block itself for another span inside it, and none outside", () => {
+    expect(linkedPart(table, { start: 2, end: 2 })).toBe(table.parts[0]);
+    expect(linkedPart(table, { start: 5, end: 5 })).toBeUndefined();
+  });
+});
+
+describe("withClasses", () => {
+  it("adds a class to a marked element and copies only its ancestors", () => {
+    const [list] = parseBlocks("- a\n- b");
+    const item = list?.parts[1]?.node;
+    if (!list || !item) throw new Error("no item");
+    const marked = withClasses(list.node, [[item, "linked"]]);
+    expect(marked).not.toBe(list.node);
+    const copy = marked.children.find((c) => c.type === "element");
+    expect(copy?.type === "element" && copy.properties.className).toEqual([
+      "linked",
+    ]);
+    expect(withClasses(list.node, [[undefined, "linked"]])).toBe(list.node);
   });
 });
 

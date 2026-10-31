@@ -815,6 +815,29 @@ const captures = [
       await centerOn(page, page.locator(`${plan} textarea`));
     },
   },
+  // A draft on one table cell of a rendered Markdown attachment: a click
+  // links the cell, c opens the editor on it, and the pointer over
+  // another cell outlines that cell.
+  {
+    name: "review-rendered-part",
+    path: "/changes/12?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await expandAllFiles(page);
+      const plan = '[data-diff-path="/attachments/plan/rotation.md"]';
+      await clickNow(page.locator(`${plan} td`, { hasText: "storage" }));
+      await untilDom(page, () => !!document.querySelector("td.linked"));
+      await page.keyboard.press("c");
+      await fillNow(
+        page.locator(`${plan} textarea`),
+        "Should storage own the migration too?",
+      );
+      await centerOn(page, page.locator(`${plan} textarea`));
+      await page
+        .locator(`${plan} td`, { hasText: "Endpoint" })
+        .hover({ force: true });
+    },
+  },
   // Autosize: the inline editor grows to fit a multi-line draft instead of
   // scrolling inside its default min-height box (useAutosize).
   {

@@ -1,11 +1,15 @@
 import type { Side } from "../api/types";
 
 /** Lines `start` through `end` on one side of a file's diff. Both ends are
- * inclusive, and `start` never exceeds `end`. */
+ * inclusive, and `start` never exceeds `end`. `chars`, when set, narrows
+ * the span to the text from character `chars[0]` of line `start` to
+ * character `chars[1]` of line `end`, the end exclusive: one table cell of
+ * a rendered Markdown file. */
 interface LineSpan {
   side: Side;
   start: number;
   end: number;
+  chars?: [number, number];
 }
 
 /** A place in the diff that a link points at: a whole file, or a span of
@@ -28,12 +32,22 @@ export type DiffLink = FileLink | ThreadLink;
 
 const LINE = /^(\d+)(?:-(\d+))?$/;
 
-/** Reads the link from the review page's query string.
+/** A range of characters written as `A-B`, or undefined when `text` is
+ * not one. */
+export function parseChars(
+  text: string | null | undefined,
+): [number, number] | undefined {
+  const m = /^(\d+)-(\d+)$/.exec(text ?? "");
+  return m ? [Number(m[1]), Number(m[2])] : undefined;
+}
+
+/** Parses the link from the review page's query string.
  *
- * `thread` names a thread by its id. Otherwise `file` names the file,
- * `line` holds `N` or `N-M`, and `side=old` puts the lines on the old side.
- * Returns null without a well-formed `thread` or a `file`. A malformed
- * `line` links the whole file. */
+ * `thread` is a thread's id. Otherwise `file` is the file's path, `line`
+ * is `N` or `N-M`, `chars` is `A-B`, and `side=old` puts the lines on the
+ * old side. Returns null without a well-formed `thread` or a
+ * `file`. A malformed `line` links the whole file, and a malformed `chars`
+ * links the whole lines. */
 export function parseLink(params: URLSearchParams): DiffLink | null {
   const thread = /^\d+$/.exec(params.get("thread") ?? "");
   if (thread) return { thread: Number(thread[0]) };
@@ -43,12 +57,14 @@ export function parseLink(params: URLSearchParams): DiffLink | null {
   if (!m) return { file, lines: null };
   const a = Number(m[1]);
   const b = Number(m[2] ?? m[1]);
+  const chars = parseChars(params.get("chars"));
   return {
     file,
     lines: {
       side: params.get("side") === "old" ? "old" : "new",
       start: Math.min(a, b),
       end: Math.max(a, b),
+      ...(chars && { chars }),
     },
   };
 }
@@ -56,7 +72,13 @@ export function parseLink(params: URLSearchParams): DiffLink | null {
 /** The query-string patch that writes `link`, the inverse of `parseLink`. */
 export function linkParams(link: DiffLink): Record<string, string | null> {
   if ("thread" in link) {
-    return { thread: String(link.thread), file: null, line: null, side: null };
+    return {
+      thread: String(link.thread),
+      file: null,
+      line: null,
+      chars: null,
+      side: null,
+    };
   }
   const { lines } = link;
   return {
@@ -68,6 +90,7 @@ export function linkParams(link: DiffLink): Record<string, string | null> {
         : lines.start === lines.end
           ? String(lines.start)
           : `${lines.start}-${lines.end}`,
+    chars: lines?.chars ? lines.chars.join("-") : null,
     side: lines?.side === "old" ? "old" : null,
   };
 }

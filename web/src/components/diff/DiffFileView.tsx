@@ -28,7 +28,7 @@ import {
   threadKey,
   type UiThread,
 } from "../../lib/comments";
-import { linksLine, type FileLink } from "../../lib/diffLink";
+import { fileLink, linksLine, type FileLink } from "../../lib/diffLink";
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
@@ -45,6 +45,7 @@ import type { ReviewFile } from "../../lib/attachments";
 import {
   blockAt,
   type Block,
+  linkedPart,
   type DocRow,
   renderDoc,
   type RenderedDoc,
@@ -547,10 +548,9 @@ export default function DiffFileView({
 
   const { linked, press } = useLineDrag(file.path, sectionRef);
 
-  /** The class suffix marking a cell that shows a linked line, or a
-   * block that holds one of lines `no` through `end`. */
-  const lineLinked = (side: Side, no: number | undefined, end = no) =>
-    linksLine(linked, file.path, side, no, end) ? " linked" : "";
+  /** The class suffix marking a cell that shows a linked line. */
+  const lineLinked = (side: Side, no: number | undefined) =>
+    linksLine(linked, file.path, side, no) ? " linked" : "";
 
   /** A gutter's line number, as a link to its line. */
   const lineNumber = (side: Side, no: number | undefined) =>
@@ -739,6 +739,16 @@ export default function DiffFileView({
   const blockItems = (side: Side, block: Block | undefined) =>
     block?.fromSource ? metaItems(side, block.lines[1]) : [];
 
+  /** The part of a rendered block on `side` that the link marks. A block
+   * outside the link gets none, so that a drag re-renders only the blocks
+   * that it crosses. */
+  const docLinked = (side: Side, block: Block) => {
+    const at = fileLink(linked);
+    return at?.file === file.path && at.lines?.side === side
+      ? linkedPart(block, at.lines)
+      : undefined;
+  };
+
   /** A block, then `items` under it: by default, the threads and the
    * editor on the block. `change` is its class suffix in a diff. */
   const docItem = (
@@ -748,7 +758,7 @@ export default function DiffFileView({
     change = "",
     items = blockItems(side, block),
   ) => {
-    const [start, end] = block.lines;
+    const end = block.lines[1];
     return (
       <Fragment key={key}>
         <DocBlock
@@ -756,12 +766,8 @@ export default function DiffFileView({
           block={block}
           side={side}
           press={press}
-          tint={
-            change +
-            (block.fromSource
-              ? lineHover(side, end) + lineLinked(side, start, end)
-              : "")
-          }
+          linked={docLinked(side, block)}
+          tint={change + (block.fromSource ? lineHover(side, end) : "")}
         />
         {items.length > 0 ? (
           <div className="meta-row doc-meta">{items}</div>

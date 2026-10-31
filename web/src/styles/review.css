@@ -631,6 +631,19 @@ button.rail-toggle,
   padding-left: 60px;
 }
 
+/* The innermost part under the pointer has an outline: the part that a
+   click links, and that c then opens a draft on. */
+.rendered-markdown [data-part]:hover:not(:has([data-part]:hover)) {
+  outline: 1px solid var(--blue);
+  outline-offset: -1px;
+}
+
+/* A line of a code block is a part of its own, as wide as the block. */
+.rendered-markdown .code-line {
+  display: inline-block;
+  min-width: 100%;
+}
+
 .rendered-markdown .doc-gutter {
   position: absolute;
   top: 0;

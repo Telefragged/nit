@@ -25,6 +25,20 @@ export interface Block {
   /** The length of the block's last source line, where a comment that
    * ends on the block ends. */
   endChar: number;
+  /** The parts that a link can mark: the block itself first, then the
+   * parts inside it, in document order. */
+  parts: Part[];
+}
+
+/** A part of a block that a link or a comment can mark: the block
+ * itself, with no `node`, or an element inside it. */
+export interface Part {
+  node?: Element;
+  /** The first and last source line of the part. */
+  lines: Lines;
+  /** For a table cell, the characters of its content on its line, the
+   * end exclusive. */
+  chars?: [number, number];
 }
 
 const processor = unified().use(remarkParse).use(remarkGfm).use(remarkRehype);
@@ -68,23 +82,19 @@ const PARTS = new Set(["li", "tr", "th", "td"]);
  * `data-start` and `data-end`, the length of its last line as
  * `data-end-char`, and for a table cell the range of its content's
  * characters as `data-chars` (lib/selection). */
-function tag(
-  el: Element,
-  [start, end]: Lines,
-  lines: readonly string[],
-  chars?: string,
-) {
+function tag(el: Element, part: Part, lines: readonly string[]) {
+  const [start, end] = part.lines;
   el.properties.dataPart = "";
   el.properties.dataStart = start;
   el.properties.dataEnd = end;
   el.properties.dataEndChar = lines[end - 1]?.length ?? 0;
-  if (chars) el.properties.dataChars = chars;
+  if (part.chars) el.properties.dataChars = part.chars.join("-");
 }
 
-/** Tags each part inside `node`. The code of a code block becomes one
- * tagged `span.code-line` per line, with the fence's language as
- * `data-lang`. */
-function tagParts(node: Element, lines: readonly string[]) {
+/** Tags each part inside `node`, and adds it to `parts`. The code of a
+ * code block becomes one tagged `span.code-line` per line, with the
+ * fence's language as `data-lang`. */
+function tagParts(node: Element, lines: readonly string[], parts: Part[]) {
   const pos = node.position;
   const code = node.children.find(
     (c): c is Element => c.type === "element" && c.tagName === "code",
@@ -110,7 +120,9 @@ function tagParts(node: Element, lines: readonly string[]) {
           properties: { className: ["code-line"], dataLang: lang },
           children: [{ type: "text", value }],
         };
-        tag(line, [first + i, first + i], lines);
+        const part = { node: line, lines: [first + i, first + i] as Lines };
+        tag(line, part, lines);
+        parts.push(part);
         return [line, { type: "text", value: "\n" }];
       });
     return;
@@ -119,16 +131,17 @@ function tagParts(node: Element, lines: readonly string[]) {
     if (child.type !== "element") continue;
     const at = child.position;
     if (at && (PARTS.has(child.tagName) || node.tagName === "blockquote")) {
-      let chars: string | undefined;
+      const part: Part = { node: child, lines: [at.start.line, at.end.line] };
       if (child.tagName === "th" || child.tagName === "td") {
         // A cell's span starts and ends on its pipes.
         const first = child.children.at(0)?.position?.start ?? at.start;
         const last = child.children.at(-1)?.position?.end ?? at.end;
-        chars = `${first.column - 1}-${last.column - 1}`;
+        part.chars = [first.column - 1, last.column - 1];
       }
-      tag(child, [at.start.line, at.end.line], lines, chars);
+      tag(child, part, lines);
+      parts.push(part);
     }
-    tagParts(child, lines);
+    tagParts(child, lines, parts);
   }
 }
 
@@ -154,7 +167,6 @@ export function parseBlocks(text: string): Block[] {
   const lines = text.split("\n");
   const blocks: Block[] = [];
   for (const node of blockNodes(tree)) {
-    tagParts(node, lines);
     const pos = node.position;
     const start = pos?.start.line ?? 0;
     let end = pos?.end.line ?? 0;
@@ -162,14 +174,55 @@ export function parseBlocks(text: string): Block[] {
     // line of text.
     while (end > start && !lines[end - 1]) end--;
     const endChar = lines[end - 1]?.length ?? 0;
+    const parts: Part[] = [{ lines: [start, end] }];
+    tagParts(node, lines, parts);
     blocks.push({
       node,
       fromSource: pos !== undefined,
       lines: [start, end],
       endChar,
+      parts,
     });
   }
   return blocks;
+}
+
+/** The part of `block` that the linked `span` marks: the part with
+ * exactly its lines and characters, or else the block itself. Undefined
+ * when the span lies outside the block. */
+export function linkedPart(
+  block: Block,
+  span: { start: number; end: number; chars?: [number, number] },
+): Part | undefined {
+  const [start, end] = block.lines;
+  if (!block.fromSource || span.end < start || span.start > end) {
+    return undefined;
+  }
+  const same = (part: Part) =>
+    part.lines[0] === span.start &&
+    part.lines[1] === span.end &&
+    part.chars?.join("-") === span.chars?.join("-");
+  return block.parts.find(same) ?? block.parts[0];
+}
+
+/** `node` with `className` added to each element of `marks`, as a copy of
+ * the elements on the path to them. The rest of the tree is shared. */
+export function withClasses(
+  node: Element,
+  marks: readonly (readonly [Element | undefined, string])[],
+): Element {
+  if (marks.every(([el]) => !el)) return node;
+  const own = marks.filter(([el]) => el === node).map(([, cls]) => cls);
+  const children = node.children.map((child) =>
+    child.type === "element" ? withClasses(child, marks) : child,
+  );
+  const changed = children.some((child, i) => child !== node.children[i]);
+  if (own.length === 0 && !changed) return node;
+  const className = [
+    [node.properties.className ?? []].flat().map(String),
+    own,
+  ].flat();
+  return { ...node, properties: { ...node.properties, className }, children };
 }
 
 /** The block that shows a thread on source line `line`: the last block

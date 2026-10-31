@@ -77,6 +77,7 @@ import {
   parseLink,
   sameLink,
   type DiffLink,
+  type LinkSpan,
 } from "../lib/diffLink";
 import { displayPath, fileAt, fileDomId, treeOrder } from "../lib/diffview";
 import { highlight } from "../lib/highlight";
@@ -87,6 +88,7 @@ import type { SelectionMiss } from "../lib/selection";
 import {
   cellLine,
   linesRange,
+  partLink,
   selectionAnchorSide,
   selectionTarget,
 } from "../lib/selection";
@@ -676,8 +678,9 @@ export default function ReviewPage() {
         if (selected !== latestRevision) onRight(latestRevision);
       } else if (key === "c") {
         // Draft a comment on the selected diff text (gerrit's c), or else
-        // on the linked lines: one line whole, several from the start of
-        // the first to the end of the last.
+        // on the linked span: one line whole, the characters of a table
+        // cell, or several lines from the start of the first to the end of
+        // the last.
         const sel = document.getSelection();
         const linked = fileLink(link);
         let range: Range | null = null;
@@ -686,11 +689,11 @@ export default function ReviewPage() {
           range = sel.getRangeAt(0);
           result = selectionTarget(range);
         } else if (linked?.lines) {
-          const { side, start, end } = linked.lines;
-          if (start === end) {
+          const { side, start, end, chars } = linked.lines;
+          if (start === end && !chars) {
             result = { file: linked.file, side, at: { whole: start } };
           } else {
-            range = linesRange(linked.file, side, start, end);
+            range = linesRange({ file: linked.file, lines: linked.lines });
             result = range && selectionTarget(range, side);
           }
         }
@@ -772,24 +775,36 @@ export default function ReviewPage() {
   }, []);
 
   // A click on a line's code links the line, as a click on its number
-  // does. A shift-click extends the linked span. A click that ends a text
-  // selection leaves the link alone. A shift-press would extend the text
-  // selection from the caret, so the mousedown handler cancels it.
+  // does. A click on a part of a rendered Markdown file links the part. A
+  // shift-click extends the linked span over the lines. A click that ends
+  // a text selection leaves the link alone. A shift-press would extend the
+  // text selection from the caret, so the mousedown handler cancels it.
   useEffect(() => {
-    const lineOf = (e: MouseEvent) =>
-      e.target instanceof Element &&
-      diffColumnRef.current?.contains(e.target) === true
-        ? cellLine(e.target)
-        : null;
+    const clicked = (e: MouseEvent): LinkSpan | null => {
+      const el = e.target;
+      if (!(el instanceof Element) || !diffColumnRef.current?.contains(el)) {
+        return null;
+      }
+      const at = cellLine(el);
+      return at
+        ? {
+            file: at.file,
+            lines: { side: at.side, start: at.line, end: at.line },
+          }
+        : partLink(el);
+    };
     const onMouseDown = (e: MouseEvent) => {
-      if (e.shiftKey && plainClick(e) && lineOf(e)) e.preventDefault();
+      if (e.shiftKey && plainClick(e) && clicked(e)) e.preventDefault();
     };
     const onClick = (e: MouseEvent) => {
-      const at = lineOf(e);
+      const at = clicked(e);
       if (at === null || !plainClick(e)) return;
       if (document.getSelection()?.isCollapsed === false) return;
+      const { side, start, end } = at.lines;
       ctxValue.selectLink(
-        pressLink(link, at.file, at.side, [at.line, at.line], e.shiftKey).span,
+        e.shiftKey
+          ? pressLink(link, at.file, side, [start, end], true).span
+          : at,
       );
     };
     document.addEventListener("mousedown", onMouseDown);
