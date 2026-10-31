@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { RootContent } from "hast";
+import type { LineAnchor } from "../api/types";
 import { add, ctx as both, del, drift } from "../api/fixtures/builders";
 import {
   blockAt,
+  coveringPart,
   type DocRow,
   linkedPart,
   parseBlocks,
@@ -117,6 +119,22 @@ describe("linkedPart", () => {
   it("marks the block itself for another span inside it, and none outside", () => {
     expect(linkedPart(table, { start: 2, end: 2 })).toBe(table.parts[0]);
     expect(linkedPart(table, { start: 5, end: 5 })).toBeUndefined();
+  });
+});
+
+describe("coveringPart", () => {
+  const [table] = parseBlocks("| A | B |\n|---|---|\n| x | y |");
+  if (!table) throw new Error("no table");
+  const covering = (at: LineAnchor) => coveringPart(table, at)?.node?.tagName;
+
+  it("finds the innermost part that covers an anchor", () => {
+    const sel = { start_line: 3, start_char: 6, end_line: 3, end_char: 7 };
+    expect(covering({ selection: sel })).toBe("td");
+    expect(covering({ whole: 3 })).toBe("tr");
+  });
+
+  it("falls back to the block for an anchor that no part covers", () => {
+    expect(coveringPart(table, { whole: 2 })).toBe(table.parts[0]);
   });
 });
 

@@ -14,9 +14,11 @@ import {
   type CommentRange,
   type Hunk,
   type Line,
+  type LineAnchor,
   type Side,
 } from "../../api/types";
 import {
+  anchorAt,
   anchorKind,
   anchorLineText,
   anchorRange,
@@ -45,6 +47,7 @@ import type { ReviewFile } from "../../lib/attachments";
 import {
   blockAt,
   type Block,
+  coveringPart,
   linkedPart,
   type DocRow,
   renderDoc,
@@ -279,6 +282,7 @@ export default function DiffFileView({
   const [hovered, setHovered] = useState<{
     thread: string;
     line: string | null;
+    at: LineAnchor | null;
   } | null>(null);
 
   const expansion = useHunkExpansion(file, ctx);
@@ -595,12 +599,13 @@ export default function DiffFileView({
           className="meta-item"
           key={`t-${side}-${threadKey(t)}`}
           onMouseEnter={() => {
-            // A block has no text to tint a selection on, so the whole
-            // block tints.
+            // A rendered block has no text to tint a selection on, so the
+            // part of the block that covers the selection tints.
             setHovered({
               thread: threadKey(t),
               line:
                 anchorRange(shownAt(t).anchor) && !doc ? null : `${side}:${no}`,
+              at: anchorAt(shownAt(t).anchor),
             });
           }}
           onMouseLeave={() => {
@@ -739,6 +744,19 @@ export default function DiffFileView({
   const blockItems = (side: Side, block: Block | undefined) =>
     block?.fromSource ? metaItems(side, block.lines[1]) : [];
 
+  /** The part of a rendered block on `side` that the hovered thread's
+   * anchor, or the open editor's, covers. */
+  const docMarked = (side: Side, block: Block) => {
+    const end = block.lines[1];
+    const at =
+      hovered?.line === `${side}:${end}`
+        ? hovered.at
+        : editorAt(side, end)
+          ? ctx.editingTarget?.at
+          : undefined;
+    return at && block.fromSource ? coveringPart(block, at) : undefined;
+  };
+
   /** The part of a rendered block on `side` that the link marks. A block
    * outside the link gets none, so that a drag re-renders only the blocks
    * that it crosses. */
@@ -758,7 +776,6 @@ export default function DiffFileView({
     change = "",
     items = blockItems(side, block),
   ) => {
-    const end = block.lines[1];
     return (
       <Fragment key={key}>
         <DocBlock
@@ -767,7 +784,8 @@ export default function DiffFileView({
           side={side}
           press={press}
           linked={docLinked(side, block)}
-          tint={change + (block.fromSource ? lineHover(side, end) : "")}
+          marked={docMarked(side, block)}
+          change={change}
         />
         {items.length > 0 ? (
           <div className="meta-row doc-meta">{items}</div>

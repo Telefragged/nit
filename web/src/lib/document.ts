@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import type { Line, Side } from "../api/types";
+import type { Line, LineAnchor, Side } from "../api/types";
 import type { Lines } from "./diffLink";
 import { sideText } from "./rendered";
 
@@ -203,6 +203,28 @@ export function linkedPart(
     part.lines[1] === span.end &&
     part.chars?.join("-") === span.chars?.join("-");
   return block.parts.find(same) ?? block.parts[0];
+}
+
+/** The innermost part of `block` that covers all of `at`, or else the
+ * block itself. A part without characters covers its lines whole. */
+export function coveringPart(block: Block, at: LineAnchor): Part | undefined {
+  const [sl, sc, el, ec] =
+    "whole" in at
+      ? [at.whole, 0, at.whole, Infinity]
+      : [
+          at.selection.start_line,
+          at.selection.start_char,
+          at.selection.end_line,
+          at.selection.end_char,
+        ];
+  const covers = ({ lines: [start, end], chars }: Part) => {
+    const [from, to] = chars ?? [0, Infinity];
+    return (
+      (start < sl || (start === sl && from <= sc)) &&
+      (el < end || (el === end && ec <= to))
+    );
+  };
+  return block.parts.filter(covers).at(-1) ?? block.parts[0];
 }
 
 /** `node` with `className` added to each element of `marks`, as a copy of
