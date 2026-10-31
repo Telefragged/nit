@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { add, ctx as both, del } from "../api/fixtures/builders";
-import { blockAt, parseBlocks, renderDoc } from "./document";
+import {
+  blockAt,
+  type DocRow,
+  parseBlocks,
+  renderDoc,
+  shownRows,
+} from "./document";
 
 const doc = [
   "# Plan", // 1
@@ -114,5 +120,34 @@ describe("renderDoc", () => {
     const doc = renderDoc([add(1, "# New"), add(2, "")], "new");
     expect(doc.rows).toHaveLength(1);
     expect(doc.old).toEqual([]);
+  });
+});
+
+describe("shownRows", () => {
+  const [block] = parseBlocks("text");
+  if (!block) throw new Error("no block");
+  const same: DocRow = { side: "new", same: block };
+  const change: DocRow = { removed: [block], added: [] };
+  /** Each shown row as its index, each hidden run as `from-to`. */
+  const shape = (
+    rows: DocRow[],
+    keep: (row: DocRow, index: number) => boolean = () => false,
+  ) =>
+    shownRows(rows, keep).map((s) =>
+      "from" in s ? `${s.from}-${s.to}` : s.index,
+    );
+
+  it("hides the rows past the context of a change", () => {
+    const rows = [same, same, same, change, same, same, same];
+    expect(shape(rows)).toEqual(["0-1", 2, 3, 4, "5-6"]);
+  });
+
+  it("shows a row that keep holds for", () => {
+    const rows = [same, same, same, change, same];
+    expect(shape(rows, (_, i) => i === 0)).toEqual([0, "1-1", 2, 3, 4]);
+  });
+
+  it("shows every row of a file with no change", () => {
+    expect(shape([same, same, same])).toEqual([0, 1, 2]);
   });
 });

@@ -400,6 +400,65 @@ describe("a rendered attachment", () => {
   });
 });
 
+describe("a rendered Markdown diff", () => {
+  const paragraphs = ["# Title", "One.", "Two.", "Three."];
+  const lines = [
+    ...paragraphs.flatMap((text, i) => [
+      both(2 * i + 1, 2 * i + 1, text),
+      both(2 * i + 2, 2 * i + 2, ""),
+    ]),
+    del(9, "old end."),
+    add(9, "new end."),
+  ];
+  const doc: DiffFile = {
+    path: "docs/long.md",
+    status: "modified",
+    binary: false,
+    additions: 1,
+    deletions: 1,
+    old_total: 9,
+    new_total: 9,
+    hunks: [
+      {
+        old_start: 1,
+        old_lines: 9,
+        new_start: 1,
+        new_lines: 9,
+        header: "",
+        lines,
+      },
+    ],
+  };
+  const shown = (container: HTMLElement) =>
+    [...container.querySelectorAll(".doc-block")].map((b) => b.textContent);
+
+  it("hides the unchanged blocks far from a change until a click", () => {
+    const { container } = renderFile("unified", doc);
+    fireEvent.click(screen.getByRole("button", { name: "Rendered" }));
+    expect(shown(container)).toEqual(["7Three.", "9old end.", "9new end."]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "⋯ 3 unchanged blocks" }),
+    );
+    expect(shown(container)).toHaveLength(6);
+  });
+
+  it("shows a block with a thread", () => {
+    const thread = uiThread({
+      id: 1,
+      revision: 2,
+      anchor: { line: { file: doc.path, side: "new", at: { whole: 3 } } },
+    });
+    const { container } = renderFile("unified", doc, [thread]);
+    fireEvent.click(screen.getByRole("button", { name: "Rendered" }));
+    expect(shown(container)).toEqual([
+      "3One.",
+      "7Three.",
+      "9old end.",
+      "9new end.",
+    ]);
+  });
+});
+
 describe("a Markdown file", () => {
   const doc: DiffFile = {
     path: "docs/a.md",

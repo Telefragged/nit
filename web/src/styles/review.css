@@ -688,6 +688,22 @@ button.rail-toggle,
   background-image: linear-gradient(var(--red), var(--red));
 }
 
+/* A run of unchanged blocks that the rendered diff hides. A click shows
+   them. */
+.doc-gap {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  border-inline: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doc-gap:hover .hunk-skip {
+  color: var(--blue);
+}
+
 /* Side by side, the old side's blocks sit in the left column of each
    row, and the new side's in the right. */
 .rendered-markdown.doc-split {

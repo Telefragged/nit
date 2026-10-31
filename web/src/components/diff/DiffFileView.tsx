@@ -51,9 +51,11 @@ import type { ReviewFile } from "../../lib/attachments";
 import {
   blockAt,
   type Block,
+  type DocRow,
   renderDoc,
   type RenderedDoc,
   rowBlocks,
+  shownRows,
 } from "../../lib/document";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
 import { renderedKind } from "../../lib/rendered";
@@ -133,8 +135,10 @@ type View = "raw" | "rendered";
 
 const VIEW_OPTIONS: SegOption<View>[] = [
   { value: "raw", label: "Raw", title: "The lines of the diff" },
-  { value: "rendered", label: "Rendered", title: "The whole file, rendered" },
+  { value: "rendered", label: "Rendered", title: "The file, rendered" },
 ];
+
+const NO_ROWS: ReadonlySet<number> = new Set();
 
 const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
   a.file === file && a.side === side && targetLine(a) === line;
@@ -304,6 +308,13 @@ export default function DiffFileView({
     () => (showDoc && whole.data ? renderDoc(whole.data.lines, docOnly) : null),
     [showDoc, whole.data, docOnly],
   );
+  // The rows of the rendered diff that the reviewer chose to show out of
+  // a hidden run, by index. A new parse starts with none.
+  const [shown, setShown] = useState<{
+    doc: RenderedDoc | null;
+    rows: ReadonlySet<number>;
+  }>({ doc: null, rows: new Set() });
+  const revealedRows = shown.doc === doc ? shown.rows : NO_ROWS;
   /** The line that a thread on `line` of `side` shows under: the last line
    * of its block in a rendered Markdown file, else the line itself. */
   const shownLine = useCallback(
@@ -816,11 +827,25 @@ export default function DiffFileView({
     );
   };
 
+  /** Whether a block has a thread, the open editor or the linked lines,
+   * so that it shows even far from a change. */
+  const pinned = (side: Side, block: Block) => {
+    const [start, end] = block.lines;
+    return (
+      block.at !== null &&
+      (inline.has(`${side}:${end}`) ||
+        (ctx.editingTarget !== null &&
+          targetAt(ctx.editingTarget, file.path, side, end)) ||
+        linksLine(drag ?? ctx.link, file.path, side, start, end))
+    );
+  };
+
   /** The rows of a rendered Markdown file. Side by side, the old side's
    * blocks sit left of the new side's. Unified, a removed block shows
    * above the block that replaces it, and a block that the diff leaves
-   * as it was holds the threads of both sides. */
-  function documentRows({ rows }: RenderedDoc) {
+   * as it was holds the threads of both sides. A run of unchanged blocks
+   * far from a change shows as one row, which shows the run on a click. */
+  function documentRows(doc: RenderedDoc) {
     const split = rendered === "split";
     const pair = (key: number, left: ReactNode, right: ReactNode) =>
       split ? (
@@ -834,7 +859,31 @@ export default function DiffFileView({
           {right}
         </Fragment>
       );
-    return rows.map((row, ri) => {
+    const keep = (row: DocRow, ri: number) =>
+      revealedRows.has(ri) ||
+      rowBlocks(row).some(([side, b]) => pinned(side, b));
+    return shownRows(doc.rows, keep).map((item) => {
+      if ("from" in item) {
+        const { from, to } = item;
+        const count = to - from + 1;
+        return (
+          <button
+            type="button"
+            className="hunk-row doc-gap"
+            key={`g${from}`}
+            onClick={() => {
+              const rows = new Set(revealedRows);
+              for (let ri = from; ri <= to; ri++) rows.add(ri);
+              setShown({ doc, rows });
+            }}
+          >
+            <span className="hunk-skip">
+              ⋯ {count} unchanged block{count === 1 ? "" : "s"}
+            </span>
+          </button>
+        );
+      }
+      const { index: ri, row } = item;
       if (!("same" in row)) {
         return pair(
           ri,

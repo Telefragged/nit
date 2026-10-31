@@ -121,7 +121,7 @@ export function blockAt(blocks: readonly Block[], line: number) {
 }
 
 /** A row of a rendered Markdown file. */
-type DocRow =
+export type DocRow =
   /** A block that the diff leaves as it was, on `side`. `old` is the old
    * side's block with the same lines, when the file has both sides. */
   | { side: Side; same: Block; old?: Block }
@@ -241,4 +241,39 @@ export function renderDoc(lines: readonly Line[], only?: Side): RenderedDoc {
     (side === "old" ? run.removed : run.added).push(block);
   }
   return doc;
+}
+
+/** What a rendered diff shows in place of its rows: a row with its
+ * index, or a run of hidden rows, `from` through `to`. */
+type ShownRow = { index: number; row: DocRow } | { from: number; to: number };
+
+/** The unchanged rows that a rendered diff shows on each side of a
+ * change. */
+const CONTEXT = 1;
+
+/** The rows of `rows` that a rendered diff shows, in order, with each run
+ * of the others hidden in its place.
+ *
+ * A row shows when it changes, when it is at most `CONTEXT` rows from a
+ * change, or when `keep` holds for it. A file with no changed row
+ * shows every row. */
+export function shownRows(
+  rows: readonly DocRow[],
+  keep: (row: DocRow, index: number) => boolean,
+): ShownRow[] {
+  const changed = (row: DocRow) => !("same" in row);
+  if (!rows.some(changed)) return rows.map((row, index) => ({ index, row }));
+  const near = (i: number) =>
+    rows.slice(Math.max(0, i - CONTEXT), i + CONTEXT + 1).some(changed);
+  const out: ShownRow[] = [];
+  for (const [index, row] of rows.entries()) {
+    if (near(index) || keep(row, index)) {
+      out.push({ index, row });
+      continue;
+    }
+    const run = out.at(-1);
+    if (run && "to" in run) run.to = index;
+    else out.push({ from: index, to: index });
+  }
+  return out;
 }
