@@ -399,7 +399,7 @@ export default function DiffFileView({
     const set = new Set<string>();
     for (const row of doc?.rows ?? []) {
       for (const [side, block] of rowBlocks(row)) {
-        if (block.at) set.add(`${side}:${block.lines[1]}`);
+        if (block.fromSource) set.add(`${side}:${block.lines[1]}`);
       }
     }
     for (const hunk of showRendered ? [] : hunks) {
@@ -727,7 +727,7 @@ export default function DiffFileView({
 
   /** The thread and editor items on a block. */
   const blockItems = (side: Side, block: Block | undefined) =>
-    block?.at ? metaItems(side, block.lines[1]) : [];
+    block?.fromSource ? metaItems(side, block.lines[1]) : [];
 
   /** A block, then `items` under it: by default, the threads and the
    * editor on the block. `change` is its class suffix in a diff. */
@@ -745,9 +745,10 @@ export default function DiffFileView({
           file={file.path}
           block={block}
           side={side}
+          press={press}
           tint={
             change +
-            (block.at
+            (block.fromSource
               ? lineHover(side, end) + lineLinked(side, start, end)
               : "")
           }
@@ -764,7 +765,7 @@ export default function DiffFileView({
   const pinned = (side: Side, block: Block) => {
     const [start, end] = block.lines;
     return (
-      block.at !== null &&
+      block.fromSource &&
       (inline.has(`${side}:${end}`) ||
         (ctx.editingTarget !== null &&
           targetAt(ctx.editingTarget, file.path, side, end)) ||

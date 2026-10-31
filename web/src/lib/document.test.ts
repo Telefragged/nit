@@ -35,11 +35,8 @@ describe("parseBlocks", () => {
     ]);
   });
 
-  it("anchors a block to its whole lines", () => {
-    expect(blocks[0]?.at).toEqual({ whole: 1 });
-    expect(blocks[1]?.at).toEqual({
-      selection: { start_line: 3, start_char: 0, end_line: 4, end_char: 20 },
-    });
+  it("keeps the length of a block's last line", () => {
+    expect(blocks[1]?.endChar).toBe(20);
   });
 
   it("keeps the number of an ordered item", () => {
@@ -52,9 +49,9 @@ describe("parseBlocks", () => {
     expect(fence?.lines).toEqual([1, 2]);
   });
 
-  it("gives the footnotes no anchor", () => {
+  it("marks the footnotes as no source lines", () => {
     const blocks = parseBlocks("Text[^1]\n\n[^1]: The note.");
-    expect(blocks.map((b) => b.at)).toEqual([{ whole: 1 }, null]);
+    expect(blocks.map((b) => b.fromSource)).toEqual([true, false]);
   });
 
   it("drops a javascript: link", () => {

@@ -199,15 +199,17 @@
   box-shadow: inset 0 0 0 100vmax var(--amber-dim);
 }
 
-/* A line number is a link to its line. It reads as a plain number until
-   the pointer reaches it. */
+/* A line number is a link to its lines, in the raw view and in a
+   rendered file alike. It reads as a plain number until the pointer
+   reaches it, and it shows blue on the linked lines. */
 .line-link {
-  color: inherit;
+  color: var(--text-faint);
   text-decoration: none;
   cursor: pointer;
 }
 
-.line-link:hover {
+.line-link:hover,
+.linked .line-link {
   color: var(--blue);
 }
 
@@ -215,10 +217,6 @@
    .line-hover. The blue tint is different from the amber of a comment. */
 .linked {
   box-shadow: inset 0 0 0 100vmax var(--blue-dim);
-}
-
-.g.linked {
-  color: var(--blue);
 }
 
 /* The "why c drafted nothing" bubble, hung under the selection it rejected

@@ -380,9 +380,9 @@ describe("a rendered Markdown block", () => {
     section.setAttribute("data-diff-path", "docs/a.md");
     section.innerHTML =
       `<div class="doc-block" data-side="new" data-start="1" data-end="1"` +
-      ` data-anchor='{"whole":1}'><h1>Title</h1></div>` +
+      ` data-end-char="7"><h1>Title</h1></div>` +
       `<div class="doc-block" data-side="new" data-start="3" data-end="4"` +
-      ` data-anchor='${JSON.stringify(anchor)}'><p>Some <em>text</em></p></div>`;
+      ` data-end-char="8"><p>Some <em>text</em></p></div>`;
     document.body.appendChild(section);
     return section;
   };
@@ -394,19 +394,28 @@ describe("a rendered Markdown block", () => {
     expect(selectionTarget(rangeOf(em, 0, em, 2))).toEqual(target);
   });
 
-  it("takes no comment for a selection across two blocks", () => {
+  it("takes a comment on the whole lines of every block a selection touches", () => {
     const section = mountDoc();
     const h1 = section.querySelector("h1")?.firstChild;
     const em = section.querySelector("em")?.firstChild;
     if (!h1 || !em) throw new Error("no text");
-    expect(selectionTarget(rangeOf(h1, 0, em, 2))).toBeNull();
+    expect(selectionTarget(rangeOf(h1, 2, em, 2))).toEqual({
+      ...target,
+      at: { selection: { ...anchor.selection, start_line: 1 } },
+    });
   });
 
-  it("takes a comment on the block whose lines a link names", () => {
+  it("takes a comment on the blocks whose lines a link names", () => {
     mountDoc();
-    const range = linesRange("docs/a.md", "new", 3, 4);
-    if (range === null) throw new Error("no range");
-    expect(selectionTarget(range, "new")).toEqual(target);
-    expect(linesRange("docs/a.md", "new", 3, 3)).toBeNull();
+    const linked = (start: number, end: number) => {
+      const range = linesRange("docs/a.md", "new", start, end);
+      return range && selectionTarget(range, "new");
+    };
+    expect(linked(3, 4)).toEqual(target);
+    expect(linked(1, 4)).toEqual({
+      ...target,
+      at: { selection: { ...anchor.selection, start_line: 1 } },
+    });
+    expect(linked(3, 3)).toBeNull();
   });
 });

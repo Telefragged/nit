@@ -640,12 +640,6 @@ button.rail-toggle,
   font-family: var(--mono);
   font-size: 11px;
   line-height: 22px;
-  color: var(--text-faint);
-}
-
-.rendered-markdown .doc-gutter:hover,
-.doc-block.linked .doc-gutter {
-  color: var(--blue);
 }
 
 .rendered-markdown > .doc-block:first-child > :last-child {
@@ -848,7 +842,7 @@ button.rail-toggle,
   max-width: 100%;
 }
 
-.rendered-markdown a {
+.rendered-markdown a:not(.line-link) {
   color: var(--blue);
 }
 
