@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clickLink, linkParams, parseLink } from "./diffLink";
+import { linkParams, parseLink, pressLink } from "./diffLink";
 
 const parse = (query: string) => parseLink(new URLSearchParams(query));
 
@@ -43,8 +43,8 @@ describe("parseLink", () => {
   });
 });
 
-describe("clickLink", () => {
-  const span = clickLink(null, "a.rs", "new", 10, false);
+describe("pressLink", () => {
+  const span = pressLink(null, "a.rs", "new", [10, 10], false).span;
 
   it("links the clicked line", () => {
     expect(span).toEqual({
@@ -54,9 +54,9 @@ describe("clickLink", () => {
   });
 
   it("stretches the span on an extending click, in either direction", () => {
-    const down = clickLink(span, "a.rs", "new", 14, true);
+    const down = pressLink(span, "a.rs", "new", [14, 14], true).span;
     expect(down.lines).toEqual({ side: "new", start: 10, end: 14 });
-    expect(clickLink(down, "a.rs", "new", 6, true).lines).toEqual({
+    expect(pressLink(down, "a.rs", "new", [6, 6], true).span.lines).toEqual({
       side: "new",
       start: 6,
       end: 14,
@@ -64,12 +64,12 @@ describe("clickLink", () => {
   });
 
   it("starts over on another side or file", () => {
-    expect(clickLink(span, "a.rs", "old", 14, true).lines).toEqual({
+    expect(pressLink(span, "a.rs", "old", [14, 14], true).span.lines).toEqual({
       side: "old",
       start: 14,
       end: 14,
     });
-    expect(clickLink(span, "b.rs", "new", 14, true).lines).toEqual({
+    expect(pressLink(span, "b.rs", "new", [14, 14], true).span.lines).toEqual({
       side: "new",
       start: 14,
       end: 14,

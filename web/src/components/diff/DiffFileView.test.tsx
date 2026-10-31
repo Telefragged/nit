@@ -17,6 +17,7 @@ import {
   uiThread,
 } from "../../api/fixtures/builders";
 import type { DiffFile, LineAnchor } from "../../api/types";
+import type { DiffLink } from "../../lib/diffLink";
 import type { UiThread } from "../../lib/comments";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
 import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
@@ -318,6 +319,32 @@ const hoverThread = (container: HTMLElement) => {
   fireEvent.mouseEnter(item);
   return item;
 };
+
+describe("a drag over the line numbers", () => {
+  it("links the lines from the pressed number to the one under the pointer", () => {
+    const linked: DiffLink[] = [];
+    const { container } = render(
+      tree("unified", mixed, [], undefined, {
+        ...ctx,
+        selectLink: (to) => linked.push(to),
+      }),
+    );
+    const cell = (no: number) => {
+      const code = container.querySelector(`.code[data-new="${no}"]`);
+      if (!code) throw new Error(`no line ${no}`);
+      return code;
+    };
+    const number = cell(1).parentElement?.querySelectorAll(".line-link")[0];
+    if (!number) throw new Error("no line number");
+    fireEvent.mouseDown(number);
+    fireEvent.mouseOver(cell(3));
+    expect(cell(2).classList).toContain("linked");
+    fireEvent.mouseUp(document);
+    expect(linked).toEqual([
+      { file: mixed.path, lines: { side: "new", start: 1, end: 3 } },
+    ]);
+  });
+});
 
 describe("hovering a thread", () => {
   it.each(["unified", "split"] as const)(

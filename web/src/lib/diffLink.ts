@@ -112,22 +112,42 @@ export const linksLine = (
   );
 };
 
-/** The link a click on line `no` makes. With `extend`, the click stretches
- * the current span on the same side of the same file to reach `no`, and
- * keeps the end of the span farther from it. */
-export function clickLink(
+/** Lines `start` through `end` of one side, as a pair. */
+export type Lines = [start: number, end: number];
+
+/** The span on `side` of `file` that covers both `a` and `b`. */
+export const spanOver = (
+  file: string,
+  side: Side,
+  a: Lines,
+  b: Lines,
+): LinkSpan => ({
+  file,
+  lines: {
+    side,
+    start: Math.min(a[0], b[0]),
+    end: Math.max(a[1], b[1]),
+  },
+});
+
+/** The link a press on `lines` makes, and the lines it keeps while a drag
+ * moves its other end. With `extend`, the press stretches the current span
+ * on the same side of the same file to reach `lines`. It keeps the span's
+ * start, or its end when `lines` start above the span. */
+export function pressLink(
   current: DiffLink | null,
   file: string,
   side: Side,
-  no: number,
+  lines: Lines,
   extend: boolean,
-): LinkSpan {
+): { span: LinkSpan; fixed: Lines } {
   const linked = fileLink(current);
   const cur = linked?.file === file ? linked.lines : null;
-  const anchor =
-    extend && cur?.side === side ? (no < cur.start ? cur.end : cur.start) : no;
-  return {
-    file,
-    lines: { side, start: Math.min(anchor, no), end: Math.max(anchor, no) },
-  };
+  const fixed: Lines =
+    extend && cur?.side === side
+      ? lines[0] < cur.start
+        ? [cur.end, cur.end]
+        : [cur.start, cur.start]
+      : lines;
+  return { span: spanOver(file, side, fixed, lines), fixed };
 }
