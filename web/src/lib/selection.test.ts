@@ -379,22 +379,33 @@ describe("a rendered Markdown block", () => {
     const section = document.createElement("section");
     section.setAttribute("data-diff-path", "docs/a.md");
     section.innerHTML =
-      `<div class="doc-block" data-side="new" data-start="1" data-end="1"` +
-      ` data-end-char="7"><h1>Title</h1></div>` +
-      `<div class="doc-block" data-side="new" data-start="3" data-end="4"` +
-      ` data-end-char="8"><p>Some <em>text</em></p></div>`;
+      `<div class="doc-block" data-side="new" data-part data-start="1"` +
+      ` data-end="1" data-end-char="7"><h1>Title</h1></div>` +
+      `<div class="doc-block" data-side="new" data-part data-start="3"` +
+      ` data-end="4" data-end-char="8"><p>Some <em>text</em></p></div>` +
+      `<div class="doc-block" data-side="new" data-part data-start="6"` +
+      ` data-end="7" data-end-char="11"><table>` +
+      `<tr data-part data-start="6" data-end="6" data-end-char="11">` +
+      `<td data-part data-start="6" data-end="6" data-chars="2-3">a</td>` +
+      `<td data-part data-start="6" data-end="6" data-chars="6-9">bcd</td>` +
+      `</tr></table></div>` +
+      `<div class="doc-block" data-side="new" data-part data-start="9"` +
+      ` data-end="12" data-end-char="3"><pre><code>` +
+      `<span data-part data-start="10" data-end="10">let a;</span>\n` +
+      `<span data-part data-start="11" data-end="11">let b;</span>\n` +
+      `</code></pre></div>`;
     document.body.appendChild(section);
     return section;
   };
   const target = { file: "docs/a.md", side: "new", at: anchor };
 
-  it("takes a comment on the whole block for a selection inside it", () => {
+  it("targets the whole block for a selection inside it", () => {
     const em = mountDoc().querySelector("em")?.firstChild;
     if (!em) throw new Error("no text");
     expect(selectionTarget(rangeOf(em, 0, em, 2))).toEqual(target);
   });
 
-  it("takes a comment on the whole lines of every block a selection touches", () => {
+  it("targets the whole lines of every block that a selection touches", () => {
     const section = mountDoc();
     const h1 = section.querySelector("h1")?.firstChild;
     const em = section.querySelector("em")?.firstChild;
@@ -405,7 +416,35 @@ describe("a rendered Markdown block", () => {
     });
   });
 
-  it("takes a comment on the blocks whose lines a link names", () => {
+  it("targets the table cell that contains a selection", () => {
+    const cell = mountDoc().querySelectorAll("td")[1]?.firstChild;
+    if (!cell) throw new Error("no cell");
+    expect(selectionTarget(rangeOf(cell, 0, cell, 2))).toEqual({
+      ...target,
+      at: {
+        selection: { start_line: 6, start_char: 6, end_line: 6, end_char: 9 },
+      },
+    });
+  });
+
+  it("targets the row that contains a selection over two cells", () => {
+    const [a, bcd] = mountDoc().querySelectorAll("td");
+    if (!a?.firstChild || !bcd?.firstChild) throw new Error("no cells");
+    expect(
+      selectionTarget(rangeOf(a.firstChild, 0, bcd.firstChild, 1)),
+    ).toEqual({ ...target, at: { whole: 6 } });
+  });
+
+  it("targets the code line that contains a selection", () => {
+    const line = mountDoc().querySelectorAll("code span")[1]?.firstChild;
+    if (!line) throw new Error("no code line");
+    expect(selectionTarget(rangeOf(line, 0, line, 3))).toEqual({
+      ...target,
+      at: { whole: 11 },
+    });
+  });
+
+  it("targets the blocks whose lines a link spans", () => {
     mountDoc();
     const linked = (start: number, end: number) => {
       const range = linesRange("docs/a.md", "new", start, end);
@@ -417,5 +456,6 @@ describe("a rendered Markdown block", () => {
       at: { selection: { ...anchor.selection, start_line: 1 } },
     });
     expect(linked(3, 3)).toBeNull();
+    expect(linked(11, 11)).toEqual({ ...target, at: { whole: 11 } });
   });
 });

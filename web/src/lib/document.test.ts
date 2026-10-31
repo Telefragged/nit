@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { RootContent } from "hast";
 import { add, ctx as both, del, drift } from "../api/fixtures/builders";
 import {
   blockAt,
@@ -52,6 +53,45 @@ describe("parseBlocks", () => {
   it("marks the footnotes as no source lines", () => {
     const blocks = parseBlocks("Text[^1]\n\n[^1]: The note.");
     expect(blocks.map((b) => b.fromSource)).toEqual([true, false]);
+  });
+
+  it("tags the parts of a block with their source spans", () => {
+    const [table] = parseBlocks("| A | Bee |\n|---|-----|\n| x | yz  |");
+    const parts: unknown[] = [];
+    const walk = (node: RootContent) => {
+      if (node.type !== "element") return;
+      if (node.properties.dataPart !== undefined) {
+        const { tagName, properties: p } = node;
+        parts.push([tagName, p.dataStart, p.dataEnd, p.dataChars]);
+      }
+      node.children.forEach(walk);
+    };
+    if (table) walk(table.node);
+    expect(parts).toEqual([
+      ["tr", 1, 1, undefined],
+      ["th", 1, 1, "2-3"],
+      ["th", 1, 1, "6-9"],
+      ["tr", 3, 3, undefined],
+      ["td", 3, 3, "2-3"],
+      ["td", 3, 3, "6-8"],
+    ]);
+  });
+
+  it("splits a fence's code into one tagged span per line", () => {
+    const [, fence] = parseBlocks("text\n\n```js\nlet a;\nlet b;\n```");
+    const code = fence?.node.children[0];
+    const lines =
+      code?.type === "element"
+        ? code.children.flatMap((c) =>
+            c.type === "element"
+              ? [[c.properties.dataStart, c.properties.dataLang]]
+              : [],
+          )
+        : [];
+    expect(lines).toEqual([
+      [4, "js"],
+      [5, "js"],
+    ]);
   });
 
   it("drops a javascript: link", () => {

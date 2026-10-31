@@ -136,9 +136,6 @@ const VIEW_OPTIONS: SegOption<View>[] = [
 
 const NO_ROWS: ReadonlySet<number> = new Set();
 
-const targetAt = (a: DraftTarget, file: string, side: string, line: number) =>
-  a.file === file && a.side === side && targetLine(a) === line;
-
 /** Class suffix marking a rebase-drift line, so its gutter and code cell
  * render contained. */
 const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
@@ -320,6 +317,19 @@ export default function DiffFileView({
     },
     [doc],
   );
+
+  /** Whether the open editor shows under line `no` of `side`: the line of
+   * its draft, or in a rendered Markdown file, the last line of the block
+   * that contains that line. */
+  const editorAt = (side: Side, no: number) => {
+    const target = ctx.editingTarget;
+    return (
+      target !== null &&
+      target.file === file.path &&
+      target.side === side &&
+      shownLine(side, targetLine(target)) === no
+    );
+  };
 
   const sectionRef = useRef<HTMLElement>(null);
   // The last reveal for which the effect opened a gap. The effect opens a
@@ -601,7 +611,7 @@ export default function DiffFileView({
         </div>,
       );
     }
-    if (ctx.editingTarget && targetAt(ctx.editingTarget, file.path, side, no)) {
+    if (ctx.editingTarget && editorAt(side, no)) {
       const target = ctx.editingTarget;
       items.push(
         <div className="meta-item" key={`editor-${side}-${no}`}>
@@ -767,8 +777,7 @@ export default function DiffFileView({
     return (
       block.fromSource &&
       (inline.has(`${side}:${end}`) ||
-        (ctx.editingTarget !== null &&
-          targetAt(ctx.editingTarget, file.path, side, end)) ||
+        editorAt(side, end) ||
         linksLine(linked, file.path, side, start, end))
     );
   };
