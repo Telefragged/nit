@@ -850,9 +850,9 @@ const change12: ChangeRecord = {
           hunks: [
             {
               old_start: 1,
-              old_lines: 5,
+              old_lines: 10,
               new_start: 1,
-              new_lines: 10,
+              new_lines: 15,
               header: "",
               lines: [
                 del(1, "# Auth"),
@@ -873,6 +873,11 @@ const change12: ChangeRecord = {
                 add(8, ""),
                 ctx(4, 9, "## Endpoints"),
                 ctx(5, 10, ""),
+                ctx(6, 11, "`POST /auth/refresh` rotates the presented token."),
+                ctx(7, 12, ""),
+                ctx(8, 13, "### Errors"),
+                ctx(9, 14, ""),
+                ctx(10, 15, "A reused token answers `401`."),
               ],
             },
           ],
