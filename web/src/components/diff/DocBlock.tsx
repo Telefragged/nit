@@ -37,43 +37,54 @@ const docComponents: Components = {
 };
 
 /** One block of a rendered Markdown file, with a link to its lines in
- * the gutter. `tint` is the class suffix that marks the block, for example
- * as hovered. `linked` is the part that the page's link marks: the block
- * itself, or a part inside it. A block that comes from source lines is a
- * part for the `c` key (lib/selection). */
+ * the gutter. `change` is the class suffix that marks the block as added
+ * or removed. `linked` is the part that the page's link marks, and
+ * `marked` the part that a hovered thread or the open editor covers: the
+ * block itself, or a part inside it. A block that comes from source lines
+ * is a part for the `c` key (lib/selection). */
 function DocBlock({
   file,
   block,
   side,
-  tint,
+  change,
   linked,
+  marked,
   press,
 }: {
   file: string;
   block: Block;
   side: Side;
-  tint: string;
+  change: string;
   linked: Part | undefined;
+  marked: Part | undefined;
   press: Press;
 }) {
   // The library types its result as the global `JSX.Element`, which the
   // React 19 types do not declare.
   const content = useMemo(
     () =>
-      toJsxRuntime(withClasses(block.node, [[linked?.node, "linked"]]), {
-        Fragment,
-        jsx,
-        jsxs,
-        components: docComponents,
-        passKeys: true,
-      }) as ReactElement,
-    [block.node, linked],
+      toJsxRuntime(
+        withClasses(block.node, [
+          [linked?.node, "linked"],
+          [marked?.node, "line-hover"],
+        ]),
+        {
+          Fragment,
+          jsx,
+          jsxs,
+          components: docComponents,
+          passKeys: true,
+        },
+      ) as ReactElement,
+    [block.node, linked, marked],
   );
   const [start, end] = block.lines;
-  const own = linked && !linked.node ? " linked" : "";
+  const own =
+    (linked && !linked.node ? " linked" : "") +
+    (marked && !marked.node ? " line-hover" : "");
   return (
     <div
-      className={`doc-block${tint}${own}`}
+      className={`doc-block${change}${own}`}
       data-side={side}
       data-start={start}
       data-end={end}
@@ -96,5 +107,5 @@ function DocBlock({
 }
 
 // The parent section re-renders on every hover. memo re-renders only the
-// blocks whose tint or linked part changes.
+// blocks whose linked or marked part changes.
 export default memo(DocBlock);

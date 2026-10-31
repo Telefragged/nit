@@ -418,6 +418,27 @@ describe("a rendered attachment", () => {
     expect(block?.nextElementSibling?.querySelector("textarea")).not.toBeNull();
   });
 
+  it("tints the innermost part that a hovered thread's anchor covers", () => {
+    const table = attachedFile("t.md", "| A | B |\n|---|---|\n| x | y |\n", 2);
+    const hovered = (at: LineAnchor) => {
+      const thread = uiThread({
+        id: 1,
+        revision: 2,
+        anchor: { line: { file: table.path, side: "new", at } },
+      });
+      const { container } = renderFile("unified", table, [thread]);
+      hoverThread(container);
+      const tinted = [...container.querySelectorAll(".line-hover")].map(
+        (el) => el.tagName,
+      );
+      cleanup();
+      return tinted;
+    };
+    const cell = { start_line: 3, start_char: 6, end_line: 3, end_char: 7 };
+    expect(hovered({ selection: cell })).toEqual(["TD"]);
+    expect(hovered({ whole: 3 })).toEqual(["TR"]);
+  });
+
   it("marks the linked part, or else the block that the link overlaps", () => {
     const table = attachedFile("t.md", "| A | B |\n|---|---|\n| x | y |\n", 2);
     const shown = (lines: LinkSpan["lines"]) => {
