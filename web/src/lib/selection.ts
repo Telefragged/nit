@@ -12,7 +12,7 @@
 // content's characters.
 
 import type { LineAnchor, Side } from "../api/types";
-import type { Lines } from "./diffLink";
+import { parseChars, type LinkSpan, type Lines } from "./diffLink";
 import type { DraftTarget } from "../pages/reviewContext";
 
 /** `Range.intersectsNode`, hand-rolled so jsdom tests and the browser run
@@ -86,14 +86,14 @@ function partsTarget(
   if (pathOf(last) !== file || selectionAnchorSide(last) !== side) return null;
   const start = Number(first.dataset.start);
   const end = Number(last.dataset.end);
-  const chars = first === last ? first.dataset.chars?.split("-") : undefined;
+  const chars = first === last ? parseChars(first.dataset.chars) : undefined;
   const at: LineAnchor = chars
     ? {
         selection: {
           start_line: start,
-          start_char: Number(chars[0]),
+          start_char: chars[0],
           end_line: end,
-          end_char: Number(chars[1]),
+          end_char: chars[1],
         },
       }
     : linesAnchor(start, end, Number(last.dataset.endChar));
@@ -187,22 +187,44 @@ export function rowLines(el: Element, side: Side): Lines | null {
     : null;
 }
 
-/** A range over lines `start` through `end` on one side of `file`'s
- * section: from the start of the first line to the end of the last. In a
- * rendered Markdown file, it covers the part that spans exactly those
- * lines, or else runs from the block that starts on the first line to the
- * block that ends on the last. Null when either end does not render. */
-export function linesRange(
-  file: string,
-  side: Side,
-  start: number,
-  end: number,
-): Range | null {
+/** The link to the part of a rendered Markdown block that contains `el`.
+ * Null outside a part, and inside a link or a button, which handle their
+ * own clicks. */
+export function partLink(el: Element): LinkSpan | null {
+  if (el.closest("a, button")) return null;
+  const part = partOf(el);
+  const file = pathOf(part);
+  const side = part && selectionAnchorSide(part);
+  if (!part || !file || !side) return null;
+  const chars = parseChars(part.dataset.chars);
+  return {
+    file,
+    lines: {
+      side,
+      start: Number(part.dataset.start),
+      end: Number(part.dataset.end),
+      ...(chars && { chars }),
+    },
+  };
+}
+
+/** A range over the lines that `link` spans in its file's section: from
+ * the start of the first line to the end of the last. In a rendered
+ * Markdown file, it covers the part that spans exactly those lines, and
+ * those characters for a table cell. Else it runs from the block that
+ * starts on the first line to the block that ends on the last. Null when
+ * either end does not render. */
+export function linesRange({
+  file,
+  lines: { side, start, end, chars },
+}: LinkSpan): Range | null {
   const section = sectionOf(file);
   const block = `.doc-block[data-side="${side}"]`;
-  const lines = `[data-start="${start}"][data-end="${end}"]`;
+  const lines =
+    `[data-start="${start}"][data-end="${end}"]` +
+    (chars ? `[data-chars="${chars.join("-")}"]` : ":not([data-chars])");
   const part = section?.querySelector(
-    `${block}${lines}, ${block} [data-part]${lines}:not([data-chars])`,
+    `${block}${lines}, ${block} [data-part]${lines}`,
   );
   const first =
     part ??
@@ -266,8 +288,9 @@ export function selectionAnchorSide(anchor: Node | null): Side | null {
  * all of it. A selection over several blocks drafts on their whole lines, from
  * the first block it touches to the last.
  *
- * `side` overrides the side that `sideOf` reads from the boundary cells.
- * Where both boundary cells show both sides, `sideOf` reads the new side.
+ * `side` overrides the side that `sideOf` finds in the boundary cells.
+ * Where both boundary cells show both sides, `sideOf` returns the new
+ * side.
  */
 export function selectionTarget(
   range: Range,

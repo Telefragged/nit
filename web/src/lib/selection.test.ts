@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   cellLine,
   linesRange,
+  partLink,
   selectionAnchorSide,
   selectionTarget,
 } from "./selection";
@@ -354,7 +355,10 @@ describe("linked lines", () => {
 
   it("spans whole lines on the side the link names", () => {
     mountUnified([rows]);
-    const range = linesRange("src/a.rs", "old", 4, 6);
+    const range = linesRange({
+      file: "src/a.rs",
+      lines: { side: "old", start: 4, end: 6 },
+    });
     if (range === null) throw new Error("no range");
     expect(selectionTarget(range, "old")).toEqual({
       file: "src/a.rs",
@@ -367,7 +371,12 @@ describe("linked lines", () => {
 
   it("finds no range when an end line does not render", () => {
     mountUnified([rows]);
-    expect(linesRange("src/a.rs", "new", 4, 9)).toBeNull();
+    expect(
+      linesRange({
+        file: "src/a.rs",
+        lines: { side: "new", start: 4, end: 9 },
+      }),
+    ).toBeNull();
   });
 });
 
@@ -444,10 +453,25 @@ describe("a rendered Markdown block", () => {
     });
   });
 
-  it("targets the blocks whose lines a link spans", () => {
+  it("links the part that contains an element", () => {
+    const section = mountDoc();
+    const cell = section.querySelectorAll("td")[1];
+    const line = section.querySelectorAll("code span")[0];
+    if (!cell || !line) throw new Error("no parts");
+    expect(partLink(cell)).toEqual({
+      file: "docs/a.md",
+      lines: { side: "new", start: 6, end: 6, chars: [6, 9] },
+    });
+    expect(partLink(line)?.lines).toEqual({ side: "new", start: 10, end: 10 });
+  });
+
+  it("targets the parts whose lines a link spans", () => {
     mountDoc();
-    const linked = (start: number, end: number) => {
-      const range = linesRange("docs/a.md", "new", start, end);
+    const linked = (start: number, end: number, chars?: [number, number]) => {
+      const range = linesRange({
+        file: "docs/a.md",
+        lines: { side: "new", start, end, ...(chars && { chars }) },
+      });
       return range && selectionTarget(range, "new");
     };
     expect(linked(3, 4)).toEqual(target);
@@ -457,5 +481,11 @@ describe("a rendered Markdown block", () => {
     });
     expect(linked(3, 3)).toBeNull();
     expect(linked(11, 11)).toEqual({ ...target, at: { whole: 11 } });
+    expect(linked(6, 6, [6, 9])).toEqual({
+      ...target,
+      at: {
+        selection: { start_line: 6, start_char: 6, end_line: 6, end_char: 9 },
+      },
+    });
   });
 });

@@ -1,9 +1,9 @@
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { memo, type ReactElement, useMemo } from "react";
+import type { Components } from "react-markdown";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import type { Side } from "../../api/types";
-import type { Components } from "react-markdown";
-import type { Block } from "../../lib/document";
+import { type Block, type Part, withClasses } from "../../lib/document";
 import { highlight } from "../../lib/highlight";
 import type { Press } from "../../lib/useLineDrag";
 import { components } from "../markdownElements";
@@ -37,39 +37,43 @@ const docComponents: Components = {
 };
 
 /** One block of a rendered Markdown file, with a link to its lines in
- * the gutter. `tint` is the class suffix that marks it, for example as
- * linked. A block that comes from source lines is a part for the `c` key
- * (lib/selection). */
+ * the gutter. `tint` is the class suffix that marks the block, for example
+ * as hovered. `linked` is the part that the page's link marks: the block
+ * itself, or a part inside it. A block that comes from source lines is a
+ * part for the `c` key (lib/selection). */
 function DocBlock({
   file,
   block,
   side,
   tint,
+  linked,
   press,
 }: {
   file: string;
   block: Block;
   side: Side;
   tint: string;
+  linked: Part | undefined;
   press: Press;
 }) {
   // The library types its result as the global `JSX.Element`, which the
   // React 19 types do not declare.
   const content = useMemo(
     () =>
-      toJsxRuntime(block.node, {
+      toJsxRuntime(withClasses(block.node, [[linked?.node, "linked"]]), {
         Fragment,
         jsx,
         jsxs,
         components: docComponents,
         passKeys: true,
       }) as ReactElement,
-    [block.node],
+    [block.node, linked],
   );
   const [start, end] = block.lines;
+  const own = linked && !linked.node ? " linked" : "";
   return (
     <div
-      className={`doc-block${tint}`}
+      className={`doc-block${tint}${own}`}
       data-side={side}
       data-start={start}
       data-end={end}
@@ -92,5 +96,5 @@ function DocBlock({
 }
 
 // The parent section re-renders on every hover. memo re-renders only the
-// blocks whose tint changes.
+// blocks whose tint or linked part changes.
 export default memo(DocBlock);

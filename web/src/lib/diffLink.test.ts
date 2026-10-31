@@ -26,11 +26,23 @@ describe("parseLink", () => {
     expect(parse("file=a.rs&line=x")).toEqual({ file: "a.rs", lines: null });
   });
 
+  it("parses the characters of a span, and drops malformed ones", () => {
+    expect(parse("file=a.md&line=6&chars=2-5")).toEqual({
+      file: "a.md",
+      lines: { side: "new", start: 6, end: 6, chars: [2, 5] },
+    });
+    expect(parse("file=a.md&line=6&chars=x")).toEqual({
+      file: "a.md",
+      lines: { side: "new", start: 6, end: 6 },
+    });
+  });
+
   it("is the inverse of linkParams", () => {
     for (const query of [
       "file=a.rs",
       "file=a.rs&line=7",
       "file=a&line=4-9",
+      "file=a.md&line=6&chars=2-5",
       "thread=42",
     ]) {
       const link = parse(query);
