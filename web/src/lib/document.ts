@@ -1,7 +1,7 @@
-// Splits a Markdown file into the blocks that the review page renders and
-// comments on one at a time.
+// Splits a Markdown file into the blocks that the review page renders, and
+// tags the parts inside them that a comment can anchor to.
 
-import type { Element, Root, RootContent } from "hast";
+import type { Element, ElementContent, Root, RootContent } from "hast";
 import { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
@@ -16,9 +16,9 @@ import { sideText } from "./rendered";
 export interface Block {
   /** The element to render. An item renders inside a list of its own. */
   node: Element;
-  /** Whether source lines hold the block, so that it takes comments.
-   * False for an element that no source line holds, such as the list of
-   * footnotes. */
+  /** Whether the block comes from source lines, so that a comment can
+   * anchor to it. False for an element with no source lines, such as the
+   * list of footnotes. */
   fromSource: boolean;
   /** The first and last source line of the block. */
   lines: Lines;
@@ -60,6 +60,78 @@ function* blockNodes(tree: Root): Generator<Element> {
   }
 }
 
+/** The elements inside a block that a comment can anchor to on their own,
+ * besides the block itself. */
+const PARTS = new Set(["li", "tr", "th", "td"]);
+
+/** Sets the data attributes of a part: its source lines as `data-part`,
+ * `data-start` and `data-end`, the length of its last line as
+ * `data-end-char`, and for a table cell the range of its content's
+ * characters as `data-chars` (lib/selection). */
+function tag(
+  el: Element,
+  [start, end]: Lines,
+  lines: readonly string[],
+  chars?: string,
+) {
+  el.properties.dataPart = "";
+  el.properties.dataStart = start;
+  el.properties.dataEnd = end;
+  el.properties.dataEndChar = lines[end - 1]?.length ?? 0;
+  if (chars) el.properties.dataChars = chars;
+}
+
+/** Tags each part inside `node`. The code of a code block becomes one
+ * tagged `span.code-line` per line, with the fence's language as
+ * `data-lang`. */
+function tagParts(node: Element, lines: readonly string[]) {
+  const pos = node.position;
+  const code = node.children.find(
+    (c): c is Element => c.type === "element" && c.tagName === "code",
+  );
+  const text = code?.children[0];
+  if (pos && node.tagName === "pre" && code && text?.type === "text") {
+    // The opening fence is the line above the code. Indented code has
+    // no fence.
+    const fenced = /^[\s>]*(```|~~~)/.test(lines[pos.start.line - 1] ?? "");
+    const first = pos.start.line + (fenced ? 1 : 0);
+    const lang = [code.properties.className ?? []]
+      .flat()
+      .map(String)
+      .find((c) => c.startsWith("language-"))
+      ?.slice("language-".length);
+    code.children = text.value
+      .replace(/\n$/, "")
+      .split("\n")
+      .flatMap((value, i): ElementContent[] => {
+        const line: Element = {
+          type: "element",
+          tagName: "span",
+          properties: { className: ["code-line"], dataLang: lang },
+          children: [{ type: "text", value }],
+        };
+        tag(line, [first + i, first + i], lines);
+        return [line, { type: "text", value: "\n" }];
+      });
+    return;
+  }
+  for (const child of node.children) {
+    if (child.type !== "element") continue;
+    const at = child.position;
+    if (at && (PARTS.has(child.tagName) || node.tagName === "blockquote")) {
+      let chars: string | undefined;
+      if (child.tagName === "th" || child.tagName === "td") {
+        // A cell's span starts and ends on its pipes.
+        const first = child.children.at(0)?.position?.start ?? at.start;
+        const last = child.children.at(-1)?.position?.end ?? at.end;
+        chars = `${first.column - 1}-${last.column - 1}`;
+      }
+      tag(child, [at.start.line, at.end.line], lines, chars);
+    }
+    tagParts(child, lines);
+  }
+}
+
 /** Passes every URL through react-markdown's filter, which drops a
  * `javascript:` link. Markdown without raw HTML puts a URL only in a
  * link's `href` and an image's `src`. */
@@ -82,6 +154,7 @@ export function parseBlocks(text: string): Block[] {
   const lines = text.split("\n");
   const blocks: Block[] = [];
   for (const node of blockNodes(tree)) {
+    tagParts(node, lines);
     const pos = node.position;
     const start = pos?.start.line ?? 0;
     let end = pos?.end.line ?? 0;

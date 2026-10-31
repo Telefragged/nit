@@ -93,7 +93,9 @@ function escapeHtml(text: string): string {
  * HTML string; unknown/null languages fall back to escaped text.
  */
 export function highlight(text: string, language: string | null): string {
-  if (!language) return escapeHtml(text);
+  // hljs.highlight writes an error to the console for an unregistered
+  // language on every call, and a code block calls this once per line.
+  if (!language || !hljs.getLanguage(language)) return escapeHtml(text);
   try {
     return hljs.highlight(text, { language, ignoreIllegals: true }).value;
   } catch {

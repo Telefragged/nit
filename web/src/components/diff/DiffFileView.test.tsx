@@ -403,7 +403,7 @@ describe("a rendered attachment", () => {
     expect(threadBlock(container)).toEqual(["1", "1"]);
   });
 
-  it("opens the editor under the block it drafts on", () => {
+  it("opens the editor under the block of its draft", () => {
     const at: LineAnchor = {
       selection: { start_line: 3, start_char: 0, end_line: 4, end_char: 8 },
     };
@@ -436,6 +436,18 @@ describe("a rendered attachment", () => {
     expect(linked).toEqual([
       { file: plan.path, lines: { side: "new", start: 1, end: 4 } },
     ]);
+  });
+
+  it("opens the editor under the block that contains the part of its draft", () => {
+    const list = attachedFile("l.md", "- a\n  - b\n  - c\n", 2);
+    const { container } = render(
+      tree("unified", list, [], undefined, {
+        ...ctx,
+        editingTarget: { file: list.path, side: "new", at: { whole: 2 } },
+      }),
+    );
+    const block = container.querySelector('.doc-block[data-end="3"]');
+    expect(block?.nextElementSibling?.querySelector("textarea")).not.toBeNull();
   });
 
   it("renders from its own lines, without a read", () => {
