@@ -194,7 +194,13 @@ pub(super) async fn revision_diff(
                 .collect()
         };
         let (old, new) = (shown(revs.against.as_ref()), shown(Some(&revs.revision)));
-        let names: BTreeSet<_> = old.keys().chain(new.keys()).collect();
+        // An attachment that both revisions show with the same bytes stays
+        // out of the diff, as an unchanged file does.
+        let names: BTreeSet<_> = old
+            .keys()
+            .chain(new.keys())
+            .filter(|name| old.get(*name) != new.get(*name))
+            .collect();
         wire.files.extend(names.into_iter().map(|name| {
             diff::attachment_file(
                 state.blobs(),

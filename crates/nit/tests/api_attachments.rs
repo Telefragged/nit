@@ -463,7 +463,7 @@ fn the_diff_shows_the_attachments_as_added_files() {
 }
 
 /// An interdiff compares the attachment that each revision shows. An
-/// attachment that carries forward unchanged shows as all context.
+/// attachment that carries forward unchanged stays out of it.
 #[test]
 fn an_interdiff_compares_the_attachments_of_the_two_revisions() {
     let g = GitRepo::new();
@@ -476,21 +476,12 @@ fn an_interdiff_compares_the_attachments_of_the_two_revisions() {
     let after = upload(&server, b"a\nB\n");
     attach(&server, change_number, 1, "notes.txt", &after);
 
-    let notes = diff_file(
-        &server,
-        change_number,
-        1,
-        "?against=0",
-        "/attachments/notes.txt",
-    );
-    let kept = diff_file(
-        &server,
-        change_number,
-        1,
-        "?against=0",
-        "/attachments/kept.txt",
-    );
+    let (st, diff) = http_get(&server.url(&format!(
+        "/api/changes/{change_number}/revisions/1/diff?against=0"
+    )));
 
+    assert_eq!(st, 200, "{diff}");
+    let notes = by_path(&diff, "/attachments/notes.txt");
     assert_eq!(notes["status"], "modified");
     assert_eq!(
         lines(&notes),
@@ -500,9 +491,13 @@ fn an_interdiff_compares_the_attachments_of_the_two_revisions() {
             ("add".into(), Value::Null, json!(2), "B".into()),
         ]
     );
-    assert_eq!(
-        lines(&kept),
-        [("context".into(), json!(1), json!(1), "kept".into())]
+    assert!(
+        diff["files"]
+            .as_array()
+            .expect("files")
+            .iter()
+            .all(|f| f["path"] != "/attachments/kept.txt"),
+        "{diff}"
     );
 }
 
