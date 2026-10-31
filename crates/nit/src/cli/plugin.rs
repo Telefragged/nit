@@ -2,7 +2,7 @@
 //! carries.
 //!
 //! The plugin lives in a store at `$XDG_DATA_HOME/nit/claude-plugin/`. The
-//! store holds one directory per nit version and a `current` symlink to one
+//! store contains one directory per nit version and a `current` symlink to one
 //! of them. Claude Code reads `current` as the `nit` marketplace. An install
 //! takes three steps, and after each step `current` points at a complete
 //! plugin:
@@ -21,7 +21,13 @@ use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
 
+// Cargo sets `CARGO_MANIFEST_DIR` to the crate's current directory on every
+// compile.
+#[cfg(nit_plugin_dir)]
 static PLUGIN: include_dir::Dir = include_dir::include_dir!("$NIT_PLUGIN_DIR");
+#[cfg(not(nit_plugin_dir))]
+static PLUGIN: include_dir::Dir =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../plugins/nit");
 
 /// Installs this build's plugin into the store and registers it with Claude
 /// Code.
