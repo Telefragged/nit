@@ -162,20 +162,67 @@
               });
         };
 
-      # Source tree and version shared by the web build (nit-web) and its
-      # lint/test checks. System-independent, so it lives outside
-      # forAllSystems.
-      webArgs = {
-        inherit (cargoToml.workspace.package) version;
-        src = ./web;
-      };
+      # The web tree for each web derivation, without the parts that it
+      # cannot use, so an edit rebuilds only the derivations that use the
+      # edited file. System-independent, so it lives outside forAllSystems.
+      webSrc =
+        let
+          fs = nixpkgs.lib.fileset;
+          named =
+            suffixes: fs.fileFilter (f: builtins.any (s: nixpkgs.lib.hasSuffix s f.name) suffixes) ./web;
+          tests = fs.unions [
+            (named [
+              ".test.ts"
+              ".test.tsx"
+              "test-setup.ts"
+            ])
+            ./web/src/test
+          ];
+          stories = named [ ".story.tsx" ];
+          without =
+            parts:
+            fs.toSource {
+              root = ./web;
+              fileset = fs.difference ./web (fs.unions parts);
+            };
+        in
+        {
+          npm = fs.toSource {
+            root = ./web;
+            fileset = fs.unions [
+              ./web/package.json
+              ./web/package-lock.json
+            ];
+          };
+          bundle = without [
+            tests
+            stories
+            ./web/gallery
+            ./web/screenshots
+          ];
+          lint = without [ ];
+          test = without [
+            stories
+            ./web/gallery
+            ./web/screenshots
+          ];
+          screenshots = without [
+            tests
+            stories
+            (fs.difference ./web/gallery ./web/gallery/act.ts)
+          ];
+          gallery = without [
+            tests
+            ./web/screenshots
+          ];
+        };
 
       # The web npm closure, shared via `npmDeps` so the nit-web build and
       # the web-lint / web-test checks don't each refetch it.
       webNpmDepsFor =
         pkgs:
         pkgs.fetchNpmDeps {
-          inherit (webArgs) src;
+          src = webSrc.npm;
           inherit (pkgs) nodejs;
           name = "nit-web-npm-deps";
           hash = "sha256-7s6zgmyg3UxGA1Am0NSMZYDEdEpeRwfcJfC5/s3Y2jE=";
@@ -395,7 +442,8 @@
         let
           nit-web = pkgs.buildNpmPackage {
             pname = "nit-web";
-            inherit (webArgs) version src;
+            inherit (cargoToml.workspace.package) version;
+            src = webSrc.bundle;
             inherit (pkgs) nodejs;
             npmDeps = webNpmDepsFor pkgs;
             preBuild = injectWasm pkgs;
@@ -440,14 +488,16 @@
               ];
             };
           };
-          # A web validator that runs `script` against the web tree. It sets
-          # dontNpmBuild, which disables the build phase (and its preBuild
-          # hook), so the wasm goes in at the head of the install phase.
+          # A web validator that runs `script` against `webSrc.<name>`. It
+          # sets dontNpmBuild, which disables the build phase (and its
+          # preBuild hook), so the wasm goes in at the head of the install
+          # phase.
           webCheck =
-            pname: env: script:
+            name: env: script:
             pkgs.buildNpmPackage {
-              pname = "nit-${pname}";
-              inherit (webArgs) version src;
+              pname = "nit-web-${name}";
+              inherit (cargoToml.workspace.package) version;
+              src = webSrc.${name};
               inherit (pkgs) nodejs;
               inherit env;
               npmDeps = webNpmDeps;
@@ -494,18 +544,18 @@
           # a validator, the web counterpart to clippy. It runs the devShell
           # `npm run lint`, so `nix flake check` fails on a type, eslint,
           # stylelint or knip error.
-          web-lint = webCheck "web-lint" { } "npm run lint > $out";
-          web-test = webCheck "web-test" { } "npm run test > $out";
+          web-lint = webCheck "lint" { } "npm run lint > $out";
+          web-test = webCheck "test" { } "npm run test > $out";
           # The same `capture.mjs` agents run locally, but against the nix
           # `playwright-driver` browsers, so a driver/npm-pin skew fails the
           # check. Its output is the PNGs, not a marker file.
-          web-screenshots = webCheck "web-screenshots" browserEnv ''
+          web-screenshots = webCheck "screenshots" browserEnv ''
             export HOME=$TMPDIR
             NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
           '';
           # Runs the gallery specs (docs/dev.md "Component gallery"). Its
           # output is the PNG and the page of every story.
-          web-gallery = webCheck "web-gallery" browserEnv ''
+          web-gallery = webCheck "gallery" browserEnv ''
             export HOME=$TMPDIR
             npm run gallery -- --output $out
           '';
