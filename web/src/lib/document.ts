@@ -25,13 +25,13 @@ export interface Block {
   /** The length of the block's last source line, where a comment that
    * ends on the block ends. */
   endChar: number;
-  /** The parts that a link can mark: the block itself first, then the
-   * parts inside it, in document order. */
+  /** The parts that the page can show as linked or as hovered: the block
+   * itself first, then the parts inside it, in document order. */
   parts: Part[];
 }
 
-/** A part of a block that a link or a comment can mark: the block
- * itself, with no `node`, or an element inside it. */
+/** A part of a block that the page can show as linked or as hovered:
+ * the block itself, with no `node`, or an element inside it. */
 export interface Part {
   node?: Element;
   /** The first and last source line of the part. */
@@ -187,15 +187,18 @@ export function parseBlocks(text: string): Block[] {
   return blocks;
 }
 
-/** The part of `block` that the linked `span` marks: the part with
- * exactly its lines and characters, or else the block itself. Undefined
- * when the span lies outside the block. */
+/** Whether lines `start` through `end` lie outside `block`'s lines. */
+const outside = ({ lines: [first, last] }: Block, start: number, end: number) =>
+  end < first || start > last;
+
+/** The part of `block` to show as linked for the linked `span`: the part
+ * with exactly its lines and characters, or else the block itself.
+ * Undefined when the span lies outside the block. */
 export function linkedPart(
   block: Block,
   span: { start: number; end: number; chars?: [number, number] },
 ): Part | undefined {
-  const [start, end] = block.lines;
-  if (!block.fromSource || span.end < start || span.start > end) {
+  if (!block.fromSource || outside(block, span.start, span.end)) {
     return undefined;
   }
   const same = (part: Part) =>
@@ -205,10 +208,11 @@ export function linkedPart(
   return block.parts.find(same) ?? block.parts[0];
 }
 
-/** The innermost part of `block` that covers all of `at`, or else the
- * block itself. A part without characters covers its lines whole. */
+/** The innermost part of `block` that covers all of `at` that lies
+ * inside the block, or else the block itself. Undefined when `at` lies
+ * outside the block. A part without characters covers its lines whole. */
 export function coveringPart(block: Block, at: LineAnchor): Part | undefined {
-  const [sl, sc, el, ec] =
+  let [sl, sc, el, ec] =
     "whole" in at
       ? [at.whole, 0, at.whole, Infinity]
       : [
@@ -217,6 +221,10 @@ export function coveringPart(block: Block, at: LineAnchor): Part | undefined {
           at.selection.end_line,
           at.selection.end_char,
         ];
+  if (outside(block, sl, el)) return undefined;
+  const [first, last] = block.lines;
+  if (sl < first) [sl, sc] = [first, 0];
+  if (el > last) [el, ec] = [last, Infinity];
   const covers = ({ lines: [start, end], chars }: Part) => {
     const [from, to] = chars ?? [0, Infinity];
     return (

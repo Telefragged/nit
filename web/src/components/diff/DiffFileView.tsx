@@ -26,6 +26,7 @@ import {
   commentCountLabel,
   commentPlacement,
   draftAnchor,
+  placementLine,
   shownAt,
   threadKey,
   type UiThread,
@@ -276,12 +277,11 @@ export default function DiffFileView({
   const queryClient = useQueryClient();
   const lang = languageFor(file.path);
 
-  // The inline thread under the pointer, by `threadKey`. `line` is its
-  // `side:line` when it anchors a whole line; a selection thread tints its
-  // range instead.
+  // The inline thread under the pointer, by `threadKey`: the column that it
+  // shows under, and its anchor.
   const [hovered, setHovered] = useState<{
     thread: string;
-    line: string | null;
+    side: Side;
     at: LineAnchor | null;
   } | null>(null);
 
@@ -323,17 +323,18 @@ export default function DiffFileView({
     [doc],
   );
 
+  /** The open editor's target, when its draft is on `side` of this file. */
+  const editingOn = (side: Side) => {
+    const target = ctx.editingTarget;
+    return target?.file === file.path && target.side === side ? target : null;
+  };
+
   /** Whether the open editor shows under line `no` of `side`: the line of
    * its draft, or in a rendered Markdown file, the last line of the block
    * that contains that line. */
   const editorAt = (side: Side, no: number) => {
-    const target = ctx.editingTarget;
-    return (
-      target !== null &&
-      target.file === file.path &&
-      target.side === side &&
-      shownLine(side, targetLine(target)) === no
-    );
+    const target = editingOn(side);
+    return target !== null && shownLine(side, targetLine(target)) === no;
   };
 
   const sectionRef = useRef<HTMLElement>(null);
@@ -546,9 +547,13 @@ export default function DiffFileView({
     file.path,
   ]);
 
-  /** The class suffix tinting a cell when it shows the hovered line. */
-  const lineHover = (side: Side, no: number | undefined) =>
-    no !== undefined && hovered?.line === `${side}:${no}` ? " line-hover" : "";
+  /** The class suffix tinting a cell when it shows the line that the
+   * hovered thread anchors to whole. A selection thread tints its range
+   * instead. */
+  const lineHover = (side: Side, no: number | undefined) => {
+    const at = hovered?.side === side ? hovered.at : null;
+    return at && "whole" in at && at.whole === no ? " line-hover" : "";
+  };
 
   const { linked, press } = useLineDrag(file.path, sectionRef);
 
@@ -599,12 +604,9 @@ export default function DiffFileView({
           className="meta-item"
           key={`t-${side}-${threadKey(t)}`}
           onMouseEnter={() => {
-            // A rendered block has no text to tint a selection on, so the
-            // part of the block that covers the selection tints.
             setHovered({
               thread: threadKey(t),
-              line:
-                anchorRange(shownAt(t).anchor) && !doc ? null : `${side}:${no}`,
+              side,
               at: anchorAt(shownAt(t).anchor),
             });
           }}
@@ -744,17 +746,26 @@ export default function DiffFileView({
   const blockItems = (side: Side, block: Block | undefined) =>
     block?.fromSource ? metaItems(side, block.lines[1]) : [];
 
-  /** The part of a rendered block on `side` that the hovered thread's
-   * anchor, or the open editor's, covers. */
+  /** The part of a rendered block to mark for anchor `at` on `side`: the
+   * innermost part that covers the anchor inside the block, or else the
+   * whole block that a thread on a blank line below it shows under. */
+  const tintOf = (side: Side, block: Block, at: LineAnchor) =>
+    coveringPart(block, at) ??
+    (shownLine(side, placementLine(at)) === block.lines[1]
+      ? block.parts[0]
+      : undefined);
+
+  /** The part of a rendered block on `side` to mark for the hovered
+   * thread's anchor, or else for the open editor's. Each block in the
+   * anchor's span has its own marked part. */
   const docMarked = (side: Side, block: Block) => {
-    const end = block.lines[1];
-    const at =
-      hovered?.line === `${side}:${end}`
-        ? hovered.at
-        : editorAt(side, end)
-          ? ctx.editingTarget?.at
-          : undefined;
-    return at && block.fromSource ? coveringPart(block, at) : undefined;
+    if (!block.fromSource) return undefined;
+    const hovering = hovered?.side === side ? hovered.at : null;
+    const editing = editingOn(side)?.at;
+    return (
+      (hovering ? tintOf(side, block, hovering) : undefined) ??
+      (editing ? tintOf(side, block, editing) : undefined)
+    );
   };
 
   /** The part of a rendered block on `side` that the link marks. A block

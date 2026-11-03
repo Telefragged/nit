@@ -37,11 +37,10 @@ const docComponents: Components = {
 };
 
 /** One block of a rendered Markdown file, with a link to its lines in
- * the gutter. `change` is the class suffix that marks the block as added
- * or removed. `linked` is the part that the page's link marks, and
- * `marked` the part that a hovered thread or the open editor covers: the
- * block itself, or a part inside it. A block that comes from source lines
- * is a part for the `c` key (lib/selection). */
+ * the gutter. `change` is the block's class suffix in a diff: added or
+ * removed. `linked` is the part to show as linked, and `marked` the part
+ * to show as hovered: the block itself, or a part inside it. A block that
+ * comes from source lines is a part for the `c` key (lib/selection). */
 function DocBlock({
   file,
   block,
