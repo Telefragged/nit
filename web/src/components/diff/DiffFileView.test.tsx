@@ -564,14 +564,51 @@ describe("a rendered Markdown diff", () => {
   const shown = (container: HTMLElement) =>
     [...container.querySelectorAll(".doc-block")].map((b) => b.textContent);
 
-  it("hides the unchanged blocks far from a change until a click", () => {
+  it("hides the unchanged blocks far from a change until the reviewer reveals them", () => {
     const { container } = renderFile("unified", doc);
     fireEvent.click(screen.getByRole("button", { name: "Rendered" }));
     expect(shown(container)).toEqual(["7Three.", "9old end.", "9new end."]);
-    fireEvent.click(
-      screen.getByRole("button", { name: "⋯ 3 unchanged blocks" }),
-    );
+    fireEvent.click(screen.getByTitle("Show 1 more block above"));
+    expect(shown(container)).toEqual([
+      "5Two.",
+      "7Three.",
+      "9old end.",
+      "9new end.",
+    ]);
+    fireEvent.click(screen.getByTitle("Show all 2 blocks"));
     expect(shown(container)).toHaveLength(6);
+  });
+
+  it("reveals the hidden blocks under a change one at a time", () => {
+    const below: DiffFile = {
+      ...doc,
+      old_total: 8,
+      new_total: 8,
+      hunks: [
+        {
+          old_start: 1,
+          old_lines: 8,
+          new_start: 1,
+          new_lines: 8,
+          header: "",
+          lines: [
+            del(1, "old start."),
+            add(1, "new start."),
+            ...lines.slice(1, 8),
+          ],
+        },
+      ],
+    };
+    const { container } = renderFile("unified", below);
+    fireEvent.click(screen.getByRole("button", { name: "Rendered" }));
+    expect(shown(container)).toEqual(["1old start.", "1new start.", "3One."]);
+    fireEvent.click(screen.getByTitle("Show 1 more block below"));
+    expect(shown(container)).toEqual([
+      "1old start.",
+      "1new start.",
+      "3One.",
+      "5Two.",
+    ]);
   });
 
   it("shows a block with a thread", () => {

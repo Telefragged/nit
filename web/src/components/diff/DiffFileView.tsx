@@ -77,6 +77,7 @@ import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
 import Seg, { type SegOption } from "../Seg";
 import DocBlock from "./DocBlock";
+import GapSeparator from "./GapSeparator";
 import LineLink from "./LineLink";
 import RenderedView from "./RenderedView";
 import StatusMark from "./StatusMark";
@@ -145,42 +146,11 @@ const NO_ROWS: ReadonlySet<number> = new Set();
  * render contained. */
 const driftClass = (line: Line | null) => (line?.drift ? " drift" : "");
 
-/** One reveal button, floating over a separator; `kind` is both its class
- * suffix and which lines it takes. */
-const ExpandButton = ({
-  kind,
-  count,
-  title,
-  busy,
-  onClick,
-}: {
-  kind: "all" | "down" | "up";
-  count: number;
-  title: string;
-  busy: boolean;
-  onClick: () => void;
-}) => (
-  <button
-    type="button"
-    className={`hunk-expand expand-${kind}`}
-    onClick={onClick}
-    disabled={busy}
-    title={title}
-  >
-    +{count}
-  </button>
-);
-
-/** A separator over a gap of `more` lines the diff does not show, shown
- * only while the gap
- * remains (a fully-revealed gap leaves the hunks contiguous, so it
- * vanishes).
- * When the file is expandable the gap's reveal buttons float over it: the
- * whole run, then a stepped button per
- * edge it can pull from — down from `hunk`'s predecessor, up from `hunk`
- * itself. The top gap (`sep` 0) has no hunk above, the bottom gap no `hunk`
- * below (nor a `@@` header), and a gap one step covers needs no stepped
- * button at all. */
+/** The separator for the `more` lines above `hunk`, the `sep`th gap of the
+ * file.
+ *
+ * The top gap (`sep` 0) has no hunk above it. The bottom gap has no
+ * `hunk` below it and no `@@` header. */
 function HunkSeparator({
   more,
   hunk,
@@ -193,53 +163,25 @@ function HunkSeparator({
   expansion: ReturnType<typeof useHunkExpansion>;
 }) {
   const { expandable, expand, busyAt } = expansion;
-  if (more === 0) return null;
-  // The whole run folds into the hunk above — or below, for the top gap,
-  // which has none.
-  const end = sep > 0 ? "down" : "up";
   return (
-    <div className="hunk-row">
-      {expandable ? (
-        <div className="hunk-expanders">
-          <ExpandButton
-            kind="all"
-            count={more}
-            title={`Show all ${more} line${more === 1 ? "" : "s"}`}
-            busy={busyAt(end, sep)}
-            onClick={() => void expand(end, sep, Infinity)}
-          />
-          {more > EXPAND_STEP ? (
-            <div className="hunk-expand-steps">
-              {sep > 0 ? (
-                <ExpandButton
-                  kind="down"
-                  count={EXPAND_STEP}
-                  title={`Show ${EXPAND_STEP} more lines below`}
-                  busy={busyAt("down", sep)}
-                  onClick={() => void expand("down", sep)}
-                />
-              ) : null}
-              {hunk ? (
-                <ExpandButton
-                  kind="up"
-                  count={EXPAND_STEP}
-                  title={`Show ${EXPAND_STEP} more lines above`}
-                  busy={busyAt("up", sep)}
-                  onClick={() => void expand("up", sep)}
-                />
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      <span className="hunk-skip">⋯ {more} lines</span>
+    <GapSeparator
+      more={more}
+      unit="line"
+      step={EXPAND_STEP}
+      down={sep > 0}
+      up={hunk !== undefined}
+      reveal={
+        expandable ? (end, count) => void expand(end, sep, count) : undefined
+      }
+      busy={(end) => busyAt(end, sep)}
+    >
       {hunk ? (
         <span className="hunk-header">
           @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},
           {hunk.new_lines} @@ {hunk.header}
         </span>
       ) : null}
-    </div>
+    </GapSeparator>
   );
 }
 
@@ -818,10 +760,10 @@ export default function DiffFileView({
   };
 
   /** The rows of a rendered Markdown file. Side by side, the old side's
-   * blocks sit left of the new side's. Unified, a removed block shows
-   * above the block that replaces it, and a block that the diff leaves
-   * as it was holds the threads of both sides. A run of unchanged blocks
-   * far from a change shows as one row, which shows the run on a click. */
+   * blocks show to the left of the new side's blocks. Unified, a removed
+   * block shows above the block that replaces it. An unchanged block
+   * shows the threads of both sides. A run of unchanged blocks far from a
+   * change shows as one separator, like a run of unchanged lines. */
   function documentRows(doc: RenderedDoc) {
     const split = rendered === "split";
     const pair = (key: number, left: ReactNode, right: ReactNode) =>
@@ -839,25 +781,29 @@ export default function DiffFileView({
     const keep = (row: DocRow, ri: number) =>
       revealedRows.has(ri) ||
       rowBlocks(row).some(([side, b]) => pinned(side, b));
+    // Gaps are keyed by their order, not by their first row, so that a
+    // reveal from the top edge does not remount the separator and its
+    // focused button.
+    let gaps = 0;
     return shownRows(doc.rows, keep).map((item) => {
       if ("from" in item) {
         const { from, to } = item;
-        const count = to - from + 1;
         return (
-          <button
-            type="button"
-            className="hunk-row doc-gap"
-            key={`g${from}`}
-            onClick={() => {
+          <GapSeparator
+            key={`g${gaps++}`}
+            more={to - from + 1}
+            unit="block"
+            step={1}
+            down={from > 0}
+            up={to < doc.rows.length - 1}
+            reveal={(end, count) => {
               const rows = new Set(revealedRows);
-              for (let ri = from; ri <= to; ri++) rows.add(ri);
+              const n = Math.min(count, to - from + 1);
+              for (let i = 0; i < n; i++)
+                rows.add(end === "down" ? from + i : to - i);
               setShown({ doc, rows });
             }}
-          >
-            <span className="hunk-skip">
-              ⋯ {count} unchanged block{count === 1 ? "" : "s"}
-            </span>
-          </button>
+          />
         );
       }
       const { index: ri, row } = item;
