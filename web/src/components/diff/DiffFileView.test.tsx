@@ -439,6 +439,49 @@ describe("a rendered attachment", () => {
     expect(hovered({ whole: 3 })).toEqual(["TR"]);
   });
 
+  it("tints the block above a hovered thread on a blank line", () => {
+    const doc = attachedFile("d.md", "First.\n\nLast one.\n", 2);
+    const thread = uiThread({
+      id: 1,
+      revision: 2,
+      anchor: { line: { file: doc.path, side: "new", at: { whole: 2 } } },
+    });
+    const { container } = renderFile("unified", doc, [thread]);
+    hoverThread(container);
+    const tinted = [...container.querySelectorAll(".line-hover")].map((el) =>
+      el.textContent.replace(/^\d+/, ""),
+    );
+    expect(tinted).toEqual(["First."]);
+  });
+
+  it("tints a part in each block that a hovered thread's range spans", () => {
+    const doc = attachedFile("d.md", "First.\n\n- a\n- b\n\nLast one.\n", 2);
+    const thread = uiThread({
+      id: 1,
+      revision: 2,
+      anchor: {
+        line: {
+          file: doc.path,
+          side: "new",
+          at: {
+            selection: {
+              start_line: 1,
+              start_char: 2,
+              end_line: 6,
+              end_char: 4,
+            },
+          },
+        },
+      },
+    });
+    const { container } = renderFile("unified", doc, [thread]);
+    hoverThread(container);
+    const tinted = [...container.querySelectorAll(".line-hover")].map((el) =>
+      el.textContent.replace(/^\d+/, ""),
+    );
+    expect(tinted).toEqual(["First.", "a", "b", "Last one."]);
+  });
+
   it("marks the linked part, or else the block that the link overlaps", () => {
     const table = attachedFile("t.md", "| A | B |\n|---|---|\n| x | y |\n", 2);
     const shown = (lines: LinkSpan["lines"]) => {

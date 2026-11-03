@@ -133,8 +133,23 @@ describe("coveringPart", () => {
     expect(covering({ whole: 3 })).toBe("tr");
   });
 
-  it("falls back to the block for an anchor that no part covers", () => {
+  it("falls back to the block for an anchor that no part covers, and to none outside", () => {
     expect(coveringPart(table, { whole: 2 })).toBe(table.parts[0]);
+    expect(coveringPart(table, { whole: 20 })).toBeUndefined();
+  });
+
+  it("covers the portion of an anchor inside each block that it spans", () => {
+    const blocks = parseBlocks(
+      "| A | B |\n|---|---|\n| x | y |\n\n> note\n\n```js\nlet a;\n```",
+    );
+    const at: LineAnchor = {
+      selection: { start_line: 3, start_char: 2, end_line: 8, end_char: 3 },
+    };
+    const marked = blocks.map((b) => {
+      const part = coveringPart(b, at);
+      return part && (part.node?.tagName ?? "block");
+    });
+    expect(marked).toEqual(["tr", "p", "block"]);
   });
 });
 
