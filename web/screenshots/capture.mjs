@@ -32,6 +32,7 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
+import { clickNow, one } from "../gallery/act.ts";
 // The bytes behind each attachment of change 12.
 import ATTACHMENT_BLOBS from "../src/api/fixtures/blobs.json" with { type: "json" };
 
@@ -118,23 +119,6 @@ const untilSpySettled = (page) =>
     return (selected?.dataset.path ?? null) === (path ?? null);
   });
 
-/** Checks that `locator` names exactly one element. Each step acts on what
- * the step before it has already rendered, so a missing element is a
- * failure to report at once, not a state to wait for. */
-const expectOne = async (locator) => {
-  const count = await locator.count();
-  if (count !== 1) {
-    throw new Error(`${locator.toString()} matched ${String(count)} elements`);
-  }
-};
-
-/** Clicks the one element `locator` names, without Playwright's retries
- * for actionability. */
-const clickNow = async (locator) => {
-  await expectOne(locator);
-  await locator.click({ force: true });
-};
-
 /** Clicks the code of the one line `locator` names, and waits until the
  * page links that line, so a following `c` comments on it. */
 const linkLine = async (page, locator) => {
@@ -144,7 +128,7 @@ const linkLine = async (page, locator) => {
 
 /** Types `text` into the one element `locator` names. */
 const fillNow = async (locator, text) => {
-  await expectOne(locator);
+  await one(locator);
   await locator.fill(text, { force: true });
 };
 
@@ -207,7 +191,7 @@ async function snapshot() {
 
 /** Scrolls the one element `locator` names to the middle of the viewport. */
 const centerOn = async (page, locator) => {
-  await expectOne(locator);
+  await one(locator);
   await locator.evaluate((el) => {
     el.scrollIntoView({ block: "center" });
   });
@@ -358,7 +342,7 @@ const captures = [
     path: "/changes/11?against=base",
     actions: async (page) => {
       const dir = page.locator(".rail-dir", { hasText: "src / auth" });
-      await expectOne(dir);
+      await one(dir);
       await dir.hover();
     },
   },
@@ -455,7 +439,7 @@ const captures = [
     actions: async (page) => {
       await expandAllFiles(page);
       const plan = '[data-diff-path="/attachments/plan/rotation.md"]';
-      await expectOne(page.locator(`${plan} .rendered-markdown`));
+      await one(page.locator(`${plan} .rendered-markdown`));
       await page.locator(".rendered-image img").evaluate((img) => img.decode());
       const frame = await (
         await page.locator(".rendered-frame").elementHandle()
@@ -566,7 +550,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Reply" }).first());
-      await expectOne(page.locator(".check-label"));
+      await one(page.locator(".check-label"));
     },
   },
   // Drafted thread resolution: Reopen the
@@ -608,7 +592,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Settings" }));
-      await expectOne(page.locator(".settings-modal"));
+      await one(page.locator(".settings-modal"));
     },
   },
   // Side-by-side, base → r1: new-side drafts sit under the right column,
@@ -775,7 +759,7 @@ const captures = [
         sel.addRange(range);
       });
       await page.keyboard.press("c");
-      await expectOne(page.locator(".selection-miss"));
+      await one(page.locator(".selection-miss"));
     },
   },
   {
@@ -969,7 +953,7 @@ const captures = [
       const cover = page.getByPlaceholder(
         "Cover message (saved with your decision)…",
       );
-      await expectOne(cover);
+      await one(cover);
       await cover.pressSequentially(
         "Nice cleanup — two nits inline, otherwise ready.",
       );
@@ -984,7 +968,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Review (a)" }));
-      await expectOne(page.locator(".reply-modal"));
+      await one(page.locator(".reply-modal"));
     },
   },
   // Rename + binary file in one diff.
