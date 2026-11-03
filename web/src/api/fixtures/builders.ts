@@ -3,6 +3,7 @@
 import type { ReviewFile } from "../../lib/attachments";
 import type { UiThread } from "../../lib/comments";
 import { span } from "../../lib/diffview";
+import type { ReviewCtx } from "../../pages/reviewContext";
 import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../types";
 import type { Diff, DiffFile, Hunk, Line, Side } from "../types";
 
@@ -16,6 +17,25 @@ export const uiThread = (
   comments: [],
   drafts: [],
   created_at: "2026-01-01T00:00:00Z",
+  ...over,
+});
+
+/** The context of a review page at revision 1 of change 1, against the
+ * base, with no link and no draft editor. Its callbacks do nothing. */
+export const reviewCtx = (over: Partial<ReviewCtx> = {}): ReviewCtx => ({
+  changeNumber: 1,
+  selected: 1,
+  against: undefined,
+  latestRevision: 1,
+  whitespace: "compare",
+  attachKey: "",
+  showRange: () => undefined,
+  link: null,
+  linkHref: () => "",
+  selectLink: () => undefined,
+  editingTarget: null,
+  setEditingTarget: () => false,
+  setEditorDirty: () => undefined,
   ...over,
 });
 
