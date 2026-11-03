@@ -490,10 +490,10 @@
             runTests = true;
             features = [ ];
           };
-          # The frontend lint (eslint + stylelint + knip) as a validator, the
-          # web counterpart to clippy — it mirrors the devShell `npm run lint`,
-          # so a stylelint, eslint, or knip regression fails `nix flake check`
-          # instead of slipping in.
+          # The frontend type check and lint (tsc, eslint, stylelint, knip) as
+          # a validator, the web counterpart to clippy. It runs the devShell
+          # `npm run lint`, so `nix flake check` fails on a type, eslint,
+          # stylelint or knip error.
           web-lint = webCheck "web-lint" { } "npm run lint > $out";
           web-test = webCheck "web-test" { } "npm run test > $out";
           # The same `capture.mjs` agents run locally, but against the nix
