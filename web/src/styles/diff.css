@@ -264,7 +264,9 @@
   grid-column: 1 / -1;
   background: rgb(88 166 255 / 5%);
   color: var(--text-faint);
+  font-family: var(--mono);
   font-size: 11px;
+  line-height: 1.5;
   padding: 3px 12px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -305,7 +307,6 @@
 .hunk-expand {
   padding: 0 8px;
   font: inherit;
-  line-height: 1.5;
   color: var(--blue);
   background: var(--bg-inset);
   border: 1px solid var(--border);
@@ -348,7 +349,6 @@
 
 .hunk-skip {
   margin-right: 12px;
-  color: var(--text-faint);
 }
 
 .hunk-header {
