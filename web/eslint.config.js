@@ -164,9 +164,32 @@ export default tseslint.config(
     },
   },
 
-  // ── Node tooling at the repo root — type-aware via tsconfig.node.json ──
+  // The same rule applies to the gallery specs. The web-first assertions
+  // of Playwright and its waits retry until a timeout. A spec instead
+  // fetches a value once and asserts on it with node:assert/strict.
   {
-    files: ["*.ts"],
+    files: ["gallery/*.spec.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: 'ImportSpecifier[imported.name="expect"]',
+          message:
+            "Its web-first assertions retry until a timeout. Read the value once, then assert on it with node:assert/strict.",
+        },
+        {
+          selector:
+            "MemberExpression[property.name=/^(waitFor|waitForFunction|waitForSelector|waitForTimeout)$/]",
+          message:
+            "It polls. Await the action, then read the page once. one() and clickNow() in gallery/act.ts check and click an element without a retry.",
+        },
+      ],
+    },
+  },
+
+  // ── Node tooling, type-aware through tsconfig.node.json ──
+  {
+    files: ["*.ts", "gallery/*.ts"],
     languageOptions: {
       parserOptions: {
         projectService: false,

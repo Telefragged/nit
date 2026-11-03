@@ -14,7 +14,8 @@
     "lint:css": "stylelint \"src/**/*.css\"",
     "lint:unused": "knip",
     "test": "vitest run",
-    "screenshots": "node screenshots/capture.mjs"
+    "screenshots": "node screenshots/capture.mjs",
+    "gallery": "playwright test --config gallery/playwright.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.103.1",
@@ -56,6 +57,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.70.0",
     "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.4",
     "vitest": "^5.0.1"
   }
 }

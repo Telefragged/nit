@@ -19,5 +19,5 @@
     "noUncheckedSideEffectImports": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "gallery/*.ts"]
 }

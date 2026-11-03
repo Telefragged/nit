@@ -19,6 +19,8 @@ export default defineConfig({
   // client.ts answers from the contract-true fixtures — the same canned
   // data the screenshot harness renders.
   test: {
+    // The Playwright specs in gallery/ run in a browser, not in jsdom.
+    dir: "src",
     environment: "jsdom",
     env: { VITE_MOCK: "1" },
     setupFiles: ["./wasm-test-setup.ts", "./src/test-setup.ts"],
