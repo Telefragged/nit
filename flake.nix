@@ -162,82 +162,6 @@
               });
         };
 
-      # The web tree for each web derivation, without the parts that it
-      # cannot use, so an edit rebuilds only the derivations that use the
-      # edited file. System-independent, so it lives outside forAllSystems.
-      webSrc =
-        let
-          fs = nixpkgs.lib.fileset;
-          named =
-            suffixes: fs.fileFilter (f: builtins.any (s: nixpkgs.lib.hasSuffix s f.name) suffixes) ./web;
-          tests = fs.unions [
-            (named [
-              ".test.ts"
-              ".test.tsx"
-              "test-setup.ts"
-            ])
-            ./web/src/test
-          ];
-          stories = named [ ".story.tsx" ];
-          without =
-            parts:
-            fs.toSource {
-              root = ./web;
-              fileset = fs.difference ./web (fs.unions parts);
-            };
-        in
-        {
-          npm = fs.toSource {
-            root = ./web;
-            fileset = fs.unions [
-              ./web/package.json
-              ./web/package-lock.json
-            ];
-          };
-          bundle = without [
-            tests
-            stories
-            ./web/gallery
-            ./web/screenshots
-          ];
-          lint = without [ ];
-          test = without [
-            stories
-            ./web/gallery
-            ./web/screenshots
-          ];
-          screenshots = without [
-            tests
-            stories
-            (fs.difference ./web/gallery ./web/gallery/act.ts)
-          ];
-          gallery = without [
-            tests
-            ./web/screenshots
-          ];
-        };
-
-      # The web npm closure, shared via `npmDeps` so the nit-web build and
-      # the web-lint / web-test checks don't each refetch it.
-      webNpmDepsFor =
-        pkgs:
-        pkgs.fetchNpmDeps {
-          src = webSrc.npm;
-          inherit (pkgs) nodejs;
-          name = "nit-web-npm-deps";
-          hash = "sha256-7s6zgmyg3UxGA1Am0NSMZYDEdEpeRwfcJfC5/s3Y2jE=";
-        };
-
-      # The screenshot harness (web/screenshots/capture.mjs) and the gallery
-      # (web/gallery/) launch only chromium, so the browser set has no
-      # firefox and no webkit.
-      playwrightBrowsersFor =
-        pkgs:
-        pkgs.playwright-driver.selectBrowsers {
-          withFirefox = false;
-          withWebkit = false;
-        };
-
       # Build metadata for `nit --version`: `+<sha>[.dirty]` from the flake's
       # git state, which the build sandbox can't reach itself (no `.git`).
       # `rev` is set only on a clean tree, `dirtyRev` only on a dirty one;
@@ -356,15 +280,6 @@
           dontFixup = true;
         };
 
-      # Drop the generated wasm glue into a web build's tree before it runs.
-      # web/src/wasm is gitignored (so absent from the npm-package source), so
-      # every web derivation injects it the way `gen-wasm` does for local dev
-      # — the artifact is built by nix, never committed.
-      injectWasm = pkgs: ''
-        mkdir -p src/wasm
-        cp ${wasmPkg pkgs}/* src/wasm/
-      '';
-
       # Writes the WebAssembly fold into web/src/wasm for local dev. One
       # derivation shared two ways: `nix run .#gen-wasm` (no devShell needed)
       # and, added to the devShell below, a bare `gen-wasm` on PATH inside
@@ -383,6 +298,13 @@
             install -m644 ${wasmPkg pkgs}/* web/src/wasm/
             echo "wrote web/src/wasm/"
           '';
+        };
+
+      webFor =
+        pkgs:
+        pkgs.callPackage ./web {
+          inherit (cargoToml.workspace.package) version;
+          wasm = wasmPkg pkgs;
         };
     in
     {
@@ -428,7 +350,7 @@
             ];
 
             env = {
-              PLAYWRIGHT_BROWSERS_PATH = playwrightBrowsersFor pkgs;
+              PLAYWRIGHT_BROWSERS_PATH = (webFor pkgs).playwrightBrowsers;
               PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
               # Pin for package.json: npm playwright must match the driver.
               PLAYWRIGHT_DRIVER_VERSION = pkgs.playwright-driver.version;
@@ -440,15 +362,7 @@
       packages = forAllSystems (
         pkgs:
         let
-          nit-web = pkgs.buildNpmPackage {
-            pname = "nit-web";
-            inherit (cargoToml.workspace.package) version;
-            src = webSrc.bundle;
-            inherit (pkgs) nodejs;
-            npmDeps = webNpmDepsFor pkgs;
-            preBuild = injectWasm pkgs;
-            installPhase = "cp -r dist $out";
-          };
+          nit-web = (webFor pkgs).bundle;
         in
         rec {
           inherit nit-web;
@@ -471,39 +385,6 @@
         pkgs:
         let
           cargoNix = cargoNixFor pkgs;
-          webNpmDeps = webNpmDepsFor pkgs;
-          browserEnv = {
-            PLAYWRIGHT_BROWSERS_PATH = playwrightBrowsersFor pkgs;
-            PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
-            # The build sandbox has no user namespaces and no writable
-            # /dev/shm.
-            NIT_SCREENSHOT_NO_SANDBOX = "1";
-            # The system font stacks (tokens.css) resolve to no font in the
-            # sandbox. Map the generic sans and mono families to real fonts,
-            # so that the captures show text and not empty boxes.
-            FONTCONFIG_FILE = pkgs.makeFontsConf {
-              fontDirectories = [
-                pkgs.liberation_ttf
-                pkgs.dejavu_fonts
-              ];
-            };
-          };
-          # A web validator that runs `script` against `webSrc.<name>`. It
-          # sets dontNpmBuild, which disables the build phase (and its
-          # preBuild hook), so the wasm goes in at the head of the install
-          # phase.
-          webCheck =
-            name: env: script:
-            pkgs.buildNpmPackage {
-              pname = "nit-web-${name}";
-              inherit (cargoToml.workspace.package) version;
-              src = webSrc.${name};
-              inherit (pkgs) nodejs;
-              inherit env;
-              npmDeps = webNpmDeps;
-              dontNpmBuild = true;
-              installPhase = injectWasm pkgs + script;
-            };
         in
         {
           # The release build carries no `+<sha>` suffix, so a commit that
@@ -540,25 +421,6 @@
             runTests = true;
             features = [ ];
           };
-          # The frontend type check and lint (tsc, eslint, stylelint, knip) as
-          # a validator, the web counterpart to clippy. It runs the devShell
-          # `npm run lint`, so `nix flake check` fails on a type, eslint,
-          # stylelint or knip error.
-          web-lint = webCheck "lint" { } "npm run lint > $out";
-          web-test = webCheck "test" { } "npm run test > $out";
-          # The same `capture.mjs` agents run locally, but against the nix
-          # `playwright-driver` browsers, so a driver/npm-pin skew fails the
-          # check. Its output is the PNGs, not a marker file.
-          web-screenshots = webCheck "screenshots" browserEnv ''
-            export HOME=$TMPDIR
-            NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
-          '';
-          # Runs the gallery specs (docs/web.md "Component gallery"). Its
-          # output is the PNG and the page of every story.
-          web-gallery = webCheck "gallery" browserEnv ''
-            export HOME=$TMPDIR
-            npm run gallery -- --output $out
-          '';
           contract = contractSnapshot pkgs;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
             if ! diff -u ${./web/src/api/types.gen.ts} ${wireTypesTs pkgs}; then
@@ -568,6 +430,7 @@
             touch $out
           '';
         }
+        // (webFor pkgs).checks
       );
 
       # `nix run .#gen-types` regenerates the web's wire types into the tree.
