@@ -181,9 +181,9 @@
           hash = "sha256-7s6zgmyg3UxGA1Am0NSMZYDEdEpeRwfcJfC5/s3Y2jE=";
         };
 
-      # The screenshot harness launches chromium and nothing else
-      # (web/screenshots/capture.mjs), so drop firefox and webkit from the
-      # browser set it runs against.
+      # The screenshot harness (web/screenshots/capture.mjs) and the gallery
+      # (web/gallery/) launch only chromium, so the browser set has no
+      # firefox and no webkit.
       playwrightBrowsersFor =
         pkgs:
         pkgs.playwright-driver.selectBrowsers {
@@ -424,7 +424,22 @@
         let
           cargoNix = cargoNixFor pkgs;
           webNpmDeps = webNpmDepsFor pkgs;
-          playwrightBrowsers = playwrightBrowsersFor pkgs;
+          browserEnv = {
+            PLAYWRIGHT_BROWSERS_PATH = playwrightBrowsersFor pkgs;
+            PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+            # The build sandbox has no user namespaces and no writable
+            # /dev/shm.
+            NIT_SCREENSHOT_NO_SANDBOX = "1";
+            # The system font stacks (tokens.css) resolve to no font in the
+            # sandbox. Map the generic sans and mono families to real fonts,
+            # so that the captures show text and not empty boxes.
+            FONTCONFIG_FILE = pkgs.makeFontsConf {
+              fontDirectories = [
+                pkgs.liberation_ttf
+                pkgs.dejavu_fonts
+              ];
+            };
+          };
         in
         {
           # The release build carries no `+<sha>` suffix, so a commit that
@@ -493,24 +508,24 @@
             inherit (pkgs) nodejs;
             npmDeps = webNpmDeps;
             dontNpmBuild = true;
-            env = {
-              PLAYWRIGHT_BROWSERS_PATH = playwrightBrowsers;
-              PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
-              # No user namespaces / writable /dev/shm in the build sandbox.
-              NIT_SCREENSHOT_NO_SANDBOX = "1";
-              # The system font stacks (tokens.css) resolve to nothing in the
-              # sandbox; map the generic sans/mono families to real fonts so
-              # the captures render text, not tofu.
-              FONTCONFIG_FILE = pkgs.makeFontsConf {
-                fontDirectories = [
-                  pkgs.liberation_ttf
-                  pkgs.dejavu_fonts
-                ];
-              };
-            };
+            env = browserEnv;
             installPhase = injectWasm pkgs + ''
               export HOME=$TMPDIR
               NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
+            '';
+          };
+          # Runs the gallery specs (docs/dev.md "Component gallery"). Its
+          # output is the PNG and the page of every story.
+          web-gallery = pkgs.buildNpmPackage {
+            pname = "nit-web-gallery";
+            inherit (webArgs) version src;
+            inherit (pkgs) nodejs;
+            npmDeps = webNpmDeps;
+            dontNpmBuild = true;
+            env = browserEnv;
+            installPhase = injectWasm pkgs + ''
+              export HOME=$TMPDIR
+              npm run gallery -- --output $out
             '';
           };
           contract = contractSnapshot pkgs;
