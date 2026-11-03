@@ -54,114 +54,6 @@
             }
           )
         );
-      # Pin rustc from rust-toolchain.toml so nix and rustup builds match.
-      rustToolchainFor = pkgs: pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-
-      # Rustdoc, run from inside the crate's own build. `runTests` covers
-      # every test kind but the doc examples, and no build runs rustdoc at
-      # all: buildRustCrate drives rustc directly, so nothing extracts the
-      # examples from doc-comments or resolves the intra-doc links between
-      # them. But the flags rustdoc wants are the ones the lib build just
-      # used, and build-crate.nix leaves them in the shell it hands to
-      # `postBuild` — so re-run the compiler it already configured, one flag
-      # different. Gated on `buildTests` to ride the test build, whose
-      # dependency set includes the dev-dependencies cargo also lends to doc
-      # examples. `docTests` is false for a cdylib, which has no rlib for an
-      # example to link against — cargo skips its doc tests for the same
-      # reason, but still documents it.
-      rustdocPostBuild = docTests: ''
-        # Every other variable read here would fail the rustdoc calls loudly
-        # if it went away; an unset $buildTests would just skip them forever,
-        # so make that case an error instead.
-        : "''${buildTests?buildRustCrate no longer sets buildTests}"
-        if [ -n "$buildTests" ]; then
-          docLib="$LIB_PATH"
-          [ -e "$docLib" ] || docLib=src/lib.rs
-          if [ -e "$docLib" ]; then
-            docOpts=""
-            for opt in $LIB_RUSTC_OPTS; do
-              case "$opt" in
-                --remap-path-prefix=*) ;;
-                *) docOpts="$docOpts $opt" ;;
-              esac
-            done
-            # Rendering the docs is what resolves every intra-doc link, so a
-            # broken or private one is a rustdoc lint here — denied by the
-            # `[workspace.lints]` flags already in $LIB_RUSTC_OPTS. The
-            # rendered tree is the by-product; the exit code is the point.
-            # No $EXTRA_LIB: a crate is not an extern of its own docs.
-            rustdoc "$docLib" \
-              --crate-name "$CRATE_NAME" \
-              --out-dir target/doc \
-              --cap-lints "$CAP_LINTS" \
-              --color always \
-              -L dependency=target/deps \
-              $docOpts $LINK $BUILD_OUT_DIR $EXTRA_FEATURES
-            ${nixpkgs.lib.optionalString docTests ''
-              echo "Doc-testing $CRATE_NAME ($docLib)"
-              # $EXTRA_LIB is the --extern for this crate's own rlib, built
-              # by build_lib before the --test pass; the rest is verbatim
-              # what build_lib passes rustc.
-              rustdoc --test "$docLib" \
-                --crate-name "$CRATE_NAME" \
-                --cap-lints "$CAP_LINTS" \
-                --color always \
-                -L dependency=target/deps \
-                $docOpts $EXTRA_LIB $LINK $BUILD_OUT_DIR $EXTRA_FEATURES
-            ''}
-          fi
-        fi
-      '';
-
-      cargoToml = fromTOML (builtins.readFile ./Cargo.toml);
-
-      # Cargo.nix is generated — don't hand-edit (regen: docs/generated.md). Build
-      # with our pinned rustc, not nixpkgs'; the virtual workspace has no
-      # rootCrate, so callers select a member via `workspaceMembers."<name>"`.
-      # Our own crates (local `src`, not a crates.io `sha256`) compile with
-      # clippy-driver under Cargo.toml's `[workspace.lints]`; deps stay plain.
-      # On Linux every crate links statically against musl, as the release
-      # binary does, so the checks test what ships. Darwin has no
-      # pkgsStatic and builds natively.
-      cargoNixFor =
-        pkgs:
-        let
-          cargoPkgs = if pkgs.stdenv.hostPlatform.isLinux then pkgs.pkgsStatic else pkgs;
-          rustToolchain = rustToolchainFor cargoPkgs.buildPackages;
-          lints = cargoToml.workspace.lints;
-        in
-        cargoPkgs.callPackage ./Cargo.nix {
-          buildRustCrateForPkgs =
-            p:
-            let
-              base = p.buildRustCrate.override {
-                rustc = rustToolchain;
-                cargo = rustToolchain;
-                clippy = rustToolchain;
-                # buildRustCrate defaults to codegen-units=1 (serial codegen),
-                # ~3x slower per crate than cargo's release default. Match cargo.
-                defaultCodegenUnits = 16;
-                # The nit crate's source is its own directory only, so the
-                # plugin that it compiles in comes by path (crates/nit/build.rs).
-                defaultCrateOverrides = p.defaultCrateOverrides // {
-                  nit = _: { NIT_PLUGIN_DIR = ./plugins/nit; };
-                };
-              };
-            in
-            crate:
-            let
-              drv = base crate;
-            in
-            if crate ? sha256 then
-              drv
-            else
-              drv.override (_: {
-                useClippy = true;
-                inherit lints;
-                postBuild = rustdocPostBuild (nixpkgs.lib.elem "lib" (crate.type or [ "lib" ]));
-              });
-        };
-
       # Build metadata for `nit --version`: `+<sha>[.dirty]` from the flake's
       # git state, which the build sandbox can't reach itself (no `.git`).
       # `rev` is set only on a clean tree, `dirtyRev` only on a dirty one;
@@ -174,190 +66,59 @@
         else
           "";
 
-      # cargo loads every workspace member's manifest and rejects one that
-      # discovers no target, so a `src` holding only the crates a derivation
-      # builds hands the members it left out an empty stand-in lib.
-      stubMembers = nixpkgs.lib.concatMapStrings (member: ''
-        mkdir -p ${member}/src
-        : > ${member}/src/lib.rs
-      '');
-
-      # The web's wire types, generated from nit-types: a native `cargo test`
-      # (the `ts`-feature exporter) writes every web-facing type's ts-rs
-      # declaration into one module, prettier-formatted like any source file. A
-      # pinned, offline derivation so `gen-types` (writes it) and `types-drift`
-      # (diffs it) share one source of truth. `TS_RS_LARGE_INT=number` maps
-      # u64/i64 to the wire's `number`, not bigint.
-      wireTypesTs =
-        pkgs:
-        pkgs.stdenv.mkDerivation {
-          name = "nit-wire-types.gen.ts";
-          src = nixpkgs.lib.fileset.toSource {
-            root = ./.;
-            fileset = nixpkgs.lib.fileset.unions [
-              ./Cargo.toml
-              ./Cargo.lock
-              ./crates/nit-types
-              ./crates/nit/Cargo.toml
-              ./crates/nit-contract/Cargo.toml
-              ./crates/nit-wasm/Cargo.toml
-            ];
-          };
-          nativeBuildInputs = [
-            (rustToolchainFor pkgs)
-            pkgs.prettier
-            pkgs.rustPlatform.cargoSetupHook
-          ];
-          cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-          buildPhase =
-            stubMembers [
-              "crates/nit"
-              "crates/nit-contract"
-              "crates/nit-wasm"
-            ]
-            + ''
-              TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
-                cargo test --offline --features ts -p nit-types \
-                -- --exact export::write_wire_types
-              prettier --write types.gen.ts
-            '';
-          installPhase = "mv types.gen.ts $out";
-          dontFixup = true;
-        };
-
-      # The public contract: the OpenAPI document the routes' utoipa
-      # annotations produce and the CLI's clap syntax, written by
-      # `nit-contract` into one directory.
-      contractSnapshot =
-        pkgs:
-        pkgs.runCommand "nit-contract" { } ''
-          ${(cargoNixFor pkgs).workspaceMembers."nit-contract".build}/bin/nit-contract $out
-        '';
-
-      # The shared change fold compiled to WebAssembly: nit-wasm built for
-      # wasm32, then run through wasm-bindgen (`--target web`) into the JS
-      # glue + `.wasm` the web imports. Offline and pinned like wireTypesTs; the
-      # `rust-toolchain.toml` wasm32 target and the wasm-bindgen-cli version
-      # (which must match nit-wasm's `wasm-bindgen` dep) come from this flake.
-      wasmPkg =
-        pkgs:
-        pkgs.stdenv.mkDerivation {
-          name = "nit-wasm-pkg";
-          # Only nit-wasm and the nit-types it depends on: the server crate's
-          # sources are excluded so a server change leaves this derivation —
-          # and every web check that injects it — untouched.
-          src = nixpkgs.lib.fileset.toSource {
-            root = ./.;
-            fileset = nixpkgs.lib.fileset.unions [
-              ./Cargo.toml
-              ./Cargo.lock
-              ./rust-toolchain.toml
-              ./crates/nit-types
-              ./crates/nit-wasm
-              ./crates/nit/Cargo.toml
-              ./crates/nit-contract/Cargo.toml
-            ];
-          };
-          nativeBuildInputs = [
-            # With rust-src in the sysroot, rustc writes its store path into
-            # std's panic locations, and the server binary embeds this wasm.
-            ((rustToolchainFor pkgs).override { extensions = [ ]; })
-            pkgs.wasm-bindgen-cli
-            pkgs.rustPlatform.cargoSetupHook
-          ];
-          cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-          buildPhase =
-            stubMembers [
-              "crates/nit"
-              "crates/nit-contract"
-            ]
-            + ''
-              cargo build --offline --release --target wasm32-unknown-unknown -p nit-wasm
-              wasm-bindgen target/wasm32-unknown-unknown/release/nit_wasm.wasm \
-                --target web --out-dir pkg
-            '';
-          installPhase = "cp -r pkg $out";
-          dontFixup = true;
-        };
-
-      # Writes the WebAssembly fold into web/src/wasm for local dev. One
-      # derivation shared two ways: `nix run .#gen-wasm` (no devShell needed)
-      # and, added to the devShell below, a bare `gen-wasm` on PATH inside
-      # `nix develop` — so generating it doesn't require `nix run`. Finds the
-      # tree via git so it also works from a worktree or the web/ subdir
-      # (`npm run` scripts shell out to it with that cwd).
-      genWasmApp =
-        pkgs:
-        pkgs.writeShellApplication {
-          name = "gen-wasm";
-          runtimeInputs = [ pkgs.git ];
-          text = ''
-            cd "$(git rev-parse --show-toplevel)"
-            rm -rf web/src/wasm
-            install -d web/src/wasm
-            install -m644 ${wasmPkg pkgs}/* web/src/wasm/
-            echo "wrote web/src/wasm/"
-          '';
-        };
+      rustFor = pkgs: pkgs.callPackage ./rust.nix { };
 
       webFor =
         pkgs:
         pkgs.callPackage ./web {
-          inherit (cargoToml.workspace.package) version;
-          wasm = wasmPkg pkgs;
+          inherit (rustFor pkgs) version wasm;
         };
     in
     {
-      devShells = forAllSystems (
-        pkgs:
-        let
-          rustToolchain = rustToolchainFor pkgs;
-        in
-        {
-          default = pkgs.mkShell {
-            packages = with pkgs; [
-              # Rust backend — rustc/cargo/clippy/rustfmt/rust-analyzer all
-              # come from the one pinned toolchain.
-              rustToolchain
-              pkg-config
-              sqlite
-              zlib
+      devShells = forAllSystems (pkgs: {
+        default = pkgs.mkShell {
+          packages = with pkgs; [
+            # Rust backend — rustc/cargo/clippy/rustfmt/rust-analyzer all
+            # come from the one pinned toolchain.
+            (rustFor pkgs).toolchain
+            pkg-config
+            sqlite
+            zlib
 
-              # Regenerates Cargo.nix
-              crate2nix
+            # Regenerates Cargo.nix
+            crate2nix
 
-              # `gen-wasm`, on PATH here, writes web/src/wasm (docs/generated.md).
-              # wasm-bindgen-cli's version is pinned to nit-wasm's
-              # wasm-bindgen dep.
-              wasm-bindgen-cli
-              (genWasmApp pkgs)
+            # `gen-wasm`, on PATH here, writes web/src/wasm (docs/generated.md).
+            # wasm-bindgen-cli's version is pinned to nit-wasm's
+            # wasm-bindgen dep.
+            wasm-bindgen-cli
+            (rustFor pkgs).genWasm
 
-              # Web frontend. Every npm derivation below takes this same
-              # `pkgs.nodejs`, so the shell and the build share an npm and
-              # read each other's lock file.
-              nodejs
+            # Web frontend. Every npm derivation below takes this same
+            # `pkgs.nodejs`, so the shell and the build share an npm and
+            # read each other's lock file.
+            nodejs
 
-              # Formatting — treefmt drives the per-language formatters
-              # configured in treefmt.toml (rustfmt from the toolchain above)
-              treefmt
-              nixfmt
-              prettier
-              shfmt
-              taplo
+            # Formatting — treefmt drives the per-language formatters
+            # configured in treefmt.toml (rustfmt from the toolchain above)
+            treefmt
+            nixfmt
+            prettier
+            shfmt
+            taplo
 
-              # Screenshot harness / frontend checking
-              playwright-driver
-            ];
+            # Screenshot harness / frontend checking
+            playwright-driver
+          ];
 
-            env = {
-              PLAYWRIGHT_BROWSERS_PATH = (webFor pkgs).playwrightBrowsers;
-              PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
-              # Pin for package.json: npm playwright must match the driver.
-              PLAYWRIGHT_DRIVER_VERSION = pkgs.playwright-driver.version;
-            };
+          env = {
+            PLAYWRIGHT_BROWSERS_PATH = (webFor pkgs).playwrightBrowsers;
+            PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+            # Pin for package.json: npm playwright must match the driver.
+            PLAYWRIGHT_DRIVER_VERSION = pkgs.playwright-driver.version;
           };
-        }
-      );
+        };
+      });
 
       packages = forAllSystems (
         pkgs:
@@ -369,7 +130,7 @@
           # Build only; tests live in the `test` check (the build/verify split).
           # The crate's build.rs reads the git suffix, and it compiles in the
           # web UI that NIT_WEB_DIST names.
-          nit = (cargoNixFor pkgs).workspaceMembers."nit".build.overrideAttrs (_: {
+          nit = (rustFor pkgs).cargoNix.workspaceMembers."nit".build.overrideAttrs (_: {
             NIT_GIT_SUFFIX = gitSuffix;
             NIT_WEB_DIST = nit-web;
           });
@@ -377,14 +138,15 @@
           # The release drops the `+<sha>` suffix, so `nit --version` tells
           # a published release from a build of a git checkout.
           nit-release = nit.overrideAttrs { NIT_GIT_SUFFIX = ""; };
-          contract = contractSnapshot pkgs;
+          contract = (rustFor pkgs).contract;
         }
       );
 
       checks = forAllSystems (
         pkgs:
         let
-          cargoNix = cargoNixFor pkgs;
+          rust = rustFor pkgs;
+          inherit (rust) cargoNix;
         in
         {
           # The release build carries no `+<sha>` suffix, so a commit that
@@ -392,7 +154,7 @@
           build = self.packages.${pkgs.stdenv.hostPlatform.system}.nit-release;
           # Compile the WebAssembly fold — surfaces a wasm32 build break or a
           # wasm-bindgen version skew independently of the web build.
-          wasm-build = wasmPkg pkgs;
+          wasm-build = rust.wasm;
           # `wasm-build` runs a bare `cargo build`, so it is the one crate the
           # workspace lints and tests would otherwise miss. Built here through
           # crate2nix (host target) to put it under clippy like every other
@@ -410,7 +172,8 @@
           };
           # Also clippy-checks the test targets (lib/bins are linted in every
           # build). Tests run here, not in `nix build`. Rustdoc rides the same
-          # build (rustdocPostBuild): the docs render and the doc tests run.
+          # build (rustdocPostBuild in rust.nix): the docs render and
+          # the doc tests run.
           test = cargoNix.workspaceMembers."nit".build.override {
             runTests = true;
           };
@@ -421,9 +184,9 @@
             runTests = true;
             features = [ ];
           };
-          contract = contractSnapshot pkgs;
+          contract = (rustFor pkgs).contract;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
-            if ! diff -u ${./web/src/api/types.gen.ts} ${wireTypesTs pkgs}; then
+            if ! diff -u ${./web/src/api/types.gen.ts} ${rust.wireTypes}; then
               echo "web/src/api/types.gen.ts is stale — run: nix run .#gen-types" >&2
               exit 1
             fi
@@ -445,7 +208,7 @@
                   echo "run from the repo root" >&2
                   exit 1
                 fi
-                install -m644 ${wireTypesTs pkgs} web/src/api/types.gen.ts
+                install -m644 ${(rustFor pkgs).wireTypes} web/src/api/types.gen.ts
                 echo "wrote web/src/api/types.gen.ts"
               '';
             }
@@ -454,7 +217,7 @@
 
         gen-wasm = {
           type = "app";
-          program = "${genWasmApp pkgs}/bin/gen-wasm";
+          program = "${(rustFor pkgs).genWasm}/bin/gen-wasm";
         };
 
         release-check = {
