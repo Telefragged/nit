@@ -14,32 +14,19 @@ import {
   ctx as both,
   del,
   msgFile,
+  reviewCtx,
   uiThread,
 } from "../../api/fixtures/builders";
 import type { DiffFile, LineAnchor } from "../../api/types";
 import type { DiffLink, LinkSpan } from "../../lib/diffLink";
 import type { UiThread } from "../../lib/comments";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
-import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
+import { ReviewContext } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
 
 afterEach(cleanup);
 
-const ctx: ReviewCtx = {
-  changeNumber: 1,
-  selected: 2,
-  against: 1,
-  latestRevision: 2,
-  whitespace: "compare",
-  attachKey: "",
-  showRange: () => undefined,
-  link: null,
-  linkHref: () => "",
-  selectLink: () => undefined,
-  editingTarget: null,
-  setEditingTarget: () => false,
-  setEditorDirty: () => undefined,
-};
+const ctx = reviewCtx({ selected: 2, against: 1, latestRevision: 2 });
 
 /** Two hunks with a hidden run of `gap` unchanged lines above the first and
  * another between them — a top separator with no hunk above it, then an
