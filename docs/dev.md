@@ -9,7 +9,7 @@ Checks verify a change, not a green build — `nix build` skips tests
 - `nix develop -c cargo check` — fast inner-loop gate.
 - `nix flake check` — the pre-commit gate: builds the product and runs the
   Rust validators (`test`, `test-nit-types`, `test-nit-wasm`) and the web
-  validators (`web-lint`, `web-test`, `web-screenshots`). Every crate of ours
+  validators (`web-lint`, `web-test`, `web-screenshots`, `web-gallery`). Every crate of ours
   compiles with `clippy-driver` under `-D warnings`, so a lint fails any
   build; the `test*` checks add the test targets and run rustdoc over the
   crate, so a doc test failure or a broken intra-doc link fails there too;
@@ -98,7 +98,51 @@ nit attach screenshots/review-attachments.html --change <number>
 `pkgs.playwright-driver` (the devShell sets `$PLAYWRIGHT_DRIVER_VERSION`) —
 the `web-screenshots` flake check runs it in the sandbox and its
 output _is_ the PNGs, so `nix build .#checks.<system>.web-screenshots` both
-catches a skew and gives you the gallery in `result/`.
+catches a skew and gives you the PNGs in `result/`.
+
+## Component gallery
+
+The gallery renders one component at a time, in a state that a story
+defines. A story is a named export of a `*.story.tsx` file next to
+its component under `web/src/`. It is a plain React component that renders
+the component with fixed data, and with the providers and state that the
+component needs. Its id is the path of the file under `src/` without
+`.story.tsx`, then the export name, for example
+`components/diff/FileRail/Default`.
+
+Run the specs and capture every story:
+
+```sh
+cd web && nix develop -c npm run gallery
+```
+
+The run writes `screenshots/gallery/<id>.png` and
+`screenshots/gallery/<id>.html`. The page contains the whole gallery, with
+every script and stylesheet inline. The page renders its story on load.
+nit shows an attached page in a sandboxed frame, and the scripts of the
+page run in that frame. Attach the page so that the reviewer can click the
+component in nit:
+
+```sh
+nit attach screenshots/gallery/components/diff/FileRail/Default.html --change <number>
+```
+
+The specs are Playwright tests in `web/gallery/*.spec.ts`. The `mount`
+fixture of `@playwright/test` opens the gallery, renders a story, and
+returns a locator for its root. `mount` returns after React commits the
+story, so a spec acts on the page at once:
+
+- Check an element with `one()`, and click it with `clickNow()`
+  (`web/gallery/act.ts`). Both fail at once when the locator matches no
+  element or several.
+- Fetch a value once, then assert on it with `node:assert/strict`. ESLint
+  reports an error for the `expect` of Playwright and for a Playwright wait,
+  because they retry until a timeout (golden rule 13).
+
+The `web-gallery` flake check runs `npm run gallery` in the sandbox. The
+output of the check is the PNGs and the pages. `npm run dev` also serves the
+gallery at `/gallery/`. To render a story there, call
+`mount({ story: "<id>" })` in the browser console.
 
 ## Testing expectations
 

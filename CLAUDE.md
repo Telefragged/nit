@@ -27,7 +27,8 @@ trailer carries identity across rewrites.
    hand-edit that file).
 5. **To see the UI, render it**:
    `cd web && nix develop -c npm run screenshots`, then Read
-   `screenshots/*.png`.
+   `screenshots/*.png`. To see one component, run `npm run gallery` and
+   Read `screenshots/gallery/<id>.png` (docs/dev.md "Component gallery").
 6. **Changes merge through nit itself — the default for _every_ change
    unless the user says otherwise.** Start in a worktree (`.worktrees/<slug>`
    on a `track/<slug>` branch), then drive the review loop with the
