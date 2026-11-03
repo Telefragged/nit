@@ -38,7 +38,7 @@ test("a file row expands to a link per published thread", async ({ mount }) => {
 
 test("selecting a file marks its row as current", async ({ mount }) => {
   const rail = await mount(DEFAULT);
-  await clickNow(rail.getByText("scan.rs"));
+  await clickNow(rail.getByRole("button", { name: "scan.rs", exact: true }));
   const current = await one(rail.locator('[aria-current="true"]'));
   assert.equal(
     await current.getAttribute("data-path"),

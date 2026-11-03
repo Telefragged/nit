@@ -187,8 +187,11 @@ export default function FileRail({
             <span className="rail-toggle" />
           )}
           <FileIcon className="rail-icon" size={14} aria-hidden />
+          {/* The stem and the extension are flex items, so without the
+              label the accessible name has a space between them. */}
           <button
             className="rail-name"
+            aria-label={name}
             onClick={() => {
               onSelect(index);
             }}
