@@ -440,6 +440,20 @@
               ];
             };
           };
+          # A web validator that runs `script` against the web tree. It sets
+          # dontNpmBuild, which disables the build phase (and its preBuild
+          # hook), so the wasm goes in at the head of the install phase.
+          webCheck =
+            pname: env: script:
+            pkgs.buildNpmPackage {
+              pname = "nit-${pname}";
+              inherit (webArgs) version src;
+              inherit (pkgs) nodejs;
+              inherit env;
+              npmDeps = webNpmDeps;
+              dontNpmBuild = true;
+              installPhase = injectWasm pkgs + script;
+            };
         in
         {
           # The release build carries no `+<sha>` suffix, so a commit that
@@ -480,54 +494,21 @@
           # web counterpart to clippy — it mirrors the devShell `npm run lint`,
           # so a stylelint, eslint, or knip regression fails `nix flake check`
           # instead of slipping in.
-          # web-lint/web-test set dontNpmBuild, which disables the build phase
-          # (and its preBuild hook), so inject the wasm at the head of the
-          # install phase that runs the lint/test instead.
-          web-lint = pkgs.buildNpmPackage {
-            pname = "nit-web-lint";
-            inherit (webArgs) version src;
-            inherit (pkgs) nodejs;
-            npmDeps = webNpmDeps;
-            dontNpmBuild = true;
-            installPhase = injectWasm pkgs + "npm run lint > $out";
-          };
-          web-test = pkgs.buildNpmPackage {
-            pname = "nit-web-test";
-            inherit (webArgs) version src;
-            inherit (pkgs) nodejs;
-            npmDeps = webNpmDeps;
-            dontNpmBuild = true;
-            installPhase = injectWasm pkgs + "npm run test > $out";
-          };
+          web-lint = webCheck "web-lint" { } "npm run lint > $out";
+          web-test = webCheck "web-test" { } "npm run test > $out";
           # The same `capture.mjs` agents run locally, but against the nix
           # `playwright-driver` browsers, so a driver/npm-pin skew fails the
           # check. Its output is the PNGs, not a marker file.
-          web-screenshots = pkgs.buildNpmPackage {
-            pname = "nit-web-screenshots";
-            inherit (webArgs) version src;
-            inherit (pkgs) nodejs;
-            npmDeps = webNpmDeps;
-            dontNpmBuild = true;
-            env = browserEnv;
-            installPhase = injectWasm pkgs + ''
-              export HOME=$TMPDIR
-              NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
-            '';
-          };
+          web-screenshots = webCheck "web-screenshots" browserEnv ''
+            export HOME=$TMPDIR
+            NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
+          '';
           # Runs the gallery specs (docs/dev.md "Component gallery"). Its
           # output is the PNG and the page of every story.
-          web-gallery = pkgs.buildNpmPackage {
-            pname = "nit-web-gallery";
-            inherit (webArgs) version src;
-            inherit (pkgs) nodejs;
-            npmDeps = webNpmDeps;
-            dontNpmBuild = true;
-            env = browserEnv;
-            installPhase = injectWasm pkgs + ''
-              export HOME=$TMPDIR
-              npm run gallery -- --output $out
-            '';
-          };
+          web-gallery = webCheck "web-gallery" browserEnv ''
+            export HOME=$TMPDIR
+            npm run gallery -- --output $out
+          '';
           contract = contractSnapshot pkgs;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
             if ! diff -u ${./web/src/api/types.gen.ts} ${wireTypesTs pkgs}; then
