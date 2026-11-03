@@ -54,7 +54,9 @@ jobs:
           name: nit-ci-cache
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           skipPush: ${{ github.event_name != 'push' }}
-      - run: nix flake check
+      # -L prints the build output of each derivation, so the log shows the
+      # check that fails or hangs.
+      - run: nix flake check -L
 
   # Checks the version against the contract changes since the last release,
   # when the version differs from the newest release tag. It needs every tag
