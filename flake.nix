@@ -115,7 +115,7 @@
 
       cargoToml = fromTOML (builtins.readFile ./Cargo.toml);
 
-      # Cargo.nix is generated — don't hand-edit (regen: docs/dev.md). Build
+      # Cargo.nix is generated — don't hand-edit (regen: docs/generated.md). Build
       # with our pinned rustc, not nixpkgs'; the virtual workspace has no
       # rootCrate, so callers select a member via `workspaceMembers."<name>"`.
       # Our own crates (local `src`, not a crates.io `sha256`) compile with
@@ -404,7 +404,7 @@
               # Regenerates Cargo.nix
               crate2nix
 
-              # `gen-wasm`, on PATH here, writes web/src/wasm (docs/dev.md).
+              # `gen-wasm`, on PATH here, writes web/src/wasm (docs/generated.md).
               # wasm-bindgen-cli's version is pinned to nit-wasm's
               # wasm-bindgen dep.
               wasm-bindgen-cli
@@ -553,7 +553,7 @@
             export HOME=$TMPDIR
             NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
           '';
-          # Runs the gallery specs (docs/dev.md "Component gallery"). Its
+          # Runs the gallery specs (docs/web.md "Component gallery"). Its
           # output is the PNG and the page of every story.
           web-gallery = webCheck "gallery" browserEnv ''
             export HOME=$TMPDIR

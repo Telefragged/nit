@@ -28,7 +28,7 @@ trailer carries identity across rewrites.
 5. **To see the UI, render it**:
    `cd web && nix develop -c npm run screenshots`, then Read
    `screenshots/*.png`. To see one component, run `npm run gallery` and
-   Read `screenshots/gallery/<id>.png` (docs/dev.md "Component gallery").
+   Read `screenshots/gallery/<id>.png` (docs/web.md "Component gallery").
 6. **Changes merge through nit itself — the default for _every_ change
    unless the user says otherwise.** Start in a worktree (`.worktrees/<slug>`
    on a `track/<slug>` branch), then drive the review loop with the
@@ -97,7 +97,10 @@ trailer carries identity across rewrites.
 - `crates/nit/` — Rust: axum server, git2 scanning, sqlite state, CLI
 - `web/` — React/TS SPA (Vite)
 - `docs/` — read the one you need:
-  - `dev.md` — verification, formatting, screenshot harness, testing,
-    commit discipline, merging
+  - `dev.md` — verification, formatting, testing, commit discipline,
+    merging: the rules for every change
+  - `web.md` — the screenshot harness and the component gallery
+  - `generated.md` — the generated files, and when to regenerate them
+  - `releases.md` — the public contract, the release check, and releases
   - `design-review-guide.md` — design anti-patterns to catch when reviewing
     code, with bad-vs-good examples — read before a design review
