@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { genWasmPlugin } from "./vite-plugin-gen-wasm";
+import { genWasmPlugin } from "./vite-plugin-gen-wasm.ts";
 
 // Dev mode: vite serves the frontend with HMR and proxies API calls to the
 // rust backend (`cargo run -- serve`). Production: `vite build` output is
