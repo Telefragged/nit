@@ -1,12 +1,13 @@
 # Generated files
 
-## Cargo.nix and npmDepsHash
+## Cargo.nix and the npm hash
 
 The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
 change, regenerate it with `nix develop -c crate2nix generate` and commit it
 in the same change — a stale `Cargo.nix` fails the build fast. Likewise,
-changing `web/package-lock.json` means refreshing `npmDepsHash` in
-`flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`
+changing `web/package-lock.json` means refreshing the `hash` of
+`fetchNpmDeps` in `web/default.nix`
+(`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`
 prints it); a stale hash breaks `nix build` and every
 `nix run '…?ref=main#nit'` CLI invocation.
 
