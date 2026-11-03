@@ -42,6 +42,9 @@ jobs:
       matrix:
         sha: ${{ fromJSON(needs.commits.outputs.shas) }}
     runs-on: ubuntu-latest
+    # The slowest check job that passed took 15 minutes, so a job that runs
+    # twice as long has hung. The default limit of GitHub is 6 hours.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
