@@ -1,4 +1,4 @@
-// The gallery page (docs/dev.md "Component gallery"). Playwright's `mount`
+// The gallery page (docs/web.md "Component gallery"). Playwright's `mount`
 // fixture calls `window.mount` here to render one story into #root.
 
 import { StrictMode, type ComponentType } from "react";

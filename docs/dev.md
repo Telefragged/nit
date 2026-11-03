@@ -1,5 +1,13 @@
 # Development
 
+This page has the rules for every change. Each area has its own page:
+
+- `web.md`: the screenshot harness and the component gallery.
+- `generated.md`: the generated files, and when to regenerate them.
+- `releases.md`: the public contract, the release check, and releases.
+- `design-review-guide.md`: the design anti-patterns to catch in a design
+  review.
+
 ## Verification
 
 Checks verify a change, not a green build — `nix build` skips tests
@@ -21,41 +29,6 @@ Checks verify a change, not a green build — `nix build` skips tests
   commit in `<base>..HEAD`, 8 at a time. CI runs the same checks on every
   commit of a PR.
 
-The crate2nix build file `Cargo.nix` is checked in. After any `Cargo.lock`
-change, regenerate it with `nix develop -c crate2nix generate` and commit it
-in the same change — a stale `Cargo.nix` fails the build fast. Likewise,
-changing `web/package-lock.json` means refreshing `npmDepsHash` in
-`flake.nix` (`nix run nixpkgs#prefetch-npm-deps -- web/package-lock.json`
-prints it); a stale hash breaks `nix build` and every
-`nix run '…?ref=main#nit'` CLI invocation.
-
-The web's wire types (`web/src/api/types.gen.ts`) are generated the same
-way — from `crates/nit-types` via `nix run .#gen-types`, a native
-`cargo test` that runs the crate's `ts`-feature `ts-rs` exporter (no wasm).
-Regenerate and commit it whenever those types change; the `types-drift`
-check fails a stale file.
-
-`nix build .#contract` builds the public contract. `openapi.json` is the
-OpenAPI document that the routes' `#[utoipa::path]` annotations produce, and
-the router registers its routes from the same annotations. `cli.json` is the
-syntax of every `nit` command: its flags, positionals and subcommands.
-`nix build -f release --argstr last <tag> '^*'` compares it with the
-contract at the release tag `last`, and fails when the version in
-`Cargo.toml` is too small a step for the changes. Before 1.0.0, a breaking
-change needs the next minor version and any other change the next patch.
-`result` holds the kind of the changes, and `result-changes` lists them. `nix run .#bump-oasdiff`
-moves the pinned oasdiff to its latest release.
-
-The shared change fold is compiled to WebAssembly (`crates/nit-wasm`) for the
-event-driven change page. `gen-wasm` writes the glue + `.wasm` into
-`web/src/wasm/` — **gitignored** (binary, derived) and injected into every web
-nix build. It's on `PATH` inside the devShell (also runnable standalone as
-`nix run .#gen-wasm`); every `npm run` frontend script generates it on demand,
-so there's no manual step. The `wasm-build` check compiles it under `nix
-flake check`. The `wasm-bindgen-cli` in the devShell and `crates/nit-wasm`'s
-`wasm-bindgen` dep are pinned to the same version — a skew breaks the glue at
-init, not at build.
-
 ## Formatting
 
 `nix develop -c treefmt` formats the tree (`nix fmt` is the same; config in
@@ -76,75 +49,6 @@ Two edges: don't run a bare treefmt before amending a checked-out historic
 commit mid-rebase (it folds later commits' formatting into the amend —
 stage only your files); and keep inline code spans on one line, or prettier
 drops the hanging indent of a wrapped markdown list item.
-
-## Screenshot harness (frontend checking for AI agents)
-
-Agents read PNGs, not browsers. The harness renders every UI state from
-fixtures with no backend, writing `screenshots/*.png` (repo root,
-gitignored); run it and `Read` them:
-
-```sh
-cd web && nix develop -c npm run screenshots
-```
-
-It covers detailed states (drafts, 409s, interdiff); add a capture with
-every new page or state. Each capture also writes `screenshots/<name>.html`:
-the same state as one file, with its CSS inlined and its scripts removed.
-Attach it to a UI change so that the reviewer reads the page in nit:
-
-```sh
-nit attach screenshots/review-attachments.html --change <number>
-```
-
-The npm `@playwright/test` version must match
-`pkgs.playwright-driver` (the devShell sets `$PLAYWRIGHT_DRIVER_VERSION`) —
-the `web-screenshots` flake check runs it in the sandbox and its
-output _is_ the PNGs, so `nix build .#checks.<system>.web-screenshots` both
-catches a skew and gives you the PNGs in `result/`.
-
-## Component gallery
-
-The gallery renders one component at a time, in a state that a story
-defines. A story is a named export of a `*.story.tsx` file next to
-its component under `web/src/`. It is a plain React component that renders
-the component with fixed data, and with the providers and state that the
-component needs. Its id is the path of the file under `src/` without
-`.story.tsx`, then the export name, for example
-`components/diff/FileRail/Default`.
-
-Run the specs and capture every story:
-
-```sh
-cd web && nix develop -c npm run gallery
-```
-
-The run writes `screenshots/gallery/<id>.png` and
-`screenshots/gallery/<id>.html`. The page contains the whole gallery, with
-every script and stylesheet inline. The page renders its story on load.
-nit shows an attached page in a sandboxed frame, and the scripts of the
-page run in that frame. Attach the page so that the reviewer can click the
-component in nit:
-
-```sh
-nit attach screenshots/gallery/components/diff/FileRail/Default.html --change <number>
-```
-
-The specs are Playwright tests in `web/gallery/*.spec.ts`. The `mount`
-fixture of `@playwright/test` opens the gallery, renders a story, and
-returns a locator for its root. `mount` returns after React commits the
-story, so a spec acts on the page at once:
-
-- Check an element with `one()`, and click it with `clickNow()`
-  (`web/gallery/act.ts`). Both fail at once when the locator matches no
-  element or several.
-- Fetch a value once, then assert on it with `node:assert/strict`. ESLint
-  reports an error for the `expect` of Playwright and for a Playwright wait,
-  because they retry until a timeout (golden rule 13).
-
-The `web-gallery` flake check runs `npm run gallery` in the sandbox. The
-output of the check is the PNGs and the pages. `npm run dev` also serves the
-gallery at `/gallery/`. To render a story there, call
-`mount({ story: "<id>" })` in the browser console.
 
 ## Testing expectations
 
@@ -241,20 +145,3 @@ regardless of size. The only exits are an explicit, up-front "skip nit" /
 Standing exemptions (same discipline, still green):
 
 - _(none yet)_
-
-## Releases
-
-A release starts from one edit: raise `workspace.package.version` in `Cargo.toml`. Then run `nix develop -c cargo check` to update `Cargo.lock` and `nix develop -c crate2nix generate` to update `Cargo.nix`, and open a PR. Run `nix run .#release-check` to see the result of the CI check before you push.
-
-The `semver` job runs `nix run .#release-check` on every PR. When the version differs from the newest release tag, the script checks it against the contract changes since that tag (see "Verification"). Release tags are the bare version, for example `0.2.0`.
-
-After the merge, `.github/workflows/release.yml` runs the same check. When the commit is a release, it builds `.#nit-release`, creates the tag and the GitHub release, and uploads `nit-x86_64-linux` with its checksum and a build provenance attestation. To confirm that a binary came from that workflow, run:
-
-```sh
-gh attestation verify nit-x86_64-linux --repo Telefragged/nit
-```
-
-The repository settings carry two rulesets:
-
-- `main`: no direct push and no force push, the `nix` and `semver` jobs are required status checks, and a PR must be up to date with `main` before it merges. A repository owned by a personal account has no merge queue.
-- Tags `*.*.*`: no update and no deletion. A ruleset cannot exempt the workflow token, so tag creation stays open for the release workflow.
