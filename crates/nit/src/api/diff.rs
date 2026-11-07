@@ -11,7 +11,7 @@ use git2::{Delta, Repository, Tree};
 
 use nit_types::diff::{Diff, DiffFile, Hunk, Line};
 use nit_types::domain::{AttachmentHash, Sha};
-use nit_types::domain::{DiffView, FileStatus, LineKind};
+use nit_types::domain::{FileStatus, LineKind, Whitespace};
 
 use super::attachments::Blobs;
 use crate::hunks::{self, wire_line};
@@ -144,7 +144,7 @@ pub fn render(
     repo: &Repository,
     diff: &git2::Diff,
     context: u32,
-    view: DiffView,
+    whitespace: Whitespace,
     keep: impl Fn(&str) -> bool,
 ) -> Result<Diff> {
     let mut files = Vec::new();
@@ -155,7 +155,7 @@ pub fn render(
         if !keep(&file.path) {
             continue;
         }
-        files.push(render_delta(repo, &delta, file, context, view)?);
+        files.push(render_delta(repo, &delta, file, context, whitespace)?);
     }
     Ok(Diff { files })
 }
@@ -173,12 +173,12 @@ pub(super) fn render_delta(
     delta: &git2::DiffDelta,
     mut file: DiffFile,
     context: u32,
-    view: DiffView,
+    whitespace: Whitespace,
 ) -> Result<DiffFile> {
     let old = blob_bytes(repo, &file.path, delta.old_file().id())?;
     let new = blob_bytes(repo, &file.path, delta.new_file().id())?;
     if let (Some(old), Some(new)) = (old, new) {
-        fill_lines(&mut file, &old, &new, context, view);
+        fill_lines(&mut file, &old, &new, context, whitespace);
     }
     Ok(file)
 }
@@ -192,13 +192,13 @@ pub(super) fn fill_lines(
     old: &[u8],
     new: &[u8],
     context: u32,
-    view: DiffView,
+    whitespace: Whitespace,
 ) {
     let (old, new) = (String::from_utf8_lossy(old), String::from_utf8_lossy(new));
     file.binary = false;
     file.old_total = old.lines().count() as u64;
     file.new_total = new.lines().count() as u64;
-    file.hunks = hunks::of_file(&old, &new, context, view);
+    file.hunks = hunks::of_file(&old, &new, context, whitespace);
     (file.additions, file.deletions) = stats(&file.hunks);
 }
 
@@ -265,7 +265,7 @@ pub fn commit_msg_file(old: Option<&str>, new: &str, context: u32) -> DiffFile {
         old.unwrap_or_default(),
         new,
         context,
-        DiffView::default(),
+        Whitespace::default(),
     );
     file
 }
@@ -280,13 +280,13 @@ pub(super) fn attachment_file(
     old: Option<&AttachmentHash>,
     new: Option<&AttachmentHash>,
     context: u32,
-    view: DiffView,
+    whitespace: Whitespace,
 ) -> DiffFile {
     let path = format!("{ATTACHMENT_PREFIX}{name}");
     let mut file = outside_tree(path, old.is_some(), new.is_some());
     let text = |hash: Option<&AttachmentHash>| hash.map_or(Some(String::new()), |h| blobs.text(h));
     if let (Some(old), Some(new)) = (text(old), text(new)) {
-        fill_text(&mut file, &old, &new, context, view);
+        fill_text(&mut file, &old, &new, context, whitespace);
     }
     file
 }
@@ -317,8 +317,8 @@ fn outside_tree(path: String, old: bool, new: bool) -> DiffFile {
 ///
 /// Identical texts render as a single all-`context` hunk, so the file
 /// stays visible and commentable.
-fn fill_text(file: &mut DiffFile, old: &str, new: &str, context: u32, view: DiffView) {
-    fill_lines(file, old.as_bytes(), new.as_bytes(), context, view);
+fn fill_text(file: &mut DiffFile, old: &str, new: &str, context: u32, whitespace: Whitespace) {
+    fill_lines(file, old.as_bytes(), new.as_bytes(), context, whitespace);
     if file.hunks.is_empty() && !new.is_empty() {
         let lines: Vec<Line> = new
             .lines()
@@ -426,14 +426,14 @@ mod tests {
 
     fn shown(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
-        render(repo, &diff, 3, DiffView::default(), |_| true).expect("diff renders")
+        render(repo, &diff, 3, Whitespace::default(), |_| true).expect("diff renders")
     }
 
     /// One file's diff with every unchanged line kept as context — what the UI
     /// reveals from when expanding a hunk's surroundings.
     fn whole(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
-        render(repo, &diff, u32::MAX, DiffView::default(), |p| p == only).expect("diff renders")
+        render(repo, &diff, u32::MAX, Whitespace::default(), |p| p == only).expect("diff renders")
     }
 
     fn lines(n: std::ops::RangeInclusive<u64>) -> String {
