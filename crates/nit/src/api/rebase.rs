@@ -52,7 +52,7 @@ use git2::{Delta, Oid, Repository, Tree};
 
 use nit_types::diff::{Diff, DiffFile, Line};
 use nit_types::domain::Sha;
-use nit_types::domain::{DiffView, LineKind};
+use nit_types::domain::{LineKind, Whitespace};
 
 use super::diff;
 use super::position::{Edit, Span, buffer_edits, project_clipped};
@@ -127,8 +127,8 @@ fn file_drift(bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> DriftRanges {
 /// Whether any line edit of `m → n` escapes the drift.
 ///
 /// The verdict [`tag`] reaches from rendered hunks, read off the edits
-/// themselves instead, so it does not depend on the [`DiffView`] the hunks
-/// are drawn in.
+/// themselves instead, so it does not depend on the [`Whitespace`] setting
+/// of the diff.
 fn own_edit(bm: &[u8], bn: &[u8], (old, new): &DriftRanges) -> bool {
     buffer_edits(bm, bn).iter().any(|edit| {
         edit.before.clone().any(|line| !drifted(old, line))
@@ -189,7 +189,7 @@ pub fn contain(
     m: &Rev,
     n: &Rev,
     context: u32,
-    view: DiffView,
+    whitespace: Whitespace,
     keep: impl Fn(&str) -> bool,
 ) -> Result<Diff> {
     let (Some(tree_m), Some(tree_n), Some(parent_m), Some(parent_n)) = (
@@ -262,7 +262,7 @@ pub fn contain(
         // disagreed) is left plain: diffing unrelated parent blobs could
         // claim the change's real edits as drift.
         if base.get(name_pm).map(String::as_str) != Some(name_pn) {
-            files.push(diff::render_delta(repo, &delta, file, context, view)?);
+            files.push(diff::render_delta(repo, &delta, file, context, whitespace)?);
             continue;
         }
         // Gerrit's implicitRename: a rename either side's delta produced is
@@ -288,12 +288,12 @@ pub fn contain(
             blob(name_n, oid_n)?,
         ) else {
             // Binary on some side.
-            files.push(diff::render_delta(repo, &delta, file, context, view)?);
+            files.push(diff::render_delta(repo, &delta, file, context, whitespace)?);
             continue;
         };
         let ranges = file_drift(&bpm, &bm, &bpn, &bn);
         let real_edit = own_edit(&bm, &bn, &ranges);
-        diff::fill_lines(&mut file, &bm, &bn, context, view);
+        diff::fill_lines(&mut file, &bm, &bn, context, whitespace);
         tag(&mut file, &ranges);
         // A rename the change made is its own work even when every line
         // inside it drifted.

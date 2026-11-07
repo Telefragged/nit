@@ -44,28 +44,6 @@ pub enum Whitespace {
     Ignore,
 }
 
-/// How a reviewer asked for a diff to be drawn.
-///
-/// Each setting is independent, and a request that omits one takes its
-/// default.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Default,
-    Serialize,
-    Deserialize,
-    utoipa::ToSchema,
-    utoipa::IntoParams,
-)]
-#[into_params(parameter_in = Query)]
-pub struct DiffView {
-    #[serde(default)]
-    pub whitespace: Whitespace,
-}
-
 /// A diff line's role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

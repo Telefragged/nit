@@ -21,7 +21,7 @@ use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
 use nit_types::domain::ThreadOrigin;
-use nit_types::domain::{DiffView, Whitespace};
+use nit_types::domain::Whitespace;
 use nit_types::domain::{LogPayload, TagsPayload};
 use nit_types::log::Log;
 
@@ -169,12 +169,11 @@ pub(super) async fn get_change_drafts(
 #[into_params(parameter_in = Query)]
 pub(super) struct DiffQuery {
     against: Option<RevisionNumber>,
-    #[serde(flatten)]
-    #[param(ignore)]
-    view: DiffView,
+    #[serde(default)]
+    whitespace: Whitespace,
 }
 
-#[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/diff", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), DiffQuery, DiffView), responses((status = 200, body = Diff)))]
+#[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/diff", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), DiffQuery), responses((status = 200, body = Diff)))]
 pub(super) async fn revision_diff(
     State(state): State<Arc<AppState>>,
     AppPath((id, n)): AppPath<(ChangeNumber, RevisionNumber)>,
@@ -183,7 +182,7 @@ pub(super) async fn revision_diff(
     with_conn(state.pool(), move |conn| {
         let change = change_or_404(conn, id)?;
         let revs = resolve_revs(conn, &change, n, q.against)?;
-        let mut wire = contained_diff(&revs, 3, q.view, None)?;
+        let mut wire = contained_diff(&revs, 3, q.whitespace, None)?;
         // After tagging: the message and the attachments are not git
         // deltas, so they are never drift.
         let shown = |r: Option<&RevisionProjection>| -> BTreeMap<_, _> {
@@ -208,7 +207,7 @@ pub(super) async fn revision_diff(
                 old.get(name),
                 new.get(name),
                 3,
-                q.view,
+                q.whitespace,
             )
         }));
         wire.files.insert(
@@ -264,9 +263,6 @@ pub(super) async fn revision_lines(
             path: q.path,
             old_path: q.old_path,
         };
-        let view = DiffView {
-            whitespace: q.whitespace,
-        };
         let file = if wanted.path == diff::COMMIT_MSG_PATH {
             Some(diff::commit_msg_file(
                 revs.against.as_ref().map(|a| a.message.as_str()),
@@ -284,10 +280,10 @@ pub(super) async fn revision_lines(
                 hash(revs.against.as_ref()).as_ref(),
                 hash(Some(&revs.revision)).as_ref(),
                 u32::MAX,
-                view,
+                q.whitespace,
             ))
         } else {
-            contained_diff(&revs, u32::MAX, view, Some(&wanted))?
+            contained_diff(&revs, u32::MAX, q.whitespace, Some(&wanted))?
                 .files
                 .into_iter()
                 .find(|f| f.path == wanted.path)
@@ -360,7 +356,7 @@ fn resolve_revs(
 fn contained_diff(
     revs: &Revs,
     context: u32,
-    view: DiffView,
+    whitespace: Whitespace,
     only: Option<&Wanted>,
 ) -> Result<Diff, Error> {
     let repo = open_repo(&revs.git_dir)?;
@@ -375,7 +371,7 @@ fn contained_diff(
     let names = only.map(Wanted::names);
     let git = diff::git_diff(&repo, &old_tree, &new_tree, names.as_deref())?;
     let shown = |path: &str| only.is_none_or(|w| w.path == path);
-    let plain = || diff::render(&repo, &git, context, view, shown);
+    let plain = || diff::render(&repo, &git, context, whitespace, shown);
 
     let wire = match revs
         .against
@@ -383,11 +379,19 @@ fn contained_diff(
         .filter(|a| a.parent_sha != revision.parent_sha)
     {
         None => plain()?,
-        Some(m) => rebase::contain(&repo, &git, &at(m), &at(revision), context, view, shown)
-            .or_else(|e| {
-                tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
-                plain()
-            })?,
+        Some(m) => rebase::contain(
+            &repo,
+            &git,
+            &at(m),
+            &at(revision),
+            context,
+            whitespace,
+            shown,
+        )
+        .or_else(|e| {
+            tracing::warn!("rebase-aware interdiff analysis failed; serving plain diff: {e:#}");
+            plain()
+        })?,
     };
     Ok(wire)
 }
@@ -456,29 +460,4 @@ fn open_repo(git_dir: &str) -> Result<Repository, Error> {
 
 fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Result<Tree<'r>, Error> {
     diff::commit_tree(repo, sha).ok_or_else(|| Error::internal(format!("tree for {sha} missing")))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A flattened field makes serde buffer the whole query before it reads
-    /// any of it, and a buffered number arrives as a string. The parser has
-    /// to convert it back, or `against` fails as soon as another field is
-    /// flattened beside it.
-    #[test]
-    fn a_diff_request_reads_its_revision_beside_its_view() {
-        let q: DiffQuery =
-            serde_html_form::from_str("against=1&whitespace=ignore").expect("query parses");
-        assert_eq!(q.against.map(RevisionNumber::get), Some(1));
-        assert_eq!(
-            q.view,
-            DiffView {
-                whitespace: Whitespace::Ignore,
-            }
-        );
-
-        let silent: DiffQuery = serde_html_form::from_str("").expect("empty query parses");
-        assert_eq!(silent.view, DiffView::default());
-    }
 }

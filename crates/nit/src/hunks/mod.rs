@@ -9,14 +9,14 @@ use std::ops::Range;
 use imara_diff::{Algorithm, InternedInput};
 
 use nit_types::diff::{Hunk, Line};
-use nit_types::domain::{DiffView, LineKind, Whitespace};
+use nit_types::domain::{LineKind, Whitespace};
 
 /// The hunks of `old → new`, each with `context` unchanged lines around it.
 #[must_use]
-pub fn of_file(old: &str, new: &str, context: u32, view: DiffView) -> Vec<Hunk> {
+pub fn of_file(old: &str, new: &str, context: u32, whitespace: Whitespace) -> Vec<Hunk> {
     let before: Vec<&str> = old.split_inclusive('\n').collect();
     let after: Vec<&str> = new.split_inclusive('\n').collect();
-    line_hunks(&before, &after, context, view.whitespace)
+    line_hunks(&before, &after, context, whitespace)
 }
 
 /// The line diff `old → new`, as the ranges of changed lines on each side.
@@ -157,28 +157,22 @@ mod tests {
 
     const BEFORE: &str = "fn a() {\n    one();\n    two();\n}\n";
 
-    fn ignoring_whitespace() -> DiffView {
-        DiffView {
-            whitespace: Whitespace::Ignore,
-        }
-    }
-
     #[test]
     fn a_re_indented_body_does_not_reach_the_diff() {
         let after = "fn a() {\n        one();\n        two();\n}\n";
         assert_eq!(
-            of_file(BEFORE, after, 3, DiffView::default()).len(),
+            of_file(BEFORE, after, 3, Whitespace::Compare).len(),
             1,
             "compared whole, the two indentations differ"
         );
-        assert!(of_file(BEFORE, after, 3, ignoring_whitespace()).is_empty());
+        assert!(of_file(BEFORE, after, 3, Whitespace::Ignore).is_empty());
     }
 
     #[test]
     fn an_ignored_line_shows_the_new_side() {
         // Line 2 is re-indented alone; line 3 is really edited.
         let after = "fn a() {\n        one();\n    three();\n}\n";
-        let hunks = of_file(BEFORE, after, 3, ignoring_whitespace());
+        let hunks = of_file(BEFORE, after, 3, Whitespace::Ignore);
 
         let kinds: Vec<_> = hunks[0]
             .lines
