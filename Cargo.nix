@@ -134,7 +134,7 @@ rec {
           "perf-literal" = [ "dep:memchr" ];
           "std" = [ "memchr?/std" ];
         };
-        resolvedDefaultFeatures = [ "perf-literal" "std" ];
+        resolvedDefaultFeatures = [ "std" ];
       };
       "annotate-snippets" = rec {
         crateName = "annotate-snippets";
@@ -3814,26 +3814,6 @@ rec {
             features = [ "env-filter" ];
           }
           {
-            name = "tree-sitter";
-            packageId = "tree-sitter";
-          }
-          {
-            name = "tree-sitter-nix";
-            packageId = "tree-sitter-nix";
-          }
-          {
-            name = "tree-sitter-python";
-            packageId = "tree-sitter-python";
-          }
-          {
-            name = "tree-sitter-rust";
-            packageId = "tree-sitter-rust";
-          }
-          {
-            name = "tree-sitter-typescript";
-            packageId = "tree-sitter-typescript";
-          }
-          {
             name = "tungstenite";
             packageId = "tungstenite 0.30.0";
           }
@@ -4392,64 +4372,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "os_rng" "std" ];
       };
-      "regex" = rec {
-        crateName = "regex";
-        version = "1.13.1";
-        edition = "2021";
-        sha256 = "1391a0a4100ik8cp7l577p3ip3haqq03rd9c5vdr7vcfdixj687h";
-        authors = [
-          "The Rust Project Developers"
-          "Andrew Gallant <jamslam@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "aho-corasick";
-            packageId = "aho-corasick";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "memchr";
-            packageId = "memchr";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "regex-automata";
-            packageId = "regex-automata";
-            usesDefaultFeatures = false;
-            features = [ "alloc" "syntax" "meta" "nfa-pikevm" ];
-          }
-          {
-            name = "regex-syntax";
-            packageId = "regex-syntax";
-            usesDefaultFeatures = false;
-          }
-        ];
-        features = {
-          "default" = [ "std" "perf" "unicode" "regex-syntax/default" ];
-          "logging" = [ "aho-corasick?/logging" "memchr?/logging" "regex-automata/logging" ];
-          "perf" = [ "perf-cache" "perf-dfa" "perf-onepass" "perf-backtrack" "perf-inline" "perf-literal" ];
-          "perf-backtrack" = [ "regex-automata/nfa-backtrack" ];
-          "perf-dfa" = [ "regex-automata/hybrid" ];
-          "perf-dfa-full" = [ "regex-automata/dfa-build" "regex-automata/dfa-search" ];
-          "perf-inline" = [ "regex-automata/perf-inline" ];
-          "perf-literal" = [ "dep:aho-corasick" "dep:memchr" "regex-automata/perf-literal" ];
-          "perf-onepass" = [ "regex-automata/dfa-onepass" ];
-          "std" = [ "aho-corasick?/std" "memchr?/std" "regex-automata/std" "regex-syntax/std" ];
-          "unicode" = [ "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" "regex-automata/unicode" "regex-syntax/unicode" ];
-          "unicode-age" = [ "regex-automata/unicode-age" "regex-syntax/unicode-age" ];
-          "unicode-bool" = [ "regex-automata/unicode-bool" "regex-syntax/unicode-bool" ];
-          "unicode-case" = [ "regex-automata/unicode-case" "regex-syntax/unicode-case" ];
-          "unicode-gencat" = [ "regex-automata/unicode-gencat" "regex-syntax/unicode-gencat" ];
-          "unicode-perl" = [ "regex-automata/unicode-perl" "regex-automata/unicode-word-boundary" "regex-syntax/unicode-perl" ];
-          "unicode-script" = [ "regex-automata/unicode-script" "regex-syntax/unicode-script" ];
-          "unicode-segment" = [ "regex-automata/unicode-segment" "regex-syntax/unicode-segment" ];
-          "unstable" = [ "pattern" ];
-          "use_std" = [ "std" ];
-        };
-        resolvedDefaultFeatures = [ "perf" "perf-backtrack" "perf-cache" "perf-dfa" "perf-inline" "perf-literal" "perf-onepass" "std" "unicode" "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" ];
-      };
       "regex-automata" = rec {
         crateName = "regex-automata";
         version = "0.4.18";
@@ -4509,7 +4431,7 @@ rec {
           "unicode-script" = [ "regex-syntax?/unicode-script" ];
           "unicode-segment" = [ "regex-syntax?/unicode-segment" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "dfa-build" "dfa-onepass" "dfa-search" "hybrid" "meta" "nfa-backtrack" "nfa-pikevm" "nfa-thompson" "perf-inline" "perf-literal" "perf-literal-multisubstring" "perf-literal-substring" "std" "syntax" "unicode" "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" "unicode-word-boundary" ];
+        resolvedDefaultFeatures = [ "alloc" "dfa-build" "dfa-search" "nfa-thompson" "std" "syntax" ];
       };
       "regex-syntax" = rec {
         crateName = "regex-syntax";
@@ -4526,7 +4448,7 @@ rec {
           "default" = [ "std" "unicode" ];
           "unicode" = [ "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" ];
         };
-        resolvedDefaultFeatures = [ "std" "unicode" "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" ];
+        resolvedDefaultFeatures = [ "std" ];
       };
       "rsqlite-vfs" = rec {
         crateName = "rsqlite-vfs";
@@ -4948,11 +4870,6 @@ rec {
         ];
         dependencies = [
           {
-            name = "indexmap";
-            packageId = "indexmap";
-            optional = true;
-          }
-          {
             name = "itoa";
             packageId = "itoa";
           }
@@ -4991,7 +4908,7 @@ rec {
           "preserve_order" = [ "indexmap" "std" ];
           "std" = [ "memchr/std" "serde_core/std" ];
         };
-        resolvedDefaultFeatures = [ "default" "indexmap" "preserve_order" "raw_value" "std" ];
+        resolvedDefaultFeatures = [ "default" "raw_value" "std" ];
       };
       "serde_path_to_error" = rec {
         crateName = "serde_path_to_error";
@@ -5295,19 +5212,6 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
-          "std" = [ "alloc" ];
-        };
-      };
-      "streaming-iterator" = rec {
-        crateName = "streaming-iterator";
-        version = "0.1.9";
-        edition = "2021";
-        sha256 = "0845zdv8qb7zwqzglpqc0830i43xh3fb6vqms155wz85qfvk28ib";
-        libName = "streaming_iterator";
-        authors = [
-          "Steven Fackler <sfackler@gmail.com>"
-        ];
-        features = {
           "std" = [ "alloc" ];
         };
       };
@@ -6355,169 +6259,6 @@ rec {
           "valuable_crate" = [ "dep:valuable_crate" ];
         };
         resolvedDefaultFeatures = [ "alloc" "ansi" "default" "env-filter" "fmt" "matchers" "nu-ansi-term" "once_cell" "registry" "sharded-slab" "smallvec" "std" "thread_local" "tracing" "tracing-log" ];
-      };
-      "tree-sitter" = rec {
-        crateName = "tree-sitter";
-        version = "0.27.0";
-        edition = "2024";
-        links = "tree-sitter";
-        sha256 = "07c592cdga4nd585kb662674mkmb5vv1j9ih2w6vmvaq0176hf10";
-        build = "binding_rust/build.rs";
-        libName = "tree_sitter";
-        libPath = "binding_rust/lib.rs";
-        authors = [
-          "Max Brunsfeld <maxbrunsfeld@gmail.com>"
-          "Amaan Qureshi <amaanq12@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "regex";
-            packageId = "regex";
-            usesDefaultFeatures = false;
-            features = [ "unicode" ];
-          }
-          {
-            name = "streaming-iterator";
-            packageId = "streaming-iterator";
-          }
-          {
-            name = "tree-sitter-language";
-            packageId = "tree-sitter-language";
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "cc";
-            packageId = "cc";
-          }
-          {
-            name = "serde_json";
-            packageId = "serde_json";
-            features = [ "preserve_order" ];
-          }
-        ];
-        features = {
-          "bindgen" = [ "dep:bindgen" ];
-          "default" = [ "std" ];
-          "std" = [ "regex/std" "regex/perf" ];
-          "wasm" = [ "std" "wasmtime-c-api" ];
-          "wasmtime-c-api" = [ "dep:wasmtime-c-api" ];
-        };
-        resolvedDefaultFeatures = [ "default" "std" ];
-      };
-      "tree-sitter-language" = rec {
-        crateName = "tree-sitter-language";
-        version = "0.1.8";
-        edition = "2024";
-        links = "tree-sitter-language";
-        sha256 = "10f0v84sqy7ll1klxr9rxyfkav854zsq53qrwlxf81nqzpv1n3fa";
-        libName = "tree_sitter_language";
-        libPath = "src/language.rs";
-        authors = [
-          "Max Brunsfeld <maxbrunsfeld@gmail.com>"
-          "Amaan Qureshi <amaanq12@gmail.com>"
-        ];
-
-      };
-      "tree-sitter-nix" = rec {
-        crateName = "tree-sitter-nix";
-        version = "0.3.0";
-        edition = "2018";
-        sha256 = "1qrdv5d7d1ldaicfvvl4gqpsbdsav0si1k8c79lgd61s7xrsjlj9";
-        build = "bindings/rust/build.rs";
-        libName = "tree_sitter_nix";
-        libPath = "bindings/rust/lib.rs";
-        dependencies = [
-          {
-            name = "tree-sitter-language";
-            packageId = "tree-sitter-language";
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "cc";
-            packageId = "cc";
-          }
-        ];
-
-      };
-      "tree-sitter-python" = rec {
-        crateName = "tree-sitter-python";
-        version = "0.25.0";
-        edition = "2021";
-        sha256 = "072anxf7f3wn2jzpa1c8fnnskhwjjkd4qvzlc2zl1rsjjv9mzy3b";
-        build = "bindings/rust/build.rs";
-        libName = "tree_sitter_python";
-        libPath = "bindings/rust/lib.rs";
-        authors = [
-          "Max Brunsfeld <maxbrunsfeld@gmail.com>"
-          "Amaan Qureshi <amaanq12@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "tree-sitter-language";
-            packageId = "tree-sitter-language";
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "cc";
-            packageId = "cc";
-          }
-        ];
-
-      };
-      "tree-sitter-rust" = rec {
-        crateName = "tree-sitter-rust";
-        version = "0.24.2";
-        edition = "2021";
-        sha256 = "0i8f28d2gpckdx094pvfzb6by38j65sjriiab313whh7prymg7j3";
-        build = "bindings/rust/build.rs";
-        libName = "tree_sitter_rust";
-        libPath = "bindings/rust/lib.rs";
-        authors = [
-          "Max Brunsfeld <maxbrunsfeld@gmail.com>"
-          "Amaan Qureshi <amaanq12@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "tree-sitter-language";
-            packageId = "tree-sitter-language";
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "cc";
-            packageId = "cc";
-          }
-        ];
-
-      };
-      "tree-sitter-typescript" = rec {
-        crateName = "tree-sitter-typescript";
-        version = "0.23.2";
-        edition = "2021";
-        sha256 = "1zsyaxx3v1sd8gx2zkscwv6z1sq2nvccqpvd8k67ayllipnpcpvc";
-        build = "bindings/rust/build.rs";
-        libName = "tree_sitter_typescript";
-        libPath = "bindings/rust/lib.rs";
-        authors = [
-          "Max Brunsfeld <maxbrunsfeld@gmail.com>"
-          "Amaan Qureshi <amaanq12@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "tree-sitter-language";
-            packageId = "tree-sitter-language";
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "cc";
-            packageId = "cc";
-          }
-        ];
-
       };
       "ts-rs" = rec {
         crateName = "ts-rs";

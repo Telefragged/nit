@@ -4,27 +4,18 @@
 //! shapes around them; this module owns which lines a diff compares and
 //! where the hunk boundaries fall between them.
 
-mod outline;
-
 use std::ops::Range;
 
 use imara_diff::{Algorithm, InternedInput};
 
 use nit_types::diff::{Hunk, Line};
-use nit_types::domain::{DiffMode, DiffView, LineKind, Whitespace};
-
-use outline::outline;
+use nit_types::domain::{DiffView, LineKind, Whitespace};
 
 /// The hunks of `old → new`, each with `context` unchanged lines around it.
-///
-/// Under [`DiffMode::Outline`] both sides are collapsed before they are
-/// diffed, so the hunks describe the change to the file's outline. `path`
-/// names the file, which is what picks the grammar the collapse parses it
-/// with.
 #[must_use]
-pub fn of_file(path: &str, old: &str, new: &str, context: u32, view: DiffView) -> Vec<Hunk> {
-    let before = file_lines(path, old, view.mode);
-    let after = file_lines(path, new, view.mode);
+pub fn of_file(old: &str, new: &str, context: u32, view: DiffView) -> Vec<Hunk> {
+    let before: Vec<&str> = old.split_inclusive('\n').collect();
+    let after: Vec<&str> = new.split_inclusive('\n').collect();
     line_hunks(&before, &after, context, view.whitespace)
 }
 
@@ -43,39 +34,6 @@ pub fn line_edits<T: AsRef<[u8]>>(input: &InternedInput<T>) -> Vec<imara_diff::H
     diff.hunks().collect()
 }
 
-/// One line of a file: its text, and the 1-based line it holds there.
-///
-/// A full diff reads every line, so the numbers ascend by one. An outline
-/// reads only the lines its collapse kept, and each of those holds the
-/// number it had in the file it was read from. Any other number would
-/// anchor a comment to a line that is not the one shown.
-struct FileLine<'a> {
-    number: u64,
-    text: &'a str,
-}
-
-/// The lines of `text` that a diff drawn in `mode` reads.
-fn file_lines<'a>(path: &str, text: &'a str, mode: DiffMode) -> Vec<FileLine<'a>> {
-    match mode {
-        DiffMode::Full => text
-            .split_inclusive('\n')
-            .enumerate()
-            .map(|(i, text)| FileLine {
-                number: i as u64 + 1,
-                text,
-            })
-            .collect(),
-        DiffMode::Outline => {
-            let (numbers, lines) = outline(path, text);
-            numbers
-                .into_iter()
-                .zip(lines)
-                .map(|(number, text)| FileLine { number, text })
-                .collect()
-        }
-    }
-}
-
 /// The text a line is compared by: the line itself, or the line with its
 /// whitespace removed.
 fn compared(line: &str, whitespace: Whitespace) -> String {
@@ -90,30 +48,17 @@ fn compared(line: &str, whitespace: Whitespace) -> String {
 /// Each run of changed lines with `context` unchanged lines on either
 /// side, runs closer than twice that merged into one hunk (git's
 /// grouping, so a hunk never shows the same line twice).
-///
-/// A hunk is always consecutive on each side, so a body an outline
-/// collapsed falls *between* two hunks — the same shape as context the
-/// diff does not show, which the client already counts and expands.
-fn line_hunks(
-    before: &[FileLine],
-    after: &[FileLine],
-    context: u32,
-    whitespace: Whitespace,
-) -> Vec<Hunk> {
+fn line_hunks(before: &[&str], after: &[&str], context: u32, whitespace: Whitespace) -> Vec<Hunk> {
     let mut input = InternedInput::default();
-    input.update_before(before.iter().map(|line| compared(line.text, whitespace)));
-    input.update_after(after.iter().map(|line| compared(line.text, whitespace)));
+    input.update_before(before.iter().map(|line| compared(line, whitespace)));
+    input.update_after(after.iter().map(|line| compared(line, whitespace)));
     let edits: Vec<(Range<usize>, Range<usize>)> = line_edits(&input)
         .into_iter()
         .map(|h| (range(h.before), range(h.after)))
         .collect();
     // The lines carry their separator; the wire text never does.
-    let text = |line: &FileLine<'_>| {
-        line.text
-            .strip_suffix('\n')
-            .unwrap_or(line.text)
-            .to_string()
-    };
+    let text = |line: &str| line.strip_suffix('\n').unwrap_or(line).to_string();
+    let number = |index: usize| Some(index as u64 + 1);
     let ctx = context as usize;
 
     // The header is git's default rule: the nearest line above the hunk whose
@@ -124,30 +69,26 @@ fn line_hunks(
     let (mut scanned, mut header) = (0usize, "");
     let mut header_above = |line: usize| {
         for read in &before[scanned..line] {
-            if read
-                .text
-                .starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$')
-            {
-                header = read.text.trim_end();
+            if read.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$') {
+                header = read.trim_end();
             }
         }
         scanned = line;
         header.to_string()
     };
 
-    let context_upto = |out: &mut Vec<(Line, usize)>, b: &mut usize, a: &mut usize, upto: usize| {
+    let context_upto = |out: &mut Vec<Line>, b: &mut usize, a: &mut usize, upto: usize| {
         while *b < upto {
             // Under `Whitespace::Ignore` a line the change only re-indented
             // is context, and its two sides differ. The reviewer reads the
             // file as the change leaves it, so the text shown is the new
             // side's.
-            let line = wire_line(
+            out.push(wire_line(
                 LineKind::Context,
-                Some(before[*b].number),
-                Some(after[*a].number),
-                text(&after[*a]),
-            );
-            out.push((line, *b));
+                number(*b),
+                number(*a),
+                text(after[*a]),
+            ));
             *b += 1;
             *a += 1;
         }
@@ -163,86 +104,35 @@ fn line_hunks(
         let (before_start, after_start) = (first.0.start - back, first.1.start - back);
         let (mut b, mut a) = (before_start, after_start);
 
-        // Each line with the before-index it was read at, which is where its
-        // hunk's header is searched from.
-        let mut emitted: Vec<(Line, usize)> = Vec::new();
+        let mut lines = Vec::new();
         for (dels, adds) in group {
-            context_upto(&mut emitted, &mut b, &mut a, dels.start);
+            context_upto(&mut lines, &mut b, &mut a, dels.start);
             for i in dels.clone() {
-                let line = wire_line(
-                    LineKind::Del,
-                    Some(before[i].number),
-                    None,
-                    text(&before[i]),
-                );
-                emitted.push((line, i));
+                lines.push(wire_line(LineKind::Del, number(i), None, text(before[i])));
             }
             for i in adds.clone() {
-                let line = wire_line(LineKind::Add, None, Some(after[i].number), text(&after[i]));
-                emitted.push((line, b));
+                lines.push(wire_line(LineKind::Add, None, number(i), text(after[i])));
             }
             (b, a) = (dels.end, adds.end);
         }
-        context_upto(&mut emitted, &mut b, &mut a, before_end);
-        hunks.extend(contiguous_hunks(emitted, &mut header_above));
-    }
-    hunks
-}
-
-/// Splits a group's lines into hunks that skip no file line.
-///
-/// A collapsed body is a run the lines step over, and stepping over a run is
-/// what a hunk boundary already means — so the diff carries it as the gap
-/// between two hunks rather than as anything new. A piece left with no
-/// change of its own is context the collapse stranded, and is dropped.
-fn contiguous_hunks(
-    emitted: Vec<(Line, usize)>,
-    header_above: &mut impl FnMut(usize) -> String,
-) -> Vec<Hunk> {
-    let steps_over = |last: Option<u64>, at: Option<u64>| matches!((last, at), (Some(last), Some(at)) if at > last + 1);
-    let mut hunks: Vec<Hunk> = Vec::new();
-    let (mut piece, mut piece_at) = (Vec::new(), 0);
-    let (mut last_old, mut last_new) = (None, None);
-    let (mut before_old, mut before_new) = (0, 0);
-
-    let mut close = |piece: &mut Vec<Line>, at, before_old, before_new| {
-        if !piece.iter().any(|l: &Line| l.kind != LineKind::Context) {
-            piece.clear();
-            return;
-        }
-        // Contiguous, so a side's span is however many of its lines are here.
-        let extent = |numbers: Vec<u64>, sits_after| match numbers.first() {
-            Some(first) => (*first, numbers.len() as u64),
-            None => (sits_after, 0),
+        context_upto(&mut lines, &mut b, &mut a, before_end);
+        // A side with no lines starts at the line above the hunk (git's `-N,0`).
+        let start = |from: usize, to: usize| {
+            if to > from {
+                from as u64 + 1
+            } else {
+                from as u64
+            }
         };
-        let (old_start, old_lines) =
-            extent(piece.iter().filter_map(|l| l.old).collect(), before_old);
-        let (new_start, new_lines) =
-            extent(piece.iter().filter_map(|l| l.new).collect(), before_new);
         hunks.push(Hunk {
-            old_start,
-            old_lines,
-            new_start,
-            new_lines,
-            header: header_above(at),
-            lines: std::mem::take(piece),
+            old_start: start(before_start, b),
+            old_lines: (b - before_start) as u64,
+            new_start: start(after_start, a),
+            new_lines: (a - after_start) as u64,
+            header: header_above(before_start),
+            lines,
         });
-    };
-
-    for (line, at) in emitted {
-        if steps_over(last_old, line.old) || steps_over(last_new, line.new) {
-            close(&mut piece, piece_at, before_old, before_new);
-            (before_old, before_new) = (last_old.unwrap_or(0), last_new.unwrap_or(0));
-            piece_at = at;
-        }
-        if piece.is_empty() {
-            piece_at = at;
-        }
-        last_old = line.old.or(last_old);
-        last_new = line.new.or(last_new);
-        piece.push(line);
     }
-    close(&mut piece, piece_at, before_old, before_new);
     hunks
 }
 
@@ -269,7 +159,6 @@ mod tests {
 
     fn ignoring_whitespace() -> DiffView {
         DiffView {
-            mode: DiffMode::Full,
             whitespace: Whitespace::Ignore,
         }
     }
@@ -278,18 +167,18 @@ mod tests {
     fn a_re_indented_body_does_not_reach_the_diff() {
         let after = "fn a() {\n        one();\n        two();\n}\n";
         assert_eq!(
-            of_file("m.rs", BEFORE, after, 3, DiffView::default()).len(),
+            of_file(BEFORE, after, 3, DiffView::default()).len(),
             1,
             "compared whole, the two indentations differ"
         );
-        assert!(of_file("m.rs", BEFORE, after, 3, ignoring_whitespace()).is_empty());
+        assert!(of_file(BEFORE, after, 3, ignoring_whitespace()).is_empty());
     }
 
     #[test]
     fn an_ignored_line_shows_the_new_side() {
         // Line 2 is re-indented alone; line 3 is really edited.
         let after = "fn a() {\n        one();\n    three();\n}\n";
-        let hunks = of_file("m.rs", BEFORE, after, 3, ignoring_whitespace());
+        let hunks = of_file(BEFORE, after, 3, ignoring_whitespace());
 
         let kinds: Vec<_> = hunks[0]
             .lines

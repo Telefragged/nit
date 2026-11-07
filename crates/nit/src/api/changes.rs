@@ -21,7 +21,7 @@ use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
 use nit_types::domain::Sha;
 use nit_types::domain::ThreadOrigin;
-use nit_types::domain::{DiffMode, DiffView, Whitespace};
+use nit_types::domain::{DiffView, Whitespace};
 use nit_types::domain::{LogPayload, TagsPayload};
 use nit_types::log::Log;
 
@@ -265,7 +265,6 @@ pub(super) async fn revision_lines(
             old_path: q.old_path,
         };
         let view = DiffView {
-            mode: DiffMode::Full,
             whitespace: q.whitespace,
         };
         let file = if wanted.path == diff::COMMIT_MSG_PATH {
@@ -378,7 +377,7 @@ fn contained_diff(
     let shown = |path: &str| only.is_none_or(|w| w.path == path);
     let plain = || diff::render(&repo, &git, context, view, shown);
 
-    let mut wire = match revs
+    let wire = match revs
         .against
         .as_ref()
         .filter(|a| a.parent_sha != revision.parent_sha)
@@ -390,13 +389,6 @@ fn contained_diff(
                 plain()
             })?,
     };
-    if view.mode == DiffMode::Outline {
-        // An outline answers with outlines, so a file that has none to show
-        // is not in it — whatever else its delta did. A change inside a
-        // body, a rename, a binary blob: each leaves a row saying nothing,
-        // which is the noise the mode exists to remove.
-        wire.files.retain(|file| !file.hunks.is_empty());
-    }
     Ok(wire)
 }
 
@@ -476,13 +468,12 @@ mod tests {
     /// flattened beside it.
     #[test]
     fn a_diff_request_reads_its_revision_beside_its_view() {
-        let q: DiffQuery = serde_html_form::from_str("against=1&mode=outline&whitespace=ignore")
-            .expect("query parses");
+        let q: DiffQuery =
+            serde_html_form::from_str("against=1&whitespace=ignore").expect("query parses");
         assert_eq!(q.against.map(RevisionNumber::get), Some(1));
         assert_eq!(
             q.view,
             DiffView {
-                mode: DiffMode::Outline,
                 whitespace: Whitespace::Ignore,
             }
         );
