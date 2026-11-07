@@ -266,11 +266,7 @@ const total = (file: Totals, side: Side) =>
 
 /** One side's `[lo, hi]` of the file lines hidden between `prev` and `hunk`,
  * empty when `hi < lo`. An absent `prev` is the file's start, an absent
- * `hunk` its end, which the file's total for that side bounds.
- *
- * A gap's two sides are measured apart because an outline diff pairs
- * signatures straight across the bodies it collapsed, so a body the change
- * rewrote leaves runs of different lengths under one gap. */
+ * `hunk` its end, which the file's total for that side bounds. */
 function gapWindow(
   prev: Hunk | undefined,
   hunk: Hunk | undefined,
@@ -300,14 +296,10 @@ export function skipped(
 
 /** The lines that fall in the gap between `prev` and `hunk` — the hidden
  * run a context-expand button reveals. `whole` is the whole file as diff
- * lines; an undefined `hunk` is the run below the last hunk, bounded only
- * by the file's end. Order is preserved.
- *
- * A line lands in the gap by either of its numbers, and comes back carrying
- * only the sides that landed: the whole file is diffed on its own terms, so
- * where its pairing disagrees with the hunks' the same line reads as a del
- * under one gap and an add under another. Revealing it whole would put it
- * twice into a hunk that has room for it once. */
+ * lines; a line belongs to the gap by its new number (`add`/`context`) or
+ * its old number (`del`), so an all-drift gap's del lines come along. An
+ * undefined `hunk` is the run below the last hunk, bounded only by the
+ * file's end. Order is preserved. */
 export function gapLines(
   whole: readonly Line[],
   prev: Hunk | undefined,
@@ -316,15 +308,9 @@ export function gapLines(
 ): Line[] {
   const [oldLo, oldHi] = gapWindow(prev, hunk, "old", file);
   const [newLo, newHi] = gapWindow(prev, hunk, "new", file);
-  const gap: Line[] = [];
-  for (const line of whole) {
-    const onOld =
-      line.old !== undefined && line.old >= oldLo && line.old <= oldHi;
-    const onNew =
-      line.new !== undefined && line.new >= newLo && line.new <= newHi;
-    if (onOld && onNew) gap.push(line);
-    else if (onOld) gap.push({ ...line, new: undefined, kind: "del" });
-    else if (onNew) gap.push({ ...line, old: undefined, kind: "add" });
-  }
-  return gap;
+  return whole.filter((line) =>
+    line.new !== undefined
+      ? line.new >= newLo && line.new <= newHi
+      : line.old !== undefined && line.old >= oldLo && line.old <= oldHi,
+  );
 }

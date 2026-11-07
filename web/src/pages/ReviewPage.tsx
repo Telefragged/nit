@@ -260,7 +260,7 @@ export default function ReviewPage() {
   });
 
   const [settings, saveSettings] = useReviewSettings();
-  const { mode, layout, whitespace } = settings;
+  const { layout, whitespace } = settings;
   const [editingTarget, setEditingTarget] = useState<DraftTarget | null>(null);
   const editorDirty = useRef(false);
   const diffColumnRef = useRef<HTMLDivElement>(null);
@@ -383,7 +383,7 @@ export default function ReviewPage() {
   // outlives every way of replacing it (it is reused across /changes/:id).
   // Adjust-during-render, like `shownChange` below: a bubble hanging over
   // code it never described must not paint even once.
-  const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}:${mode}:${whitespace}`;
+  const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}:${whitespace}`;
   if (selectionMiss && selectionMiss.diff !== diffKey) setSelectionMiss(null);
 
   const shownAttachments = useMemo(
@@ -399,10 +399,10 @@ export default function ReviewPage() {
     .filter((r) => r.number === selected || r.number === against)
     .flatMap((r) => r.attachments.map((a) => a.hash))
     .join(",");
-  const diffView = [changeNumber, selected, against ?? null, mode, whitespace];
+  const diffView = [changeNumber, selected, against ?? null, whitespace];
   const diffQ = useQuery({
     queryKey: ["diff", ...diffView, attachKey],
-    queryFn: () => getDiff(changeNumber, selected, against, mode, whitespace),
+    queryFn: () => getDiff(changeNumber, selected, against, whitespace),
     enabled: published !== undefined,
     retry: false,
     placeholderData: (previous, query) =>
@@ -719,11 +719,6 @@ export default function ReviewPage() {
         // the cover-message textarea the opening modal focuses.
         e.preventDefault();
         setReplyOpen(true);
-      } else if (key === "0") {
-        saveSettings({
-          ...settings,
-          mode: settings.mode === "outline" ? "full" : "outline",
-        });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -739,8 +734,6 @@ export default function ReviewPage() {
     navigate,
     ctxValue,
     diffKey,
-    settings,
-    saveSettings,
     selected,
     latestRevision,
     onRight,
@@ -1044,7 +1037,7 @@ export default function ReviewPage() {
               <kbd>[</kbd>
               <kbd>]</kbd> files · <kbd>n</kbd>
               <kbd>shift+n</kbd> changes · <kbd>r</kbd> latest revision ·{" "}
-              <kbd>c</kbd> comment · <kbd>a</kbd> reply · <kbd>0</kbd> outline
+              <kbd>c</kbd> comment · <kbd>a</kbd> reply
             </span>
             <ReviewSettingsMenu settings={settings} onApply={saveSettings} />
           </div>

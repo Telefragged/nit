@@ -59,10 +59,9 @@ export const EXPAND_STEP = 10;
  * is sliced from it and folded back into the bordering hunks as real Lines —
  * drift and all — so highlight/comment/placement and the drift tint flow
  * through unchanged. The synthetic commit message is the one file with no
- * diff to expand: a deleted file has gaps too, because an outline collapses
- * its lines and the run each collapse hid is a gap. Reveals are keyed by
- * separator `i` (the gap before hunk i): `down` pulls from the gap's top
- * into hunk i-1, `up` from its bottom into hunk i.
+ * diff to expand. Reveals are keyed by separator `i` (the gap before hunk
+ * i): `down` counts the lines revealed from the gap's top into hunk i-1,
+ * and `up` the lines revealed from its bottom into hunk i.
  *
  * Returns the spliced `hunks`, whether the file is expandable, the `expand`
  * and `revealLine` actions, and `busyAt` to check a given end/separator's

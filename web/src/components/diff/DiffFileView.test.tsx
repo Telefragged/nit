@@ -202,62 +202,6 @@ describe("context-expand buttons", () => {
   });
 });
 
-describe("a deleted file's outline", () => {
-  /** The outline kept line 1 and line 27, so the gap between them hides
-   * the 25 lines the collapse took. The delete leaves the new side empty,
-   * which is why every hunk sits at new line 0. */
-  const deleted: DiffFile = {
-    path: "src/gone.rs",
-    status: "deleted",
-    binary: false,
-    additions: 0,
-    deletions: 2,
-    old_total: 27,
-    new_total: 0,
-    hunks: [
-      {
-        old_start: 1,
-        old_lines: 1,
-        new_start: 0,
-        new_lines: 0,
-        header: "",
-        lines: [{ kind: "del", old: 1, text: "fn a() {" }],
-      },
-      {
-        old_start: 27,
-        old_lines: 1,
-        new_start: 0,
-        new_lines: 0,
-        header: "",
-        lines: [{ kind: "del", old: 27, text: "fn b() {" }],
-      },
-    ],
-  };
-
-  const interior = [
-    ["expand-all", "+25"],
-    ["expand-down", "+10"],
-    ["expand-up", "+10"],
-  ];
-
-  it("offers to reveal the run the collapse hid", () => {
-    expect(buttons(renderFile("unified", deleted).container)).toEqual([
-      interior,
-    ]);
-  });
-
-  it("offers the run below the last hunk, which only old_total bounds", () => {
-    const tail = { ...deleted, old_total: 40 };
-    expect(buttons(renderFile("unified", tail).container)).toEqual([
-      interior,
-      [
-        ["expand-all", "+13"],
-        ["expand-down", "+10"],
-      ],
-    ]);
-  });
-});
-
 describe("a file the change only renamed", () => {
   const clean: DiffFile = {
     path: "src/renamed.rs",
