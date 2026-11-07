@@ -10,4 +10,6 @@ import { join } from "node:path";
 
 import { initSync } from "./src/wasm/nit_wasm";
 
-initSync(readFileSync(join(import.meta.dirname, "src/wasm/nit_wasm_bg.wasm")));
+initSync({
+  module: readFileSync(join(import.meta.dirname, "src/wasm/nit_wasm_bg.wasm")),
+});
