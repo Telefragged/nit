@@ -10,7 +10,6 @@ import type {
   ChangeStatus,
   Diff,
   DiffFile,
-  DiffMode,
   Draft,
   DraftDecision,
   EditDraft,
@@ -109,12 +108,10 @@ export const getDiff = (
   changeNumber: number,
   revision: number,
   against?: number,
-  mode: DiffMode = "full",
   whitespace: Whitespace = "compare",
 ) => {
   const q = new URLSearchParams();
   if (against !== undefined) q.set("against", String(against));
-  if (mode !== "full") q.set("mode", mode);
   if (whitespace !== "compare") q.set("whitespace", whitespace);
   const query = q.size > 0 ? `?${q}` : "";
   return request<Diff>(

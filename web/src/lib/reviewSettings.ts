@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { DiffMode, Whitespace } from "../api/types";
+import type { Whitespace } from "../api/types";
 import { readSaved, writeSaved } from "./storage";
 
 const KEY = "nit.review-settings";
@@ -7,8 +7,6 @@ const KEY = "nit.review-settings";
 /** How the reviewer wants a diff drawn. One set per browser, shared by
  * every change the reviewer opens. */
 export interface ReviewSettings {
-  /** `outline` collapses every function body, leaving the signatures. */
-  mode: DiffMode;
   /** `split` draws the old and the new side in two columns. */
   layout: "unified" | "split";
   /** Which threads of earlier revisions are ported into the shown range:
@@ -19,7 +17,6 @@ export interface ReviewSettings {
 }
 
 const DEFAULTS: ReviewSettings = {
-  mode: "full",
   layout: "unified",
   ported: "open",
   whitespace: "compare",
@@ -30,7 +27,6 @@ const DEFAULTS: ReviewSettings = {
 function load(): ReviewSettings {
   const saved = readSaved(KEY) as Partial<ReviewSettings> | null;
   return {
-    mode: saved?.mode === "outline" ? "outline" : DEFAULTS.mode,
     layout: saved?.layout === "split" ? "split" : DEFAULTS.layout,
     ported: saved?.ported === "all" ? "all" : DEFAULTS.ported,
     whitespace: saved?.whitespace === "ignore" ? "ignore" : DEFAULTS.whitespace,

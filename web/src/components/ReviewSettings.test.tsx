@@ -9,7 +9,6 @@ afterEach(cleanup);
 /** The page's half of the contract: it holds the applied settings. */
 function Harness({ applied }: { applied: ReviewSettings[] }) {
   const [settings, setSettings] = useState<ReviewSettings>({
-    mode: "full",
     layout: "unified",
     ported: "open",
     whitespace: "compare",
@@ -40,7 +39,7 @@ describe("the review settings popup", () => {
     const applied = openAndChange();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(applied).toEqual([
-      { mode: "full", layout: "split", ported: "open", whitespace: "compare" },
+      { layout: "split", ported: "open", whitespace: "compare" },
     ]);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -52,7 +51,7 @@ describe("the review settings popup", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ignore" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(applied).toEqual([
-      { mode: "full", layout: "unified", ported: "open", whitespace: "ignore" },
+      { layout: "unified", ported: "open", whitespace: "ignore" },
     ]);
   });
 

@@ -4,19 +4,6 @@ import Modal from "./Modal";
 import Seg, { type SegOption } from "./Seg";
 import type { ReviewSettings } from "../lib/reviewSettings";
 
-const MODE_OPTIONS: SegOption<ReviewSettings["mode"]>[] = [
-  {
-    value: "full",
-    label: "Full",
-    title: "Every line the change touched (0)",
-  },
-  {
-    value: "outline",
-    label: "Outline",
-    title: "Every function body collapsed, leaving signatures (0)",
-  },
-];
-
 const LAYOUT_OPTIONS: SegOption<ReviewSettings["layout"]>[] = [
   {
     value: "unified",
@@ -127,14 +114,6 @@ export default function ReviewSettingsMenu({
             <strong>Review settings</strong>
             <span className="dim">Saved in this browser</span>
           </div>
-          <Knob
-            label="Diff body"
-            value={draft.mode}
-            options={MODE_OPTIONS}
-            onChange={(mode) => {
-              setDraft({ ...draft, mode });
-            }}
-          />
           <Knob
             label="Whitespace"
             value={draft.whitespace}

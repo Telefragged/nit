@@ -1,8 +1,8 @@
 import { afterEach } from "vitest";
 
 // Each test opens with an empty browser store. A page that remembers a view
-// choice — the diff mode, the change graph's grouping — would otherwise
-// carry the choice of one test into the next.
+// choice, for example the diff layout or the change graph's grouping, would
+// otherwise carry the choice of one test into the next.
 afterEach(() => {
   localStorage.clear();
 });
