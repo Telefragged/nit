@@ -27,10 +27,8 @@ pub struct Diff {
 
 /// The whole file as diff lines.
 ///
-/// For expanding the runs the shown diff hides — context beyond a hunk's
-/// reach, or a body an outline collapsed. Same `Line`
-/// shape as the diff, so revealed lines carry their drift exactly as the
-/// hunks do.
+/// For expanding the runs the shown diff hides. Same `Line` shape as the
+/// diff, so revealed lines carry their drift exactly as the hunks do.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]

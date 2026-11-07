@@ -28,24 +28,6 @@ pub enum FileStatus {
     Renamed,
 }
 
-/// How much of a diff is rendered.
-///
-/// `Full` renders every line the change touched. `Outline` collapses every
-/// function body and drops every import, so that only signatures,
-/// doc-comments, types and fields remain — the change read at the altitude
-/// of its API surface. A run of blank lines the collapse leaves behind
-/// comes back as one, which is what keeps an import block from outlining
-/// as a column of empty lines.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(utoipa::ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DiffMode {
-    #[default]
-    Full,
-    Outline,
-}
-
 /// Whether whitespace is part of a line's identity.
 ///
 /// `Compare` compares a line as its whole text. `Ignore` compares two
@@ -80,8 +62,6 @@ pub enum Whitespace {
 )]
 #[into_params(parameter_in = Query)]
 pub struct DiffView {
-    #[serde(default)]
-    pub mode: DiffMode,
     #[serde(default)]
     pub whitespace: Whitespace,
 }

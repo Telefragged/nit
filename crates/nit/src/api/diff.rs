@@ -187,11 +187,6 @@ pub(super) fn render_delta(
 ///
 /// Proves the file is not binary, which is what [`delta_file`] assumed it
 /// was.
-///
-/// The counts measure the hunks [`hunks::of_file`] came back with, so an
-/// outline of a rewritten body under a surviving signature counts `+0 -0`
-/// where a full diff counts its real size. The two totals measure the
-/// whole file either way.
 pub(super) fn fill_lines(
     file: &mut DiffFile,
     old: &[u8],
@@ -203,7 +198,7 @@ pub(super) fn fill_lines(
     file.binary = false;
     file.old_total = old.lines().count() as u64;
     file.new_total = new.lines().count() as u64;
-    file.hunks = hunks::of_file(&file.path, &old, &new, context, view);
+    file.hunks = hunks::of_file(&old, &new, context, view);
     (file.additions, file.deletions) = stats(&file.hunks);
 }
 
@@ -385,7 +380,6 @@ pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: u64) -> Optio
 mod tests {
     use super::*;
     use git2::RepositoryInitOptions;
-    use nit_types::domain::DiffMode;
 
     struct Repo {
         _directory: tempfile::TempDir,
@@ -440,110 +434,6 @@ mod tests {
     fn whole(repo: &Repository, old: &Tree, new: &Tree, only: &str) -> Diff {
         let diff = git_diff(repo, old, new, None).expect("diff builds");
         render(repo, &diff, u32::MAX, DiffView::default(), |p| p == only).expect("diff renders")
-    }
-
-    fn outlined(repo: &Repository, old: &Tree, new: &Tree) -> Diff {
-        let diff = git_diff(repo, old, new, None).expect("diff builds");
-        render(
-            repo,
-            &diff,
-            3,
-            DiffView {
-                mode: DiffMode::Outline,
-                ..DiffView::default()
-            },
-            |_| true,
-        )
-        .expect("diff renders")
-    }
-
-    /// A body rewritten under an untouched signature.
-    const BEFORE: &[u8] =
-        b"/// Adds.\npub fn add(a: u8, b: u8) -> u8 {\n    let sum = a + b;\n    sum\n}\n";
-    const AFTER: &[u8] = b"/// Adds.\npub fn add(a: u8, b: u8) -> u8 {\n    a.wrapping_add(b)\n}\n";
-
-    #[test]
-    fn an_outline_is_silent_about_a_body_under_an_untouched_signature() {
-        let r = Repo::new();
-        let old = r.tree(&[("m.rs", BEFORE)]);
-        let new = r.tree(&[("m.rs", AFTER)]);
-        let diff = outlined(&r.repo, &r.find(old), &r.find(new));
-
-        let file = &diff.files[0];
-        assert!(file.hunks.is_empty(), "the outline did not change");
-        assert_eq!((file.additions, file.deletions), (0, 0));
-        // Still rendered, and still anchored to the whole file.
-        assert_eq!(file.path, "m.rs");
-        assert_eq!(file.new_total, 4);
-
-        let full = shown(&r.repo, &r.find(old), &r.find(new));
-        assert_eq!((full.files[0].additions, full.files[0].deletions), (1, 2));
-    }
-
-    #[test]
-    fn an_outlined_line_carries_the_number_it_holds_in_the_file() {
-        let r = Repo::new();
-        // The signature on line 6 moves; the bodies around it collapse, so
-        // the kept lines are 1, 5, 6 and 8.
-        let old = r.tree(&[(
-            "m.rs",
-            b"fn a() {\n    1;\n    2;\n    3;\n}\nfn b(x: u8) {\n    4;\n}\n" as &[u8],
-        )]);
-        let new = r.tree(&[(
-            "m.rs",
-            b"fn a() {\n    1;\n    2;\n    3;\n}\nfn b(x: u16) {\n    4;\n}\n" as &[u8],
-        )]);
-        let diff = outlined(&r.repo, &r.find(old), &r.find(new));
-
-        let hunk = &diff.files[0].hunks[0];
-        let changed: Vec<_> = hunk
-            .lines
-            .iter()
-            .filter(|l| l.kind != LineKind::Context)
-            .map(|l| (l.kind, l.old, l.new, l.text.as_str()))
-            .collect();
-        assert_eq!(
-            changed,
-            [
-                (LineKind::Del, Some(6), None, "fn b(x: u8) {"),
-                (LineKind::Add, None, Some(6), "fn b(x: u16) {"),
-            ]
-        );
-        // The hunk stops at the collapsed body rather than spanning it, so
-        // its span is the run of the file it really shows.
-        assert_eq!((hunk.old_start, hunk.old_lines), (5, 2));
-        assert_eq!((hunk.new_start, hunk.new_lines), (5, 2));
-    }
-
-    #[test]
-    fn an_outlined_hunk_skips_no_line_of_the_file() {
-        let r = Repo::new();
-        // Two signatures change, with a collapsed body between them, so one
-        // group of edits has to come back as two hunks.
-        let body = "    body();\n    more();\n    yet();\n";
-        let before = format!("fn a(x: u8) {{\n{body}}}\nfn b(y: u8) {{\n{body}}}\n");
-        let after = format!("fn a(x: u16) {{\n{body}}}\nfn b(y: u16) {{\n{body}}}\n");
-        let old = r.tree(&[("m.rs", before.as_bytes())]);
-        let new = r.tree(&[("m.rs", after.as_bytes())]);
-        let diff = outlined(&r.repo, &r.find(old), &r.find(new));
-
-        let hunks = &diff.files[0].hunks;
-        assert_eq!(hunks.len(), 2, "one hunk per signature, split at the body");
-        for hunk in hunks {
-            for side in [
-                hunk.lines.iter().filter_map(|l| l.old).collect::<Vec<_>>(),
-                hunk.lines.iter().filter_map(|l| l.new).collect::<Vec<_>>(),
-            ] {
-                assert!(
-                    side.windows(2).all(|w| w[1] == w[0] + 1),
-                    "a hunk's numbers run consecutively: {side:?}"
-                );
-            }
-        }
-        // The gap between them is the collapsed body, which the client
-        // reveals with the same expander it uses for unshown context.
-        let (first, second) = (&hunks[0], &hunks[1]);
-        assert!(second.new_start > first.new_start + first.new_lines);
     }
 
     fn lines(n: std::ops::RangeInclusive<u64>) -> String {

@@ -84,18 +84,6 @@ export type FileStatus = "added" | "deleted" | "modified" | "renamed";
 export type LineKind = "context" | "add" | "del";
 
 /**
- * How much of a diff is rendered.
- *
- * `Full` renders every line the change touched. `Outline` collapses every
- * function body and drops every import, so that only signatures,
- * doc-comments, types and fields remain — the change read at the altitude
- * of its API surface. A run of blank lines the collapse leaves behind
- * comes back as one, which is what keeps an import block from outlining
- * as a column of empty lines.
- */
-export type DiffMode = "full" | "outline";
-
-/**
  * Whether whitespace is part of a line's identity.
  *
  * `Compare` compares a line as its whole text. `Ignore` compares two
@@ -491,10 +479,8 @@ export type DiffFile = {
 /**
  * The whole file as diff lines.
  *
- * For expanding the runs the shown diff hides — context beyond a hunk's
- * reach, or a body an outline collapsed. Same `Line`
- * shape as the diff, so revealed lines carry their drift exactly as the
- * hunks do.
+ * For expanding the runs the shown diff hides. Same `Line` shape as the
+ * diff, so revealed lines carry their drift exactly as the hunks do.
  */
 export type FileLines = { lines: Array<Line> };
 

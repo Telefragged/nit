@@ -127,8 +127,8 @@ fn file_drift(bpm: &[u8], bm: &[u8], bpn: &[u8], bn: &[u8]) -> DriftRanges {
 /// Whether any line edit of `m → n` escapes the drift.
 ///
 /// The verdict [`tag`] reaches from rendered hunks, read off the edits
-/// themselves instead — so it does not depend on which of a file's lines the
-/// request asked to see.
+/// themselves instead, so it does not depend on the [`DiffView`] the hunks
+/// are drawn in.
 fn own_edit(bm: &[u8], bn: &[u8], (old, new): &DriftRanges) -> bool {
     buffer_edits(bm, bn).iter().any(|edit| {
         edit.before.clone().any(|line| !drifted(old, line))

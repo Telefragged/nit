@@ -47,11 +47,6 @@ tokio = { version = "1", features = [
 tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tree-sitter = "0.27"
-tree-sitter-nix = "0.3"
-tree-sitter-python = "0.25"
-tree-sitter-rust = "0.24"
-tree-sitter-typescript = "0.23"
 tungstenite = "0.30"
 ureq = { version = "3.3.0", default-features = false, features = ["json"] }
 utoipa = "5"

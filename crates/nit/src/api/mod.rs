@@ -73,7 +73,6 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     components(schemas(
         nit_types::error::ApiError,
         nit_types::domain::Tag,
-        nit_types::domain::DiffMode,
         nit_types::domain::Whitespace,
     )),
     modifiers(&ErrorEnvelope)
