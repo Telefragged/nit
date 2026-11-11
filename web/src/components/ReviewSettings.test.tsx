@@ -65,9 +65,11 @@ describe("the review settings popup", () => {
 
     // The next opening starts from the applied settings, not the dropped draft.
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    expect(screen.getByRole("button", { name: "Unified" }).className).toBe(
-      "active",
-    );
+    expect(
+      screen
+        .getByRole("button", { name: "Unified" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     confirm.mockRestore();
   });
 
