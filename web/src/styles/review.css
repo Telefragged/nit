@@ -449,10 +449,6 @@ button.rail-toggle.mark-draft:hover {
   text-align: right;
 }
 
-.tag-nav-row .unresolved-count {
-  font-size: 10.5px;
-}
-
 .diff-column {
   flex: 1;
   min-width: 0;

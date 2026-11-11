@@ -274,6 +274,27 @@
   gap: 5px;
 }
 
+/* The comment icon of a thread, or of a count of threads, in the form of
+   the thread (docs/design.md): a fill for an open thread, a dashed outline
+   for a draft, and gray for a resolved thread. */
+.thread-icon {
+  flex: none;
+  color: var(--color-muted-foreground);
+}
+
+.thread-icon.mark-open {
+  color: var(--color-mark-text);
+  fill: var(--color-mark);
+}
+
+/* Butt caps, because the round caps of the icon close the gaps of a
+   dashed line at this size. */
+.thread-icon.mark-draft {
+  color: var(--color-mark-text);
+  stroke-dasharray: 4 3.5;
+  stroke-linecap: butt;
+}
+
 /* A count or a label of the reviewer's work. */
 .pill {
   display: inline-flex;
@@ -312,10 +333,6 @@
 .line-row .g.mark-resolved {
   background: var(--color-accent);
   color: var(--color-muted-foreground);
-}
-
-.unresolved-count {
-  color: var(--color-mark-text);
 }
 
 /* -------------------------------------------------------------- banners */
