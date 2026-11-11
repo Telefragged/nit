@@ -9,6 +9,7 @@ import type {
   Diff,
   DiffFile,
   Draft,
+  GraphNode,
   Hunk,
   Line,
   Side,
@@ -93,6 +94,32 @@ export function sha(seed: number): string {
 export function shaOf(label: string): string {
   return hexExpansion(label);
 }
+
+/** A node of a change graph. `sha` and `parent` are labels for `shaOf`.
+ * With a `change`, the node is that open change at revision 1, and
+ * pending. Without one, it is a merged commit of the history. */
+export const graphNode = ({
+  sha,
+  parent,
+  change = null,
+  ...over
+}: Partial<GraphNode> & {
+  sha: string;
+  parent: string;
+  change?: number | null;
+}): GraphNode => ({
+  commit_sha: shaOf(sha),
+  section: change === null ? "history" : "open",
+  subject: sha,
+  status: change === null ? "merged" : "pending",
+  parents: [shaOf(parent)],
+  change_number: change,
+  change_id: change === null ? null : `I${change}`,
+  revision: change === null ? null : 1,
+  fork_sha: shaOf("a0"),
+  group: null,
+  ...over,
+});
 
 /** A distinct, well-formed `Change-Id` for `label`. */
 export function changeId(label: string): string {
