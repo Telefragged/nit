@@ -96,7 +96,7 @@
 }
 
 .page h1 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   margin: 0 0 4px;
 }
@@ -208,7 +208,7 @@
 
 .repo-name {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -313,9 +313,9 @@
   gap: 8px;
   align-items: baseline;
   border: 1px solid;
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 7px 12px;
-  font-size: 12.5px;
+  font-size: 13px;
   margin-bottom: 10px;
 }
 

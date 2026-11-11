@@ -28,6 +28,8 @@ The screenshot harness and the gallery capture the dark theme. A capture with `c
 
 The interface uses Atkinson Hyperlegible Next. Code, paths, commit ids and revision numbers use Intel One Mono. Both families are drawn so that similar characters differ, for example `0` and `O`.
 
+A rule uses one of five sizes: 11px for a count or a key, 12px for a label and for code, 13px for text, 15px for a title and for a rendered document, and 18px for the subject of a change. A size inside a rendered document or a comment can be relative to its text.
+
 ## Components
 
 A control is a shadcn/ui component in `web/src/components/ui/`. Add one with `npx shadcn add <name>` (`web/components.json`), then reduce it to the variants that a caller uses. Its classes are Tailwind utilities, and `web/src/styles/index.css` limits those utilities to the tokens.
