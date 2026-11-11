@@ -1,6 +1,7 @@
 import { type CSSProperties, Fragment, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, GraphNode } from "../api/types";
+import { DECISION_LABEL } from "../api/verdict";
 import { type NodeActivity, revisionActivity } from "../lib/comments";
 import type { GraphLayout, LaidEdge, LaidNode } from "../lib/graphLayout";
 import { layoutGraph } from "../lib/graphLayout";
@@ -82,21 +83,22 @@ function Activity({
         </span>
       )}
       {drafts > 0 && (
-        <span className="draft-count" title="your drafts">
-          {drafts} draft{drafts > 1 ? "s" : ""}
+        <span className="count" title="your drafts">
+          <span className="pill mark-draft">{drafts}</span> draft
+          {drafts > 1 ? "s" : ""}
         </span>
       )}
       {unresolved > 0 && (
-        <span className="unresolved-count" title="unresolved threads">
-          {unresolved} open
+        <span className="count" title="unresolved threads">
+          <span className="pill mark-open">{unresolved}</span> open
         </span>
       )}
       {decision && (
         <span
-          className="draft-count"
+          className="pill mark-draft"
           title="your draft decision (not yet submitted)"
         >
-          ✎ {decision}
+          {DECISION_LABEL[decision]}
         </span>
       )}
     </span>
@@ -145,9 +147,9 @@ function GraphRow({
         {isOpen ? (
           <StatusChip status={node.status} />
         ) : ln.isHead ? (
-          <span className="graph-plain-status">HEAD</span>
+          <span className="graph-head-label mono">HEAD</span>
         ) : (
-          <span className="graph-plain-status">merged</span>
+          <StatusChip status="merged" />
         )}
       </div>
       <div className="graph-cell-revision mono">

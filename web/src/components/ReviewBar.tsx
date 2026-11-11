@@ -6,20 +6,12 @@ import {
   submitDecisions,
 } from "../api/client";
 import type { ChangeDetail, Decision } from "../api/types";
+import { DECISION_LABEL } from "../api/verdict";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { shortcutKey } from "../lib/shortcutKey";
 import Modal from "./Modal";
 import { Button } from "./ui/button";
-
-/** Human label for a draft decision (the bar chip + the modal's current state). */
-const DECISION_LABEL: Record<Decision, string> = {
-  approve: "Approve",
-  request_changes: "Request changes",
-  comment: "Comment",
-  abandon: "Abandon",
-  reopen: "Reopen",
-};
 
 function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
   return abandoned

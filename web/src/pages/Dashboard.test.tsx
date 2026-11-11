@@ -36,7 +36,7 @@ describe("repo dashboard change graph", () => {
     expect(screen.getByText("Activity")).toBeTruthy();
     const row = subject.closest(".graph-row");
     if (!(row instanceof HTMLElement)) throw new Error("no row for change 12");
-    expect(within(row).getByText("✎ request_changes")).toBeTruthy();
+    expect(within(row).getByText("Request changes")).toBeTruthy();
   });
 
   it("groups by the tag key the URL names, labelling each run", async () => {
