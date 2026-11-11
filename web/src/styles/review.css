@@ -46,22 +46,30 @@
 .subject-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin: 4px 0 6px;
 }
 
 .subject-line h1 {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
+  letter-spacing: -0.005em;
   margin: 0;
 }
 
+/* Each item is a muted label and then its value in the color of the
+   text. */
 .meta-line {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: center;
   font-size: 12px;
   flex-wrap: wrap;
+  color: var(--color-muted-foreground);
+}
+
+.meta-line .mono {
+  color: var(--color-foreground);
 }
 
 /* diffbar */
