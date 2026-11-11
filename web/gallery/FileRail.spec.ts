@@ -86,8 +86,8 @@ test("the title row switches between expand all and collapse all", async ({
   mount,
 }) => {
   const rail = await mount(DEFAULT);
-  await clickNow(rail.getByRole("button", { name: "expand all" }));
-  await one(rail.getByRole("button", { name: "collapse all" }));
+  await clickNow(rail.getByRole("button", { name: "Expand all" }));
+  await one(rail.getByRole("button", { name: "Collapse all" }));
 });
 
 test("while the diff loads, the rail shows 0 files and no button", async ({

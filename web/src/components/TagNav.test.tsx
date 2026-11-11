@@ -186,7 +186,7 @@ describe("TagNav", () => {
     expect(current.contains(counts[0] ?? null)).toBe(true);
     expect(current.querySelector(".num")?.textContent).toBe("#11");
     // Nothing to expand: the whole graph fits the window.
-    expect(document.querySelector(".tag-nav-all")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show all" })).toBeNull();
   });
 
   it("scrolls a seven-row window to center the current change", () => {
@@ -202,13 +202,13 @@ describe("TagNav", () => {
   it("asks to expand from the window, and to collapse from the whole graph", () => {
     const onExpandedChange = vi.fn();
     renderNav(chain(12), 16, { onExpandedChange });
-    fireEvent.click(screen.getByRole("button", { name: "show all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
     expect(onExpandedChange).toHaveBeenLastCalledWith(true);
     cleanup();
 
     renderNav(chain(12), 16, { expanded: true, onExpandedChange });
     expect(scroller().style.maxHeight).toBe("");
-    fireEvent.click(screen.getByRole("button", { name: "show less" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
     expect(onExpandedChange).toHaveBeenLastCalledWith(false);
   });
 });

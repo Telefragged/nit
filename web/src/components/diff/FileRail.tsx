@@ -39,6 +39,7 @@ import {
 } from "../../lib/diffview";
 import { buildTree, type TreeNode } from "../../lib/fileTree";
 import { REVEAL, useReview } from "../../pages/reviewContext";
+import { Button } from "../ui/button";
 import StatusMark from "./StatusMark";
 
 /** Where in its file the diff shows a thread. */
@@ -299,9 +300,9 @@ export default function FileRail({
           ) : null}
         </span>
         {files.length > 0 ? (
-          <button className="linkish rail-toggle-all" onClick={onToggleAll}>
-            {allExpanded ? "collapse all" : "expand all"}
-          </button>
+          <Button variant="ghost" size="sm" onClick={onToggleAll}>
+            {allExpanded ? "Collapse all" : "Expand all"}
+          </Button>
         ) : null}
       </div>
       <div className="rail-tree" ref={port}>

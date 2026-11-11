@@ -317,8 +317,9 @@ export default function ReviewPage() {
     setPreferredKey(key);
     localStorage.setItem(TAG_KEY, key);
   }, []);
-  // The skeleton unmounts TagNav while the next change loads, so its
-  // "show all" choice lives here to follow the reviewer between changes.
+  // The skeleton unmounts TagNav while the next change loads, so the "Show
+  // all" choice is state of this page, and it stays the same from one
+  // change to the next.
   const [tagNavExpanded, setTagNavExpanded] = useState(false);
   const tags = published?.tags ?? {};
   const selectedTag = selectTag(tags, preferredKey);

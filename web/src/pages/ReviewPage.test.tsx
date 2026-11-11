@@ -167,10 +167,10 @@ describe("collapsed-by-default file sections", () => {
   it("expand all / collapse all flips every section", async () => {
     await renderReview();
 
-    fireEvent.click(screen.getByRole("button", { name: "expand all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "collapse all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(false);
     expect(scrollCalls).toEqual([]);
     expect(railRow("src/auth/rotate.rs")).not.toBeNull();
@@ -381,16 +381,16 @@ describe("collapse with an open dirty comment editor", () => {
       .mockReturnValueOnce(true);
     await openDirtyEditor();
     // Expanding is never a discard: no prompt for expand all.
-    fireEvent.click(screen.getByRole("button", { name: "expand all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
     expect(confirm).not.toHaveBeenCalled();
 
     // Declined: nothing collapses, the editor survives.
-    fireEvent.click(screen.getByRole("button", { name: "collapse all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(true);
     expect(section(1).querySelector("textarea")).not.toBeNull();
 
     // Accepted: everything collapses and the editor is unmounted with it.
-    fireEvent.click(screen.getByRole("button", { name: "collapse all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
     for (const i of [0, 1, 2, 3]) expect(isExpanded(section(i))).toBe(false);
     expect(document.querySelector("textarea")).toBeNull();
     expect(confirm).toHaveBeenCalledTimes(2);
@@ -595,7 +595,7 @@ describe("thread counts in the file headers", () => {
 describe("context expansion", () => {
   it("reveals a whole top gap in one click", async () => {
     const { settle } = await renderReview();
-    fireEvent.click(screen.getByRole("button", { name: "expand all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
 
     // rotate.rs hides a run above its first hunk and another between the two.
     const gaps = () => section(1).querySelectorAll(".hunk-row");

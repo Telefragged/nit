@@ -220,7 +220,7 @@ const hoverThread = async (page, text, selector) => {
 /** File sections start collapsed; captures that show diff contents open
  * them all via the rail's toggle first. */
 const expandAllFiles = (page) =>
-  clickNow(page.getByRole("button", { name: "expand all" }));
+  clickNow(page.getByRole("button", { name: "Expand all" }));
 
 /** Opens the picker whose label is `label`, so the capture shows its
  * list. The list mounts after the click. */
@@ -234,7 +234,7 @@ const openPicker = async (page, label) => {
 const applySetting = async (page, name) => {
   await clickNow(page.getByRole("button", { name: "Settings" }));
   // Scoped to the modal: an option label can be part of a page button's
-  // name, as "All" is of "expand all".
+  // name, as "All" is of "Expand all".
   const modal = page.locator(".settings-modal");
   await clickNow(modal.getByRole("button", { name, exact: true }));
   await clickNow(modal.getByRole("button", { name: "Apply" }));
@@ -395,14 +395,14 @@ const captures = [
     path: "/changes/77?against=base",
     fullPage: false,
   },
-  // The same graph after "show all": every row, the two terminal changes
+  // The same graph after "Show all": every row, the two terminal changes
   // as lone nodes below the chain.
   {
     name: "review-tag-expanded",
     path: "/changes/77?against=base",
     fullPage: false,
     actions: async (page) => {
-      await clickNow(page.locator(".tag-nav-all"));
+      await clickNow(page.getByRole("button", { name: "Show all" }));
     },
   },
   {
