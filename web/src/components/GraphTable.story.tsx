@@ -1,5 +1,5 @@
 import { MemoryRouter } from "react-router-dom";
-import { ago, draft, graphNode } from "../api/fixtures/builders";
+import { draft, graphNode } from "../api/fixtures/builders";
 import type { ChangeGraph } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
 import GraphTable from "./GraphTable";
@@ -55,35 +55,19 @@ const GRAPH: ChangeGraph = {
   ],
 };
 
-const thread = (id: number, resolved: boolean) => ({
-  id,
-  change_number: 11,
-  revision: 1,
-  anchor: "change" as const,
-  resolved,
-  comments: [],
-  created_at: ago(60),
-  updated_at: ago(60),
-});
-
 const ACTIVITY = new Map<number, NodeActivity>([
   [
     11,
     {
-      threads: [thread(1, false), thread(2, false), thread(3, true)],
       drafts: [draft({ id: 1 }), draft({ id: 2 })],
       unresolved: 2,
       decision: null,
     },
   ],
-  [12, { threads: [], drafts: [], unresolved: 0, decision: "approve" }],
-  [
-    9,
-    { threads: [thread(4, true)], drafts: [], unresolved: 0, decision: null },
-  ],
+  [12, { drafts: [], unresolved: 0, decision: "approve" }],
 ]);
 
-/** The change graph of a repository, with the activity of three changes. */
+/** The change graph of a repository, with the activity of two changes. */
 export function Default() {
   return (
     <MemoryRouter>

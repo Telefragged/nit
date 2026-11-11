@@ -273,27 +273,6 @@ export function commentCountLabel(n: number): string {
   return `${n} comment${n === 1 ? "" : "s"}`;
 }
 
-/** A change's published activity at one revision: the comment and draft
- * counts an aggregate row (a graph node, a tag-nav row) shows. Recomputed
- * client-side from a change's threads + drafts so those aggregate rows need
- * not denormalize it. The unresolved count is the change's, not a
- * revision's: see `NodeActivity`. */
-export interface RevisionActivity {
-  threads: number;
-  drafts: number;
-}
-
-export function revisionActivity(
-  threads: readonly { revision: number; resolved: boolean }[],
-  drafts: readonly { revision: number }[],
-  revision: number,
-): RevisionActivity {
-  return {
-    threads: threads.filter((t) => t.revision === revision).length,
-    drafts: drafts.filter((d) => d.revision === revision).length,
-  };
-}
-
 /**
  * A thread's resolution as it *would* be after the reviewer's pending drafts
  * publish: the newest draft on the thread carries the draft decision, so it
@@ -367,16 +346,15 @@ export function threadKey(t: UiThread): string {
  * the reviewer's drafts overlay rather than denormalized onto the graph
  * node. */
 export interface NodeActivity {
-  threads: readonly ThreadProjection[];
   drafts: readonly Draft[];
   /** Unresolved threads over every revision (`unresolvedThreads`). */
   unresolved: number;
   decision: Decision | null;
 }
 
-/** Each change's activity, keyed by change number: its threads off its
- * projection, and its drafts and draft decision off the reviewer's overlay
- * (`GET /changes/{id}/drafts`) when that has arrived. */
+/** Each change's activity, keyed by change number: its open threads off
+ * its projection, and its drafts and draft decision off the reviewer's
+ * overlay (`GET /changes/{id}/drafts`) when that has arrived. */
 export function nodeActivity(
   projections: readonly ChangeProjection[],
   overlays: Map<number, ChangeDrafts>,
@@ -387,7 +365,6 @@ export function nodeActivity(
       return [
         p.id,
         {
-          threads: p.threads,
           drafts: overlay?.drafts ?? [],
           unresolved: unresolvedThreads(p),
           decision: overlay?.draft_decision?.decision ?? null,
