@@ -26,6 +26,7 @@ import {
   commentCountLabel,
   commentPlacement,
   draftAnchor,
+  pendingResolved,
   placementLine,
   shownAt,
   threadKey,
@@ -184,6 +185,19 @@ function HunkSeparator({
     </GapSeparator>
   );
 }
+
+/** The mark of a commented line in its gutter. */
+type GutterMark = "open" | "draft" | "resolved";
+
+/** Of the threads on one line, the mark of the highest rank shows. */
+const MARK_RANK: Record<GutterMark, number> = {
+  resolved: 0,
+  draft: 1,
+  open: 2,
+};
+
+const markOf = (t: UiThread): GutterMark =>
+  t.id === null ? "draft" : pendingResolved(t) ? "resolved" : "open";
 
 /** One file section: header, off-hunk/file-level threads, hunks with inline
  * threads and the draft editor. Threads place by the diff range — new-side
@@ -380,6 +394,9 @@ export default function DiffFileView({
   // interdiff-left thread is stored "new" on the FROM revision.
   const displaced: { t: UiThread; side: Side }[] = [];
   const inline = new Map<string, UiThread[]>();
+  // The mark of each line that an inline thread covers: its whole line,
+  // or every line of its selection.
+  const gutterMarks = new Map<string, GutterMark>();
   for (const t of threads) {
     const at = shownAt(t);
     if (anchorKind(at.anchor) === "file") {
@@ -397,6 +414,14 @@ export default function DiffFileView({
       const list = inline.get(key) ?? [];
       list.push(t);
       inline.set(key, list);
+      const range = anchorRange(at.anchor);
+      const mark = markOf(t);
+      for (let no = range?.start_line ?? p.line; no <= p.line; no++) {
+        const lineKey = `${p.side}:${no}`;
+        const other = gutterMarks.get(lineKey);
+        if (!other || MARK_RANK[mark] > MARK_RANK[other])
+          gutterMarks.set(lineKey, mark);
+      }
     } else {
       displaced.push({ t, side: p.side });
     }
@@ -502,6 +527,12 @@ export default function DiffFileView({
   /** The class suffix marking a cell that shows a linked line. */
   const lineLinked = (side: Side, no: number | undefined) =>
     linksLine(linked, file.path, side, no) ? " linked" : "";
+
+  /** The class suffix of a gutter cell whose line a thread covers. */
+  const gutterMark = (side: Side, no: number | undefined) => {
+    const mark = gutterMarks.get(`${side}:${no}`);
+    return mark ? ` mark-${mark}` : "";
+  };
 
   /** A gutter's line number, as a link to its line. */
   const lineNumber = (side: Side, no: number | undefined) =>
@@ -613,8 +644,12 @@ export default function DiffFileView({
       return (
         <Fragment key={li}>
           <div className="line-row">
-            <span className={`g ${cls}`}>{lineNumber("old", line.old)}</span>
-            <span className={`g ${cls}`}>{lineNumber("new", line.new)}</span>
+            <span className={`g ${cls}${gutterMark("old", line.old)}`}>
+              {lineNumber("old", line.old)}
+            </span>
+            <span className={`g ${cls}${gutterMark("new", line.new)}`}>
+              {lineNumber("new", line.new)}
+            </span>
             <span
               className={`code ${cls}`}
               data-old={line.old}
@@ -649,7 +684,7 @@ export default function DiffFileView({
     )}${lineLinked(side, no)}`;
     return (
       <>
-        <span className={`g ${cls}`} data-side={side}>
+        <span className={`g ${cls}${gutterMark(side, no)}`} data-side={side}>
           {lineNumber(side, no)}
         </span>
         <span

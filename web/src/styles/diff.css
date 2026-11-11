@@ -199,6 +199,35 @@
   box-shadow: inset 0 0 0 100vmax var(--color-mark-tint);
 }
 
+/* The gutter of a line that a thread covers, in the three forms of
+   docs/design.md: a yellow fill for an open thread, a dashed yellow outline
+   for a draft, and a gray fill for a resolved thread. */
+.line-row .g.mark-open {
+  background: var(--color-mark);
+}
+
+.line-row .g.mark-open .line-link {
+  color: var(--color-mark-foreground);
+  font-weight: 600;
+}
+
+.line-row .g.mark-draft {
+  outline: 1px dashed var(--color-mark-text);
+  outline-offset: -2px;
+}
+
+.line-row .g.mark-draft .line-link {
+  color: var(--color-mark-text);
+}
+
+.line-row .g.mark-resolved {
+  background: var(--color-accent);
+}
+
+.line-row .g.mark-resolved .line-link {
+  color: var(--color-muted-foreground);
+}
+
 /* A line number is a link to its lines, in the raw view and in a
    rendered file alike. It reads as a plain number until the pointer
    reaches it, and it shows in the text color on the linked lines. */
