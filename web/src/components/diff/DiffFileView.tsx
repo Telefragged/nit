@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { createDraft } from "../../api/client";
 import {
   type CommentRange,
@@ -885,7 +886,11 @@ export default function DiffFileView({
         aria-expanded={!collapsed}
         title={collapsed ? "Expand file" : "Collapse file"}
       >
-        <span className="fchevron">{collapsed ? "▸" : "▾"}</span>
+        {collapsed ? (
+          <ChevronRight className="fchevron" size={14} aria-hidden />
+        ) : (
+          <ChevronDown className="fchevron" size={14} aria-hidden />
+        )}
         <span className={letter ? `fstat fstat-${letter}` : "fstat"}>
           <StatusMark file={file} />
         </span>

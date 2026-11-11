@@ -1145,7 +1145,7 @@ export default function ReviewPage() {
             )}
 
             {orphanFileThreads.length > 0 ? (
-              <section className="leftover-threads">
+              <section>
                 <div className="thread-group-title">
                   Threads on files outside this diff
                 </div>
