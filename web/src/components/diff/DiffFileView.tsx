@@ -939,7 +939,7 @@ export default function DiffFileView({
         ) : file.binary ? (
           <span className="dim">binary</span>
         ) : (
-          <span className="fcounts">
+          <span>
             <span className="plus">+{file.additions}</span>{" "}
             <span className="minus">−{file.deletions}</span>
           </span>
