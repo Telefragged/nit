@@ -5,7 +5,15 @@ import type { UiThread } from "../../lib/comments";
 import { span } from "../../lib/diffview";
 import type { ReviewCtx } from "../../pages/reviewContext";
 import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../types";
-import type { Diff, DiffFile, Hunk, Line, Side } from "../types";
+import type {
+  Diff,
+  DiffFile,
+  Draft,
+  Hunk,
+  Line,
+  Side,
+  ThreadComment,
+} from "../types";
 
 /** A UI thread with no comments, on line 1 of src/main.rs at revision 1. */
 export const uiThread = (
@@ -42,6 +50,31 @@ export const reviewCtx = (over: Partial<ReviewCtx> = {}): ReviewCtx => ({
 const NOW = Date.now();
 export const ago = (minutes: number) =>
   new Date(NOW - minutes * 60_000).toISOString();
+
+/** A draft on change 1 with no text, written 22 minutes ago. */
+export const draft = (over: Partial<Draft> = {}): Draft => ({
+  id: 1,
+  change_number: 1,
+  thread_id: null,
+  revision: 1,
+  anchor: "change",
+  body: "",
+  resolved: false,
+  created_at: ago(22),
+  updated_at: ago(22),
+  ...over,
+});
+
+/** A published comment of the reviewer or of the author. */
+export const threadComment = (
+  minutes: number,
+  body: string,
+  by: "reviewer" | "author" = "reviewer",
+): ThreadComment => ({
+  body,
+  review_id: by === "reviewer" ? 1 : null,
+  created_at: ago(minutes),
+});
 
 export function sha(seed: number): string {
   let x = (seed * 2654435761) >>> 0;
