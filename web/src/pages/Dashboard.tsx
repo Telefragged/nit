@@ -5,6 +5,7 @@ import { getChanges, getHistory, getTags, listRepos } from "../api/client";
 import { repoGraph } from "../api/fold";
 import type { ChangeStatus } from "../api/types";
 import GraphTable from "../components/GraphTable";
+import Select from "../components/Select";
 import { repoPath } from "../lib/repo";
 import { nodeActivity } from "../lib/comments";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
@@ -124,43 +125,42 @@ export default function Dashboard() {
   return (
     <main aria-busy={busy}>
       <div className="graph-toolbar">
-        <label>
+        <div>
           Group by
-          <select
-            className="revision-select"
+          <Select
+            className="min-w-0 flex-1"
+            label="Group by"
+            placeholder="none"
             value={groupBy ?? ""}
-            onChange={(e) => {
-              chooseGroup(e.target.value || null);
+            onChange={(key) => {
+              chooseGroup(key || null);
             }}
-          >
-            <option value="">none</option>
-            {groupKeys.map((key) => (
-              <option key={key} value={key}>
-                {key}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
+            options={[
+              { value: "", label: "none" },
+              ...groupKeys.map((key) => ({ value: key, label: key })),
+            ]}
+          />
+        </div>
+        <div>
           Only
-          <select
-            className="revision-select"
+          <Select
+            className="min-w-0 flex-1"
+            label="Only"
+            placeholder=""
             value={value ?? ""}
-            disabled={groupBy === null}
-            onChange={(e) => {
-              updateParams({ value: e.target.value || null });
+            onChange={(next) => {
+              updateParams({ value: next || null });
             }}
-          >
-            <option value="">
-              {groupBy === null ? "" : `every ${groupBy}`}
-            </option>
-            {values.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={
+              groupBy === null
+                ? []
+                : [
+                    { value: "", label: `every ${groupBy}` },
+                    ...values.map((v) => ({ value: v, label: v })),
+                  ]
+            }
+          />
+        </div>
       </div>
       {error ? (
         <ErrorPanel error={error} />
