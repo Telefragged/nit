@@ -36,7 +36,7 @@ const MAX_SIZE: u64 = 64 * 1024 * 1024;
 /// The server snapshots a line and ports a thread only on text this size
 /// or smaller. A larger attachment is binary in a diff, so no thread
 /// anchors on a line the server could not read.
-const MAX_TEXT_SIZE: u64 = 1024 * 1024;
+const MAX_TEXT_SIZE: u64 = 8 * 1024 * 1024;
 
 /// What a collection of the blob store deleted.
 #[derive(Debug, Default, PartialEq, Eq)]
