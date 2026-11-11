@@ -13,6 +13,7 @@ import { shortcutKey } from "../lib/shortcutKey";
 import { cn } from "../lib/utils";
 import { DraftDecision } from "./badges";
 import Modal from "./Modal";
+import ThreadCount from "./ThreadCount";
 import { Button } from "./ui/button";
 import { Kbd } from "./ui/kbd";
 
@@ -171,17 +172,9 @@ export default function ReviewBar({
 
   const stats = (
     <span className="counts review-stats">
-      {drafts > 0 ? (
-        <span className="count">
-          <span className="pill mark-draft">{drafts}</span> draft
-          {drafts === 1 ? "" : "s"}
-        </span>
-      ) : null}
+      {drafts > 0 ? <ThreadCount mark="draft" count={drafts} word /> : null}
       {unresolved > 0 ? (
-        <span className="count">
-          <span className="pill mark-open">{unresolved}</span> open thread
-          {unresolved === 1 ? "" : "s"}
-        </span>
+        <ThreadCount mark="open" count={unresolved} word />
       ) : null}
       {draftDecision ? (
         <span className="count">

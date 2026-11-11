@@ -271,26 +271,22 @@
   stroke-linecap: butt;
 }
 
-/* A count or a label of the reviewer's work. */
+/* The label of a draft decision. */
 .pill {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 18px;
   height: 16px;
   padding: 0 5px;
   border-radius: 8px;
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
-/* The three forms of the reviewer's work (docs/design.md), on a pill and
-   on the gutter of a commented line. The chevron of a file in the rail
-   has the first two: a fill for an open thread, a dashed
-   outline for unsent work, and gray for a resolved thread. */
-.pill.mark-open,
+/* The three forms of the reviewer's work (docs/design.md), on the gutter
+   of a commented line: a fill for an open thread, a dashed outline for
+   unsent work, and gray for a resolved thread. The chevron of a file in
+   the rail has the first two, and a draft decision has the second. */
 .line-row .g.mark-open,
 .rail-toggle.mark-open {
   background: var(--color-mark);
@@ -305,7 +301,6 @@
   color: var(--color-mark-text);
 }
 
-.pill.mark-resolved,
 .line-row .g.mark-resolved {
   background: var(--color-accent);
   color: var(--color-muted-foreground);

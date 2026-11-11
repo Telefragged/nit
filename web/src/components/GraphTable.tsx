@@ -7,6 +7,7 @@ import { layoutGraph } from "../lib/graphLayout";
 import { shortSha } from "../lib/sha";
 import { useRowNav } from "../lib/useRowNav";
 import { DraftDecision, StatusChip } from "./badges";
+import ThreadCount from "./ThreadCount";
 
 // Distinct branch colors cycle through this many lanes (gleisbau-style: a whole
 // branch carries one color); merged history is always grey.
@@ -81,17 +82,8 @@ function Activity({
           {threads} comment{threads > 1 ? "s" : ""}
         </span>
       )}
-      {drafts > 0 && (
-        <span className="count" title="your drafts">
-          <span className="pill mark-draft">{drafts}</span> draft
-          {drafts > 1 ? "s" : ""}
-        </span>
-      )}
-      {unresolved > 0 && (
-        <span className="count" title="unresolved threads">
-          <span className="pill mark-open">{unresolved}</span> open
-        </span>
-      )}
+      {drafts > 0 && <ThreadCount mark="draft" count={drafts} word />}
+      {unresolved > 0 && <ThreadCount mark="open" count={unresolved} word />}
       {decision && <DraftDecision decision={decision} />}
     </span>
   );
@@ -221,7 +213,7 @@ export default function GraphTable({
   activity: Map<number, NodeActivity>;
 }) {
   const layout = useMemo(() => layoutGraph(graph), [graph]);
-  const cols = `${layout.railWidth}px minmax(0, 1fr) 168px 52px 184px`;
+  const cols = `${layout.railWidth}px minmax(0, 1fr) 168px 52px 216px`;
   const bodyStyle = {
     height: layout.height,
     "--rail-w": `${layout.railWidth}px`,

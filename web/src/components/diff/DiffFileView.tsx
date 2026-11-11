@@ -26,6 +26,7 @@ import {
   anchorSide,
   commentPlacement,
   draftAnchor,
+  markCounts,
   placementLine,
   shownAt,
   strongerMark,
@@ -79,12 +80,12 @@ import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
 import Seg, { type SegOption } from "../Seg";
+import ThreadCount from "../ThreadCount";
 import DocBlock from "./DocBlock";
 import GapSeparator from "./GapSeparator";
 import LineLink from "./LineLink";
 import RenderedView from "./RenderedView";
 import StatusMark from "./StatusMark";
-import ThreadMarks from "./ThreadMarks";
 
 /** A commented char window to tint on one line; `active` (brighter chrome)
  * marks the open editor's pending selection or the hovered thread's range. */
@@ -946,7 +947,9 @@ export default function DiffFileView({
         {/* Threads visible in the current range for this file: the `threads`
             prop is already range-filtered, so a thread pinned to a hidden
             revision is not counted. */}
-        <ThreadMarks threads={threads} />
+        {markCounts(threads).map(({ mark, count }) => (
+          <ThreadCount key={mark} mark={mark} count={count} word />
+        ))}
       </header>
 
       {collapsed ? null : (
