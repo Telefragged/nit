@@ -282,11 +282,6 @@ a.comment-time:hover {
   color: var(--color-muted-foreground);
 }
 
-.btn-primary {
-  border-color: var(--color-muted-foreground);
-  font-weight: 600;
-}
-
 /* titled thread groups, and the leftover ones */
 
 .thread-group {
@@ -454,11 +449,6 @@ summary.log-line:hover {
 
 /* review bar + reply modal */
 
-.reply-modal-hint {
-  margin: -2px 0 8px;
-  font-size: 12px;
-}
-
 .review-bar {
   position: fixed;
   bottom: 0;
@@ -480,59 +470,10 @@ summary.log-line:hover {
   gap: 8px;
 }
 
-.btn-lifecycle {
-  color: var(--color-muted-foreground);
-}
-
-.btn-lifecycle:hover:not(:disabled) {
-  border-color: var(--color-del);
-  color: var(--color-del);
-}
-
 .review-stats {
   gap: 14px;
   font-size: 12px;
   white-space: nowrap;
-}
-
-/* Full-bleed <dialog>: it paints the dim itself and is its own backdrop,
-   so backdrop presses hit the dialog element (not the inner box). Rendered
-   in the top layer by showModal(), hence no z-index. */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  border: 0;
-  padding: 0;
-  color: inherit;
-  background: var(--color-scrim);
-}
-
-.modal-backdrop[open] {
-  /* gate on [open] so the UA's display:none for a closed dialog holds */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-backdrop::backdrop {
-  background: transparent;
-}
-
-.modal-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: calc(100vw - 48px);
-  background: var(--color-card);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 6px;
-  padding: 12px 14px;
-  box-shadow: 0 12px 36px var(--color-shadow);
 }
 
 .reply-modal {
@@ -541,10 +482,26 @@ summary.log-line:hover {
 
 .modal-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 13px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  font-size: 12px;
 }
 
 .review-conflict {
@@ -558,6 +515,8 @@ summary.log-line:hover {
 .reply-modal textarea {
   width: 100%;
   min-height: 96px;
+  padding: 8px 12px;
+  background: var(--color-background);
 
   /* autosizes like the inline editor (see .editor textarea). */
   resize: none;
@@ -568,27 +527,12 @@ summary.log-line:hover {
 .modal-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--color-border);
 }
 
 .modal-actions .spacer {
   flex: 1;
-}
-
-.btn-approve {
-  border-color: color-mix(in srgb, var(--color-add) 55%, transparent);
-  color: var(--color-add);
-}
-
-.btn-approve:hover:not(:disabled) {
-  background: var(--color-add-bg);
-}
-
-.btn-request {
-  border-color: color-mix(in srgb, var(--color-del) 55%, transparent);
-  color: var(--color-del);
-}
-
-.btn-request:hover:not(:disabled) {
-  background: var(--color-del-bg);
 }

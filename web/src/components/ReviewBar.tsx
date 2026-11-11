@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   clearDecision,
   setDraftDecision,
@@ -10,19 +10,29 @@ import { DECISION_LABEL } from "../api/verdict";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { shortcutKey } from "../lib/shortcutKey";
+import { cn } from "../lib/utils";
 import { DraftDecision } from "./badges";
 import Modal from "./Modal";
 import { Button } from "./ui/button";
 import { Kbd } from "./ui/kbd";
 
+/** The decisions that the modal offers, each with the classes of its
+ * button. A decision that approves is green and one that rejects is red. */
 function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
+  const approve = "border-add/55 text-add hover:bg-add-bg";
   return abandoned
-    ? [{ decision: "reopen", cls: "btn-approve" }]
+    ? [{ decision: "reopen", cls: approve }]
     : [
-        { decision: "approve", cls: "btn-approve" },
-        { decision: "request_changes", cls: "btn-request" },
+        { decision: "approve", cls: approve },
+        {
+          decision: "request_changes",
+          cls: "border-del/55 text-del hover:bg-del-bg",
+        },
         { decision: "comment", cls: "" },
-        { decision: "abandon", cls: "btn-lifecycle" },
+        {
+          decision: "abandon",
+          cls: "text-muted-foreground hover:border-del hover:text-del",
+        },
       ];
 }
 
@@ -134,25 +144,18 @@ export default function ReviewBar({
     }
   }
 
-  // Focus the textarea explicitly: React's autoFocus fires before the modal
-  // opens the dialog.
-  useLayoutEffect(() => {
-    if (!replyOpen) return;
-    textareaRef.current?.focus();
-  }, [replyOpen]);
-
   // Keyboard twin of the Submit button — same `canSubmit` gate;
   // `shortcutKey` mutes modifier chords and typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (replyOpen || shortcutKey(e) !== "s" || !canSubmit) return;
+      if (shortcutKey(e) !== "s" || !canSubmit) return;
       submit.mutate();
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [replyOpen, canSubmit, submit]);
+  }, [canSubmit, submit]);
 
   const busy = saveDraft.isPending || clear.isPending;
 
@@ -225,14 +228,57 @@ export default function ReviewBar({
         </div>
       </div>
       {replyOpen ? (
-        <Modal label="Review" card="reply-modal" onDismiss={requestClose}>
-          <div className="modal-head">
-            <strong>Review</strong>
-            {stats}
-          </div>
-          <div className="dim reply-modal-hint">
-            Your decision is a draft, not published — Submit publishes every
-            listed change&apos;s decision at once.
+        <Modal
+          title="Review"
+          aside={stats}
+          card="reply-modal"
+          onDismiss={requestClose}
+          initialFocus={textareaRef}
+          actions={
+            <>
+              <Button variant="ghost" onClick={requestClose} disabled={busy}>
+                Cancel
+              </Button>
+              {draftDecision ? (
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    clear.mutate();
+                  }}
+                >
+                  Clear draft
+                </Button>
+              ) : null}
+              <span className="spacer" />
+              {offered(abandoned).map(({ decision, cls }) => {
+                const drafted = draftDecision?.decision === decision;
+                return (
+                  <Button
+                    key={decision}
+                    // The drafted decision has the dashed outline of
+                    // unsent work.
+                    className={cn(
+                      cls,
+                      drafted && "border-dashed border-mark-text",
+                    )}
+                    aria-pressed={drafted}
+                    disabled={saveDraft.isPending}
+                    title={drafted ? "Currently drafted" : undefined}
+                    onClick={() => {
+                      saveDraft.mutate(decision);
+                    }}
+                  >
+                    {DECISION_LABEL[decision]}
+                  </Button>
+                );
+              })}
+            </>
+          }
+        >
+          <div className="dim">
+            Your decision is a draft. Submit publishes the reviews of all listed
+            changes at once.
           </div>
           {error ? (
             <div className="banner banner-error review-conflict">
@@ -248,41 +294,6 @@ export default function ReviewBar({
               setMessage(e.target.value);
             }}
           />
-          <div className="modal-actions">
-            <button onClick={requestClose} disabled={busy}>
-              Cancel
-            </button>
-            {draftDecision ? (
-              <button
-                className="linkish"
-                disabled={busy}
-                onClick={() => {
-                  clear.mutate();
-                }}
-              >
-                Clear draft
-              </button>
-            ) : null}
-            <span className="spacer" />
-            {offered(abandoned).map(({ decision, cls }) => (
-              <button
-                key={decision}
-                className={cls}
-                disabled={saveDraft.isPending}
-                title={
-                  draftDecision?.decision === decision
-                    ? "Currently drafted"
-                    : undefined
-                }
-                onClick={() => {
-                  saveDraft.mutate(decision);
-                }}
-              >
-                {draftDecision?.decision === decision ? "✎ " : ""}
-                {DECISION_LABEL[decision]}
-              </button>
-            ))}
-          </div>
         </Modal>
       ) : null}
     </>

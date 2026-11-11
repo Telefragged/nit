@@ -117,21 +117,6 @@
   background: var(--color-sunken);
 }
 
-.settings-cog {
-  background: none;
-  border: none;
-  color: var(--color-muted-foreground);
-  font-size: 16px;
-  line-height: 1;
-  padding: 2px 4px;
-}
-
-.settings-cog:hover:not(:disabled) {
-  background: none;
-  border: none;
-  color: var(--color-foreground);
-}
-
 .settings-modal {
   width: 420px;
 }

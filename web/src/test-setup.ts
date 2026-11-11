@@ -7,12 +7,6 @@ afterEach(() => {
   localStorage.clear();
 });
 
-// jsdom has no top-layer, so a <dialog> carries no showModal(); opening a
-// modal throws without this stub.
-HTMLDialogElement.prototype.showModal = function () {
-  this.open = true;
-};
-
 // jsdom has no matchMedia, so a page that reads a media query throws
 // without this stub. No query matches.
 window.matchMedia = (media) => ({ matches: false, media }) as MediaQueryList;

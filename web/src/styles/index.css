@@ -56,4 +56,5 @@
   --color-muted: var(--color-accent);
   --color-input: var(--color-border-strong);
   --color-ring: var(--color-foreground);
+  --shadow-overlay: 0 8px 24px var(--color-shadow);
 }

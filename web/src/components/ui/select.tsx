@@ -51,7 +51,7 @@ export function SelectContent({
       >
         <SelectPrimitive.Popup
           data-slot="select-content"
-          className="max-h-(--available-height) max-w-80 min-w-(--anchor-width) overflow-y-auto rounded-lg border border-input bg-card p-0.5 text-foreground shadow-md outline-none"
+          className="max-h-(--available-height) max-w-80 min-w-(--anchor-width) overflow-y-auto rounded-lg border border-input bg-card p-0.5 text-foreground shadow-overlay outline-none"
           {...props}
         >
           <SelectPrimitive.List>{children}</SelectPrimitive.List>
