@@ -454,10 +454,6 @@ summary.log-line:hover {
   white-space: nowrap;
 }
 
-.reply-modal {
-  width: 560px;
-}
-
 .modal-head {
   display: flex;
   align-items: center;

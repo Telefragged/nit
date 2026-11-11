@@ -22,7 +22,7 @@ export function ShortcutList({ onClose }: { onClose: () => void }) {
   return (
     <Modal
       title="Keyboard shortcuts"
-      card="shortcuts-modal"
+      className="w-110"
       onDismiss={onClose}
       actions={<Button onClick={onClose}>Close</Button>}
     >
