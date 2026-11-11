@@ -166,12 +166,37 @@ const untilResolutionDraft = (page) =>
 /** The page half of a capture's `.html`: the DOM with every stylesheet
  * inlined and every script removed. The file then renders on its own, for
  * example as a nit attachment, and nothing on it responds to input. An
- * embedded image or page carries its content too, as a `data:` URL or a
- * `srcdoc`, because the file has no server to fetch it from. */
+ * embedded image or page and each font file that the page loaded carry
+ * their content too, as a `data:` URL or a `srcdoc`, because the file has
+ * no server to fetch them from. */
 async function snapshot() {
-  const css = [...document.styleSheets]
-    .map((sheet) => [...sheet.cssRules].map((rule) => rule.cssText).join("\n"))
-    .join("\n");
+  const fetchOk = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`snapshot: ${url} answered ${res.status}`);
+    return res;
+  };
+  const dataUrl = async (url) => {
+    const blob = await (await fetchOk(url)).blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  };
+  const loaded = new Set(
+    performance.getEntriesByType("resource").map((entry) => entry.name),
+  );
+  const sheets = [...document.styleSheets].map(async (sheet) => {
+    let css = [...sheet.cssRules].map((rule) => rule.cssText).join("\n");
+    for (const [ref, path] of css.matchAll(/url\("([^"]+\.woff2)"\)/g)) {
+      const url = new URL(path, sheet.href ?? location.href).href;
+      if (loaded.has(url))
+        css = css.replace(ref, `url("${await dataUrl(url)}")`);
+    }
+    return css;
+  });
+  const css = (await Promise.all(sheets)).join("\n");
   const doc = document.documentElement.cloneNode(true);
   doc
     .querySelectorAll(
@@ -181,20 +206,8 @@ async function snapshot() {
   const style = document.createElement("style");
   style.textContent = css;
   doc.querySelector("head").append(style);
-  const fetchOk = async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`snapshot: ${url} answered ${res.status}`);
-    return res;
-  };
-  for (const img of doc.querySelectorAll("img[src]:not([src^='data:'])")) {
-    const blob = await (await fetchOk(img.getAttribute("src"))).blob();
-    img.src = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-  }
+  for (const img of doc.querySelectorAll("img[src]:not([src^='data:'])"))
+    img.src = await dataUrl(img.getAttribute("src"));
   for (const frame of doc.querySelectorAll("iframe[src]")) {
     frame.srcdoc = await (await fetchOk(frame.getAttribute("src"))).text();
     frame.removeAttribute("src");
