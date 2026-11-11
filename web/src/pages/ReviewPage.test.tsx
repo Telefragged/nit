@@ -9,7 +9,7 @@ import { Link, Route, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { logFor } from "../api/fixtures/stream";
 import { COMMIT_MSG_PATH } from "../api/types";
-import { renderPage } from "../test/page";
+import { renderPage, user } from "../test/page";
 import ReviewPage from "./ReviewPage";
 
 // No vitest globals → testing-library cannot auto-cleanup; without this,
@@ -77,9 +77,9 @@ const picker = (label: string): HTMLButtonElement =>
   screen.getByLabelText<HTMLButtonElement>(label);
 
 /** Opens `label`'s list and chooses the option named `option`. */
-const choose = (label: string, option: string) => {
+const choose = async (label: string, option: string) => {
   fireEvent.click(picker(label));
-  fireEvent.click(screen.getByRole("option", { name: option }));
+  await user.click(screen.getByRole("option", { name: option }));
 };
 
 /** The options `label` offers, each as it reads on screen. */
@@ -201,7 +201,7 @@ describe("expansion across diff-range navigation", () => {
     expect(added("src/auth/rotate.rs")).toBe("+19");
 
     // r0 → r1 interdiff: the same files in the same (tree) order.
-    choose("Diff base", "r0 6 comments");
+    await choose("Diff base", "r0 6 comments");
     await settle();
     expect(added("src/auth/rotate.rs")).toBe("+17");
     expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
@@ -209,7 +209,7 @@ describe("expansion across diff-range navigation", () => {
 
     // r0 vs base (the invalid against=0 snaps back to Base): rotate.rs is
     // still open; store.rs stays collapsed; tests/rotation.rs drops out.
-    choose("Revision", "r0 6 comments");
+    await choose("Revision", "r0 6 comments");
     await settle();
     expect(queryPath("tests/rotation.rs")).toBeNull();
     expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
@@ -324,7 +324,7 @@ describe("the selection-miss bubble", () => {
     expect(bubble()).not.toBeNull();
 
     // Switching the range leaves different lines where it hangs.
-    choose("Diff base", "r0 6 comments");
+    await choose("Diff base", "r0 6 comments");
     expect(bubble()).toBeNull();
   });
 });

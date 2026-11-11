@@ -68,6 +68,7 @@ export default function TagNav({
     <section className="tag-nav">
       <div className="tag-nav-title">
         <Select
+          className="min-w-0 flex-1"
           label="Tag"
           title="Graph the changes that share this tag's value"
           placeholder="no tags"

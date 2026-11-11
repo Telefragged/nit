@@ -195,6 +195,9 @@ function DiffRangeSelect({
   return (
     <>
       <Select
+        // Wide enough for a revision and its comment count, so choosing one
+        // never reflows the toolbar around it.
+        className="min-w-[18ch]"
         label="Diff base"
         title="Base = parent commit; rM = interdiff against revision M"
         placeholder="no base"
@@ -210,6 +213,7 @@ function DiffRangeSelect({
       />
       <span className="dim mono">→</span>
       <Select
+        className="min-w-[18ch]"
         label="Revision"
         title="Revision under review"
         placeholder="no revisions"

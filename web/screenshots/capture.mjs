@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { clickNow, one } from "../gallery/act.ts";
+import { clickNow, one, untilDom } from "../gallery/act.ts";
 // The bytes behind each attachment of change 12.
 import ATTACHMENT_BLOBS from "../src/api/fixtures/blobs.json" with { type: "json" };
 
@@ -64,34 +64,6 @@ const serve = (dir) =>
     res.writeHead(200, { "Content-Type": CONTENT_TYPES[extname(file)] });
     createReadStream(file).pipe(res);
   });
-
-/** The page half of `untilDom`: resolves once `test(arg)` holds. It runs
- * the test now, then after each DOM mutation, and never on a timer. */
-function observe(test, arg) {
-  return new Promise((resolve) => {
-    const options = {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      characterData: true,
-    };
-    const observer = new MutationObserver(check);
-    function check() {
-      if (!test(arg)) return;
-      observer.disconnect();
-      resolve();
-    }
-    observer.observe(document, options);
-    check();
-  });
-}
-
-/** Resolves once `test(arg)` holds in the page. `test` runs in the page,
- * so it can reach nothing of this module but `arg`. */
-const untilDom = (page, test, arg) =>
-  page.evaluate(
-    `(${observe.toString()})(${test.toString()}, ${JSON.stringify(arg)})`,
-  );
 
 /** Every page marks its `<main>` busy until all the data it draws has
  * arrived. The repo sidebar marks itself busy the same way. No `<main>`
@@ -250,8 +222,12 @@ const hoverThread = async (page, text, selector) => {
 const expandAllFiles = (page) =>
   clickNow(page.getByRole("button", { name: "expand all" }));
 
-/** Opens the picker `label` names, so the capture shows its list. */
-const openPicker = (page, label) => clickNow(page.getByLabel(label));
+/** Opens the picker whose label is `label`, so the capture shows its
+ * list. The list mounts after the click. */
+const openPicker = async (page, label) => {
+  await clickNow(page.getByLabel(label));
+  await untilDom(page, () => !!document.querySelector('[role="listbox"]'));
+};
 
 /** Diff settings live behind the diffbar cog; a capture that wants a
  * non-default one picks it in the modal and applies. */
