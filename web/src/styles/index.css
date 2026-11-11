@@ -1,15 +1,59 @@
-/* nit stylesheet — split by area, one global cascade. Imported once
-   (styles.ts). Order is the cascade: tokens first, then the element base,
-   then chrome and the review/diff/comment surfaces, the syntax theme, and
-   the change graph. The classes stay global (no CSS Modules) on purpose —
+/* nit stylesheet, imported once (styles.ts).
+
+   Tailwind orders its layers: theme, base, components, utilities. The
+   hand-written sheets are `components`: they override Tailwind's reset in
+   `base`, and a utility class overrides them.
+
+   The classes of those sheets stay global (no CSS Modules) on purpose —
    the diff selection logic coordinates across components through shared
    selectors (diff.css `sel-old`/`sel-new`, the `[data-sel-side]` ::selection
    rules), which a scoped sheet would fight. */
-@import url("./tokens.css");
-@import url("./base.css");
-@import url("./chrome.css");
-@import url("./review.css");
-@import url("./diff.css");
-@import url("./comments.css");
-@import url("./highlight.css");
-@import url("./graph.css");
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./tokens.css";
+@import "./base.css" layer(components);
+@import "./chrome.css" layer(components);
+@import "./review.css" layer(components);
+@import "./diff.css" layer(components);
+@import "./comments.css" layer(components);
+@import "./highlight.css" layer(components);
+@import "./graph.css" layer(components);
+
+/* The gallery builds from its own directory, which contains no component. */
+@source "..";
+
+/* Tailwind's own type scale and radii are removed here, and its palette in
+   tokens.css, so a utility resolves only to a value that tokens.css or
+   this block defines. `--name-*` and `--name--line-height` are Tailwind's
+   syntax. */
+/* stylelint-disable custom-property-pattern */
+@theme {
+  --text-*: initial;
+  --radius-*: initial;
+  --text-xs: 11px;
+  --text-xs--line-height: 16px;
+  --text-sm: 12px;
+  --text-sm--line-height: 18px;
+  --text-base: 13px;
+  --text-base--line-height: 19px;
+  --text-lg: 15px;
+  --text-lg--line-height: 22px;
+  --text-xl: 18px;
+  --text-xl--line-height: 24px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+}
+/* stylelint-enable custom-property-pattern */
+
+/* The names that shadcn/ui components use. */
+@theme inline {
+  --color-primary: var(--color-mark);
+  --color-primary-foreground: var(--color-mark-foreground);
+  --color-muted: var(--color-accent);
+  --color-input: var(--color-border-strong);
+  --color-ring: var(--color-foreground);
+}
