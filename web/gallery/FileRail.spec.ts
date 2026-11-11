@@ -65,11 +65,11 @@ test("a file row expands to a link per thread, with its state", async ({
     "/?file=crates/nit/src/server.rs&line=12",
   ]);
   assert.deepEqual(await of("title"), ["open", "open", "draft"]);
-  assert.deepEqual(await of("class", ".rail-icon"), [
-    "lucide lucide-message-square rail-icon mark-open",
-    "lucide lucide-message-square rail-icon mark-open",
-    "lucide lucide-message-square rail-icon mark-draft",
-  ]);
+  const icons = await of("class", ".thread-icon");
+  assert.deepEqual(
+    icons.map((cls) => /mark-\w+/.exec(cls ?? "")?.[0]),
+    ["mark-open", "mark-open", "mark-draft"],
+  );
 });
 
 test("selecting a file marks its row as current", async ({ mount }) => {

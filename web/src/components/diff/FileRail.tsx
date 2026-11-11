@@ -65,9 +65,9 @@ function threadLink(file: string, t: UiThread): DiffLink {
   return { file, lines: { side: anchorSide(anchor), start, end } };
 }
 
-/** The row's trailing lane: the +/- churn, then the status letter. Binary
- * files carry no churn. An attachment shows a paperclip for its status,
- * and the revision it carries forward from when that is not the one on
+/** The row's trailing lane: the +/- churn, then the status letter. A
+ * binary file has no churn. An attachment shows a paperclip for its
+ * status, and the revision that it comes from when that is not the one on
  * screen. */
 function Counts({ file }: { file: ReviewFile }) {
   const { selected } = useReview();
@@ -237,7 +237,7 @@ export default function FileRail({
                 >
                   <span className="rail-toggle" />
                   <MessageSquare
-                    className={`rail-icon mark-${threadMark(t)}`}
+                    className={`thread-icon rail-icon mark-${threadMark(t)}`}
                     size={14}
                     aria-hidden
                   />

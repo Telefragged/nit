@@ -261,19 +261,6 @@ button.rail-toggle,
   margin-right: 5px;
 }
 
-/* The comment icon of a thread row has the form of its thread
-   (docs/design.md): a fill for an open thread, a dashed outline for a
-   draft, and gray for a resolved thread. */
-.rail-thread .mark-open {
-  color: var(--color-mark-text);
-  fill: var(--color-mark);
-}
-
-.rail-thread .mark-draft {
-  color: var(--color-mark-text);
-  stroke-dasharray: 3 2;
-}
-
 .rail-chevron.open {
   transform: rotate(90deg);
 }
