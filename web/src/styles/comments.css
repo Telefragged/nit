@@ -311,22 +311,17 @@ a.comment-time:hover {
 }
 
 .change-threads {
-  margin-bottom: 14px;
+  padding: 10px 12px 2px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .change-threads .thread {
   margin-left: 0;
 }
 
-.leftover-threads {
-  margin-bottom: 14px;
-}
-
 .leftover-file {
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-bottom: 1px solid var(--color-border);
   padding: 8px 12px;
-  margin-bottom: 10px;
   background: var(--color-sunken);
 }
 
@@ -439,7 +434,8 @@ summary.log-line:hover {
   z-index: 40;
   background: var(--color-card);
   border-top: 1px solid var(--color-border-strong);
-  padding: 8px 16px;
+  height: var(--review-bar-h);
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;

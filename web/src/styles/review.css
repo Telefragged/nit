@@ -1,7 +1,11 @@
 /* ---------------------------------------------------------- review page */
 
 .review-page {
-  padding-bottom: 56px; /* room for the fixed single-row review bar */
+  /* The height of the review bar, which is fixed at the bottom of the
+     page, and room for it under the page. */
+  --review-bar-h: 46px;
+
+  padding-bottom: calc(var(--review-bar-h) + 10px);
 
   /* The heights of the two sticky bars above the files. The topbar is
      outside this page, and chrome.css gives it the same 40px. A file
@@ -147,15 +151,20 @@
 
 /* layout: sidebar (file list) + diff column */
 
+/* The two columns touch. The hairline between them is the left border of
+   the diff column, and its file sections reach the right edge of the
+   page. */
 .review-layout {
-  padding: 12px 16px 0;
+  gap: 0;
 }
 
 /* The sidebar is the one sticky, height-bounded column; the file tree
-   sizes its scrollport against it. */
-.review-sidebar {
-  top: calc(var(--bars-h) + 5px);
-  max-height: calc(100vh - 140px);
+   sizes its scrollport against it. It ends above the review bar. */
+.review-layout > .review-sidebar {
+  top: var(--bars-h);
+  width: 284px;
+  max-height: calc(100vh - var(--bars-h) - var(--review-bar-h));
+  padding: 12px 8px 12px 12px;
   display: flex;
   flex-direction: column;
 }
@@ -404,6 +413,7 @@ button.rail-toggle.mark-draft:hover {
 .diff-column {
   flex: 1;
   min-width: 0;
+  border-left: 1px solid var(--color-border);
 
   /* the containing block for the selection-miss bubble, which is placed in
      this column's coordinates so it scrolls with the lines it points at */
@@ -412,23 +422,22 @@ button.rail-toggle.mark-draft:hover {
 
 /* file sections */
 
+/* A section has no box: its header and its rows reach both edges of the
+   column, and one hairline ends it. A file lands with its header directly
+   under the sticky bars. */
 .file-section {
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
+  --file-header-h: 36px;
 
-  /* clip (not hidden — that would break the sticky header) rounds the
-     header's corners at rest and squares them while stuck */
-  overflow: clip;
-  margin-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
   background: var(--color-background);
+  scroll-margin-top: var(--bars-h, 0);
 }
 
-/* A file, a linked line, and a linked thread all land just below the
-   sticky file header. */
-.file-section,
+/* A linked line and a linked thread land just below the sticky file
+   header. A thread outside a file section has no header above it. */
 .line-row .code,
 [data-thread] {
-  scroll-margin-top: calc(var(--bars-h, 0px) + 43px);
+  scroll-margin-top: calc(var(--bars-h, 0px) + var(--file-header-h, 0px));
 }
 
 .file-header {
@@ -436,11 +445,12 @@ button.rail-toggle.mark-draft:hover {
   top: var(--bars-h, 0);
   z-index: 10;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
+  height: var(--file-header-h);
+  padding: 0 12px;
   background: var(--color-card);
   border-bottom: 1px solid var(--color-border);
-  padding: 5px 10px;
   font-family: var(--font-mono);
   font-size: 12px;
   cursor: pointer; /* the header toggles the section's collapse */
@@ -450,18 +460,15 @@ button.rail-toggle.mark-draft:hover {
   background: var(--color-accent);
 }
 
-/* A collapsed section is just its header: no inner edge (the section's
-   clip already rounds all four header corners). */
+/* A collapsed section is just its header, and the hairline of the section
+   is under it. */
 .file-section.collapsed .file-header {
   border-bottom: none;
 }
 
 .fchevron {
   flex: none;
-  width: 10px;
-  font-size: 10px;
-  color: var(--color-faint-foreground);
-  user-select: none;
+  color: var(--color-muted-foreground);
 }
 
 .file-header .fpath {
@@ -503,32 +510,33 @@ button.rail-toggle.mark-draft:hover {
 }
 
 .fstat {
-  width: 16px;
-  text-align: center;
-  border-radius: 3px;
-  font-weight: 700;
-  font-size: 10.5px;
-  font-family: var(--font-mono);
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 11px;
 }
 
 .fstat-A {
   color: var(--color-add);
-  background: var(--color-add-bg);
+  background: var(--color-add-gutter);
 }
 
-/* A modification is what nearly every file in a diff is, so its badge
-   carries the filename's own grey — the colored ones then read as the
-   exceptions they are. */
+/* A modification is what nearly every file in a diff is, so its badge is
+   gray, and the colored ones stand out as the exceptions. */
 .fstat-M,
 .fstat-R {
-  color: var(--color-foreground);
+  color: var(--color-muted-foreground);
   background: var(--color-accent);
 }
 
 .fstat-D {
   color: var(--color-del);
-  background: var(--color-del-bg);
+  background: var(--color-del-gutter);
 }
 
 .plus {
