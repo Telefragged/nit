@@ -151,10 +151,12 @@ export default function ReviewBar({
     };
   }, [replyOpen, canSubmit, submit]);
 
+  const busy = saveDraft.isPending || clear.isPending;
+
   // Closing discards only the typed cover message (after confirmation when it
   // diverges from the draft) — the draft decision lives server-side.
   const requestClose = () => {
-    if (saveDraft.isPending || clear.isPending) return;
+    if (busy) return;
     const dirty = message.trim() !== (draftDecision?.message ?? "");
     if (!confirmDiscard(dirty, "cover message")) return;
     setError(null);
@@ -234,16 +236,13 @@ export default function ReviewBar({
             }}
           />
           <div className="modal-actions">
-            <button
-              onClick={requestClose}
-              disabled={saveDraft.isPending || clear.isPending}
-            >
+            <button onClick={requestClose} disabled={busy}>
               Cancel
             </button>
             {draftDecision ? (
               <button
                 className="linkish"
-                disabled={saveDraft.isPending || clear.isPending}
+                disabled={busy}
                 onClick={() => {
                   clear.mutate();
                 }}

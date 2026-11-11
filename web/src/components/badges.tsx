@@ -1,4 +1,5 @@
-import type { ChangeStatus } from "../api/types";
+import type { ChangeStatus, Decision } from "../api/types";
+import { DECISION_LABEL } from "../api/verdict";
 
 const STATUS_LABEL: Record<ChangeStatus, string> = {
   pending: "Pending",
@@ -38,4 +39,16 @@ export function StatusDot({
   title?: string;
 }) {
   return <span className={`dot dot-${STATUS_COLOR[status]}`} title={title} />;
+}
+
+/** The label of a decision that the reviewer drafted and did not submit. */
+export function DraftDecision({ decision }: { decision: Decision }) {
+  return (
+    <span
+      className="pill mark-draft"
+      title="Your draft decision (not yet submitted)"
+    >
+      {DECISION_LABEL[decision]}
+    </span>
+  );
 }

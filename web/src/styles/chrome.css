@@ -283,27 +283,32 @@
   height: 16px;
   padding: 0 5px;
   border-radius: 8px;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 /* The three forms of the reviewer's work (docs/design.md), on a pill and
-   on the gutter of a commented line: a fill for an open thread, a dashed
+   on the gutter of a commented line. The chevron of a file in the rail
+   has the first two: a fill for an open thread, a dashed
    outline for unsent work, and gray for a resolved thread. */
 .pill.mark-open,
-.line-row .g.mark-open {
+.line-row .g.mark-open,
+.rail-toggle.mark-open {
   background: var(--color-mark);
   color: var(--color-mark-foreground);
 }
 
 .pill.mark-draft,
-.line-row .g.mark-draft {
+.line-row .g.mark-draft,
+.rail-toggle.mark-draft {
   outline: 1px dashed var(--color-mark-text);
   outline-offset: -1px;
   color: var(--color-mark-text);
 }
 
+.pill.mark-resolved,
 .line-row .g.mark-resolved {
   background: var(--color-accent);
   color: var(--color-muted-foreground);

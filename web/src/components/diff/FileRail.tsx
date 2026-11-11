@@ -18,7 +18,18 @@ import {
 import { Link } from "react-router-dom";
 import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../../api/types";
 import type { ReviewFile } from "../../lib/attachments";
-import { anchorAt, shownAt, type UiThread } from "../../lib/comments";
+import {
+  anchorAt,
+  anchorSide,
+  markCountsLabel,
+  shownAt,
+  strongerMark,
+  threadKey,
+  threadMark,
+  type ThreadMark,
+  type UiThread,
+} from "../../lib/comments";
+import type { DiffLink } from "../../lib/diffLink";
 import {
   attachmentPaths,
   diffTotals,
@@ -39,25 +50,29 @@ function threadLines(t: UiThread): string {
   return `range ${start_line}:${start_char}-${end_line}:${end_char}`;
 }
 
-/** The row's trailing lane: draft and published comment counts, the +/-
- * churn, then the status letter. Binary files carry no churn. An
- * attachment shows a paperclip for its status, and the revision it
- * carries forward from when that is not the one on screen. */
-function Counts({
-  file,
-  drafts,
-  published,
-}: {
-  file: ReviewFile;
-  drafts: number;
-  published: number;
-}) {
+/** The link to a thread: a published thread by its id, and a thread of
+ * drafts only by the lines of its anchor. */
+function threadLink(file: string, t: UiThread): DiffLink {
+  if (t.id !== null) return { thread: t.id };
+  const { anchor } = shownAt(t);
+  const at = anchorAt(anchor);
+  if (at === null) return { file, lines: null };
+  const [start, end] =
+    "whole" in at
+      ? [at.whole, at.whole]
+      : [at.selection.start_line, at.selection.end_line];
+  return { file, lines: { side: anchorSide(anchor), start, end } };
+}
+
+/** The row's trailing lane: the +/- churn, then the status letter. Binary
+ * files carry no churn. An attachment shows a paperclip for its status,
+ * and the revision it carries forward from when that is not the one on
+ * screen. */
+function Counts({ file }: { file: ReviewFile }) {
   const { selected } = useReview();
   const from = file.attachment?.revision;
   return (
     <span className="rail-counts">
-      {drafts > 0 ? <span className="rail-drafts">{drafts}d</span> : null}
-      {published > 0 ? <span>{published}c</span> : null}
       {from !== undefined && from !== selected ? (
         <span className="dim" title={`attached to r${from}`}>
           r{from}
@@ -108,13 +123,14 @@ function flip(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
   return next;
 }
 
-/** Left rail: the diff as a directory tree, each file with its status, its
- * comment counts and its +/- churn. The attachments follow in a tree of
- * their own, grouped by the directories in their names. Selecting a file expands its section
- * and scrolls to it. A file with published threads opens to a row per
- * thread, and each row links to its thread. The title row toggles all
- * sections at once. A long diff needs this bulk toggle, because every
- * file starts collapsed. */
+/** Left rail: the diff as a directory tree, each file with its status and
+ * its +/- churn. The attachments follow in a tree of their own, grouped by
+ * the directories in their names. Selecting a file expands its section
+ * and scrolls to it. A file with threads has a chevron in the form of its
+ * mark of the highest rank, and opens to a row per thread. The comment
+ * icon of a row has the form of its thread, and the row links to the
+ * thread. The title row toggles all sections at once. A long diff needs
+ * this bulk toggle, because every file starts collapsed. */
 export default function FileRail({
   files,
   threadsByFile,
@@ -157,9 +173,9 @@ export default function FileRail({
     const file = files[index];
     if (!file) return null;
     const threads = threadsByFile.get(file.path) ?? [];
-    const published = threads.filter(
-      (t): t is UiThread & { id: number } => t.id !== null,
-    );
+    const mark = threads
+      .map(threadMark)
+      .reduce<ThreadMark | undefined>(strongerMark, undefined);
     const open = openFiles.has(file.path);
     const FileIcon = FILE_ICON[fileStatus(file)];
     const [stem, ext] = splitExtension(name);
@@ -172,11 +188,12 @@ export default function FileRail({
           title={file.old_path ? `${file.old_path} → ${file.path}` : undefined}
           style={indent(depth)}
         >
-          {published.length > 0 ? (
+          {mark ? (
             <button
-              className="rail-toggle rail-toggle-chevron"
+              className={`rail-toggle rail-toggle-chevron mark-${mark}`}
               aria-expanded={open}
               aria-label={`comments on ${name}`}
+              title={markCountsLabel(threads)}
               onClick={() => {
                 setOpenFiles((cur) => flip(cur, file.path));
               }}
@@ -204,24 +221,25 @@ export default function FileRail({
             </span>
             {ext}
           </button>
-          <Counts
-            file={file}
-            drafts={threads.length - published.length}
-            published={published.length}
-          />
+          <Counts file={file} />
         </div>
         {open ? (
           <ul>
-            {published.map((t) => (
-              <li key={t.id}>
+            {threads.map((t) => (
+              <li key={threadKey(t)}>
                 <Link
                   className="rail-row rail-thread"
-                  to={linkHref({ thread: t.id })}
+                  to={linkHref(threadLink(file.path, t))}
                   state={REVEAL}
+                  title={threadMark(t)}
                   style={indent(depth + 1)}
                 >
                   <span className="rail-toggle" />
-                  <MessageSquare className="rail-icon" size={14} aria-hidden />
+                  <MessageSquare
+                    className={`rail-icon mark-${threadMark(t)}`}
+                    size={14}
+                    aria-hidden
+                  />
                   <span className="rail-name">{threadLines(t)}</span>
                   <span className="rail-counts">r{shownAt(t).revision}</span>
                 </Link>
