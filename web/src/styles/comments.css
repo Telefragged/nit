@@ -469,8 +469,7 @@ summary.log-line:hover {
 }
 
 .review-stats {
-  display: flex;
-  gap: 12px;
+  gap: 14px;
   font-size: 12px;
   white-space: nowrap;
 }

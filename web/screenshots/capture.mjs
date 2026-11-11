@@ -996,7 +996,7 @@ const captures = [
     path: "/changes/12",
     fullPage: false,
     actions: async (page) => {
-      await clickNow(page.getByRole("button", { name: "Review (a)" }));
+      await clickNow(page.getByRole("button", { name: "Review", exact: true }));
       await one(page.locator(".reply-modal"));
     },
   },
