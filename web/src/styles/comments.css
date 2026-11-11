@@ -1,8 +1,8 @@
 /* threads + comments */
 
 .thread {
-  border: 1px solid var(--color-border-strong);
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
   background: var(--color-card);
   margin: 8px 12px 10px 58px;
   max-width: 760px;
@@ -15,38 +15,46 @@
   box-shadow: 0 0 0 1px var(--color-foreground);
 }
 
+/* A dashed yellow outline is the form of unsent work (docs/design.md). */
 .thread-draft {
-  border-style: dashed;
-  border-color: var(--color-mark-text);
+  border: 1px dashed var(--color-mark-text);
+  background: none;
 }
 
 .comment {
-  padding: 7px 11px 8px;
+  padding: 6px 12px 8px;
 }
 
 .comment + .comment {
   border-top: 1px solid var(--color-border);
 }
 
+/* As high as the buttons that the head of a first comment and of a draft
+   carries, so every head has one height. */
 .comment-head {
   display: flex;
   gap: 8px;
   align-items: center;
-  font-size: 10.5px;
-  margin-bottom: 3px;
+  min-height: 24px;
+  font-size: 12px;
+}
+
+/* The toggle of a thread. */
+.comment-head > [aria-expanded] {
+  margin-left: -6px;
 }
 
 .byline {
-  font-weight: 700;
-  letter-spacing: 0.8px;
-}
-
-.byline-reviewer {
-  color: var(--color-foreground);
+  font-weight: 600;
 }
 
 .byline-author {
   color: var(--color-muted-foreground);
+}
+
+.draft-label {
+  font-weight: 600;
+  color: var(--color-mark-text);
 }
 
 .comment-time {
@@ -59,16 +67,54 @@ a.comment-time:hover {
   text-decoration: underline;
 }
 
-.comment-tools {
+.comment-tools,
+.thread-tail {
   margin-left: auto;
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 4px;
+}
+
+.thread-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+}
+
+/* A thread as one row: the head of its first comment, with the start of
+   that comment and the count of the comments in place of the byline. The
+   head has the padding of an open thread, so the toggle and the state stay
+   where they are when the thread opens. */
+.thread-collapsed .comment {
+  padding-bottom: 6px;
+}
+
+.thread-collapsed .comment-head {
+  cursor: pointer;
+}
+
+.thread-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-muted-foreground);
+}
+
+.thread-count {
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
 }
 
 /* markdown body: blocks own their spacing (remark-breaks keeps single
    newlines as hard breaks, so no pre-wrap) */
 .comment-body {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--color-foreground);
 }
 
@@ -161,14 +207,10 @@ a.comment-time:hover {
 
 .thread-actions {
   display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 5px 11px;
+  gap: 4px;
+  justify-content: flex-end;
+  padding: 4px 6px;
   border-top: 1px solid var(--color-border);
-}
-
-.thread-actions .spacer {
-  flex: 1;
 }
 
 .linkish {
@@ -185,16 +227,6 @@ a.comment-time:hover {
   border: none;
   color: var(--color-foreground);
   text-decoration: underline;
-}
-
-.linkish-danger,
-.linkish-danger:hover:not(:disabled) {
-  color: var(--color-del);
-}
-
-.thread-ported {
-  color: var(--color-faint-foreground);
-  font-style: italic;
 }
 
 /* editors */

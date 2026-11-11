@@ -10,6 +10,11 @@ The rules for the look of the web UI. `web/src/styles/tokens.css` defines the to
 - **A change status reuses three of them.** Approved is green, changes requested is red, and merged is purple. Pending is yellow. Every other status is gray.
 - **Syntax colors are quiet.** A keyword is violet, a string or a literal is teal, and a comment is gray. No token is red, orange, yellow or green, so no token has the color of a deletion, a mark or an addition.
 
+## Threads
+
+- **Form shows the state.** A draft has a dashed yellow outline. An open thread has a yellow dot. A resolved thread has a gray check. The box of a published thread is neutral.
+- **A resolved thread is one row.** An open thread shows in full. A resolved thread shows its state, the start of its first comment, and the count of its comments. The chevron of a thread changes it to the other form.
+
 ## Themes
 
 Each color token has a light and a dark value, and the system setting selects one. A rule takes its color from a token and never from a literal, so that it holds in both themes.

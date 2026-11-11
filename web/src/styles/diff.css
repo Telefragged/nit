@@ -358,9 +358,6 @@
 
 .meta-row {
   grid-column: 1 / -1;
-  background: var(--color-sunken);
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
 }
 
 /* Side-by-side: a row's threads sit under the column they were made on —

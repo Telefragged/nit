@@ -227,6 +227,14 @@ const centerOn = async (page, locator) => {
   await untilSpySettled(page);
 };
 
+/** Expands the collapsed thread whose row is `row`. A resolved thread
+ * starts as one row. The row goes to the middle of the viewport first,
+ * clear of the sticky bars, so the click lands on it. */
+const expandThread = async (page, row) => {
+  await centerOn(page, row);
+  await clickNow(row);
+};
+
 /** Centers the inline thread holding `text`, points at it, and resolves
  * once the tint `selector` names shows. */
 const hoverThread = async (page, text, selector) => {
@@ -585,28 +593,29 @@ const captures = [
     path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
-      await clickNow(page.getByRole("button", { name: "Reply" }).first());
+      await expandThread(page, page.locator(".thread-collapsed"));
+      await clickNow(page.getByRole("button", { name: "Reply" }));
       await one(page.locator(".check-label"));
     },
   },
   // Drafted thread resolution: Reopen the
   // resolved commit-message thread, then save the resolution-only draft. The
-  // editor's Resolved checkbox, the pending OPEN badge with its "· unsaved"
-  // hint, and the "Reopening this thread" draft are all visible.
+  // pending Open state with its "not submitted" hint and the "Reopening
+  // this thread" draft are both visible.
   {
     name: "review-resolve-drafted",
     path: "/changes/11?against=0",
     fullPage: false,
     actions: async (page) => {
-      await clickNow(page.getByRole("button", { name: "Reopen" }).first());
+      await expandThread(page, page.locator(".thread-collapsed"));
+      await clickNow(page.getByRole("button", { name: "Reopen" }));
       await clickNow(page.getByRole("button", { name: "Save draft" }));
       await untilResolutionDraft(page);
     },
   },
   // One-click Resolve: Resolve on an open thread drafts the empty
-  // resolution-only draft directly — no editor. The
-  // "Resolving this thread" draft and the pending RESOLVED badge appear with
-  // a single click.
+  // resolution-only draft directly — no editor. The thread collapses to
+  // one row that shows its pending Resolved state.
   {
     name: "review-resolve-oneclick",
     path: "/changes/11?against=0",
@@ -617,7 +626,11 @@ const captures = [
           .locator(".thread", { hasText: "clone the pool" })
           .getByRole("button", { name: "Resolve" }),
       );
-      await untilResolutionDraft(page);
+      await untilDom(page, () =>
+        [...document.querySelectorAll(".thread-collapsed")].some((row) =>
+          row.textContent.includes("not submitted"),
+        ),
+      );
       await untilSpySettled(page);
     },
   },
@@ -897,6 +910,10 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await expandAllFiles(page);
+      await expandThread(
+        page,
+        page.locator(".thread-collapsed", { hasText: "Locking the RNG mutex" }),
+      );
       await centerOn(page, page.locator(".thread", { hasText: "ChaCha12" }));
     },
   },
