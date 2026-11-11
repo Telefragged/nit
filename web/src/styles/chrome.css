@@ -253,13 +253,6 @@
   white-space: nowrap;
 }
 
-.error-glyph {
-  color: var(--color-del);
-  margin-left: 6px;
-  cursor: help;
-  font-size: 12px;
-}
-
 .sha {
   color: var(--color-faint-foreground);
   font-size: 11px;
@@ -324,21 +317,6 @@
   color: var(--color-mark-text);
 }
 
-.orphaned-block {
-  margin-top: 14px;
-}
-
-.orphaned-block summary {
-  color: var(--color-muted-foreground);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px 0;
-}
-
-.orphaned-block summary:hover {
-  color: var(--color-foreground);
-}
-
 /* -------------------------------------------------------------- banners */
 
 .banner {
@@ -356,18 +334,6 @@
   border-color: color-mix(in srgb, var(--color-del) 40%, transparent);
   background: var(--color-del-bg);
   color: var(--color-del);
-}
-
-.banner-warn {
-  border-color: color-mix(in srgb, var(--color-mark-text) 40%, transparent);
-  background: var(--color-mark-tint);
-  color: var(--color-mark-text);
-}
-
-.banner-info {
-  border-color: var(--color-border-strong);
-  background: var(--color-card);
-  color: var(--color-muted-foreground);
 }
 
 .banner .banner-body {
