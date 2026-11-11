@@ -170,27 +170,27 @@ describe("code cell text nodes", () => {
   });
 });
 
-/** Each separator's buttons, as [class suffix, label] pairs. */
+/** Each separator's buttons, as [kind, title] pairs. */
 const buttons = (container: HTMLElement) =>
   [...container.querySelectorAll(".hunk-row")].map((row) =>
     [...row.querySelectorAll("button")].map((b) => [
-      b.className.replace("hunk-expand ", ""),
-      b.textContent,
+      /expand-\w+/.exec(b.className)?.[0],
+      b.title,
     ]),
   );
 
 describe("context-expand buttons", () => {
-  it("offers the whole gap beside the stepped reveals", () => {
+  it("offers the stepped reveals, then the whole gap", () => {
     expect(buttons(renderFile("unified", gapped(25)).container)).toEqual([
       // The top gap has no hunk above to step down from.
       [
-        ["expand-all", "+25"],
-        ["expand-up", "+10"],
+        ["expand-up", "Show 10 more lines above"],
+        ["expand-all", "Show all 25 lines"],
       ],
       [
-        ["expand-all", "+25"],
-        ["expand-down", "+10"],
-        ["expand-up", "+10"],
+        ["expand-down", "Show 10 more lines below"],
+        ["expand-up", "Show 10 more lines above"],
+        ["expand-all", "Show all 25 lines"],
       ],
     ]);
   });
@@ -198,7 +198,10 @@ describe("context-expand buttons", () => {
   it("drops the stepped reveals once one step covers the gap", () => {
     expect(
       buttons(renderFile("unified", gapped(EXPAND_STEP)).container),
-    ).toEqual([[["expand-all", "+10"]], [["expand-all", "+10"]]]);
+    ).toEqual([
+      [["expand-all", "Show all 10 lines"]],
+      [["expand-all", "Show all 10 lines"]],
+    ]);
   });
 });
 

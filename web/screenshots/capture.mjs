@@ -416,20 +416,16 @@ const captures = [
     actions: expandAllFiles,
     colorScheme: "light",
   },
-  // Context expansion: a gap separator carries a centred unit of +N buttons
-  // — the whole gap on the left, then the stepped pair, the top one
-  // revealing downward from the hunk above and the bottom one upward from
-  // the hunk below. Clicks the stepped downward button to show the
-  // revealed lines and the dropped count.
+  // Context expansion: a gap separator has its buttons at its right. The
+  // down arrow reveals lines under the hunk above, the up arrow reveals
+  // lines over the hunk below, and the last button reveals the whole gap.
+  // Clicks the down arrow to show the revealed lines and the lower count.
   {
     name: "review-expand-context",
     path: "/changes/11?against=base",
     actions: async (page) => {
       await expandAllFiles(page);
-      await revealContext(
-        page,
-        page.locator(".hunk-expand.expand-down").first(),
-      );
+      await revealContext(page, page.locator(".hunk-row .expand-down").first());
       await untilSpySettled(page);
     },
   },
@@ -443,9 +439,7 @@ const captures = [
       await expandAllFiles(page);
       await revealContext(
         page,
-        page.locator(
-          ".hunk-row:not(:has(.hunk-header)) .hunk-expand.expand-down",
-        ),
+        page.locator(".hunk-row:not(:has(.hunk-header)) .expand-down"),
       );
       await untilSpySettled(page);
     },

@@ -670,9 +670,7 @@ button.rail-toggle.mark-draft:hover {
 }
 
 /* This separator shows in place of a run of unchanged blocks that the
-   rendered diff hides. The stepped buttons extend past the top and
-   bottom borders of the separator. The margin stops them from covering
-   the blocks above and below. */
+   rendered diff hides. */
 .rendered-markdown > .hunk-row {
   margin: 12px 0;
 }
