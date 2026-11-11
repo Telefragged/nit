@@ -157,8 +157,9 @@ interface ThreadEditor {
   resolved: boolean;
 }
 
-/** Whether a thread is open or resolved once the pending drafts apply.
- * `pending` marks a state that the reviewer drafted and did not submit. */
+/** Whether a thread is open or resolved. A state that the reviewer
+ * drafted and did not submit shows as a draft: the icon is the one of the
+ * drafted state, and that state is in the title. */
 function ThreadState({
   resolved,
   pending,
@@ -166,18 +167,18 @@ function ThreadState({
   resolved: boolean;
   pending: boolean;
 }) {
+  const state = resolved ? "Resolved" : "Open";
   return (
     <span
-      className="status"
-      title={pending ? "Applies when you submit the review" : undefined}
+      className={pending ? "status draft-label" : "status"}
+      title={pending ? `${state} once you submit the review` : undefined}
     >
       {resolved ? (
         <Check size={14} aria-hidden />
       ) : (
         <span className="dot dot-amber" />
       )}
-      {resolved ? "Resolved" : "Open"}
-      {pending ? ", not submitted" : ""}
+      {pending ? "Draft" : state}
     </span>
   );
 }

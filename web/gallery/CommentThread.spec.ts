@@ -63,6 +63,10 @@ test("a drafted resolve collapses the thread and names its state", async ({
   mount,
 }) => {
   const thread = await mount("components/CommentThread/ResolveDrafted");
-  const head = await one(thread.locator(".comment-head"));
-  assert.match((await head.textContent()) ?? "", /Resolved, not submitted$/);
+  const state = await one(thread.locator(".comment-head .status"));
+  assert.equal(await state.textContent(), "Draft");
+  assert.equal(
+    await state.getAttribute("title"),
+    "Resolved once you submit the review",
+  );
 });
