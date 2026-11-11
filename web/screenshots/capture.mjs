@@ -576,8 +576,8 @@ const captures = [
   },
   // Drafted thread resolution: Reopen the
   // resolved commit-message thread, then save the resolution-only draft. The
-  // pending Open state with its "not submitted" hint and the "Reopening
-  // this thread" draft are both visible.
+  // pending Open state, which shows as a draft, and the "Reopening this
+  // thread" draft are both visible.
   {
     name: "review-resolve-drafted",
     path: "/changes/11?against=0",
@@ -604,7 +604,7 @@ const captures = [
       );
       await untilDom(page, () =>
         [...document.querySelectorAll(".thread-collapsed")].some((row) =>
-          row.textContent.includes("not submitted"),
+          row.querySelector(".status.draft-label"),
         ),
       );
       await untilSpySettled(page);
