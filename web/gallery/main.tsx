@@ -5,7 +5,7 @@ import { StrictMode, type ComponentType } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { ready } from "../src/lib/wasm";
-import "../src/styles/index.css";
+import "../src/styles";
 import { storyId } from "./storyId";
 
 const modules = import.meta.glob<Record<string, ComponentType>>(
@@ -21,6 +21,14 @@ const stories = new Map<string, ComponentType>(
       ([name, story]) => [storyId(path, name), story] as const,
     );
   }),
+);
+
+/** Resolves once the font files for Latin text have loaded, the same
+ * files that screenshots/capture.mjs loads. */
+const fonts = Promise.all(
+  [...document.fonts].map((face) =>
+    document.fonts.load(`${face.style} 1em ${face.family}`),
+  ),
 );
 
 const rootEl = document.getElementById("root");
@@ -41,6 +49,8 @@ async function mount({ story, props }: { story: string; props?: object }) {
   if (!Story) throw new Error(`no story ${story}`);
   // A story can call the fold while it renders.
   await ready;
+  // A font that loads after the commit moves the text that a spec measured.
+  await fonts;
   // flushSync commits the render before it returns. As a result, `mount`
   // returns after the commit, and it throws the error of a story that throws.
   flushSync(() => {
