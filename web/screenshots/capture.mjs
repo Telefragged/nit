@@ -47,6 +47,7 @@ const CONTENT_TYPES = {
   ".css": "text/css",
   ".svg": "image/svg+xml",
   ".wasm": "application/wasm",
+  ".woff2": "font/woff2",
 };
 
 /** An HTTP server for the bundle in `dir`. A path that names no file gets
@@ -101,6 +102,18 @@ const untilReady = (page) =>
     () =>
       !!document.querySelector("#root main") &&
       !document.querySelector('#root [aria-busy="true"]'),
+  );
+
+/** Resolves once the font files for Latin text have loaded. A font that
+ * loads later moves the text, so a capture loads the fonts before it
+ * measures or scrolls. */
+const untilFonts = (page) =>
+  page.evaluate(() =>
+    Promise.all(
+      [...document.fonts].map((face) =>
+        document.fonts.load(`${face.style} 1em ${face.family}`),
+      ),
+    ),
   );
 
 /** The scroll spy highlights, in the rail, the last file section whose top
@@ -1040,6 +1053,7 @@ async function main() {
       page.on("pageerror", (err) => errors.push(String(err)));
       try {
         await page.goto(baseUrl + cap.path, { waitUntil: "load" });
+        await untilFonts(page);
         await untilReady(page);
         if (cap.actions) await cap.actions(page);
       } catch (err) {

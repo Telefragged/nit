@@ -51,10 +51,6 @@
   --graph-lane-3: #5fae8e;
   --graph-lane-4: #c0894e;
   --graph-lane-5: #c47e9e;
-  --mono:
-    ui-monospace, "SF Mono", "JetBrains Mono", menlo, consolas,
-    "Liberation Mono", monospace;
-  --sans:
-    -apple-system, blinkmacsystemfont, "Segoe UI", inter, roboto,
-    "Helvetica Neue", sans-serif;
+  --mono: "Intel One Mono Variable", ui-monospace, monospace;
+  --sans: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
 }

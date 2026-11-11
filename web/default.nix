@@ -74,7 +74,7 @@ let
     src = src.npm;
     inherit nodejs;
     name = "nit-web-npm-deps";
-    hash = "sha256-7s6zgmyg3UxGA1Am0NSMZYDEdEpeRwfcJfC5/s3Y2jE=";
+    hash = "sha256-vgfWJhLwJ9ERTBJSZMF1k1Qnib7CHw+jWLar5XGlyzs=";
   };
 
   # Drop the generated wasm glue into a web build's tree before it runs.
@@ -100,9 +100,10 @@ let
     # The build sandbox has no user namespaces and no writable
     # /dev/shm.
     NIT_SCREENSHOT_NO_SANDBOX = "1";
-    # The system font stacks (tokens.css) resolve to no font in the
-    # sandbox. Map the generic sans and mono families to real fonts,
-    # so that the captures show text and not empty boxes.
+    # The bundled fonts (src/styles.ts) cover Latin text. A character
+    # outside them uses the generic sans or mono family, which resolves
+    # to no font in the sandbox. Map both families to real fonts, so
+    # that the captures show such a character and not an empty box.
     FONTCONFIG_FILE = makeFontsConf {
       fontDirectories = [
         liberation_ttf
