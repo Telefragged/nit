@@ -168,7 +168,7 @@ function ThreadState({
 }) {
   return (
     <span
-      className="thread-state"
+      className="status"
       title={pending ? "Applies when you submit the review" : undefined}
     >
       {resolved ? (

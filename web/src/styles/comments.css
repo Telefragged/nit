@@ -75,16 +75,6 @@ a.comment-time:hover {
   gap: 4px;
 }
 
-.thread-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-muted-foreground);
-  white-space: nowrap;
-}
-
 /* A thread as one row: the head of its first comment, with the start of
    that comment and the count of the comments in place of the byline. The
    head has the padding of an open thread, so the toggle and the state stay
