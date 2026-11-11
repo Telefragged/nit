@@ -35,24 +35,12 @@ function node(
   };
 }
 
-/** `count` unresolved threads at revision 0. */
-function activity(count: number): NodeActivity {
-  return {
-    threads: Array.from({ length: count }, (_, i) => ({
-      id: i,
-      change_number: 0,
-      revision: 0,
-      anchor: "change" as const,
-      resolved: false,
-      comments: [],
-      created_at: "",
-      updated_at: "",
-    })),
-    drafts: [],
-    unresolved: count,
-    decision: null,
-  };
-}
+/** The activity of a change with `count` unresolved threads. */
+const activity = (count: number): NodeActivity => ({
+  drafts: [],
+  unresolved: count,
+  decision: null,
+});
 
 /** A chain of `n` changes numbered from 10, tip first as the graph lists
  * them: change 10 + n - 1 at the top, change 10 at the bottom on "m". */

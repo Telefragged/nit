@@ -33,7 +33,7 @@ const GRAPH: ChangeGraph = {
 };
 
 const ACTIVITY = new Map<number, NodeActivity>([
-  [11, { threads: [], drafts: [], unresolved: 3, decision: null }],
+  [11, { drafts: [], unresolved: 3, decision: null }],
 ]);
 
 const TAGS = { branch: "track/auth-rotation", "session-id": "auth-rotation" };

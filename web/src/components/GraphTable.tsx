@@ -1,7 +1,7 @@
 import { type CSSProperties, Fragment, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, GraphNode } from "../api/types";
-import { type NodeActivity, revisionActivity } from "../lib/comments";
+import type { NodeActivity } from "../lib/comments";
 import type { GraphLayout, LaidEdge, LaidNode } from "../lib/graphLayout";
 import { layoutGraph } from "../lib/graphLayout";
 import { shortSha } from "../lib/sha";
@@ -56,8 +56,9 @@ function nodeColor(ln: LaidNode): string {
   return `lane-${ln.lane % LANE_COLORS}`;
 }
 
-// Comment/draft/unresolved counts at the node's pinned revision plus the
-// reviewer's draft decision. `act` is undefined until the overlay resolves.
+// The drafts at the node's pinned revision, the open threads of the change,
+// and the reviewer's draft decision. `act` is undefined until the overlay
+// resolves.
 function Activity({
   node,
   act,
@@ -66,22 +67,11 @@ function Activity({
   act: NodeActivity | undefined;
 }) {
   if (!act || node.revision === null) return null;
-  const { threads, drafts } = revisionActivity(
-    act.threads,
-    act.drafts,
-    node.revision,
-  );
+  const drafts = act.drafts.filter((d) => d.revision === node.revision).length;
   const { unresolved, decision } = act;
-  if (threads === 0 && drafts === 0 && unresolved === 0 && !decision) {
-    return null;
-  }
+  if (drafts === 0 && unresolved === 0 && !decision) return null;
   return (
     <span className="counts">
-      {threads > 0 && (
-        <span title="published comments">
-          {threads} comment{threads > 1 ? "s" : ""}
-        </span>
-      )}
       {drafts > 0 && <ThreadCount mark="draft" count={drafts} word />}
       {unresolved > 0 && <ThreadCount mark="open" count={unresolved} word />}
       {decision && <DraftDecision decision={decision} />}
