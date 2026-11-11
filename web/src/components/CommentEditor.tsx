@@ -1,13 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { useAutosize } from "../lib/useAutosize";
+import { Button } from "./ui/button";
 
-/** Plain draft editor: textarea + save/cancel. Used for new drafts, edits
- * and replies. Cancel (button or Escape) asks for confirmation before
- * discarding text that differs from what the editor opened with. Owners
- * whose UI can discard the editor by unmounting it (e.g. moving the inline
- * draft target) should mirror `onDirtyChange` and gate that path with
- * confirmDiscard.
+/** Plain draft editor: a textarea and its save/cancel row in one box.
+ * Used for new drafts, edits and replies. Cancel (button or Escape) opens
+ * a confirmation prompt before it discards text that differs from the
+ * text that the editor opened with. A parent component that can unmount
+ * the editor, for example when the inline draft target moves, should
+ * mirror `onDirtyChange` and call `confirmDiscard` before it unmounts the
+ * editor.
  *
  * Pass `initialResolved` (gerrit-style thread resolution) to
  * show a Resolved checkbox defaulting to it; `onSave` then reports the
@@ -101,12 +103,17 @@ export default function CommentEditor({
           </label>
         ) : null}
         <span className="spacer" />
-        <button onClick={requestCancel} disabled={saving}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={requestCancel}
+          disabled={saving}
+        >
           Cancel
-        </button>
-        <button className="btn-primary" onClick={save} disabled={!canSave}>
+        </Button>
+        <Button size="sm" onClick={save} disabled={!canSave}>
           {saving ? "Saving…" : "Save draft"}
-        </button>
+        </Button>
       </div>
     </div>
   );

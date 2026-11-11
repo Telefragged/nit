@@ -221,19 +221,35 @@ a.comment-time:hover {
 
 /* editors */
 
+/* The text and its actions share one box. The box has the place and the
+   width of the thread that the draft becomes. */
 .editor {
   margin: 8px 12px 10px 58px;
   max-width: 760px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-background);
 }
 
-.comment .editor,
-.thread .editor {
+.editor:focus-within {
+  border-color: var(--color-foreground);
+}
+
+.comment .editor {
   margin: 6px 0 2px;
 }
 
+.thread > .editor {
+  margin: 2px 12px 10px;
+}
+
 .editor textarea {
+  display: block;
   width: 100%;
   min-height: 64px;
+  padding: 8px 12px;
+  border: none;
+  background: none;
 
   /* useAutosize fits the height to the content, so manual resize is
      redundant; cap very long bodies with a scroll instead of an endless box. */
@@ -244,10 +260,15 @@ a.comment-time:hover {
 
 .editor-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
   justify-content: flex-end;
-  margin-top: 6px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--color-border);
+}
+
+.editor-actions .check-label {
+  margin-left: 4px;
 }
 
 .editor-actions .spacer {
