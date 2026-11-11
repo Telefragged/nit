@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 export default function Modal({
   title,
   aside,
-  card,
+  className,
   onDismiss,
   initialFocus,
   actions,
@@ -22,8 +22,8 @@ export default function Modal({
   title: string;
   /** Shows at the right of the head. */
   aside?: ReactNode;
-  /** The card's own class, which carries its width. */
-  card: string;
+  /** Sets the width of the card. */
+  className: string;
   onDismiss: () => void;
   /** The element that has the focus when the modal opens. Without it, the
    * first control of the card has the focus. */
@@ -38,7 +38,7 @@ export default function Modal({
         if (!open) onDismiss();
       }}
     >
-      <DialogContent className={card} initialFocus={initialFocus}>
+      <DialogContent className={className} initialFocus={initialFocus}>
         <div className="modal-head">
           <DialogTitle>{title}</DialogTitle>
           {aside}

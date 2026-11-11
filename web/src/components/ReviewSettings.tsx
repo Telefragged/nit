@@ -92,7 +92,7 @@ export default function ReviewSettingsMenu({
       >
         <Settings size={15} aria-hidden />
       </PopoverTrigger>
-      <PopoverContent className="settings-popover">
+      <PopoverContent className="w-90">
         <div className="flex items-baseline justify-between gap-3">
           <PopoverTitle className="text-base font-semibold">
             Review settings

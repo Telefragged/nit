@@ -44,7 +44,7 @@ export default function About() {
       {open ? (
         <Modal
           title="About nit"
-          card="about-modal"
+          className="w-90"
           onDismiss={close}
           actions={<Button onClick={close}>Close</Button>}
         >

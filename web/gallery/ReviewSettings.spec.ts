@@ -8,7 +8,7 @@ test("the cog opens the popover, a press changes a setting, and Escape closes it
 }) => {
   const root = await mount("components/ReviewSettings/Default");
   await clickNow(root.getByRole("button", { name: "Settings" }));
-  await untilSelector(page, ".settings-popover");
+  await untilSelector(page, '[role="dialog"]');
   const popover = await one(
     page.getByRole("dialog", { name: "Review settings" }),
   );
@@ -16,10 +16,10 @@ test("the cog opens the popover, a press changes a setting, and Escape closes it
   await clickNow(split);
   assert.equal(await split.getAttribute("aria-pressed"), "true");
   await page.keyboard.press("Escape");
-  await untilSelector(page, "body:not(:has(.settings-popover))");
+  await untilSelector(page, 'body:not(:has([role="dialog"]))');
   // The story has the changed setting, so the popover shows it again.
   await clickNow(root.getByRole("button", { name: "Settings" }));
-  await untilSelector(page, ".settings-popover");
+  await untilSelector(page, '[role="dialog"]');
   assert.equal(
     await page
       .getByRole("button", { name: "Side-by-side" })

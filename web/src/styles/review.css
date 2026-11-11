@@ -109,10 +109,6 @@
   margin-left: 0;
 }
 
-.shortcuts-modal {
-  width: 440px;
-}
-
 /* Each row: the keys in one column, then what they do. */
 .shortcut-list {
   display: grid;
@@ -135,10 +131,6 @@
 
 .shortcut-list dd {
   margin: 0;
-}
-
-.settings-popover {
-  width: 360px;
 }
 
 .settings-knob {

@@ -224,7 +224,7 @@ export default function ReviewBar({
         <Modal
           title="Review"
           aside={stats}
-          card="reply-modal"
+          className="reply-modal w-140"
           onDismiss={requestClose}
           initialFocus={textareaRef}
           actions={

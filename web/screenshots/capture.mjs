@@ -233,16 +233,16 @@ const openPicker = async (page, label) => {
  * then closes the popover. */
 const applySetting = async (page, name) => {
   await clickNow(page.getByRole("button", { name: "Settings" }));
-  await untilDom(page, () => !!document.querySelector(".settings-popover"));
+  await untilDom(page, () => !!document.querySelector('[role="dialog"]'));
   // Scoped to the popover: an option label can be part of a page button's
   // name, as "All" is of "Expand all".
-  const popover = page.locator(".settings-popover");
+  const popover = page.getByRole("dialog", { name: "Review settings" });
   await clickNow(popover.getByRole("button", { name, exact: true }));
   await page.keyboard.press("Escape");
   // A setting that is part of a read's key marks the page busy in the
   // commit that applies it, so the page is ready with the new setting
   // once it is idle after the popover closes.
-  await untilDom(page, () => !document.querySelector(".settings-popover"));
+  await untilDom(page, () => !document.querySelector('[role="dialog"]'));
   await untilReady(page);
 };
 
@@ -611,7 +611,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Settings" }));
-      await untilDom(page, () => !!document.querySelector(".settings-popover"));
+      await untilDom(page, () => !!document.querySelector('[role="dialog"]'));
     },
   },
   // The list of the page's keys, which the ? key opens.
@@ -621,7 +621,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await page.keyboard.press("?");
-      await one(page.locator(".shortcuts-modal"));
+      await one(page.getByRole("dialog", { name: "Keyboard shortcuts" }));
     },
   },
   // Side-by-side, base → r1: new-side drafts sit under the right column,
@@ -1001,7 +1001,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Review", exact: true }));
-      await one(page.locator(".reply-modal"));
+      await one(page.getByRole("dialog", { name: "Review", exact: true }));
     },
   },
   // Rename + binary file in one diff.

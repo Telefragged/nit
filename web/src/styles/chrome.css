@@ -60,10 +60,6 @@
   gap: 8px;
 }
 
-.about-modal {
-  width: 360px;
-}
-
 .about-versions {
   display: grid;
   grid-template-columns: max-content 1fr;

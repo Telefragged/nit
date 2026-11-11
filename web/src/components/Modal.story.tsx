@@ -12,7 +12,7 @@ export function Default() {
       <Modal
         title="About nit"
         aside={<span className="dim">0.2.0</span>}
-        card="about-modal"
+        className="w-90"
         onDismiss={nothing}
         actions={
           <>
