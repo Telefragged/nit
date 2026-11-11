@@ -30,6 +30,8 @@ The interface uses Atkinson Hyperlegible Next. Code, paths, commit ids and revis
 
 A control is a shadcn/ui component in `web/src/components/ui/`. Add one with `npx shadcn add <name>` (`web/components.json`), then reduce it to the variants that a caller uses. Its classes are Tailwind utilities, and `web/src/styles/index.css` limits those utilities to the tokens.
 
+The command writes `import { cn } from "cn"` and adds the package `cn`. Change the import to `@/lib/utils`, and remove the package from `package.json`.
+
 A view has at most one filled yellow button, and that button publishes the work of the reviewer.
 
 The diff grid and its selection logic are hand-written CSS on the same tokens.

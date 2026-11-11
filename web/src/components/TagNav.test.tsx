@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChangeGraph, ChangeStatus, GraphNode } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
 import { LAYOUT_DENSE } from "../lib/graphLayout";
+import { user } from "../test/page";
 import TagNav from "./TagNav";
 
 afterEach(cleanup);
@@ -106,28 +107,23 @@ const subjects = () =>
   rows().map((r) => r.querySelector(".subj")?.textContent ?? "");
 
 describe("TagNav", () => {
-  it("shows the chosen key with its value, and offers the others", () => {
+  it("shows the chosen key with its value, and offers the others", async () => {
     const onSelectKey = vi.fn();
     renderNav(three, 11, { onSelectKey });
     const head = screen.getByLabelText<HTMLButtonElement>("Tag");
     expect(head.disabled).toBe(false);
-    expect(head.querySelector(".select-label")?.textContent).toBe("session-id");
-    expect(head.querySelector(".select-detail")?.textContent).toBe("s1");
+    expect(head.textContent).toBe("session-id s1");
 
     fireEvent.click(head);
     const options = screen.getAllByRole("option");
     expect(
-      options.map((o) => [
-        o.querySelector(".select-label")?.textContent,
-        o.querySelector(".select-detail")?.textContent,
-        o.getAttribute("aria-selected"),
-      ]),
+      options.map((o) => [o.textContent, o.getAttribute("aria-selected")]),
     ).toEqual([
-      ["branch", "feat", "false"],
-      ["session-id", "s1", "true"],
+      ["branch feat", "false"],
+      ["session-id s1", "true"],
     ]);
 
-    fireEvent.click(must(options[0], "the branch option"));
+    await user.click(must(options[0], "the branch option"));
     expect(onSelectKey).toHaveBeenCalledWith("branch");
     expect(screen.queryByRole("listbox")).toBeNull();
   });

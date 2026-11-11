@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { user } from "../test/page";
 import Select from "./Select";
 
 afterEach(cleanup);
@@ -40,23 +41,21 @@ describe("Select", () => {
     ).toBe("true");
   });
 
-  it("reports the chosen option and closes", () => {
+  it("reports the chosen option and closes", async () => {
     const onChange = vi.fn();
     const head = renderSelect(onChange);
     fireEvent.click(head);
-    fireEvent.click(screen.getByRole("option", { name: "r0 6 comments" }));
+    await user.click(screen.getByRole("option", { name: "r0 6 comments" }));
     expect(onChange).toHaveBeenCalledWith("0");
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
-  it("offers a disabled option without letting it be chosen", () => {
+  it("offers a disabled option without letting it be chosen", async () => {
     const onChange = vi.fn();
     fireEvent.click(renderSelect(onChange));
-    const option = screen.getByRole<HTMLButtonElement>("option", {
-      name: "r1 3 comments",
-    });
-    expect(option.disabled).toBe(true);
-    fireEvent.click(option);
+    const option = screen.getByRole("option", { name: "r1 3 comments" });
+    expect(option.ariaDisabled).toBe("true");
+    await user.click(option);
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByRole("listbox")).not.toBeNull();
   });

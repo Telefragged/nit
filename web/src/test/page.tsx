@@ -4,6 +4,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { act, render } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Routes } from "react-router-dom";
 
@@ -75,3 +76,7 @@ export async function renderPage(
   await settle(client);
   return { ...view, client, settle: () => settle(client) };
 }
+
+/** The pointer of the reviewer. `delay: null` sends the events of one
+ * action with no timer between them. */
+export const user = userEvent.setup({ delay: null });

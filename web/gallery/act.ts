@@ -1,4 +1,4 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /** Returns `locator` after a check that it matches exactly one element.
  *
@@ -20,3 +20,40 @@ export async function one(locator: Locator): Promise<Locator> {
 export async function clickNow(locator: Locator) {
   await (await one(locator)).click({ force: true });
 }
+
+/** The page half of `untilDom`, as source text: it resolves once
+ * `test(arg)` holds. It runs the test now, then after each DOM mutation,
+ * and never on a timer. */
+const OBSERVE = `(test, arg) =>
+  new Promise((resolve) => {
+    const observer = new MutationObserver(check);
+    function check() {
+      if (!test(arg)) return;
+      observer.disconnect();
+      resolve();
+    }
+    observer.observe(document, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    check();
+  })`;
+
+/** Resolves once `test(arg)` holds in the page. `test` runs in the page,
+ * so it can use nothing of its module but `arg`. */
+export const untilDom = (
+  page: Page,
+  test: (arg: never) => boolean,
+  arg?: unknown,
+) => page.evaluate(`(${OBSERVE})(${test.toString()}, ${JSON.stringify(arg)})`);
+
+/** Resolves once `selector` matches an element of the page.
+ *
+ * A Select opens and closes its list after the click that toggles it, so a
+ * step waits for the list or for the state of the head. */
+export const untilSelector = (page: Page, selector: string) =>
+  page.evaluate(
+    `(${OBSERVE})((s) => !!document.querySelector(s), ${JSON.stringify(selector)})`,
+  );
