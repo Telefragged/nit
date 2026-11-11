@@ -7,13 +7,14 @@ type End = "down" | "up";
 /** A separator in place of a gap of `more` hidden lines or blocks.
  *
  * The separator renders only when `more` is not 0. It shows the count,
- * then `children`. When the caller passes `reveal`, buttons at its right
- * call it. When `down` is true, a button with a down arrow shows the first
- * `step` rows of the gap, under the rows above it. When `up` is true, a
- * button with an up arrow shows the last `step` rows, over the rows below
- * it. A gap that one step covers has no stepped buttons. The last button
- * shows the whole gap: from the top edge when `down` is true, and from the
- * bottom edge when it is false. */
+ * then `children`.
+ *
+ * When the caller passes `reveal`, buttons call it. One button shows the
+ * whole gap: from the top edge when `down` is true, and from the bottom
+ * edge when it is false. When `up` is true, a button with an up arrow
+ * shows the last `step` rows, over the rows below the gap. When `down` is
+ * true, a button with a down arrow shows the first `step` rows, under the
+ * rows above the gap. A gap that one step covers has no stepped buttons. */
 export default function GapSeparator({
   more,
   unit,
@@ -63,19 +64,19 @@ export default function GapSeparator({
   };
   return (
     <div className="hunk-row">
-      <span>
+      <span className="hunk-label">
         {more} {noun(more)} hidden
+        {children}
       </span>
-      {children}
       {reveal ? (
         <span className="hunk-expanders">
-          {stepped && down
-            ? button("down", step, `Show ${step} more ${noun(step)} below`)
-            : null}
           {stepped && up
             ? button("up", step, `Show ${step} more ${noun(step)} above`)
             : null}
           {button("all", more, `Show all ${more} ${noun(more)}`)}
+          {stepped && down
+            ? button("down", step, `Show ${step} more ${noun(step)} below`)
+            : null}
         </span>
       ) : null}
     </div>

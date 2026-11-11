@@ -416,10 +416,8 @@ const captures = [
     actions: expandAllFiles,
     colorScheme: "light",
   },
-  // Context expansion: a gap separator has its buttons at its right. The
-  // down arrow reveals lines under the hunk above, the up arrow reveals
-  // lines over the hunk below, and the last button reveals the whole gap.
-  // Clicks the down arrow to show the revealed lines and the lower count.
+  // Context expansion: clicks the down arrow of the first gap separator
+  // that has one, to show the revealed lines and the lower count.
   {
     name: "review-expand-context",
     path: "/changes/11?against=base",
