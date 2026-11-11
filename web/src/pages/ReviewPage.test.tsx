@@ -532,6 +532,19 @@ describe("the page shortcuts while the settings popup is open", () => {
   });
 });
 
+describe("the ? key", () => {
+  it("opens the list of shortcuts", async () => {
+    await renderReview("/changes/11?against=base");
+    const list = () =>
+      screen.queryByRole("dialog", { name: "Keyboard shortcuts" });
+    expect(list()).toBeNull();
+    fireEvent.keyDown(window, { key: "?", shiftKey: true });
+    expect(list()).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(list()).toBeNull();
+  });
+});
+
 // Counting comments pinned to a hidden revision would lie about what's shown.
 describe("thread counts in the file headers", () => {
   const marks = (i: number): (string | null)[] =>

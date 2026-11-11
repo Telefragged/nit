@@ -35,4 +35,6 @@ The command writes `import { cn } from "cn"` and adds the package `cn`. Change t
 
 A view has at most one filled yellow button, and that button publishes the work of the reviewer.
 
+A button with a one-key shortcut shows the key in a `Kbd`. The Shortcuts button of the review page lists every key.
+
 The diff grid and its selection logic are hand-written CSS on the same tokens.
