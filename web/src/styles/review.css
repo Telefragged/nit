@@ -89,32 +89,40 @@
 .diffbar-toggles {
   display: flex;
   align-items: center;
+  gap: 2px;
   margin-left: auto;
-}
-
-.change-comment-btn {
-  margin-right: 14px;
 }
 
 .change-threads .editor {
   margin-left: 0;
 }
 
-.kbd-hint {
-  color: var(--color-faint-foreground);
-  font-size: 11px;
-  margin-right: 12px;
-  cursor: default;
+.shortcuts-modal {
+  width: 440px;
 }
 
-.kbd-hint kbd {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 3px;
-  padding: 0 3px;
-  margin: 0 1px;
-  background: var(--color-sunken);
+/* Each row: the keys in one column, then what they do. */
+.shortcut-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.shortcut-list > div {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.shortcut-list dt {
+  display: flex;
+  gap: 4px;
+}
+
+.shortcut-list dd {
+  margin: 0;
 }
 
 .settings-modal {

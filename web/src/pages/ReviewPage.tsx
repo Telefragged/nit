@@ -41,6 +41,8 @@ import FileRail from "../components/diff/FileRail";
 import ReviewBar from "../components/ReviewBar";
 import ReviewSettingsMenu from "../components/ReviewSettings";
 import Select, { type SelectOption } from "../components/Select";
+import Shortcuts from "../components/Shortcuts";
+import { Button } from "../components/ui/button";
 import {
   allExpanded,
   collapseAll,
@@ -271,6 +273,7 @@ export default function ReviewPage() {
   const [activeFile, setActiveFile] = useState<number | null>(null);
   const [changeCommentOpen, setChangeCommentOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const [selectionMiss, setSelectionMiss] = useState<
     (SelectionMiss & { top: number; left: number; diff: string }) | null
@@ -653,10 +656,10 @@ export default function ReviewPage() {
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
   // expanded, then scrolled), n / shift+n next/previous change, r the latest
   // revision, c comments on the selected text or else the linked lines, a
-  // opens the reply modal. `shortcutKey` gives no key while a dialog is
-  // open. A layout effect, so the listener gets the link from the commit
-  // that marks the linked lines: a c pressed once they show comments on
-  // them.
+  // opens the reply modal, ? opens the list of these keys. `shortcutKey`
+  // gives no key while a dialog is open. A layout effect, so the listener
+  // gets the link from the commit that marks the linked lines: a c pressed
+  // once they show comments on them.
   useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const key = shortcutKey(e);
@@ -720,6 +723,9 @@ export default function ReviewPage() {
         // the cover-message textarea the opening modal focuses.
         e.preventDefault();
         setReplyOpen(true);
+      } else if (key?.endsWith("?")) {
+        // `?` needs shift on some keyboard layouts and not on others.
+        setShortcutsOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -1023,23 +1029,15 @@ export default function ReviewPage() {
             />
           </div>
           <div className="diffbar-toggles">
-            <button
-              className="linkish change-comment-btn"
+            <Button
+              variant="ghost"
               onClick={() => {
                 setChangeCommentOpen(true);
               }}
             >
-              + change comment
-            </button>
-            <span
-              className="kbd-hint"
-              title="Keyboard: [ and ] switch files, n and shift+n switch changes, r shows the latest revision, c comments on the selected text or else the linked lines, a opens the reply dialog"
-            >
-              <kbd>[</kbd>
-              <kbd>]</kbd> files · <kbd>n</kbd>
-              <kbd>shift+n</kbd> changes · <kbd>r</kbd> latest revision ·{" "}
-              <kbd>c</kbd> comment · <kbd>a</kbd> reply
-            </span>
+              Comment on change
+            </Button>
+            <Shortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
             <ReviewSettingsMenu settings={settings} onApply={saveSettings} />
           </div>
         </div>

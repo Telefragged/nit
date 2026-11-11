@@ -620,6 +620,16 @@ const captures = [
       await one(page.locator(".settings-modal"));
     },
   },
+  // The list of the page's keys, which the ? key opens.
+  {
+    name: "review-shortcuts",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await page.keyboard.press("?");
+      await one(page.locator(".shortcuts-modal"));
+    },
+  },
   // Side-by-side, base → r1: new-side drafts sit under the right column,
   // the old-side draft under the left.
   {
