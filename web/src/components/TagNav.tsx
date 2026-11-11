@@ -7,6 +7,7 @@ import { StatusDot } from "./badges";
 import { GraphRail } from "./GraphTable";
 import Select from "./Select";
 import ThreadCount from "./ThreadCount";
+import { Button } from "./ui/button";
 
 /** Rows the scroll window shows before the reviewer asks for the whole
  * graph. */
@@ -20,7 +21,8 @@ const WINDOW = 7;
  * others linking through. The selector picks which of the current
  * change's tag keys the graph follows. Unless `expanded`, the graph
  * scrolls inside a seven-row window centered on the current change.
- * "show all" and "show less" ask the caller to flip `expanded`.
+ * A press on "Show all" or "Show less" calls `onExpandedChange` with the
+ * other value.
  */
 export default function TagNav({
   tags,
@@ -82,14 +84,15 @@ export default function TagNav({
           }))}
         />
         {total > WINDOW ? (
-          <button
-            className="linkish tag-nav-all"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               onExpandedChange(!expanded);
             }}
           >
-            {expanded ? "show less" : "show all"}
-          </button>
+            {expanded ? "Show less" : "Show all"}
+          </Button>
         ) : null}
       </div>
       <div

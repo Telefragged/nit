@@ -336,25 +336,16 @@ button.rail-toggle.mark-draft:hover {
 .rail-title {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  font-size: 10px;
+  align-items: center;
+  min-height: 24px;
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--color-faint-foreground);
-  padding: 2px 8px 6px;
+  padding: 0 4px 4px 8px;
 }
 
 .rail-title .rail-total {
-  margin-left: 7px;
+  margin-left: 8px;
   font-family: var(--font-mono);
-  letter-spacing: 0;
-}
-
-.rail-toggle-all {
-  font-size: 10px;
-  text-transform: none;
-  letter-spacing: normal;
   font-weight: 400;
 }
 
@@ -371,13 +362,6 @@ button.rail-toggle.mark-draft:hover {
   align-items: center;
   gap: 8px;
   padding: 0 0 6px;
-  font-size: 10px;
-  color: var(--color-faint-foreground);
-}
-
-.tag-nav-all {
-  margin-left: auto;
-  font-size: 10.5px;
 }
 
 /* The rows share the body's columns through subgrid, so each column lines
@@ -564,11 +548,10 @@ button.rail-toggle.mark-draft:hover {
 
 /* attachments: their own group below the commit's files in the rail */
 .rail-section {
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--color-faint-foreground);
+  color: var(--color-muted-foreground);
   padding: 10px 8px 4px;
 }
 
