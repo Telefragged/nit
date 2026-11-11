@@ -244,10 +244,16 @@
   gap: 10px;
 }
 
+/* The baseline of a count is the baseline of its text. An icon in it is
+   centered on the line and sets no baseline. */
 .count {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 5px;
+}
+
+.count > svg {
+  align-self: center;
 }
 
 /* The comment icon of a thread, or of a count of threads, in the form of

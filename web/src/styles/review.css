@@ -369,12 +369,15 @@ button.rail-toggle.mark-draft:hover {
   column-gap: 6px;
 }
 
-/* The rail column is padding: the rail SVG paints over it. */
+/* The rail column is padding: the rail SVG paints over it. The cells have
+   two typefaces and an icon, so they share a baseline, and `align-content`
+   centers that line in the row. */
 .tag-nav-row {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
-  align-items: center;
+  align-items: baseline;
+  align-content: center;
   height: var(--row-h);
   padding: 0 8px 0 var(--rail-w);
   font-size: 12px;
