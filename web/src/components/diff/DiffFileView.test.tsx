@@ -180,7 +180,7 @@ const buttons = (container: HTMLElement) =>
   );
 
 describe("context-expand buttons", () => {
-  it("offers the stepped reveals, then the whole gap", () => {
+  it("puts the show-all button between the stepped buttons", () => {
     expect(buttons(renderFile("unified", gapped(25)).container)).toEqual([
       // The top gap has no hunk above to step down from.
       [
@@ -188,9 +188,9 @@ describe("context-expand buttons", () => {
         ["expand-all", "Show all 25 lines"],
       ],
       [
-        ["expand-down", "Show 10 more lines below"],
         ["expand-up", "Show 10 more lines above"],
         ["expand-all", "Show all 25 lines"],
+        ["expand-down", "Show 10 more lines below"],
       ],
     ]);
   });
