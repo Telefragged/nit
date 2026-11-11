@@ -30,29 +30,6 @@ code,
   font-family: var(--font-mono);
 }
 
-/* A shadcn/ui component carries `data-slot` and styles itself. */
-button:where(:not([data-slot])) {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  color: var(--color-foreground);
-  background: var(--color-card);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 4px;
-  padding: 3px 10px;
-  cursor: pointer;
-  line-height: 1.5;
-}
-
-button:where(:not([data-slot])):hover:not(:disabled) {
-  background: var(--color-accent);
-  border-color: var(--color-faint-foreground);
-}
-
-button:where(:not([data-slot])):disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
 input[type="text"],
 textarea {
   font-family: var(--font-sans);

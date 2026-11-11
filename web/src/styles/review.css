@@ -189,11 +189,6 @@
 .rail-row,
 button.rail-toggle,
 .rail-name {
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
   cursor: pointer;
 }
 
@@ -277,19 +272,6 @@ button.rail-toggle,
 
 .rail-toggle:is(.mark-open, .mark-draft) .rail-chevron {
   color: inherit;
-}
-
-/* These two outrank the hover fill of a plain button (base.css). */
-button.rail-toggle.mark-open:hover {
-  background: var(--color-mark);
-}
-
-button.rail-toggle.mark-draft:hover {
-  background: none;
-}
-
-.rail-name:hover:not(:disabled) {
-  background: none;
 }
 
 /* The name gives way to the counts: it ellipsizes, and they never clip. */
