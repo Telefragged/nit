@@ -14,26 +14,62 @@ test("a click on a directory row hides its files", async ({ mount }) => {
   assert.equal(await rail.getByText("server.rs").count(), 0);
 });
 
-test("a file row shows the counts of its drafts and published threads", async ({
+test("the chevron of a file has the form of its strongest thread", async ({
   mount,
 }) => {
   const rail = await mount(DEFAULT);
-  const counts = await one(
-    rail.locator('[data-path="crates/nit/src/server.rs"] .rail-counts'),
-  );
-  assert.equal(await counts.textContent(), "1d2c+12−3M");
+  const chevron = async (path: string) => {
+    const toggle = await one(
+      rail.locator(`[data-path="${path}"] button.rail-toggle`),
+    );
+    return [
+      /mark-\w+/.exec((await toggle.getAttribute("class")) ?? "")?.[0],
+      await toggle.getAttribute("title"),
+    ];
+  };
+  assert.deepEqual(await chevron("crates/nit/src/server.rs"), [
+    "mark-open",
+    "1 draft, 2 open",
+  ]);
+  assert.deepEqual(await chevron("crates/nit/src/scan.rs"), [
+    "mark-resolved",
+    "1 resolved",
+  ]);
+  assert.deepEqual(await chevron("docs/dev.md"), ["mark-draft", "1 draft"]);
 });
 
-test("a file row expands to a link per published thread", async ({ mount }) => {
+test("a file row expands to a link per thread, with its state", async ({
+  mount,
+}) => {
   const rail = await mount(DEFAULT);
   await clickNow(rail.getByRole("button", { name: "comments on server.rs" }));
   const links = rail.locator(".rail-thread");
   assert.deepEqual(await links.allTextContents(), [
     "line 41r1",
     "range 88:4-90:12r0",
+    "line 12r1",
   ]);
-  const hrefs = (await links.all()).map((link) => link.getAttribute("href"));
-  assert.deepEqual(await Promise.all(hrefs), ["/?thread=3", "/?thread=7"]);
+  const of = (attribute: string, inner = "") =>
+    links
+      .all()
+      .then((all) =>
+        Promise.all(
+          all.map((link) =>
+            (inner ? link.locator(inner) : link).getAttribute(attribute),
+          ),
+        ),
+      );
+  assert.deepEqual(await of("href"), [
+    "/?thread=3",
+    "/?thread=7",
+    "/?file=crates/nit/src/server.rs&line=12",
+  ]);
+  assert.deepEqual(await of("title"), ["open", "open", "draft"]);
+  assert.deepEqual(await of("class", ".rail-icon"), [
+    "lucide lucide-message-square rail-icon mark-open",
+    "lucide lucide-message-square rail-icon mark-open",
+    "lucide lucide-message-square rail-icon mark-draft",
+  ]);
 });
 
 test("selecting a file marks its row as current", async ({ mount }) => {

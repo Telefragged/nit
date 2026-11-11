@@ -533,9 +533,11 @@ describe("the page shortcuts while the settings popup is open", () => {
 });
 
 // Counting comments pinned to a hidden revision would lie about what's shown.
-describe("comment counts in the file headers", () => {
-  const fcomments = (i: number): string | null =>
-    section(i).querySelector(".fcomments")?.textContent ?? null;
+describe("thread counts in the file headers", () => {
+  const marks = (i: number): (string | null)[] =>
+    [...section(i).querySelectorAll(".file-header .count")].map(
+      (count) => count.textContent,
+    );
 
   it("counts only this file's threads visible in the current range", async () => {
     // base → r1: the r0 threads are pinned away, so only the r1 drafts and
@@ -544,15 +546,15 @@ describe("comment counts in the file headers", () => {
 
     // rotate.rs (file-1): two drafts on r1 — one new-side, one old-side —
     // and the open r0 selection thread ported to its shifted lines.
-    expect(fcomments(1)).toBe("3 comments");
+    expect(marks(1)).toEqual(["2 drafts", "1 open"]);
     // tests/rotation.rs (file-3): a single r1 draft.
-    expect(fcomments(3)).toBe("1 comment");
+    expect(marks(3)).toEqual(["1 draft"]);
     // store.rs (file-2): its file thread has no line, so it shows in every
     // range, and its r0 line thread is ported to the file since r1 rewrote
     // the line.
-    expect(fcomments(2)).toBe("2 comments");
-    // /COMMIT_MSG (file-0): only r0 line threads — no badge.
-    expect(fcomments(0)).toBeNull();
+    expect(marks(2)).toEqual(["2 open"]);
+    // /COMMIT_MSG (file-0): only r0 line threads, so no count.
+    expect(marks(0)).toEqual([]);
   });
 
   it("ports the resolved threads too when the settings ask for all", async () => {
@@ -560,7 +562,7 @@ describe("comment counts in the file headers", () => {
     await renderReview("/changes/11?against=base");
     // rotate.rs: the three of the open setting plus the resolved r0 line
     // thread ported to its shifted line.
-    expect(fcomments(1)).toBe("4 comments");
+    expect(marks(1)).toEqual(["2 drafts", "1 open", "1 resolved"]);
   });
 
   it("follows the range: the r0 → r1 interdiff surfaces the r0 threads", async () => {
@@ -569,7 +571,7 @@ describe("comment counts in the file headers", () => {
 
     // rotate.rs: three r0 threads (lines 21/22/23) on the left + one r1
     // draft on the right; the old-side r1 draft has no column here.
-    expect(fcomments(1)).toBe("4 comments");
+    expect(marks(1)).toEqual(["1 draft", "1 open", "2 resolved"]);
   });
 });
 

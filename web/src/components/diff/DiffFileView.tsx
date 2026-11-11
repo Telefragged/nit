@@ -23,13 +23,14 @@ import {
   anchorLineText,
   anchorRange,
   anchorSide,
-  commentCountLabel,
   commentPlacement,
   draftAnchor,
-  pendingResolved,
   placementLine,
   shownAt,
+  strongerMark,
   threadKey,
+  threadMark,
+  type ThreadMark,
   type UiThread,
 } from "../../lib/comments";
 import { fileLink, linksLine, type FileLink } from "../../lib/diffLink";
@@ -82,6 +83,7 @@ import GapSeparator from "./GapSeparator";
 import LineLink from "./LineLink";
 import RenderedView from "./RenderedView";
 import StatusMark from "./StatusMark";
+import ThreadMarks from "./ThreadMarks";
 
 /** A commented char window to tint on one line; `active` (brighter chrome)
  * marks the open editor's pending selection or the hovered thread's range. */
@@ -185,19 +187,6 @@ function HunkSeparator({
     </GapSeparator>
   );
 }
-
-/** The mark of a commented line in its gutter. */
-type GutterMark = "open" | "draft" | "resolved";
-
-/** Of the threads on one line, the mark of the highest rank shows. */
-const MARK_RANK: Record<GutterMark, number> = {
-  resolved: 0,
-  draft: 1,
-  open: 2,
-};
-
-const markOf = (t: UiThread): GutterMark =>
-  t.id === null ? "draft" : pendingResolved(t) ? "resolved" : "open";
 
 /** One file section: header, off-hunk/file-level threads, hunks with inline
  * threads and the draft editor. Threads place by the diff range — new-side
@@ -396,7 +385,7 @@ export default function DiffFileView({
   const inline = new Map<string, UiThread[]>();
   // The mark of each line that an inline thread covers: its whole line,
   // or every line of its selection.
-  const gutterMarks = new Map<string, GutterMark>();
+  const gutterMarks = new Map<string, ThreadMark>();
   for (const t of threads) {
     const at = shownAt(t);
     if (anchorKind(at.anchor) === "file") {
@@ -415,12 +404,10 @@ export default function DiffFileView({
       list.push(t);
       inline.set(key, list);
       const range = anchorRange(at.anchor);
-      const mark = markOf(t);
+      const mark = threadMark(t);
       for (let no = range?.start_line ?? p.line; no <= p.line; no++) {
         const lineKey = `${p.side}:${no}`;
-        const other = gutterMarks.get(lineKey);
-        if (!other || MARK_RANK[mark] > MARK_RANK[other])
-          gutterMarks.set(lineKey, mark);
+        gutterMarks.set(lineKey, strongerMark(gutterMarks.get(lineKey), mark));
       }
     } else {
       displaced.push({ t, side: p.side });
@@ -954,9 +941,7 @@ export default function DiffFileView({
         {/* Threads visible in the current range for this file: the `threads`
             prop is already range-filtered, so a thread pinned to a hidden
             revision is not counted. */}
-        {threads.length > 0 ? (
-          <span className="fcomments">{commentCountLabel(threads.length)}</span>
-        ) : null}
+        <ThreadMarks threads={threads} />
       </header>
 
       {collapsed ? null : (

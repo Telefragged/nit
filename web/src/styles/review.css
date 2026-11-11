@@ -284,8 +284,17 @@ button.rail-toggle,
   margin-right: 5px;
 }
 
-.rail-thread .rail-icon {
+/* The comment icon of a thread row has the form of its thread
+   (docs/design.md): a fill for an open thread, a dashed outline for a
+   draft, and gray for a resolved thread. */
+.rail-thread .mark-open {
   color: var(--color-mark-text);
+  fill: var(--color-mark);
+}
+
+.rail-thread .mark-draft {
+  color: var(--color-mark-text);
+  stroke-dasharray: 3 2;
 }
 
 .rail-chevron.open {
@@ -293,13 +302,26 @@ button.rail-toggle,
 }
 
 /* A row lights up under the pointer too, so the chevron takes a stronger
-   fill to stand out from it. */
-.rail-toggle-chevron:hover:not(:disabled) {
+   fill to stand out from it. A chevron with a form keeps the form. */
+.rail-toggle-chevron:not(.mark-open, .mark-draft):hover:not(:disabled) {
   background: var(--color-border);
 }
 
-.rail-toggle-chevron:hover .rail-chevron {
+.rail-toggle-chevron:not(.mark-open, .mark-draft):hover .rail-chevron {
   color: var(--color-foreground);
+}
+
+.rail-toggle:is(.mark-open, .mark-draft) .rail-chevron {
+  color: inherit;
+}
+
+/* These two outrank the hover fill of a plain button (base.css). */
+button.rail-toggle.mark-open:hover {
+  background: var(--color-mark);
+}
+
+button.rail-toggle.mark-draft:hover {
+  background: none;
 }
 
 .rail-name:hover:not(:disabled) {
@@ -333,12 +355,9 @@ button.rail-toggle,
 .rail-counts {
   flex: none;
   display: flex;
+  align-items: center;
   gap: 4px;
   margin-left: 6px;
-}
-
-.rail-drafts {
-  color: var(--color-mark-text);
 }
 
 .rail-status {
@@ -531,9 +550,8 @@ button.rail-toggle,
   font-size: 11.5px;
 }
 
-.fcomments {
-  font-size: 11.5px;
-  color: var(--color-faint-foreground);
+.file-header .count {
+  font-family: var(--font-sans);
 }
 
 .fstat {

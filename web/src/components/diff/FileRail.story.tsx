@@ -13,7 +13,10 @@ import { ReviewContext } from "../../pages/reviewContext";
 import FileRail from "./FileRail";
 
 const ctx = reviewCtx({
-  linkHref: (link) => ("thread" in link ? `?thread=${link.thread}` : ""),
+  linkHref: (link) =>
+    "thread" in link
+      ? `?thread=${link.thread}`
+      : `?file=${link.file}&line=${link.lines?.start ?? ""}`,
 });
 
 /** The rail in the sidebar of the review page. */
@@ -89,10 +92,21 @@ const THREADS = new Map<string, UiThread[]>([
       uiThread({ id: null, anchor: line("crates/nit/src/server.rs", 12) }),
     ],
   ],
+  [
+    "crates/nit/src/scan.rs",
+    [
+      uiThread({
+        id: 9,
+        resolved: true,
+        anchor: line("crates/nit/src/scan.rs", 30),
+      }),
+    ],
+  ],
   ["docs/dev.md", [uiThread({ id: null, anchor: line("docs/dev.md", 5) })]],
 ]);
 
-/** A diff with every kind of file row, comment counts, and attachments.
+/** A diff with every kind of file row, a file for each thread mark, and
+ * attachments.
  * The selection and the expand-all toggle are state of the story. */
 export function Default() {
   const [active, setActive] = useState<number | null>(null);

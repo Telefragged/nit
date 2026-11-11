@@ -1,13 +1,12 @@
 import { type CSSProperties, Fragment, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, GraphNode } from "../api/types";
-import { DECISION_LABEL } from "../api/verdict";
 import { type NodeActivity, revisionActivity } from "../lib/comments";
 import type { GraphLayout, LaidEdge, LaidNode } from "../lib/graphLayout";
 import { layoutGraph } from "../lib/graphLayout";
 import { shortSha } from "../lib/sha";
 import { useRowNav } from "../lib/useRowNav";
-import { StatusChip } from "./badges";
+import { DraftDecision, StatusChip } from "./badges";
 
 // Distinct branch colors cycle through this many lanes (gleisbau-style: a whole
 // branch carries one color); merged history is always grey.
@@ -93,14 +92,7 @@ function Activity({
           <span className="pill mark-open">{unresolved}</span> open
         </span>
       )}
-      {decision && (
-        <span
-          className="pill mark-draft"
-          title="your draft decision (not yet submitted)"
-        >
-          {DECISION_LABEL[decision]}
-        </span>
-      )}
+      {decision && <DraftDecision decision={decision} />}
     </span>
   );
 }

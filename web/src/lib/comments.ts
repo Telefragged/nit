@@ -305,6 +305,49 @@ export function pendingResolved(thread: UiThread): boolean {
   return latest ? latest.resolved : thread.resolved;
 }
 
+/** The form in which the UI marks a thread: a thread of unsent drafts
+ * only, or a published thread that is open or resolved once the pending
+ * drafts publish. */
+export type ThreadMark = "open" | "draft" | "resolved";
+
+export const threadMark = (t: UiThread): ThreadMark =>
+  t.id === null ? "draft" : pendingResolved(t) ? "resolved" : "open";
+
+const MARK_RANK: Record<ThreadMark, number> = {
+  resolved: 0,
+  draft: 1,
+  open: 2,
+};
+
+/** The mark that one place shows for two threads: the one of the higher
+ * rank, where open is over draft and draft is over resolved. */
+export const strongerMark = (
+  a: ThreadMark | undefined,
+  b: ThreadMark,
+): ThreadMark => (a !== undefined && MARK_RANK[a] > MARK_RANK[b] ? a : b);
+
+/** The word for `count` threads with `mark`: the mark, in the plural for
+ * several drafts. */
+const markWord = (mark: ThreadMark, count: number): string =>
+  mark === "draft" && count !== 1 ? "drafts" : mark;
+
+/** The count of `threads` for each mark that has a thread, in the order
+ * draft, open, resolved, with the word for that count. */
+export function markCounts(
+  threads: readonly UiThread[],
+): { mark: ThreadMark; count: number; word: string }[] {
+  return (["draft", "open", "resolved"] as const).flatMap((mark) => {
+    const count = threads.filter((t) => threadMark(t) === mark).length;
+    return count === 0 ? [] : [{ mark, count, word: markWord(mark, count) }];
+  });
+}
+
+/** `markCounts` as text: "1 draft, 2 open". */
+export const markCountsLabel = (threads: readonly UiThread[]) =>
+  markCounts(threads)
+    .map(({ count, word }) => `${count} ${word}`)
+    .join(", ");
+
 /**
  * How many of a change's threads are unresolved once pending drafts apply —
  * the reviewer-side count shown in the review bar (the server's published
