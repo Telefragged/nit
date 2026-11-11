@@ -9,7 +9,7 @@ const buttonVariants = cva(
       variant: {
         // The one filled button of a view. Its action publishes the reviewer's work.
         primary:
-          "bg-primary font-semibold text-primary-foreground hover:bg-primary/85",
+          "bg-primary font-semibold text-primary-foreground hover:bg-primary/85 **:data-[slot=kbd]:border-primary-foreground/35 **:data-[slot=kbd]:bg-transparent **:data-[slot=kbd]:text-primary-foreground",
         outline: "border-input bg-background text-foreground hover:bg-muted",
         ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
       },

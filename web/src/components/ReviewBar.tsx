@@ -10,8 +10,10 @@ import { DECISION_LABEL } from "../api/verdict";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { shortcutKey } from "../lib/shortcutKey";
+import { DraftDecision } from "./badges";
 import Modal from "./Modal";
 import { Button } from "./ui/button";
+import { Kbd } from "./ui/kbd";
 
 function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
   return abandoned
@@ -28,8 +30,9 @@ function offered(abandoned: boolean): { decision: Decision; cls: string }[] {
  * Slim sticky bottom bar and the review modal it opens (`a`). The modal
  * drafts into the change's `draft_decision`; the bar's **Submit**
  * publishes every listed change's at once.
- * The bar shows the draft/unresolved counts plus the draft decision so the
- * reviewer can see and submit pending work without leaving the diff.
+ * The bar shows the counts of drafts and open threads plus the draft
+ * decision so the reviewer can see and submit pending work without leaving
+ * the diff.
  */
 export default function ReviewBar({
   change,
@@ -164,21 +167,26 @@ export default function ReviewBar({
   };
 
   const stats = (
-    <span className="review-stats">
-      <span className={drafts > 0 ? "draft-count" : "dim"}>
-        {drafts} draft{drafts === 1 ? "" : "s"}
-      </span>
-      <span className={unresolved > 0 ? "unresolved-count" : "dim"}>
-        {unresolved} unresolved
-      </span>
-      {draftDecision ? (
-        <span
-          className="draft-count"
-          title="Your draft decision (not yet submitted)"
-        >
-          ✎ {DECISION_LABEL[draftDecision.decision]}
+    <span className="counts review-stats">
+      {drafts > 0 ? (
+        <span className="count">
+          <span className="pill mark-draft">{drafts}</span> draft
+          {drafts === 1 ? "" : "s"}
         </span>
       ) : null}
+      {unresolved > 0 ? (
+        <span className="count">
+          <span className="pill mark-open">{unresolved}</span> open thread
+          {unresolved === 1 ? "" : "s"}
+        </span>
+      ) : null}
+      {draftDecision ? (
+        <span className="count">
+          <DraftDecision decision={draftDecision.decision} /> drafted
+        </span>
+      ) : (
+        <span className="dim">No decision drafted</span>
+      )}
       <span className="dim mono">r{selectedRevision}</span>
     </span>
   );
@@ -189,8 +197,17 @@ export default function ReviewBar({
         {stats}
         <div className="review-bar-actions">
           <Button
+            aria-keyshortcuts="a"
+            onClick={() => {
+              onReplyOpenChange(true);
+            }}
+          >
+            Review <Kbd aria-hidden>a</Kbd>
+          </Button>
+          <Button
             variant="primary"
             disabled={!canSubmit}
+            aria-keyshortcuts="s"
             title={
               drafted === 0
                 ? "Draft a decision first (Review)"
@@ -200,14 +217,10 @@ export default function ReviewBar({
               submit.mutate();
             }}
           >
-            Submit (s){drafted > 0 ? ` · ${drafted}` : ""}
-          </Button>
-          <Button
-            onClick={() => {
-              onReplyOpenChange(true);
-            }}
-          >
-            Review (a)
+            {drafted === 0
+              ? "Submit"
+              : `Submit ${drafted} review${drafted === 1 ? "" : "s"}`}{" "}
+            <Kbd aria-hidden>s</Kbd>
           </Button>
         </div>
       </div>

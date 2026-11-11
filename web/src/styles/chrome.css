@@ -314,10 +314,6 @@
   color: var(--color-muted-foreground);
 }
 
-.draft-count {
-  color: var(--color-mark-text);
-}
-
 .unresolved-count {
   color: var(--color-mark-text);
 }

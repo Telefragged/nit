@@ -490,17 +490,17 @@ describe("the s key submits the listed changes' draft decisions", () => {
     expect(client.isMutating()).toBe(0);
     expect(path).toBe("/changes/20");
 
-    fireEvent.click(screen.getByRole("button", { name: "Review (a)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
     await settle();
     expect(
-      screen.getByRole("button", { name: /Submit \(s\) · 1/ }),
+      screen.getByRole("button", { name: "Submit 1 review" }),
     ).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "s" });
     // The drafted count drains once the invalidated drafts overlay refetches.
     await settle();
-    expect(screen.getByRole("button", { name: "Submit (s)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Submit" })).toBeTruthy();
     expect(path).toBe("/changes/20");
   });
 });
