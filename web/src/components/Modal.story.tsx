@@ -10,15 +10,15 @@ export function Default() {
   return (
     <div className="h-screen w-screen">
       <Modal
-        title="Review settings"
-        aside={<span className="dim">Saved in this browser</span>}
-        card="settings-modal"
+        title="About nit"
+        aside={<span className="dim">0.2.0</span>}
+        card="about-modal"
         onDismiss={nothing}
         actions={
           <>
             <Button variant="ghost">Cancel</Button>
             <span className="spacer" />
-            <Button>Apply</Button>
+            <Button>Close</Button>
           </>
         }
       >

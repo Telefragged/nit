@@ -1,9 +1,12 @@
 import { Settings } from "lucide-react";
-import { useState } from "react";
-import { confirmDiscard } from "../lib/confirmDiscard";
-import Modal from "./Modal";
 import Seg, { type SegOption } from "./Seg";
 import { Button } from "./ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "./ui/popover";
 import type { ReviewSettings } from "../lib/reviewSettings";
 
 const LAYOUT_OPTIONS: SegOption<ReviewSettings["layout"]>[] = [
@@ -64,103 +67,63 @@ function Knob<T extends string>({
 }
 
 /**
- * The diffbar's cog and the settings modal it opens. The modal edits a
- * draft copy: **Apply** hands it to `onApply`, which saves it, and every
- * other exit throws it away.
+ * The diffbar's cog and the popover of settings that it opens. A press on
+ * an option calls `onChange` with the changed settings at once, so the
+ * diff behind the popover shows the effect.
  */
 export default function ReviewSettingsMenu({
   settings,
-  onApply,
+  onChange,
 }: {
   settings: ReviewSettings;
-  onApply: (next: ReviewSettings) => void;
+  onChange: (next: ReviewSettings) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(settings);
-
-  // Every knob compares itself, so a knob added later needs no edit here.
-  const edited = (Object.keys(draft) as (keyof ReviewSettings)[]).some(
-    (knob) => draft[knob] !== settings[knob],
-  );
-
-  // A backdrop press can be a mis-click, so it asks before dropping edits.
-  // Cancel and Escape say the same thing on purpose, and just close.
-  const requestClose = () => {
-    if (!confirmDiscard(edited, "settings")) return;
-    setOpen(false);
-  };
-
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Settings"
-        title="Review settings"
-        onClick={() => {
-          setDraft(settings);
-          setOpen(true);
-        }}
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Settings"
+            title="Review settings"
+          />
+        }
       >
         <Settings size={15} aria-hidden />
-      </Button>
-      {open ? (
-        <Modal
-          title="Review settings"
-          aside={<span className="dim">Saved in this browser</span>}
-          card="settings-modal"
-          onDismiss={(via) => {
-            if (via === "backdrop") requestClose();
-            else setOpen(false);
+      </PopoverTrigger>
+      <PopoverContent className="settings-popover">
+        <div className="flex items-baseline justify-between gap-3">
+          <PopoverTitle className="text-base font-semibold">
+            Review settings
+          </PopoverTitle>
+          <span className="dim">Saved in this browser</span>
+        </div>
+        <Knob
+          label="Whitespace"
+          value={settings.whitespace}
+          options={WHITESPACE_OPTIONS}
+          onChange={(whitespace) => {
+            onChange({ ...settings, whitespace });
           }}
-          actions={
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setOpen(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <span className="spacer" />
-              <Button
-                onClick={() => {
-                  onApply(draft);
-                  setOpen(false);
-                }}
-              >
-                Apply
-              </Button>
-            </>
-          }
-        >
-          <Knob
-            label="Whitespace"
-            value={draft.whitespace}
-            options={WHITESPACE_OPTIONS}
-            onChange={(whitespace) => {
-              setDraft({ ...draft, whitespace });
-            }}
-          />
-          <Knob
-            label="Columns"
-            value={draft.layout}
-            options={LAYOUT_OPTIONS}
-            onChange={(layout) => {
-              setDraft({ ...draft, layout });
-            }}
-          />
-          <Knob
-            label="Ported comments"
-            value={draft.ported}
-            options={PORTED_OPTIONS}
-            onChange={(ported) => {
-              setDraft({ ...draft, ported });
-            }}
-          />
-        </Modal>
-      ) : null}
-    </>
+        />
+        <Knob
+          label="Columns"
+          value={settings.layout}
+          options={LAYOUT_OPTIONS}
+          onChange={(layout) => {
+            onChange({ ...settings, layout });
+          }}
+        />
+        <Knob
+          label="Ported comments"
+          value={settings.ported}
+          options={PORTED_OPTIONS}
+          onChange={(ported) => {
+            onChange({ ...settings, ported });
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

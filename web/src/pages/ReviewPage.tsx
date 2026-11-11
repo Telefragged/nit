@@ -1039,7 +1039,7 @@ export default function ReviewPage() {
               Comment on change
             </Button>
             <Shortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-            <ReviewSettingsMenu settings={settings} onApply={saveSettings} />
+            <ReviewSettingsMenu settings={settings} onChange={saveSettings} />
           </div>
         </div>
 

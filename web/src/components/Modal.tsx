@@ -6,9 +6,8 @@ import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
  * its body, and `actions` in a row at its bottom.
  *
  * Opening is mounting, so the caller renders the modal only while it is
- * open. The reviewer can close the dialog with Escape or with a press on
- * the backdrop, and `onDismiss` gets the one that the reviewer used. The
- * modal stays open unless the caller then removes it.
+ * open. Escape and a press on the backdrop call `onDismiss`. The modal
+ * stays open unless the caller then removes it.
  */
 export default function Modal({
   title,
@@ -25,7 +24,7 @@ export default function Modal({
   aside?: ReactNode;
   /** The card's own class, which carries its width. */
   card: string;
-  onDismiss: (via: "escape" | "backdrop") => void;
+  onDismiss: () => void;
   /** The element that has the focus when the modal opens. Without it, the
    * first control of the card has the focus. */
   initialFocus?: RefObject<HTMLElement | null>;
@@ -35,8 +34,8 @@ export default function Modal({
   return (
     <Dialog
       open
-      onOpenChange={(open, { reason }) => {
-        if (!open) onDismiss(reason === "escape-key" ? "escape" : "backdrop");
+      onOpenChange={(open) => {
+        if (!open) onDismiss();
       }}
     >
       <DialogContent className={card} initialFocus={initialFocus}>

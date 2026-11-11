@@ -137,8 +137,8 @@
   margin: 0;
 }
 
-.settings-modal {
-  width: 420px;
+.settings-popover {
+  width: 360px;
 }
 
 .settings-knob {
