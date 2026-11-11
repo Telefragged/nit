@@ -1,104 +1,57 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { user } from "../test/page";
 import ReviewSettingsMenu from "./ReviewSettings";
-import type { ReviewSettings } from "../lib/reviewSettings";
+import { DEFAULTS, type ReviewSettings } from "../lib/reviewSettings";
 
 afterEach(cleanup);
 
-/** The page's half of the contract: it holds the applied settings. */
-function Harness({ applied }: { applied: ReviewSettings[] }) {
-  const [settings, setSettings] = useState<ReviewSettings>({
-    layout: "unified",
-    ported: "open",
-    whitespace: "compare",
-  });
+/** Stands in for the page: the settings are its state, and `changes` gets
+ * each change. */
+function Harness({ changes }: { changes: ReviewSettings[] }) {
+  const [settings, setSettings] = useState(DEFAULTS);
   return (
     <ReviewSettingsMenu
       settings={settings}
-      onApply={(next) => {
-        applied.push(next);
+      onChange={(next) => {
+        changes.push(next);
         setSettings(next);
       }}
     />
   );
 }
 
-/** Opens the popup and picks side-by-side, leaving the draft dirty. */
-function openAndChange(applied: ReviewSettings[] = []) {
-  render(<Harness applied={applied} />);
+const open = () => {
+  const changes: ReviewSettings[] = [];
+  render(<Harness changes={changes} />);
   fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-  fireEvent.click(screen.getByRole("button", { name: "Side-by-side" }));
-  return applied;
-}
-
-/** Presses the scrim around the open dialog. */
-const pressBackdrop = () => {
-  const scrim = document.querySelector('[data-slot="dialog-overlay"]');
-  if (!scrim) throw new Error("no dialog is open");
-  return user.click(scrim);
+  return changes;
 };
 
-describe("the review settings popup", () => {
-  it("applies the draft and closes", () => {
-    const applied = openAndChange();
-    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    expect(applied).toEqual([
-      { layout: "split", ported: "open", whitespace: "compare" },
-    ]);
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
+const pressed = (name: string) =>
+  screen.getByRole("button", { name }).getAttribute("aria-pressed");
 
-  it("applies the whitespace knob", () => {
-    const applied: ReviewSettings[] = [];
-    render(<Harness applied={applied} />);
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+describe("the review settings popover", () => {
+  it("changes a setting at once and stays open", () => {
+    const changes = open();
+    expect(pressed("Unified")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Side-by-side" }));
     fireEvent.click(screen.getByRole("button", { name: "Ignore" }));
-    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    expect(applied).toEqual([
-      { layout: "unified", ported: "open", whitespace: "ignore" },
+    expect(changes).toEqual([
+      { layout: "split", ported: "open", whitespace: "compare" },
+      { layout: "split", ported: "open", whitespace: "ignore" },
     ]);
-  });
-
-  it("drops the draft on Cancel without asking", () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const applied = openAndChange();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(confirm).not.toHaveBeenCalled();
-    expect(applied).toEqual([]);
-    expect(screen.queryByRole("dialog")).toBeNull();
-
-    // The next opening starts from the applied settings, not the dropped draft.
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(pressed("Side-by-side")).toBe("true");
     expect(
-      screen
-        .getByRole("button", { name: "Unified" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    confirm.mockRestore();
+      screen.queryByRole("dialog", { name: "Review settings" }),
+    ).not.toBeNull();
   });
 
-  it("warns before a backdrop press drops changed settings", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    openAndChange();
-    await pressBackdrop();
-    expect(confirm).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("dialog")).not.toBeNull();
-
-    confirm.mockReturnValue(true);
-    await pressBackdrop();
+  it("closes on Escape", async () => {
+    open();
+    await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
-    confirm.mockRestore();
-  });
-
-  it("closes on a backdrop press without asking when nothing changed", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<Harness applied={[]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    await pressBackdrop();
-    expect(confirm).not.toHaveBeenCalled();
-    expect(screen.queryByRole("dialog")).toBeNull();
-    confirm.mockRestore();
   });
 });

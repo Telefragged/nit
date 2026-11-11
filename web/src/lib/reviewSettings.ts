@@ -16,7 +16,8 @@ export interface ReviewSettings {
   whitespace: Whitespace;
 }
 
-const DEFAULTS: ReviewSettings = {
+/** The settings of a browser that saved none. */
+export const DEFAULTS: ReviewSettings = {
   layout: "unified",
   ported: "open",
   whitespace: "compare",

@@ -229,20 +229,20 @@ const openPicker = async (page, label) => {
   await untilDom(page, () => !!document.querySelector('[role="listbox"]'));
 };
 
-/** Diff settings live behind the diffbar cog; a capture that wants a
- * non-default one picks it in the modal and applies. */
+/** Presses the option `name` in the settings popover of the diffbar cog,
+ * then closes the popover. */
 const applySetting = async (page, name) => {
   await clickNow(page.getByRole("button", { name: "Settings" }));
-  // Scoped to the modal: an option label can be part of a page button's
+  await untilDom(page, () => !!document.querySelector(".settings-popover"));
+  // Scoped to the popover: an option label can be part of a page button's
   // name, as "All" is of "Expand all".
-  const modal = page.locator(".settings-modal");
-  await clickNow(modal.getByRole("button", { name, exact: true }));
-  await clickNow(modal.getByRole("button", { name: "Apply" }));
-  // Apply closes the modal in the commit that applies the setting. A
-  // setting that is part of a read's key marks the page busy in that same
-  // commit, so the page is ready with the new setting once it is idle
-  // after the modal closes.
-  await untilDom(page, () => !document.querySelector(".settings-modal"));
+  const popover = page.locator(".settings-popover");
+  await clickNow(popover.getByRole("button", { name, exact: true }));
+  await page.keyboard.press("Escape");
+  // A setting that is part of a read's key marks the page busy in the
+  // commit that applies it, so the page is ready with the new setting
+  // once it is idle after the popover closes.
+  await untilDom(page, () => !document.querySelector(".settings-popover"));
   await untilReady(page);
 };
 
@@ -604,14 +604,14 @@ const captures = [
       await untilSpySettled(page);
     },
   },
-  // The diffbar cog's settings popup, holding the diff knobs.
+  // The diffbar cog's settings popover, with the diff knobs.
   {
     name: "review-settings",
     path: "/changes/11?against=base",
     fullPage: false,
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Settings" }));
-      await one(page.locator(".settings-modal"));
+      await untilDom(page, () => !!document.querySelector(".settings-popover"));
     },
   },
   // The list of the page's keys, which the ? key opens.
