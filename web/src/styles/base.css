@@ -43,8 +43,7 @@ button:where(:not([data-slot])) {
   line-height: 1.5;
 }
 
-button:where(:not([data-slot])):hover:not(:disabled),
-.revision-select:hover {
+button:where(:not([data-slot])):hover:not(:disabled) {
   background: var(--color-accent);
   border-color: var(--color-faint-foreground);
 }
@@ -55,8 +54,7 @@ button:where(:not([data-slot])):disabled {
 }
 
 input[type="text"],
-textarea,
-select {
+textarea {
   font-family: var(--font-sans);
   font-size: 13px;
   color: var(--color-foreground);
@@ -74,8 +72,7 @@ textarea {
 }
 
 input:focus,
-textarea:focus,
-select:focus {
+textarea:focus {
   outline: none;
   border-color: var(--color-foreground);
 }

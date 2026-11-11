@@ -79,24 +79,12 @@
   color: var(--color-muted-foreground);
 }
 
-.graph-toolbar label {
+.graph-toolbar > div {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   white-space: nowrap;
-}
-
-.graph-toolbar select {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.graph-toolbar select:disabled {
-  opacity: 0.45;
-  cursor: default;
 }
 
 /* Clickable rows highlight on hover, the rest stay flat. */

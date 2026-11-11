@@ -7,7 +7,7 @@
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { Route } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
-import { renderPage } from "../test/page";
+import { renderPage, user } from "../test/page";
 import Dashboard from "./Dashboard";
 
 afterEach(cleanup);
@@ -43,10 +43,7 @@ describe("repo dashboard change graph", () => {
     await renderDashboard(4, "?group=session-id");
     const alpha = screen.getByText("alpha", { selector: ".graph-gap-label" });
     const beta = screen.getByText("beta", { selector: ".graph-gap-label" });
-    expect(screen.getByLabelText("Group by")).toHaveProperty(
-      "value",
-      "session-id",
-    );
+    expect(screen.getByLabelText("Group by").textContent).toBe("session-id");
     // Beta's run sits above alpha's run. The change stacked on alpha's tip
     // is the first row of beta's run.
     expect(
@@ -59,7 +56,7 @@ describe("repo dashboard change graph", () => {
     expect(
       screen.getByText("lumen: evict cached manifests by age"),
     ).toBeTruthy();
-    expect(screen.getByLabelText("Only")).toHaveProperty("value", "beta");
+    expect(screen.getByLabelText("Only").textContent).toBe("beta");
     expect(screen.queryByText("lumen: parse the manifest lazily")).toBeNull();
     // The filter excluded the stacked change's parent: a break mark cuts
     // its edge to the fork.
@@ -68,6 +65,7 @@ describe("repo dashboard change graph", () => {
 
   it("offers the tag keys the repo's live changes carry", async () => {
     await renderDashboard(4);
+    fireEvent.click(screen.getByLabelText("Group by"));
     expect(screen.getByRole("option", { name: "session-id" })).toBeTruthy();
     // Repo 4 puts `branch` on its abandoned change alone.
     expect(screen.queryByRole("option", { name: "branch" })).toBeNull();
@@ -92,11 +90,8 @@ describe("repo dashboard change graph", () => {
     expect(
       screen.getByText("alpha", { selector: ".graph-gap-label" }),
     ).toBeTruthy();
-    expect(screen.getByLabelText("Group by")).toHaveProperty(
-      "value",
-      "session-id",
-    );
-    expect(screen.getByLabelText("Only")).toHaveProperty("value", "");
+    expect(screen.getByLabelText("Group by").textContent).toBe("session-id");
+    expect(screen.getByLabelText("Only").textContent).toBe("every session-id");
   });
 
   it("groups by the URL's key, not the remembered one", async () => {
@@ -104,17 +99,13 @@ describe("repo dashboard change graph", () => {
     await renderDashboard(4, "?group=none-such");
 
     expect(screen.getByText("lumen: parse the manifest lazily")).toBeTruthy();
-    expect(screen.getByLabelText("Group by")).toHaveProperty(
-      "value",
-      "none-such",
-    );
+    expect(screen.getByLabelText("Group by").textContent).toBe("none-such");
   });
 
   it("remembers the grouping per repo", async () => {
     await renderDashboard(4);
-    fireEvent.change(screen.getByLabelText("Group by"), {
-      target: { value: "session-id" },
-    });
+    fireEvent.click(screen.getByLabelText("Group by"));
+    await user.click(screen.getByRole("option", { name: "session-id" }));
 
     expect(
       screen.getByText("alpha", { selector: ".graph-gap-label" }),
