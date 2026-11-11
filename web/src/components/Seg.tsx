@@ -1,3 +1,5 @@
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
+
 /** One choice of a segmented control. */
 export interface SegOption<T> {
   value: T;
@@ -5,7 +7,8 @@ export interface SegOption<T> {
   title: string;
 }
 
-/** A segmented control: one button per option, the chosen one active. */
+/** A segmented control: one toggle per option, the chosen one pressed.
+ * A press on the chosen option does not change the choice. */
 export default function Seg<T extends string>({
   value,
   options,
@@ -16,20 +19,21 @@ export default function Seg<T extends string>({
   onChange: (next: T) => void;
 }) {
   return (
-    <span className="seg">
+    <ToggleGroup
+      value={[value]}
+      onValueChange={([next]) => {
+        if (next !== undefined) onChange(next);
+      }}
+    >
       {options.map((option) => (
-        <button
+        <ToggleGroupItem
           key={option.value}
-          type="button"
-          className={value === option.value ? "active" : ""}
+          value={option.value}
           title={option.title}
-          onClick={() => {
-            onChange(option.value);
-          }}
         >
           {option.label}
-        </button>
+        </ToggleGroupItem>
       ))}
-    </span>
+    </ToggleGroup>
   );
 }
