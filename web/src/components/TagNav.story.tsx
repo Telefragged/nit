@@ -1,39 +1,34 @@
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { shaOf } from "../api/fixtures/builders";
-import type { ChangeGraph, ChangeStatus, GraphNode } from "../api/types";
+import { graphNode } from "../api/fixtures/builders";
+import type { ChangeGraph } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
 import TagNav from "./TagNav";
-
-const node = (
-  change: number,
-  subject: string,
-  status: ChangeStatus,
-  parent: string,
-): GraphNode => ({
-  commit_sha: shaOf(`c${change}`),
-  section: "open",
-  subject,
-  status,
-  parents: [shaOf(parent)],
-  change_number: change,
-  change_id: `I${change}`,
-  revision: change === 11 ? 1 : 0,
-  fork_sha: shaOf("a0"),
-  group: null,
-});
 
 const GRAPH: ChangeGraph = {
   history_truncated: false,
   nodes: [
-    node(12, "auth: document rotation and ship flow diagram", "pending", "c11"),
-    node(11, "auth: rotate refresh tokens on use", "pending", "c10"),
-    node(
-      10,
-      "auth: add TokenStore schema and config plumbing",
-      "approved",
-      "a0",
-    ),
+    graphNode({
+      sha: "c12",
+      parent: "c11",
+      change: 12,
+      subject: "auth: document rotation and ship flow diagram",
+      revision: 0,
+    }),
+    graphNode({
+      sha: "c11",
+      parent: "c10",
+      change: 11,
+      subject: "auth: rotate refresh tokens on use",
+    }),
+    graphNode({
+      sha: "c10",
+      parent: "a0",
+      change: 10,
+      subject: "auth: add TokenStore schema and config plumbing",
+      status: "approved",
+      revision: 0,
+    }),
   ],
 };
 

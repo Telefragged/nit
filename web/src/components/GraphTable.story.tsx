@@ -1,95 +1,57 @@
 import { MemoryRouter } from "react-router-dom";
-import { ago, draft, shaOf } from "../api/fixtures/builders";
-import type {
-  ChangeGraph,
-  ChangeStatus,
-  GraphNode,
-  GraphSection,
-} from "../api/types";
+import { ago, draft, graphNode } from "../api/fixtures/builders";
+import type { ChangeGraph } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
 import GraphTable from "./GraphTable";
-
-const node = (
-  sha: string,
-  section: GraphSection,
-  subject: string,
-  status: ChangeStatus,
-  parent: string,
-  change: number | null,
-): GraphNode => ({
-  commit_sha: shaOf(sha),
-  section,
-  subject,
-  status,
-  parents: [shaOf(parent)],
-  change_number: change,
-  change_id: change === null ? null : `I${change}`,
-  revision: change === null ? null : 1,
-  fork_sha: shaOf("a0"),
-  group: null,
-});
 
 /** A stack of three changes on HEAD, one change that forks from an older
  * commit, and the merged history below them. */
 const GRAPH: ChangeGraph = {
   history_truncated: true,
   nodes: [
-    node(
-      "c3",
-      "open",
-      "auth: document rotation and ship flow diagram",
-      "pending",
-      "c2",
-      12,
-    ),
-    node(
-      "c2",
-      "open",
-      "auth: rotate refresh tokens on use",
-      "changes_requested",
-      "c1",
-      11,
-    ),
-    node(
-      "c1",
-      "open",
-      "auth: add TokenStore schema and config plumbing",
-      "approved",
-      "a0",
-      10,
-    ),
-    node(
-      "d1",
-      "open",
-      "wal: checkpoint on idle, not on every commit",
-      "commented",
-      "a1",
-      9,
-    ),
-    node(
-      "a0",
-      "head",
-      "feat: make the push base optional",
-      "merged",
-      "a1",
-      null,
-    ),
-    node(
-      "a1",
-      "history",
-      "feat: decouple display fields",
-      "merged",
-      "a2",
-      null,
-    ),
-    node(
-      "a2",
-      "history",
-      "fix: reject an already-merged push",
-      "merged",
-      "a3",
-      null,
-    ),
+    graphNode({
+      sha: "c3",
+      parent: "c2",
+      change: 12,
+      subject: "auth: document rotation and ship flow diagram",
+    }),
+    graphNode({
+      sha: "c2",
+      parent: "c1",
+      change: 11,
+      subject: "auth: rotate refresh tokens on use",
+      status: "changes_requested",
+    }),
+    graphNode({
+      sha: "c1",
+      parent: "a0",
+      change: 10,
+      subject: "auth: add TokenStore schema and config plumbing",
+      status: "approved",
+    }),
+    graphNode({
+      sha: "d1",
+      parent: "a1",
+      change: 9,
+      subject: "wal: checkpoint on idle, not on every commit",
+      status: "commented",
+    }),
+    graphNode({
+      sha: "a0",
+      parent: "a1",
+      section: "head",
+      subject: "feat: make the push base optional",
+    }),
+    graphNode({
+      sha: "a1",
+      parent: "a2",
+      subject: "feat: decouple display fields",
+    }),
+    graphNode({
+      sha: "a2",
+      parent: "a3",
+      subject: "fix: reject an already-merged push",
+    }),
   ],
 };
 
