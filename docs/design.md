@@ -13,6 +13,7 @@ The rules for the look of the web UI. `web/src/styles/tokens.css` defines the to
 ## Threads
 
 - **Form shows the state.** A draft has a dashed yellow outline. An open thread has a yellow dot. A resolved thread has a gray check. The box of a published thread is neutral.
+- **The gutter shows where the threads are.** The line number of a commented line has the form of its thread: a yellow fill for an open thread, a dashed yellow outline for a draft, and a gray fill for a resolved thread.
 - **A resolved thread is one row.** An open thread shows in full. A resolved thread shows its state, the start of its first comment, and the count of its comments. The chevron of a thread changes it to the other form.
 
 ## Themes
