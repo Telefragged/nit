@@ -2,6 +2,13 @@
 
 .review-page {
   padding-bottom: 56px; /* room for the fixed single-row review bar */
+
+  /* The heights of the two sticky bars above the files. The topbar is
+     outside this page, and chrome.css gives it the same 40px. A file
+     section outside this page has no bar above it. */
+  --topbar-h: 40px;
+  --diffbar-h: 33px;
+  --bars-h: calc(var(--topbar-h) + var(--diffbar-h));
 }
 
 /* The header: the change's own lines at the left, and at the right the
@@ -61,12 +68,12 @@
 
 .diffbar {
   position: sticky;
-  top: 40px;
+  top: var(--topbar-h);
   z-index: 20;
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 33px; /* pinned: the 73/78/116px sticky offsets below assume it */
+  height: var(--diffbar-h);
   padding: 0 16px;
   background: var(--color-card);
   border-bottom: 1px solid var(--color-border);
@@ -185,7 +192,7 @@
 /* The sidebar is the one sticky, height-bounded column; the file tree
    sizes its scrollport against it. */
 .review-sidebar {
-  top: 78px;
+  top: calc(var(--bars-h) + 5px);
   max-height: calc(100vh - 140px);
   display: flex;
   flex-direction: column;
@@ -465,12 +472,12 @@ button.rail-toggle,
 .file-section,
 .line-row .code,
 [data-thread] {
-  scroll-margin-top: 116px;
+  scroll-margin-top: calc(var(--bars-h, 0px) + 43px);
 }
 
 .file-header {
   position: sticky;
-  top: 73px; /* topbar 40px + diffbar 33px */
+  top: var(--bars-h, 0);
   z-index: 10;
   display: flex;
   gap: 8px;
