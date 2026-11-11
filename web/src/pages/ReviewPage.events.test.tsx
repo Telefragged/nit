@@ -96,7 +96,7 @@ describe("event-driven change page", () => {
     });
 
     expect(rows()[rows().length - 1]?.textContent).toContain(
-      "status reset to PENDING",
+      "status reset to Pending",
     );
   });
 });

@@ -1,28 +1,30 @@
 import type { ChangeStatus } from "../api/types";
 
-// Amber needs the reviewer. Green, red and purple are the three outcomes.
-
 const STATUS_LABEL: Record<ChangeStatus, string> = {
-  pending: "PENDING",
-  approved: "APPROVED",
-  changes_requested: "CHANGES REQUESTED",
-  commented: "COMMENTED",
-  merged: "MERGED",
-  abandoned: "ABANDONED",
+  pending: "Pending",
+  approved: "Approved",
+  changes_requested: "Changes requested",
+  commented: "Commented",
+  merged: "Merged",
+  abandoned: "Abandoned",
 };
 
+// Amber: the next action is the reviewer's. Green, red and purple: the
+// three outcomes. Hollow: a review without a verdict.
 const STATUS_COLOR: Record<ChangeStatus, string> = {
   pending: "amber",
   approved: "green",
   changes_requested: "red",
-  commented: "gray",
+  commented: "hollow",
   merged: "purple",
   abandoned: "gray",
 };
 
+/** A change status as its dot and its name. */
 export function StatusChip({ status }: { status: ChangeStatus }) {
   return (
-    <span className={`badge badge-${STATUS_COLOR[status]}`}>
+    <span className="status">
+      <StatusDot status={status} />
       {STATUS_LABEL[status]}
     </span>
   );
