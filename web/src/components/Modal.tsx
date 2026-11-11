@@ -1,52 +1,52 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
+import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 
 /**
- * A native modal dialog holding `children` in a centered card.
+ * A modal dialog: a centered card with `title` in its head, `children` in
+ * its body, and `actions` in a row at its bottom.
  *
- * `showModal()` puts the dialog in the top layer and makes the page behind
- * it inert. Opening is mounting, so the caller renders the modal only while
- * it is open. The dialog itself offers two ways out, and `onDismiss` names
- * which one the reviewer took.
+ * Opening is mounting, so the caller renders the modal only while it is
+ * open. The reviewer can close the dialog with Escape or with a press on
+ * the backdrop, and `onDismiss` gets the one that the reviewer used. The
+ * modal stays open unless the caller then removes it.
  */
 export default function Modal({
-  label,
+  title,
+  aside,
   card,
   onDismiss,
+  initialFocus,
+  actions,
   children,
 }: {
-  /** Names the dialog for assistive technology. */
-  label: string;
+  /** The heading of the card, and the accessible name of the dialog. */
+  title: string;
+  /** Shows at the right of the head. */
+  aside?: ReactNode;
   /** The card's own class, which carries its width. */
   card: string;
   onDismiss: (via: "escape" | "backdrop") => void;
+  /** The element that has the focus when the modal opens. Without it, the
+   * first control of the card has the focus. */
+  initialFocus?: RefObject<HTMLElement | null>;
+  actions: ReactNode;
   children: ReactNode;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  // Layout effect so the dialog is visible the frame it mounts. It runs
-  // before the caller's own, which is where a modal focuses its field.
-  useLayoutEffect(() => {
-    dialogRef.current?.showModal();
-  }, []);
-
   return (
-    // The dialog is its own full-bleed backdrop, so a backdrop press lands
-    // on the dialog element itself. Escape arrives as `cancel` wherever
-    // focus sits.
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- keyboard dismiss is onCancel (Escape)
-    <dialog
-      ref={dialogRef}
-      className="modal-backdrop"
-      aria-label={label}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onDismiss("backdrop");
-      }}
-      onCancel={(e) => {
-        e.preventDefault();
-        onDismiss("escape");
+    <Dialog
+      open
+      onOpenChange={(open, { reason }) => {
+        if (!open) onDismiss(reason === "escape-key" ? "escape" : "backdrop");
       }}
     >
-      <div className={`modal-card ${card}`}>{children}</div>
-    </dialog>
+      <DialogContent className={card} initialFocus={initialFocus}>
+        <div className="modal-head">
+          <DialogTitle>{title}</DialogTitle>
+          {aside}
+        </div>
+        <div className="modal-body">{children}</div>
+        <div className="modal-actions">{actions}</div>
+      </DialogContent>
+    </Dialog>
   );
 }

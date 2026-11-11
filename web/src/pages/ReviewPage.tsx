@@ -653,15 +653,12 @@ export default function ReviewPage() {
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
   // expanded, then scrolled), n / shift+n next/previous change, r the latest
   // revision, c comments on the selected text or else the linked lines, a
-  // opens the reply modal.
-  // All inert while a modal is open — a showModal() dialog owns the keyboard
-  // (Escape arrives as its cancel event), but window listeners still fire, so
-  // the open dialog itself is the gate. A layout effect, so the listener
-  // reads the link of the commit that marks the linked lines: a c pressed
-  // once they show comments on them.
+  // opens the reply modal. `shortcutKey` gives no key while a dialog is
+  // open. A layout effect, so the listener gets the link from the commit
+  // that marks the linked lines: a c pressed once they show comments on
+  // them.
   useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector("dialog[open]")) return;
       const key = shortcutKey(e);
       if (key === "[" || key === "]") {
         if (fileCount === 0) return;

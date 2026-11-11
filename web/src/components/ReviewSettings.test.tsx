@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { user } from "../test/page";
 import ReviewSettingsMenu from "./ReviewSettings";
 import type { ReviewSettings } from "../lib/reviewSettings";
 
@@ -32,7 +33,12 @@ function openAndChange(applied: ReviewSettings[] = []) {
   return applied;
 }
 
-const backdrop = () => screen.getByRole("dialog", { name: "Settings" });
+/** Presses the scrim around the open dialog. */
+const pressBackdrop = () => {
+  const scrim = document.querySelector('[data-slot="dialog-overlay"]');
+  if (!scrim) throw new Error("no dialog is open");
+  return user.click(scrim);
+};
 
 describe("the review settings popup", () => {
   it("applies the draft and closes", () => {
@@ -73,24 +79,24 @@ describe("the review settings popup", () => {
     confirm.mockRestore();
   });
 
-  it("warns before a backdrop press drops changed settings", () => {
+  it("warns before a backdrop press drops changed settings", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     openAndChange();
-    fireEvent.mouseDown(backdrop());
+    await pressBackdrop();
     expect(confirm).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog")).not.toBeNull();
 
     confirm.mockReturnValue(true);
-    fireEvent.mouseDown(backdrop());
+    await pressBackdrop();
     expect(screen.queryByRole("dialog")).toBeNull();
     confirm.mockRestore();
   });
 
-  it("closes on a backdrop press without asking when nothing changed", () => {
+  it("closes on a backdrop press without asking when nothing changed", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<Harness applied={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    fireEvent.mouseDown(backdrop());
+    await pressBackdrop();
     expect(confirm).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
     confirm.mockRestore();

@@ -505,8 +505,8 @@ describe("the s key submits the listed changes' draft decisions", () => {
   });
 });
 
-// An open modal owns the keyboard: its dialog is in the top layer, but the
-// page's window listener still hears every keystroke.
+// The keyboard focus is in the open settings, but the listener of the page
+// on the window still gets every key.
 describe("the page shortcuts while the settings popup is open", () => {
   let path = "";
   function LocationProbe() {

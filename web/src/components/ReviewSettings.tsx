@@ -1,7 +1,9 @@
+import { Settings } from "lucide-react";
 import { useState } from "react";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import Modal from "./Modal";
 import Seg, { type SegOption } from "./Seg";
+import { Button } from "./ui/button";
 import type { ReviewSettings } from "../lib/reviewSettings";
 
 const LAYOUT_OPTIONS: SegOption<ReviewSettings["layout"]>[] = [
@@ -90,8 +92,9 @@ export default function ReviewSettingsMenu({
 
   return (
     <>
-      <button
-        className="settings-cog"
+      <Button
+        variant="ghost"
+        size="icon"
         aria-label="Settings"
         title="Review settings"
         onClick={() => {
@@ -99,21 +102,39 @@ export default function ReviewSettingsMenu({
           setOpen(true);
         }}
       >
-        ⚙
-      </button>
+        <Settings size={15} aria-hidden />
+      </Button>
       {open ? (
         <Modal
-          label="Settings"
+          title="Review settings"
+          aside={<span className="dim">Saved in this browser</span>}
           card="settings-modal"
           onDismiss={(via) => {
             if (via === "backdrop") requestClose();
             else setOpen(false);
           }}
+          actions={
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <span className="spacer" />
+              <Button
+                onClick={() => {
+                  onApply(draft);
+                  setOpen(false);
+                }}
+              >
+                Apply
+              </Button>
+            </>
+          }
         >
-          <div className="modal-head">
-            <strong>Review settings</strong>
-            <span className="dim">Saved in this browser</span>
-          </div>
           <Knob
             label="Whitespace"
             value={draft.whitespace}
@@ -138,25 +159,6 @@ export default function ReviewSettingsMenu({
               setDraft({ ...draft, ported });
             }}
           />
-          <div className="modal-actions">
-            <button
-              onClick={() => {
-                setOpen(false);
-              }}
-            >
-              Cancel
-            </button>
-            <span className="spacer" />
-            <button
-              className="btn-primary"
-              onClick={() => {
-                onApply(draft);
-                setOpen(false);
-              }}
-            >
-              Apply
-            </button>
-          </div>
         </Modal>
       ) : null}
     </>

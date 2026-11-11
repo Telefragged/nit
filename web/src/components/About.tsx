@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { Info } from "lucide-react";
 import { useState } from "react";
 import { getHealth } from "../api/client";
 import { isNewer, useReleaseCheck } from "../lib/releaseCheck";
 import { timeAgo } from "../lib/time";
 import Modal from "./Modal";
+import { Button } from "./ui/button";
 
 /**
  * The topbar's about button and the dialog it opens. The dialog shows the
@@ -26,21 +28,26 @@ export default function About() {
 
   return (
     <>
-      <button
-        className="about-button"
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative"
         aria-label={label}
         title={label}
         onClick={() => {
           setOpen(true);
         }}
       >
-        i{update ? <span className="about-dot" /> : null}
-      </button>
+        <Info size={15} aria-hidden />
+        {update ? <span className="about-dot" /> : null}
+      </Button>
       {open ? (
-        <Modal label="About nit" card="about-modal" onDismiss={close}>
-          <div className="modal-head">
-            <strong>About nit</strong>
-          </div>
+        <Modal
+          title="About nit"
+          card="about-modal"
+          onDismiss={close}
+          actions={<Button onClick={close}>Close</Button>}
+        >
           <dl className="about-versions">
             <dt>Version</dt>
             <dd>{version ?? "unknown"}</dd>
@@ -65,7 +72,8 @@ export default function About() {
                   {check.checkedAt === 0
                     ? "never"
                     : timeAgo(new Date(check.checkedAt).toISOString())}
-                  <button
+                  <Button
+                    size="sm"
                     disabled={refreshing}
                     onClick={() => {
                       setRefreshing(true);
@@ -75,7 +83,7 @@ export default function About() {
                     }}
                   >
                     Refresh
-                  </button>
+                  </Button>
                 </dd>
               </>
             ) : null}
@@ -90,10 +98,6 @@ export default function About() {
             />
             Check GitHub for new releases
           </label>
-          <div className="modal-actions">
-            <span className="spacer" />
-            <button onClick={close}>Close</button>
-          </div>
         </Modal>
       ) : null}
     </>
