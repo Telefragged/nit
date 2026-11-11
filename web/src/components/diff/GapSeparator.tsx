@@ -1,17 +1,19 @@
+import { ArrowDown, ArrowUp } from "lucide-react";
 import type { ReactNode } from "react";
+import { Button } from "../ui/button";
 
 type End = "down" | "up";
 
 /** A separator in place of a gap of `more` hidden lines or blocks.
  *
- * The separator renders only when `more` is not 0. When the caller passes
- * `reveal`, buttons over the middle of the separator call it. The button
- * for the whole gap reveals from the top edge when `down` is true, and
- * from the bottom edge when it is false. When `down` is true, a button
- * shows the first `step` rows of the gap, under the rows above it. When
- * `up` is true, a button shows the last `step` rows, over the rows below
- * it. A gap that one step covers has no stepped buttons. `children` render
- * after the count. */
+ * The separator renders only when `more` is not 0. It shows the count,
+ * then `children`. When the caller passes `reveal`, buttons at its right
+ * call it. When `down` is true, a button with a down arrow shows the first
+ * `step` rows of the gap, under the rows above it. When `up` is true, a
+ * button with an up arrow shows the last `step` rows, over the rows below
+ * it. A gap that one step covers has no stepped buttons. The last button
+ * shows the whole gap: from the top edge when `down` is true, and from the
+ * bottom edge when it is false. */
 export default function GapSeparator({
   more,
   unit,
@@ -33,43 +35,49 @@ export default function GapSeparator({
 }) {
   if (more === 0) return null;
   const noun = (n: number) => (n === 1 ? unit : `${unit}s`);
+  const stepped = more > step;
   const button = (kind: "all" | End, count: number, title: string) => {
     const end = kind !== "all" ? kind : down ? "down" : "up";
+    const Arrow = kind === "down" ? ArrowDown : ArrowUp;
     return (
-      <button
-        type="button"
-        className={`hunk-expand expand-${kind}`}
+      <Button
+        variant="ghost"
+        size="sm"
+        className={`expand-${kind} h-5 px-1.5`}
         onClick={() => {
           reveal?.(end, kind === "all" ? Infinity : count);
         }}
         disabled={busy(end)}
         title={title}
       >
-        +{count}
-      </button>
+        {kind === "all" ? (
+          "Show all"
+        ) : (
+          <>
+            <Arrow size={12} aria-hidden />
+            {count}
+          </>
+        )}
+      </Button>
     );
   };
   return (
     <div className="hunk-row">
-      {reveal ? (
-        <div className="hunk-expanders">
-          {button("all", more, `Show all ${more} ${noun(more)}`)}
-          {more > step ? (
-            <div className="hunk-expand-steps">
-              {down
-                ? button("down", step, `Show ${step} more ${noun(step)} below`)
-                : null}
-              {up
-                ? button("up", step, `Show ${step} more ${noun(step)} above`)
-                : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      <span className="hunk-skip">
-        ⋯ {more} {noun(more)}
+      <span>
+        {more} {noun(more)} hidden
       </span>
       {children}
+      {reveal ? (
+        <span className="hunk-expanders">
+          {stepped && down
+            ? button("down", step, `Show ${step} more ${noun(step)} below`)
+            : null}
+          {stepped && up
+            ? button("up", step, `Show ${step} more ${noun(step)} above`)
+            : null}
+          {button("all", more, `Show all ${more} ${noun(more)}`)}
+        </span>
+      ) : null}
     </div>
   );
 }
