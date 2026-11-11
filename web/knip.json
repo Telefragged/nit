@@ -6,7 +6,11 @@
     "gallery/main.tsx",
     "gallery/setup.ts"
   ],
-  "project": ["src/**/*.{ts,tsx}", "screenshots/*.mjs", "gallery/*.{ts,tsx}"],
+  "project": [
+    "src/**/*.{ts,tsx,css}",
+    "screenshots/*.mjs",
+    "gallery/*.{ts,tsx}"
+  ],
   "ignoreDependencies": ["@html-eslint/parser"],
   "ignoreBinaries": ["gen-wasm"]
 }

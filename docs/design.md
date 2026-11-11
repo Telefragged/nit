@@ -19,3 +19,11 @@ The screenshot harness and the gallery capture the dark theme. A capture with `c
 ## Type
 
 The interface uses Atkinson Hyperlegible Next. Code, paths, commit ids and revision numbers use Intel One Mono. Both families are drawn so that similar characters differ, for example `0` and `O`.
+
+## Components
+
+A control is a shadcn/ui component in `web/src/components/ui/`. Add one with `npx shadcn add <name>` (`web/components.json`), then reduce it to the variants that a caller uses. Its classes are Tailwind utilities, and `web/src/styles/index.css` limits those utilities to the tokens.
+
+A view has at most one filled yellow button, and that button publishes the work of the reviewer.
+
+The diff grid and its selection logic are hand-written CSS on the same tokens.

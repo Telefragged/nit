@@ -4,7 +4,7 @@
 // removed upstream in v15), so formatting stays prettier's job via treefmt.
 //
 // The temporary burn-down allow-list is empty: every standard rule is
-// enabled. The two below are turned off permanently and with a reason —
+// enabled. The first two below are turned off permanently and with a reason —
 // they genuinely don't fit this codebase, the way `similar_names = allow`
 // doesn't fit the Rust side — never a silent "this one is noise".
 
@@ -25,5 +25,10 @@ export default {
     // would scatter related rules across hundreds of lines for no visual
     // change.
     "no-descending-specificity": null,
+    // Tailwind compiles the stylesheet (@tailwindcss/vite). It inlines an
+    // import only in the string notation, and `@source` and `@theme` are
+    // its at-rules.
+    "import-notation": "string",
+    "at-rule-no-unknown": [true, { ignoreAtRules: ["source", "theme"] }],
   },
 };

@@ -4,6 +4,14 @@
 
 :root {
   color-scheme: light dark;
+}
+
+/* Tailwind makes a utility for each token of this block, and `static`
+   keeps a token that no utility uses. `--color-*: initial` removes
+   Tailwind's own palette. `--name-*` is Tailwind's syntax. */
+/* stylelint-disable custom-property-pattern */
+@theme static {
+  --color-*: initial;
 
   /* Neutrals: all chrome and text. */
   --color-background: light-dark(#fff, #1a1a19);
@@ -21,10 +29,11 @@
   /* The lines, or the thread, that the URL of the page links to. */
   --color-linked: light-dark(rgb(26 26 24 / 10%), rgb(232 231 227 / 12%));
 
-  /* Mark: the reviewer's work. `--color-mark` is a fill. `--color-mark-text` is text
-     and borders on a neutral background. The three washes go under text,
-     weakest first. */
+  /* Mark: the reviewer's work. `--color-mark` is a fill and `--color-mark-foreground`
+     the text on it. `--color-mark-text` is text and borders on a neutral
+     background. The three washes go under text, weakest first. */
   --color-mark: light-dark(#ffd43b, #f2c744);
+  --color-mark-foreground: #1a1a18;
   --color-mark-text: light-dark(#7a5c00, #f2c744);
   --color-mark-tint: light-dark(rgb(255 212 59 / 28%), rgb(242 199 68 / 14%));
   --color-mark-soft: light-dark(rgb(255 212 59 / 55%), rgb(242 199 68 / 30%));
@@ -68,3 +77,4 @@
   --font-mono: "Intel One Mono Variable", ui-monospace, monospace;
   --font-sans: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
 }
+/* stylelint-enable custom-property-pattern */

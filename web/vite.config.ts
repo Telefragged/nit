@@ -1,6 +1,8 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { join } from "node:path";
 import { genWasmPlugin } from "./vite-plugin-gen-wasm.ts";
 
 // Dev mode: vite serves the frontend with HMR and proxies API calls to the
@@ -9,7 +11,9 @@ import { genWasmPlugin } from "./vite-plugin-gen-wasm.ts";
 export default defineConfig({
   // genWasmPlugin(): generates src/wasm (gitignored) if missing, and in dev
   // watches crates/nit-wasm to regenerate + reload on change.
-  plugins: [react(), genWasmPlugin()],
+  plugins: [react(), tailwindcss(), genWasmPlugin()],
+  // The alias that shadcn/ui components import through (components.json).
+  resolve: { alias: { "@": join(import.meta.dirname, "src") } },
   build: {
     // These browsers have `light-dark()`, so the build keeps it. For an
     // older target the build replaces it with a polyfill that depends only

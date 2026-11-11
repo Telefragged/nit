@@ -2,10 +2,9 @@
   box-sizing: border-box;
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
+/* A tab keeps the width that git and a terminal give it. */
+html {
+  tab-size: 8;
 }
 
 body {
@@ -31,7 +30,8 @@ code,
   font-family: var(--font-mono);
 }
 
-button {
+/* A shadcn/ui component carries `data-slot` and styles itself. */
+button:where(:not([data-slot])) {
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--color-foreground);
@@ -43,13 +43,13 @@ button {
   line-height: 1.5;
 }
 
-button:hover:not(:disabled),
+button:where(:not([data-slot])):hover:not(:disabled),
 .revision-select:hover {
   background: var(--color-accent);
   border-color: var(--color-faint-foreground);
 }
 
-button:disabled {
+button:where(:not([data-slot])):disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -64,6 +64,7 @@ select {
   border: 1px solid var(--color-border-strong);
   border-radius: 4px;
   padding: 4px 8px;
+  line-height: normal;
 }
 
 textarea {
@@ -91,4 +92,8 @@ select:focus {
 
 .check-label input {
   cursor: pointer;
+}
+
+input[type="checkbox"] {
+  margin: 3px 3px 3px 4px;
 }

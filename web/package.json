@@ -18,9 +18,13 @@
     "gallery": "playwright test --config gallery/playwright.config.ts"
   },
   "dependencies": {
+    "@base-ui/react": "^1.9.0",
     "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
     "@fontsource-variable/intel-one-mono": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.5",
     "@tanstack/react-query": "^5.103.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "highlight.js": "^11.12.0",
     "lucide-react": "^1.57.0",
@@ -32,6 +36,8 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.2",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.5",
     "unified": "^11.0.5"
   },
   "devDependencies": {

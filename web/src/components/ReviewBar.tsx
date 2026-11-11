@@ -10,6 +10,7 @@ import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import { shortcutKey } from "../lib/shortcutKey";
 import Modal from "./Modal";
+import { Button } from "./ui/button";
 
 /** Human label for a draft decision (the bar chip + the modal's current state). */
 const DECISION_LABEL: Record<Decision, string> = {
@@ -193,8 +194,8 @@ export default function ReviewBar({
       <div className="review-bar">
         {stats}
         <div className="review-bar-actions">
-          <button
-            className="btn-primary"
+          <Button
+            variant="primary"
             disabled={!canSubmit}
             title={
               drafted === 0
@@ -206,15 +207,14 @@ export default function ReviewBar({
             }}
           >
             Submit (s){drafted > 0 ? ` · ${drafted}` : ""}
-          </button>
-          <button
-            className="btn-primary"
+          </Button>
+          <Button
             onClick={() => {
               onReplyOpenChange(true);
             }}
           >
             Review (a)
-          </button>
+          </Button>
         </div>
       </div>
       {replyOpen ? (
