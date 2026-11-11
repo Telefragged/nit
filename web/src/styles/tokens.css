@@ -1,56 +1,70 @@
-/* nit — dark, dense, reviewer-grade. Single theme. */
+/* Color and type tokens, by role. Each color has a light and a dark value,
+   and the system setting selects one. docs/design.md states the rules for
+   their use. */
 
 :root {
-  --bg: #0d1117;
-  --bg-raised: #131922;
-  --bg-inset: #0a0e14;
-  --bg-hover: #171f29;
-  --border: #212833;
-  --border-strong: #303a47;
-  --text: #cdd5de;
-  --text-dim: #8b949e;
-  --text-faint: #636e7b;
-  --amber: #d29922;
-  --blue: #58a6ff;
-  --green: #3fb950;
-  --purple: #a371f7;
-  --red: #f85149;
-  --gray: #6e7681;
-  --amber-dim: rgb(210 153 34 / 15%);
-  --blue-dim: rgb(88 166 255 / 13%);
-  --green-dim: rgb(63 185 80 / 14%);
-  --red-dim: rgb(248 81 73 / 13%);
-  --gray-dim: rgb(110 118 129 / 16%);
-  --add-bg: rgb(63 185 80 / 10%);
-  --add-gutter: rgb(63 185 80 / 18%);
-  --add-intraline: rgb(63 185 80 / 30%);
-  --del-bg: rgb(248 81 73 / 9%);
-  --del-gutter: rgb(248 81 73 / 16%);
-  --del-intraline: rgb(248 81 73 / 28%);
+  color-scheme: light dark;
+
+  /* Neutrals: all chrome and text. */
+  --color-background: light-dark(#fff, #1a1a19);
+  --color-card: light-dark(#f6f6f4, #222221);
+  --color-sunken: light-dark(#eeeeeb, #141413);
+  --color-accent: light-dark(#e9e9e5, #2c2c2a);
+  --color-border: light-dark(#e3e3df, #313130);
+  --color-border-strong: light-dark(#c6c6c0, #4a4a46);
+  --color-foreground: light-dark(#1a1a18, #e8e7e3);
+  --color-muted-foreground: light-dark(#5a5954, #a6a59f);
+  --color-faint-foreground: light-dark(#76756f, #86857f);
+  --color-shadow: light-dark(rgb(0 0 0 / 16%), rgb(0 0 0 / 50%));
+  --color-scrim: light-dark(rgb(26 26 24 / 35%), rgb(0 0 0 / 60%));
+
+  /* The lines, or the thread, that the URL of the page links to. */
+  --color-linked: light-dark(rgb(26 26 24 / 10%), rgb(232 231 227 / 12%));
+
+  /* Mark: the reviewer's work. `--color-mark` is a fill. `--color-mark-text` is text
+     and borders on a neutral background. The three washes go under text,
+     weakest first. */
+  --color-mark: light-dark(#ffd43b, #f2c744);
+  --color-mark-text: light-dark(#7a5c00, #f2c744);
+  --color-mark-tint: light-dark(rgb(255 212 59 / 28%), rgb(242 199 68 / 14%));
+  --color-mark-soft: light-dark(rgb(255 212 59 / 55%), rgb(242 199 68 / 30%));
+  --color-mark-strong: light-dark(rgb(255 212 59 / 90%), rgb(242 199 68 / 46%));
+
+  /* Diff data: the author's additions and deletions. */
+  --color-add: light-dark(#1a7f37, #57c278);
+  --color-add-bg: light-dark(#e6f6ea, rgb(87 194 120 / 12%));
+  --color-add-gutter: light-dark(#cfeed7, rgb(87 194 120 / 20%));
+  --color-add-intraline: light-dark(#abe3b9, rgb(87 194 120 / 34%));
+  --color-del: light-dark(#c93c37, #f0736a);
+  --color-del-bg: light-dark(#fdebe9, rgb(240 115 106 / 12%));
+  --color-del-gutter: light-dark(#fad7d3, rgb(240 115 106 / 20%));
+  --color-del-intraline: light-dark(#f7bdb7, rgb(240 115 106 / 36%));
 
   /* Rebase drift keeps a hue per direction (gerrit's rebased-add /
      rebased-remove highlights): blue for an added line, purple for a removed
      one. Neither is green or red, so drift never reads as the author's own
-     edit, and each sits below its add/del counterpart above. */
-  --drift-add-bg: rgb(88 166 255 / 9%);
-  --drift-add-gutter: rgb(88 166 255 / 16%);
-  --drift-add-intraline: rgb(88 166 255 / 24%);
-  --drift-del-bg: rgb(163 113 247 / 10%);
-  --drift-del-gutter: rgb(163 113 247 / 18%);
-  --drift-del-intraline: rgb(163 113 247 / 26%);
+     edit. */
+  --color-drift-add: light-dark(#2563c9, #6ea8f7);
+  --color-drift-add-bg: light-dark(#e8f0fd, rgb(110 168 247 / 11%));
+  --color-drift-add-gutter: light-dark(#d5e3fb, rgb(110 168 247 / 18%));
+  --color-drift-add-intraline: light-dark(#b4cdf8, rgb(110 168 247 / 28%));
+  --color-drift-del: light-dark(#7c4fd6, #b08cf5);
+  --color-drift-del-bg: light-dark(#f1eafd, rgb(176 140 245 / 12%));
+  --color-drift-del-gutter: light-dark(#e4d8fb, rgb(176 140 245 / 20%));
+  --color-drift-del-intraline: light-dark(#cfbaf7, rgb(176 140 245 / 30%));
 
-  /* change graph: the HEAD ring, the merged-history
-     edge, and a per-lane branch palette (gleisbau-style — a whole branch
-     carries one color). Node/status colors reuse the palette above. */
-  --graph-node-bg: var(--bg-raised);
-  --graph-head: #aebbd0;
-  --graph-hist-edge: #4e576a;
-  --graph-lane-0: #a98a3e;
-  --graph-lane-1: #7e93cf;
-  --graph-lane-2: #a07cc4;
-  --graph-lane-3: #5fae8e;
-  --graph-lane-4: #c0894e;
-  --graph-lane-5: #c47e9e;
-  --mono: "Intel One Mono Variable", ui-monospace, monospace;
-  --sans: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+  /* Syntax: two hues, and neither is a diff hue or the mark. */
+  --color-syntax-keyword: light-dark(#6b4fb0, #b8a9e8);
+  --color-syntax-string: light-dark(#0b7a75, #7cc7c1);
+
+  /* Change graph: a per-lane branch palette (gleisbau-style — a whole
+     branch carries one color). No lane is yellow. */
+  --color-graph-lane-0: light-dark(#2b7a89, #5aa7b5);
+  --color-graph-lane-1: light-dark(#4f66b0, #7e93cf);
+  --color-graph-lane-2: light-dark(#7a52a8, #a07cc4);
+  --color-graph-lane-3: light-dark(#2f7f61, #5fae8e);
+  --color-graph-lane-4: light-dark(#9a6328, #c0894e);
+  --color-graph-lane-5: light-dark(#a04f76, #c47e9e);
+  --font-mono: "Intel One Mono Variable", ui-monospace, monospace;
+  --font-sans: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
 }

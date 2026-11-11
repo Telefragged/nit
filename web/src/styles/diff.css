@@ -6,7 +6,7 @@
 
 .diff-grid {
   display: grid;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -35,9 +35,9 @@
 .line-row .g {
   padding: 0 8px;
   text-align: right;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   user-select: none;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
@@ -55,7 +55,7 @@
 }
 
 .line-row .code.half {
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--color-border);
 }
 
 /* While a split-view drag runs, mark the side it did not start on
@@ -92,37 +92,37 @@
   display: inline-block;
   width: 14px;
   text-align: center;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   user-select: none;
 }
 
 .code.add .sign {
-  color: var(--green);
+  color: var(--color-add);
 }
 
 .code.del .sign {
-  color: var(--red);
+  color: var(--color-del);
 }
 
 .code.add {
-  background: var(--add-bg);
+  background: var(--color-add-bg);
 }
 
 .g.add {
-  background: var(--add-gutter);
+  background: var(--color-add-gutter);
 }
 
 .code.del {
-  background: var(--del-bg);
+  background: var(--color-del-bg);
 }
 
 .g.del {
-  background: var(--del-gutter);
+  background: var(--color-del-gutter);
 }
 
 .code.void,
 .g.void {
-  background: var(--bg-inset);
+  background: var(--color-sunken);
 }
 
 /* Rebase drift: lines changed by the base moving, not the author.
@@ -132,27 +132,27 @@
    count toward the diff. The triple class beats the .code.add / .code.del
    background above. */
 .code.add.drift {
-  background: var(--drift-add-bg);
+  background: var(--color-drift-add-bg);
 }
 
 .g.add.drift {
-  background: var(--drift-add-gutter);
+  background: var(--color-drift-add-gutter);
 }
 
 .code.add.drift .sign {
-  color: var(--blue);
+  color: var(--color-drift-add);
 }
 
 .code.del.drift {
-  background: var(--drift-del-bg);
+  background: var(--color-drift-del-bg);
 }
 
 .g.del.drift {
-  background: var(--drift-del-gutter);
+  background: var(--color-drift-del-gutter);
 }
 
 .code.del.drift .sign {
-  color: var(--purple);
+  color: var(--color-drift-del);
 }
 
 .code.drift .code-text,
@@ -162,62 +162,62 @@
 
 /* Intraline (word-level) emphasis inside modified line pairs. */
 .code.add .intraline {
-  background: var(--add-intraline);
+  background: var(--color-add-intraline);
   border-radius: 2px;
 }
 
 .code.del .intraline {
-  background: var(--del-intraline);
+  background: var(--color-del-intraline);
   border-radius: 2px;
 }
 
 .code.add.drift .intraline {
-  background: var(--drift-add-intraline);
+  background: var(--color-drift-add-intraline);
 }
 
 .code.del.drift .intraline {
-  background: var(--drift-del-intraline);
+  background: var(--color-drift-del-intraline);
 }
 
-/* Commented text ranges. Amber = needs
+/* Commented text ranges. Yellow = needs
    reviewer attention, kept translucent so syntax colors read through;
-   overlapping ranges nest and the rgba stacks darker. The dotted rule
+   overlapping ranges nest and the wash stacks darker. The dotted rule
    points at the thread below the range's last line. */
 .code-text .comment-range {
-  background: rgb(210 153 34 / 18%);
-  border-bottom: 1px dotted rgb(210 153 34 / 70%);
+  background: var(--color-mark-soft);
+  border-bottom: 1px dotted var(--color-mark-text);
 }
 
 .code-text .comment-range-active {
-  background: rgb(210 153 34 / 32%);
+  background: var(--color-mark-strong);
   border-bottom-style: solid;
 }
 
 /* The line a hovered whole-line thread hangs on. An inset shadow paints
    over the cell's add/del background without replacing it. */
 .line-hover {
-  box-shadow: inset 0 0 0 100vmax var(--amber-dim);
+  box-shadow: inset 0 0 0 100vmax var(--color-mark-tint);
 }
 
 /* A line number is a link to its lines, in the raw view and in a
    rendered file alike. It reads as a plain number until the pointer
-   reaches it, and it shows blue on the linked lines. */
+   reaches it, and it shows in the text color on the linked lines. */
 .line-link {
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   text-decoration: none;
   cursor: pointer;
 }
 
 .line-link:hover,
 .linked .line-link {
-  color: var(--blue);
+  color: var(--color-foreground);
 }
 
 /* The lines, or the rendered part, that the page's URL links to. The inset
-   shadow tints the cell like .line-hover. The blue tint is different from
-   the amber of a comment. */
+   shadow tints the cell like .line-hover. The gray tint is different from
+   the yellow of a comment. */
 .linked {
-  box-shadow: inset 0 0 0 100vmax var(--blue-dim);
+  box-shadow: inset 0 0 0 100vmax var(--color-linked);
 }
 
 /* The "why c drafted nothing" bubble, hung under the selection it rejected
@@ -235,11 +235,11 @@
   right: 12px;
   max-width: 360px;
   padding: 5px 9px;
-  border: 1px solid var(--amber);
+  border: 1px solid var(--color-mark-text);
   border-radius: 6px;
-  background: var(--bg-raised);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 45%);
-  color: var(--amber);
+  background: var(--color-card);
+  box-shadow: 0 4px 12px var(--color-shadow);
+  color: var(--color-mark-text);
   font-size: 12px;
   line-height: 1.45;
   pointer-events: none;
@@ -253,23 +253,23 @@
   left: 13px;
   width: 8px;
   height: 8px;
-  border-top: 1px solid var(--amber);
-  border-left: 1px solid var(--amber);
-  background: var(--bg-raised);
+  border-top: 1px solid var(--color-mark-text);
+  border-left: 1px solid var(--color-mark-text);
+  background: var(--color-card);
   transform: rotate(45deg);
 }
 
 .hunk-row {
   position: relative; /* anchors the centred expand buttons */
   grid-column: 1 / -1;
-  background: rgb(88 166 255 / 5%);
-  color: var(--text-faint);
-  font-family: var(--mono);
+  background: var(--color-sunken);
+  color: var(--color-faint-foreground);
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
   padding: 3px 12px;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   user-select: none; /* separator chrome stays out of copied code */
 }
 
@@ -307,9 +307,9 @@
 .hunk-expand {
   padding: 0 8px;
   font: inherit;
-  color: var(--blue);
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
+  color: var(--color-muted-foreground);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   cursor: pointer;
 }
@@ -338,8 +338,9 @@
 }
 
 .hunk-expand:hover:not(:disabled) {
-  background: rgb(88 166 255 / 22%);
-  border-color: var(--blue);
+  color: var(--color-foreground);
+  background: var(--color-accent);
+  border-color: var(--color-border-strong);
 }
 
 .hunk-expand:disabled {
@@ -352,15 +353,14 @@
 }
 
 .hunk-header {
-  color: var(--blue);
-  opacity: 0.75;
+  color: var(--color-muted-foreground);
 }
 
 .meta-row {
   grid-column: 1 / -1;
-  background: var(--bg-inset);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  background: var(--color-sunken);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* Side-by-side: a row's threads sit under the column they were made on —
@@ -381,7 +381,7 @@
 
 .meta-col-new {
   grid-column: 3 / 5;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--color-border);
 }
 
 /* Inside a split half the thread clears one gutter, not the unified row's

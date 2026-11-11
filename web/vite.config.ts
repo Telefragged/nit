@@ -10,6 +10,13 @@ export default defineConfig({
   // genWasmPlugin(): generates src/wasm (gitignored) if missing, and in dev
   // watches crates/nit-wasm to regenerate + reload on change.
   plugins: [react(), genWasmPlugin()],
+  build: {
+    // These browsers have `light-dark()`, so the build keeps it. For an
+    // older target the build replaces it with a polyfill that depends only
+    // on the system setting, and then `color-scheme` on an element selects
+    // no theme.
+    cssTarget: ["chrome123", "firefox120", "safari17.5"],
+  },
   server: {
     proxy: {
       "/api": { target: "http://127.0.0.1:8877", ws: true },

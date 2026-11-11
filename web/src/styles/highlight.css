@@ -1,77 +1,41 @@
-/* ------------------------------------------------- hljs tokens (dark) */
+/* highlight.js token colors. A token without a rule here keeps the color
+   of the code around it. */
 
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-tag {
-  color: #ff7b72;
+  color: var(--color-syntax-keyword);
 }
 
 .hljs-string,
-.hljs-regexp {
-  color: #a5d6ff;
-}
-
+.hljs-regexp,
+.hljs-symbol,
 .hljs-number,
 .hljs-literal {
-  color: #79c0ff;
+  color: var(--color-syntax-string);
 }
 
 .hljs-comment,
 .hljs-quote {
-  color: #8b949e;
+  color: var(--color-faint-foreground);
   font-style: italic;
 }
 
-.hljs-title,
-.hljs-title.function_ {
-  color: #d2a8ff;
-}
-
-.hljs-title.class_,
-.hljs-type,
-.hljs-built_in {
-  color: #ffa657;
-}
-
-.hljs-attr,
-.hljs-attribute,
-.hljs-property,
-.hljs-selector-attr {
-  color: #79c0ff;
-}
-
-.hljs-meta {
-  color: #d2a8ff;
-}
-
-.hljs-params {
-  color: inherit;
+.hljs-meta,
+.hljs-bullet {
+  color: var(--color-muted-foreground);
 }
 
 .hljs-section {
-  color: #79c0ff;
   font-weight: 600;
 }
 
-.hljs-bullet {
-  color: #ffa657;
-}
-
-.hljs-variable,
-.hljs-template-variable {
-  color: #ffa657;
-}
-
-.hljs-symbol {
-  color: #a5d6ff;
-}
-
 .hljs-addition {
-  color: #aff5b4;
+  color: var(--color-add);
 }
 
 .hljs-deletion {
-  color: #ffdcd7;
+  color: var(--color-del);
 }
 
 .hljs-emphasis {

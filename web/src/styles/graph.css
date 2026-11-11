@@ -4,9 +4,9 @@
 .change-graph {
   /* Rows sit on the page background. Only the header and the border are
      raised. */
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: var(--bg);
+  background: var(--color-background);
   overflow: hidden;
 }
 
@@ -15,13 +15,13 @@
   align-items: center;
   gap: 16px;
   padding: 11px 18px;
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border);
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 .graph-body {
@@ -46,7 +46,7 @@
   grid-template-columns: var(--graph-cols);
   align-items: center;
   gap: 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .graph-row {
@@ -62,12 +62,12 @@
    the group's value, so each run reads as one block. */
 .graph-gap {
   height: var(--gap-h);
-  background: var(--bg-raised);
+  background: var(--color-card);
 }
 
 .graph-gap-label {
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 /* The selector row above the graph: two equal columns spanning the graph's
@@ -78,7 +78,7 @@
   gap: 16px;
   margin-bottom: 10px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
 }
 
 .graph-toolbar label {
@@ -103,7 +103,7 @@
 
 /* Clickable rows highlight on hover, the rest stay flat. */
 .graph-row.is-clickable:hover {
-  background: var(--bg-hover);
+  background: var(--color-accent);
 }
 
 .graph-cell-rail {
@@ -116,7 +116,7 @@
 
 .graph-subject {
   display: block;
-  color: var(--text);
+  color: var(--color-foreground);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -124,7 +124,7 @@
 }
 
 a.graph-subject:hover {
-  color: var(--blue);
+  text-decoration: underline;
 }
 
 .graph-meta {
@@ -135,7 +135,7 @@ a.graph-subject:hover {
 }
 
 .graph-row.is-history .graph-subject {
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   font-weight: 500;
 }
 
@@ -144,13 +144,13 @@ a.graph-subject:hover {
    inline to the next fade step) carries it one gradient further. */
 .graph-collapsed-label {
   font-size: 11.5px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   letter-spacing: 0.04em;
 }
 
 .graph-chevron {
   fill: none;
-  stroke: var(--graph-hist-edge);
+  stroke: var(--color-border-strong);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -161,17 +161,17 @@ a.graph-subject:hover {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 .graph-cell-revision {
   font-size: 12px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 .graph-cell-activity {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   white-space: nowrap;
 }
 
@@ -182,7 +182,7 @@ a.graph-subject:hover {
 }
 
 .graph-edge.edge-history {
-  stroke: var(--graph-hist-edge);
+  stroke: var(--color-border-strong);
 }
 
 /* A fork whose base is older than the window keeps its branch color but dashes
@@ -200,58 +200,58 @@ a.graph-subject:hover {
 }
 
 .graph-break .graph-break-gap {
-  stroke: var(--graph-node-bg);
+  stroke: var(--color-card);
   stroke-width: 4;
 }
 
 .graph-node {
-  fill: var(--graph-node-bg);
+  fill: var(--color-card);
   stroke-width: 2;
 }
 
 .graph-node.node-gray {
-  stroke: var(--gray);
+  stroke: var(--color-faint-foreground);
 }
 
 .graph-node.node-head {
-  stroke: var(--graph-head);
+  stroke: var(--color-muted-foreground);
 }
 
 /* Lane palette: each branch's edge and its open node share one color,
-   keyed off the --graph-lane-N tokens. (An edge is either history or a
+   keyed off the --color-graph-lane-N tokens. (An edge is either history or a
    lane; a behind fork keeps its lane color and only adds the dash above.) */
 .graph-edge.lane-0,
 .graph-node.node-lane-0 {
-  stroke: var(--graph-lane-0);
+  stroke: var(--color-graph-lane-0);
 }
 
 .graph-edge.lane-1,
 .graph-node.node-lane-1 {
-  stroke: var(--graph-lane-1);
+  stroke: var(--color-graph-lane-1);
 }
 
 .graph-edge.lane-2,
 .graph-node.node-lane-2 {
-  stroke: var(--graph-lane-2);
+  stroke: var(--color-graph-lane-2);
 }
 
 .graph-edge.lane-3,
 .graph-node.node-lane-3 {
-  stroke: var(--graph-lane-3);
+  stroke: var(--color-graph-lane-3);
 }
 
 .graph-edge.lane-4,
 .graph-node.node-lane-4 {
-  stroke: var(--graph-lane-4);
+  stroke: var(--color-graph-lane-4);
 }
 
 .graph-edge.lane-5,
 .graph-node.node-lane-5 {
-  stroke: var(--graph-lane-5);
+  stroke: var(--color-graph-lane-5);
 }
 
 .graph-node-ring {
   fill: none;
-  stroke: var(--graph-head);
+  stroke: var(--color-muted-foreground);
   stroke-width: 2;
 }
