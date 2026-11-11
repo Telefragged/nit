@@ -11,7 +11,7 @@
   align-items: flex-start;
   gap: 24px;
   padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .review-header-main {
@@ -21,19 +21,19 @@
 
 .crumb-line {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   display: flex;
   gap: 7px;
   align-items: baseline;
 }
 
 .crumb-line a {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-weight: 600;
 }
 
 .crumb-line .sep {
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 .subject-line {
@@ -68,8 +68,8 @@
   gap: 12px;
   height: 33px; /* pinned: the 73/78/116px sticky offsets below assume it */
   padding: 0 16px;
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border);
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .diffbar-mode {
@@ -80,10 +80,10 @@
 }
 
 .revision-select {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   padding: 2px 6px;
-  background: var(--bg-raised);
+  background: var(--color-card);
   cursor: pointer;
 }
 
@@ -108,26 +108,26 @@
 }
 
 .kbd-hint {
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   font-size: 11px;
   margin-right: 12px;
   cursor: default;
 }
 
 .kbd-hint kbd {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--color-border-strong);
   border-radius: 3px;
   padding: 0 3px;
   margin: 0 1px;
-  background: var(--bg-inset);
+  background: var(--color-sunken);
 }
 
 .settings-cog {
   background: none;
   border: none;
-  color: var(--blue);
+  color: var(--color-muted-foreground);
   font-size: 16px;
   line-height: 1;
   padding: 2px 4px;
@@ -136,7 +136,7 @@
 .settings-cog:hover:not(:disabled) {
   background: none;
   border: none;
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 .settings-modal {
@@ -153,7 +153,7 @@
 
 .seg {
   display: inline-flex;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -163,16 +163,16 @@
   border-radius: 0;
   font-size: 11.5px;
   padding: 3px 10px;
-  background: var(--bg-raised);
+  background: var(--color-card);
 }
 
 .seg button + button {
-  border-left: 1px solid var(--border-strong);
+  border-left: 1px solid var(--color-border-strong);
 }
 
 .seg button.active {
-  background: var(--blue-dim);
-  color: var(--blue);
+  background: var(--color-accent);
+  color: var(--color-foreground);
   font-weight: 600;
 }
 
@@ -198,7 +198,7 @@
   min-height: 0;
   overflow-y: auto;
   position: relative;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11.5px;
 }
 
@@ -226,38 +226,38 @@ button.rail-toggle,
   height: 22px;
   padding-right: 4px;
   border-radius: 4px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   text-align: left;
   text-decoration: none;
   white-space: nowrap;
 }
 
 .rail-row:hover {
-  background: var(--bg-hover);
+  background: var(--color-accent);
   text-decoration: none;
 }
 
 .rail-row[aria-current="true"] {
-  background: var(--blue-dim);
-  color: var(--text);
+  background: var(--color-accent);
+  color: var(--color-foreground);
 }
 
 /* A modified file keeps the dim grey of `.rail-row`, so a directory takes
    the brighter foreground to stand apart from it. */
 .rail-dir {
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 .rail-added :is(.rail-name, .rail-status, .rail-icon) {
-  color: var(--green);
+  color: var(--color-add);
 }
 
 .rail-deleted :is(.rail-name, .rail-status, .rail-icon) {
-  color: var(--red);
+  color: var(--color-del);
 }
 
 .rail-renamed :is(.rail-name, .rail-status, .rail-icon) {
-  color: var(--blue);
+  color: var(--color-foreground);
 }
 
 .rail-toggle {
@@ -272,7 +272,7 @@ button.rail-toggle,
 .rail-chevron {
   display: block;
   margin: 0 auto;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   transition: transform 0.1s;
 }
 
@@ -284,7 +284,7 @@ button.rail-toggle,
 }
 
 .rail-thread .rail-icon {
-  color: var(--amber);
+  color: var(--color-mark-text);
 }
 
 .rail-chevron.open {
@@ -294,11 +294,11 @@ button.rail-toggle,
 /* A row lights up under the pointer too, so the chevron takes a stronger
    fill to stand out from it. */
 .rail-toggle-chevron:hover:not(:disabled) {
-  background: var(--border);
+  background: var(--color-border);
 }
 
 .rail-toggle-chevron:hover .rail-chevron {
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 .rail-name:hover:not(:disabled) {
@@ -337,7 +337,7 @@ button.rail-toggle,
 }
 
 .rail-drafts {
-  color: var(--amber);
+  color: var(--color-mark-text);
 }
 
 .rail-status {
@@ -353,13 +353,13 @@ button.rail-toggle,
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   padding: 2px 8px 6px;
 }
 
 .rail-title .rail-total {
   margin-left: 7px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   letter-spacing: 0;
 }
 
@@ -384,7 +384,7 @@ button.rail-toggle,
   gap: 8px;
   padding: 0 0 6px;
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 .tag-nav-title .select {
@@ -415,12 +415,12 @@ button.rail-toggle,
   height: var(--row-h);
   padding: 0 8px 0 var(--rail-w);
   font-size: 11.5px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
 }
 
 .tag-nav-row:hover,
 .tag-nav-row[aria-current="page"] {
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 .tag-nav-row .subj {
@@ -436,7 +436,6 @@ button.rail-toggle,
 
 .tag-nav-row .unresolved-count {
   font-size: 10.5px;
-  color: var(--amber);
 }
 
 .diff-column {
@@ -451,14 +450,14 @@ button.rail-toggle,
 /* file sections */
 
 .file-section {
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
 
   /* clip (not hidden — that would break the sticky header) rounds the
      header's corners at rest and squares them while stuck */
   overflow: clip;
   margin-bottom: 14px;
-  background: var(--bg);
+  background: var(--color-background);
 }
 
 /* A file, a linked line, and a linked thread all land just below the
@@ -476,16 +475,16 @@ button.rail-toggle,
   display: flex;
   gap: 8px;
   align-items: center;
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border);
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
   padding: 5px 10px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   cursor: pointer; /* the header toggles the section's collapse */
 }
 
 .file-header:hover {
-  background: var(--bg-hover);
+  background: var(--color-accent);
 }
 
 /* A collapsed section is just its header: no inner edge (the section's
@@ -498,27 +497,27 @@ button.rail-toggle,
   flex: none;
   width: 10px;
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   user-select: none;
 }
 
 .file-header .fpath {
-  color: var(--text);
+  color: var(--color-foreground);
   font-weight: 600;
 }
 
 .file-header .old-path {
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   text-decoration: line-through;
-  text-decoration-color: var(--text-faint);
+  text-decoration-color: var(--color-faint-foreground);
   font-weight: 400;
 }
 
 /* The link to a file shows while the pointer is on its header, or while
    the link holds the keyboard focus. */
 .file-link {
-  color: var(--text-faint);
-  font-family: var(--mono);
+  color: var(--color-faint-foreground);
+  font-family: var(--font-mono);
   text-decoration: none;
   opacity: 0;
 }
@@ -529,7 +528,7 @@ button.rail-toggle,
 }
 
 .file-link:hover {
-  color: var(--blue);
+  color: var(--color-foreground);
 }
 
 .fcounts {
@@ -538,7 +537,7 @@ button.rail-toggle,
 
 .fcomments {
   font-size: 11.5px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 .fstat {
@@ -547,44 +546,40 @@ button.rail-toggle,
   border-radius: 3px;
   font-weight: 700;
   font-size: 10.5px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   flex: none;
 }
 
 .fstat-A {
-  color: var(--green);
-  background: var(--green-dim);
+  color: var(--color-add);
+  background: var(--color-add-bg);
 }
 
 /* A modification is what nearly every file in a diff is, so its badge
    carries the filename's own grey — the colored ones then read as the
    exceptions they are. */
-.fstat-M {
-  color: var(--text);
-  background: var(--gray-dim);
+.fstat-M,
+.fstat-R {
+  color: var(--color-foreground);
+  background: var(--color-accent);
 }
 
 .fstat-D {
-  color: var(--red);
-  background: var(--red-dim);
-}
-
-.fstat-R {
-  color: var(--blue);
-  background: var(--blue-dim);
+  color: var(--color-del);
+  background: var(--color-del-bg);
 }
 
 .plus {
-  color: var(--green);
+  color: var(--color-add);
 }
 
 .minus {
-  color: var(--red);
+  color: var(--color-del);
 }
 
 .diff-note {
   padding: 18px 12px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   font-size: 12px;
   text-align: center;
 }
@@ -595,7 +590,7 @@ button.rail-toggle,
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   padding: 10px 8px 4px;
 }
 
@@ -620,7 +615,7 @@ button.rail-toggle,
   padding: 16px 24px 16px 0;
   font-size: 14.5px;
   line-height: 1.6;
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 /* A block of the file, with its first line number in the gutter to its
@@ -634,7 +629,7 @@ button.rail-toggle,
 /* The innermost part under the pointer has an outline: the part that a
    click links, and that c then opens a draft on. */
 .rendered-markdown [data-part]:hover:not(:has([data-part]:hover)) {
-  outline: 1px solid var(--blue);
+  outline: 1px solid var(--color-muted-foreground);
   outline-offset: -1px;
 }
 
@@ -650,7 +645,7 @@ button.rail-toggle,
   left: 0;
   width: 44px;
   text-align: right;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 22px;
 }
@@ -686,25 +681,31 @@ button.rail-toggle,
 }
 
 .doc-added {
-  background-color: var(--add-bg);
-  background-image: linear-gradient(var(--green), var(--green));
+  background-color: var(--color-add-bg);
+  background-image: linear-gradient(var(--color-add), var(--color-add));
 }
 
 .doc-removed {
-  background-color: var(--del-bg);
-  background-image: linear-gradient(var(--red), var(--red));
+  background-color: var(--color-del-bg);
+  background-image: linear-gradient(var(--color-del), var(--color-del));
 }
 
 /* A block that only a rebase changed takes the drift colors of the raw
    view. Its text dims with the raw view's drift lines (diff.css). */
 .doc-added.drift {
-  background-color: var(--drift-add-bg);
-  background-image: linear-gradient(var(--blue), var(--blue));
+  background-color: var(--color-drift-add-bg);
+  background-image: linear-gradient(
+    var(--color-drift-add),
+    var(--color-drift-add)
+  );
 }
 
 .doc-removed.drift {
-  background-color: var(--drift-del-bg);
-  background-image: linear-gradient(var(--purple), var(--purple));
+  background-color: var(--color-drift-del-bg);
+  background-image: linear-gradient(
+    var(--color-drift-del),
+    var(--color-drift-del)
+  );
 }
 
 /* This separator shows in place of a run of unchanged blocks that the
@@ -727,7 +728,7 @@ button.rail-toggle,
 }
 
 .doc-col + .doc-col {
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--color-border);
 }
 
 /* An item of a list renders as a list of its own, so the items of one
@@ -767,7 +768,7 @@ button.rail-toggle,
 .rendered-markdown h1,
 .rendered-markdown h2 {
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .rendered-markdown h3 {
@@ -781,7 +782,7 @@ button.rail-toggle,
 .rendered-markdown h5,
 .rendered-markdown h6 {
   font-size: 0.9em;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
 }
 
 .rendered-markdown ul,
@@ -790,17 +791,17 @@ button.rail-toggle,
 }
 
 .rendered-markdown code {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 0.88em;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
+  background: var(--color-sunken);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 1px 4px;
 }
 
 .rendered-markdown pre {
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
+  background: var(--color-sunken);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 12px 14px;
   overflow-x: auto;
@@ -815,9 +816,9 @@ button.rail-toggle,
 }
 
 .rendered-markdown blockquote {
-  border-left: 3px solid var(--border-strong);
+  border-left: 3px solid var(--color-border-strong);
   padding-left: 14px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
 }
 
 .rendered-markdown table {
@@ -828,18 +829,18 @@ button.rail-toggle,
 
 .rendered-markdown th,
 .rendered-markdown td {
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--color-border-strong);
   padding: 5px 12px;
 }
 
 .rendered-markdown th {
-  background: var(--bg-raised);
+  background: var(--color-card);
   font-weight: 600;
 }
 
 .rendered-markdown hr {
   border: none;
-  border-top: 1px solid var(--border-strong);
+  border-top: 1px solid var(--color-border-strong);
   margin: 20px 0;
 }
 
@@ -848,7 +849,7 @@ button.rail-toggle,
 }
 
 .rendered-markdown a:not(.line-link) {
-  color: var(--blue);
+  text-decoration: underline;
 }
 
 .rendered-image img {

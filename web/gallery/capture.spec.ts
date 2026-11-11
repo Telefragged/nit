@@ -19,6 +19,8 @@ for (const id of ids) {
     const clip = await root.boundingBox();
     if (!clip) throw new Error(`${id} rendered no box`);
     await page.screenshot({ path: `${out}.png`, clip, fullPage: true });
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.screenshot({ path: `${out}-light.png`, clip, fullPage: true });
     writeFileSync(
       `${out}.html`,
       gallery.replace("<body>", `<body data-story="${id}">`),

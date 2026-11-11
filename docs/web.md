@@ -41,7 +41,8 @@ Run the specs and capture every story:
 cd web && nix develop -c npm run gallery
 ```
 
-The run writes `screenshots/gallery/<id>.png` and
+The run writes `screenshots/gallery/<id>.png` in the dark theme,
+`screenshots/gallery/<id>-light.png` in the light theme, and
 `screenshots/gallery/<id>.html`. The page contains the whole gallery, with
 every script and stylesheet inline. The page renders its story on load.
 nit shows an attached page in a sandboxed frame, and the scripts of the

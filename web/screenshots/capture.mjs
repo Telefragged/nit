@@ -168,8 +168,10 @@ const untilResolutionDraft = (page) =>
  * example as a nit attachment, and nothing on it responds to input. An
  * embedded image or page and each font file that the page loaded carry
  * their content too, as a `data:` URL or a `srcdoc`, because the file has
- * no server to fetch them from. */
-async function snapshot() {
+ * no server to fetch them from. `colorScheme` is the theme of the capture.
+ * The root element of the file sets `color-scheme` to it, so the file
+ * shows that theme whatever the system setting of its reader. */
+async function snapshot(colorScheme) {
   const fetchOk = async (url) => {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`snapshot: ${url} answered ${res.status}`);
@@ -198,6 +200,7 @@ async function snapshot() {
   });
   const css = (await Promise.all(sheets)).join("\n");
   const doc = document.documentElement.cloneNode(true);
+  doc.style.colorScheme = colorScheme;
   doc
     .querySelectorAll(
       "script, style, link[rel=stylesheet], link[rel=modulepreload]",
@@ -285,6 +288,7 @@ const captures = [
   // stacks — one off HEAD, one forked two commits behind (the dashed "behind"
   // edge) — over a history window that includes a merge commit.
   { name: "dashboard", path: "/repos/2" },
+  { name: "dashboard-light", path: "/repos/2", colorScheme: "light" },
   // Repo 1: a stack whose base is older than the shown window — its lineage
   // dangles into the "earlier history hidden" marker the canonical ref descends into.
   // The Activity column carries change 11's drafts and change 12's decision.
@@ -421,6 +425,12 @@ const captures = [
     name: "review-full-unified",
     path: "/changes/11?against=base",
     actions: expandAllFiles,
+  },
+  {
+    name: "review-full-unified-light",
+    path: "/changes/11?against=base",
+    actions: expandAllFiles,
+    colorScheme: "light",
   },
   // Context expansion: a gap separator carries a centred unit of +N buttons
   // — the whole gap on the left, then the stepped pair, the top one
@@ -1052,6 +1062,9 @@ async function main() {
 
     for (const cap of captures) {
       const page = await context.newPage();
+      // A capture is dark unless it sets `colorScheme`.
+      if (cap.colorScheme)
+        await page.emulateMedia({ colorScheme: cap.colorScheme });
       await page.route("**/api/attachments/**", (route) => {
         const hash = new URL(route.request().url()).pathname.split("/")[3];
         const blob = ATTACHMENT_BLOBS[hash];
@@ -1077,7 +1090,7 @@ async function main() {
       // bar fixed as the page has it.
       writeFileSync(
         resolve(outDir, `${cap.name}.html`),
-        await page.evaluate(snapshot),
+        await page.evaluate(snapshot, cap.colorScheme ?? "dark"),
       );
       // Fixed elements repeat confusingly in full-page captures; pin the
       // review bar to the end of the document instead. Viewport captures

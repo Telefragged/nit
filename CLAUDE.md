@@ -100,6 +100,7 @@ trailer carries identity across rewrites.
   - `dev.md` — verification, formatting, testing, commit discipline,
     merging: the rules for every change
   - `web.md` — the screenshot harness and the component gallery
+  - `design.md` — the color, theme and type rules of the web UI
   - `generated.md` — the generated files, and when to regenerate them
   - `releases.md` — the public contract, the release check, and releases
   - `design-review-guide.md` — design anti-patterns to catch when reviewing

@@ -6,28 +6,27 @@
   gap: 10px;
   height: 40px;
   padding: 0 16px;
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border);
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
   position: sticky;
   top: 0;
   z-index: 30;
 }
 
 .topbar .logo {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-weight: 700;
   font-size: 15px;
-  color: var(--text);
+  color: var(--color-foreground);
   letter-spacing: 0.5px;
 }
 
 .topbar .logo:hover {
   text-decoration: none;
-  color: var(--blue);
 }
 
 .topbar .crumb {
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -36,7 +35,7 @@
 
 .topbar .crumb .sep {
   margin: 0 6px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 .topbar .spacer {
@@ -44,12 +43,12 @@
 }
 
 .topbar .mock-flag {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 1px;
-  color: var(--amber);
-  border: 1px solid var(--amber-dim);
-  background: var(--amber-dim);
+  color: var(--color-mark-text);
+  border: 1px solid var(--color-mark-tint);
+  background: var(--color-mark-tint);
   border-radius: 3px;
   padding: 1px 6px;
 }
@@ -60,10 +59,10 @@
   height: 18px;
   padding: 0;
   border-radius: 50%;
-  border-color: var(--text-faint);
+  border-color: var(--color-faint-foreground);
   background: none;
-  color: var(--text-dim);
-  font-family: var(--mono);
+  color: var(--color-muted-foreground);
+  font-family: var(--font-mono);
   font-weight: 700;
   font-size: 11px;
   line-height: 1;
@@ -76,7 +75,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--red);
+  background: var(--color-del);
 }
 
 .about-checked {
@@ -99,12 +98,12 @@
 }
 
 .about-versions dt {
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
 }
 
 .about-versions dd {
   margin: 0;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
 }
 
 /* ---------------------------------------------------------------- layout */
@@ -127,7 +126,7 @@
 }
 
 .page .subtitle {
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   font-size: 12px;
   margin: 0 0 16px;
 }
@@ -146,28 +145,28 @@
 }
 
 .badge-amber {
-  color: var(--amber);
-  background: var(--amber-dim);
+  color: var(--color-mark-text);
+  background: var(--color-mark-tint);
 }
 
-.badge-blue {
-  color: var(--blue);
-  background: var(--blue-dim);
+.badge-purple {
+  color: var(--color-drift-del);
+  background: var(--color-drift-del-bg);
 }
 
 .badge-green {
-  color: var(--green);
-  background: var(--green-dim);
+  color: var(--color-add);
+  background: var(--color-add-bg);
 }
 
 .badge-red {
-  color: var(--red);
-  background: var(--red-dim);
+  color: var(--color-del);
+  background: var(--color-del-bg);
 }
 
 .badge-gray {
-  color: var(--text-dim);
-  background: var(--gray-dim);
+  color: var(--color-muted-foreground);
+  background: var(--color-accent);
 }
 
 /* Status dots shown beside a dashboard row's state. */
@@ -180,23 +179,23 @@
 }
 
 .dot-amber {
-  background: var(--amber);
+  background: var(--color-mark);
 }
 
-.dot-blue {
-  background: var(--blue);
+.dot-purple {
+  background: var(--color-drift-del);
 }
 
 .dot-green {
-  background: var(--green);
+  background: var(--color-add);
 }
 
 .dot-red {
-  background: var(--red);
+  background: var(--color-del);
 }
 
 .dot-gray {
-  background: var(--gray);
+  background: var(--color-faint-foreground);
 }
 
 /* -------------------------------------------------------------- sidebars */
@@ -237,12 +236,12 @@
 }
 
 .nav-row:hover {
-  background: var(--bg-hover);
+  background: var(--color-accent);
   text-decoration: none;
 }
 
 .nav-row[aria-current="page"] {
-  background: var(--blue-dim);
+  background: var(--color-accent);
 }
 
 .repo-link {
@@ -250,11 +249,11 @@
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: 8px;
   padding: 5px 8px;
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 .repo-name {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 600;
   overflow: hidden;
@@ -264,32 +263,32 @@
 
 .repo-open {
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
 }
 
 .repo-path {
   grid-column: 1 / -1;
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .error-glyph {
-  color: var(--red);
+  color: var(--color-del);
   margin-left: 6px;
   cursor: help;
   font-size: 12px;
 }
 
 .sha {
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
   font-size: 11px;
 }
 
 .dim {
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 .counts {
@@ -298,11 +297,11 @@
 }
 
 .draft-count {
-  color: var(--amber);
+  color: var(--color-mark-text);
 }
 
 .unresolved-count {
-  color: var(--red);
+  color: var(--color-mark-text);
 }
 
 .orphaned-block {
@@ -310,14 +309,14 @@
 }
 
 .orphaned-block summary {
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   font-size: 12px;
   cursor: pointer;
   padding: 4px 0;
 }
 
 .orphaned-block summary:hover {
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 /* -------------------------------------------------------------- banners */
@@ -334,25 +333,25 @@
 }
 
 .banner-error {
-  border-color: rgb(248 81 73 / 40%);
-  background: var(--red-dim);
-  color: var(--red);
+  border-color: color-mix(in srgb, var(--color-del) 40%, transparent);
+  background: var(--color-del-bg);
+  color: var(--color-del);
 }
 
 .banner-warn {
-  border-color: rgb(210 153 34 / 40%);
-  background: var(--amber-dim);
-  color: var(--amber);
+  border-color: color-mix(in srgb, var(--color-mark-text) 40%, transparent);
+  background: var(--color-mark-tint);
+  color: var(--color-mark-text);
 }
 
 .banner-info {
-  border-color: rgb(88 166 255 / 40%);
-  background: var(--blue-dim);
-  color: var(--blue);
+  border-color: var(--color-border-strong);
+  background: var(--color-card);
+  color: var(--color-muted-foreground);
 }
 
 .banner .banner-body {
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 /* ------------------------------------------------------------ skeletons */
@@ -371,37 +370,37 @@
 .skeleton {
   height: 12px;
   border-radius: 3px;
-  background: var(--border);
+  background: var(--color-border);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
 .empty-state {
-  border: 1px dashed var(--border-strong);
+  border: 1px dashed var(--color-border-strong);
   border-radius: 6px;
-  color: var(--text-dim);
+  color: var(--color-muted-foreground);
   text-align: center;
   padding: 40px 16px;
   font-size: 13px;
 }
 
 .empty-state code {
-  color: var(--text);
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
+  color: var(--color-foreground);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
   border-radius: 3px;
   padding: 1px 5px;
 }
 
 .error-panel {
-  border: 1px solid rgb(248 81 73 / 40%);
-  background: var(--red-dim);
+  border: 1px solid color-mix(in srgb, var(--color-del) 40%, transparent);
+  background: var(--color-del-bg);
   border-radius: 6px;
   padding: 14px 16px;
-  color: var(--text);
+  color: var(--color-foreground);
 }
 
 .error-panel .title {
-  color: var(--red);
+  color: var(--color-del);
   font-weight: 600;
   margin-bottom: 4px;
 }
@@ -419,7 +418,7 @@
   gap: 8px;
   align-items: baseline;
   width: 100%;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   padding: 2px 6px;
 }
@@ -446,7 +445,7 @@
 
 .select-detail {
   text-align: right;
-  color: var(--text-faint);
+  color: var(--color-faint-foreground);
 }
 
 /* The list is at least as wide as the head and grows to fit the longest
@@ -461,10 +460,10 @@
   max-width: 320px;
   max-height: 50vh;
   overflow: hidden auto;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-strong);
+  background: var(--color-card);
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
-  box-shadow: 0 6px 16px rgb(0 0 0 / 45%);
+  box-shadow: 0 6px 16px var(--color-shadow);
 }
 
 .select-list button {
@@ -474,5 +473,5 @@
 }
 
 .select-list button[aria-selected="true"] .select-label {
-  color: var(--blue);
+  font-weight: 600;
 }

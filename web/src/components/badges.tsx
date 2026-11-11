@@ -1,7 +1,6 @@
 import type { ChangeStatus } from "../api/types";
 
-// Color discipline: amber = needs reviewer, blue = author
-// working, green = approved/ready, red = changes requested, gray = inert.
+// Amber needs the reviewer. Green, red and purple are the three outcomes.
 
 const STATUS_LABEL: Record<ChangeStatus, string> = {
   pending: "PENDING",
@@ -16,8 +15,8 @@ const STATUS_COLOR: Record<ChangeStatus, string> = {
   pending: "amber",
   approved: "green",
   changes_requested: "red",
-  commented: "blue",
-  merged: "gray",
+  commented: "gray",
+  merged: "purple",
   abandoned: "gray",
 };
 
