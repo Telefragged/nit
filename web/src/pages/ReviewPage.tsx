@@ -983,26 +983,26 @@ export default function ReviewPage() {
                 {repo ? repoPath(repo.git_dir) : `repo ${change.repo_id}`}
               </Link>
               <span className="sep">/</span>
-              <span className="dim">change {change.id}</span>
-              <span className="sep">·</span>
-              <span className="mono dim" title={change.change_id}>
-                {change.change_id.slice(0, 12)}
-              </span>
+              <span>change {change.id}</span>
             </div>
             <div className="subject-line">
               <h1>{selectedRev.subject}</h1>
               <StatusChip status={selectedRev.status} />
             </div>
             <div className="meta-line">
-              <span className="dim">
+              <span>
                 commit{" "}
                 <span className="mono">{shortSha(selectedRev.commit_sha)}</span>
               </span>
-              <span className="dim">
+              <span>
                 parent{" "}
                 <span className="mono">{shortSha(selectedRev.parent_sha)}</span>
               </span>
-              <span className="dim">{timeAgo(selectedRev.created_at)}</span>
+              <span title={change.change_id}>
+                Change-Id{" "}
+                <span className="mono">{change.change_id.slice(0, 12)}</span>
+              </span>
+              <span>{timeAgo(selectedRev.created_at)}</span>
             </div>
           </div>
           <TagNav
