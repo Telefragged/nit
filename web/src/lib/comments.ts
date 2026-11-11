@@ -328,7 +328,7 @@ export const strongerMark = (
 
 /** The word for `count` threads with `mark`: the mark, in the plural for
  * several drafts. */
-const markWord = (mark: ThreadMark, count: number): string =>
+export const markWord = (mark: ThreadMark, count: number): string =>
   mark === "draft" && count !== 1 ? "drafts" : mark;
 
 /** The count of `threads` for each mark that has a thread, in the order

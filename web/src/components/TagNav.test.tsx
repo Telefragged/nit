@@ -178,14 +178,12 @@ describe("TagNav", () => {
     );
     expect(current.tagName).toBe("DIV");
     expect(current.querySelector(".subj")?.textContent).toBe("second change");
-    expect(current.querySelector(".unresolved-count")?.textContent).toBe(
+    // Only the current change has open threads.
+    const counts = [...document.querySelectorAll(".count")];
+    expect(counts.map((count) => count.getAttribute("title"))).toEqual([
       "2 open",
-    );
-    expect(
-      [...document.querySelectorAll(".unresolved-count")].map(
-        (e) => e.textContent,
-      ),
-    ).toEqual(["", "2 open", ""]);
+    ]);
+    expect(current.contains(counts[0] ?? null)).toBe(true);
     expect(current.querySelector(".num")?.textContent).toBe("#11");
     // Nothing to expand: the whole graph fits the window.
     expect(document.querySelector(".tag-nav-all")).toBeNull();

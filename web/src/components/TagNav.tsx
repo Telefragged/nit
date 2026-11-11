@@ -6,6 +6,7 @@ import { LAYOUT_DENSE, type LaidNode, layoutGraph } from "../lib/graphLayout";
 import { StatusDot } from "./badges";
 import { GraphRail } from "./GraphTable";
 import Select from "./Select";
+import ThreadCount from "./ThreadCount";
 
 /** Rows the scroll window shows before the reviewer asks for the whole
  * graph. */
@@ -14,7 +15,7 @@ const WINDOW = 7;
 /**
  * The review header's graph of the changes that share a tag with the
  * current one: the tag graph (api/fold tagGraph) drawn as the dashboard's
- * rail beside one-line rows (status dot, subject, unresolved count,
+ * rail beside one-line rows (status dot, subject, count of open threads,
  * revision, change number), the current change highlighted and the
  * others linking through. The selector picks which of the current
  * change's tag keys the graph follows. Unless `expanded`, the graph
@@ -141,8 +142,8 @@ function Row({
     <>
       <StatusDot status={node.status} />
       <span className="subj">{node.subject}</span>
-      <span className="unresolved-count" title="unresolved threads">
-        {unresolved > 0 ? `${unresolved} open` : ""}
+      <span>
+        {unresolved > 0 ? <ThreadCount mark="open" count={unresolved} /> : null}
       </span>
       <span className="rev mono dim">
         {node.revision === null ? "" : `r${node.revision}`}
