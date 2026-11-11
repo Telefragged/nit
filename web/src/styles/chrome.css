@@ -14,15 +14,7 @@
 }
 
 .topbar .logo {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--color-foreground);
-  letter-spacing: 0.5px;
-}
-
-.topbar .logo:hover {
-  text-decoration: none;
+  display: flex;
 }
 
 .topbar .crumb {
@@ -43,14 +35,12 @@
 }
 
 .topbar .mock-flag {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 1px;
-  color: var(--color-mark-text);
-  border: 1px solid var(--color-mark-tint);
-  background: var(--color-mark-tint);
+  padding: 0 6px;
+  border: 1px solid var(--color-border-strong);
   border-radius: 3px;
-  padding: 1px 6px;
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  line-height: 16px;
 }
 
 /* The mark of a newer release, on the about button. */
