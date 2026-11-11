@@ -93,4 +93,5 @@ textarea:focus {
 
 input[type="checkbox"] {
   margin: 3px 3px 3px 4px;
+  accent-color: var(--color-foreground);
 }
