@@ -32,7 +32,7 @@ export default function Repos() {
   });
 
   return (
-    <div className="sidebar-layout repo-layout">
+    <div className="repo-layout">
       <aside className="repo-sidebar" aria-busy={query.isLoading}>
         <div className="rail-title">Repositories</div>
         {query.isError ? (

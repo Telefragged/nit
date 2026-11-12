@@ -150,21 +150,11 @@
 
 /* -------------------------------------------------------------- sidebars */
 
-/* A page with a sticky sidebar at its left. Each page sets the padding,
-   and the sidebar's sticky offset and height. */
-.sidebar-layout {
+/* The page of repositories, with a sticky sidebar at its left. */
+.repo-layout {
   display: flex;
   align-items: flex-start;
   gap: 14px;
-}
-
-.sidebar-layout > aside {
-  width: 270px;
-  flex: none;
-  position: sticky;
-}
-
-.repo-layout {
   padding: 20px 16px 64px;
 }
 
@@ -174,6 +164,9 @@
 }
 
 .repo-sidebar {
+  width: 270px;
+  flex: none;
+  position: sticky;
   top: 60px;
   max-height: calc(100vh - 80px);
   overflow-y: auto;

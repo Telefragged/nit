@@ -143,18 +143,11 @@
 
 /* layout: sidebar (file list) + diff column */
 
-/* The two columns touch. The hairline between them is the left border of
-   the diff column, and its file sections reach the right edge of the
-   page. */
-.review-layout {
-  gap: 0;
-}
-
 /* The sidebar is the one sticky, height-bounded column; the file tree
    sizes its scrollport against it. It ends above the review bar. */
-.review-layout > .review-sidebar {
+.review-sidebar {
+  position: sticky;
   top: var(--bars-h);
-  width: 284px;
   max-height: calc(100vh - var(--bars-h) - var(--review-bar-h));
   padding: 12px 8px 12px 12px;
   display: flex;
@@ -375,10 +368,6 @@ button.rail-toggle,
 }
 
 .diff-column {
-  flex: 1;
-  min-width: 0;
-  border-left: 1px solid var(--color-border);
-
   /* the containing block for the selection-miss bubble, which is placed in
      this column's coordinates so it scrolls with the lines it points at */
   position: relative;
