@@ -557,9 +557,12 @@ button.rail-toggle,
   min-width: 100%;
 }
 
+/* The link has the height of its block, so a press beside any line of
+   the block links the block. */
 .rendered-markdown .doc-gutter {
   position: absolute;
   top: 0;
+  bottom: 0;
   left: 0;
   width: 44px;
   text-align: right;

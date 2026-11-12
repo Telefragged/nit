@@ -33,7 +33,6 @@
 }
 
 .line-row .g {
-  padding: 0 8px;
   text-align: right;
   color: var(--color-faint-foreground);
   user-select: none;
@@ -218,8 +217,24 @@
   cursor: pointer;
 }
 
+/* The link fills its cell, so the whole cell is the target of a press,
+   also when the code beside it has several lines. */
+.line-row .g > .line-link {
+  display: block;
+  height: 100%;
+  padding: 0 8px;
+}
+
+/* In the one-column layout, a press on the empty cell of an added or
+   removed line links that line (DiffFileView `unifiedGutter`). The number
+   beside the cell shows that the pointer is on its line. */
+.diff-grid-unified .g:empty {
+  cursor: pointer;
+}
+
 .line-link:hover,
-.linked .line-link {
+.linked .line-link,
+.diff-grid-unified .line-row:has(> .g:empty:hover) .line-link {
   color: var(--color-foreground);
 }
 

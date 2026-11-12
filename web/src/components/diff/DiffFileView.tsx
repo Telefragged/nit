@@ -535,6 +535,33 @@ export default function DiffFileView({
       />
     );
 
+  /** A gutter cell of a row in the one-column layout. An added or removed
+   * line has one number, so the cell of its other side is empty. A press
+   * on the empty cell links the line, as a press on its number does. */
+  const unifiedGutter = (line: Line, side: Side, cls: string) => {
+    const other = side === "old" ? "new" : "old";
+    const beside = line[side] === undefined ? line[other] : undefined;
+    return (
+      // The number beside the empty cell is a link, and the keyboard
+      // reaches the line through that link.
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+      <span
+        className={`g ${cls}${gutterMark(side, line[side])}`}
+        onMouseDown={
+          beside === undefined
+            ? undefined
+            : (e) => {
+                if (!plainClick(e)) return;
+                e.preventDefault();
+                press(other, [beside, beside], e.shiftKey);
+              }
+        }
+      >
+        {lineNumber(side, line[side])}
+      </span>
+    );
+  };
+
   /** The comment-range tints falling on `line`'s text in a cell showing
    * the given sides (unified cells show both; split cells one). */
   function cellRangeMarks(
@@ -633,12 +660,8 @@ export default function DiffFileView({
       return (
         <Fragment key={li}>
           <div className="line-row">
-            <span className={`g ${cls}${gutterMark("old", line.old)}`}>
-              {lineNumber("old", line.old)}
-            </span>
-            <span className={`g ${cls}${gutterMark("new", line.new)}`}>
-              {lineNumber("new", line.new)}
-            </span>
+            {unifiedGutter(line, "old", cls)}
+            {unifiedGutter(line, "new", cls)}
             <span
               className={`code ${cls}`}
               data-old={line.old}
