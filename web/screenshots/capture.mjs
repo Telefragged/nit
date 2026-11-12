@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { clickNow, one, untilDom } from "../gallery/act.ts";
+import { clickNow, dragX, one, untilDom, untilWidth } from "../gallery/act.ts";
 // The bytes behind each attachment of change 12.
 import ATTACHMENT_BLOBS from "../src/api/fixtures/blobs.json" with { type: "json" };
 
@@ -734,6 +734,22 @@ const captures = [
         window.scrollTo(0, sec.offsetTop + 200);
       });
       await untilSpySettled(page);
+    },
+  },
+  // A drag of the line between the rail and the diff makes the rail 160
+  // pixels wider.
+  {
+    name: "review-rail-resized",
+    path: "/changes/11?against=base",
+    fullPage: false,
+    actions: async (page) => {
+      await dragX(
+        page,
+        page.getByRole("separator", { name: "Width of the file rail" }),
+        160,
+        200,
+      );
+      await untilWidth(page, "[data-panel]:first-child", 444);
     },
   },
   // Old revision selected: full diff of r0, threads at their written lines.

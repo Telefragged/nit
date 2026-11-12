@@ -57,3 +57,31 @@ export const untilSelector = (page: Page, selector: string) =>
   page.evaluate(
     `(${OBSERVE})((s) => !!document.querySelector(s), ${JSON.stringify(selector)})`,
   );
+
+/** Resolves once the one element that `selector` matches is `width` pixels
+ * wide. */
+export const untilWidth = (page: Page, selector: string, width: number) =>
+  page.evaluate(
+    `(${OBSERVE})(
+      ([s, w]) => document.querySelector(s)?.getBoundingClientRect().width === w,
+      ${JSON.stringify([selector, width])},
+    )`,
+  );
+
+/** Drags the one element that `locator` matches `dx` pixels to the right.
+ * The pointer is `dy` pixels below the top of the element, or at its
+ * middle when the caller gives no `dy`. */
+export async function dragX(
+  page: Page,
+  locator: Locator,
+  dx: number,
+  dy?: number,
+) {
+  const box = await (await one(locator)).boundingBox();
+  if (!box) throw new Error(`${locator.toString()} has no box`);
+  const y = box.y + (dy ?? box.height / 2);
+  await page.mouse.move(box.x, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + dx, y);
+  await page.mouse.up();
+}

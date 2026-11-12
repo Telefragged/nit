@@ -39,6 +39,7 @@ import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
 import FileRail from "../components/diff/FileRail";
 import ReviewBar from "../components/ReviewBar";
+import ReviewColumns from "../components/ReviewColumns";
 import ReviewSettingsMenu from "../components/ReviewSettings";
 import Select, { type SelectOption } from "../components/Select";
 import Shortcuts from "../components/Shortcuts";
@@ -1043,8 +1044,8 @@ export default function ReviewPage() {
           </div>
         </div>
 
-        <div className="sidebar-layout review-layout">
-          <aside className="review-sidebar">
+        <ReviewColumns
+          rail={
             <FileRail
               files={files}
               threadsByFile={threadsByFile}
@@ -1063,7 +1064,8 @@ export default function ReviewPage() {
                 );
               }}
             />
-          </aside>
+          }
+        >
           {/* The diff base of the rendered diff. It is absent while the
               diff of the current range loads. */}
           <div
@@ -1182,7 +1184,7 @@ export default function ReviewPage() {
               </section>
             ) : null}
           </div>
-        </div>
+        </ReviewColumns>
 
         <ChangeLog feed={log} threads={change.threads} />
 

@@ -10,6 +10,7 @@ import type { DiffFile, FileStatus } from "../../api/types";
 import type { ReviewFile } from "../../lib/attachments";
 import type { UiThread } from "../../lib/comments";
 import { ReviewContext } from "../../pages/reviewContext";
+import ReviewColumns from "../ReviewColumns";
 import FileRail from "./FileRail";
 
 const ctx = reviewCtx({
@@ -19,13 +20,13 @@ const ctx = reviewCtx({
       : `?file=${link.file}&line=${link.lines?.start ?? ""}`,
 });
 
-/** The rail in the sidebar of the review page. */
+/** The rail in the columns of the review page. */
 function Frame({ children }: { children: ReactNode }) {
   return (
     <MemoryRouter>
       <ReviewContext.Provider value={ctx}>
-        <div className="sidebar-layout">
-          <aside className="review-sidebar">{children}</aside>
+        <div className="w-[600px]">
+          <ReviewColumns rail={children}>{null}</ReviewColumns>
         </div>
       </ReviewContext.Provider>
     </MemoryRouter>

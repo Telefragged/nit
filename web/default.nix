@@ -74,7 +74,7 @@ let
     src = src.npm;
     inherit nodejs;
     name = "nit-web-npm-deps";
-    hash = "sha256-SsatupLftkNWaTZhKx7kpbFFuSKc08ymZStXFg6TWKw=";
+    hash = "sha256-eloY97d+h8NMWGC1hr7TLK8Qyg28mnsBzmh0e+p8Few=";
   };
 
   # Drop the generated wasm glue into a web build's tree before it runs.
