@@ -46,6 +46,11 @@ export const anchorAt = (a: Anchor): LineAnchor | null => lineOf(a)?.at ?? null;
 export const placementLine = (at: LineAnchor): number =>
   "whole" in at ? at.whole : at.selection.end_line;
 
+/** The first line that an anchor covers: the line where a selection
+ * starts, or the line of a whole-line anchor. */
+export const firstLine = (at: LineAnchor): number =>
+  "whole" in at ? at.whole : at.selection.start_line;
+
 /** The side a line anchor reads. Off a line, the side is `new`. */
 export const anchorSide = (a: Anchor): Side => lineOf(a)?.side ?? "new";
 

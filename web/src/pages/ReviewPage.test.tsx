@@ -845,6 +845,16 @@ describe("links to a comment thread", () => {
     expect(thread(73).classList).toContain("thread-linked");
   });
 
+  it("scrolls to the first line of the anchor of a thread on lines", async () => {
+    // Thread 79 is on lines 30 to 31 of rotate.rs at r1, and it renders
+    // under line 31.
+    await renderReview("/changes/11?against=base&thread=79");
+
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0]?.getAttribute("data-new")).toBe("30");
+    expect(thread(79).classList).toContain("thread-linked");
+  });
+
   it("links a thread from the time of its comment", async () => {
     let search = "";
     function LocationProbe() {
@@ -907,7 +917,7 @@ describe("links to a comment thread", () => {
 
     const at = thread(71).closest(".meta-row")?.previousElementSibling;
     expect(at?.querySelector(".code")?.getAttribute("data-new")).toBe("30");
-    expect(scrolled).toEqual([thread(71)]);
+    expect(scrolled).toEqual([at?.querySelector(".code")]);
     // Thread 75 is resolved too, and stays hidden.
     expect(document.querySelector('[data-thread="75"]')).toBeNull();
   });
