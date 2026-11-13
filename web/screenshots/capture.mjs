@@ -514,7 +514,7 @@ const captures = [
   { name: "review-files-collapsed", path: "/changes/11?against=base" },
   // A link to thread 71, resolved on r0. The setting shows open threads
   // only, but the page ports the linked thread to its r1 line, scrolls to
-  // it, and marks it.
+  // that line, and marks the thread.
   {
     name: "review-linked-thread",
     path: "/changes/11?against=base&thread=71",

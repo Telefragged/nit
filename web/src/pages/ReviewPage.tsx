@@ -29,7 +29,13 @@ import {
   getRepo,
 } from "../api/client";
 import { tagGraph } from "../api/fold";
-import type { ChangeDetail, Revision, Subscription, Tags } from "../api/types";
+import type {
+  ChangeDetail,
+  Revision,
+  Side,
+  Subscription,
+  Tags,
+} from "../api/types";
 import { StatusChip } from "../components/badges";
 
 import TagNav from "../components/TagNav";
@@ -55,6 +61,8 @@ import {
 import {
   anchorAt,
   anchorFile,
+  anchorSide,
+  firstLine,
   anchorLineText,
   assembleThreads,
   commentCountLabel,
@@ -111,6 +119,26 @@ const TAG_KEY = "nit.review-tag";
 
 /** The location state of a navigation that must not move the view. */
 const QUIET = "quiet";
+
+/** The element that shows `line` on `side` in the file section of the
+ * thread `el`: a row of the diff, or a block of a rendered file. Null when
+ * the thread does not render under a line, or the section shows no such
+ * line. A thread whose line the shown range does not have renders in a
+ * group of its own, and its anchor names a line of another revision. */
+function anchorTop(el: Element, side: Side, line: number): Element | null {
+  const section = el.closest(".meta-row")?.closest(".file-section");
+  if (!section) return null;
+  const blocks = section.querySelectorAll<HTMLElement>(
+    `.doc-block[data-side="${side}"]`,
+  );
+  return (
+    section.querySelector(`.code[data-${side}="${line}"]`) ??
+    [...blocks].find(
+      (b) => Number(b.dataset.start) <= line && line <= Number(b.dataset.end),
+    ) ??
+    null
+  );
+}
 
 /** The tag the sidebar follows: the reviewer's last key when the change
  * carries it, else `session-id`, else the first key. Null only when the
@@ -932,9 +960,17 @@ export default function ReviewPage() {
     if (pendingThread === null || scrolledThread.current === pending) return;
     const el = document.querySelector(`[data-thread="${pendingThread}"]`);
     if (el === null) return;
-    el.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+    // The thread renders under the last line of its anchor. The scroll
+    // goes to the first line, so the page shows the code that the thread
+    // is about. A thread with no line on the page is the target itself.
+    const thread = shownThreads.find((t) => t.id === pendingThread);
+    const anchor = thread && shownAt(thread).anchor;
+    const at = anchor && anchorAt(anchor);
+    const top =
+      anchor && at && anchorTop(el, anchorSide(anchor), firstLine(at));
+    (top ?? el).scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     scrolledThread.current = pending;
-  }, [pending, pendingThread, expanded]);
+  }, [pending, pendingThread, expanded, shownThreads]);
 
   // Busy until the stream has delivered the change and a member of its tag
   // graph, and every read has its first answer. A read that this render enables
