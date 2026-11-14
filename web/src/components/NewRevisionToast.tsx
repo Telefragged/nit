@@ -38,7 +38,7 @@ export default memo(function NewRevisionToast({
       actionProps: {
         children: (
           <>
-            Open <Kbd aria-hidden>r</Kbd>
+            Open <Kbd aria-hidden>R</Kbd>
           </>
         ),
         onClick: () => {
