@@ -27,7 +27,7 @@ import { ATTACHMENT_PREFIX } from "../types";
 import { placementLine } from "../../lib/comments";
 import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, picks, projection } from "./stream";
-import { addedFile, diffKey, sideEnd } from "./builders";
+import { addedFile, changedFile, diffKey, sideEnd } from "./builders";
 import blobs from "./blobs.json";
 import { changes, draftReviews, drafts, repos } from "./data";
 import type {
@@ -408,11 +408,22 @@ export function mockRequest(
       old_total: sideEnd(f, "old"),
       new_total: sideEnd(f, "new"),
     }));
-    // Each attachment the revision shows, as added whatever the diff base:
-    // the fixtures attach to no revision that an interdiff compares.
-    for (const a of changeDetail(c).revisions[number]?.attachments ?? []) {
-      const blob = blobs[a.hash as keyof typeof blobs];
-      files.push(addedFile(ATTACHMENT_PREFIX + a.name, blob.body));
+    // Each attachment the revision shows, against the base attachment of
+    // its name in a diff against the base. The fixtures attach to no
+    // revision that an interdiff compares.
+    const detail = changeDetail(c);
+    const shown = detail.revisions[number]?.attachments ?? [];
+    const base =
+      against === undefined
+        ? (detail.revisions[number]?.base_attachments ?? [])
+        : [];
+    const text = (hash: string) => blobs[hash as keyof typeof blobs].body;
+    for (const a of shown) {
+      const before = base.find((b) => b.name === a.name);
+      const path = ATTACHMENT_PREFIX + a.name;
+      if (before === undefined) files.push(addedFile(path, text(a.hash)));
+      else if (before.hash !== a.hash)
+        files.push(changedFile(path, text(before.hash), text(a.hash)));
     }
     return structuredClone({ files });
   }

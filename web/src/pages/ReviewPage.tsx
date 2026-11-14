@@ -430,12 +430,19 @@ export default function ReviewPage() {
       [],
     [published, selected],
   );
-  // The diff holds the attachments of both revisions, so the key carries
-  // them, and an attach entry from the stream refetches the diff. The page
+  // The diff includes the attachments of both sides, so the key includes
+  // their hashes, and an attach entry from the stream refetches the diff. The page
   // keeps the old diff on screen until the new one arrives.
-  const attachKey = (published?.revisions ?? [])
-    .filter((r) => r.number === selected || r.number === against)
-    .flatMap((r) => r.attachments.map((a) => a.hash))
+  const attachKey = [
+    ...(against === undefined
+      ? (published?.revisions.find((r) => r.number === selected)
+          ?.base_attachments ?? [])
+      : []),
+    ...(published?.revisions ?? [])
+      .filter((r) => r.number === selected || r.number === against)
+      .flatMap((r) => r.attachments),
+  ]
+    .map((a) => a.hash)
     .join(",");
   const diffView = [changeNumber, selected, against ?? null, whitespace];
   const diffQ = useQuery({
