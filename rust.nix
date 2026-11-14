@@ -6,7 +6,10 @@
   pkgs,
   pkgsStatic,
   stdenv,
+  stdenvNoCC,
   runCommand,
+  cargo-nextest,
+  jq,
   writeShellApplication,
   git,
   prettier,
@@ -16,16 +19,16 @@ let
   # Pin rustc from rust-toolchain.toml so nix and rustup builds match.
   toolchainFor = p: p.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-  # Rustdoc, run from inside the crate's own build. `runTests` covers
-  # every test kind but the doc examples, and no build runs rustdoc at
-  # all: buildRustCrate drives rustc directly, so nothing extracts the
+  # Rustdoc, run from inside the crate's own build. nextest runs every
+  # test kind but the doc examples, and no build runs rustdoc at all:
+  # buildRustCrate drives rustc directly, so nothing extracts the
   # examples from doc-comments or resolves the intra-doc links between
-  # them. But the flags rustdoc wants are the ones the lib build just
-  # used, and build-crate.nix leaves them in the shell it hands to
+  # them. But the flags that rustdoc needs are the ones the lib build
+  # just used, and build-crate.nix leaves them in the shell that runs
   # `postBuild` — so re-run the compiler it already configured, one flag
-  # different. Gated on `buildTests` to ride the test build, whose
-  # dependency set includes the dev-dependencies cargo also lends to doc
-  # examples. `docTests` is false for a cdylib, which has no rlib for an
+  # different. Gated on `buildTests`, so it runs in the test build, whose
+  # dependency set includes the dev-dependencies that cargo also links
+  # into doc examples. `docTests` is false for a cdylib, which has no rlib for an
   # example to link against — cargo skips its doc tests for the same
   # reason, but still documents it.
   rustdocPostBuild = docTests: ''
@@ -124,32 +127,122 @@ rec {
   # pkgsStatic and builds natively.
   cargoNix = cargoPkgs.callPackage ./Cargo.nix { inherit buildRustCrateForPkgs; };
 
+  # The test targets of a workspace member, compiled but not run.
+  # crate2nix exposes this build only through `internal`.
+  testBuild =
+    packageId: features:
+    (cargoNix.internal.builtRustCratesWithFeatures {
+      inherit packageId features;
+      runTests = true;
+      buildRustCrateForPkgsFunc = buildRustCrateForPkgs;
+    }).crates.${packageId}.override
+      (_: {
+        buildTests = true;
+      });
+
+  # The workspace that `cargoMetadata` and the test runs load: the
+  # manifests, and every Rust source as an empty file. cargo finds a
+  # target by its file name. No test loads a source file. An edit to a
+  # source file thus leaves this tree unchanged. Only a new or removed
+  # source file causes the tests to run again.
+  workspaceSrc =
+    let
+      manifests = lib.fileset.toSource {
+        root = ./.;
+        fileset = lib.fileset.unions [
+          ./Cargo.toml
+          (lib.fileset.fileFilter (f: f.name == "Cargo.toml") ./crates)
+        ];
+      };
+      sources = map (lib.path.removePrefix ./.) (
+        lib.fileset.toList (lib.fileset.fileFilter (f: f.hasExt "rs") ./crates)
+      );
+    in
+    runCommand "nit-workspace" { } ''
+      cp -r ${manifests} $out
+      chmod -R u+w $out
+      cd $out
+      for f in ${lib.escapeShellArgs sources}; do
+        mkdir -p "$(dirname "$f")"
+        touch "$f"
+      done
+    '';
+
+  # The package graph that nextest loads. Without it, nextest runs
+  # `cargo metadata` itself. With `--no-deps`, cargo resolves no
+  # dependency, so this derivation needs no vendored crates.
+  cargoMetadata = runCommand "nit-cargo-metadata.json" { nativeBuildInputs = [ toolchain ]; } ''
+    cd ${workspaceSrc}
+    CARGO_HOME=$TMPDIR cargo metadata --no-deps --format-version 1 > $out
+  '';
+
+  # Runs the tests of a workspace member under nextest. The binary list
+  # that nextest loads comes from the targets in `cargoMetadata` and the
+  # files of the test build, so no cargo build runs.
+  nextest =
+    packageId:
+    let
+      tests = testBuild packageId [ "default" ];
+      libTest = "${tests}/tests/${lib.replaceStrings [ "-" ] [ "_" ] tests.libName}-${tests.metadata}";
+    in
+    stdenvNoCC.mkDerivation {
+      name = "nextest-${packageId}";
+      src = workspaceSrc;
+      nativeBuildInputs = [
+        cargo-nextest
+        jq
+      ];
+      RUST_BACKTRACE = 1;
+      buildPhase = ''
+        jq --arg pkg ${packageId} --arg dir ${tests}/tests --arg lib ${libTest} \
+          --arg target "$PWD/target" '
+          (.packages[] | select(.name == $pkg)) as $p
+          | {
+              "rust-build-meta": {
+                "target-directory": $target,
+                "base-output-directories": [],
+                "non-test-binaries": {},
+                "linked-paths": []
+              },
+              "rust-binaries": INDEX(
+                $p.targets[]
+                | select(.test)
+                | (if any(.kind[]; test("lib$")) then "lib" else .kind[0] end) as $kind
+                | {
+                    "binary-id": (
+                      if $kind == "lib" then $pkg
+                      elif $kind == "test" then "\($pkg)::\(.name)"
+                      else "\($pkg)::\($kind)/\(.name)" end),
+                    "binary-name": .name,
+                    "package-id": $p.id,
+                    kind: $kind,
+                    "binary-path": (if $kind == "lib" then $lib else "\($dir)/\(.name)" end),
+                    "build-platform": "target"
+                  };
+                ."binary-id")
+            }' ${cargoMetadata} > binaries.json
+        cargo-nextest nextest run \
+          --cargo-metadata ${cargoMetadata} \
+          --binaries-metadata binaries.json \
+          --workspace-remap "$PWD" \
+          --no-fail-fast \
+          --show-progress none
+      '';
+      installPhase = "touch $out";
+    };
+
   # The web's wire types, generated from nit-types: the test binary of
   # the `ts`-feature build runs the ts-rs exporter, which writes every
   # web-facing type's declaration into one module, prettier-formatted like
   # any source file. `gen-types` writes it and `types-drift` diffs it.
   # `TS_RS_LARGE_INT=number` maps u64/i64 to the wire's `number`, not
-  # bigint. crate2nix exposes the test build without its run only through
-  # `internal`.
-  wireTypes =
-    let
-      tests =
-        (cargoNix.internal.builtRustCratesWithFeatures {
-          packageId = "nit-types";
-          features = [ "ts" ];
-          runTests = true;
-          buildRustCrateForPkgsFunc = buildRustCrateForPkgs;
-        }).crates."nit-types".override
-          (_: {
-            buildTests = true;
-          });
-    in
-    runCommand "nit-wire-types.gen.ts" { nativeBuildInputs = [ prettier ]; } ''
-      TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
-        ${tests}/tests/nit_types-* --exact export::write_wire_types
-      prettier --write types.gen.ts
-      mv types.gen.ts $out
-    '';
+  # bigint.
+  wireTypes = runCommand "nit-wire-types.gen.ts" { nativeBuildInputs = [ prettier ]; } ''
+    TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
+      ${testBuild "nit-types" [ "ts" ]}/tests/nit_types-* --exact export::write_wire_types
+    prettier --write types.gen.ts
+    mv types.gen.ts $out
+  '';
 
   # The public contract: the OpenAPI document the routes' utoipa
   # annotations produce and the CLI's clap syntax, written by
