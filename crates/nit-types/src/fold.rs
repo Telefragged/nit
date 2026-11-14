@@ -251,10 +251,21 @@ mod tests {
     use super::*;
     use crate::domain::TagsPayload;
     use crate::domain::{AttachmentHash, AttachmentName};
-    use crate::testing::{change_id, sha, tags};
+    use crate::domain::{ChangeId, Sha, Tag, Tags};
+
+    const A: &str = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
+    const B: &str = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2";
+    const C: &str = "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3";
+    const BASE: &str = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
+    const BASE2: &str = "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d";
+    const CHANGE_ID: &str = "Iabc0abc0abc0abc0abc0abc0abc0abc0abc0abc0";
 
     fn empty() -> ChangeProjection {
-        ChangeProjection::new(ChangeNumber::new(1), 1, change_id("Iabc"))
+        ChangeProjection::new(
+            ChangeNumber::new(1),
+            1,
+            ChangeId::new(CHANGE_ID).expect("valid change id"),
+        )
     }
 
     fn entry(position: u64, payload: LogPayload) -> LogEntry {
@@ -267,18 +278,18 @@ mod tests {
     }
 
     /// A `revision` payload; the fold mints its 0-based number.
-    fn revision(name: &str, parent: &str, base: &str, resets: bool) -> LogPayload {
+    fn revision(commit: &str, parent: &str, base: &str, resets: bool) -> LogPayload {
         LogPayload::Revision(RevisionPayload {
-            commit_sha: sha(name),
-            parent_sha: sha(parent),
-            fork_sha: sha(base),
-            message: format!("subject {name}\n\nChange-Id: {}\n", change_id("Iabc")),
+            commit_sha: Sha::new(commit).expect("valid sha"),
+            parent_sha: Sha::new(parent).expect("valid sha"),
+            fork_sha: Sha::new(base).expect("valid sha"),
+            message: format!("subject\n\nChange-Id: {CHANGE_ID}\n"),
             resets_status: resets,
         })
     }
 
-    fn tags_entry(pairs: &[(&str, &str)]) -> LogPayload {
-        LogPayload::Tags(TagsPayload { tags: tags(pairs) })
+    fn tags_entry(tags: Tags) -> LogPayload {
+        LogPayload::Tags(TagsPayload { tags })
     }
 
     fn review(revision: u64, verdict: Verdict) -> LogPayload {
@@ -330,27 +341,43 @@ mod tests {
     #[test]
     fn revisions_are_zero_based_and_minted_in_the_fold() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
-            revision("B", "A", "base", true),
+            revision(A, BASE, BASE, true),
+            revision(B, A, BASE, true),
         ]);
         assert_eq!(c.revisions.len(), 2);
         assert_eq!(c.revisions[0].number.get(), 0);
         assert_eq!(c.revisions[1].number.get(), 1);
         assert_eq!(
             c.latest_revision().expect("a revision").commit_sha,
-            sha("B")
+            Sha::new(B).expect("valid sha")
         );
     }
 
     #[test]
     fn a_tags_entry_overlays_the_set_it_finds() {
         let c = folded(vec![
-            tags_entry(&[("feature", "epic-saga"), ("session-id", "s1")]),
-            tags_entry(&[("session-id", "s2")]),
+            tags_entry(
+                [
+                    Tag::new("feature", "epic-saga").expect("valid tag"),
+                    Tag::new("session-id", "s1").expect("valid tag"),
+                ]
+                .into_iter()
+                .collect::<Tags>(),
+            ),
+            tags_entry(
+                [Tag::new("session-id", "s2").expect("valid tag")]
+                    .into_iter()
+                    .collect::<Tags>(),
+            ),
         ]);
         assert_eq!(
             c.tags,
-            tags(&[("feature", "epic-saga"), ("session-id", "s2")])
+            [
+                Tag::new("feature", "epic-saga").expect("valid tag"),
+                Tag::new("session-id", "s2").expect("valid tag")
+            ]
+            .into_iter()
+            .collect::<Tags>()
         );
     }
 
@@ -359,13 +386,22 @@ mod tests {
     #[test]
     fn a_tags_entry_leaves_the_revisions_and_the_status_alone() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
-            tags_entry(&[("feature", "epic-saga")]),
+            tags_entry(
+                [Tag::new("feature", "epic-saga").expect("valid tag")]
+                    .into_iter()
+                    .collect::<Tags>(),
+            ),
         ]);
         assert_eq!(c.revisions.len(), 1);
         assert_eq!(c.current_status(), ChangeStatus::Approved);
-        assert_eq!(c.tags, tags(&[("feature", "epic-saga")]));
+        assert_eq!(
+            c.tags,
+            [Tag::new("feature", "epic-saga").expect("valid tag")]
+                .into_iter()
+                .collect::<Tags>()
+        );
     }
 
     #[test]
@@ -376,9 +412,9 @@ mod tests {
     #[test]
     fn status_is_per_revision() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::RequestChanges),
-            revision("B", "base", "base", true), // reword: new revision
+            revision(B, BASE, BASE, true), // reword: new revision
         ]);
         // The review landed on r0; r1 has no review yet and resets → pending.
         assert_eq!(
@@ -391,10 +427,10 @@ mod tests {
     #[test]
     fn pure_rebase_carries_status_forward() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
             // r1 is a pure rebase (resets_status = false): inherits r0's approve.
-            revision("B", "base2", "base2", false),
+            revision(B, BASE2, BASE2, false),
         ]);
         assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
         assert_eq!(c.status_at(RevisionNumber::new(1)), ChangeStatus::Approved);
@@ -403,9 +439,9 @@ mod tests {
     #[test]
     fn reword_resets_status() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
-            revision("B", "base", "base", true),
+            revision(B, BASE, BASE, true),
         ]);
         assert_eq!(c.status_at(RevisionNumber::new(1)), ChangeStatus::Pending);
     }
@@ -416,20 +452,20 @@ mod tests {
         // current_status is the displayed status at the latest revision: r1 has no
         // review, so pending — even though r0 was approved.
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
-            revision("B", "base", "base", true),
+            revision(B, BASE, BASE, true),
         ]);
         assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
         assert_eq!(c.current_status(), ChangeStatus::Pending);
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
         ]);
         assert_eq!(c.current_status(), ChangeStatus::Approved);
         // The lifecycle overlay wins change-wide: abandoned regardless of revision.
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
             LogPayload::lifecycle(LifecycleAction::Abandoned, None, None),
         ]);
@@ -447,8 +483,8 @@ mod tests {
     #[test]
     fn an_attach_replaces_the_same_name_on_its_revision() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
-            revision("B", "base", "base", true),
+            revision(A, BASE, BASE, true),
+            revision(B, BASE, BASE, true),
             attach(0, "plan.md", 'a'),
             attach(0, "shot.png", 'b'),
             attach(0, "plan.md", 'c'),
@@ -473,10 +509,14 @@ mod tests {
     #[test]
     fn merged_paints_at_latest() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
-            revision("B", "base", "base", true),
-            LogPayload::lifecycle(LifecycleAction::Merged, Some(sha("C")), None),
+            revision(B, BASE, BASE, true),
+            LogPayload::lifecycle(
+                LifecycleAction::Merged,
+                Some(Sha::new(C).expect("valid sha")),
+                None,
+            ),
         ]);
         // Merged shows at the latest revision; older ones keep their own status.
         assert_eq!(c.status_at(RevisionNumber::new(1)), ChangeStatus::Merged);
@@ -487,7 +527,7 @@ mod tests {
     #[test]
     fn abandon_then_reopen() {
         let mut c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             review(0, Verdict::RequestChanges),
             LogPayload::lifecycle(LifecycleAction::Abandoned, None, None),
         ]);
@@ -511,7 +551,7 @@ mod tests {
     #[test]
     fn threads_open_reply_and_resolve() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             LogPayload::Review(ReviewPayload {
                 revision: RevisionNumber::new(0),
                 verdict: Verdict::Comment,
@@ -537,7 +577,7 @@ mod tests {
     #[test]
     fn agent_comment_opens_a_thread() {
         let c = folded(vec![
-            revision("A", "base", "base", true),
+            revision(A, BASE, BASE, true),
             LogPayload::Comment(anchored("a.rs", 1, "why?")),
         ]);
         assert_eq!(c.threads.len(), 1);
@@ -569,7 +609,7 @@ mod tests {
     #[test]
     fn fold_opens_a_thread_for_a_stamped_unseen_id() {
         let mut c = empty();
-        fold(&mut c, entry(0, revision("A", "base", "base", true)));
+        fold(&mut c, entry(0, revision(A, BASE, BASE, true)));
         fold(
             &mut c,
             entry(
@@ -593,9 +633,9 @@ mod tests {
         let c = replay(
             ChangeNumber::new(1),
             1,
-            change_id("Iabc"),
+            ChangeId::new(CHANGE_ID).expect("valid change id"),
             vec![
-                entry(0, revision("A", "base", "base", true)),
+                entry(0, revision(A, BASE, BASE, true)),
                 entry(1, review(0, Verdict::Approve)),
             ],
         );
@@ -606,7 +646,7 @@ mod tests {
     #[test]
     fn entries_folded_tracks_the_high_water_mark_and_dedups_the_overlap() {
         let mut c = empty();
-        fold(&mut c, entry(0, revision("A", "base", "base", true)));
+        fold(&mut c, entry(0, revision(A, BASE, BASE, true)));
         fold(&mut c, entry(1, review(0, Verdict::Approve)));
         assert_eq!(c.entries_folded, 2);
         // Re-delivering the projection/live boundary (position 1) is a no-op.

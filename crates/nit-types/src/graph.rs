@@ -177,28 +177,34 @@ pub fn row_order(nodes: &[(Sha, Vec<Sha>)]) -> Vec<Sha> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::sha;
 
     #[test]
     fn row_order_is_topological_children_before_parents() {
         // The change-graph mock topology: two open tips (A1, A2) fanning from
         // A3 → A4 → HEAD, then merged history H → G1 → G2(merge of G3,G4) → G5.
+        let a1 = Sha::new("a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1").expect("valid sha");
+        let a2 = Sha::new("a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2").expect("valid sha");
+        let a3 = Sha::new("a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3").expect("valid sha");
+        let a4 = Sha::new("a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4").expect("valid sha");
+        let h = Sha::new("fefefefefefefefefefefefefefefefefefefefe").expect("valid sha");
+        let g1 = Sha::new("9191919191919191919191919191919191919191").expect("valid sha");
+        let g2 = Sha::new("9292929292929292929292929292929292929292").expect("valid sha");
+        let g3 = Sha::new("9393939393939393939393939393939393939393").expect("valid sha");
+        let g4 = Sha::new("9494949494949494949494949494949494949494").expect("valid sha");
+        let g5 = Sha::new("9595959595959595959595959595959595959595").expect("valid sha");
         let pairs = vec![
-            (sha("A1"), vec![sha("A3")]),
-            (sha("A2"), vec![sha("A3")]),
-            (sha("A3"), vec![sha("A4")]),
-            (sha("A4"), vec![sha("H")]),
-            (sha("H"), vec![sha("G1")]),
-            (sha("G1"), vec![sha("G2")]),
-            (sha("G2"), vec![sha("G3"), sha("G4")]),
-            (sha("G3"), vec![sha("G5")]),
-            (sha("G4"), vec![sha("G5")]),
-            (sha("G5"), vec![]),
+            (a1.clone(), vec![a3.clone()]),
+            (a2.clone(), vec![a3.clone()]),
+            (a3.clone(), vec![a4.clone()]),
+            (a4.clone(), vec![h.clone()]),
+            (h.clone(), vec![g1.clone()]),
+            (g1.clone(), vec![g2.clone()]),
+            (g2.clone(), vec![g3.clone(), g4.clone()]),
+            (g3.clone(), vec![g5.clone()]),
+            (g4.clone(), vec![g5.clone()]),
+            (g5.clone(), vec![]),
         ];
-        assert_eq!(
-            row_order(&pairs),
-            ["A1", "A2", "A3", "A4", "H", "G1", "G2", "G3", "G4", "G5"].map(sha)
-        );
+        assert_eq!(row_order(&pairs), [a1, a2, a3, a4, h, g1, g2, g3, g4, g5]);
         // None < Some keeps the comparison honest if a sha is ever missing.
         let order = row_order(&pairs);
         let pos = |s: &Sha| order.iter().position(|x| x == s);
