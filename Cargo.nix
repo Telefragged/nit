@@ -83,6 +83,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "workspace-hack" = rec {
+      packageId = "workspace-hack";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "workspace-hack";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
   };
 
 
@@ -3831,6 +3841,10 @@ rec {
             name = "utoipa-axum";
             packageId = "utoipa-axum";
           }
+          {
+            name = "workspace-hack";
+            packageId = "workspace-hack";
+          }
         ];
         devDependencies = [
           {
@@ -3869,6 +3883,10 @@ rec {
             name = "serde_json";
             packageId = "serde_json";
           }
+          {
+            name = "workspace-hack";
+            packageId = "workspace-hack";
+          }
         ];
 
       };
@@ -3902,6 +3920,10 @@ rec {
           {
             name = "utoipa";
             packageId = "utoipa";
+          }
+          {
+            name = "workspace-hack";
+            packageId = "workspace-hack";
           }
         ];
         devDependencies = [
@@ -3944,6 +3966,10 @@ rec {
           {
             name = "wasm-bindgen";
             packageId = "wasm-bindgen";
+          }
+          {
+            name = "workspace-hack";
+            packageId = "workspace-hack";
           }
         ];
 
@@ -7384,6 +7410,82 @@ rec {
           "macros" = [ "dep:wit-bindgen-rust-macro" ];
           "rustc-dep-of-std" = [ "dep:core" "dep:alloc" ];
         };
+      };
+      "workspace-hack" = rec {
+        crateName = "workspace-hack";
+        version = "0.1.0";
+        edition = "2021";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/workspace-hack; };
+        libName = "workspace_hack";
+        dependencies = [
+          {
+            name = "futures-core";
+            packageId = "futures-core";
+          }
+          {
+            name = "futures-sink";
+            packageId = "futures-sink";
+          }
+          {
+            name = "futures-util";
+            packageId = "futures-util";
+            usesDefaultFeatures = false;
+            features = [ "sink" "std" ];
+          }
+          {
+            name = "hashbrown";
+            packageId = "hashbrown 0.17.1";
+            usesDefaultFeatures = false;
+            features = [ "default-hasher" ];
+          }
+          {
+            name = "js-sys";
+            packageId = "js-sys";
+            target = { target, features }: (target.name == "wasm32-unknown-unknown");
+          }
+          {
+            name = "memchr";
+            packageId = "memchr";
+          }
+          {
+            name = "serde_core";
+            packageId = "serde_core";
+            features = [ "alloc" ];
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+            features = [ "raw_value" ];
+          }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+            target = { target, features }: (target.name == "wasm32-unknown-unknown");
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+          {
+            name = "syn";
+            packageId = "syn 2.0.119";
+            rename = "syn-f595c2ba2a3f28df";
+            features = [ "extra-traits" "full" "visit-mut" ];
+          }
+          {
+            name = "syn";
+            packageId = "syn 3.0.6";
+            rename = "syn-7b89eefb6aaa9bf3";
+            features = [ "extra-traits" "full" "visit" "visit-mut" ];
+          }
+        ];
+
       };
       "writeable" = rec {
         crateName = "writeable";

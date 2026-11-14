@@ -4,6 +4,7 @@ members = [
   "crates/nit-contract",
   "crates/nit-types",
   "crates/nit-wasm",
+  "crates/workspace-hack",
 ]
 resolver = "3"
 

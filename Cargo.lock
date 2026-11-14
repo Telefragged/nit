@@ -1183,6 +1183,7 @@ dependencies = [
  "ureq",
  "utoipa",
  "utoipa-axum",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1193,6 +1194,7 @@ dependencies = [
  "clap",
  "nit",
  "serde_json",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1205,6 +1207,7 @@ dependencies = [
  "thiserror",
  "ts-rs",
  "utoipa",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1216,6 +1219,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2194,6 +2198,25 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "hashbrown 0.17.1",
+ "js-sys",
+ "memchr",
+ "proc-macro2",
+ "quote",
+ "serde_core",
+ "serde_json",
+ "syn 2.0.119",
+ "syn 3.0.6",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "writeable"

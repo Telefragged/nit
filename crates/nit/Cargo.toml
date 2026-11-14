@@ -51,6 +51,7 @@ tungstenite = "0.30"
 ureq = { version = "3.3.0", default-features = false, features = ["json"] }
 utoipa = "5"
 utoipa-axum = "0.2"
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tempfile = "3"
