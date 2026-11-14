@@ -2,8 +2,7 @@
 //!
 //! The repo graph joins the repo's change folds (`GET /api/changes`) to
 //! the canonical ref's merged history (`GET /api/history`). The tag graph
-//! is the folds alone, at their latest revisions. Both run only in the
-//! browser — the server serves the parts, never the whole.
+//! is the folds alone, at their latest revisions.
 //!
 //! Kept `cfg`-free so the host build compiles the same code wasm32 does and
 //! the `test-nit-wasm` flake check covers it natively.
@@ -24,7 +23,7 @@ struct OpenNode<'a> {
 }
 
 impl OpenNode<'_> {
-    /// The node as the graph carries it, `group` its value for the
+    /// The node as a [`GraphNode`], with `group` its value for the
     /// grouping key.
     fn graph_node(self, group: Option<String>) -> GraphNode {
         let OpenNode { change, revision } = self;
@@ -61,9 +60,8 @@ fn sha_index(changes: &[ChangeProjection]) -> ShaIndex<'_> {
 /// Tip commit-shas of the non-terminal changes, sorted.
 ///
 /// A tip is a change's latest-revision sha that no revision records as a
-/// `parent_sha`. A superseded revision is never a tip — only the latest
-/// revision is a candidate. A merged change is on the canonical ref and an
-/// abandoned change is dead, so neither is a tip.
+/// `parent_sha`. A merged change is on the canonical ref and an abandoned
+/// change is dead, so neither is a tip.
 fn tips(changes: &[ChangeProjection]) -> Vec<&Sha> {
     let parents: HashSet<&Sha> = changes
         .iter()
@@ -140,8 +138,8 @@ fn open_nodes(changes: &[ChangeProjection]) -> Vec<OpenNode<'_>> {
 /// float to the top, which is wrong whenever the whole stack forks behind
 /// HEAD.
 ///
-/// `group_by` names the tag key to group the open region on. [`ChangeGraph`]
-/// states the order that a grouped graph guarantees.
+/// `group_by` specifies the tag key to group the open region on.
+/// [`ChangeGraph`] documents the order that a grouped graph guarantees.
 #[must_use]
 pub fn assemble(
     changes: &[ChangeProjection],
@@ -166,10 +164,6 @@ pub fn assemble(
         .map(|(n, group)| n.graph_node(group.map(str::to_string)))
         .collect();
     let mut nodes = ordered(nodes, &groups, |_| ());
-
-    // An open stack's root keeps its real fork (`fork_sha`): the client draws a
-    // "behind" edge to it when it is a visible history node, or dangles it into
-    // the "earlier history hidden" marker when the fork predates the window.
 
     // The HEAD anchor + history keep the canonical-walk order below the open
     // region.
@@ -242,7 +236,7 @@ fn ordered<G: Hash + Eq + Copy, P: Ord + Copy>(
 
 /// Reorders a topological `order` so that each group's nodes sit together.
 ///
-/// `rank` names each node's group by the group's rank. The result stays
+/// `rank` identifies each node's group by the group's rank. The result stays
 /// topological: this function places a node only after it places every
 /// child of that node. It continues the current group while that group
 /// has such a node. Otherwise it starts the lowest-ranked group that has
@@ -452,8 +446,7 @@ mod tests {
         let idb =
             ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id");
         // A → B forked from "m"; A has since merged. The walk stops at
-        // the canonical ref, so B's path is the open member alone — the
-        // merged ancestor sits below the branch now.
+        // the canonical ref, so B's path is the open member alone.
         let mut ca = change(1, &ida, vec![revision(0, &sha_a, &sha_m, &sha_m)]);
         ca.lifecycle = Lifecycle::Merged;
         let cb = change(2, &idb, vec![revision(0, &sha_b, &sha_a, &sha_m)]);
@@ -523,8 +516,6 @@ mod tests {
         assert_eq!(g.nodes[row(&c3)].fork_sha, None);
     }
 
-    // The enriched history rides through untouched, an anchor-sha open node
-    // dedupes away, and truncation is the history's flag.
     #[test]
     fn history_enrichment_and_truncation_ride_through() {
         let sha_a = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
@@ -554,7 +545,6 @@ mod tests {
         let g = assemble(&changes, &history, None);
         assert!(g.history_truncated);
         let shas: Vec<&Sha> = g.nodes.iter().map(|n| &n.commit_sha).collect();
-        // Children ascend: the tip B sits above its parent A, both above HEAD.
         assert_eq!(shas, [&sha_b, &sha_a, &sha_h, &g1, &g2]);
         let node_g1 = g.nodes.iter().find(|n| n.commit_sha == g1).expect("g1");
         assert_eq!(node_g1.change_number, Some(ChangeNumber::new(9)));
