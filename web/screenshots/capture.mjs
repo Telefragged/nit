@@ -1058,6 +1058,9 @@ async function capture(browser, baseUrl, cap) {
   // produces its state, and withinLimit bounds a hung capture as a whole.
   context.setDefaultTimeout(0);
   const page = await context.newPage();
+  // The fixtures date their entries from the current time. A fixed clock
+  // gives each entry the same date in every run.
+  await page.clock.setFixedTime(new Date("2026-01-01T12:00:00Z"));
   await page.route("**/api/attachments/**", (route) => {
     const hash = new URL(route.request().url()).pathname.split("/")[3];
     const blob = ATTACHMENT_BLOBS[hash];
