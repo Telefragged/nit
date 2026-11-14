@@ -84,7 +84,12 @@ pub fn comment(args: CommentArgs) -> Result<()> {
     let req = NewComment {
         thread_id: args.thread,
         revision: args.revision,
-        anchor: Some(Anchor::parse(args.file, args.side, at)?),
+        // clap requires --file with --line and --range.
+        anchor: Some(match (args.file, at) {
+            (Some(file), Some(at)) => Anchor::line(file, args.side.unwrap_or_default(), at),
+            (Some(file), None) => Anchor::File { file },
+            (None, _) => Anchor::Change,
+        }),
         body,
         resolved,
     };

@@ -227,10 +227,7 @@ mod tests {
         CommentInput {
             thread_id: Some(tid),
             revision: Some(RevisionNumber::new(1)),
-            anchor: Some(
-                Anchor::parse(Some("src/queue.rs".into()), Some(Side::New), Some(at))
-                    .expect("a fixture names one anchor"),
-            ),
+            anchor: Some(Anchor::line("src/queue.rs".into(), Side::New, at)),
             body: body.to_string(),
             resolved: None,
         }

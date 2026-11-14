@@ -400,13 +400,10 @@ mod tests {
             created_at: String::new(),
             payload,
         };
-        let opening = |tid, file: Option<&str>, at, resolved, body: &str| CommentInput {
+        let opening = |tid, anchor, resolved, body: &str| CommentInput {
             thread_id: Some(tid),
             revision: Some(RevisionNumber::new(2)),
-            anchor: Some(
-                Anchor::parse(file.map(String::from), Some(Side::New), at)
-                    .expect("a fixture names one anchor"),
-            ),
+            anchor: Some(anchor),
             body: body.to_string(),
             resolved,
         };
@@ -418,20 +415,22 @@ mod tests {
                 verdict: Verdict::RequestChanges,
                 message: "Cover one.\nCover two.".to_string(),
                 comments: vec![
-                    opening(3, None, None, None, "Change-level question?"),
+                    opening(3, Anchor::Change, None, "Change-level question?"),
                     opening(
                         4,
-                        Some("src/queue.rs"),
-                        Some(LineAnchor::Whole(42)),
+                        Anchor::line("src/queue.rs".into(), Side::New, LineAnchor::Whole(42)),
                         None,
                         "Bounded channel.",
                     ),
                     opening(
                         5,
-                        Some("src/queue.rs"),
-                        Some(LineAnchor::Selection(
-                            CommentRange::new(42, 8, 42, 30).expect("a forward range"),
-                        )),
+                        Anchor::line(
+                            "src/queue.rs".into(),
+                            Side::New,
+                            LineAnchor::Selection(
+                                CommentRange::new(42, 8, 42, 30).expect("a forward range"),
+                            ),
+                        ),
                         Some(true),
                         "Overflow on 32-bit.",
                     ),

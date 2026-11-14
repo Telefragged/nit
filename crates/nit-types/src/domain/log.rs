@@ -192,16 +192,24 @@ impl From<LoggedComment> for CommentInput {
     fn from(c: LoggedComment) -> CommentInput {
         let anchor = c.anchor.or_else(|| {
             let side = c.side?;
-            // A stored entry that the anchor rules reject reads as
-            // change-level. A hard failure would leave the whole change
+            // A stored entry with a line and no file gets no anchor, so it
+            // is change-level. An error here would make the whole change
             // unfoldable.
             let at = c
                 .range
                 .map(LineAnchor::Selection)
                 .or(c.line.map(LineAnchor::Whole));
-            let mut anchor = Anchor::parse(c.file, Some(side), at).ok()?;
-            anchor.snapshot_line_text(c.line_text);
-            Some(anchor)
+            match (c.file, at) {
+                (Some(file), Some(at)) => Some(Anchor::Line {
+                    file,
+                    side,
+                    line_text: c.line_text,
+                    at,
+                }),
+                (Some(file), None) => Some(Anchor::File { file }),
+                (None, None) => Some(Anchor::Change),
+                (None, Some(_)) => None,
+            }
         });
         CommentInput {
             thread_id: c.thread_id,

@@ -144,40 +144,17 @@ pub enum LineAnchor {
 }
 
 impl Anchor {
-    /// The anchor that a file, a line and a selection name together.
+    /// Returns the anchor on line `at` of `file`, on `side`.
     ///
-    /// A line names a place inside a file, so it needs one. Nothing else
-    /// is an anchor, and the absent file is the change itself.
-    ///
-    /// # Errors
-    ///
-    /// [`AnchorError`], naming the rule the parts broke.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use nit_types::domain::{Anchor, LineAnchor};
-    ///
-    /// let at = LineAnchor::Whole(3);
-    /// assert!(Anchor::parse(None, None, None).is_ok());
-    /// assert!(Anchor::parse(None, None, Some(at)).is_err());
-    /// assert!(Anchor::parse(Some("a.rs".into()), None, Some(at)).is_ok());
-    /// ```
-    pub fn parse(
-        file: Option<String>,
-        side: Option<Side>,
-        at: Option<LineAnchor>,
-    ) -> Result<Anchor, AnchorError> {
-        match (file, at) {
-            (Some(file), Some(at)) => Ok(Anchor::Line {
-                file,
-                side: side.unwrap_or_default(),
-                line_text: None,
-                at,
-            }),
-            (Some(file), None) => Ok(Anchor::File { file }),
-            (None, None) => Ok(Anchor::Change),
-            (None, Some(_)) => Err(AnchorError::LineWithoutFile),
+    /// The text of the line stays unset until
+    /// [`Anchor::snapshot_line_text`].
+    #[must_use]
+    pub fn line(file: String, side: Side, at: LineAnchor) -> Anchor {
+        Anchor::Line {
+            file,
+            side,
+            line_text: None,
+            at,
         }
     }
 
@@ -216,13 +193,6 @@ impl Anchor {
             *line_text = text;
         }
     }
-}
-
-/// Why a file, a line and a selection are not an anchor.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum AnchorError {
-    #[error("a line anchor requires a file")]
-    LineWithoutFile,
 }
 
 /// A located, resolvable conversation.

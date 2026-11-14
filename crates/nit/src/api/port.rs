@@ -272,7 +272,11 @@ fn port_in_file(anchor: &Anchor, path: &str, edits: Option<&[Edit]>) -> Anchor {
         Anchor::File { .. } => None,
         Anchor::Line { at, .. } => edits.and_then(|edits| port_line(at, edits)),
     };
-    Anchor::parse(Some(path.to_owned()), Some(anchor.side()), at).expect("a file is given")
+    let file = path.to_owned();
+    match at {
+        Some(at) => Anchor::line(file, anchor.side(), at),
+        None => Anchor::File { file },
+    }
 }
 
 /// The anchor's lines through `edits`, or `None` when an edit rewrote them.
