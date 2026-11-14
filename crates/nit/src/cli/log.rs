@@ -135,7 +135,7 @@ mod tests {
     use nit_types::domain::LifecycleAction;
     use nit_types::domain::RevisionNumber;
 
-    use nit_types::testing::sha;
+    use nit_types::domain::Sha;
 
     #[test]
     fn log_range_forms_and_rejections() {
@@ -170,10 +170,11 @@ mod tests {
             })
         };
         let revision = || {
+            let sha = Sha::new("0000000000000000000000000000000000000000").expect("valid sha");
             LogPayload::Revision(RevisionPayload {
-                commit_sha: sha(""),
-                parent_sha: sha(""),
-                fork_sha: sha(""),
+                commit_sha: sha.clone(),
+                parent_sha: sha.clone(),
+                fork_sha: sha,
                 message: String::new(),
                 resets_status: true,
             })

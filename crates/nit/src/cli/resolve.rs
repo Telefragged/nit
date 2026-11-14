@@ -121,13 +121,17 @@ impl std::error::Error for NotRegistered {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::testing::tags;
 
     #[test]
     fn query_repeats_and_encodes_each_tag() {
         let tagged = Selection {
             repo: 7,
-            tags: tags(&[("branch", "track/a b"), ("worktree", "/w/x=y&z")]),
+            tags: [
+                Tag::new("branch", "track/a b").expect("valid tag"),
+                Tag::new("worktree", "/w/x=y&z").expect("valid tag"),
+            ]
+            .into_iter()
+            .collect(),
         };
         assert_eq!(
             tagged.query(),

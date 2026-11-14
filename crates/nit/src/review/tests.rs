@@ -1,26 +1,27 @@
-use nit_types::domain::RevisionNumber;
+use nit_types::domain::{ChangeId, RevisionNumber, Sha};
 use nit_types::domain::{ChangeStatus, Verdict};
 use nit_types::domain::{LogPayload, ReviewPayload, RevisionPayload};
 
 use super::*;
-use nit_types::testing::{change_id, sha};
 
 fn change_row() -> db::ChangeRow {
     db::ChangeRow {
         id: ChangeNumber::new(1),
         repo_id: 1,
-        change_id: change_id("Iabc"),
+        change_id: ChangeId::new("Iabc0000000000000000000000000000000000000")
+            .expect("valid change id"),
         status: None,
         created_at: "t0".to_string(),
     }
 }
 
-fn revision(name: &str) -> LogPayload {
+fn revision(commit: &str) -> LogPayload {
+    let base = Sha::new("ba5eba5eba5eba5eba5eba5eba5eba5eba5eba5e").expect("valid sha");
     LogPayload::Revision(RevisionPayload {
-        commit_sha: sha(name),
-        parent_sha: sha("base"),
-        fork_sha: sha("base"),
-        message: format!("subject {name}\n\nChange-Id: {}\n", change_id("Iabc")),
+        commit_sha: Sha::new(commit).expect("valid sha"),
+        parent_sha: base.clone(),
+        fork_sha: base,
+        message: "subject\n\nChange-Id: Iabc0000000000000000000000000000000000000\n".to_string(),
         resets_status: true,
     })
 }
@@ -40,7 +41,7 @@ fn review(revision: RevisionNumber, verdict: Verdict) -> LogPayload {
 #[test]
 fn replay_rows_round_trips_stored_log() {
     let rows: Vec<db::LogRow> = [
-        revision("A"),
+        revision("a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"),
         review(RevisionNumber::new(0), Verdict::Approve),
     ]
     .into_iter()

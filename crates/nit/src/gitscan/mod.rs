@@ -321,7 +321,6 @@ mod tests {
     use super::{canonical_history, detect_merges, sha_of};
     use nit_types::domain::{ChangeId, ChangeNumber, Sha};
     use nit_types::domain::{ChangeProjection, RevisionProjection};
-    use nit_types::testing::change_id;
 
     /// Flat paths only. A `TreeBuilder` seeded from the first parent is
     /// all these tests need.
@@ -354,11 +353,16 @@ mod tests {
     }
 
     fn keyed(subject: &str, key: &str) -> String {
-        format!("{subject}\n\nChange-Id: {}\n", change_id(key))
+        let key = ChangeId::new(key).expect("valid change id");
+        format!("{subject}\n\nChange-Id: {key}\n")
     }
 
     fn change_proj(id: u64, key: &str, commit: Oid, base: Oid) -> ChangeProjection {
-        let mut proj = ChangeProjection::new(ChangeNumber::new(id), 1, change_id(key));
+        let mut proj = ChangeProjection::new(
+            ChangeNumber::new(id),
+            1,
+            ChangeId::new(key).expect("valid change id"),
+        );
         proj.revisions.push(RevisionProjection {
             number: RevisionNumber::new(0),
             commit_sha: sha_of(commit),
@@ -400,15 +404,15 @@ mod tests {
             &repo,
             &[root],
             0,
-            &keyed("feat", "I001"),
+            &keyed("feat", "I1111111111111111111111111111111111111111"),
             &[("a.txt", "a\n")],
         );
-        let change = change_proj(1, "I001", feat, root);
+        let change = change_proj(1, "I1111111111111111111111111111111111111111", feat, root);
         let merged = commit(
             &repo,
             &[root],
             0,
-            &keyed("feat", "I001"),
+            &keyed("feat", "I1111111111111111111111111111111111111111"),
             &[("a.txt", "a adapted\n")],
         );
         let got = detect_merges(&repo, &sha_of(root), &sha_of(merged), &open(&[&change]));
@@ -438,10 +442,10 @@ mod tests {
             &repo,
             &[root],
             0,
-            &keyed("feat", "I001"),
+            &keyed("feat", "I1111111111111111111111111111111111111111"),
             &[("a.txt", "a\n")],
         );
-        let change = change_proj(1, "I001", feat, root);
+        let change = change_proj(1, "I1111111111111111111111111111111111111111", feat, root);
         let merged = commit(
             &repo,
             &[root],
@@ -458,22 +462,39 @@ mod tests {
     #[test]
     fn stacked_prefix_detects_each_member() {
         let (_dir, repo, root) = repo();
-        let a_feat = commit(&repo, &[root], 0, &keyed("a", "I001"), &[("a.txt", "a\n")]);
+        let a_feat = commit(
+            &repo,
+            &[root],
+            0,
+            &keyed("a", "I1111111111111111111111111111111111111111"),
+            &[("a.txt", "a\n")],
+        );
         let b_feat = commit(
             &repo,
             &[a_feat],
             0,
-            &keyed("b", "I002"),
+            &keyed("b", "I2222222222222222222222222222222222222222"),
             &[("b.txt", "b\n")],
         );
-        let a = change_proj(1, "I001", a_feat, root);
-        let b = change_proj(2, "I002", b_feat, a_feat);
-        let landed_a = commit(&repo, &[root], 0, &keyed("a", "I001"), &[("a.txt", "a\n")]);
+        let a = change_proj(1, "I1111111111111111111111111111111111111111", a_feat, root);
+        let b = change_proj(
+            2,
+            "I2222222222222222222222222222222222222222",
+            b_feat,
+            a_feat,
+        );
+        let landed_a = commit(
+            &repo,
+            &[root],
+            0,
+            &keyed("a", "I1111111111111111111111111111111111111111"),
+            &[("a.txt", "a\n")],
+        );
         let landed_b = commit(
             &repo,
             &[landed_a],
             0,
-            &keyed("b", "I002"),
+            &keyed("b", "I2222222222222222222222222222222222222222"),
             &[("b.txt", "b\n")],
         );
         let mut got = detect_merges(&repo, &sha_of(root), &sha_of(landed_b), &open(&[&a, &b]));
@@ -494,15 +515,15 @@ mod tests {
             &repo,
             &[root],
             0,
-            &keyed("feat", "I001"),
+            &keyed("feat", "I1111111111111111111111111111111111111111"),
             &[("a.txt", "a\n")],
         );
-        let change = change_proj(1, "I001", feat, root);
+        let change = change_proj(1, "I1111111111111111111111111111111111111111", feat, root);
         let merged = commit(
             &repo,
             &[root],
             0,
-            &keyed("other", "I999"),
+            &keyed("other", "I9999999999999999999999999999999999999999"),
             &[("z.txt", "z\n")],
         );
         let got = detect_merges(&repo, &sha_of(root), &sha_of(merged), &open(&[&change]));
@@ -516,15 +537,15 @@ mod tests {
             &repo,
             &[root],
             0,
-            &keyed("feat", "I001"),
+            &keyed("feat", "I1111111111111111111111111111111111111111"),
             &[("a.txt", "a\n")],
         );
-        let change = change_proj(1, "I001", feat, root);
+        let change = change_proj(1, "I1111111111111111111111111111111111111111", feat, root);
         let merged = commit(
             &repo,
             &[root],
             0,
-            &keyed("feat", "I001"),
+            &keyed("feat", "I1111111111111111111111111111111111111111"),
             &[("a.txt", "a\n")],
         );
         let absent = Sha::new("0".repeat(40)).expect("40 zeroes name no object");

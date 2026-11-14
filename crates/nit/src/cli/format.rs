@@ -344,7 +344,7 @@ mod tests {
 
     use nit_types::domain::CommentRange;
     use nit_types::domain::LineAnchor;
-    use nit_types::testing::{change_id, sha};
+    use nit_types::domain::{Sha, Tag};
 
     #[test]
     fn entry_summary_digests_each_kind() {
@@ -364,9 +364,9 @@ mod tests {
             resolved: None,
         };
         let revision = entry(LogPayload::Revision(RevisionPayload {
-            commit_sha: sha("abcdef0123456789"),
-            parent_sha: sha(""),
-            fork_sha: sha(""),
+            commit_sha: Sha::new("abcdef0123456789000000000000000000000000").expect("valid sha"),
+            parent_sha: Sha::new("0000000000000000000000000000000000000000").expect("valid sha"),
+            fork_sha: Sha::new("0000000000000000000000000000000000000000").expect("valid sha"),
             message: String::new(),
             resets_status: true,
         }));
@@ -454,14 +454,16 @@ mod tests {
         );
 
         // A revision entry shows its short sha and subject — no minted number.
-        let revision = |position, name: &str, msg: &str| {
+        let revision = |position, sha: &str, msg: &str| {
             entry(
                 ChangeNumber::new(42),
                 position,
                 LogPayload::Revision(RevisionPayload {
-                    commit_sha: sha(name),
-                    parent_sha: sha(""),
-                    fork_sha: sha(""),
+                    commit_sha: Sha::new(sha).expect("valid sha"),
+                    parent_sha: Sha::new("0000000000000000000000000000000000000000")
+                        .expect("valid sha"),
+                    fork_sha: Sha::new("0000000000000000000000000000000000000000")
+                        .expect("valid sha"),
                     message: msg.to_string(),
                     resets_status: true,
                 }),
@@ -469,14 +471,22 @@ mod tests {
         };
         assert_eq!(
             render_entry(
-                &revision(0, "abcdef0123456789", "queue: first\n\nbody"),
+                &revision(
+                    0,
+                    "abcdef0123456789000000000000000000000000",
+                    "queue: first\n\nbody"
+                ),
                 &Sources::default()
             ),
             "change 42  position 0  revision abcdef012345  queue: first"
         );
         assert_eq!(
             render_entry(
-                &revision(6, "1234567890abcdef", "queue: second"),
+                &revision(
+                    6,
+                    "1234567890abcdef000000000000000000000000",
+                    "queue: second"
+                ),
                 &Sources::default()
             ),
             "change 42  position 6  revision 1234567890ab  queue: second"
@@ -486,12 +496,11 @@ mod tests {
     #[test]
     fn tagged_digest_lists_changes_by_number_at_their_latest_revision() {
         use nit_types::domain::{Lifecycle, RevisionProjection, ThreadProjection};
-        use nit_types::testing::tags;
         let revision = |number: u64, message: &str| RevisionProjection {
             number: RevisionNumber::new(number),
-            commit_sha: sha(""),
-            parent_sha: sha(""),
-            fork_sha: sha(""),
+            commit_sha: Sha::new("0000000000000000000000000000000000000000").expect("valid sha"),
+            parent_sha: Sha::new("0000000000000000000000000000000000000000").expect("valid sha"),
+            fork_sha: Sha::new("0000000000000000000000000000000000000000").expect("valid sha"),
             message: message.to_string(),
             resets_status: true,
             created_at: String::new(),
@@ -507,14 +516,18 @@ mod tests {
             updated_at: String::new(),
         };
         let change = |id: u64, key: &str, revisions: Vec<RevisionProjection>, threads| {
-            let mut c = ChangeProjection::new(ChangeNumber::new(id), 1, change_id(key));
+            let mut c = ChangeProjection::new(
+                ChangeNumber::new(id),
+                1,
+                ChangeId::new(key).expect("valid change id"),
+            );
             c.revisions = revisions;
             c.threads = threads;
             c
         };
         let mut merged = change(
             2,
-            "Iabcdef0123456",
+            "Iabcdef0123456000000000000000000000000000",
             vec![revision(0, "web: render")],
             vec![],
         );
@@ -523,7 +536,7 @@ mod tests {
             merged,
             change(
                 12,
-                "I0123456789abc",
+                "I0123456789abc000000000000000000000000000",
                 vec![
                     revision(0, "old"),
                     revision(1, "server: add health\n\nbody"),
@@ -533,8 +546,11 @@ mod tests {
         ];
         // The count spans every revision: the open thread on revision 0
         // counts with the one on revision 1.
+        let tags: Tags = [Tag::new("branch", "track/a").expect("valid tag")]
+            .into_iter()
+            .collect();
         assert_eq!(
-            tagged_digest(&tags(&[("branch", "track/a")]), &changes),
+            tagged_digest(&tags, &changes),
             "tag branch=track/a\n\
              2   Iabcdef0  merged   r0  0u  web: render\n\
              12  I0123456  pending  r1  2u  server: add health\n"
