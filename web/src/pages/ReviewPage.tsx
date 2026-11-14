@@ -1020,6 +1020,7 @@ export default function ReviewPage() {
           key={changeNumber}
           opened={defaultRev ?? latest.number}
           latest={latest.number}
+          selected={selected}
         />
         <div className="review-header">
           <div className="review-header-main">
