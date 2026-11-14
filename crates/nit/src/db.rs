@@ -965,7 +965,7 @@ pub fn repo_tags(
 pub struct LogRow {
     /// Globally monotone across the repo — the cross-change order.
     pub sequence: u64,
-    /// 0-based, contiguous per change.
+    /// 0-based and ascending per change. The v5 migration left gaps.
     pub position: u64,
     pub kind: String,
     pub payload: String,
