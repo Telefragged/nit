@@ -207,7 +207,7 @@ describe("expansion across diff-range navigation", () => {
     expect(isExpanded(byPath("src/auth/rotate.rs"))).toBe(true);
     expect(isExpanded(byPath("src/auth/store.rs"))).toBe(false);
 
-    // r0 vs base (the invalid against=0 snaps back to Base): rotate.rs is
+    // r0 vs base (the invalid against=r0 snaps back to Base): rotate.rs is
     // still open; store.rs stays collapsed; tests/rotation.rs drops out.
     await choose("Revision", "r0 6 comments");
     await settle();
@@ -418,7 +418,7 @@ describe("comment counts in the diff-range dropdowns", () => {
   it("honors r0 as an explicit diff base instead of snapping to Base", async () => {
     // r0 is a valid interdiff base — selecting it must stick; an M >= 1 guard
     // would wrongly reject it.
-    await renderReview("/changes/11?against=0");
+    await renderReview("/changes/11?against=r0");
     expect(picker("Diff base").textContent).toBe("r0 6 comments");
   });
 });
@@ -580,7 +580,7 @@ describe("thread counts in the file headers", () => {
 
   it("follows the range: the r0 → r1 interdiff surfaces the r0 threads", async () => {
     // The left column is r0's own tree, so r0-pinned threads reappear there.
-    await renderReview("/changes/11?against=0");
+    await renderReview("/changes/11?against=r0");
 
     // rotate.rs: three r0 threads (lines 21/22/23) on the left + one r1
     // draft on the right; the old-side r1 draft has no column here.

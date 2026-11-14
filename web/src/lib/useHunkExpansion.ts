@@ -23,7 +23,7 @@ export const fileLinesQuery = (ctx: ReviewCtx, file: ReviewFile) =>
       "lines",
       ctx.changeNumber,
       ctx.selected,
-      ctx.against ?? null,
+      ctx.against,
       ctx.whitespace,
       file.path,
       file.old_path ?? null,

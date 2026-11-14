@@ -35,6 +35,7 @@ import type {
   Side,
   Subscription,
   Tags,
+  ChangeVersion,
 } from "../api/types";
 import { StatusChip } from "../components/badges";
 
@@ -78,7 +79,14 @@ import {
   type DiffRange,
   type UiThread,
 } from "../lib/comments";
-import { reviewFiles } from "../lib/attachments";
+import { attachmentsOf, reviewFiles } from "../lib/attachments";
+import {
+  baseVersion,
+  isBase,
+  parseVersion,
+  revisionOf,
+  revisionVersion,
+} from "../lib/version";
 import { confirmDiscard } from "../lib/confirmDiscard";
 import {
   pressLink,
@@ -185,17 +193,18 @@ function missAnchor(range: Range, col: DOMRect): { top: number; left: number } {
 }
 
 /** Resolve the ?against param into a diff base for the selected revision.
- * Grammar: "base" or absent → full diff vs parent; "M" → interdiff
- * rM → rSelected when 0 <= M < selected (junk falls back to the full diff). */
-function deriveDiffBase(
-  raw: string | null,
-  selected: number,
-): number | undefined {
-  if (raw === null) return undefined;
-  const m = Number(raw);
-  const valid = Number.isInteger(m) && m >= 0 && m < selected;
-  return valid ? m : undefined;
+ * Grammar: "base" or absent → full diff vs parent; "rM" → interdiff
+ * rM → rSelected when M < selected (junk falls back to the full diff). */
+function deriveDiffBase(raw: string | null, selected: number): ChangeVersion {
+  const version = parseVersion(raw);
+  return version !== null && !isBase(version) && revisionOf(version) < selected
+    ? version
+    : baseVersion(selected);
 }
+
+/** The ?against param of `version`: none for a base. */
+const againstParam = (version: ChangeVersion) =>
+  isBase(version) ? null : version;
 
 /** Gerrit-style diff range: [Base|rM] → [rN]. Left picks the diff base,
  * right the revision under review. Each rN row carries its own
@@ -211,7 +220,7 @@ function DiffRangeSelect({
 }: {
   revisions: Revision[];
   selected: number;
-  against: number | undefined;
+  against: ChangeVersion;
   counts: Map<number, number>;
   onLeft: (v: string) => void;
   onRight: (n: number) => void;
@@ -233,12 +242,13 @@ function DiffRangeSelect({
         label="Diff base"
         title="Base = parent commit; rM = interdiff against revision M"
         placeholder="no base"
-        value={against === undefined ? "base" : String(against)}
+        value={againstParam(against) ?? "base"}
         onChange={onLeft}
         options={[
           { value: "base", label: "Base" },
           ...revisions.map((r) => ({
             ...option(r),
+            value: revisionVersion(r.number),
             disabled: r.number >= selected,
           })),
         ]}
@@ -421,30 +431,17 @@ export default function ReviewPage() {
   // outlives every way of replacing it (it is reused across /changes/:id).
   // Adjust-during-render, like `shownChange` below: a bubble hanging over
   // code it never described must not paint even once.
-  const diffKey = `${changeNumber}:${selected}:${String(against)}:${layout}:${whitespace}`;
+  const diffKey = `${changeNumber}:${selected}:${against}:${layout}:${whitespace}`;
   if (selectionMiss && selectionMiss.diff !== diffKey) setSelectionMiss(null);
 
-  const shownAttachments = useMemo(
-    () =>
-      published?.revisions.find((r) => r.number === selected)?.attachments ??
-      [],
-    [published, selected],
-  );
+  const shownAttachments = attachmentsOf(published, revisionVersion(selected));
   // The diff includes the attachments of both sides, so the key includes
-  // their hashes, and an attach entry from the stream refetches the diff. The page
-  // keeps the old diff on screen until the new one arrives.
-  const attachKey = [
-    ...(against === undefined
-      ? (published?.revisions.find((r) => r.number === selected)
-          ?.base_attachments ?? [])
-      : []),
-    ...(published?.revisions ?? [])
-      .filter((r) => r.number === selected || r.number === against)
-      .flatMap((r) => r.attachments),
-  ]
+  // their hashes, and an attach entry from the stream refetches the diff.
+  // The page keeps the old diff on screen until the new one arrives.
+  const attachKey = [...attachmentsOf(published, against), ...shownAttachments]
     .map((a) => a.hash)
     .join(",");
-  const diffView = [changeNumber, selected, against ?? null, whitespace];
+  const diffView = [changeNumber, selected, against, whitespace];
   const diffQ = useQuery({
     queryKey: ["diff", ...diffView, attachKey],
     queryFn: () => getDiff(changeNumber, selected, against, whitespace),
@@ -548,8 +545,9 @@ export default function ReviewPage() {
     [editingTarget, confirmEditorCollapse, updateParams],
   );
 
-  // Diff range dropdowns. Left writes ?against ("base" | "1".."N-1").
-  // Right writes ?revision; a still-valid numeric base is preserved (the
+  // Diff range dropdowns. Left writes ?against ("base", or "rM" below the
+  // selected revision).
+  // Right writes ?revision; a still-valid revision base is preserved (the
   // dropdowns are independent coordinates, as in Gerrit), an invalid one
   // resets to Base, an explicit "base" is kept.
   const onLeft = (v: string) => {
@@ -561,7 +559,7 @@ export default function ReviewPage() {
       if (
         againstRaw !== null &&
         againstRaw !== "base" &&
-        deriveDiffBase(againstRaw, n) === undefined
+        againstParam(deriveDiffBase(againstRaw, n)) === null
       )
         patch.against = null;
       switchRange(patch);
@@ -579,7 +577,7 @@ export default function ReviewPage() {
       attachKey,
       showRange: ({ against: from, selected: to }: DiffRange) => {
         switchRange({
-          against: from === undefined ? null : String(from),
+          against: againstParam(from),
           revision: String(to),
         });
       },
@@ -658,7 +656,7 @@ export default function ReviewPage() {
     [threads, selected],
   );
   const portedQ = useQuery({
-    queryKey: ["ported", changeNumber, selected, against ?? null, portKey],
+    queryKey: ["ported", changeNumber, selected, against, portKey],
     queryFn: () => getPorted(changeNumber, selected, against),
     enabled: published !== undefined && selected > 0,
   });
@@ -1123,9 +1121,7 @@ export default function ReviewPage() {
           <div
             className="diff-column"
             ref={diffColumnRef}
-            data-diff-ready={
-              diffQ.isSuccess ? String(against ?? "base") : undefined
-            }
+            data-diff-ready={diffQ.isSuccess ? against : undefined}
           >
             {selectionMiss ? (
               <div

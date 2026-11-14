@@ -8,6 +8,7 @@ import type { UiThread } from "../lib/comments";
 import { anchorKind, pendingResolved, rangeSince } from "../lib/comments";
 import { linksThread } from "../lib/diffLink";
 import { timeAgo } from "../lib/time";
+import { baseVersion } from "../lib/version";
 import { REVEAL, useReview } from "../pages/reviewContext";
 import CommentEditor from "./CommentEditor";
 import Markdown from "./Markdown";
@@ -310,7 +311,10 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
           className="italic"
           title="Show the revision this thread was written on"
           onClick={() => {
-            showRange({ against: undefined, selected: thread.revision });
+            showRange({
+              against: baseVersion(thread.revision),
+              selected: thread.revision,
+            });
           }}
         >
           ported from r{thread.revision}

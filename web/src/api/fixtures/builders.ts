@@ -34,7 +34,7 @@ export const uiThread = (
 export const reviewCtx = (over: Partial<ReviewCtx> = {}): ReviewCtx => ({
   changeNumber: 1,
   selected: 1,
-  against: undefined,
+  against: "r1^",
   latestRevision: 1,
   whitespace: "compare",
   attachKey: "",
@@ -195,15 +195,15 @@ export function addedFile(path: string, text: string): DiffFile {
 }
 
 /** The entry of a diff for a file outside the tree, from the text
- * `before` to the text `after`. One hunk spans the whole file, and the
- * lines between the common head and tail change. */
+ * `before` to the text `after`, or deleted without `after`. One hunk spans
+ * the whole file, and the lines between the common head and tail change. */
 export function changedFile(
   path: string,
   before: string,
-  after: string,
+  after?: string,
 ): DiffFile {
   const old = linesOf(before);
-  const next = linesOf(after);
+  const next = after === undefined ? [] : linesOf(after);
   let head = 0;
   while (head < old.length && head < next.length && old[head] === next[head])
     head++;
@@ -218,7 +218,7 @@ export function changedFile(
   const nextEnd = next.length - tail;
   return {
     path,
-    status: "modified",
+    status: after === undefined ? "deleted" : "modified",
     binary: false,
     additions: nextEnd - head,
     deletions: oldEnd - head,
@@ -228,7 +228,7 @@ export function changedFile(
       {
         old_start: 1,
         old_lines: old.length,
-        new_start: 1,
+        new_start: next.length === 0 ? 0 : 1,
         new_lines: next.length,
         header: "",
         lines: [

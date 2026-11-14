@@ -30,7 +30,11 @@ import DiffFileView from "./DiffFileView";
 
 afterEach(cleanup);
 
-const ctx = reviewCtx({ selected: 2, against: 1, latestRevision: 2 });
+const ctx = reviewCtx({
+  selected: 2,
+  against: "r1",
+  latestRevision: 2,
+});
 
 /** Two hunks with a hidden run of `gap` unchanged lines above the first and
  * another between them — a top separator with no hunk above it, then an

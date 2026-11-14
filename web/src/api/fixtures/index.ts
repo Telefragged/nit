@@ -22,9 +22,18 @@ import type {
   DraftDecision,
   TagList,
   Verdict,
+  ChangeVersion,
 } from "../types";
 import { ATTACHMENT_PREFIX } from "../types";
+import { attachmentsOf } from "../../lib/attachments";
 import { placementLine } from "../../lib/comments";
+import {
+  baseVersion,
+  isBase,
+  parseVersion,
+  revisionOf,
+  revisionVersion,
+} from "../../lib/version";
 import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, picks, projection } from "./stream";
 import { addedFile, changedFile, diffKey, sideEnd } from "./builders";
@@ -242,8 +251,8 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
 /** The revision that the query's `against` specifies, or `undefined`
  * for the base. */
 const againstOf = (q: URLSearchParams) => {
-  const raw = q.get("against");
-  return raw === null || raw === "base" ? undefined : Number(raw.slice(1));
+  const version = parseVersion(q.get("against"));
+  return version === null || isBase(version) ? undefined : revisionOf(version);
 };
 
 /** The reviewer's overlay alone (`GET /changes/{id}/drafts`). */
@@ -415,22 +424,23 @@ export function mockRequest(
       old_total: sideEnd(f, "old"),
       new_total: sideEnd(f, "new"),
     }));
-    // Each attachment the revision shows, against the base attachment of
-    // its name in a diff against the base. The fixtures attach to no
-    // revision that an interdiff compares.
+    // The attachments of both sides, compared by name as the server
+    // compares them.
     const detail = changeDetail(c);
-    const shown = detail.revisions[number]?.attachments ?? [];
-    const base =
-      against === undefined
-        ? (detail.revisions[number]?.base_attachments ?? [])
-        : [];
+    const byName = (version: ChangeVersion) =>
+      new Map(attachmentsOf(detail, version).map((a) => [a.name, a.hash]));
+    const old = byName(parseVersion(q.get("against")) ?? baseVersion(number));
+    const next = byName(revisionVersion(number));
     const text = (hash: string) => blobs[hash as keyof typeof blobs].body;
-    for (const a of shown) {
-      const before = base.find((b) => b.name === a.name);
-      const path = ATTACHMENT_PREFIX + a.name;
-      if (before === undefined) files.push(addedFile(path, text(a.hash)));
-      else if (before.hash !== a.hash)
-        files.push(changedFile(path, text(before.hash), text(a.hash)));
+    for (const name of [...new Set([...old.keys(), ...next.keys()])].sort()) {
+      const [before, after] = [old.get(name), next.get(name)];
+      const path = ATTACHMENT_PREFIX + name;
+      if (before === after) continue;
+      files.push(
+        before === undefined
+          ? addedFile(path, text(after ?? ""))
+          : changedFile(path, text(before), after && text(after)),
+      );
     }
     return structuredClone({ files });
   }
