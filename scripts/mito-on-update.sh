@@ -46,6 +46,13 @@ for path in "$fingerprints"/* target/debug/{build,deps}/* target/debug/*; do
   fi
 done
 
+# Keeps the most recently compiled crates of the incremental cache, up to
+# 5 GiB, and deletes the others. rustc writes a new session into the
+# directory of a crate on every compile of that crate, so the newest
+# modification time in it is the time of the last compile.
+du -sk --time --time-style=+%s target/debug/incremental/* | sort -k2,2nr |
+  awk '(total += $1) > 5 * 1024 * 1024 { print $3 }' | xargs -r rm -rf
+
 # Every derivation that the flake outputs for this system: the packages,
 # checks, dev shells and formatter, and the programs of the apps.
 drvs=($(nix eval --impure --raw .#. --apply '
