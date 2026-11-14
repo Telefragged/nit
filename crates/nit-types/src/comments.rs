@@ -11,7 +11,7 @@ use crate::domain::RevisionNumber;
 #[derive(utoipa::ToSchema)]
 pub struct NewDraft {
     pub revision: RevisionNumber,
-    /// Where a new thread hangs. A reply keeps the anchor it copies.
+    /// The anchor of a new thread. A reply keeps the anchor of its thread.
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub anchor: Option<Anchor>,

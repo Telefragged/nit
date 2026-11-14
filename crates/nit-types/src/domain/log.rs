@@ -81,8 +81,8 @@ impl LifecycleAction {
 
 /// A `revision` entry: one new commit-sha observed for this change.
 ///
-/// The revision `number` is **not** carried — the fold mints it, so a
-/// concurrent shared-change push cannot duplicate it.
+/// The payload contains no revision `number`. The fold mints it, so a
+/// concurrent push to the same change cannot duplicate it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
@@ -101,7 +101,7 @@ pub struct RevisionPayload {
 /// A `tags` entry: the labels it puts on a change.
 ///
 /// The fold lays it over the change's current set, so a key this entry
-/// omits keeps the value it had and a key it names takes a new one. The
+/// omits keeps the value it had and a key it sets takes a new one. The
 /// entry stands on its own, so labelling a change costs no revision and
 /// disturbs no review status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,8 +143,8 @@ pub struct CommentInput {
     /// the change's latest only for a malformed payload.
     #[serde(default)]
     pub revision: Option<RevisionNumber>,
-    /// Where a new thread is anchored; `None` on a reply, which takes the
-    /// anchor its thread already holds.
+    /// Where a new thread is anchored; `None` on a reply, which uses the
+    /// anchor of its thread.
     #[serde(default)]
     pub anchor: Option<Anchor>,
     pub body: String,
@@ -152,17 +152,16 @@ pub struct CommentInput {
     ///
     /// `Some(true/false)` = resolve/reopen, `None` = no decision. On a new
     /// thread it is the birth state; a `thread_id` reply with an empty
-    /// `body` carries only this.
+    /// `body` contains only this.
     #[serde(default)]
     pub resolved: Option<bool>,
 }
 
-/// A comment as the log holds it, in either spelling.
+/// A comment as the log stores it, in either spelling.
 ///
-/// The log is append-only, so entries written before a comment carried
-/// one [`Anchor`] keep the five loose fields it was spelled with. Reading
-/// resolves the two into the anchor, which is why nothing downstream has
-/// to know that a second spelling exists.
+/// The log is append-only, so entries written before a comment had one
+/// [`Anchor`] keep the five loose fields it was spelled with. Parsing
+/// resolves the two spellings into the anchor.
 #[derive(Deserialize)]
 struct LoggedComment {
     #[serde(default)]

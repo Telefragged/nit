@@ -1,4 +1,4 @@
-//! The labels a push stamps on a change.
+//! The labels set on a change.
 
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 /// A tag set: one value per key.
 ///
 /// The map orders by key, so a set serializes stably and two sets
-/// compare verbatim. Only a [`Tag`] enters a set, and that holds for a
-/// set arriving over the wire, so every pair in one meets the vocabulary.
+/// compare verbatim. Every pair in a set is a valid [`Tag`], including in
+/// a set deserialized from the wire.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "BTreeMap<String, String>")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -24,15 +24,15 @@ impl Tags {
 
     /// Lays a later set over this one.
     ///
-    /// A key that `later` names takes its value. A key that `later`
-    /// omits keeps the value it had, so a tag follows a change forward
-    /// without a restatement.
+    /// A key that `later` contains takes its value. A key that `later`
+    /// omits keeps the value it had, so a tag stays on a change until a
+    /// later set replaces it.
     pub fn overlay(&mut self, later: &Tags) {
         self.0
             .extend(later.0.iter().map(|(k, v)| (k.clone(), v.clone())));
     }
 
-    /// The value `key` carries, if the set holds it.
+    /// The value of `key`, if the set contains it.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&str> {
         self.0.get(key).map(String::as_str)
@@ -63,7 +63,7 @@ impl Tags {
             .all(|(key, value)| self.get(key) == Some(value))
     }
 
-    /// How many keys the set holds.
+    /// The number of keys in the set.
     #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
@@ -118,8 +118,8 @@ impl TryFrom<BTreeMap<String, String>> for Tags {
     }
 }
 
-// Serialized by hand rather than `#[serde(transparent)]`, which serde
-// refuses to combine with the `try_from` that gates the way in.
+// serde rejects `#[serde(transparent)]` together with `try_from`, so
+// this impl serializes by hand.
 impl Serialize for Tags {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.serialize(serializer)
@@ -147,7 +147,7 @@ impl Tag {
     ///
     /// # Errors
     ///
-    /// [`TagError`], naming the rule the input broke.
+    /// [`TagError`], which identifies the rule the input broke.
     ///
     /// # Examples
     ///
@@ -209,7 +209,7 @@ impl FromStr for Tag {
     ///
     /// # Errors
     ///
-    /// [`TagError`], naming the rule the input broke.
+    /// [`TagError`], which identifies the rule the input broke.
     ///
     /// # Examples
     ///

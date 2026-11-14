@@ -20,20 +20,20 @@ use crate::domain::LogEntry;
 /// `query` again and compares the result with the positions:
 ///
 /// - For a change that `query` matches for the first time, the server
-///   sends what `start` names.
+///   sends what `start` selects.
 /// - For a followed change, the server sends each entry from its
 ///   position on, in `position` order.
 /// - For a followed change that `query` no longer matches, the server
 ///   sends `left`.
 ///
-/// A socket holds one subscription. A second subscription replaces the
+/// A socket has one subscription. A second subscription replaces the
 /// first.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 pub struct Subscription {
     pub query: ChangeQuery,
-    /// The changes that the client holds, each with the `position` of the
+    /// The changes that the client stores, each with the `position` of the
     /// next entry that the client lacks.
     ///
     /// The position of a projection is its `entries_folded`. The server

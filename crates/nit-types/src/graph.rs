@@ -21,10 +21,10 @@ pub struct HistoryCommit {
     /// Parent commit-shas; more than one is a merge.
     pub parents: Vec<Sha>,
     pub subject: String,
-    /// The merged change this commit carries, matched by its `Change-Id:`
-    /// trailer. Coupled with `change_id`: a commit whose trailer names no
+    /// The merged change of this commit, matched by its `Change-Id:`
+    /// trailer. Coupled with `change_id`: a commit whose trailer matches no
     /// known change (a merge, a pre-nit commit, a foreign trailer) reports
-    /// both as `None`, never an orphan key.
+    /// both as `None`.
     pub change_number: Option<ChangeNumber>,
     pub change_id: Option<ChangeId>,
 }
@@ -38,7 +38,7 @@ pub struct HistoryCommit {
 #[derive(utoipa::ToSchema)]
 pub struct RepoHistory {
     /// HEAD-first, and every commit precedes its parents. Each commit's
-    /// `parents` carry the edges.
+    /// `parents` contain the edges.
     pub commits: Vec<HistoryCommit>,
     /// The branch has more merged commits below the window.
     pub truncated: bool,
@@ -57,7 +57,7 @@ pub struct RepoHistory {
 /// another.
 ///
 /// The caller may group the repo graph by one tag key. Open nodes that
-/// carry the same value for that key then sit in one run of rows. Each
+/// have the same value for that key then sit in one run of rows. Each
 /// node reports its own value as `group`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -94,7 +94,8 @@ pub struct GraphNode {
     pub commit_sha: Sha,
     pub section: GraphSection,
     pub subject: String,
-    /// `ChangeStatus` at the pinned revision; head/history read as merged.
+    /// `ChangeStatus` at the pinned revision; head and history nodes are
+    /// merged.
     ///
     /// The client styles by `section`.
     pub status: ChangeStatus,
@@ -108,7 +109,7 @@ pub struct GraphNode {
     /// Where the pinned revision forks from the canonical ref (open
     /// nodes); `None` off the open region.
     pub fork_sha: Option<Sha>,
-    /// The value the change carries for the grouping key (open nodes of
+    /// The value the change has for the grouping key (open nodes of
     /// a grouped graph); `None` for a change without the key, and off the
     /// open region.
     pub group: Option<String>,

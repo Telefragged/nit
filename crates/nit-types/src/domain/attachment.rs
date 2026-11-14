@@ -1,4 +1,4 @@
-//! Attachments: files a change carries beside its commit.
+//! Attachments: files stored on a change beside its commit.
 
 use serde::{Deserialize, Serialize};
 
@@ -7,8 +7,8 @@ use super::RevisionNumber;
 
 /// The BLAKE3 hash of an attachment's bytes: 64 lowercase hex characters.
 ///
-/// It names the bytes, so two attachments with equal hashes hold the
-/// same content.
+/// It identifies the bytes, so two attachments with equal hashes have
+/// the same content.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "String")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -19,7 +19,7 @@ impl AttachmentHash {
     ///
     /// # Errors
     ///
-    /// [`AttachmentHashError`], naming the rule the input broke.
+    /// [`AttachmentHashError`], which identifies the rule the input broke.
     ///
     /// # Examples
     ///
@@ -63,8 +63,8 @@ impl TryFrom<String> for AttachmentHash {
     }
 }
 
-// Serialized by hand rather than `#[serde(transparent)]`, which serde
-// refuses to combine with the `try_from` that gates the way in.
+// serde rejects `#[serde(transparent)]` together with `try_from`, so
+// this impl serializes by hand.
 impl Serialize for AttachmentHash {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.0)
@@ -77,22 +77,22 @@ impl std::fmt::Display for AttachmentHash {
     }
 }
 
-/// The name an attachment carries on a revision: a relative path.
+/// The name of an attachment on a revision: a relative path.
 ///
 /// Its segments are separated by `/`. Within one revision a name
 /// identifies one attachment, and across revisions it pairs the versions
-/// of one attachment. The path gives no other meaning to the name.
+/// of one attachment.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "String")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct AttachmentName(String);
 
 impl AttachmentName {
-    /// A relative path whose every segment names a file or a directory.
+    /// A relative path whose every segment is a file or directory name.
     ///
     /// # Errors
     ///
-    /// [`AttachmentNameError`], naming the rule the input broke.
+    /// [`AttachmentNameError`], which identifies the rule the input broke.
     ///
     /// # Examples
     ///
@@ -140,8 +140,8 @@ impl TryFrom<String> for AttachmentName {
     }
 }
 
-// Serialized by hand rather than `#[serde(transparent)]`, which serde
-// refuses to combine with the `try_from` that gates the way in.
+// serde rejects `#[serde(transparent)]` together with `try_from`, so
+// this impl serializes by hand.
 impl Serialize for AttachmentName {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.0)
@@ -227,7 +227,7 @@ pub struct AttachmentProjection {
 ///
 /// A revision shows, for each name, the attachment of the latest revision
 /// at or below it that has that name. The base of a revision shows the
-/// same for the bases of those revisions. So an attachment carries forward
+/// same for the bases of those revisions. So an attachment stays in effect
 /// until a later revision, or the base of a later revision, replaces it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

@@ -28,7 +28,7 @@ pub struct Diff {
 /// The whole file as diff lines.
 ///
 /// For expanding the runs the shown diff hides. Same `Line` shape as the
-/// diff, so revealed lines carry their drift exactly as the hunks do.
+/// diff, so revealed lines contain their drift exactly as the hunks do.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
@@ -39,9 +39,9 @@ pub struct FileLines {
 /// One file of a diff.
 ///
 /// The two totals are the EOF anchors that let the client reveal the run
-/// below the last hunk, which no hunk bounds from beneath. A delete holds
-/// lines in that run and has no new side to measure them on, so each side
-/// carries its own count.
+/// below the last hunk, which no hunk bounds from beneath. A deleted file
+/// has lines in that run and no new side to measure them on, so each side
+/// has its own count.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
@@ -89,7 +89,7 @@ pub struct Line {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub new: Option<u64>,
-    /// Changed by a rebase, not by the change itself.
+    /// Changed by a rebase.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub drift: bool,
     /// Without trailing newline.

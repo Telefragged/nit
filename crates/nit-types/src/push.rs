@@ -10,7 +10,7 @@ use crate::domain::RevisionNumber;
 /// `POST /api/push` request (this is `nit push`).
 ///
 /// The repo must already be registered (`nit repo create`); the canonical
-/// branch is its stored `canonical_ref`, so push takes no base.
+/// branch is its stored `canonical_ref`.
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PushRequest {
     pub git_dir: String,

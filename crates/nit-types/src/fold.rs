@@ -4,10 +4,10 @@
 //! [`ChangeProjection`]; [`replay`] rebuilds a change's projection from its
 //! entries; [`change_detail`] publishes one as the wire view.
 //!
-//! Pure over `nit_types` alone: no database, no storage serialization, no event
-//! publishing. The server's db/storage adapters (`crate::review`) feed it wire
-//! `LogEntry`s and store the entries it returns; the same code folds
-//! the websocket stream client-side once compiled to WebAssembly.
+//! Pure over `nit_types` alone. The server's db/storage adapters
+//! (`nit::review`) feed it wire `LogEntry`s and store the entries it returns;
+//! the same code folds the websocket stream client-side once compiled to
+//! WebAssembly.
 //!
 //! Fold-assigned ids: a review's id is its `review` entry's `position` — a log
 //! coordinate, reproduced by replay with nothing stored and nothing minted.
@@ -25,7 +25,7 @@
 //! [`ChangeProjection::entries_folded`] is the count of entries consumed (the next
 //! `position`): the server stamps it into a projection so a follower resumes folding
 //! the live tail at the boundary, and [`fold`] skips any entry below it, so the
-//! arm/projection overlap is idempotent, never doubled.
+//! arm/projection overlap is idempotent.
 
 use crate::changes::{ChangeDetail, Revision};
 use crate::domain::ChangeId;
@@ -47,18 +47,11 @@ use crate::domain::{
 /// Mints any new-thread ids into the entry's typed payload and returns
 /// the id-bearing entry (the server stores that one).
 pub fn fold(change: &mut ChangeProjection, mut entry: LogEntry) -> LogEntry {
-    // Idempotent across the projection/live overlap: an entry already folded into
-    // this projection (its position below the high-water mark) leaves it untouched,
-    // so a follower that re-receives the boundary entries the projection already
-    // covers never double-applies them.
     if entry.position < change.entries_folded {
         return entry;
     }
     change.entries_folded = entry.position + 1;
     let now = entry.created_at.clone();
-    // A review is identified by where it sits in its change's log: replay
-    // reproduces the id with nothing stored and nothing minted, and no reader
-    // outside this fold references a review at all.
     let review_id = entry.position;
     match &mut entry.payload {
         LogPayload::Revision(p) => fold_revision(change, p, &now),
@@ -207,9 +200,6 @@ pub fn replay(
     }
     change
 }
-
-// Projection → wire: the published view of a change, shared by the
-// server's change endpoint and the WebAssembly fold.
 
 fn revision_view(change: &ChangeProjection, revision: &RevisionProjection) -> Revision {
     Revision {
@@ -388,8 +378,6 @@ mod tests {
         );
     }
 
-    // A `tags` entry stands on its own, so it neither mints a revision nor
-    // moves the status a review left behind.
     #[test]
     fn a_tags_entry_leaves_the_revisions_and_the_status_alone() {
         let c = folded(vec![
@@ -423,7 +411,6 @@ mod tests {
             review(0, Verdict::RequestChanges),
             revision(B, BASE, BASE, true), // reword: new revision
         ]);
-        // The review landed on r0; r1 has no review yet and resets → pending.
         assert_eq!(
             c.status_at(RevisionNumber::new(0)),
             ChangeStatus::ChangesRequested
@@ -436,7 +423,6 @@ mod tests {
         let c = folded(vec![
             revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
-            // r1 is a pure rebase (resets_status = false): inherits r0's approve.
             revision(B, BASE2, BASE2, false),
         ]);
         assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
@@ -456,8 +442,6 @@ mod tests {
     #[test]
     fn current_status_tracks_the_latest_revision() {
         assert_eq!(empty().current_status(), ChangeStatus::Pending);
-        // current_status is the displayed status at the latest revision: r1 has no
-        // review, so pending — even though r0 was approved.
         let c = folded(vec![
             revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
@@ -470,7 +454,6 @@ mod tests {
             review(0, Verdict::Approve),
         ]);
         assert_eq!(c.current_status(), ChangeStatus::Approved);
-        // The lifecycle overlay wins change-wide: abandoned regardless of revision.
         let c = folded(vec![
             revision(A, BASE, BASE, true),
             review(0, Verdict::Approve),
@@ -525,7 +508,6 @@ mod tests {
                 None,
             ),
         ]);
-        // Merged shows at the latest revision; older ones keep their own status.
         assert_eq!(c.status_at(RevisionNumber::new(1)), ChangeStatus::Merged);
         assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Approved);
         assert!(c.is_terminal());
@@ -540,7 +522,6 @@ mod tests {
         ]);
         assert_eq!(c.status_at(RevisionNumber::new(0)), ChangeStatus::Abandoned);
         assert!(c.is_terminal());
-        // Reopen restores the retained verdict status.
         fold(
             &mut c,
             entry(
@@ -588,7 +569,7 @@ mod tests {
             LogPayload::Comment(anchored("a.rs", 1, "why?")),
         ]);
         assert_eq!(c.threads.len(), 1);
-        // An author note carries no review_id — that is what marks it author-written.
+        // An author note has no review_id; that marks it as written by the author.
         assert_eq!(c.threads[0].comments[0].review_id, None);
     }
 
@@ -656,7 +637,6 @@ mod tests {
         fold(&mut c, entry(0, revision(A, BASE, BASE, true)));
         fold(&mut c, entry(1, review(0, Verdict::Approve)));
         assert_eq!(c.entries_folded, 2);
-        // Re-delivering the projection/live boundary (position 1) is a no-op.
         fold(&mut c, entry(1, review(0, Verdict::RequestChanges)));
         assert_eq!(c.reviews.len(), 1);
         assert_eq!(c.entries_folded, 2);

@@ -1,16 +1,16 @@
-//! nit's domain model: the vocabulary every component speaks.
+//! nit's domain model: the vocabulary that every component uses.
 //!
-//! A term is defined once, on the type that carries it, and that type
-//! lives here — so this page is the model in full. A term with no type of
-//! its own is defined in the prose below: roles, acts, and the relations
-//! between terms.
+//! A term is defined once, on the type that represents it, and that type
+//! is in this module, so this page is the whole model. A term with no type
+//! of its own is defined in the prose below: roles, acts, and the
+//! relations between terms.
 //!
 //! A shape that exists to serve a route — a request body, a list
 //! envelope, the published rendering of a term defined here — belongs to
-//! the module behind that route and points back here for what its fields
-//! mean.
+//! the module behind that route and links back here for the definitions
+//! of its fields.
 //!
-//! A definition says what a term **is**. Anything a code change could
+//! A definition documents what a term **is**. Anything a code change could
 //! falsify — a count, a route, a column, a status code, a behavior —
 //! belongs to the code it describes and never to a definition.
 //!
@@ -36,13 +36,13 @@
 //! of a revision starts from its base ([`ChangeVersion`]).
 //!
 //! **Attachment** — a file stored on a change version beside its commit,
-//! under a name that is a relative path. Its bytes are named by their
-//! hash, so the same bytes can sit on many versions. A later revision shows
-//! the attachments of an earlier one too, and the base of a later revision
-//! those of an earlier base ([`EffectiveAttachment`]).
+//! under a name that is a relative path. Its bytes are identified by
+//! their hash, so the same bytes can be on many versions. A later revision
+//! shows the attachments of an earlier one too, and the base of a later
+//! revision those of an earlier base ([`EffectiveAttachment`]).
 //!
 //! **Tag** — a `key: value` label set on a change. A `tags` entry
-//! stands on its own, so a key keeps its value until a later entry names
+//! stands on its own, so a key keeps its value until a later entry sets
 //! it again and labelling costs no revision. Tags correlate changes that
 //! git ancestry does not.
 //!
@@ -79,7 +79,7 @@
 //! git-common-dir.
 //!
 //! **Canonical ref** — the one ref a repo tracks. It is the base a push
-//! forks from and the yardstick for whether a change has merged.
+//! forks from and the ref that determines whether a change has merged.
 //!
 //! **Fork point** — the commit on the canonical ref that a revision was
 //! pushed against.
@@ -96,18 +96,18 @@
 //! what is true of it now. **Projection** — what a fold produces
 //! ([`ChangeProjection`]); the algorithm is `crate::fold`.
 //!
-//! # Verdict, decision, status, state
+//! # Verdict, decision, status
 //!
-//! Four terms a reader will otherwise conflate:
+//! Three terms a reader will otherwise conflate:
 //!
 //! - [`Verdict`] — what a reviewer concluded about a change.
 //! - [`Decision`] — a conclusion the reviewer has drafted privately and
-//!   not yet published. A superset of the verdicts, because abandoning
-//!   is chosen in the same breath as approving.
+//!   not yet published. A superset of the verdicts, because a reviewer
+//!   chooses between abandoning and approving in one step.
 //! - [`ChangeStatus`] — where one change stands, at one revision.
 //!
-//! A reviewer chooses the first two. The last two are derived, and
-//! nobody sets them by hand.
+//! A reviewer chooses the first two. The last is derived, and nobody
+//! sets it by hand.
 
 mod attachment;
 mod change;

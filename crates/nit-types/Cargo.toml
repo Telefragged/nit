@@ -9,11 +9,10 @@ description = "Wire types shared by the nit server and CLI"
 workspace = true
 
 [features]
-# Off by default; the `nit` crate turns it on for the CLI's
-# `clap::ValueEnum` derive on `Side`.
+# The `nit` crate turns it on for the CLI's `clap::ValueEnum` derive on
+# `Side`.
 clap = ["dep:clap"]
-# Off by default (`test-nit-types` builds without it);
-# turned on to derive the ts-rs TypeScript bindings — the `gen-types` app and
+# Derives the ts-rs TypeScript bindings. The `gen-types` app and the
 # `types-drift` check in flake.nix generate web/src/api/types.gen.ts from them.
 ts = ["dep:ts-rs", "ts-rs/no-serde-warnings"]
 

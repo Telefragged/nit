@@ -4,16 +4,13 @@
 /**
  * A change's identity: its `Change-Id` trailer, verbatim.
  *
- * It is carried in the commit message and survives the rewrites review
- * provokes, which is what binds a new revision to the change it revises;
- * a commit sha does not.
+ * It is stored in the commit message and survives the rewrites that
+ * review causes. So it binds a new revision to the change it revises.
  */
 export type ChangeId = string;
 
 /**
  * A git object name, in full: 40 hex characters.
- *
- * Only display ever shortens it.
  */
 export type Sha = string;
 
@@ -45,10 +42,11 @@ export type RevisionNumber = number;
 export type ChangeVersion = `r${number}` | `r${number}^`;
 
 /**
- * A change's number: the handle nit assigns it and everything carries.
+ * A change's number: the identifier that nit assigns and every
+ * component uses.
  *
- * Scoped to one nit instance, unlike the [`ChangeId`] that travels in the
- * commit message.
+ * Scoped to one nit instance, unlike the [`ChangeId`] in the commit
+ * message.
  */
 export type ChangeNumber = number;
 
@@ -109,7 +107,7 @@ export type LineKind = "context" | "add" | "del";
  * Whether whitespace is part of a line's identity.
  *
  * `Compare` compares a line as its whole text. `Ignore` compares two
- * lines as one line when they hold the same characters apart from
+ * lines as one line when they contain the same characters apart from
  * whitespace, so the diff does not show a block that was only
  * re-indented.
  */
@@ -124,8 +122,8 @@ export type LifecycleAction = "merged" | "abandoned" | "reopened";
  * A tag set: one value per key.
  *
  * The map orders by key, so a set serializes stably and two sets
- * compare verbatim. Only a [`Tag`] enters a set, and that holds for a
- * set arriving over the wire, so every pair in one meets the vocabulary.
+ * compare verbatim. Every pair in a set is a valid [`Tag`], including in
+ * a set deserialized from the wire.
  */
 export type Tags = { [key in string]: string };
 
@@ -149,8 +147,7 @@ export type Repo = {
    */
   canonical_ref: string;
   /**
-   * How many changes are neither merged nor abandoned (derived, never
-   * stored).
+   * How many changes are neither merged nor abandoned.
    */
   open_changes: number;
 };
@@ -171,7 +168,7 @@ export type RepoList = { repos: Array<Repo> };
  * another.
  *
  * The caller may group the repo graph by one tag key. Open nodes that
- * carry the same value for that key then sit in one run of rows. Each
+ * have the same value for that key then sit in one run of rows. Each
  * node reports its own value as `group`.
  */
 export type ChangeGraph = {
@@ -212,7 +209,8 @@ export type GraphNode = {
   section: GraphSection;
   subject: string;
   /**
-   * `ChangeStatus` at the pinned revision; head/history read as merged.
+   * `ChangeStatus` at the pinned revision; head and history nodes are
+   * merged.
    *
    * The client styles by `section`.
    */
@@ -236,7 +234,7 @@ export type GraphNode = {
    */
   fork_sha: Sha | null;
   /**
-   * The value the change carries for the grouping key (open nodes of
+   * The value the change has for the grouping key (open nodes of
    * a grouped graph); `None` for a change without the key, and off the
    * open region.
    */
@@ -256,10 +254,10 @@ export type HistoryCommit = {
   parents: Array<Sha>;
   subject: string;
   /**
-   * The merged change this commit carries, matched by its `Change-Id:`
-   * trailer. Coupled with `change_id`: a commit whose trailer names no
+   * The merged change of this commit, matched by its `Change-Id:`
+   * trailer. Coupled with `change_id`: a commit whose trailer matches no
    * known change (a merge, a pre-nit commit, a foreign trailer) reports
-   * both as `None`, never an orphan key.
+   * both as `None`.
    */
   change_number: ChangeNumber | null;
   change_id: ChangeId | null;
@@ -274,7 +272,7 @@ export type HistoryCommit = {
 export type RepoHistory = {
   /**
    * HEAD-first, and every commit precedes its parents. Each commit's
-   * `parents` carry the edges.
+   * `parents` contain the edges.
    */
   commits: Array<HistoryCommit>;
   /**
@@ -300,11 +298,10 @@ export type ChangeList = { changes: Array<ChangeProjection> };
  * (`?status={s}&status={s}`) and matches each change's status at its
  * **latest revision** (terminal states win). `tag` is repeatable too
  * (`?tag=key=value&tag=key=value`); each one matches the change's tags,
- * verbatim key and value, and every one given must match. There is no
- * prefix, wildcard, or key-only form. `change` picks the change with that
- * number, `change_id` the one with that `Change-Id`. Filters compose, so
- * a tag match admits merged and abandoned changes like any other; narrow
- * with `status` to exclude them.
+ * verbatim key and value, and every one given must match. `change` picks
+ * the change with that number, `change_id` the one with that
+ * `Change-Id`. Filters compose, so a tag match admits merged and
+ * abandoned changes like any other; narrow with `status` to exclude them.
  */
 export type ChangeQuery = {
   repo?: number;
@@ -392,14 +389,14 @@ export type Revision = {
 export type DraftDecision = { decision: Decision; message: string };
 
 /**
- * A thread's anchor carried to a revision it was not written on.
+ * A thread's anchor ported to a revision it was not written on.
  *
  * The thread keeps the anchor it was written with. `anchor` is where that
- * one lands in the trees of `revision`, read off the diff between them:
- * the same lines when the diff left them alone, shifted lines when it
- * inserted or deleted lines above them, and the next place up (the file,
- * then the change) when it rewrote those lines or dropped the file. A
- * ported line anchor carries no `line_text`.
+ * one lands in the trees of `revision`, derived from the diff between
+ * them: the same lines when the diff left them alone, shifted lines when
+ * it inserted or deleted lines above them, and the next place up (the
+ * file, then the change) when it rewrote those lines or dropped the file.
+ * A ported line anchor contains no `line_text`.
  */
 export type PortedComment = {
   thread_id: number;
@@ -411,9 +408,7 @@ export type PortedComment = {
  * Selected-text anchor of a line comment.
  *
  * 1-based lines on the comment's side, 0-based chars, `end_char`
- * exclusive, `end_line` = the comment's `line`. The JSON shape is these
- * four fields. They are domain coordinates (always non-negative), so the
- * shape is `u64`.
+ * exclusive.
  */
 export type CommentRange = {
   start_line: number;
@@ -452,7 +447,7 @@ export type Draft = {
 export type NewDraft = {
   revision: RevisionNumber;
   /**
-   * Where a new thread hangs. A reply keeps the anchor it copies.
+   * The anchor of a new thread. A reply keeps the anchor of its thread.
    */
   anchor?: Anchor;
   body: string;
@@ -471,9 +466,9 @@ export type Diff = { files: Array<DiffFile> };
  * One file of a diff.
  *
  * The two totals are the EOF anchors that let the client reveal the run
- * below the last hunk, which no hunk bounds from beneath. A delete holds
- * lines in that run and has no new side to measure them on, so each side
- * carries its own count.
+ * below the last hunk, which no hunk bounds from beneath. A deleted file
+ * has lines in that run and no new side to measure them on, so each side
+ * has its own count.
  */
 export type DiffFile = {
   /**
@@ -506,7 +501,7 @@ export type DiffFile = {
  * The whole file as diff lines.
  *
  * For expanding the runs the shown diff hides. Same `Line` shape as the
- * diff, so revealed lines carry their drift exactly as the hunks do.
+ * diff, so revealed lines contain their drift exactly as the hunks do.
  */
 export type FileLines = { lines: Array<Line> };
 
@@ -530,7 +525,7 @@ export type Line = {
    */
   new?: number;
   /**
-   * Changed by a rebase, not by the change itself.
+   * Changed by a rebase.
    */
   drift?: boolean;
   /**
@@ -563,7 +558,7 @@ export type SubmitError = { change_number: ChangeNumber; message: string };
 /**
  * `GET /api/tags` response: every tag in use across one repo's changes.
  *
- * Each change contributes the tags it carries now, so a value a later
+ * Each change contributes its current tags, so a value that a later
  * `tags` entry replaced does not appear. `status` is repeatable
  * (`?status={s}&status={s}`) and admits only the changes at those
  * statuses, as on the change read. Without it, terminal changes
@@ -579,8 +574,8 @@ export type TagList = {
 /**
  * A `revision` entry: one new commit-sha observed for this change.
  *
- * The revision `number` is **not** carried — the fold mints it, so a
- * concurrent shared-change push cannot duplicate it.
+ * The payload contains no revision `number`. The fold mints it, so a
+ * concurrent push to the same change cannot duplicate it.
  */
 export type RevisionPayload = {
   commit_sha: Sha;
@@ -600,7 +595,7 @@ export type RevisionPayload = {
  * A `tags` entry: the labels it puts on a change.
  *
  * The fold lays it over the change's current set, so a key this entry
- * omits keeps the value it had and a key it names takes a new one. The
+ * omits keeps the value it had and a key it sets takes a new one. The
  * entry stands on its own, so labelling a change costs no revision and
  * disturbs no review status.
  */
@@ -639,8 +634,8 @@ export type CommentInput = {
    */
   revision: RevisionNumber | null;
   /**
-   * Where a new thread is anchored; `None` on a reply, which takes the
-   * anchor its thread already holds.
+   * Where a new thread is anchored; `None` on a reply, which uses the
+   * anchor of its thread.
    */
   anchor: Anchor | null;
   body: string;
@@ -649,7 +644,7 @@ export type CommentInput = {
    *
    * `Some(true/false)` = resolve/reopen, `None` = no decision. On a new
    * thread it is the birth state; a `thread_id` reply with an empty
-   * `body` carries only this.
+   * `body` contains only this.
    */
   resolved: boolean | null;
 };
@@ -736,19 +731,19 @@ export type LogEntry = {
  * `query` again and compares the result with the positions:
  *
  * - For a change that `query` matches for the first time, the server
- *   sends what `start` names.
+ *   sends what `start` selects.
  * - For a followed change, the server sends each entry from its
  *   position on, in `position` order.
  * - For a followed change that `query` no longer matches, the server
  *   sends `left`.
  *
- * A socket holds one subscription. A second subscription replaces the
+ * A socket has one subscription. A second subscription replaces the
  * first.
  */
 export type Subscription = {
   query: ChangeQuery;
   /**
-   * The changes that the client holds, each with the `position` of the
+   * The changes that the client stores, each with the `position` of the
    * next entry that the client lacks.
    *
    * The position of a projection is its `entries_folded`. The server
@@ -775,8 +770,7 @@ export type Start = "projection" | "log";
 /**
  * A change's terminal lifecycle, folded from its `lifecycle` entries.
  *
- * The merged commit's sha stays on the `merged` log entry, not here —
- * the fold answers "is it merged", the log answers "as what".
+ * The sha of the merged commit is on the `merged` log entry.
  */
 export type Lifecycle = "active" | "merged" | "abandoned";
 
@@ -809,17 +803,17 @@ export type LineAnchor = { whole: number } | { selection: CommentRange };
 /**
  * The BLAKE3 hash of an attachment's bytes: 64 lowercase hex characters.
  *
- * It names the bytes, so two attachments with equal hashes hold the
- * same content.
+ * It identifies the bytes, so two attachments with equal hashes have
+ * the same content.
  */
 export type AttachmentHash = string;
 
 /**
- * The name an attachment carries on a revision: a relative path.
+ * The name of an attachment on a revision: a relative path.
  *
  * Its segments are separated by `/`. Within one revision a name
  * identifies one attachment, and across revisions it pairs the versions
- * of one attachment. The path gives no other meaning to the name.
+ * of one attachment.
  */
 export type AttachmentName = string;
 
@@ -836,7 +830,7 @@ export type AttachmentProjection = {
  *
  * A revision shows, for each name, the attachment of the latest revision
  * at or below it that has that name. The base of a revision shows the
- * same for the bases of those revisions. So an attachment carries forward
+ * same for the bases of those revisions. So an attachment stays in effect
  * until a later revision, or the base of a later revision, replaces it.
  */
 export type EffectiveAttachment = {
@@ -906,8 +900,6 @@ export type ThreadProjection = {
 export type ReviewProjection = {
   /**
    * The `position` of the `review` entry this is the fold of.
-   *
-   * A log coordinate, reproduced by replay with nothing stored.
    */
   id: number;
   revision: RevisionNumber;
@@ -942,7 +934,7 @@ export type ChangeProjection = {
   /**
    * Count of entries folded = the next unconsumed `position`.
    *
-   * A high-water mark, carried in the projection so a resumed fold
+   * A high-water mark, stored in the projection so a resumed fold
    * starts at the right boundary and stays idempotent across the
    * overlap.
    */
