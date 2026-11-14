@@ -8,6 +8,10 @@ mod common;
 
 use common::*;
 use serde_json::{Value, json};
+
+const IX: &str = "I7800000000000000000000000000000000000000";
+const IA: &str = "Ia000000000000000000000000000000000000000";
+const IE: &str = "Ie000000000000000000000000000000000000000";
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_id: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
@@ -41,13 +45,13 @@ fn review_drains_drafts_and_sets_status() {
     let g = GitRepo::new();
     let c1 = g.commit(
         &[g.root],
-        &msg("core: add a", "Ia"),
+        &msg("core: add a", IA),
         &[("a.txt", "a1\na2\na3\n")],
     );
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     // Drafts are reviewer-private until published.
     let (st, d1) = http_post(
@@ -94,10 +98,10 @@ fn review_drains_drafts_and_sets_status() {
 #[test]
 fn reply_draft_appends_to_thread() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x1\nx2\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", IX), &[("x.txt", "x1\nx2\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ix");
+    let id = push_one(&server, &g, "feat", IX);
 
     let (_, _) = http_post(
         &drafts_url(&server, id),
@@ -128,12 +132,12 @@ fn ranged_draft_publishes_with_its_range() {
     let g = GitRepo::new();
     let c1 = g.commit(
         &[g.root],
-        &msg("core: add a", "Ia"),
+        &msg("core: add a", IA),
         &[("a.txt", "a1\na2\na3\n")],
     );
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     let range = json!({"start_line": 2, "start_char": 0, "end_line": 2, "end_char": 2});
     let (st, d) = http_post(
@@ -164,12 +168,12 @@ fn draft_anchor_validation() {
     let g = GitRepo::new();
     let c1 = g.commit(
         &[g.root],
-        &msg("core: x\n\nbody line.", "Ix"),
+        &msg("core: x\n\nbody line.", IX),
         &[("x.txt", "x1\nx2\nx3\n")],
     );
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ix");
+    let id = push_one(&server, &g, "feat", IX);
     let url = drafts_url(&server, id);
 
     let (st, ranged) = http_post(
@@ -236,13 +240,13 @@ fn old_side_draft_snapshots_parent_tree() {
     g.branch("main", seed);
     let c1 = g.commit(
         &[seed],
-        &msg("edit f", "Ie"),
+        &msg("edit f", IE),
         &[("f.txt", "old1\nNEW2\nold3\n")],
     );
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ie");
+    let id = push_one(&server, &g, "feat", IE);
     let url = drafts_url(&server, id);
 
     let (st, old) = http_post(
@@ -269,10 +273,10 @@ fn old_side_draft_snapshots_parent_tree() {
 #[test]
 fn patch_and_delete_draft() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", IX), &[("x.txt", "x\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ix");
+    let id = push_one(&server, &g, "feat", IX);
     let url = drafts_url(&server, id);
 
     let (_, d) = http_post(
@@ -310,10 +314,10 @@ fn patch_and_delete_draft() {
 #[test]
 fn drafted_thread_resolution() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", IX), &[("x.txt", "x\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ix");
+    let id = push_one(&server, &g, "feat", IX);
     let url = drafts_url(&server, id);
 
     let (_, _) = http_post(
@@ -360,10 +364,10 @@ fn drafted_thread_resolution() {
 #[test]
 fn resolution_applied_in_draft_order() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", IX), &[("x.txt", "x\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ix");
+    let id = push_one(&server, &g, "feat", IX);
     let url = drafts_url(&server, id);
 
     let (_, _) = http_post(
@@ -398,18 +402,18 @@ fn resolution_applied_in_draft_order() {
 fn pure_rebase_carries_status_forward() {
     let g = GitRepo::new();
     let a_txt = "a1\na2\na3\n";
-    let c0 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", a_txt)]);
+    let c0 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", a_txt)]);
     g.branch("feat", c0);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     review(&server, id, "approve", "lgtm");
 
     let m1 = g.commit(&[g.root], "mainline: unrelated\n", &[("b.txt", "b\n")]);
     g.branch("main", m1);
-    let c1 = g.commit(&[m1], &msg("core: a", "Ia"), &[("a.txt", a_txt)]);
+    let c1 = g.commit(&[m1], &msg("core: a", IA), &[("a.txt", a_txt)]);
     g.branch("feat", c1);
-    let id2 = push_one(&server, &g, "feat", "Ia");
+    let id2 = push_one(&server, &g, "feat", IA);
     assert_eq!(id2, id);
 
     let d = detail(&server, id);
@@ -434,10 +438,10 @@ fn pure_rebase_carries_status_forward() {
 #[test]
 fn agent_comment_opens_thread_without_review_status() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x1\nx2\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", IX), &[("x.txt", "x1\nx2\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ix");
+    let id = push_one(&server, &g, "feat", IX);
     let comments_url = server.url(&format!("/api/changes/{id}/comments"));
 
     // A new author thread (published immediately; review_id null → author).
@@ -483,10 +487,10 @@ fn agent_comment_opens_thread_without_review_status() {
 #[test]
 fn reviewer_replies_to_agent_thread() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x1\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", IX), &[("x.txt", "x1\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ix");
+    let id = push_one(&server, &g, "feat", IX);
 
     let (st, thread) = http_post(
         &server.url(&format!("/api/changes/{id}/comments")),

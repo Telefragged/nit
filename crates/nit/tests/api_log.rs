@@ -5,6 +5,8 @@ mod common;
 use common::{GitRepo, TestServer, http_get, http_post, member_id, msg, push};
 use serde_json::{Value, json};
 
+const IA: &str = "Ia000000000000000000000000000000000000000";
+
 fn entries(resp: &Value) -> &Vec<Value> {
     resp["entries"].as_array().unwrap()
 }
@@ -15,12 +17,12 @@ fn entries(resp: &Value) -> &Vec<Value> {
 #[test]
 fn change_log_reads_the_entries_of_a_change() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("core: A", "Ia"), &[("a.txt", "a\n")]);
+    let a = g.commit(&[g.root], &msg("core: A", IA), &[("a.txt", "a\n")]);
     g.branch("feat", a);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let a_id = member_id(&res, "Ia");
+    let a_id = member_id(&res, IA);
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{a_id}/comments")),
         &json!({"revision": 0, "body": "note on A"}),

@@ -7,15 +7,17 @@ mod common;
 use common::{GitRepo, TestServer, change_log, http_post, member_id, msg, push, status_at};
 use serde_json::json;
 
+const I001: &str = "I0010000000000000000000000000000000000000";
+
 #[test]
 fn abandon_action_marks_the_change_abandoned_and_records_a_reason() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "I001");
+    let change_number = member_id(&res, I001);
     assert_eq!(
         status_at(&server, change_number, Some(0)).as_deref(),
         Some("pending")

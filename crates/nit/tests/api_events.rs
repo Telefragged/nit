@@ -8,6 +8,9 @@ use common::{
 };
 use serde_json::{Value, json};
 
+const I001: &str = "I0010000000000000000000000000000000000000";
+const I002: &str = "I0020000000000000000000000000000000000000";
+
 /// The next frame's `projection`, which must be the next frame.
 fn ws_projection(socket: &mut common::WsSock) -> Value {
     let frame = ws_read(socket);
@@ -34,12 +37,12 @@ fn fence(server: &TestServer, socket: &mut common::WsSock, change: u64) -> Value
 #[test]
 fn subscribe_ships_the_projection_then_streams_live() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "I001");
+    let change_number = member_id(&res, I001);
 
     let query = json!({ "change": change_number });
     let mut socket = ws_subscribe(&server, &json!({ "query": query }));
@@ -60,15 +63,15 @@ fn subscribe_ships_the_projection_then_streams_live() {
 #[test]
 fn subscribe_by_tag_follows_the_changes_that_carry_the_tag() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let a = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", a);
-    let b = g.commit(&[g.root], &msg("two", "I002"), &[("b.txt", "b\n")]);
+    let b = g.commit(&[g.root], &msg("two", I002), &[("b.txt", "b\n")]);
     g.branch("other", b);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main");
-    let one = member_id(&res, "I001");
+    let one = member_id(&res, I001);
     let (_, res) = push(&server, &g, "other", "main");
-    let two = member_id(&res, "I002");
+    let two = member_id(&res, I002);
     let (st, res) = tag_change(&server, one, &json!({"branch": "feat"}));
     assert_eq!(st, 200, "{res}");
     let repo_id = first_repo_id(&server);
@@ -102,13 +105,13 @@ fn subscribe_by_tag_follows_the_changes_that_carry_the_tag() {
 #[test]
 fn subscribe_with_positions_sends_the_entries_past_them() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
+    let c2 = g.commit(&[c1], &msg("two", I002), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main");
-    let one = member_id(&res, "I001");
-    let two = member_id(&res, "I002");
+    let one = member_id(&res, I001);
+    let two = member_id(&res, I002);
     review(&server, one, "approve", "ok");
     review(&server, one, "comment", "again");
 
@@ -135,11 +138,11 @@ fn subscribe_with_positions_sends_the_entries_past_them() {
 #[test]
 fn a_log_start_sends_every_entry() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (_, res) = push(&server, &g, "feat", "main");
-    let one = member_id(&res, "I001");
+    let one = member_id(&res, I001);
     review(&server, one, "approve", "ok");
 
     let mut socket = ws_subscribe(

@@ -10,6 +10,10 @@ mod common;
 use common::*;
 use serde_json::{Value, json};
 
+const IA: &str = "Ia000000000000000000000000000000000000000";
+const IB: &str = "Ib000000000000000000000000000000000000000";
+const IC: &str = "Ic000000000000000000000000000000000000000";
+
 fn push_one(server: &TestServer, g: &GitRepo, tip: &str, change_id: &str) -> u64 {
     let (st, res) = push(server, g, tip, "main");
     assert_eq!(st, 200, "{res}");
@@ -47,10 +51,10 @@ fn draft_comment(server: &TestServer, change_number: u64, file: &str, line: u64,
 #[test]
 fn draft_surfaces_then_clears() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     assert_eq!(detail(&server, id)["draft_decision"], Value::Null);
 
@@ -83,10 +87,10 @@ fn draft_surfaces_then_clears() {
 #[test]
 fn drafts_endpoint_returns_the_overlay() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     let drafts = |server: &TestServer| {
         let (st, d) = http_get(&server.url(&format!("/api/changes/{id}/drafts")));
@@ -113,10 +117,10 @@ fn drafts_endpoint_returns_the_overlay() {
 #[test]
 fn batch_submit_publishes_verdict_and_drains_comments() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a1\na2\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a1\na2\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     draft_comment(&server, id, "a.txt", 2, "why a2?");
     draft(&server, id, "request_changes", "a nit");
@@ -149,10 +153,10 @@ fn batch_submit_publishes_verdict_and_drains_comments() {
 #[test]
 fn batch_submit_leaves_undecided_comment_only_change() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     draft_comment(&server, id, "a.txt", 1, "a note, no verdict");
 
@@ -174,10 +178,10 @@ fn batch_submit_leaves_undecided_comment_only_change() {
 #[test]
 fn batch_submit_abandon_decision_drains_and_records_reason() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     draft_comment(&server, id, "a.txt", 1, "this is why it is wrong");
     draft(&server, id, "abandon", "superseded by another approach");
@@ -213,10 +217,10 @@ fn batch_submit_abandon_decision_drains_and_records_reason() {
 #[test]
 fn batch_submit_reopen_decision() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     // Abandon via the immediate endpoint — keeps setup off the
     // batch-submit path under test.
@@ -239,10 +243,10 @@ fn batch_submit_reopen_decision() {
 #[test]
 fn batch_submit_skips_illegal_decision_keeps_row() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{id}/abandon")),
@@ -266,10 +270,10 @@ fn batch_submit_skips_illegal_decision_keeps_row() {
 #[test]
 fn batch_submit_is_idempotent() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     draft(&server, id, "approve", "lgtm");
     assert_eq!(submit_change(&server, id)["submitted"], 1);
@@ -283,18 +287,18 @@ fn batch_submit_is_idempotent() {
 #[test]
 fn batch_submit_publishes_every_tagged_change() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
-    let b = g.commit(&[a], &msg("core: b", "Ib"), &[("b.txt", "b\n")]);
+    let a = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
+    let b = g.commit(&[a], &msg("core: b", IB), &[("b.txt", "b\n")]);
     g.branch("feat", b);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let id_a = member_id(&res, "Ia");
-    let id_b = member_id(&res, "Ib");
+    let id_a = member_id(&res, IA);
+    let id_b = member_id(&res, IB);
 
-    let c = g.commit(&[g.root], &msg("core: c", "Ic"), &[("c.txt", "c\n")]);
+    let c = g.commit(&[g.root], &msg("core: c", IC), &[("c.txt", "c\n")]);
     g.branch("other", c);
-    let id_c = push_one(&server, &g, "other", "Ic");
+    let id_c = push_one(&server, &g, "other", IC);
     for id in [id_a, id_b] {
         let (st, _) = http_post(
             &server.url(&format!("/api/changes/{id}/tags")),
@@ -321,14 +325,14 @@ fn batch_submit_publishes_every_tagged_change() {
 #[test]
 fn batch_submit_publishes_at_latest_revision() {
     let g = GitRepo::new();
-    let c0 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a1\n")]);
+    let c0 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a1\n")]);
     g.branch("feat", c0);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a1\na2\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a1\na2\n")]);
     g.branch("feat", c1);
-    let id2 = push_one(&server, &g, "feat", "Ia");
+    let id2 = push_one(&server, &g, "feat", IA);
     assert_eq!(id2, id);
 
     draft(&server, id, "approve", "lgtm");
@@ -349,10 +353,10 @@ fn batch_submit_publishes_at_latest_revision() {
 #[test]
 fn draft_validation() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
-    let id = push_one(&server, &g, "feat", "Ia");
+    let id = push_one(&server, &g, "feat", IA);
 
     let (st, _) = http_put(
         &server.url(&format!("/api/changes/{id}/decision")),

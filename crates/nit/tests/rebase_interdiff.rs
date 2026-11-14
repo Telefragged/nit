@@ -21,6 +21,9 @@ use nit::gitscan::sha_of as sha;
 use nit_types::diff::{Diff, DiffFile};
 use nit_types::domain::{FileStatus, LineKind, Whitespace};
 
+const IBASE: &str = "I6261736500000000000000000000000000000000";
+const IFEAT: &str = "I6665617400000000000000000000000000000000";
+
 fn body<S: std::borrow::Borrow<str>>(lines: &[S]) -> Vec<u8> {
     let mut s = lines.join("\n");
     s.push('\n');
@@ -565,28 +568,23 @@ fn vs_parent_diff_is_never_drift_processed() {
     let feat = body(&["pub const F: u8 = 1;"]);
 
     // C1 (base) is amended; C2 is rebased onto the moved base, revision 1.
-    let parent0 = g.commit_full(
-        &[g.root],
-        &msg("base", "Ibase"),
-        &[("shared.rs", &base)],
-        &[],
-    );
+    let parent0 = g.commit_full(&[g.root], &msg("base", IBASE), &[("shared.rs", &base)], &[]);
     let r0 = g.commit_full(
         &[parent0],
-        &msg("feat: add F", "Ifeat"),
+        &msg("feat: add F", IFEAT),
         &[("shared.rs", &base), ("feat.rs", &feat)],
         &[],
     );
     g.branch("feat", r0);
     let parent1 = g.commit_full(
         &[g.root],
-        &msg("base", "Ibase"),
+        &msg("base", IBASE),
         &[("shared.rs", &moved)],
         &[],
     );
     let r1 = g.commit_full(
         &[parent1],
-        &msg("feat: add F", "Ifeat"),
+        &msg("feat: add F", IFEAT),
         &[("shared.rs", &moved), ("feat.rs", &feat)],
         &[],
     );
@@ -597,7 +595,7 @@ fn vs_parent_diff_is_never_drift_processed() {
     assert_eq!(st, 200, "push r0: {p0}");
     let (st, p1) = push(&server, &g, "feat2", "main");
     assert_eq!(st, 200, "push r1: {p1}");
-    let change_number = member_id(&p1, "Ifeat");
+    let change_number = member_id(&p1, IFEAT);
 
     // r1's vs-parent diff is the plain `parent1 → r1` tree diff: feat.rs added,
     // nothing else, no drift — its parent is the source of truth, not r0's.
@@ -640,13 +638,13 @@ fn http_interdiff_contains_a_pure_rebase() {
 
     let c1_r0 = g.commit_full(
         &[g.root],
-        &msg("infra: shared", "Ibase"),
+        &msg("infra: shared", IBASE),
         &[("shared.rs", &base_v0)],
         &[],
     );
     let c2_r0 = g.commit_full(
         &[c1_r0],
-        &msg("feat: add F", "Ifeat"),
+        &msg("feat: add F", IFEAT),
         &[("shared.rs", &base_v0), ("feat.rs", &feat)],
         &[],
     );
@@ -655,20 +653,20 @@ fn http_interdiff_contains_a_pure_rebase() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, p0) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "push the stack: {p0}");
-    let change_number = member_id(&p0, "Ifeat");
+    let change_number = member_id(&p0, IFEAT);
 
     // Amend C1 (its body moves) and rebase C2 onto it with the *same* delta and
     // message — a pure rebase of C2. Re-push: C1 gets revision 1 (a real edit),
     // C2 gets revision 1 (pure rebase, new parent only).
     let c1_r1 = g.commit_full(
         &[g.root],
-        &msg("infra: shared", "Ibase"),
+        &msg("infra: shared", IBASE),
         &[("shared.rs", &base_v1)],
         &[],
     );
     let c2_r1 = g.commit_full(
         &[c1_r1],
-        &msg("feat: add F", "Ifeat"),
+        &msg("feat: add F", IFEAT),
         &[("shared.rs", &base_v1), ("feat.rs", &feat)],
         &[],
     );

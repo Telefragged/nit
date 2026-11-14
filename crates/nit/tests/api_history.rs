@@ -5,9 +5,13 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, change_id, first_repo_id, http_get, msg, push};
+use common::{GitRepo, TestServer, first_repo_id, http_get, msg, push};
 use nit::api::MERGED_WINDOW;
 use serde_json::Value;
+
+const IFOREIGN: &str = "I666f726569676e00000000000000000000000000";
+const IT: &str = "I7400000000000000000000000000000000000000";
+const ITOPIC: &str = "I746f706963000000000000000000000000000000";
 
 fn get_history(server: &TestServer, repo_id: u64) -> Value {
     let (st, h) = http_get(&server.url(&format!("/api/history?repo={repo_id}")));
@@ -23,12 +27,12 @@ fn history_with(below: u64) -> Value {
     for i in 0..below {
         head = g.commit(
             &[head],
-            &msg(&format!("main: {i}"), &format!("Im{i}")),
+            &msg(&format!("main: {i}"), &format!("I{i:040x}")),
             &[("m", "x\n")],
         );
     }
     g.branch("main", head);
-    let topic = g.commit(&[head], &msg("topic: at HEAD", "Itopic"), &[("t", "t\n")]);
+    let topic = g.commit(&[head], &msg("topic: at HEAD", ITOPIC), &[("t", "t\n")]);
     g.branch("topic", topic);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "topic", "main");
@@ -58,9 +62,9 @@ fn truncated_flips_at_the_window_boundary() {
 fn trailer_enrichment_couples_id_and_key() {
     let g = GitRepo::new();
     // Root carries a trailer no change will ever match (pre-nit history).
-    let c1 = g.commit(&[g.root], &msg("main: one", "Iforeign"), &[("m", "1\n")]);
+    let c1 = g.commit(&[g.root], &msg("main: one", IFOREIGN), &[("m", "1\n")]);
     g.branch("main", c1);
-    let topic = g.commit(&[c1], &msg("topic: change", "Itopic"), &[("t", "t\n")]);
+    let topic = g.commit(&[c1], &msg("topic: change", ITOPIC), &[("t", "t\n")]);
     g.branch("topic", topic);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "topic", "main");
@@ -78,11 +82,7 @@ fn trailer_enrichment_couples_id_and_key() {
 
     let merged = &commits[0];
     assert_eq!(merged["sha"], topic.to_string());
-    assert_eq!(
-        merged["change_id"],
-        change_id("Itopic"),
-        "merged change enriched"
-    );
+    assert_eq!(merged["change_id"], ITOPIC, "merged change enriched");
     assert!(merged["change_number"].is_u64(), "{merged}");
 
     let foreign = &commits[1];
@@ -97,7 +97,7 @@ fn trailer_enrichment_couples_id_and_key() {
 #[test]
 fn unknown_repo_is_404() {
     let g = GitRepo::new();
-    let topic = g.commit(&[g.root], &msg("topic: t", "It"), &[("t", "t\n")]);
+    let topic = g.commit(&[g.root], &msg("topic: t", IT), &[("t", "t\n")]);
     g.branch("topic", topic);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "topic", "main");

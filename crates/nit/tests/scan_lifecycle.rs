@@ -11,27 +11,31 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, abandon, change_id, change_ids, first_repo_id, get_changes, http_get,
-    http_post, member_id, msg, push, review, status_at, sweep, tip_change,
+    GitRepo, TestServer, abandon, change_ids, first_repo_id, get_changes, http_get, http_post,
+    member_id, msg, push, review, status_at, sweep, tip_change,
 };
 use serde_json::json;
+
+const I001: &str = "I0010000000000000000000000000000000000000";
+const I002: &str = "I0020000000000000000000000000000000000000";
+const I999: &str = "I9990000000000000000000000000000000000000";
 
 #[test]
 fn change_landed_on_main_becomes_merged() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "I001");
+    let change_number = member_id(&res, I001);
     assert_eq!(tip_change(&res)["revision"], 0);
     assert_eq!(tip_change(&res)["status"], "pending");
 
     // Land the same change on the canonical ref: the timer recognises
     // its Change-Id.
-    let merged = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let merged = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("main", merged);
 
     sweep(&server);
@@ -53,19 +57,19 @@ fn change_landed_on_main_becomes_merged() {
 #[test]
 fn prefix_merge_marks_ancestor_while_tip_stays_live() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
-    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.txt", "b\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
+    let c2 = g.commit(&[c1], &msg("two", I002), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     let tip = tip_change(&res)["change_number"].as_u64().unwrap();
-    let ancestor = member_id(&res, "I001");
-    assert_eq!(tip, member_id(&res, "I002"));
+    let ancestor = member_id(&res, I001);
+    assert_eq!(tip, member_id(&res, I002));
 
     // Land only the ancestor (I001) on main — the tip (I002) stays unlanded.
-    let merged = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let merged = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("main", merged);
 
     sweep(&server);
@@ -79,20 +83,20 @@ fn prefix_merge_marks_ancestor_while_tip_stays_live() {
 #[test]
 fn branchless_change_stays_live_without_auto_abandon() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "I001");
+    let change_number = member_id(&res, I001);
 
     // Delete the only branch, then move main with an unrelated commit (a
     // foreign Change-Id, so no false merge) so the sweep does real work
     // over the open set containing this change — and demonstrably leaves it
     // pending, never auto-abandoned.
     g.delete_branch("feat");
-    let other = g.commit(&[g.root], &msg("unrelated", "I999"), &[("z.txt", "z\n")]);
+    let other = g.commit(&[g.root], &msg("unrelated", I999), &[("z.txt", "z\n")]);
     g.branch("main", other);
     sweep(&server);
     assert_eq!(
@@ -105,13 +109,13 @@ fn branchless_change_stays_live_without_auto_abandon() {
 #[test]
 fn reopen_clears_abandoned_to_retained_status() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "I001");
+    let change_number = member_id(&res, I001);
 
     // Approve, then abandon: the verdict is retained, masked by the overlay.
     review(&server, change_number, "approve", "lgtm");
@@ -135,18 +139,18 @@ fn push_to_merged_change_409s() {
     // A Change-Id is never reused: without the gate, a new revision would
     // paint the merged overlay onto unreviewed content.
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
 
-    let merged = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let merged = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("main", merged);
     sweep(&server);
 
-    let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
+    let c1b = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "different\n")]);
     g.branch("feat", c1b);
     let (st, e) = push(&server, &g, "feat", "main");
     assert_eq!(st, 409, "{e}");
@@ -156,16 +160,16 @@ fn push_to_merged_change_409s() {
 #[test]
 fn push_to_abandoned_change_409s_until_reopened() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "I001");
+    let change_number = member_id(&res, I001);
 
     abandon(&server, change_number);
-    let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "different\n")]);
+    let c1b = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "different\n")]);
     g.branch("feat", c1b);
 
     let (st, e) = push(&server, &g, "feat", "main");
@@ -192,15 +196,15 @@ fn push_to_abandoned_change_409s_until_reopened() {
 #[test]
 fn push_rejected_at_an_abandoned_change_records_no_change() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    abandon(&server, member_id(&res, "I001"));
+    abandon(&server, member_id(&res, I001));
 
-    let new = g.commit(&[g.root], &msg("new", "I002"), &[("b.txt", "b\n")]);
-    let c1b = g.commit(&[new], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let new = g.commit(&[g.root], &msg("new", I002), &[("b.txt", "b\n")]);
+    let c1b = g.commit(&[new], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1b);
     let (st, e) = push(&server, &g, "feat", "main");
     assert_eq!(st, 409, "{e}");
@@ -208,7 +212,7 @@ fn push_rejected_at_an_abandoned_change_records_no_change() {
     let repo_id = first_repo_id(&server);
     assert_eq!(
         change_ids(&get_changes(&server, &format!("?repo={repo_id}"))),
-        vec![change_id("I001")]
+        vec![I001]
     );
 }
 
@@ -217,13 +221,13 @@ fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     // The 409 guards a revision that *moves*; an idempotent re-push of the
     // already-recorded sha must not trip it.
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "I001");
+    let change_number = member_id(&res, I001);
 
     // The branch still points at the same sha — abandon doesn't move it.
     abandon(&server, change_number);

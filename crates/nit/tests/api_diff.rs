@@ -6,8 +6,13 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, by_path, change_id, http_get, lines, msg, push, tip_change};
+use common::{GitRepo, TestServer, by_path, http_get, lines, msg, push, tip_change};
 use serde_json::{Value, json};
+
+const IDIFF0001: &str = "I6469666630303031000000000000000000000000";
+const IINTER01: &str = "I696e746572303100000000000000000000000000";
+const IONLY001: &str = "I6f6e6c7930303100000000000000000000000000";
+const IRENAME01: &str = "I72656e616d653031000000000000000000000000";
 
 /// Revision 0 of the tip change lives here after the first push.
 fn tip_change_number(push_result: &Value) -> u64 {
@@ -45,7 +50,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
         .replace("k11\n", "k11 changed\n");
     let c1 = g.commit_full(
         &[base],
-        &msg("feat: diff", "Idiff0001"),
+        &msg("feat: diff", IDIFF0001),
         &[
             ("keep.txt", keep_v2.as_bytes()),
             ("data.bin", b"\x00\x01\x02binary-two\n"),
@@ -81,7 +86,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
                 "lines": [
                     {"kind": "add", "new": 1, "text": "feat: diff"},
                     {"kind": "add", "new": 2, "text": ""},
-                    {"kind": "add", "new": 3, "text": format!("Change-Id: {}", change_id("Idiff0001"))},
+                    {"kind": "add", "new": 3, "text": "Change-Id: I6469666630303031000000000000000000000000"},
                 ],
             }],
         })
@@ -181,7 +186,7 @@ fn interdiff_against_earlier_revision() {
 
     let c1 = g.commit(
         &[base],
-        &msg("feat: thing", "Iinter01"),
+        &msg("feat: thing", IINTER01),
         &[("body.txt", &lines("b", 1..=8).replace("b4\n", "b4 v1\n"))],
     );
     g.branch("feat", c1);
@@ -194,7 +199,7 @@ fn interdiff_against_earlier_revision() {
 
     let c2 = g.commit(
         &[base],
-        &msg("feat: thing, reworded", "Iinter01"),
+        &msg("feat: thing, reworded", IINTER01),
         &[("body.txt", &lines("b", 1..=8).replace("b4\n", "b4 v2\n"))],
     );
     g.branch("feat", c2);
@@ -253,7 +258,7 @@ fn interdiff_against_earlier_revision() {
 #[test]
 fn missing_revision_is_404() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("only one", "Ionly001"), &[("f.txt", "x\n")]);
+    let c1 = g.commit(&[g.root], &msg("only one", IONLY001), &[("f.txt", "x\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -288,7 +293,7 @@ fn lines_of_a_renamed_file_need_both_of_its_names() {
     let moved = body.replace("l40\n", "l40 edited\n");
     let c1 = g.commit_full(
         &[base],
-        &msg("rename it", "Irename01"),
+        &msg("rename it", IRENAME01),
         &[("new.txt", moved.as_bytes())],
         &["old.txt"],
     );
@@ -342,9 +347,8 @@ fn lines_of_the_commit_message() {
     g.branch("main", base);
     let message = |subject: &str| {
         format!(
-            "{subject}\n\n{}\nChange-Id: {}\n",
+            "{subject}\n\n{}\nChange-Id: I6d73676c696e6573000000000000000000000000\n",
             lines("body", 1..=8),
-            change_id("Imsglines")
         )
     };
     let c1 = g.commit(&[base], &message("feat: thing"), &[("a.txt", "b\n")]);
