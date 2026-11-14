@@ -15,7 +15,7 @@ prints it); a stale hash breaks `nix build` and every
 
 The web's wire types (`web/src/api/types.gen.ts`) are generated the same
 way — from `crates/nit-types` via `nix run .#gen-types`, a native
-`cargo test` that runs the crate's `ts`-feature `ts-rs` exporter (no wasm).
+test that runs the crate's `ts`-feature `ts-rs` exporter (no wasm).
 Regenerate and commit it whenever those types change; the `types-drift`
 check fails a stale file.
 

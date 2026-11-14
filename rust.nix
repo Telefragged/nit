@@ -6,7 +6,6 @@
   pkgs,
   pkgsStatic,
   stdenv,
-  rustPlatform,
   runCommand,
   writeShellApplication,
   git,
@@ -75,13 +74,43 @@ let
 
   cargoToml = fromTOML (builtins.readFile ./Cargo.toml);
 
-  # cargo loads every workspace member's manifest and rejects one that
-  # discovers no target, so a `src` holding only the crates a derivation
-  # builds hands the members it left out an empty stand-in lib.
-  stubMembers = lib.concatMapStrings (member: ''
-    mkdir -p ${member}/src
-    : > ${member}/src/lib.rs
-  '');
+  cargoPkgs = if stdenv.hostPlatform.isLinux then pkgsStatic else pkgs;
+
+  # Our own crates (local `src`, not a crates.io `sha256`) compile with
+  # clippy-driver under Cargo.toml's `[workspace.lints]`; deps stay plain.
+  buildRustCrateForPkgs =
+    let
+      rustToolchain = toolchainFor cargoPkgs.buildPackages;
+      lints = cargoToml.workspace.lints;
+    in
+    p:
+    let
+      base = p.buildRustCrate.override {
+        rustc = rustToolchain;
+        cargo = rustToolchain;
+        clippy = rustToolchain;
+        # buildRustCrate defaults to codegen-units=1 (serial codegen),
+        # ~3x slower per crate than cargo's release default. Match cargo.
+        defaultCodegenUnits = 16;
+        # The nit crate's source is its own directory only, so the
+        # plugin that it compiles in comes by path (crates/nit/build.rs).
+        defaultCrateOverrides = p.defaultCrateOverrides // {
+          nit = _: { NIT_PLUGIN_DIR = ./plugins/nit; };
+        };
+      };
+    in
+    crate:
+    let
+      drv = base crate;
+    in
+    if crate ? sha256 then
+      drv
+    else
+      drv.override (_: {
+        useClippy = true;
+        inherit lints;
+        postBuild = rustdocPostBuild (lib.elem "lib" (crate.type or [ "lib" ]));
+      });
 in
 rec {
   inherit (cargoToml.workspace.package) version;
@@ -90,89 +119,37 @@ rec {
   # Cargo.nix is generated — don't hand-edit (regen: docs/generated.md). Build
   # with our pinned rustc, not nixpkgs'; the virtual workspace has no
   # rootCrate, so callers select a member via `workspaceMembers."<name>"`.
-  # Our own crates (local `src`, not a crates.io `sha256`) compile with
-  # clippy-driver under Cargo.toml's `[workspace.lints]`; deps stay plain.
   # On Linux every crate links statically against musl, as the release
   # binary does, so the checks test what ships. Darwin has no
   # pkgsStatic and builds natively.
-  cargoNix =
-    let
-      cargoPkgs = if stdenv.hostPlatform.isLinux then pkgsStatic else pkgs;
-      rustToolchain = toolchainFor cargoPkgs.buildPackages;
-      lints = cargoToml.workspace.lints;
-    in
-    cargoPkgs.callPackage ./Cargo.nix {
-      buildRustCrateForPkgs =
-        p:
-        let
-          base = p.buildRustCrate.override {
-            rustc = rustToolchain;
-            cargo = rustToolchain;
-            clippy = rustToolchain;
-            # buildRustCrate defaults to codegen-units=1 (serial codegen),
-            # ~3x slower per crate than cargo's release default. Match cargo.
-            defaultCodegenUnits = 16;
-            # The nit crate's source is its own directory only, so the
-            # plugin that it compiles in comes by path (crates/nit/build.rs).
-            defaultCrateOverrides = p.defaultCrateOverrides // {
-              nit = _: { NIT_PLUGIN_DIR = ./plugins/nit; };
-            };
-          };
-        in
-        crate:
-        let
-          drv = base crate;
-        in
-        if crate ? sha256 then
-          drv
-        else
-          drv.override (_: {
-            useClippy = true;
-            inherit lints;
-            postBuild = rustdocPostBuild (lib.elem "lib" (crate.type or [ "lib" ]));
-          });
-    };
+  cargoNix = cargoPkgs.callPackage ./Cargo.nix { inherit buildRustCrateForPkgs; };
 
-  # The web's wire types, generated from nit-types: a native `cargo test`
-  # (the `ts`-feature exporter) writes every web-facing type's ts-rs
-  # declaration into one module, prettier-formatted like any source file. A
-  # pinned, offline derivation so `gen-types` (writes it) and `types-drift`
-  # (diffs it) share one source of truth. `TS_RS_LARGE_INT=number` maps
-  # u64/i64 to the wire's `number`, not bigint.
-  wireTypes = stdenv.mkDerivation {
-    name = "nit-wire-types.gen.ts";
-    src = lib.fileset.toSource {
-      root = ./.;
-      fileset = lib.fileset.unions [
-        ./Cargo.toml
-        ./Cargo.lock
-        ./crates/nit-types
-        ./crates/nit/Cargo.toml
-        ./crates/nit-contract/Cargo.toml
-        ./crates/nit-wasm/Cargo.toml
-      ];
-    };
-    nativeBuildInputs = [
-      toolchain
-      prettier
-      rustPlatform.cargoSetupHook
-    ];
-    cargoDeps = rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-    buildPhase =
-      stubMembers [
-        "crates/nit"
-        "crates/nit-contract"
-        "crates/nit-wasm"
-      ]
-      + ''
-        TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
-          cargo test --offline --features ts -p nit-types \
-          -- --exact export::write_wire_types
-        prettier --write types.gen.ts
-      '';
-    installPhase = "mv types.gen.ts $out";
-    dontFixup = true;
-  };
+  # The web's wire types, generated from nit-types: the test binary of
+  # the `ts`-feature build runs the ts-rs exporter, which writes every
+  # web-facing type's declaration into one module, prettier-formatted like
+  # any source file. `gen-types` writes it and `types-drift` diffs it.
+  # `TS_RS_LARGE_INT=number` maps u64/i64 to the wire's `number`, not
+  # bigint. crate2nix exposes the test build without its run only through
+  # `internal`.
+  wireTypes =
+    let
+      tests =
+        (cargoNix.internal.builtRustCratesWithFeatures {
+          packageId = "nit-types";
+          features = [ "ts" ];
+          runTests = true;
+          buildRustCrateForPkgsFunc = buildRustCrateForPkgs;
+        }).crates."nit-types".override
+          (_: {
+            buildTests = true;
+          });
+    in
+    runCommand "nit-wire-types.gen.ts" { nativeBuildInputs = [ prettier ]; } ''
+      TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
+        ${tests}/tests/nit_types-* --exact export::write_wire_types
+      prettier --write types.gen.ts
+      mv types.gen.ts $out
+    '';
 
   # The public contract: the OpenAPI document the routes' utoipa
   # annotations produce and the CLI's clap syntax, written by
