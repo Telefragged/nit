@@ -61,7 +61,6 @@ fn truncated_flips_at_the_window_boundary() {
 #[test]
 fn trailer_enrichment_couples_id_and_key() {
     let g = GitRepo::new();
-    // Root carries a trailer no change will ever match (pre-nit history).
     let c1 = g.commit(&[g.root], &msg("main: one", IFOREIGN), &[("m", "1\n")]);
     g.branch("main", c1);
     let topic = g.commit(&[c1], &msg("topic: change", ITOPIC), &[("t", "t\n")]);

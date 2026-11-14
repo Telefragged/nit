@@ -1,15 +1,14 @@
 //! Rebase-aware interdiffs: the problem reproduced and each observable
 //! property checked against real git.
 //!
-//! Most tests drive the diff machinery directly — an unfiltered `render` is
-//! the plain interdiff (what leaked the base movement before), `contain` is
-//! the rebase-aware one — over four commits standing in for
-//! parent(m)/m/parent(n)/n. `contain` reads only the shas it is given, so the
-//! four commits need no real parent/child wiring; their *trees* are what
-//! matter. One end-to-end test exercises the HTTP handler so the wiring
-//! (threading parent(m), invoking `contain`) is covered too — built by
-//! pushing a stack and amending an earlier change so a later one is rewritten
-//! by rebase only.
+//! Most tests drive the diff machinery directly over four commits standing
+//! in for parent(m)/m/parent(n)/n: an unfiltered `render` is the plain
+//! interdiff, and `contain` is the rebase-aware one. `contain` loads only the
+//! shas it is given, so the four commits need no real parent/child wiring;
+//! their *trees* are what matter. One end-to-end test exercises the HTTP
+//! handler so the wiring (threading parent(m), invoking `contain`) is covered
+//! too. It pushes a stack and amends an earlier change, so a later one is
+//! rewritten by rebase only.
 
 mod common;
 
@@ -97,13 +96,10 @@ fn drift_lines(f: &DiffFile) -> Vec<(char, u64)> {
     out
 }
 
-// ---------------------------------------------------------------------------
-// Properties 3 & 5.
-
-/// The motivating case: an earlier change C1 is amended, which rewrites the
-/// later change C2 onto a new parent. C2's own delta is unchanged (a pure
-/// rebase), so C2's r0→r1 interdiff should show *nothing* — but the plain
-/// diff leaks C1's amendment as if C2 had made it.
+/// An earlier change C1 is amended, which rewrites the later change C2 onto
+/// a new parent. C2's own delta is unchanged (a pure rebase), so C2's r0→r1
+/// interdiff should show *nothing*. The plain diff leaks C1's amendment as if
+/// C2 had made it.
 #[test]
 fn stacked_amend_leaks_into_a_later_change_until_contained() {
     let g = GitRepo::new();
@@ -133,9 +129,6 @@ fn stacked_amend_leaks_into_a_later_change_until_contained() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Property 1 — no-rebase equivalence (same parent ⇒ byte-identical).
-
 #[test]
 fn same_parent_interdiff_is_unchanged() {
     let g = GitRepo::new();
@@ -151,9 +144,6 @@ fn same_parent_interdiff_is_unchanged() {
         "same-parent interdiff must be byte-for-byte the plain diff"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Property 4/6/7.
 
 #[test]
 fn mixed_hunk_keeps_real_edit_and_tags_drift() {
@@ -173,15 +163,14 @@ fn mixed_hunk_keeps_real_edit_and_tags_drift() {
     assert_eq!(drift_lines(f), vec![('-', 4), ('+', 4)]);
 }
 
-// ---------------------------------------------------------------------------
-// Regression: duplicate lines let the parent→parent diff fold the change's
-// own edit into a base-movement hunk. The drifted lines beside it must still
-// be tagged and excluded from the count — not mis-attributed to the change.
+// Duplicate lines let the parent→parent diff fold the change's own edit
+// into a base-movement hunk. The drifted lines beside it must still be
+// tagged and excluded from the count.
 
 #[test]
 fn drift_kept_when_the_diff_folds_it_against_a_duplicate_line() {
     let g = GitRepo::new();
-    // Duplicate `a`/`b` runs are what make Myers bundle an unchanged line.
+    // Duplicate `a`/`b` runs give the line diff more than one alignment.
     let parent_m = snapshot(
         &g,
         &[("f.rs", &body(&["a", "a", "a", "b", "b", "a", "b", "a"]))],
@@ -280,10 +269,6 @@ fn duplicate_lines_never_hide_the_changes_edit() {
     assert!(real.contains(&"DIFF"), "the change's addition is shown");
 }
 
-// ---------------------------------------------------------------------------
-// Property 8 — an isolated drift region is dropped; the file stays for its
-// real edit, but the drift hunk does not drive a rendered region.
-
 #[test]
 fn isolated_drift_hunk_is_dropped_real_hunk_kept() {
     let g = GitRepo::new();
@@ -312,10 +297,9 @@ fn isolated_drift_hunk_is_dropped_real_hunk_kept() {
     assert_eq!(f.hunks[0].new_start, 1);
 }
 
-// ---------------------------------------------------------------------------
-// Property 9 — coordinate correctness: the change's own edit shifts the drift
-// to a different line number than it had in the parents, and it is still
-// recognised (a naive parent-line comparison would tag the wrong line).
+// The change's own edit shifts the drift to a different line number than it
+// had in the parents, and it is still recognised (a naive parent-line
+// comparison would tag the wrong line).
 
 #[test]
 fn drift_is_found_after_the_changes_edits_shift_it() {
@@ -334,10 +318,6 @@ fn drift_is_found_after_the_changes_edits_shift_it() {
     assert_eq!(drift_lines(f), vec![('-', 6), ('+', 6)]);
     assert_eq!((f.additions, f.deletions), (1, 1));
 }
-
-// ---------------------------------------------------------------------------
-// Property 10 — conservative on overlap: when the change's real edit touches
-// the same lines the base moved, it is shown as a real edit, not drift.
 
 #[test]
 fn overlapping_edit_is_real_not_drift() {
@@ -391,7 +371,6 @@ fn file_added_or_deleted_by_the_rebase_is_dropped() {
     assert!(tagged.files.is_empty(), "deleted-by-rebase file drops out");
 }
 
-// ---------------------------------------------------------------------------
 // A rename the change made, of a file the base movement never touched, is
 // real work: the rename and its edits render plain, never drift.
 
@@ -429,7 +408,6 @@ fn changes_own_rename_is_left_as_a_plain_diff() {
     assert!(file(&tagged, "base.rs").is_none(), "base.rs drift dropped");
 }
 
-// ---------------------------------------------------------------------------
 // A rename the base movement itself made is drift like any other base edit:
 // the interdiff entry drops when nothing real remains, and a base content
 // tweak riding the rename is tagged.
@@ -483,7 +461,6 @@ fn base_rename_keeps_the_changes_real_edit_and_tags_drift() {
     assert_eq!((f.additions, f.deletions), (1, 1));
 }
 
-// ---------------------------------------------------------------------------
 // Path re-keying: base movement is found under the file's per-side names,
 // so it is contained even inside a file the change renamed.
 
@@ -556,7 +533,6 @@ fn base_delete_with_change_readd_is_left_plain() {
     assert_eq!((f.additions, f.deletions), (0, 1));
 }
 
-// ---------------------------------------------------------------------------
 // A vs-parent diff is never drift-processed: byte-for-byte the plain diff,
 // no drift lines, even when stacked on a moved base.
 
@@ -623,7 +599,6 @@ fn vs_parent_diff_is_never_drift_processed() {
     );
 }
 
-// ---------------------------------------------------------------------------
 // End-to-end through the HTTP handler: a stacked change rebased onto an
 // amended earlier change, its r0→r1 interdiff served by
 // `/api/changes/{id}/revisions/{n}/diff?against={m}`. A pure rebase collapses

@@ -1,12 +1,9 @@
 //! Change lifecycle: merged detection when a change lands on the canonical
-//! branch (the background timer's only job, prefix-merge included), plus
-//! the explicit `abandon`/`reopen` actions and the 409-then-200 push gate
-//! around an abandoned change.
+//! branch (prefix-merge included), plus the explicit `abandon`/`reopen`
+//! actions and the 409-then-200 push gate around an abandoned change.
 //!
 //! `merged` is written only by the background sweep, so the merged tests drive
-//! one sweep synchronously through `sweep()` and assert. Abandonment is an
-//! explicit action, not a sweep — those tests drive `POST .../abandon`
-//! directly.
+//! one sweep synchronously through `sweep()` and assert.
 
 mod common;
 
@@ -93,8 +90,7 @@ fn branchless_change_stays_live_without_auto_abandon() {
 
     // Delete the only branch, then move main with an unrelated commit (a
     // foreign Change-Id, so no false merge) so the sweep does real work
-    // over the open set containing this change — and demonstrably leaves it
-    // pending, never auto-abandoned.
+    // over the open set containing this change.
     g.delete_branch("feat");
     let other = g.commit(&[g.root], &msg("unrelated", I999), &[("z.txt", "z\n")]);
     g.branch("main", other);
@@ -232,8 +228,6 @@ fn re_push_of_unchanged_abandoned_revision_is_not_blocked() {
     // The branch still points at the same sha — abandon doesn't move it.
     abandon(&server, change_number);
 
-    // Re-pushing the same sha walks to nothing that moves, so the 409 guard
-    // (which fires only on a moving revision) never trips — idempotent 200.
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
     assert_eq!(tip_change(&res)["revision"], 0, "no new revision recorded");

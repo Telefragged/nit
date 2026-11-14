@@ -195,19 +195,17 @@ const MIGRATIONS: &[&str] = &[
     // fold of the change's log stays authoritative; this column exists so a
     // query can filter/scan changes by status without replaying every log.
     // The insert writes this and every append re-stamps it in its own
-    // transaction, so nothing reconciles it at run time.
+    // transaction.
     "ALTER TABLE changes ADD COLUMN status TEXT;",
     // v4: `base_ref` stores a git ref, not necessarily a local branch.
     "ALTER TABLE repos RENAME COLUMN base_branch TO base_ref;",
     // v5: the `partial` log kind's flag never affected a change's stored
-    // status (it only gated the read-derived `approved` chain state), so
-    // its entries are inert — drop them so replay no longer meets an
-    // unknown kind. Revision payloads keep a now-dead `partial` field,
-    // ignored by omission: `RevisionPayload` is not `deny_unknown_fields`,
-    // so serde drops the unrecognized key on deserialize. Deleting
-    // interior entries leaves idx gaps, harmless: the next idx is
-    // `MAX(idx) + 1` and the fold orders by idx, never assuming
-    // contiguity.
+    // status, so its entries are inert. Drop them so replay meets no
+    // unknown kind. Revision payloads keep a `partial` field, and serde
+    // drops that key on deserialize because `RevisionPayload` is not
+    // `deny_unknown_fields`. Deleting interior entries leaves idx gaps.
+    // The next idx is `MAX(idx) + 1`, and the fold orders by idx without
+    // assuming contiguity.
     "DELETE FROM log WHERE kind = 'partial';",
     // v6: the tracked ref is the repo's canonical ref, and the timer's
     // baseline is that ref's head — one name for the thing a chain forks
@@ -225,9 +223,6 @@ const MIGRATIONS: &[&str] = &[
       WHERE kind = 'revision' AND json_extract(payload, '$.base_sha') IS NOT NULL;",
     // v8: the log's two orderings spell themselves out — `position` for an
     // entry's 0-based place in its change, `sequence` for the global order.
-    // `index` would have been the literal expansion of `idx`, but SQLite
-    // reserves it, and `position` is already the wire's word for a 0-based
-    // ordinal.
     "ALTER TABLE log RENAME COLUMN idx TO position;
      ALTER TABLE log RENAME COLUMN seq TO sequence;",
     // v9: `change_id` is the `Change-Id` trailer the commit carries, so the
@@ -242,8 +237,7 @@ const MIGRATIONS: &[&str] = &[
     // change's log stays authoritative. These rows exist so a query can
     // select changes by tag cold, without resolving or replaying one. One
     // value per key matches the fold's overwrite semantics. Any append that
-    // moves the set rewrites them in its own transaction, and nothing
-    // reconciles them at run time.
+    // moves the set rewrites them in its own transaction.
     "
     CREATE TABLE change_tags (
       change_number INTEGER NOT NULL REFERENCES changes(id),
@@ -382,7 +376,7 @@ where
 
 /// Parses a stored `status` TEXT column into a [`ChangeStatus`].
 ///
-/// The read half of the db↔domain boundary, like [`col_decision`]. An
+/// The read half of the db↔domain boundary, like [`col_enum`]. An
 /// unknown value means external corruption, surfaced as a conversion
 /// error.
 fn col_change_status(s: &str) -> rusqlite::Result<ChangeStatus> {
@@ -390,10 +384,6 @@ fn col_change_status(s: &str) -> rusqlite::Result<ChangeStatus> {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into())
     })
 }
-
-// ---------------------------------------------------------------------------
-// Repos (the registry: a canonical git-common-dir → id + its one canonical
-// branch)
 
 #[derive(Debug, Clone)]
 pub struct RepoRow {
@@ -535,18 +525,12 @@ pub fn update_repo_canonical_head(tx: &Transaction, id: u64, canonical_head: &Sh
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Changes (identity: a (repo, Change-Id) → the number everything carries)
-
 #[derive(Debug, Clone)]
 pub struct ChangeRow {
     pub id: ChangeNumber,
     pub repo_id: u64,
     pub change_id: ChangeId,
     /// The denormalized status cache; authoritative state is the fold.
-    ///
-    /// `None` only for a row that an older binary wrote, before the
-    /// insert filled the column.
     pub status: Option<ChangeStatus>,
     pub created_at: String,
 }
@@ -770,8 +754,7 @@ pub fn change_number_by_id(
 ///
 /// The fold's current status, cached so a query need not replay the log.
 /// The change's log stays the source of truth; this is called inside the
-/// same transaction as the append that moved the fold, and on startup to
-/// backfill from replay.
+/// same transaction as the append that moved the fold.
 ///
 /// # Errors
 ///
@@ -809,8 +792,7 @@ pub fn get_change(conn: &Connection, id: ChangeNumber) -> Result<Option<ChangeRo
 pub struct ChangeFilter {
     /// Matched against the change's status at its latest revision.
     pub statuses: Vec<ChangeStatus>,
-    /// A change must have every one of these, same key and same value. A
-    /// map, because a filter has one value per key.
+    /// A change must have every one of these, same key and same value.
     pub tags: Tags,
     /// The change with this number.
     pub change: Option<ChangeNumber>,
@@ -846,7 +828,7 @@ impl ChangeFilter {
     /// The SQL `AND` clauses that apply this filter to a `changes` row,
     /// and the values to bind to them, in order.
     ///
-    /// The clauses name `id` and `status` without a table prefix, because
+    /// The clauses use `id` and `status` without a table prefix, because
     /// no other table in these queries has either column.
     fn clauses(&self) -> (String, Vec<rusqlite::types::Value>) {
         let mut sql = String::new();
@@ -888,8 +870,7 @@ pub fn count_changes(conn: &Connection, repo_id: u64, filter: &ChangeFilter) -> 
 /// One repo's change rows, ascending by number (creation order).
 ///
 /// The denormalized `status` column and `change_tags` answer it, so nothing
-/// resolves or replays a change that the filter excludes. Whole rows
-/// rather than numbers, so resolving one needs no second read.
+/// resolves or replays a change that the filter excludes.
 ///
 /// # Errors
 ///
@@ -930,13 +911,7 @@ fn push_status_filter(
     values.extend(statuses.iter().map(|s| s.as_str().to_string().into()));
 }
 
-// ---------------------------------------------------------------------------
-// Change tags (the denormalized cache of each change's effective tag set)
-
 /// Replaces one change's tag rows with `tags`.
-///
-/// This costs a delete plus an insert per tag. A reader that caught it
-/// midway would otherwise see a change holding a fragment of its set.
 ///
 /// # Errors
 ///
@@ -970,9 +945,8 @@ pub fn repo_tags(
     repo_id: u64,
     statuses: &[ChangeStatus],
 ) -> Result<Vec<(String, String)>> {
-    // An `EXISTS` semi-join reads `change_tags_by_value` in its own
-    // `(key, value)` order, so the distinct pairs need no sort. A plain
-    // join instead probes once per change and sorts what it collects.
+    // An `EXISTS` semi-join scans `change_tags_by_value` in its own
+    // `(key, value)` order, so the distinct pairs need no sort.
     let mut sql = String::from(
         "SELECT DISTINCT t.key, t.value FROM change_tags t
          WHERE EXISTS (SELECT 1 FROM changes c WHERE c.id = t.change_number AND c.repo_id = ?1",
@@ -986,8 +960,6 @@ pub fn repo_tags(
     })?;
     rows.map(|row| Ok(row?)).collect()
 }
-// ---------------------------------------------------------------------------
-// Log (the append-only event log, keyed on the change, globally ordered by sequence)
 
 #[derive(Debug, Clone)]
 pub struct LogRow {
@@ -1090,9 +1062,6 @@ pub fn log_entries_from(
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
-
-// ---------------------------------------------------------------------------
-// Drafts (reviewer-private scratch; never enters the log)
 
 #[derive(Debug, Clone)]
 pub struct DraftRow {
@@ -1310,10 +1279,6 @@ pub fn delete_drafts_for_change(tx: &Transaction, change_number: ChangeNumber) -
     )?;
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Draft reviews: never written to the log until published
-// (`crate::api::reviews`).
 
 /// A reviewer's draft decision on a change.
 #[derive(Debug, Clone)]
@@ -1671,8 +1636,6 @@ mod tests {
             )
             .expect("query status")
         };
-        // The insert writes the status, so a change with no append still
-        // filters as what its empty fold says it is.
         assert_eq!(status(&conn).as_deref(), Some("pending"));
         assert_eq!(
             get_change(&conn, c).expect("get").expect("row").status,

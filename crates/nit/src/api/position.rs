@@ -15,9 +15,8 @@ use imara_diff::InternedInput;
 
 /// A 0-based, half-open line range; `Edit` turns one into another.
 ///
-/// [`imara_diff::Hunk`]'s `before`/`after`, which is already what the
-/// projection speaks. A pure insertion has an empty `before`, a pure
-/// deletion an empty `after`.
+/// The type of [`imara_diff::Hunk`]'s `before`/`after`. A pure insertion
+/// has an empty `before`, a pure deletion an empty `after`.
 pub type Span = Range<u32>;
 pub type Edit = imara_diff::Hunk;
 

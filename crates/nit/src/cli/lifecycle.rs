@@ -34,7 +34,6 @@ pub struct AbandonArgs {
 pub fn reopen(args: ReopenArgs) -> Result<()> {
     let client = Client::new(server_url(args.server.server));
     let change_number = args.target.resolve(&client)?;
-    // The server only reads the path id; no request body needed.
     let detail: ChangeDetail = client.post(&format!("/api/changes/{change_number}/reopen"), &())?;
     println!(
         "change {} {} reopened",

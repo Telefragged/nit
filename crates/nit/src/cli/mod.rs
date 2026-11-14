@@ -10,10 +10,6 @@
 //! directly.
 //! `nit watch` reads the same changes and then follows new entries on the
 //! websocket, posting each one to the session that runs it.
-//!
-//! Modules: shared infrastructure (`client` transport, `git` discovery,
-//! `tags` the checkout's tags, `resolve` the selection, `format` digests)
-//! plus one module per subcommand group.
 
 mod attach;
 mod client;

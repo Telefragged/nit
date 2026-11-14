@@ -7,8 +7,7 @@
 //! every command it runs.
 //!
 //! The plugin's `SessionStart` hook starts it as a child of the session.
-//! That is what lets the harness read the messages as the session's own,
-//! rather than as a peer's.
+//! That makes the harness accept the messages as the session's own.
 //!
 //! The follower reads the server on a thread of its own. It hands each
 //! batch of new entries to the posting loop over a channel, so that loop
@@ -99,8 +98,6 @@ pub struct WatchArgs {
 /// response.
 pub fn watch(args: WatchArgs) -> Result<()> {
     let inbox = Inbox::open(args.inbox)?;
-    // Before the git discovery and the repo lookup, which a second watch
-    // would only throw away.
     let Some(_held) = lock(&inbox.path, &args.select)? else {
         println!("another nit watch already holds this session");
         return Ok(());
@@ -316,7 +313,7 @@ impl Follower {
 /// restarts.
 ///
 /// A restarted watch subscribes from these positions, so it posts no
-/// entry twice. It carries the lock's key, so the watch
+/// entry twice. It uses the lock's key, so the watch
 /// that holds the lock is the only one that writes it.
 struct Cursor {
     path: PathBuf,
@@ -508,8 +505,7 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 ///
 /// The claim is an exclusive lock on the watch's own file. The operating
 /// system drops the lock when the process ends, so a watch that dies with
-/// its session leaves nothing stale behind. The file lives in the
-/// temporary directory, because it matters only while a watch runs.
+/// its session leaves nothing stale behind.
 ///
 /// # Errors
 ///
@@ -587,9 +583,8 @@ mod tests {
         assert_eq!(fnv1a(b"foobar"), 0x8594_4171_f739_67e8);
     }
 
-    /// The batches waiting in the channel make one run, which is what
-    /// sends one message per reviewer pass. The closed channel ends the
-    /// run at once, so this waits out no window.
+    /// The closed channel ends the run at once, so this waits out no
+    /// window.
     #[test]
     fn one_run_takes_every_waiting_batch() {
         let (entries, batches) = sync_channel(4);
@@ -615,8 +610,6 @@ mod tests {
         assert_eq!(cursor.read().expect("read the cursor"), positions);
     }
 
-    /// A half-written cursor stops the watch, rather than reading as 0
-    /// and reposting the log the agent has already read.
     #[test]
     fn a_truncated_cursor_fails_the_read() {
         let dir = tempfile::tempdir().expect("a temporary directory");

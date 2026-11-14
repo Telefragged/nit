@@ -72,7 +72,7 @@ fn review_drains_drafts_and_sets_status() {
     assert!(pre["threads"].as_array().unwrap().is_empty(), "unpublished");
     assert_eq!(published_reviews(&server, id), Vec::<Value>::new());
 
-    // Review submit is the only publish path; drafts drain into one review entry.
+    // Review submit publishes both drafts as one review entry.
     let out = review(&server, id, "request_changes", "a few nits");
     assert_eq!(out["submitted"], 1, "{out}");
 
@@ -359,7 +359,7 @@ fn drafted_thread_resolution() {
     assert!(!is_resolved(&server), "drafted reopen applied on publish");
 }
 
-/// Drafts staging conflicting resolutions on one thread apply in draft order —
+/// Drafts with conflicting resolutions on one thread apply in draft order:
 /// the thread ends at the last decision.
 #[test]
 fn resolution_applied_in_draft_order() {
@@ -430,9 +430,6 @@ fn pure_rebase_carries_status_forward() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Author comments (never change review status)
-
 /// The author comment endpoint opens a thread / replies (`review_id` null) and never
 /// moves the change's review status.
 #[test]
@@ -475,7 +472,6 @@ fn agent_comment_opens_thread_without_review_status() {
     assert_eq!(comments.len(), 2);
     assert!(comments.iter().all(|c| c["review_id"].is_null()));
 
-    // An empty-body author comment with no resolution is a 400.
     let (st, _) = http_post(&comments_url, &json!({"revision": 0, "body": ""}));
     assert_eq!(st, 400, "empty author comment rejected");
     let (st, _) = http_post(&comments_url, &json!({"thread_id": 9999, "body": "hi"}));

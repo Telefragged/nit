@@ -51,8 +51,6 @@ fn later_tags_overlay_the_ones_before_them() {
     );
 }
 
-// Labelling is its own action, so it needs no push and leaves the
-// change's revisions where they were.
 #[test]
 fn tagging_a_change_records_no_revision() {
     let g = GitRepo::new();
@@ -105,7 +103,6 @@ fn log_len(server: &TestServer, change_number: u64) -> usize {
     change_log(server, change_number).len()
 }
 
-// A change nobody has heard of takes no tags.
 #[test]
 fn tagging_an_unknown_change_is_404() {
     let g = GitRepo::new();
@@ -200,8 +197,8 @@ fn repo_tags_narrow_by_status() {
     assert_eq!(body["tags"], json!({"track": ["docs", "perf"]}));
 }
 
-// An unknown repo narrows to nothing rather than returning 404, which
-// matches `?repo=` on the change read.
+// An unknown repo returns no tags, which matches the `?repo=` filter of
+// the change list.
 #[test]
 fn tags_of_an_unknown_repo_are_empty() {
     let g = GitRepo::new();

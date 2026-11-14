@@ -216,9 +216,7 @@ pub async fn serve_on(
 /// Runs until `shutdown` resolves. Unlike [`serve_on`] it spawns **no
 /// timer**. The only sweeps are the ones that the owner triggers through
 /// [`sweep_once`]. Thus no sweep runs between the setup of an in-process
-/// test and a later assertion. Owning the state is also what lets that
-/// in-process driver act on the very projections the server reads,
-/// instead of going over the wire.
+/// test and a later assertion.
 ///
 /// # Errors
 ///
@@ -267,8 +265,8 @@ async fn health() -> Json<Health> {
 
 /// The merged-history window for the change graph.
 ///
-/// A fixed depth, not a client knob. `pub` so the HTTP truncation test can
-/// build exactly this many commits.
+/// A fixed depth. `pub` so the HTTP truncation test can build exactly this
+/// many commits.
 pub const MERGED_WINDOW: u64 = 5;
 
 /// The anchor a request names, checked against the route's own rule.

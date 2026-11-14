@@ -63,8 +63,6 @@ pub(crate) fn print_oneline_entries(entries: &[LogEntry]) {
 }
 
 /// One-line digest of a log entry.
-///
-/// A CLI display concern; the server ships only the raw entry.
 fn entry_summary(entry: &LogEntry) -> String {
     let change = entry.change_number;
     match &entry.payload {
@@ -136,7 +134,6 @@ pub(crate) fn column_widths<const N: usize>(rows: &[[String; N]]) -> [usize; N] 
 /// One aligned row: the fixed cells, then the free-form `tail` field.
 ///
 /// Each fixed cell is padded to its column width and two-space separated.
-/// Shared by the change digest and the repo list.
 pub(crate) fn aligned_row<const N: usize>(
     cells: &[String; N],
     widths: [usize; N],
@@ -179,8 +176,7 @@ pub(crate) fn print_comment(thread: &ThreadProjection, change_number: ChangeNumb
 ///
 /// A pure function of that entry and the `sources` it quotes, so it
 /// reconstructs nothing the entry does not carry: a `revision` entry shows
-/// no revision number, and a reply names only its thread — a reply's anchor
-/// lives on the thread's opening entry.
+/// no revision number, and a reply specifies only its thread.
 fn render_entry(entry: &LogEntry, sources: &Sources) -> String {
     let position = entry.position;
     let change = entry.change_number;
@@ -264,9 +260,8 @@ fn render_comment(c: &CommentInput, quote: Option<String>) -> String {
 
 /// The anchor label and the body that a comment shows.
 ///
-/// A `quote` of the anchored lines carries both, so it replaces the label
-/// and stands in for the body. A reply carries no anchor, because its
-/// anchor lives on the opening entry.
+/// A `quote` of the anchored lines contains both, so it replaces the label
+/// and the body.
 fn shown(c: &CommentInput, quote: Option<String>) -> (Option<&Anchor>, String) {
     match quote {
         Some(quote) => (None, quote),
@@ -286,8 +281,7 @@ fn comment_target(thread_id: Option<u64>, anchor: Option<&Anchor>) -> Option<Str
 /// The anchor label.
 ///
 /// `(change-level)`, `file`, `file:line`, or the full
-/// `file:start_line:start_char-end_line:end_char` for a selection. The log
-/// renderer and the `nit comment` confirmation both use it.
+/// `file:start_line:start_char-end_line:end_char` for a selection.
 fn anchor_label(anchor: &Anchor) -> String {
     match anchor {
         Anchor::Change => "(change-level)".to_string(),
@@ -437,9 +431,6 @@ mod tests {
                 ],
             }),
         );
-        // Verdict header, indented cover message, then one comment per line led
-        // by its thread id, body indented one level deeper; the range anchor is
-        // the full form and the resolved marker sits on the anchor line.
         assert_eq!(
             render_entry(&review, &Sources::default()),
             "change 42  position 5  r2  reviewer: request_changes\n\
@@ -453,7 +444,6 @@ mod tests {
              \x20       Overflow on 32-bit."
         );
 
-        // A revision entry shows its short sha and subject — no minted number.
         let revision = |position, sha: &str, msg: &str| {
             entry(
                 ChangeNumber::new(42),

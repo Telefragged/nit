@@ -62,8 +62,7 @@ pub(super) struct ChangeLogQuery {
 /// Serves `GET /api/changes/{id}/log`: the entries of a change in a range
 /// of positions.
 ///
-/// `nit_types::log::Log` documents the query. The handler reads the
-/// requested rows alone, and it folds nothing.
+/// `nit_types::log::Log` documents the query.
 #[utoipa::path(get, path = "/api/changes/{id}/log", params(("id" = ChangeNumber, Path), ChangeLogQuery), responses((status = 200, body = Log)))]
 pub(super) async fn get_change_log(
     State(state): State<Arc<AppState>>,
@@ -85,18 +84,18 @@ pub(super) async fn get_change_log(
 #[into_params(parameter_in = Query)]
 pub(super) struct ListTagsQuery {
     repo: u64,
-    /// Repeated (`?status=pending&status=commented`); empty means every
-    /// change, like the change read.
+    /// Repeated (`?status=pending&status=commented`); empty selects every
+    /// change, as in `GET /api/changes`.
     #[serde(default)]
     status: Vec<ChangeStatus>,
 }
 
 /// Serves `GET /api/tags`: the repo's tags in use, grouped by key.
 ///
-/// `nit_types::changes::TagList` carries the semantics. `repo` is required,
-/// because tag keys collide across repos and no union of them means
-/// anything. The read goes straight to the denormalized rows, so an
-/// unknown repo yields an empty list rather than a 404.
+/// `nit_types::changes::TagList` documents the semantics. `repo` is
+/// required, because tag keys collide across repos. The query goes
+/// straight to the denormalized rows, so an unknown repo yields an empty
+/// list.
 #[utoipa::path(get, path = "/api/tags", params(ListTagsQuery), responses((status = 200, body = TagList)))]
 pub(super) async fn list_tags(
     State(state): State<Arc<AppState>>,
@@ -114,7 +113,7 @@ pub(super) async fn list_tags(
 
 /// `POST /api/changes/{id}/tags` — puts tags on one change.
 ///
-/// The new tags lay over the ones the change carries, so a key they omit
+/// The new tags lay over the ones the change has, so a key they omit
 /// keeps its value. Tags that move no key append nothing, and none of
 /// this touches the change's revisions or its review status.
 #[utoipa::path(post, path = "/api/changes/{id}/tags", params(("id" = ChangeNumber, Path)), request_body = TagsRequest, responses((status = 200, body = ChangeDetail)))]
@@ -152,7 +151,7 @@ pub(super) async fn get_change_detail(
 
 /// `GET /api/changes/{id}/drafts` — the reviewer's private overlay.
 ///
-/// Drafts plus the draft decision. The change page reads this over REST
+/// Drafts plus the draft decision. The change page loads this over REST
 /// and the folded projection over the websocket.
 #[utoipa::path(get, path = "/api/changes/{id}/drafts", params(("id" = ChangeNumber, Path)), responses((status = 200, body = ChangeDrafts)))]
 pub(super) async fn get_change_drafts(
@@ -186,8 +185,6 @@ pub(super) async fn revision_diff(
         let change = change_or_404(conn, id)?;
         let revs = resolve_revs(conn, &change, n, q.against)?;
         let mut wire = contained_diff(&revs, 3, q.whitespace, None)?;
-        // After tagging: the message and the attachments are not git
-        // deltas, so they are never drift.
         let shown = |version| -> BTreeMap<_, _> {
             change
                 .effective_attachments(version)
@@ -230,7 +227,7 @@ pub(super) struct LinesQuery {
     /// what `/diff` reported as its `old_path`.
     ///
     /// Both names bound the tree diffs this request takes, and a rename is
-    /// paired only when the bound holds both of its ends: named by its new
+    /// paired only when the bound contains both of its ends: named by its new
     /// side alone, a renamed file would come back as a whole-file add.
     old_path: Option<String>,
     /// The old side of the diff: a revision, or the base of revision `n`,
@@ -238,7 +235,7 @@ pub(super) struct LinesQuery {
     against: Option<ChangeVersion>,
     /// How the diff this reveal happens inside compares whitespace.
     ///
-    /// A revealed line then carries the kind it would hold in a hunk.
+    /// A revealed line then has the kind it would have in a hunk.
     #[serde(default)]
     whitespace: Whitespace,
 }
@@ -247,10 +244,10 @@ pub(super) struct LinesQuery {
 ///
 /// Lets the UI reveal the unchanged runs the shown diff hides. Built from
 /// the **same** `old → new` trees and drift tagging as [`revision_diff`],
-/// so a revealed line carries the exact kind/drift it would inside a
-/// hunk; the client slices the gap it needs. The synthetic
-/// [`diff::COMMIT_MSG_PATH`] and attachment files answer with their whole
-/// text, as [`revision_diff`] compares it.
+/// so a revealed line has the exact kind/drift it would have inside a
+/// hunk; the client slices the gap it needs. For the synthetic
+/// [`diff::COMMIT_MSG_PATH`] and attachment files, the response is their
+/// whole text, as [`revision_diff`] compares it.
 #[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/lines", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), LinesQuery), responses((status = 200, body = FileLines)))]
 pub(super) async fn revision_lines(
     State(state): State<Arc<AppState>>,
@@ -296,10 +293,7 @@ pub(super) async fn revision_lines(
 
 /// The one file an answer is about, under every name it goes by.
 ///
-/// The two names are not interchangeable, and each bounds a different thing:
-/// both of them bound the tree diff, because a rename is paired only when
-/// the bound holds its two ends, while only `path` is worth rendering — an
-/// unpaired rename's other side would be read and diffed for nothing.
+/// Both names bound the tree diff. Only `path` is rendered.
 struct Wanted {
     path: String,
     old_path: Option<String>,
@@ -382,12 +376,11 @@ fn resolve_revs(
 
 /// The wire diff for `revs` with rebase drift contained.
 ///
-/// `parent → commit` of the revision, or `tree(m) → tree(n)` when it names
+/// `parent → commit` of the revision, or `tree(m) → tree(n)` when it has
 /// a counterpart to diff against. Owning the choice here is what keeps
 /// `/diff` and `/lines` from having to agree on it separately.
 ///
-/// `only` narrows the answer to one file, and the git work with it: a
-/// single file's request never walks the whole interdiff.
+/// `only` narrows the answer and the git work to one file.
 ///
 /// A plain diff when the two revisions share a parent, and on analysis
 /// failure.

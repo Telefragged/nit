@@ -3,7 +3,7 @@
 //! The [`Client`] over the nit server's JSON API, the unreachable-vs-fatal
 //! [`CallError`] split, the [`Retry`] policy that rides out server restarts,
 //! and the shared `server_url` helper. Every request and response is a typed
-//! `nit-types` shape — no `serde_json::Value` crosses this boundary.
+//! `nit-types` shape.
 
 use anyhow::{Result, anyhow};
 use nit_types::error::ApiError;
@@ -17,7 +17,7 @@ pub(crate) const DEFAULT_SERVER: &str = "http://127.0.0.1:8877";
 ///
 /// Flattening keeps the flag's name, help, and default in one place. `global`
 /// lets it sit before or after a subcommand (it carries `nit repo`'s parent
-/// flag down to `create`/`move`); on a command with no subcommands it is a harmless no-op.
+/// flag down to `create`/`move`).
 #[derive(clap::Args)]
 pub struct ServerOpt {
     /// nit server URL (default: `$NIT_SERVER` or `http://127.0.0.1:8877`).

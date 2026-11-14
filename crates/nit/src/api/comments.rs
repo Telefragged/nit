@@ -122,8 +122,8 @@ fn set_lifecycle(
 
 /// `POST /api/changes/{id}/abandon` — marks a live change abandoned.
 ///
-/// `nit abandon`: a reviewer or author judgment, never automatic. Optional
-/// `message` records a reason. A no-op on an already-terminal change.
+/// `nit abandon`: a reviewer or author judgment. Optional `message`
+/// records a reason. A no-op on an already-terminal change.
 #[utoipa::path(post, path = "/api/changes/{id}/abandon", params(("id" = ChangeNumber, Path)), request_body = AbandonRequest, responses((status = 200, body = ChangeDetail)))]
 pub(super) async fn abandon_change(
     State(state): State<Arc<AppState>>,

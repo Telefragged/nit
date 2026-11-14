@@ -2,8 +2,7 @@
 //! `nit repo create` (`POST /api/repos`), pinning its one canonical
 //! `canonical_ref`; its identity is the git-common-dir, and a push into an
 //! unregistered repo is a 404. `GET /api/repos` lists each repo with
-//! its `open_changes` count, which excludes a merged or abandoned change
-//! (merged is decided only by the background timer).
+//! its `open_changes` count, which excludes a merged or abandoned change.
 //! `GET /api/changes?repo={id}` scopes the change list to one repo, and
 //! `PATCH /api/repos/{id}`
 //! (≡ `nit repo move`) repoints a repo after a disk move (404 unknown, 400
@@ -102,7 +101,6 @@ fn repos_list_shape_canonical_ref_and_scoped_changes() {
     assert_eq!(open_changes(&server, id_a), 1);
     assert_eq!(open_changes(&server, id_b), 2, "two changes");
 
-    // GET /api/changes?repo=: scoped to one repo's changes only.
     let (st, scoped_b) = http_get(&server.url(&format!("/api/changes?repo={id_b}")));
     assert_eq!(st, 200);
     assert_eq!(
@@ -122,7 +120,6 @@ fn repos_list_shape_canonical_ref_and_scoped_changes() {
 
 #[test]
 fn base_can_be_any_branch() {
-    // nit never assumes `main`/`master` — the base must be named explicitly.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("base: one", IB1), &[("a.rs", "a\n")]);
     g.branch("trunk", c1);
@@ -138,9 +135,6 @@ fn base_can_be_any_branch() {
 
 #[test]
 fn base_can_be_a_remote_tracking_ref() {
-    // The base is any git ref that resolves to a commit, not only a local
-    // branch — e.g. `origin/main`, which `find_branch` would reject. Tracking a
-    // remote ref is the point: some repos review against `origin/main`.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", IC1), &[("a.rs", "a\n")]);
     g.repo
@@ -161,7 +155,6 @@ fn create_repo_registers_and_pins_base() {
     g.branch("trunk", g.root);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
-    // no push yet — open_changes starts at 0.
     let (st, repo) = create_repo(&server, &g, "main");
     assert_eq!(st, 200, "{repo}");
     assert_eq!(repo["git_dir"].as_str().unwrap(), g.git_dir());
@@ -169,8 +162,8 @@ fn create_repo_registers_and_pins_base() {
     assert_eq!(repo["open_changes"].as_u64(), Some(0));
     let id = first_repo(&server);
 
-    // Re-registering is a 409 even when it names a different base — create means
-    // create, and the pinned base is fixed (one canonical ref per repo).
+    // Re-registering is a 409 even with a different base: the pinned base is
+    // fixed (one canonical ref per repo).
     let (st, err) = create_repo(&server, &g, "trunk");
     assert_eq!(st, 409, "{err}");
     assert!(
@@ -216,7 +209,6 @@ fn push_into_unregistered_repo_is_404() {
 
 #[test]
 fn create_repo_rejects_unknown_base() {
-    // A base that resolves to nothing is a 400 — nit never guesses a base.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("core: one", IC1), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
@@ -244,7 +236,7 @@ fn nit_repo_create_cli() {
             .expect("running nit repo create")
     };
 
-    // `--canonical-ref` is required: a bare create can't even parse.
+    // `--canonical-ref` is required.
     assert!(!run(&["repo", "create"]).status.success());
 
     // `nit repo create --canonical-ref main` from inside the repo registers the git dir.
@@ -351,7 +343,7 @@ fn nit_repo_move_cli() {
     assert_eq!(st, 200);
     let old_git_dir = a.git_dir();
 
-    // The cwd is the still-present tempdir — the command keys off its args, not the cwd.
+    // The cwd is the tempdir, which still exists after the move.
     let new_root = a.dir.path().join("moved");
     std::fs::rename(a.dir.path().join("repo"), &new_root).unwrap();
     let new_git_dir = git_dir_of(&new_root);

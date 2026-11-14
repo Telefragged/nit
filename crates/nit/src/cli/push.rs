@@ -35,9 +35,8 @@ pub struct PushArgs {
 /// Pushes the cwd's checked-out commit (or an explicit revision) for review.
 ///
 /// Idempotent. The repo must already be registered (`nit repo create`). The
-/// canonical ref comes from the registered repo, so no base is sent. Then
-/// it prints the digest of the changes it walked, so the author needs no
-/// follow-up read.
+/// canonical ref comes from the registered repo. Then it prints the digest
+/// of the changes it walked.
 ///
 /// # Errors
 ///
@@ -66,9 +65,8 @@ pub fn push(args: PushArgs) -> Result<()> {
 
 /// Puts `tags` on every change the push walked.
 ///
-/// Labelling is its own action, so this is a second call per change
-/// rather than a field on the push. A change already carrying these
-/// values records nothing.
+/// Labelling is its own action, so this is a second request per change. A
+/// change that already has these values records nothing.
 fn tag_changes(client: &Client, changes: &[PushedChange], tags: &Tags) -> Result<()> {
     if tags.is_empty() {
         return Ok(());
@@ -84,11 +82,11 @@ fn tag_changes(client: &Client, changes: &[PushedChange], tags: &Tags) -> Result
 }
 
 /// The tags this push puts on its changes: what it observes, then what
-/// `--tag` names.
+/// `--tag` specifies.
 ///
-/// The set carries `branch` only when the push takes the checked-out
-/// commit. An explicit rev may name any commit in the repo, so the
-/// checked-out branch would say nothing about it.
+/// The set contains `branch` only when the push takes the checked-out
+/// commit. An explicit rev may select any commit in the repo, so the
+/// checked-out branch does not describe it.
 fn push_tags(repo: &Repository, args: &PushArgs) -> Tags {
     let mut tags = observed_tags(repo, args.commit.is_none());
     tags.overlay(&args.tag.iter().cloned().collect());

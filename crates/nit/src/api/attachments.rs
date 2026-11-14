@@ -31,11 +31,11 @@ use super::{AppJson, AppPath, AppState, Error, append, views, with_conn};
 /// The largest upload the store accepts, in bytes.
 const MAX_SIZE: u64 = 64 * 1024 * 1024;
 
-/// The largest attachment that reads as text, in bytes.
+/// The largest attachment that the server loads as text, in bytes.
 ///
 /// The server snapshots a line and ports a thread only on text this size
 /// or smaller. A larger attachment is binary in a diff, so no thread
-/// anchors on a line the server could not read.
+/// anchors on a line the server could not load.
 const MAX_TEXT_SIZE: u64 = 8 * 1024 * 1024;
 
 /// What a collection of the blob store deleted.
@@ -93,7 +93,7 @@ impl Blobs {
     /// `cutoff`.
     ///
     /// It deletes the temp files of uploads that never finished, the
-    /// blob rows that no relation names together with their files, and
+    /// blob rows that no relation references together with their files, and
     /// the blob files that have no row. A file without a row is what a
     /// crash between a row's deletion and its file's deletion leaves.
     ///
@@ -250,9 +250,9 @@ fn io_error(e: std::io::Error) -> Error {
 
 /// `PUT /api/attachments` — stores the request body as a blob.
 ///
-/// Storing bytes that the store already holds succeeds and refreshes the
-/// blob's age, so a collection does not delete it before an attach names
-/// it. A body over the size limit is a 413.
+/// Storing bytes that the store already contains succeeds and refreshes
+/// the blob's age, so a collection does not delete it before an attach
+/// references it. A body over the size limit is a 413.
 #[utoipa::path(put, path = "/api/attachments", request_body(content = Vec<u8>, content_type = "application/octet-stream"), responses((status = 200, body = UploadedAttachment)))]
 pub(super) async fn upload(
     State(state): State<Arc<AppState>>,
@@ -281,10 +281,9 @@ pub(super) async fn upload(
 ///
 /// The request is the entry it appends.
 ///
-/// Any revision of the change, or its base, accepts an attachment, not only
-/// the latest revision. A name the version already shows with the same hash
-/// appends nothing, whether the attachment is on the version itself or
-/// carries forward.
+/// Any revision of the change, or its base, accepts an attachment. A name
+/// the version already shows with the same hash appends nothing, whether
+/// the attachment is on the version itself or on an earlier revision.
 /// A revision or a blob that does not exist is a 404, and so is a blob
 /// that a collection deleted before the attach: upload it again.
 #[utoipa::path(post, path = "/api/changes/{id}/attachments", params(("id" = ChangeNumber, Path)), request_body = AttachPayload, responses((status = 200, body = ChangeDetail)))]

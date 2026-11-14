@@ -8,11 +8,10 @@
 //! edits into the interdiff's `m`/`n` line coordinates through the change's
 //! own delta at each revision (`parent(m) → tree(m)` and
 //! `parent(n) → tree(n)`), so a base edit is recognised wherever the
-//! change's own edits shifted it (spec property 9). Projection clips out the
-//! lines the change also touched, so its own edit is shown as a real edit,
-//! never claimed as drift (property 10), and an interdiff line the base
-//! movement does not explain — including the change removing a pre-existing
-//! line in a later revision — stays real.
+//! change's own edits shifted it. Projection clips out the lines the change
+//! also touched, so its own edit is shown as a real edit. An interdiff line
+//! that the base movement does not explain stays real, including a
+//! pre-existing line that the change removes in a later revision.
 //!
 //! File identity across renames follows gerrit's path re-keying: every blob
 //! is read under the file's name in its own tree, resolved through each
@@ -32,7 +31,7 @@
 //! The projection (`project_clipped` / `drift_ranges`) is the bug-prone
 //! core gerrit shipped a false-negative in (2.15.0), and is unit-tested
 //! below. It is **line-level**, with two inherent limitations matching
-//! gerrit (the spec deems intraline/move detection out of scope):
+//! gerrit:
 //!
 //! - On runs of identical lines (blank lines, `}`, repeated imports) the two
 //!   diffs can anchor a duplicate differently, leaving a base-movement line
@@ -142,9 +141,6 @@ fn is_real_change(line: &Line) -> bool {
 
 /// Marks the file's drifted lines, drops its fully-drift hunks and recounts
 /// what is left.
-///
-/// Region selection follows the change's own real edits: a hunk the base
-/// alone explains is not a region of this file the reviewer is looking at.
 fn tag(file: &mut DiffFile, (old_ranges, new_ranges): &DriftRanges) {
     // The wire numbers lines from 1; the spans index from 0.
     let hit = |ranges: &[Span], n: Option<u64>| {
@@ -170,14 +166,9 @@ fn tag(file: &mut DiffFile, (old_ranges, new_ranges): &DriftRanges) {
 /// [`diff::render`] — the paths the request is about. The caller invokes
 /// this only when `parent(m) != parent(n)`.
 ///
-/// One pass, one verdict per file, each decided on the cheapest evidence
-/// that settles it: a file the base moved on its own is dropped by name
-/// alone, one the change left untouched at both revisions by its tree oids,
-/// and only what survives is read and diffed — once, for its drift ranges
-/// and its wire lines together. Best-effort — a file the change touched that
-/// is binary, or whose parent names the base movement does not connect, is
-/// rendered plain (the others are still contained). A returned error means
-/// nothing is contained at all (the caller serves the plain interdiff).
+/// Best-effort: a file the change touched that is binary, or whose parent
+/// names the base movement does not connect, is rendered plain. On an error
+/// nothing is contained at all, and the caller serves the plain interdiff.
 ///
 /// # Errors
 ///
@@ -216,9 +207,8 @@ pub fn contain(
         .flat_map(|(tree, parent)| [tree.as_str(), parent.as_str()])
         .collect();
     if touched.is_empty() {
-        // The change holds no file at either revision, so the interdiff is
-        // the base's throughout and the base movement need not be read to
-        // say so — which an empty bound could not ask for anyway.
+        // The change touches no file at either revision, so the whole
+        // interdiff is drift. An empty bound would match every path.
         return Ok(Diff { files: Vec::new() });
     }
     // A superset of the names the walk below looks up: what the change
@@ -272,11 +262,8 @@ pub fn contain(
         let (oid_pm, oid_m) = (entry_oid(&parent_m, name_pm), delta.old_file().id());
         let (oid_pn, oid_n) = (entry_oid(&parent_n, name_pn), delta.new_file().id());
         // The change left this file exactly as it found it at both revisions,
-        // so every line of the interdiff is the base's. Diffing would only
-        // rediscover that: with no delta of the change's own to project
-        // through, the drift ranges come out equal to the base movement and
-        // nothing escapes them. Deciding it on tree oids alone keeps the
-        // blobs unread.
+        // so every line of the interdiff is the base's. Deciding it on tree
+        // oids alone keeps the blobs unread.
         if oid_pm == oid_m && oid_pn == oid_n && !own_rename {
             continue;
         }
@@ -295,8 +282,6 @@ pub fn contain(
         let real_edit = own_edit(&bm, &bn, &ranges);
         diff::fill_lines(&mut file, &bm, &bn, context, whitespace);
         tag(&mut file, &ranges);
-        // A rename the change made is its own work even when every line
-        // inside it drifted.
         if own_rename || real_edit {
             files.push(file);
         }
@@ -320,7 +305,7 @@ mod tests {
 
     #[test]
     fn drift_ranges_shifts_with_the_changes_edits_and_clips_overlap() {
-        // Property 9: base inserts a line; the change inserts 2 above it at both
+        // The base inserts a line; the change inserts 2 above it at both
         // revisions, so the drift lands 2 lines lower in m/n.
         let (old, new) = drift_ranges(
             &[edit((3, 3), (3, 4))],
@@ -330,7 +315,7 @@ mod tests {
         assert_eq!(old, []); // a pure insertion has no old-side line
         assert_eq!(new, vec![span(5, 6)]); // new index 5 == line 6
 
-        // Property 10: the change edits the same line the base moved → not drift.
+        // The change edits the same line the base moved → not drift.
         let (old, new) = drift_ranges(
             &[edit((3, 4), (3, 4))],
             &[edit((3, 4), (3, 4))],

@@ -84,7 +84,6 @@ pub(super) async fn push(
         let repo = Repository::open(&canonical)
             .map_err(|e| Error::internal(format!("cannot open repository: {e}")))?;
 
-        // Push takes no base parameter -- the repo's stored canonical ref is used.
         let repo_row = db::find_repo(conn, &canonical)?.ok_or_else(|| {
             Error::not_found(format!(
                 "repo at {canonical} is not registered — run `nit repo create`"
@@ -94,9 +93,8 @@ pub(super) async fn push(
 
         let walk = gitscan::walk_push(&canonical, &base, &req.tip).map_err(Error::bad_request)?;
         // A tip that is ancestor-or-equal of the base walks to nothing: the work
-        // already merged (or you pushed the base itself). Reject it loudly rather
-        // than recording nothing, so a stray push of a merged commit is a visible
-        // mistake, not a silent no-op.
+        // already merged (or you pushed the base itself). The 409 makes a stray
+        // push of a merged commit a visible mistake.
         if walk.commits.is_empty() {
             return Err(Error::conflict(format!(
                 "tip {} is already merged into '{}' — no commits to review",
@@ -106,8 +104,7 @@ pub(super) async fn push(
         }
 
         // One transaction, so a push rejected at a terminal change inserts
-        // no change and appends no revision. Without it, the changes before
-        // the terminal one would stay.
+        // no change and appends no revision.
         let mut appends = Appends::begin(conn)?;
         let mut pushed = Vec::with_capacity(walk.commits.len());
         for wc in &walk.commits {

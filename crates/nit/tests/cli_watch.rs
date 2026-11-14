@@ -272,7 +272,6 @@ fn watch_with_the_server_down_exits_quietly() {
     assert!(out.stdout.is_empty() && out.stderr.is_empty(), "{out:?}");
 }
 
-/// With nowhere to post, the watch says so rather than watching nothing.
 #[test]
 fn watch_without_an_inbox_fails() {
     let (g, server, _inbox, _) = session();
