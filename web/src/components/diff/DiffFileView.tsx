@@ -79,6 +79,7 @@ import {
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
+import NewThreadButton from "../NewThreadButton";
 import NewThreadEditor from "../NewThreadEditor";
 import Seg, { type SegOption } from "../Seg";
 import ThreadCount from "../ThreadCount";
@@ -87,7 +88,6 @@ import GapSeparator from "./GapSeparator";
 import LineLink from "./LineLink";
 import RenderedView from "./RenderedView";
 import StatusMark from "./StatusMark";
-import { Button } from "../ui/button";
 
 /** A commented char window to tint on one line; `active` (brighter chrome)
  * marks the open editor's pending selection or the hovered thread's range. */
@@ -974,16 +974,14 @@ export default function DiffFileView({
         {markCounts(threads).map(({ mark, count }) => (
           <ThreadCount key={mark} mark={mark} count={count} word />
         ))}
-        <Button
-          variant="ghost"
+        <NewThreadButton
+          anchor="file"
           className="ml-auto"
           onClick={() => {
             setFileCommentOpen(true);
             if (collapsed) onToggle();
           }}
-        >
-          Comment on file
-        </Button>
+        />
       </header>
 
       {collapsed ? null : (
