@@ -85,12 +85,13 @@ trailer carries identity across rewrites.
     channel message, pipe EOF, process exit, a socket frame, a DOM
     mutation, a cache that reports idle. Better still, the test makes
     the work synchronous: it seeds the state up front or drives the step
-    in-process. A test never sleeps, polls, retries, or sets a timeout,
-    not even as a hang guard. The CI job bounds a hang. A mock answers
-    without delay. A timeout sized for load is a race against the clock,
-    and a starved CI runner loses that race on correct code. Production
-    code follows the same rule: it reacts to an event, and it polls only
-    where no event source exists, with a comment that names the reason.
+    in-process. A test never sleeps, polls or retries, and no wait in a
+    test has a timeout. The test runner sets one time limit per test,
+    far above the time that the test needs, so its report identifies the
+    test that hung. A mock answers without delay. Production code
+    follows the same rule: it reacts to an event, and it polls only
+    where no event source exists, with a comment that documents the
+    reason.
 
 ## Layout
 
