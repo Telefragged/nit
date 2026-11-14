@@ -315,7 +315,7 @@ fn snapshot_line_text(
     match (anchor.file(), hangs_under(anchor)) {
         (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&revision.message, line),
         (Some(file), Some(line)) if let Some(name) = diff::attachment_name(file) => {
-            let attachment = change.attachment_at(revision.number, name)?;
+            let attachment = change.attachment_at(side.version(revision.number), name)?;
             diff::nth_line(&blobs.text(&attachment.hash)?, line)
         }
         (Some(file), Some(line)) => {

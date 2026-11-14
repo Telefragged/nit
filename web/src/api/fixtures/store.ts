@@ -25,7 +25,7 @@ export type AuthoredFile = Omit<DiffFile, "old_total" | "new_total"> & {
  * this revision itself, which the synth log writes as `attach` entries. */
 export type AuthoredRevision = Omit<
   Revision,
-  "subject" | "status" | "attachments"
+  "subject" | "status" | "attachments" | "base_attachments"
 > & { attachments?: AttachmentProjection[] };
 interface AuthoredDiff {
   files: AuthoredFile[];

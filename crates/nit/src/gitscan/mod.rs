@@ -372,6 +372,7 @@ mod tests {
             resets_status: true,
             created_at: "t0".to_string(),
             attachments: vec![],
+            base_attachments: vec![],
         });
         proj
     }

@@ -116,6 +116,8 @@ pub struct Revision {
     pub status: ChangeStatus,
     /// The attachments this revision shows, ordered by name.
     pub attachments: Vec<EffectiveAttachment>,
+    /// The attachments the base of this revision shows, ordered by name.
+    pub base_attachments: Vec<EffectiveAttachment>,
 }
 
 /// `POST /api/changes/{id}/tags` request: the tags to put on a change.

@@ -38,9 +38,19 @@ fn attach(
     name: &str,
     hash: &str,
 ) -> (u16, Value) {
+    attach_to(server, change_number, &format!("r{revision}"), name, hash)
+}
+
+fn attach_to(
+    server: &TestServer,
+    change_number: u64,
+    version: &str,
+    name: &str,
+    hash: &str,
+) -> (u16, Value) {
     http_post(
         &server.url(&format!("/api/changes/{change_number}/attachments")),
-        &json!({ "revision": revision, "name": name, "hash": hash }),
+        &json!({ "version": version, "name": name, "hash": hash }),
     )
 }
 
@@ -104,7 +114,8 @@ fn upload_over_the_limit_is_413() {
     assert_eq!(blobs, 0);
 }
 
-/// An attach appends an entry naming the revision, the name and the hash.
+/// An attach of a `revision` appends an entry with the version of that
+/// revision, the name and the hash.
 #[test]
 fn attach_appends_an_attach_entry() {
     let g = GitRepo::new();
@@ -116,8 +127,25 @@ fn attach_appends_an_attach_entry() {
     assert_eq!(st, 200, "{res}");
     assert_eq!(
         attach_entries(&server, change_number),
-        [json!({ "revision": 0, "name": "plan/attachments.md", "hash": hash })]
+        [json!({ "version": "r0", "name": "plan/attachments.md", "hash": hash })]
     );
+}
+
+/// A request with a `revision` field, the spelling of older entries, puts
+/// the file on that revision.
+#[test]
+fn attach_with_a_revision_field_is_on_the_revision() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let hash = upload(&server, b"notes");
+
+    let (st, res) = http_post(
+        &server.url(&format!("/api/changes/{change_number}/attachments")),
+        &json!({ "revision": 0, "name": "notes.txt", "hash": hash }),
+    );
+
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(attach_entries(&server, change_number)[0]["version"], "r0");
 }
 
 /// Attaching the name and hash a revision already holds appends nothing.
@@ -549,7 +577,7 @@ fn nit_attach_names_the_file_by_its_path_from_the_root() {
     assert_eq!(
         attach_entries(&server, change_number),
         [json!({
-            "revision": 0,
+            "version": "r0",
             "name": "web/screenshots/review.png",
             "hash": blake3::hash(b"png").to_hex().to_string(),
         })]

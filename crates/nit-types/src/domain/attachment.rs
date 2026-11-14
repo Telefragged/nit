@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::ChangeVersion;
 use super::RevisionNumber;
 
 /// The BLAKE3 hash of an attachment's bytes: 64 lowercase hex characters.
@@ -153,20 +154,67 @@ impl std::fmt::Display for AttachmentName {
     }
 }
 
-/// An `attach` entry: one attachment put on one revision.
+/// An `attach` entry: one attachment put on one version of a change.
 ///
-/// An entry that names an attachment the revision already holds replaces
-/// it.
+/// An entry whose `name` matches an attachment already on the version
+/// replaces it.
+///
+/// # Examples
+///
+/// An entry with a `revision` field puts the attachment on that revision:
+///
+/// ```rust
+/// use nit_types::domain::{AttachPayload, ChangeVersion, RevisionNumber};
+///
+/// let hash = "a".repeat(64);
+/// let stored: AttachPayload = serde_json::from_value(
+///     serde_json::json!({ "revision": 1, "name": "plan.md", "hash": hash }),
+/// )
+/// .unwrap();
+/// assert_eq!(stored.version, ChangeVersion::Revision(RevisionNumber::new(1)));
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "AttachSpelling")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 pub struct AttachPayload {
-    pub revision: RevisionNumber,
+    pub version: ChangeVersion,
     pub name: AttachmentName,
     pub hash: AttachmentHash,
 }
 
-/// One attachment of a revision, as the fold leaves it.
+/// An [`AttachPayload`] as the append-only log stores it: an entry
+/// places the attachment with a `version` or with a `revision` field.
+#[derive(Deserialize)]
+struct AttachSpelling {
+    #[serde(flatten)]
+    on: On,
+    name: AttachmentName,
+    hash: AttachmentHash,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum On {
+    Version(ChangeVersion),
+    Revision(RevisionNumber),
+}
+
+impl From<AttachSpelling> for AttachPayload {
+    fn from(AttachSpelling { on, name, hash }: AttachSpelling) -> AttachPayload {
+        let version = match on {
+            On::Version(version) => version,
+            On::Revision(revision) => ChangeVersion::Revision(revision),
+        };
+        AttachPayload {
+            version,
+            name,
+            hash,
+        }
+    }
+}
+
+/// One attachment of a change version, as the fold leaves it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
@@ -175,17 +223,19 @@ pub struct AttachmentProjection {
     pub hash: AttachmentHash,
 }
 
-/// An attachment as one revision shows it.
+/// An attachment as one version of a change shows it.
 ///
 /// A revision shows, for each name, the attachment of the latest revision
-/// at or below it that holds that name. So an attachment carries forward
-/// until a later revision replaces it.
+/// at or below it that has that name. The base of a revision shows the
+/// same for the bases of those revisions. So an attachment carries forward
+/// until a later revision, or the base of a later revision, replaces it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 pub struct EffectiveAttachment {
     pub name: AttachmentName,
     pub hash: AttachmentHash,
-    /// The revision that holds it, at or below the one that shows it.
+    /// The revision that it, or its base, is attached to, at or below the
+    /// revision of the version that shows it.
     pub revision: RevisionNumber,
 }

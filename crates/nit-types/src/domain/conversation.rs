@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::ChangeNumber;
+use super::ChangeVersion;
 use super::Decision;
 use super::RevisionNumber;
 
@@ -28,6 +29,16 @@ impl Side {
         match self {
             Side::Old => "old",
             Side::New => "new",
+        }
+    }
+
+    /// The change version that this side of revision `revision` shows, in
+    /// the diff of the revision against its base.
+    #[must_use]
+    pub fn version(self, revision: RevisionNumber) -> ChangeVersion {
+        match self {
+            Side::Old => ChangeVersion::Base(revision),
+            Side::New => ChangeVersion::Revision(revision),
         }
     }
 }

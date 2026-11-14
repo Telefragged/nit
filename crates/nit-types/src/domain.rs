@@ -31,10 +31,15 @@
 //!
 //! **Revision** — one version of a change.
 //!
-//! **Attachment** — a file a revision carries beside its commit, under
-//! a name that is a relative path. Its bytes are named by their hash, so
-//! the same bytes can sit on many revisions. A later revision shows it too
-//! ([`EffectiveAttachment`]).
+//! **Change version** — a revision, or the base of a revision: the parent
+//! commit of the revision, with the attachments put on that base. The diff
+//! of a revision starts from its base ([`ChangeVersion`]).
+//!
+//! **Attachment** — a file stored on a change version beside its commit,
+//! under a name that is a relative path. Its bytes are named by their
+//! hash, so the same bytes can sit on many versions. A later revision shows
+//! the attachments of an earlier one too, and the base of a later revision
+//! those of an earlier base ([`EffectiveAttachment`]).
 //!
 //! **Tag** — a `key: value` label set on a change. A `tags` entry
 //! stands on its own, so a key keeps its value until a later entry names

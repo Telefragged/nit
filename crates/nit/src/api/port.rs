@@ -22,8 +22,8 @@ use anyhow::{Context, Result};
 use git2::{Delta, Repository, Tree};
 
 use nit_types::domain::{
-    Anchor, ChangeProjection, CommentRange, EffectiveAttachment, LineAnchor, PortedComment,
-    RevisionProjection, Side, ThreadOrigin,
+    Anchor, ChangeProjection, ChangeVersion, CommentRange, EffectiveAttachment, LineAnchor,
+    PortedComment, RevisionProjection, Side, ThreadOrigin,
 };
 
 use super::attachments::Blobs;
@@ -82,14 +82,15 @@ pub fn port_threads(
                 by_name.entry(name).or_default().push(thread);
             }
         }
-        for &(i, target) in &later {
-            for (name, threads) in &by_name {
+        for (name, threads) in &by_name {
+            let from = change.attachment_at(ChangeVersion::Revision(k), name);
+            for &(i, target) in &later {
                 // A revision that shows no attachment of the name moves its
                 // threads to the change.
-                let to = change.attachment_at(target.number, name);
+                let to = change.attachment_at(ChangeVersion::Revision(target.number), name);
                 let edits = to
                     .as_ref()
-                    .and_then(|to| attachment_edits(blobs, change.attachment_at(k, name), to));
+                    .and_then(|to| attachment_edits(blobs, from.as_ref(), to));
                 ported[i].extend(threads.iter().map(|thread| PortedComment {
                     thread_id: thread.thread_id,
                     revision: target.number,
@@ -250,7 +251,7 @@ enum FileDelta {
 /// earlier revision shows none.
 fn attachment_edits(
     blobs: &Blobs,
-    from: Option<EffectiveAttachment>,
+    from: Option<&EffectiveAttachment>,
     to: &EffectiveAttachment,
 ) -> Option<Vec<Edit>> {
     let from = from?;

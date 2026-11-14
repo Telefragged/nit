@@ -249,7 +249,10 @@ const NoteRow = memo(function NoteRow({
           entry={entry}
           summary={
             <>
-              attached <span className="mono">{p.name}</span> to r{p.revision}
+              attached <span className="mono">{p.name}</span> to{" "}
+              {p.version.endsWith("^")
+                ? `the base of ${p.version.slice(0, -1)}`
+                : p.version}
             </>
           }
         />

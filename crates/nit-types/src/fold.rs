@@ -30,6 +30,7 @@
 use crate::changes::{ChangeDetail, Revision};
 use crate::domain::ChangeId;
 use crate::domain::ChangeNumber;
+use crate::domain::ChangeVersion;
 use crate::domain::RevisionNumber;
 use crate::domain::subject_of;
 use crate::domain::{
@@ -98,11 +99,12 @@ fn fold_revision(change: &mut ChangeProjection, p: &RevisionPayload, now: &str) 
         resets_status: p.resets_status,
         created_at: now.to_string(),
         attachments: Vec::new(),
+        base_attachments: Vec::new(),
     });
 }
 
 fn fold_attach(change: &mut ChangeProjection, p: &AttachPayload) {
-    let Some(revision) = usize::try_from(p.revision.get())
+    let Some(revision) = usize::try_from(p.version.revision().get())
         .ok()
         .and_then(|i| change.revisions.get_mut(i))
     else {
@@ -112,9 +114,13 @@ fn fold_attach(change: &mut ChangeProjection, p: &AttachPayload) {
         name: p.name.clone(),
         hash: p.hash.clone(),
     };
-    match revision.attachments.iter_mut().find(|a| a.name == p.name) {
+    let attachments = match p.version {
+        ChangeVersion::Base(_) => &mut revision.base_attachments,
+        ChangeVersion::Revision(_) => &mut revision.attachments,
+    };
+    match attachments.iter_mut().find(|a| a.name == p.name) {
         Some(held) => *held = attachment,
-        None => revision.attachments.push(attachment),
+        None => attachments.push(attachment),
     }
 }
 
@@ -215,7 +221,8 @@ fn revision_view(change: &ChangeProjection, revision: &RevisionProjection) -> Re
         subject: subject_of(&revision.message),
         created_at: revision.created_at.clone(),
         status: change.status_at(revision.number),
-        attachments: change.effective_attachments(revision.number),
+        attachments: change.effective_attachments(ChangeVersion::Revision(revision.number)),
+        base_attachments: change.effective_attachments(ChangeVersion::Base(revision.number)),
     }
 }
 
@@ -474,7 +481,7 @@ mod tests {
 
     fn attach(revision: u64, name: &str, byte: char) -> LogPayload {
         LogPayload::Attach(AttachPayload {
-            revision: RevisionNumber::new(revision),
+            version: ChangeVersion::Revision(RevisionNumber::new(revision)),
             name: AttachmentName::new(name).expect("name"),
             hash: AttachmentHash::new(byte.to_string().repeat(64)).expect("hash"),
         })
