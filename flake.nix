@@ -183,7 +183,7 @@
           # the no-feature baseline an optional feature (the server's
           # `features = ["clap"]`, the web's `features = ["ts"]`) would mask.
           test-nit-types = rust.nextest "nit-types";
-          contract = (rustFor pkgs).contract;
+          contract = rust.contract;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
             if ! diff -u ${./web/src/api/types.gen.ts} ${rust.wireTypes}; then
               echo "web/src/api/types.gen.ts is stale — run: nix run .#gen-types" >&2
