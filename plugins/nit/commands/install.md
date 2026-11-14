@@ -31,7 +31,7 @@ at it if it's not on the default `http://127.0.0.1:8877`.
 ## 2. Register the repo
 
 A repo must be registered before anything can be pushed — a `nit push` into an
-unregistered repo is rejected (404). Register it once, pinning its canonical
+unregistered repo is rejected (404). Register it once, pinning its
 canonical ref (the ref mergedness is tracked against):
 
 ```sh
