@@ -17,7 +17,11 @@ import {
   reviewCtx,
   uiThread,
 } from "../../api/fixtures/builders";
-import type { DiffFile, LineAnchor } from "../../api/types";
+import {
+  COMMIT_MSG_PATH,
+  type DiffFile,
+  type LineAnchor,
+} from "../../api/types";
 import type { DiffLink, LinkSpan } from "../../lib/diffLink";
 import type { UiThread } from "../../lib/comments";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
@@ -199,6 +203,14 @@ describe("context-expand buttons", () => {
     expect(
       buttons(renderFile("unified", gapped(EXPAND_STEP)).container),
     ).toEqual([
+      [["expand-all", "Show all 10 lines"]],
+      [["expand-all", "Show all 10 lines"]],
+    ]);
+  });
+
+  it("reveal the hidden lines of a commit message like those of a file", () => {
+    const message = { ...gapped(EXPAND_STEP), path: COMMIT_MSG_PATH };
+    expect(buttons(renderFile("unified", message).container)).toEqual([
       [["expand-all", "Show all 10 lines"]],
       [["expand-all", "Show all 10 lines"]],
     ]);
