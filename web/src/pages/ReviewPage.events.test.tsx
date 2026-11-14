@@ -23,6 +23,24 @@ const revHead = () => screen.getByLabelText<HTMLButtonElement>("Revision");
 const revOptions = () =>
   screen.queryAllByRole("option").map((o) => o.textContent);
 
+/** Appends to the log of `change` a revision whose commit is `commit`. */
+const pushRevision = (
+  change: number,
+  commit: string,
+  at = "2026-06-28T00:00:00.000Z",
+) => {
+  mockAppend(change, at, {
+    kind: "revision",
+    payload: {
+      commit_sha: sha(commit),
+      parent_sha: sha("base"),
+      fork_sha: sha("base"),
+      message: `${commit}\n\nChange-Id: I${change}`,
+      resets_status: true,
+    },
+  });
+};
+
 describe("event-driven change page", () => {
   it("makes a pushed revision selectable without jumping to it", async () => {
     await renderReview("/changes/11");
@@ -34,20 +52,27 @@ describe("event-driven change page", () => {
     expect(revHead().textContent).toBe("r1 3 comments");
 
     act(() => {
-      mockAppend(11, "2026-06-28T00:00:00.000Z", {
-        kind: "revision",
-        payload: {
-          commit_sha: sha("c11r3"),
-          parent_sha: sha("c11r2"),
-          fork_sha: sha("base"),
-          message: "auth: rotate v3\n\nChange-Id: I9a41c7e2b3d4f5a6",
-          resets_status: true,
-        },
-      });
+      pushRevision(11, "c11r3");
     });
 
     expect(revOptions()).toEqual(["r0 6 comments", "r1 3 comments", "r2"]);
     expect(revHead().textContent).toBe("r1 3 comments");
+  });
+
+  it("shows one toast for the latest pushed revision", async () => {
+    await renderReview("/changes/10");
+    expect(screen.queryByText(/was pushed/)).toBeNull();
+    act(() => {
+      pushRevision(10, "c10r2");
+    });
+    expect(screen.getByText("Revision 1 was pushed")).toBeTruthy();
+
+    act(() => {
+      pushRevision(10, "c10r3");
+    });
+    expect(screen.getAllByText(/was pushed/).map((t) => t.textContent)).toEqual(
+      ["Revision 2 was pushed"],
+    );
   });
 
   it("lists the change log and appends a live entry to it", async () => {
@@ -83,16 +108,7 @@ describe("event-driven change page", () => {
           comments: [],
         },
       });
-      mockAppend(12, "2026-06-28T00:01:00.000Z", {
-        kind: "revision",
-        payload: {
-          commit_sha: sha("c12r1"),
-          parent_sha: sha("c12r0"),
-          fork_sha: sha("base"),
-          message: "c12 v2\n\nChange-Id: I12",
-          resets_status: true,
-        },
-      });
+      pushRevision(12, "c12r1", "2026-06-28T00:01:00.000Z");
     });
 
     expect(rows()[rows().length - 1]?.textContent).toContain(
