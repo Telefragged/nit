@@ -760,7 +760,7 @@ export type Anchor =
 /**
  * Where inside a file a line anchor sits.
  *
- * A selection ends on the line it anchors to, so both spellings name
+ * A selection ends on the line of its anchor, so each variant has
  * exactly one line.
  */
 export type LineAnchor = { whole: number } | { selection: CommentRange };

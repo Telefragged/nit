@@ -130,7 +130,7 @@ impl From<StoredAnchor> for Anchor {
 
 /// Where inside a file a line anchor sits.
 ///
-/// A selection ends on the line it anchors to, so both spellings name
+/// A selection ends on the line of its anchor, so each variant has
 /// exactly one line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -158,7 +158,7 @@ impl Anchor {
         }
     }
 
-    /// The file the anchor names, if it names one.
+    /// The file of the anchor, if it has one.
     #[must_use]
     pub fn file(&self) -> Option<&str> {
         match self {
@@ -167,7 +167,7 @@ impl Anchor {
         }
     }
 
-    /// The side a line anchor reads, and the default off a line.
+    /// The side of a line anchor, and the default side for any other anchor.
     #[must_use]
     pub fn side(&self) -> Side {
         match self {
