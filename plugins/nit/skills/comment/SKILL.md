@@ -14,7 +14,7 @@ about — not scattered through the chat.
 ```sh
 # open a NEW thread, anchored to code:
 nit comment --change-id <Change-Id> --file <path> (--line <n> | --range S-E) [--side new|old] -m "…"
-# reply to an EXISTING thread (anchor flags ignored):
+# reply to an EXISTING thread (anchor flags are an error here):
 nit comment --change-id <Change-Id> --thread <thread-id> [--resolve|--unresolve] -m "…"
 # body from stdin instead of -m (also: -F <path> for a file):
 nit comment --change-id <Change-Id> --thread <thread-id> -F -
