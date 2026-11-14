@@ -84,6 +84,9 @@
             sqlite
             zlib
 
+            # `cargo nextest run` applies the per-test time limit of the
+            # flake checks (.config/nextest.toml).
+            cargo-nextest
             # Regenerates Cargo.nix
             crate2nix
             # Regenerates crates/workspace-hack (docs/generated.md).
