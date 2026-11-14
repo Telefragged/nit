@@ -78,7 +78,7 @@ export function useHunkExpansion(file: ReviewFile, ctx: ReviewCtx) {
     setBusy(new Set());
   }
   // The latest committed `file`, so a fetch in flight when the diff switches
-  // can detect the switch and drop its result instead of splicing it in.
+  // can detect the switch and drop its result.
   const fileRef = useRef(file);
   useEffect(() => {
     fileRef.current = file;

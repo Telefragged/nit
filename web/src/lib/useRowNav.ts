@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
  * Spread props that make a whole table row navigate on click. Clicks that
  * land on a link inside the row are ignored, so anchors keep their native
  * behavior (middle-click / cmd-click open a new tab without also navigating
- * the current one) — no per-anchor stopPropagation needed.
+ * the current one).
  */
 export function useRowNav(to: string) {
   const navigate = useNavigate();

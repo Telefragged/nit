@@ -1,8 +1,8 @@
 // selectionTarget: DOM selections → comment-range draft targets. The DOM
 // built here mirrors DiffFileView's contract exactly (section data attr,
-// .code cell with data-old/data-new, .sign + .code-text spans). The diff
-// is a CSS grid of divs/spans, not a table — jsdom does no layout, so only
-// the element structure, classes and data attributes matter here.
+// .code cell with data-old/data-new, .sign + .code-text spans). jsdom does
+// no layout, so only the element structure, classes and data attributes
+// matter here.
 
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -120,8 +120,6 @@ describe("selectionTarget, unified layout", () => {
   it("maps a del-to-context selection to the old side", () => {
     const s = mountUnified([ROWS]);
     const r = rangeOf(textNode(s, 3), 0, textNode(s, 4), 4);
-    // The old side is always commentable — the caller maps it to a
-    // stored (revision, side) for the range it was drawn in (lib/comments).
     expect(selectionTarget(r)).toEqual({
       file: "src/a.rs",
       side: "old",
@@ -323,7 +321,7 @@ describe("selectionTarget, split layout", () => {
 
     it("is null off the split cells (unified view, blank anchor)", () => {
       const s = mountUnified([ROWS]);
-      // Unified cells carry data-old/data-new but no data-side column tag.
+      // Unified cells have data-old/data-new but no data-side column tag.
       expect(selectionAnchorSide(textNode(s, 0))).toBeNull();
       expect(selectionAnchorSide(null)).toBeNull();
       const loose = document.createElement("div");

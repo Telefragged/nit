@@ -1,13 +1,12 @@
 // Collapse state for the review page's file sections: the set of expanded
-// file paths (paths are stable across layout toggles and rerenders, unlike
-// indices). Pure transitions, kept out of components so they stay testable.
+// file paths (paths are stable across layout toggles and rerenders). Pure
+// transitions, kept out of components so they stay testable.
 
 import type { DiffFile } from "../api/types";
 import { COMMIT_MSG_PATH } from "../api/types";
 
 /** Called fresh per change: the commit message starts expanded since it's
- * the natural review entry point, and its full text lives only here, not
- * in the page header. */
+ * the natural review entry point, and its full text lives only here. */
 export function defaultExpanded(): ReadonlySet<string> {
   return new Set([COMMIT_MSG_PATH]);
 }
@@ -42,7 +41,7 @@ export function collapseAll(): ReadonlySet<string> {
 }
 
 /** Drives the rail's expand-all ⇄ collapse-all toggle; an empty diff is
- * never "all" (vacuous `every` would otherwise say yes). */
+ * never "all" (vacuous `every` would otherwise return true). */
 export function allExpanded(
   cur: ReadonlySet<string>,
   files: DiffFile[],

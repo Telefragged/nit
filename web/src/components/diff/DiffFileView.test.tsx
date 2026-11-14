@@ -1,9 +1,5 @@
 // Diff markup, rendered with a minimal ReviewContext so the assertions are
-// about the markup alone: rebase-drift lines render contained — the
-// .drift class lands on the changed
-// line's gutter and code cell so the CSS can tint them, while the real edit
-// beside them stays untagged — and a gap separator carries the reveal
-// buttons its size warrants.
+// about the markup alone.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";

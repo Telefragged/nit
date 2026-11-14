@@ -9,7 +9,7 @@
 // `session-id` and a `branch` tag; the review page lists the changes that
 // share one.
 //
-// Coverage on purpose:
+// Coverage:
 //   repo 1 (acme-runtime)
 //     changes 10–12  one session, 3 changes; change 11 has 2
 //            revisions (amended in place, interdiff available), a resolved
@@ -574,8 +574,8 @@ const change11: ChangeRecord = {
         },
       ],
     },
-    // Interdiff: effective tree of revision 1 -> effective tree of revision 2,
-    // message(1) -> message(2) for /COMMIT_MSG.
+    // Interdiff: effective tree of revision 0 -> effective tree of revision 1,
+    // message(0) -> message(1) for /COMMIT_MSG.
     [diffKey(1, 0)]: {
       files: [
         {
@@ -1873,7 +1873,7 @@ export const threads: ThreadRecord[] = [
     updated_at: ago(100),
   },
   // thread on the commit message: the r1 reword answers it; the anchored
-  // line survives unchanged (no shift needed).
+  // line survives unchanged.
   {
     id: 77,
     change_number: 11,

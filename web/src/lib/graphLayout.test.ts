@@ -160,7 +160,6 @@ describe("layoutGraph edges", () => {
 
 // An open change pushed onto an older merged commit still in the window — main
 // advanced without a rebase, so the change forks off a visible history node.
-// Its base is on screen, so the edge is solid (only an off-window base dashes).
 describe("layoutGraph behind-HEAD base (in window)", () => {
   it("attaches to its visible base with a solid edge on a side lane", () => {
     const g = layoutGraph({

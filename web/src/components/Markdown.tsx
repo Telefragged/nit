@@ -8,7 +8,7 @@ const plugins = [remarkGfm, remarkBreaks];
 
 /**
  * A comment body rendered as markdown: GFM plus GitHub-style hard line
- * breaks, so pre-markdown bodies keep their line structure. Raw HTML stays
+ * breaks, so a plain-text body keeps its line structure. Raw HTML stays
  * escaped (no rehype-raw) — bodies come from the author, i.e. untrusted.
  */
 function Markdown({ text }: { text: string }) {

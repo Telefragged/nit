@@ -1,8 +1,8 @@
 // The file tree of a diff: its paths nested into directories, with
 // directories before files at each level.
 
-/** A directory of the tree. `name` holds every segment of a chain of
- * directories that each hold only the next one, joined by `/`. */
+/** A directory of the tree. `name` contains every segment of a chain of
+ * directories that each contain only the next one, joined by `/`. */
 interface TreeDir {
   kind: "dir";
   name: string;
@@ -34,7 +34,7 @@ function compareNodes(a: TreeNode, b: TreeNode): number {
   return collator.compare(a.name, b.name);
 }
 
-/** Sorts the tree, and merges each directory that holds only one
+/** Sorts the tree, and merges each directory that contains only one
  * directory into it. */
 function flatten(node: TreeNode): TreeNode {
   if (node.kind === "file") return node;

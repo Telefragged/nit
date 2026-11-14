@@ -2,11 +2,6 @@
 // routes every call here when VITE_MOCK is set (via `await import("./fixtures")`),
 // so the whole UI (including drafts, resolve, review submission and 409s)
 // works without a backend.
-//
-// The canned data and the mutable store live in ./data; the pure builders in
-// ./builders; the record shapes in ./store. This file is just the
-// derivations (status, counts), the publish helpers, and
-// the route dispatcher — the one public export, `mockRequest`.
 
 import { ApiError } from "../client";
 import type {
@@ -53,8 +48,7 @@ let nextReviewId = 50;
 
 /** Drain a change's comment drafts into `CommentInput`s for the review's log
  * entry; a new thread gets a record id stamped on so the websocket fold mints
- * the same id. The fold owns the thread, so
- * nothing is mirrored here — the review_id is attached when the entry folds. */
+ * the same id. */
 function drainComments(c: ChangeRecord): CommentInput[] {
   const comments: CommentInput[] = [];
   const changeDrafts = drafts
@@ -161,9 +155,6 @@ function emitLifecycle(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Derivations (status, counts) so mutations stay consistent
-
 const latestRevision = (c: ChangeRecord): AuthoredRevision => {
   const r = c.revisions[c.revisions.length - 1];
   if (!r) throw new Error(`change ${c.id} has no revisions`);
@@ -181,11 +172,6 @@ function repoList(): Repo[] {
       .length,
   }));
 }
-
-// ---------------------------------------------------------------------------
-// The graph's two primitive reads. The browser assembles the graph itself
-// (api/graph, the shared wasm derivation), so the mock serves only parts:
-// each repo's change folds and a window of its synthetic canonical history.
 
 /** The fixed merged-history window (mirrors the backend's MERGED_WINDOW). */
 const MERGED_WINDOW = 5;
@@ -263,7 +249,7 @@ function changeDrafts(c: ChangeRecord) {
   };
 }
 
-/** Find the text of a diff line so new drafts get a line_text projection. */
+/** Find the text of a diff line so new drafts get a line_text snapshot. */
 function snapshotLineText(
   c: ChangeRecord,
   revision: number,
@@ -329,9 +315,6 @@ const notFound = (what: string): never => {
 
 const getChange = (id: number): ChangeRecord =>
   changes.find((c) => c.id === id) ?? notFound(`change ${id}`);
-
-// ---------------------------------------------------------------------------
-// The mock router — one arm per server endpoint
 
 export function mockRequest(
   method: string,
@@ -458,11 +441,6 @@ export function mockRequest(
     return structuredClone([...at(number), ...at(against)]);
   }
 
-  // Context expansion. The fixtures hold diffs, not whole files, so
-  // reconstruct the whole file from the
-  // shown hunks with synthesized context filling the gaps — enough for the
-  // expand controls to reveal rows. (Real drift in a gap is the backend's
-  // job; the mock just makes the interaction renderable.)
   if (
     (m = /^\/changes\/(\d+)\/revisions\/(\d+)\/lines$/.exec(p)) &&
     method === "GET"

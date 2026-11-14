@@ -24,8 +24,7 @@
 }
 
 /* Each row spans all columns and re-exposes them through subgrid, so every
-   row's cells share one set of column tracks — the alignment the table
-   gave, without the table. */
+   row's cells share one set of column tracks. */
 .line-row {
   display: grid;
   grid-template-columns: subgrid;

@@ -145,8 +145,6 @@ export default function ReviewBar({
     }
   }
 
-  // Keyboard twin of the Submit button — same `canSubmit` gate;
-  // `shortcutKey` mutes modifier chords and typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (shortcutKey(e) !== "s" || !canSubmit) return;

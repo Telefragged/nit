@@ -167,9 +167,8 @@ export function assembleThreads(
 
 /**
  * Where a thread lands in the diff range `[FROM] → [TO]` (`against` the
- * base, or the interdiff's left revision `rM`), or null when
- * its `(revision, side)` is neither displayed tree — it belongs to another
- * revision and is not shown in this diff at all.
+ * base, or the interdiff's left revision `rM`), or null when its
+ * `(revision, side)` is neither displayed tree.
  *
  * - `(TO, new)` → the right/new column;
  * - `(TO, old)` vs base, or `(FROM, new)` in an interdiff → the left/old
@@ -213,7 +212,7 @@ export interface DiffRange {
 
 /** Whether a thread shows in the range `[FROM] → [TO]`. A line thread needs
  * a column there. A change or file thread has no line, so no single tree
- * holds it and it shows in every range. */
+ * contains it and it shows in every range. */
 export function threadInRange(
   c: CommentAnchor,
   selected: number,
@@ -249,11 +248,9 @@ export function rangeSince(
 
 /**
  * How many threads are anchored to each revision, for the revision pickers.
- * Counts both published and draft-only threads — the dropdown answers "which
- * revisions carry discussion", and an in-progress draft is discussion too.
- * Keyed by revision number; revisions with none are absent (read with `?? 0`).
- * Not range-filtered: this is each revision's own total, unlike the per-file
- * header count which follows the shown diff.
+ * Counts both published and draft-only threads. Keyed by revision number;
+ * revisions with none are absent (read with `?? 0`). Not range-filtered:
+ * this is each revision's own total.
  */
 export function threadCountByRevision(
   threads: readonly UiThread[],
@@ -335,14 +332,13 @@ export function pendingUnresolvedCount(threads: readonly UiThread[]): number {
 }
 
 /** A stable React key for a UiThread: its published id, or the draft-only
- * thread's lone draft id (published threads never share a draft id). */
+ * thread's lone draft id. */
 export function threadKey(t: UiThread): string {
   return t.id !== null ? `t${t.id}` : `d${t.drafts[0]?.id ?? ""}`;
 }
 
-/** What a node's activity badges draw — read off the bulk change folds and
- * the reviewer's drafts overlay rather than denormalized onto the graph
- * node. */
+/** What a node's activity badges draw, derived from the bulk change
+ * folds and the reviewer's drafts overlay. */
 export interface NodeActivity {
   drafts: readonly Draft[];
   /** Unresolved threads over every revision (`unresolvedThreads`). */

@@ -18,10 +18,9 @@ import ReviewPage from "./ReviewPage";
 afterEach(cleanup);
 
 /** Every scrollIntoView call on a file section: which one, and whether its
- * diff body was already in the DOM when the call happened. The latter is
- * the regression guard for the collapse pitfall — a scroll issued before
- * the expansion commit would see (and target) the pre-reflow layout. The
- * rail scrolls its own port by scrollTop, so it never lands here. */
+ * diff body was already in the DOM when the call happened. A scroll issued
+ * before the expansion commit would target the pre-reflow layout. The rail
+ * scrolls its own port by scrollTop, so it never lands here. */
 let scrollCalls: { id: string; expandedAtCall: boolean }[];
 /** Every element the page scrolled into view, in order. */
 let scrolled: Element[];
@@ -31,7 +30,7 @@ beforeEach(() => {
   // rect 0 and can only answer "the last file", overwriting the reveal under
   // test. In a browser that is self-correcting — the sample is taken at the
   // scroll target — but the scrollIntoView double below never scrolls, so
-  // here it just wins. No layout, no scroll to spy on: drop the frame.
+  // here it just wins.
   window.requestAnimationFrame = () => 0;
   scrollCalls = [];
   scrolled = [];
@@ -112,7 +111,6 @@ describe("collapsed-by-default file sections", () => {
     expect(section(0).querySelector(".diff-grid")).not.toBeNull();
     for (const i of [1, 2, 3]) {
       expect(isExpanded(section(i))).toBe(false);
-      // aria matches reality: no diff body rendered while collapsed.
       expect(section(i).querySelector(".diff-grid")).toBeNull();
     }
   });
@@ -128,7 +126,6 @@ describe("collapsed-by-default file sections", () => {
     expect(isExpanded(section(1))).toBe(true);
     fireEvent.click(header);
     expect(isExpanded(section(1))).toBe(false);
-    // The active file never moved.
     expect(scrollCalls).toEqual([]);
     expect(railRow("src/auth/rotate.rs")).not.toBeNull();
     expect(railActive()).toBeNull();
@@ -153,8 +150,8 @@ describe("collapsed-by-default file sections", () => {
   it("the ] key reveals the next file like a rail click", async () => {
     await renderReview();
 
-    fireEvent.keyDown(window, { key: "]" }); // already expanded (not the regression-guard case)
-    fireEvent.keyDown(window, { key: "]" }); // was collapsed — this is the regression-guard case
+    fireEvent.keyDown(window, { key: "]" }); // already expanded
+    fireEvent.keyDown(window, { key: "]" }); // was collapsed
 
     expect(scrollCalls).toEqual([
       { id: "file-0", expandedAtCall: true },
@@ -305,7 +302,6 @@ describe("the selection-miss bubble", () => {
 
     fireEvent.keyDown(window, { key: "c" });
     expect(bubble()?.textContent).toContain("one side of the diff");
-    // No editor: the press drafted nothing.
     expect(document.querySelector("textarea")).toBeNull();
 
     // Idle keystrokes leave it be, and so does the selectionchange the
@@ -416,8 +412,6 @@ describe("comment counts in the diff-range dropdowns", () => {
   });
 
   it("honors r0 as an explicit diff base instead of snapping to Base", async () => {
-    // r0 is a valid interdiff base — selecting it must stick; an M >= 1 guard
-    // would wrongly reject it.
     await renderReview("/changes/11?against=r0");
     expect(picker("Diff base").textContent).toBe("r0 6 comments");
   });

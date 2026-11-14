@@ -161,7 +161,7 @@ function sideOf(first: HTMLElement, last: HTMLElement): Side | null {
 }
 
 /** The line a code cell shows, with its file and side. A unified cell
- * that shows both sides reads as the new side. Null when `node` is not in
+ * that shows both sides counts as the new side. Null when `node` is not in
  * a code cell that shows a line. */
 export function cellLine(
   node: Element,

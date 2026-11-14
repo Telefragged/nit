@@ -501,7 +501,7 @@ const captures = [
     },
   },
   // A Markdown file of the commit in its rendered view. The view shows
-  // the whole file, not only the lines that the diff shows.
+  // the whole file.
   {
     name: "review-rendered",
     path: "/changes/12?against=base",
@@ -616,8 +616,8 @@ const captures = [
     },
   },
   // One-click Resolve: Resolve on an open thread drafts the empty
-  // resolution-only draft directly — no editor. The thread collapses to
-  // one row that shows its pending Resolved state.
+  // resolution-only draft. The thread collapses to one row that shows its
+  // pending Resolved state.
   {
     name: "review-resolve-oneclick",
     path: "/changes/11?against=r0",
@@ -737,8 +737,8 @@ const captures = [
     },
   },
   // Scroll spy: scrolled into the middle of the third file, so its header
-  // is pinned under the diffbar and the rail highlights it (no click —
-  // expand-all first, or the collapsed page has nothing to scroll into).
+  // is pinned under the diffbar and the rail highlights it (expand-all
+  // first, or the collapsed page has nothing to scroll into).
   {
     name: "review-scroll-spy",
     path: "/changes/11?against=base",
@@ -909,8 +909,7 @@ const captures = [
         .hover({ force: true });
     },
   },
-  // Autosize: the inline editor grows to fit a multi-line draft instead of
-  // scrolling inside its default min-height box (useAutosize).
+  // Autosize: the inline editor grows to fit a multi-line draft (useAutosize).
   {
     name: "review-autosize-editor",
     path: "/changes/11?against=base",
@@ -1031,10 +1030,9 @@ const captures = [
       );
     },
   },
-  // Review modal opened via `a`: it DRAFTS a decision rather than publishing —
-  // the three verdicts plus Abandon (abandonment is a decision under the modal,
-  // not a separate button), with the cover message typed key by key (not fill,
-  // which replaces content) so a leaked shortcut keystroke would show up.
+  // Review modal opened via `a`, which drafts a decision: the three verdicts
+  // plus Abandon, with the cover message typed key by key (not fill, which
+  // replaces content) so a leaked shortcut keystroke would show up.
   {
     name: "review-modal",
     path: "/changes/11?against=base",
@@ -1212,7 +1210,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  // process.exit() drops buffered stderr on a pipe — the very error text a CI
-  // log needs; exit only once the write has flushed.
+  // process.exit() drops buffered stderr on a pipe, so exit only once the
+  // write has flushed.
   process.stderr.write(`${err?.stack ?? err}\n`, () => process.exit(1));
 });

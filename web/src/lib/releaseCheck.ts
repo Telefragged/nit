@@ -61,9 +61,9 @@ async function ask(): Promise<ReleaseCheck> {
 }
 
 /** The release check, a toggle that turns it on or off, and a refresh
- * that asks GitHub now.
+ * that queries GitHub now.
  *
- * While enabled, the tabs of this browser ask GitHub at most once an
+ * While enabled, the tabs of this browser query GitHub at most once an
  * hour between them, and each tab shows the latest answer. */
 export function useReleaseCheck(): {
   check: ReleaseCheck;

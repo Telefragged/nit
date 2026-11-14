@@ -4,10 +4,9 @@
    hand-written sheets are `components`: they override Tailwind's reset in
    `base`, and a utility class overrides them.
 
-   The classes of those sheets stay global (no CSS Modules) on purpose —
-   the diff selection logic coordinates across components through shared
-   selectors (diff.css `sel-old`/`sel-new`, the `[data-sel-side]` ::selection
-   rules), which a scoped sheet would fight. */
+   The classes of those sheets are global, because the diff selection
+   logic coordinates across components through shared selectors (diff.css
+   `sel-old`/`sel-new`, the `[data-sel-side]` ::selection rules). */
 @layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);

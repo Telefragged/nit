@@ -22,8 +22,8 @@ export async function clickNow(locator: Locator) {
 }
 
 /** The page half of `untilDom`, as source text: it resolves once
- * `test(arg)` holds. It runs the test now, then after each DOM mutation,
- * and never on a timer. */
+ * `test(arg)` returns true. It runs the test now, then after each DOM
+ * mutation. */
 const OBSERVE = `(test, arg) =>
   new Promise((resolve) => {
     const observer = new MutationObserver(check);
@@ -41,7 +41,7 @@ const OBSERVE = `(test, arg) =>
     check();
   })`;
 
-/** Resolves once `test(arg)` holds in the page. `test` runs in the page,
+/** Resolves once `test(arg)` returns true in the page. `test` runs in the page,
  * so it can use nothing of its module but `arg`. */
 export const untilDom = (
   page: Page,
