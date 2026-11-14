@@ -201,6 +201,25 @@ fn comment_opens_replies_resolves() {
         by_num.contains(&format!("on change {change_num}")),
         "{by_num}"
     );
+
+    // `--file` without `--line` or `--range` opens a thread on the file.
+    let (ok, on_file, stderr) = nit(
+        &server,
+        &g,
+        &[
+            "comment",
+            "--change-id",
+            IA,
+            "--file",
+            "a.txt",
+            "-m",
+            "split this file",
+        ],
+    );
+    assert!(ok, "{stderr}");
+    let on_file = on_file.as_str().expect("comment prints text");
+    assert!(on_file.contains("a.txt"), "anchor shown: {on_file}");
+    assert!(!on_file.contains("a.txt:"), "no line: {on_file}");
 }
 
 /// `-F` reads the body from a file; `-F -` reads stdin. `nit log` shows

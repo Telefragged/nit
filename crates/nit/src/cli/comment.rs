@@ -21,8 +21,8 @@ pub struct CommentArgs {
     /// a new one.
     #[arg(long)]
     pub thread: Option<u64>,
-    /// New thread: file to anchor to (`--line`/`--range` require a
-    /// `--file`).
+    /// New thread: file to anchor to. Without `--line` or `--range`, the
+    /// thread is on the whole file.
     #[arg(long, conflicts_with = "thread")]
     pub file: Option<String>,
     /// New thread: line to anchor to (1-based).
