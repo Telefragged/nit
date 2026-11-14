@@ -349,43 +349,42 @@ pub fn assemble_tag(changes: &[ChangeProjection]) -> ChangeGraph {
 mod tests {
     use super::*;
     use nit_types::domain::Lifecycle;
-    use nit_types::domain::Sha;
+    use nit_types::domain::{ChangeId, Sha, Tag, Tags};
     use nit_types::domain::{ChangeNumber, RevisionNumber};
     use nit_types::graph::HistoryCommit;
-    use nit_types::testing::{change_id, sha};
 
-    fn revision(number: u64, name: &str, parent: &str, base: &str) -> RevisionProjection {
+    fn revision(number: u64, commit: &Sha, parent: &Sha, base: &Sha) -> RevisionProjection {
         RevisionProjection {
             number: RevisionNumber::new(number),
-            commit_sha: sha(name),
-            parent_sha: sha(parent),
-            fork_sha: sha(base),
-            message: format!("subject {name}"),
+            commit_sha: commit.clone(),
+            parent_sha: parent.clone(),
+            fork_sha: base.clone(),
+            message: format!("subject {commit}"),
             resets_status: true,
             created_at: "t0".to_string(),
             attachments: vec![],
         }
     }
 
-    fn change(number: u64, key: &str, revs: Vec<RevisionProjection>) -> ChangeProjection {
-        let mut c = ChangeProjection::new(ChangeNumber::new(number), 1, change_id(key));
+    fn change(number: u64, id: &ChangeId, revs: Vec<RevisionProjection>) -> ChangeProjection {
+        let mut c = ChangeProjection::new(ChangeNumber::new(number), 1, id.clone());
         c.revisions = revs;
         c
     }
 
-    fn commit(name: &str, parents: &[&str]) -> HistoryCommit {
+    fn commit(sha: &Sha, parents: &[&Sha]) -> HistoryCommit {
         HistoryCommit {
-            sha: sha(name),
-            parents: parents.iter().map(|p| sha(p)).collect(),
-            subject: format!("main {name}"),
+            sha: sha.clone(),
+            parents: parents.iter().map(|&p| p.clone()).collect(),
+            subject: format!("main {sha}"),
             change_number: None,
             change_id: None,
         }
     }
 
     /// A node's `(change number, revision number)` pairs, oldest first.
-    fn walk(changes: &[ChangeProjection], tip: &str) -> Vec<(u64, u64)> {
-        path_from_tip(&sha_index(changes), &sha(tip))
+    fn walk(changes: &[ChangeProjection], tip: &Sha) -> Vec<(u64, u64)> {
+        path_from_tip(&sha_index(changes), tip)
             .iter()
             .map(|n| (n.change.id.get(), n.revision.number.get()))
             .collect()
@@ -395,44 +394,71 @@ mod tests {
     /// revisions, surfaced as two tips.
     #[test]
     fn b_under_two_tips() {
-        let ca = change(10, "Ia", vec![revision(0, "A", "m", "m")]);
+        let sha_m = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
+        let sha_a = Sha::new("2222222222222222222222222222222222222222").expect("valid sha");
+        let sha_b = Sha::new("3333333333333333333333333333333333333333").expect("valid sha");
+        let bp = Sha::new("4444444444444444444444444444444444444444").expect("valid sha");
+        let sha_c = Sha::new("5555555555555555555555555555555555555555").expect("valid sha");
+        let sha_d = Sha::new("6666666666666666666666666666666666666666").expect("valid sha");
+        let sha_e = Sha::new("7777777777777777777777777777777777777777").expect("valid sha");
+        let ida =
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id");
+        let idb =
+            ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id");
+        let idc =
+            ChangeId::new("I3333333333333333333333333333333333333333").expect("valid change id");
+        let idd =
+            ChangeId::new("I4444444444444444444444444444444444444444").expect("valid change id");
+        let ide =
+            ChangeId::new("I5555555555555555555555555555555555555555").expect("valid change id");
+        let ca = change(10, &ida, vec![revision(0, &sha_a, &sha_m, &sha_m)]);
         let cb = change(
             11,
-            "Ib",
-            vec![revision(0, "B", "A", "m"), revision(1, "Bp", "D", "m")],
+            &idb,
+            vec![
+                revision(0, &sha_b, &sha_a, &sha_m),
+                revision(1, &bp, &sha_d, &sha_m),
+            ],
         );
-        let cc = change(12, "Ic", vec![revision(0, "C", "B", "m")]);
-        let cd = change(13, "Id", vec![revision(0, "D", "m", "m")]);
-        let ce = change(14, "Ie", vec![revision(0, "E", "Bp", "m")]);
+        let cc = change(12, &idc, vec![revision(0, &sha_c, &sha_b, &sha_m)]);
+        let cd = change(13, &idd, vec![revision(0, &sha_d, &sha_m, &sha_m)]);
+        let ce = change(14, &ide, vec![revision(0, &sha_e, &bp, &sha_m)]);
         let changes = vec![ca, cb, cc, cd, ce];
 
-        assert_eq!(tips(&changes), vec![&sha("C"), &sha("E")]);
-        assert_eq!(walk(&changes, "C"), vec![(10, 0), (11, 0), (12, 0)]);
-        assert_eq!(walk(&changes, "E"), vec![(13, 0), (11, 1), (14, 0)]);
+        assert_eq!(tips(&changes), vec![&sha_c, &sha_e]);
+        assert_eq!(walk(&changes, &sha_c), vec![(10, 0), (11, 0), (12, 0)]);
+        assert_eq!(walk(&changes, &sha_e), vec![(13, 0), (11, 1), (14, 0)]);
 
-        // Open nodes dedupe by sha, so B@rev0 (sha "B") and B@rev1 (sha "Bp")
+        // Open nodes dedupe by sha, so B@rev0 (sha `b`) and B@rev1 (sha `bp`)
         // are two nodes — different commits, different parents.
         let mut shas: Vec<&Sha> = open_nodes(&changes)
             .iter()
             .map(|n| &n.revision.commit_sha)
             .collect();
         shas.sort();
-        let mut want = ["A", "B", "Bp", "C", "D", "E"].map(sha);
+        let mut want = [&sha_a, &sha_b, &bp, &sha_c, &sha_d, &sha_e];
         want.sort();
-        assert_eq!(shas, want.iter().collect::<Vec<_>>());
+        assert_eq!(shas, want);
     }
 
     #[test]
     fn walk_stops_at_a_merged_ancestor() {
+        let sha_m = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
+        let sha_a = Sha::new("2222222222222222222222222222222222222222").expect("valid sha");
+        let sha_b = Sha::new("3333333333333333333333333333333333333333").expect("valid sha");
+        let ida =
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id");
+        let idb =
+            ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id");
         // A → B forked from "m"; A has since merged. The walk stops at
         // the canonical ref, so B's path is the open member alone — the
         // merged ancestor sits below the branch now.
-        let mut a = change(1, "Ia", vec![revision(0, "A", "m", "m")]);
-        a.lifecycle = Lifecycle::Merged;
-        let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
-        let changes = vec![a, b];
+        let mut ca = change(1, &ida, vec![revision(0, &sha_a, &sha_m, &sha_m)]);
+        ca.lifecycle = Lifecycle::Merged;
+        let cb = change(2, &idb, vec![revision(0, &sha_b, &sha_a, &sha_m)]);
+        let changes = vec![ca, cb];
 
-        assert_eq!(walk(&changes, "B"), vec![(2, 0)]);
+        assert_eq!(walk(&changes, &sha_b), vec![(2, 0)]);
         let open: Vec<u64> = open_nodes(&changes)
             .iter()
             .map(|n| n.change.id.get())
@@ -442,62 +468,85 @@ mod tests {
 
     #[test]
     fn prefix_branch_is_subsumed() {
-        let a = change(1, "Ia", vec![revision(0, "A", "m", "m")]);
-        let b = change(2, "Ib", vec![revision(0, "B", "A", "m")]);
-        let c = change(3, "Ic", vec![revision(0, "C", "B", "m")]);
-        assert_eq!(tips(&[a, b, c]), vec![&sha("C")]);
+        let sha_m = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
+        let sha_a = Sha::new("2222222222222222222222222222222222222222").expect("valid sha");
+        let sha_b = Sha::new("3333333333333333333333333333333333333333").expect("valid sha");
+        let sha_c = Sha::new("4444444444444444444444444444444444444444").expect("valid sha");
+        let ida =
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id");
+        let idb =
+            ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id");
+        let idc =
+            ChangeId::new("I3333333333333333333333333333333333333333").expect("valid change id");
+        let ca = change(1, &ida, vec![revision(0, &sha_a, &sha_m, &sha_m)]);
+        let cb = change(2, &idb, vec![revision(0, &sha_b, &sha_a, &sha_m)]);
+        let cc = change(3, &idc, vec![revision(0, &sha_c, &sha_b, &sha_m)]);
+        assert_eq!(tips(&[ca, cb, cc]), vec![&sha_c]);
     }
 
     #[test]
     fn open_fork_behind_head_orders_above_anchor_and_keeps_its_base() {
-        let topic = change(1, "It", vec![revision(0, "T", "c1", "c1")]);
+        let sha_t = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
+        let c1 = Sha::new("2222222222222222222222222222222222222222").expect("valid sha");
+        let c2 = Sha::new("3333333333333333333333333333333333333333").expect("valid sha");
+        let c3 = Sha::new("4444444444444444444444444444444444444444").expect("valid sha");
+        let idt =
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id");
+        let topic = change(1, &idt, vec![revision(0, &sha_t, &c1, &c1)]);
         let changes = vec![topic];
         let history = RepoHistory {
-            commits: vec![
-                commit("c3", &["c2"]),
-                commit("c2", &["c1"]),
-                commit("c1", &[]),
-            ],
+            commits: vec![commit(&c3, &[&c2]), commit(&c2, &[&c1]), commit(&c1, &[])],
             truncated: false,
         };
 
         let g = assemble(&changes, &history, None);
-        let row = |name: &str| {
+        let row = |sha: &Sha| {
             g.nodes
                 .iter()
-                .position(|n| n.commit_sha == sha(name))
-                .unwrap_or_else(|| panic!("no node {name}"))
+                .position(|n| &n.commit_sha == sha)
+                .unwrap_or_else(|| panic!("no node {sha}"))
         };
-        assert_eq!(g.nodes[row("c3")].section, GraphSection::Head);
-        assert_eq!(g.nodes[row("T")].section, GraphSection::Open);
+        assert_eq!(g.nodes[row(&c3)].section, GraphSection::Head);
+        assert_eq!(g.nodes[row(&sha_t)].section, GraphSection::Open);
         assert!(
-            row("T") < row("c3"),
+            row(&sha_t) < row(&c3),
             "open fork must order above the HEAD anchor: {:?}",
             g.nodes.iter().map(|n| &n.commit_sha).collect::<Vec<_>>()
         );
         assert_eq!(
-            g.nodes[row("T")].parents,
-            vec![sha("c1")],
+            g.nodes[row(&sha_t)].parents,
+            vec![c1.clone()],
             "topic keeps its real fork base, never re-rooted onto HEAD"
         );
-        assert_eq!(g.nodes[row("T")].fork_sha, Some(sha("c1")));
-        assert_eq!(g.nodes[row("c3")].fork_sha, None);
+        assert_eq!(g.nodes[row(&sha_t)].fork_sha, Some(c1));
+        assert_eq!(g.nodes[row(&c3)].fork_sha, None);
     }
 
     // The enriched history rides through untouched, an anchor-sha open node
     // dedupes away, and truncation is the history's flag.
     #[test]
     fn history_enrichment_and_truncation_ride_through() {
-        let a = change(1, "Ia", vec![revision(0, "A", "h", "h")]);
-        let b = change(2, "Ib", vec![revision(0, "B", "A", "h")]);
-        let changes = vec![a, b];
+        let sha_a = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
+        let sha_b = Sha::new("2222222222222222222222222222222222222222").expect("valid sha");
+        let sha_h = Sha::new("3333333333333333333333333333333333333333").expect("valid sha");
+        let g1 = Sha::new("4444444444444444444444444444444444444444").expect("valid sha");
+        let g2 = Sha::new("5555555555555555555555555555555555555555").expect("valid sha");
+        let ida =
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id");
+        let idb =
+            ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id");
+        let idland =
+            ChangeId::new("I3333333333333333333333333333333333333333").expect("valid change id");
+        let ca = change(1, &ida, vec![revision(0, &sha_a, &sha_h, &sha_h)]);
+        let cb = change(2, &idb, vec![revision(0, &sha_b, &sha_a, &sha_h)]);
+        let changes = vec![ca, cb];
         let merged = HistoryCommit {
             change_number: Some(ChangeNumber::new(9)),
-            change_id: Some(change_id("Iland")),
-            ..commit("g1", &["g2"])
+            change_id: Some(idland.clone()),
+            ..commit(&g1, &[&g2])
         };
         let history = RepoHistory {
-            commits: vec![commit("h", &["g1"]), merged, commit("g2", &[])],
+            commits: vec![commit(&sha_h, &[&g1]), merged, commit(&g2, &[])],
             truncated: true,
         };
 
@@ -505,24 +554,16 @@ mod tests {
         assert!(g.history_truncated);
         let shas: Vec<&Sha> = g.nodes.iter().map(|n| &n.commit_sha).collect();
         // Children ascend: the tip B sits above its parent A, both above HEAD.
-        assert_eq!(
-            shas,
-            ["B", "A", "h", "g1", "g2"]
-                .map(sha)
-                .iter()
-                .collect::<Vec<_>>()
-        );
-        let g1 = g
-            .nodes
-            .iter()
-            .find(|n| n.commit_sha == sha("g1"))
-            .expect("g1");
-        assert_eq!(g1.change_number, Some(ChangeNumber::new(9)));
-        assert_eq!(g1.change_id, Some(change_id("Iland")));
+        assert_eq!(shas, [&sha_b, &sha_a, &sha_h, &g1, &g2]);
+        let node_g1 = g.nodes.iter().find(|n| n.commit_sha == g1).expect("g1");
+        assert_eq!(node_g1.change_number, Some(ChangeNumber::new(9)));
+        assert_eq!(node_g1.change_id, Some(idland));
     }
 
     fn tagged(mut change: ChangeProjection, key: &str, value: &str) -> ChangeProjection {
-        change.tags = nit_types::testing::tags(&[(key, value)]);
+        change.tags = [Tag::new(key, value).expect("valid tag")]
+            .into_iter()
+            .collect::<Tags>();
         change
     }
 
@@ -532,30 +573,50 @@ mod tests {
     // stacked across sessions does not split its own group's run.
     #[test]
     fn grouping_runs_each_tag_value_together() {
-        let p1 = tagged(
-            change(1, "Ip1", vec![revision(0, "P1", "h", "h")]),
+        let sha_h = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
+        let p1 = Sha::new("2222222222222222222222222222222222222222").expect("valid sha");
+        let p2 = Sha::new("3333333333333333333333333333333333333333").expect("valid sha");
+        let sha_q = Sha::new("4444444444444444444444444444444444444444").expect("valid sha");
+        let r1 = Sha::new("5555555555555555555555555555555555555555").expect("valid sha");
+        let r2 = Sha::new("6666666666666666666666666666666666666666").expect("valid sha");
+        let idp1 =
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id");
+        let idp2 =
+            ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id");
+        let idq =
+            ChangeId::new("I3333333333333333333333333333333333333333").expect("valid change id");
+        let idr1 =
+            ChangeId::new("I4444444444444444444444444444444444444444").expect("valid change id");
+        let idr2 =
+            ChangeId::new("I5555555555555555555555555555555555555555").expect("valid change id");
+        let cp1 = tagged(
+            change(1, &idp1, vec![revision(0, &p1, &sha_h, &sha_h)]),
             "s",
             "1",
         );
-        let p2 = tagged(
-            change(2, "Ip2", vec![revision(0, "P2", "P1", "h")]),
+        let cp2 = tagged(
+            change(2, &idp2, vec![revision(0, &p2, &p1, &sha_h)]),
             "s",
             "1",
         );
-        let q = tagged(change(3, "Iq", vec![revision(0, "Q", "P2", "h")]), "s", "2");
-        let r1 = tagged(
-            change(4, "Ir1", vec![revision(0, "R1", "h", "h")]),
+        let cq = tagged(
+            change(3, &idq, vec![revision(0, &sha_q, &p2, &sha_h)]),
             "s",
             "2",
         );
-        let r2 = tagged(
-            change(5, "Ir2", vec![revision(0, "R2", "R1", "h")]),
+        let cr1 = tagged(
+            change(4, &idr1, vec![revision(0, &r1, &sha_h, &sha_h)]),
             "s",
             "2",
         );
-        let changes = vec![p1, p2, q, r1, r2];
+        let cr2 = tagged(
+            change(5, &idr2, vec![revision(0, &r2, &r1, &sha_h)]),
+            "s",
+            "2",
+        );
+        let changes = vec![cp1, cp2, cq, cr1, cr2];
         let history = RepoHistory {
-            commits: vec![commit("h", &[])],
+            commits: vec![commit(&sha_h, &[])],
             truncated: false,
         };
         let shas = |g: &ChangeGraph| {
@@ -566,10 +627,16 @@ mod tests {
         };
 
         let plain = assemble(&changes, &history, None);
-        assert_eq!(shas(&plain), ["Q", "R2", "P2", "R1", "P1", "h"].map(sha));
+        assert_eq!(
+            shas(&plain),
+            [&sha_q, &r2, &p2, &r1, &p1, &sha_h].map(Sha::clone)
+        );
 
         let grouped = assemble(&changes, &history, Some("s"));
-        assert_eq!(shas(&grouped), ["Q", "R2", "R1", "P2", "P1", "h"].map(sha));
+        assert_eq!(
+            shas(&grouped),
+            [&sha_q, &r2, &r1, &p2, &p1, &sha_h].map(Sha::clone)
+        );
         let groups: Vec<Option<&str>> = grouped.nodes.iter().map(|n| n.group.as_deref()).collect();
         assert_eq!(
             groups,
@@ -586,18 +653,34 @@ mod tests {
     // revision is a root with no edge.
     #[test]
     fn tag_graph_runs_each_component_together() {
-        let a1 = change(1, "Ia1", vec![revision(0, "A1", "m", "m")]);
-        let b1 = change(2, "Ib1", vec![revision(0, "B1", "m", "m")]);
-        let a2 = change(3, "Ia2", vec![revision(0, "A2", "A1", "m")]);
-        let b2 = change(4, "Ib2", vec![revision(0, "B2", "B1", "m")]);
-        let a3 = change(5, "Ia3", vec![revision(0, "A3", "A2", "m")]);
-        let g = assemble_tag(&[a1, b1, a2, b2, a3]);
+        let sha_m = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
+        let a1 = Sha::new("2222222222222222222222222222222222222222").expect("valid sha");
+        let a2 = Sha::new("3333333333333333333333333333333333333333").expect("valid sha");
+        let a3 = Sha::new("4444444444444444444444444444444444444444").expect("valid sha");
+        let b1 = Sha::new("5555555555555555555555555555555555555555").expect("valid sha");
+        let b2 = Sha::new("6666666666666666666666666666666666666666").expect("valid sha");
+        let ida1 =
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id");
+        let idb1 =
+            ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id");
+        let ida2 =
+            ChangeId::new("I3333333333333333333333333333333333333333").expect("valid change id");
+        let idb2 =
+            ChangeId::new("I4444444444444444444444444444444444444444").expect("valid change id");
+        let ida3 =
+            ChangeId::new("I5555555555555555555555555555555555555555").expect("valid change id");
+        let ca1 = change(1, &ida1, vec![revision(0, &a1, &sha_m, &sha_m)]);
+        let cb1 = change(2, &idb1, vec![revision(0, &b1, &sha_m, &sha_m)]);
+        let ca2 = change(3, &ida2, vec![revision(0, &a2, &a1, &sha_m)]);
+        let cb2 = change(4, &idb2, vec![revision(0, &b2, &b1, &sha_m)]);
+        let ca3 = change(5, &ida3, vec![revision(0, &a3, &a2, &sha_m)]);
+        let g = assemble_tag(&[ca1, cb1, ca2, cb2, ca3]);
         let shas: Vec<Sha> = g.nodes.iter().map(|n| n.commit_sha.clone()).collect();
         // B2 is the first tip in the input, so B's run leads.
-        assert_eq!(shas, ["B2", "B1", "A3", "A2", "A1"].map(sha));
+        assert_eq!(shas, [&b2, &b1, &a3, &a2, &a1].map(Sha::clone));
         assert!(!g.history_truncated);
         assert!(g.nodes.iter().all(|n| n.section == GraphSection::Open));
-        assert_eq!(g.nodes[1].parents, vec![sha("m")]);
+        assert_eq!(g.nodes[1].parents, vec![sha_m]);
     }
 
     // Only the latest revisions join. A change amended onto a new parent
@@ -605,27 +688,45 @@ mod tests {
     // a component of terminal changes sinks below the active ones.
     #[test]
     fn tag_graph_pins_latest_revisions_and_sinks_terminal_components() {
-        let mut old = change(1, "Iold", vec![revision(0, "O", "m", "m")]);
+        let sha_m = Sha::new("1111111111111111111111111111111111111111").expect("valid sha");
+        let sha_n = Sha::new("2222222222222222222222222222222222222222").expect("valid sha");
+        let sha_o = Sha::new("3333333333333333333333333333333333333333").expect("valid sha");
+        let sha_d = Sha::new("4444444444444444444444444444444444444444").expect("valid sha");
+        let sha_a = Sha::new("5555555555555555555555555555555555555555").expect("valid sha");
+        let ap = Sha::new("6666666666666666666666666666666666666666").expect("valid sha");
+        let sha_b = Sha::new("7777777777777777777777777777777777777777").expect("valid sha");
+        let idold =
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id");
+        let iddead =
+            ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id");
+        let ida =
+            ChangeId::new("I3333333333333333333333333333333333333333").expect("valid change id");
+        let idb =
+            ChangeId::new("I4444444444444444444444444444444444444444").expect("valid change id");
+        let mut old = change(1, &idold, vec![revision(0, &sha_o, &sha_m, &sha_m)]);
         old.lifecycle = Lifecycle::Merged;
-        let mut dead = change(2, "Idead", vec![revision(0, "D", "O", "m")]);
+        let mut dead = change(2, &iddead, vec![revision(0, &sha_d, &sha_o, &sha_m)]);
         dead.lifecycle = Lifecycle::Abandoned;
-        let a = change(
+        let ca = change(
             3,
-            "Ia",
-            vec![revision(0, "A", "m", "m"), revision(1, "Ap", "n", "n")],
+            &ida,
+            vec![
+                revision(0, &sha_a, &sha_m, &sha_m),
+                revision(1, &ap, &sha_n, &sha_n),
+            ],
         );
-        let b = change(4, "Ib", vec![revision(0, "B", "A", "m")]);
-        let g = assemble_tag(&[old, dead, a, b]);
+        let cb = change(4, &idb, vec![revision(0, &sha_b, &sha_a, &sha_m)]);
+        let g = assemble_tag(&[old, dead, ca, cb]);
         let shas: Vec<Sha> = g.nodes.iter().map(|n| n.commit_sha.clone()).collect();
-        assert_eq!(shas, ["Ap", "B", "D", "O"].map(sha));
-        let node = |name: &str| {
+        assert_eq!(shas, [&ap, &sha_b, &sha_d, &sha_o].map(Sha::clone));
+        let node = |sha: &Sha| {
             g.nodes
                 .iter()
-                .find(|n| n.commit_sha == sha(name))
-                .expect(name)
+                .find(|n| &n.commit_sha == sha)
+                .unwrap_or_else(|| panic!("no node {sha}"))
         };
-        assert_eq!(node("Ap").revision, Some(RevisionNumber::new(1)));
-        assert_eq!(node("D").status, ChangeStatus::Abandoned);
-        assert_eq!(node("O").status, ChangeStatus::Merged);
+        assert_eq!(node(&ap).revision, Some(RevisionNumber::new(1)));
+        assert_eq!(node(&sha_d).status, ChangeStatus::Abandoned);
+        assert_eq!(node(&sha_o).status, ChangeStatus::Merged);
     }
 }
