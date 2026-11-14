@@ -1026,6 +1026,78 @@ const captures = [
   },
 ];
 
+const CAPTURE_LIMIT_MS = 60_000;
+
+/** Returns the result of `work`, or rejects when `work` runs past
+ * CAPTURE_LIMIT_MS. */
+async function withinLimit(work) {
+  let timer;
+  const hung = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`still running after ${CAPTURE_LIMIT_MS} ms`)),
+      CAPTURE_LIMIT_MS,
+    );
+  });
+  try {
+    return await Promise.race([work, hung]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Renders `cap` in a new page of `context`, and writes its PNG and its
+ * HTML snapshot. */
+async function capture(context, baseUrl, cap) {
+  const page = await context.newPage();
+  // A capture is dark unless it sets `colorScheme`.
+  if (cap.colorScheme)
+    await page.emulateMedia({ colorScheme: cap.colorScheme });
+  await page.route("**/api/attachments/**", (route) => {
+    const hash = new URL(route.request().url()).pathname.split("/")[3];
+    const blob = ATTACHMENT_BLOBS[hash];
+    return blob
+      ? route.fulfill({
+          contentType: blob.contentType,
+          body: blob.body,
+        })
+      : route.fulfill({ status: 404 });
+  });
+  const errors = [];
+  page.on("pageerror", (err) => errors.push(String(err)));
+  await page.goto(baseUrl + cap.path, { waitUntil: "load" });
+  await untilFonts(page);
+  await untilReady(page);
+  if (cap.actions) await cap.actions(page);
+  // Before the full-page style below, so the snapshot keeps the review
+  // bar fixed as the page has it.
+  writeFileSync(
+    resolve(outDir, `${cap.name}.html`),
+    await page.evaluate(snapshot, cap.colorScheme ?? "dark"),
+  );
+  // Fixed elements repeat confusingly in full-page captures; pin the
+  // review bar to the end of the document instead. Viewport captures
+  // keep it fixed so bar + modal render as they really stack.
+  if (cap.fullPage ?? true) {
+    await page.addStyleTag({
+      content: ".review-bar { position: static !important; }",
+    });
+  }
+  const file = resolve(outDir, `${cap.name}.png`);
+  // The file rail animates its hover styles with CSS transitions.
+  // `disabled` ends each running transition at its last frame, so no
+  // capture shows one halfway.
+  await page.screenshot({
+    path: file,
+    fullPage: cap.fullPage ?? true,
+    animations: "disabled",
+  });
+  console.log(
+    `captured ${cap.name}.png${errors.length ? `  PAGE ERRORS: ${errors.join("; ")}` : ""}`,
+  );
+  if (errors.length) process.exitCode = 1;
+  await page.close();
+}
+
 async function main() {
   const bundle = mkdtempSync(join(tmpdir(), "nit-screenshots-"));
   let server = null;
@@ -1060,9 +1132,8 @@ async function main() {
       colorScheme: "dark",
       reducedMotion: "reduce",
     });
-    // No step has a time limit. Each wait ends on the event that produces
-    // its state, and a limit sized for load still fails a correct capture
-    // on a starved CI runner. The CI job bounds a hang.
+    // No single wait has a time limit. Each wait ends on the event that
+    // produces its state, and withinLimit bounds a hung capture as a whole.
     context.setDefaultTimeout(0);
     // Keep captures order-independent (e.g. the persisted diff layout).
     // A sandboxed attachment frame has no storage to clear, and reading it
@@ -1072,59 +1143,12 @@ async function main() {
     });
 
     for (const cap of captures) {
-      const page = await context.newPage();
-      // A capture is dark unless it sets `colorScheme`.
-      if (cap.colorScheme)
-        await page.emulateMedia({ colorScheme: cap.colorScheme });
-      await page.route("**/api/attachments/**", (route) => {
-        const hash = new URL(route.request().url()).pathname.split("/")[3];
-        const blob = ATTACHMENT_BLOBS[hash];
-        return blob
-          ? route.fulfill({
-              contentType: blob.contentType,
-              body: blob.body,
-            })
-          : route.fulfill({ status: 404 });
-      });
-      const errors = [];
-      page.on("pageerror", (err) => errors.push(String(err)));
       try {
-        await page.goto(baseUrl + cap.path, { waitUntil: "load" });
-        await untilFonts(page);
-        await untilReady(page);
-        if (cap.actions) await cap.actions(page);
+        await withinLimit(capture(context, baseUrl, cap));
       } catch (err) {
         err.message = `capture ${cap.name}: ${err.message}`;
         throw err;
       }
-      // Before the full-page style below, so the snapshot keeps the review
-      // bar fixed as the page has it.
-      writeFileSync(
-        resolve(outDir, `${cap.name}.html`),
-        await page.evaluate(snapshot, cap.colorScheme ?? "dark"),
-      );
-      // Fixed elements repeat confusingly in full-page captures; pin the
-      // review bar to the end of the document instead. Viewport captures
-      // keep it fixed so bar + modal render as they really stack.
-      if (cap.fullPage ?? true) {
-        await page.addStyleTag({
-          content: ".review-bar { position: static !important; }",
-        });
-      }
-      const file = resolve(outDir, `${cap.name}.png`);
-      // The file rail animates its hover styles with CSS transitions.
-      // `disabled` ends each running transition at its last frame, so no
-      // capture shows one halfway.
-      await page.screenshot({
-        path: file,
-        fullPage: cap.fullPage ?? true,
-        animations: "disabled",
-      });
-      console.log(
-        `captured ${cap.name}.png${errors.length ? `  PAGE ERRORS: ${errors.join("; ")}` : ""}`,
-      );
-      if (errors.length) process.exitCode = 1;
-      await page.close();
     }
 
     await browser.close();
