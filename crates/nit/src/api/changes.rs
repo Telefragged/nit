@@ -215,11 +215,7 @@ pub(super) async fn revision_diff(
         }));
         wire.files.insert(
             0,
-            diff::commit_msg_file(
-                revs.against.as_ref().map(|a| a.message.as_str()),
-                &revs.revision.message,
-                3,
-            ),
+            diff::commit_msg_file(revs.old_message(), &revs.revision.message, 3),
         );
         Ok(Json(wire))
     })
@@ -270,7 +266,7 @@ pub(super) async fn revision_lines(
         };
         let file = if wanted.path == diff::COMMIT_MSG_PATH {
             Some(diff::commit_msg_file(
-                revs.against.as_ref().map(|a| a.message.as_str()),
+                revs.old_message(),
                 &revs.revision.message,
                 u32::MAX,
             ))
@@ -335,6 +331,24 @@ impl Revs {
                 ChangeVersion::Revision(a.number)
             })
     }
+
+    /// The commit whose tree the old side shows: the counterpart, else the
+    /// parent of the revision.
+    fn old_commit(&self) -> &Sha {
+        self.against
+            .as_ref()
+            .map_or(&self.revision.parent_sha, |a| &a.commit_sha)
+    }
+
+    /// The commit message the old side shows: the counterpart's, else none.
+    fn old_message(&self) -> Option<&str> {
+        self.against.as_ref().map(|a| a.message.as_str())
+    }
+
+    /// The revisions whose trees the diff shows, the selected one first.
+    fn revisions(&self) -> impl Iterator<Item = &RevisionProjection> {
+        std::iter::once(&self.revision).chain(self.against.as_ref())
+    }
 }
 
 fn resolve_revs(
@@ -386,12 +400,7 @@ fn contained_diff(
     let repo = open_repo(&revs.git_dir)?;
     let revision = &revs.revision;
     let new_tree = commit_tree(&repo, &revision.commit_sha)?;
-    let old_tree = commit_tree(
-        &repo,
-        revs.against
-            .as_ref()
-            .map_or(&revision.parent_sha, |a| &a.commit_sha),
-    )?;
+    let old_tree = commit_tree(&repo, revs.old_commit())?;
     let names = only.map(Wanted::names);
     let git = diff::git_diff(&repo, &old_tree, &new_tree, names.as_deref())?;
     let shown = |path: &str| only.is_none_or(|w| w.path == path);
@@ -444,10 +453,7 @@ pub(super) async fn ported_comments(
         let change = change_or_404(conn, id)?;
         let revs = resolve_revs(conn, &change, n, q.against)?;
         // Only a thread of an earlier revision can port to either target.
-        let latest = revs
-            .against
-            .as_ref()
-            .map_or(revs.revision.number, |m| m.number.max(revs.revision.number));
+        let latest = revs.revisions().fold(n, |latest, r| latest.max(r.number));
         let threads: Vec<_> = change
             .threads
             .iter()
@@ -459,9 +465,7 @@ pub(super) async fn ported_comments(
             })
             .collect();
         let repo = open_repo(&revs.git_dir)?;
-        let targets: Vec<_> = std::iter::once(&revs.revision)
-            .chain(revs.against.as_ref())
-            .collect();
+        let targets: Vec<_> = revs.revisions().collect();
         Ok(Json(port::port_threads(
             &repo,
             state.blobs(),
