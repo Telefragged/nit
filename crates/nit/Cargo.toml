@@ -53,5 +53,4 @@ utoipa = "5"
 utoipa-axum = "0.2"
 
 [dev-dependencies]
-nit-types = { workspace = true, features = ["testing"] }
 tempfile = "3"
