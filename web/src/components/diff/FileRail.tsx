@@ -119,6 +119,11 @@ const Chevron = ({ open }: { open: boolean }) => (
  * a row is under the icon of its directory. */
 const indent = (depth: number) => ({ paddingLeft: depth * 19 + 4 });
 
+/** The style of the list of rows under a row `depth` levels down the tree.
+ * The guide line of the list is under the middle of that row's toggle. */
+const guide = (depth: number) =>
+  ({ "--guide-x": `${depth * 19 + 12}px` }) as CSSProperties;
+
 /** `set` with `key` added, or removed when it holds it. */
 function flip(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
   const next = new Set(set);
@@ -227,7 +232,7 @@ export default function FileRail({
           <Counts file={file} />
         </div>
         {open ? (
-          <ul>
+          <ul className="rail-children" style={guide(depth)}>
             {threads.map((t) => (
               <li key={threadKey(t)}>
                 <Link
@@ -281,7 +286,9 @@ export default function FileRail({
           {node.name.replaceAll("/", " / ")}
         </button>
         {open ? (
-          <ul>{node.children.map((c) => nodeRows(c, depth + 1, scope))}</ul>
+          <ul className="rail-children" style={guide(depth)}>
+            {node.children.map((c) => nodeRows(c, depth + 1, scope))}
+          </ul>
         ) : null}
       </li>
     );
