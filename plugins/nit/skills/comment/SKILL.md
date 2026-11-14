@@ -1,6 +1,6 @@
 ---
 name: comment
-description: Communicate with the reviewer through nit instead of the chat — open and reply to threads with `nit comment`, anchored as tightly as possible (range > line > change-level), resolving settled notes and leaving open the ones the reviewer should weigh in on. Use to record a decision, answer a review thread, or raise a question for the reviewer.
+description: Communicate with the reviewer through nit instead of the chat — open and reply to threads with `nit comment`, anchored as tightly as possible (range > line > file > change-level), resolving settled notes and leaving open the ones the reviewer should weigh in on. Use to record a decision, answer a review thread, or raise a question for the reviewer.
 ---
 
 # nit:comment — talk to the reviewer in nit
@@ -13,7 +13,7 @@ about — not scattered through the chat.
 
 ```sh
 # open a NEW thread, anchored to code:
-nit comment --change-id <Change-Id> --file <path> (--line <n> | --range S-E) [--side new|old] -m "…"
+nit comment --change-id <Change-Id> --file <path> [--line <n> | --range S-E] [--side new|old] -m "…"
 # reply to an EXISTING thread (anchor flags are an error here):
 nit comment --change-id <Change-Id> --thread <thread-id> [--resolve|--unresolve] -m "…"
 # body from stdin instead of -m (also: -F <path> for a file):
@@ -43,8 +43,8 @@ EOF
 ## Anchor as tightly as you can
 
 Pin the note to the smallest span that carries it. **Prefer a range, then a
-line, then a change-level comment** — the tighter the anchor, the clearer what
-it is about.
+line, then a file, then a change-level comment** — the tighter the anchor, the
+clearer what it is about.
 
 ```sh
 # RANGE — best: the exact characters
@@ -53,6 +53,8 @@ nit comment --change-id <Change-Id> --file src/queue.rs --range 42:8-42:30 \
       blocking the producer."
 # LINE — when the whole line is the point
 nit comment --change-id <Change-Id> --file src/config.rs --line 14 -m "Defaulted to 30s."
+# FILE — when the note is about the whole file
+nit comment --change-id <Change-Id> --file src/queue.rs -m "Split the queue into its own crate."
 # CHANGE-LEVEL — last resort, when it isn't about specific lines
 nit comment --change-id <Change-Id> -m "Skipped the legacy migration — assuming no live data."
 ```
