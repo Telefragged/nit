@@ -77,7 +77,7 @@ let
   };
 
   # The installed npm dependencies. Every web derivation copies them, so
-  # `npm ci` runs once and not once per derivation.
+  # `npm ci` runs once.
   nodeModules = buildNpmPackage {
     pname = "nit-web-node-modules";
     inherit version nodejs npmDeps;
@@ -88,16 +88,14 @@ let
 
   # Drop the generated wasm glue into a web build's tree before it runs.
   # web/src/wasm is gitignored (so absent from the npm-package source), so
-  # every web derivation injects it the way `gen-wasm` does for local dev
-  # — the artifact is built by nix, never committed.
+  # every web derivation injects it the way `gen-wasm` does for local dev.
   injectWasm = ''
     mkdir -p src/wasm
     cp ${wasm}/* src/wasm/
   '';
 
   # The screenshot harness (web/screenshots/capture.mjs) and the gallery
-  # (web/gallery/) launch only chromium, so the browser set has no
-  # firefox and no webkit.
+  # (web/gallery/) launch only chromium.
   playwrightBrowsers = playwright-driver.selectBrowsers {
     withFirefox = false;
     withWebkit = false;
@@ -151,9 +149,7 @@ in
 
   checks = {
     # The frontend type check and lint (tsc, eslint, stylelint, knip) as a
-    # validator, the web counterpart to clippy. It runs the devShell
-    # `npm run lint`, so `nix flake check` fails on a type, eslint,
-    # stylelint or knip error.
+    # validator, the web counterpart to clippy.
     web-lint = webBuild "lint" { } "npm run lint > $out";
     web-test = webBuild "test" { } ''
       npm run test

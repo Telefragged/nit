@@ -49,8 +49,7 @@ let
         done
         # Rendering the docs is what resolves every intra-doc link, so a
         # broken or private one is a rustdoc lint here — denied by the
-        # `[workspace.lints]` flags already in $LIB_RUSTC_OPTS. The
-        # rendered tree is the by-product; the exit code is the point.
+        # `[workspace.lints]` flags already in $LIB_RUSTC_OPTS.
         # No $EXTRA_LIB: a crate is not an extern of its own docs.
         rustdoc "$docLib" \
           --crate-name "$CRATE_NAME" \
@@ -300,10 +299,8 @@ rec {
         --target web --out-name nit_wasm --out-dir $out
     '';
 
-  # Writes the WebAssembly fold into web/src/wasm for local dev. One
-  # derivation shared two ways: `nix run .#gen-wasm` (no devShell needed)
-  # and, added to the devShell below, a bare `gen-wasm` on PATH inside
-  # `nix develop` — so generating it doesn't require `nix run`. Finds the
+  # Writes the WebAssembly fold into web/src/wasm for local dev, through
+  # `nix run .#gen-wasm` or as `gen-wasm` on the devShell's PATH. Finds the
   # tree via git so it also works from a worktree or the web/ subdir
   # (`npm run` scripts shell out to it with that cwd).
   genWasm = writeShellApplication {
