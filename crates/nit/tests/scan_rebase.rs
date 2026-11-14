@@ -90,8 +90,6 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     );
     assert_eq!(latest_status(&server, tip_id), "approved");
 
-    // A reword changes reviewable content, so it resets to pending — a new
-    // revision the reviewer hasn't seen.
     let c2w = g.commit(&[c1r], &msg("two: explained", IB), &[("b.txt", b_txt)]);
     g.branch("feat", c2w);
     let (st, pr) = push(&server, &g, "feat", "main");

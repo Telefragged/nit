@@ -21,8 +21,6 @@ use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
 
-// Cargo sets `CARGO_MANIFEST_DIR` to the crate's current directory on every
-// compile.
 #[cfg(nit_plugin_dir)]
 static PLUGIN: include_dir::Dir = include_dir::include_dir!("$NIT_PLUGIN_DIR");
 #[cfg(not(nit_plugin_dir))]

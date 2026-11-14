@@ -22,11 +22,9 @@ pub fn of_file(old: &str, new: &str, context: u32, whitespace: Whitespace) -> Ve
 /// The line diff `old → new`, as the ranges of changed lines on each side.
 ///
 /// Histogram, gerrit's algorithm (`JGit`'s `HistogramDiff`): it anchors on the
-/// rarest line the two sides share, so a unique signature pins the alignment
-/// where myers — which only minimises the edit script — pairs whatever lies
-/// nearest and steals a brace from the neighbouring block. `postprocess_lines`
-/// then applies git's indent heuristic to the hunks whose placement is still
-/// ambiguous.
+/// rarest line the two sides share, so a unique signature fixes the alignment.
+/// `postprocess_lines` then applies git's indent heuristic to the hunks whose
+/// placement is still ambiguous.
 #[must_use]
 pub fn line_edits<T: AsRef<[u8]>>(input: &InternedInput<T>) -> Vec<imara_diff::Hunk> {
     let mut diff = imara_diff::Diff::compute(Algorithm::Histogram, input);
@@ -56,16 +54,15 @@ fn line_hunks(before: &[&str], after: &[&str], context: u32, whitespace: Whitesp
         .into_iter()
         .map(|h| (range(h.before), range(h.after)))
         .collect();
-    // The lines carry their separator; the wire text never does.
+    // The lines contain their separator; the wire text never does.
     let text = |line: &str| line.strip_suffix('\n').unwrap_or(line).to_string();
     let number = |index: usize| Some(index as u64 + 1);
     let ctx = context as usize;
 
     // The header is git's default rule: the nearest line above the hunk whose
     // first character is alphabetic, `_` or `$` (no support for the
-    // per-language `diff` drivers a `.gitattributes` can name). Hunks ascend,
-    // so a cursor that only moves forward reads the file once — searching
-    // backwards would re-read it per hunk on one with no declaration at all.
+    // per-language `diff` drivers a `.gitattributes` can specify). Hunks
+    // ascend, so a cursor that only moves forward scans the file once.
     let (mut scanned, mut header) = (0usize, "");
     let mut header_above = |line: usize| {
         for read in &before[scanned..line] {

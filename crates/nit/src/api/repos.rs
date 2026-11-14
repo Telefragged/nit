@@ -44,8 +44,8 @@ fn resolve_ref(repo: &Repository, canonical_ref: &str) -> Result<Sha, Error> {
 
 /// Registers a repo (`nit repo create`) with its canonical ref.
 ///
-/// `canonical_ref` must resolve to a commit
-/// — any git ref, e.g. `origin/main` (400 otherwise); nit never guesses it.
+/// `canonical_ref` must resolve to a commit. It accepts any git ref, for
+/// example `origin/main`, and returns 400 otherwise.
 /// 409 if the git dir is already registered.
 #[utoipa::path(post, path = "/api/repos", request_body = CreateRepo, responses((status = 200, body = Repo)))]
 pub(super) async fn create_repo(
@@ -82,7 +82,7 @@ pub(super) async fn create_repo(
     .await
 }
 
-/// Lists every registered repo with its open-change count (derived, never stored).
+/// Lists every registered repo with its open-change count.
 #[utoipa::path(get, path = "/api/repos", responses((status = 200, body = RepoList)))]
 pub(super) async fn list_repos(
     State(state): State<Arc<AppState>>,
@@ -97,7 +97,7 @@ pub(super) async fn list_repos(
     .await
 }
 
-/// One repo by id; open-change count derived, never stored (404 if unknown).
+/// One repo by id, with its open-change count (404 if unknown).
 #[utoipa::path(get, path = "/api/repos/{id}", params(("id" = u64, Path)), responses((status = 200, body = Repo)))]
 pub(super) async fn get_repo(
     State(state): State<Arc<AppState>>,

@@ -22,7 +22,7 @@ esac
 
 mkdir -p "$dir"
 # The download goes to the install directory, so the rename below is
-# atomic. A running server reads that rename as its signal to restart.
+# atomic. A running server restarts when it detects that rename.
 staging=$(mktemp -d "$dir/.nit-install.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
 curl -fsSL -o "$staging/$asset" "$url/$asset"
@@ -37,7 +37,7 @@ if [ -z "${NIT_NO_MODIFY_PATH:-}" ]; then
   *":$dir:"*) ;;
   *)
     line="export PATH=\"$dir:\$PATH\""
-    # A login shell of sh or bash reads .profile.
+    # A login shell of sh or bash loads .profile.
     [ -e "$HOME/.profile" ] || : >"$HOME/.profile"
     for rc in "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.zshenv"; do
       [ -e "$rc" ] || continue

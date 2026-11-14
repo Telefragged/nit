@@ -14,7 +14,6 @@ const IINTER01: &str = "I696e746572303100000000000000000000000000";
 const IONLY001: &str = "I6f6e6c7930303100000000000000000000000000";
 const IRENAME01: &str = "I72656e616d653031000000000000000000000000";
 
-/// Revision 0 of the tip change lives here after the first push.
 fn tip_change_number(push_result: &Value) -> u64 {
     tip_change(push_result)["change_number"]
         .as_u64()
@@ -43,8 +42,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
     );
     g.branch("main", base);
 
-    // Far-apart edits (k2 and k11) force two separate hunks — context windows
-    // don't overlap.
+    // Far-apart edits (k2 and k11) force two separate hunks.
     let keep_v2 = keep_v1
         .replace("k2\n", "k2 changed\n")
         .replace("k11\n", "k11 changed\n");
@@ -211,8 +209,6 @@ fn interdiff_against_earlier_revision() {
         http_get(&server.url(&format!("/api/changes/{id}/revisions/1/diff?against=r0")));
     assert_eq!(st, 200, "{diff}");
 
-    // The message file leads and is a MODIFIED message diff (subject reworded),
-    // not the all-add vs-parent form.
     let cm = diff["files"][0].clone();
     assert_eq!(cm["path"], "/COMMIT_MSG");
     assert_eq!(cm["status"], "modified");
@@ -381,8 +377,7 @@ fn lines_of_the_commit_message() {
     let count = |kinds: &[String], kind: &str| kinds.iter().filter(|k| *k == kind).count();
     // Subject, blank, eight body lines, blank, trailer.
     assert_eq!(count(&kinds(""), "add"), 12);
-    // The reworded subject, then every unchanged line, not only the three
-    // around the change.
+    // The reworded subject, then every unchanged line.
     let interdiff = kinds("&against=r0");
     assert_eq!((count(&interdiff, "del"), count(&interdiff, "add")), (1, 1));
     assert_eq!(count(&interdiff, "context"), 11);

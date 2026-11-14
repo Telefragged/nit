@@ -31,10 +31,7 @@ pub fn draft_view(d: &db::DraftRow) -> Draft {
 
 /// The reviewer's private overlay, read straight from the database.
 ///
-/// Unpublished drafts and the draft decision. Not log state, so the change
-/// page reads it over REST (`GET /api/changes/{id}/drafts`) while folding
-/// the published projection over the websocket; the change detail folds the
-/// same overlay in.
+/// Unpublished drafts and the draft decision, which are not log state.
 ///
 /// # Errors
 ///
@@ -58,9 +55,6 @@ pub fn change_overlay(conn: &Connection, change_number: ChangeNumber) -> Result<
 ///
 /// When reading drafts fails.
 pub fn build_change_detail(conn: &Connection, change: &ChangeProjection) -> Result<ChangeDetail> {
-    // The published view (revisions/threads/reviews) is the shared fold; the
-    // reviewer's drafts and draft decision live outside the log, so overlay
-    // them from the database here.
     let mut detail = nit_types::fold::change_detail(change);
     let overlay = change_overlay(conn, change.id)?;
     detail.drafts = overlay.drafts;

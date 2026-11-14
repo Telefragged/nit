@@ -1,4 +1,4 @@
-//! The git layer: the push walk and merged/abandoned detection.
+//! The git layer: the push walk and merged detection.
 //!
 //! The detection serves the background timer; [`walk_push`] and
 //! [`detect_merges`] carry the contract.
@@ -185,9 +185,10 @@ pub fn resolve_head(repo: &Repository, canonical_ref: &str) -> Option<Sha> {
 /// with the merged commit's sha. One walk covers every change; `open`
 /// maps `change_id →` the change. At most one merge per change.
 ///
-/// A merge that *stripped* its Change-Id is not detected — nit's own approve
-/// action preserves the trailer through rebase + fast-forward, and chasing
-/// keyless landings is what forced an unbounded per-change diff every sweep.
+/// A merge that *stripped* its Change-Id is not detected. nit's own approve
+/// action preserves the trailer through rebase and fast-forward, and
+/// detecting a keyless landing would require a diff per open change on every
+/// sweep.
 #[must_use]
 pub fn detect_merges<S: std::hash::BuildHasher>(
     repo: &Repository,
@@ -322,8 +323,7 @@ mod tests {
     use nit_types::domain::{ChangeId, ChangeNumber, Sha};
     use nit_types::domain::{ChangeProjection, RevisionProjection};
 
-    /// Flat paths only. A `TreeBuilder` seeded from the first parent is
-    /// all these tests need.
+    /// Flat paths only.
     fn commit(
         repo: &Repository,
         parents: &[Oid],
@@ -388,13 +388,6 @@ mod tests {
         changes.iter().map(|c| (c.change_id.clone(), *c)).collect()
     }
 
-    // The positive single-match path is covered by `stacked_prefix_detects_…`
-    // below (which lands one commit per change through the same logic) and
-    // end-to-end by `change_landed_on_main_becomes_merged`; the tests here
-    // pin the branches those don't reach — and `drifted_landing_is_detected`
-    // pins the walk's content-blindness (no fixture elsewhere lands a diff
-    // that matches no pushed revision).
-
     /// The merge rebase may adapt the diff, so the merged content can
     /// match no pushed revision; the Change-Id still identifies the merge
     /// and the merged commit's sha is recorded.
@@ -458,8 +451,8 @@ mod tests {
         assert_eq!(got, vec![]);
     }
 
-    /// One delta walk detects every member that merged — a stacked prefix
-    /// (A and B merge, each at its own revision) falls out for free.
+    /// One delta walk detects every member that merged, here a stacked
+    /// prefix where A and B merge, each at its own revision.
     #[test]
     fn stacked_prefix_detects_each_member() {
         let (_dir, repo, root) = repo();

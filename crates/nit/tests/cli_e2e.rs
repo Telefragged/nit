@@ -44,7 +44,7 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
     let (ok, push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
     // push prints the digest of the changes that have its tags, one line
-    // each (number change_id status rN Nu subject), so no follow-up read.
+    // each (number change_id status rN Nu subject).
     let push = push.as_str().expect("push prints text");
     assert!(push.contains("tag branch=feat"), "{push}");
     assert!(
@@ -453,7 +453,7 @@ fn status_before_any_push_says_run_nit_push_first() {
     assert!(stderr.contains("run 'nit push' first"), "{stderr}");
 }
 
-/// Unreachable server is reported as a connection error, not as a malformed-request error.
+/// An unreachable server is reported as a connection error.
 #[test]
 fn push_to_a_dead_server_reports_unreachable() {
     let g = GitRepo::new();
@@ -539,7 +539,6 @@ fn push_tags_derived_and_explicit_values() {
     assert_eq!(tags["session-id"], "sess-1");
     assert_eq!(tags["feature"], "epic-saga");
 
-    // An explicit rev names the same commit, but implies no ref.
     let c2 = g.commit(&[c1], &msg("core: add b", IB), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
     let (ok, _, stderr) = nit(&server, &g, &["push", "feat"]);

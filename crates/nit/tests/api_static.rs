@@ -59,7 +59,6 @@ fn runs_api_only_without_web_ui() {
     assert_eq!(st, 200);
     assert_eq!(health["status"], "ok");
 
-    // No SPA → client routes are a bare 404 (no index.html to fall back to).
     let (st, _) = http_get(&server.url("/changes/12"));
     assert_eq!(st, 404);
 }
@@ -72,7 +71,6 @@ fn api_errors_are_json_everywhere() {
     let dir = tempfile::tempdir().unwrap();
     let server = TestServer::start(dir.path().join("nit.sqlite3"), Some(&WEB_UI));
 
-    // Unknown /api paths error as JSON, not the SPA fallback.
     for path in ["/api", "/api/", "/api/nonexistent", "/api/chain/12"] {
         let (st, body) = http_get(&server.url(path));
         assert_eq!(st, 404, "{path}: {body}");
@@ -83,7 +81,6 @@ fn api_errors_are_json_everywhere() {
     assert_eq!(st, 400, "{body}");
     assert!(body["error"].is_string(), "{body}");
 
-    // A malformed JSON body errors as JSON, not text/plain.
     let resp = ureq::Agent::new_with_defaults()
         .post(&server.url("/api/push"))
         .header("content-type", "application/json")

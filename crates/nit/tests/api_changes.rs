@@ -1,8 +1,7 @@
 //! The bulk change read (`GET /api/changes`): the explicit `status` filter —
 //! repeatable, matched at each change's latest revision, and **absent means
-//! every change** (the API bakes in no default subset). The filter reads a
-//! denormalized column that nothing rebuilds at startup, so these cases
-//! cover a restart.
+//! every change**. The filter queries a denormalized column that nothing
+//! rebuilds at startup, so these cases cover a restart.
 
 mod common;
 
@@ -13,9 +12,6 @@ use common::{
 const IA: &str = "Ia000000000000000000000000000000000000000";
 const IB: &str = "Ib000000000000000000000000000000000000000";
 
-// Two changes, one reviewed: no filter returns both full
-// projections, a status filter selects by each change's latest-revision
-// status, and repeated params union.
 #[test]
 fn status_filter_is_explicit_and_absent_means_all() {
     let g = GitRepo::new();
@@ -33,7 +29,6 @@ fn status_filter_is_explicit_and_absent_means_all() {
 
     let all = get_changes(&server, &format!("?repo={repo_id}"));
     assert_eq!(change_ids(&all), vec![IA, IB], "no filter: every change");
-    // The payload is the folded projection, not a summary shape.
     assert!(
         all.iter().all(|c| c["revisions"].is_array()),
         "ChangeProjection payload: {all:?}"

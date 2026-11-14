@@ -190,9 +190,8 @@ fn merge_commit_rejects_the_push() {
 
 #[test]
 fn already_merged_commit_rejects_the_push() {
-    // A tip that is ancestor-or-equal of the base walks to nothing — the work
-    // already merged. The push fails (409) rather than silently recording
-    // nothing.
+    // A tip that is ancestor-or-equal of the base walks to nothing: the work
+    // already merged.
     let g = GitRepo::new();
     let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("main", c1);
@@ -205,7 +204,6 @@ fn already_merged_commit_rejects_the_push() {
         e["error"].as_str().unwrap().contains("already merged"),
         "{e}"
     );
-    // All-or-nothing: the already-merged push records no changes either.
     assert_eq!(all_changes(&server), Vec::<serde_json::Value>::new());
 }
 

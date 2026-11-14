@@ -38,9 +38,7 @@ pub struct AppState {
     appended: watch::Sender<()>,
     /// Process-global allocator for draft ids.
     ///
-    /// Seeded past the `draft_comments` rows in use. Change numbers are
-    /// `changes` rowids and review ids are log coordinates — neither is
-    /// allocated here.
+    /// Seeded past the `draft_comments` rows in use.
     next_id: AtomicU64,
     shutdown: watch::Sender<bool>,
 }
@@ -150,8 +148,7 @@ pub fn changes_matching(
 
 /// Returns the repo ids a `?repo=` filter admits.
 ///
-/// An unknown id has no changes, so a list read filters to empty rather
-/// than 404ing.
+/// An unknown id has no changes, so a list request for it is empty.
 ///
 /// # Errors
 ///
@@ -331,8 +328,7 @@ pub fn append(
 ///
 /// Acquires the connection and runs the work off the async runtime —
 /// deadpool's `interact` hands the closure a `&mut Connection` on a blocking
-/// thread. The per-request connection accessor every handler routes its work
-/// through.
+/// thread.
 ///
 /// # Errors
 ///
@@ -351,8 +347,6 @@ where
         .await
         .map_err(|e| Error::internal(format!("database task: {e}")))?
 }
-
-// Non-2xx responses carry {"error": "human readable message"} in the body.
 
 #[derive(Debug)]
 pub struct Error {

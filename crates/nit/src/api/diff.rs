@@ -1,6 +1,6 @@
 //! Diff JSON rendering and line-text snapshots.
 //!
-//! All functions take trees, not commits: a change's diff is always
+//! The diff functions take trees: a change's diff is always
 //! `parent_sha → commit tree` of the selected revision, an interdiff is
 //! `tree(m) → tree(n)`.
 
@@ -18,13 +18,13 @@ use crate::hunks::{self, wire_line};
 
 pub use nit_types::diff::{ATTACHMENT_PREFIX, COMMIT_MSG_PATH};
 
-/// The name of the attachment that `path` names, if it names one.
+/// The name of the attachment that `path` identifies, if it identifies one.
 #[must_use]
 pub fn attachment_name(path: &str) -> Option<&str> {
     path.strip_prefix(ATTACHMENT_PREFIX)
 }
 
-/// The tree of the commit `sha` names, when everything resolves.
+/// The tree of the commit `sha`, when everything resolves.
 #[must_use]
 pub fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Option<Tree<'r>> {
     repo.find_commit(git2::Oid::from_str(sha.as_str()).ok()?)
@@ -36,7 +36,7 @@ pub fn commit_tree<'r>(repo: &'r Repository, sha: &Sha) -> Option<Tree<'r>> {
 /// How many adds or deletes still get compared by content.
 ///
 /// Past it a delete pairs with an add only when their blobs are identical.
-/// Scoring content pairs every add against every delete and reads each
+/// Scoring content pairs every add against every delete and loads each
 /// candidate blob to do it, so a diff that spans a moved base — thousands
 /// of files the base added and deleted — spends seconds pairing files no
 /// reviewer asked about. Jgit stops there too, at gerrit's
@@ -45,21 +45,19 @@ const RENAME_LIMIT: usize = 400;
 
 /// The raw git diff `old → new`, with rename detection.
 ///
-/// The one definition of how nit pairs a delete with an add. Git supplies
-/// the deltas only; the lines inside each of them come from `line_hunks`.
-/// Built separately from [`render`] so a caller can walk the deltas itself
-/// and decide each one's fate before paying to render it
-/// ([`super::rebase::contain`]).
+/// The one definition of how nit pairs a delete with an add. Built
+/// separately from [`render`] so a caller can walk the deltas itself and
+/// select which ones to render ([`super::rebase::contain`]).
 ///
 /// Rename detection weakens on a large diff: past a ceiling on the adds or
 /// deletes it will score, a delete pairs with an add only when their blobs
-/// are identical, so a caller reading names off the deltas sees a
+/// are identical, so a caller that takes names from the deltas gets a
 /// renamed-and-edited file as an unrelated add and delete.
 ///
 /// `paths` bounds the diff to those names, matched literally. What falls
 /// outside is never walked and never offered to rename detection, so a
-/// rename is paired only when the bound holds both of its ends — and a bound
-/// with no names in it holds every path, as git reads an empty pathspec.
+/// rename is paired only when the bound contains both of its ends. A bound
+/// with no names in it matches every path, as an empty git pathspec does.
 ///
 /// # Errors
 ///
@@ -95,14 +93,14 @@ pub(super) fn delta_names(delta: &git2::DiffDelta) -> Option<(String, String)> {
     Some((name(delta.old_file())?, name(delta.new_file())?))
 }
 
-/// A delta's identity as the wire carries it, with no lines yet.
+/// A delta's identity in the wire shape, with no lines yet.
 ///
 /// Its status, the path it appears under (the new-side name, or the
 /// old-side one for a deletion) and the old-side name when a rename made
-/// the two differ. Binary until blobs prove otherwise — [`fill_lines`] is
-/// what proves it — so every unreadable or undiffable file lands in the one
-/// place that says so. `None` for a status the wire never renders, so every
-/// walk over the same deltas agrees on which exist.
+/// the two differ. Binary until [`fill_lines`] fills in the lines of two
+/// text blobs, so every unreadable or undiffable file stays binary. `None`
+/// for a status the wire never renders, so every walk over the same deltas
+/// returns the same set of files.
 pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<DiffFile> {
     let status = delta_status(delta.status())?;
     let path = |f: git2::DiffFile| {
@@ -133,9 +131,8 @@ pub(super) fn delta_file(delta: &git2::DiffDelta) -> Option<DiffFile> {
 /// `context` unchanged lines around each change ([`u32::MAX`] for the
 /// whole-file `/lines` source).
 ///
-/// `keep` decides which paths are worth rendering — the caller's chance to
-/// drop a file before its blobs are read and diffed, which is the whole
-/// point of taking it.
+/// `keep` selects the paths to render, so a caller can drop a file before
+/// its blobs are loaded and diffed.
 ///
 /// # Errors
 ///
@@ -162,9 +159,6 @@ pub fn render(
 
 /// `file` with the lines of its delta, both blobs read under the wire path.
 ///
-/// Takes the identity [`delta_file`] already resolved, so a caller that has
-/// decided on a delta does not resolve it twice.
-///
 /// # Errors
 ///
 /// When git can't read a blob.
@@ -185,8 +179,8 @@ pub(super) fn render_delta(
 
 /// Fills in the lines of a file's two sides, and the counts over them.
 ///
-/// Proves the file is not binary, which is what [`delta_file`] assumed it
-/// was.
+/// Marks the file as text, replacing the binary default that
+/// [`delta_file`] sets.
 pub(super) fn fill_lines(
     file: &mut DiffFile,
     old: &[u8],
@@ -207,7 +201,7 @@ pub(super) fn fill_lines(
 /// The null oid — the absent side of an add or delete — is the empty
 /// text.
 ///
-/// `path` decides it as git does, by `.gitattributes` first: a file marked
+/// Git's rules apply, with the `.gitattributes` of `path` first: a file marked
 /// `binary` or `-diff` is binary whatever its bytes look like. Content is only
 /// the fallback, and git's own — a NUL byte early in the blob.
 ///
@@ -236,10 +230,7 @@ fn delta_status(delta: Delta) -> Option<FileStatus> {
     }
 }
 
-/// A file's wire counts.
-///
-/// Drift lines are the base's work, not the change's, so they never count —
-/// which is why [`super::rebase::contain`] recounts a file it has tagged.
+/// A file's wire counts, which exclude drift lines.
 pub(super) fn stats(hunks: &[Hunk]) -> (u64, u64) {
     let (mut additions, mut deletions) = (0, 0);
     for line in hunks.iter().flat_map(|h| &h.lines).filter(|l| !l.drift) {
@@ -293,7 +284,7 @@ pub(super) fn attachment_file(
 
 /// A binary entry, with no lines yet, for a file outside the trees.
 ///
-/// `old` and `new` say which sides hold the file.
+/// `old` and `new` specify which sides contain the file.
 fn outside_tree(path: String, old: bool, new: bool) -> DiffFile {
     let status = match (old, new) {
         (false, _) => FileStatus::Added,
@@ -511,8 +502,8 @@ mod tests {
         let t_new = r.tree(&[("data.bin", b"one\nTWO\n".as_slice())]);
         let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
 
-        // Plain text by content, but the repo says not to diff it — as git
-        // does, the attribute wins and no lines are rendered.
+        // Plain text by content, but `.gitattributes` marks it `-diff`. As in
+        // git, the attribute wins and no lines are rendered.
         let f = &diff.files[0];
         assert!(f.binary);
         assert!(f.hunks.is_empty());
@@ -530,7 +521,7 @@ mod tests {
         let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
 
         // Every shift of this insertion costs the same three lines, so only
-        // the indent heuristic decides where it lands: the whole inserted
+        // the indent heuristic selects where it lands: the whole inserted
         // object, not a tail of one object plus the head of the next.
         let added: Vec<&str> = diff.files[0].hunks[0]
             .lines

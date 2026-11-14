@@ -1,13 +1,13 @@
 //! The per-change fold and its server-side adapters.
 //!
-//! The fold itself ([`nit_types::fold`], re-exported here so the rest of the
-//! crate keeps importing `crate::review::*`) is pure over `nit_types` — no
-//! database, no storage serialization, no event publishing — so the same code
-//! folds the websocket stream client-side once compiled to WebAssembly. This
-//! module adds the two things that must **not** follow it to the browser: the
-//! storage boundary (`payload_to_json`/`payload_from_json`, the
-//! `log.payload` column split) and the row adapters that build wire
-//! [`LogEntry`]s from `db` rows (`entry_from_row`/[`replay_rows`]).
+//! The fold itself ([`nit_types::fold`], re-exported here) is pure over
+//! `nit_types`: no database, no storage serialization, no event publishing.
+//! So the same code folds the websocket stream client-side once compiled to
+//! WebAssembly. This module adds the two things that must **not** follow it
+//! to the browser: the storage boundary (`payload_to_json` and
+//! `payload_from_json`, the `log.payload` column split) and the row adapters
+//! that build wire [`LogEntry`]s from `db` rows (`entry_from_row` and
+//! [`replay_rows`]).
 
 use anyhow::{Result, anyhow};
 
@@ -24,8 +24,7 @@ pub use nit_types::fold::*;
 ///
 /// The stored JSON is the inner struct alone, since the entry's `kind` is
 /// stored in its own column. The write half of the storage boundary
-/// ([`payload_from_json`] is the read half) — no `serde_json::Value`
-/// crosses it.
+/// ([`payload_from_json`] is the read half).
 ///
 /// # Errors
 ///

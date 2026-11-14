@@ -76,14 +76,12 @@ fn draft_surfaces_then_clears() {
     let (st, _) = http_delete(&server.url(&format!("/api/changes/{id}/decision")));
     assert_eq!(st, 204);
 
-    // Staging is not a publish.
     assert_eq!(published_reviews(&server, id), Vec::<Value>::new());
     assert_eq!(status_at(&server, id), "pending");
 }
 
-/// `GET /changes/{id}/drafts` returns the reviewer's private overlay alone —
-/// drafts + draft decision, no published projection — for the change page that
-/// folds revisions/threads/reviews over the websocket instead.
+/// `GET /changes/{id}/drafts` returns the reviewer's private overlay alone:
+/// the drafts and the draft decision, and no published projection.
 #[test]
 fn drafts_endpoint_returns_the_overlay() {
     let g = GitRepo::new();

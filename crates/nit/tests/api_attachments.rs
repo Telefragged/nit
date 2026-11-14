@@ -228,7 +228,7 @@ fn download_serves_the_bytes_typed_by_the_name() {
     assert_eq!(headers["x-content-type-options"], "nosniff");
 }
 
-/// A hash the store does not hold is a 404.
+/// A hash the store does not contain is a 404.
 #[test]
 fn download_of_an_unknown_blob_is_404() {
     let g = GitRepo::new();

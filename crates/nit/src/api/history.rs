@@ -48,7 +48,6 @@ pub(super) async fn repo_history(
                 parents: c.parents,
                 subject: c.subject,
                 change_number,
-                // Coupled: a trailer naming no known change nulls both.
                 change_id: change_number.and(c.trailer),
             });
         }

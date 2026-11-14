@@ -28,8 +28,7 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
 /// The background sweep for **merged** changes.
 ///
 /// Detects a change merged onto the canonical ref and appends
-/// `lifecycle{merged}` entries. The only writer of `merged`. It never
-/// abandons — abandonment is an explicit action (`abandon_change`).
+/// `lifecycle{merged}` entries.
 pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_watch();
     loop {
@@ -44,7 +43,7 @@ pub(super) async fn run_lifecycle_timer(state: Arc<AppState>) {
 /// Runs one lifecycle sweep to completion.
 ///
 /// The background timer calls this on its interval; tests call it directly
-/// to drive merge detection without waiting on — or coupling to — the timer.
+/// to drive merge detection without waiting on the timer.
 pub async fn sweep_once(state: &Arc<AppState>) {
     let st = state.clone();
     let _ = with_conn(state.pool(), move |conn| {
@@ -56,11 +55,10 @@ pub async fn sweep_once(state: &Arc<AppState>) {
 
 /// One sweep of every repo whose canonical ref has moved.
 ///
-/// For each such repo — moved since the last sweep — scan only the new
-/// commits for landings, append `lifecycle{merged}`, and record the new HEAD
-/// as the baseline. The baseline lives only in the DB (`repos.canonical_head`) —
-/// the single source of truth — so a repo whose branch is unchanged costs
-/// one ref resolution.
+/// For each such repo, scan the commits since the last sweep for landings,
+/// append `lifecycle{merged}`, and record the new HEAD as the baseline in
+/// `repos.canonical_head`, so a repo whose branch is unchanged costs one ref
+/// resolution.
 fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
     let Ok(repos) = db::all_repos(conn) else {
         return;
@@ -77,14 +75,13 @@ fn sweep_lifecycle(state: &Arc<AppState>, conn: &mut Connection) {
         if recorded.as_ref() == Some(&head) {
             continue;
         }
-        // First observation has no baseline -- no landings are detected;
-        // landings that predate tracking are not this timer's concern.
+        // The first observation has no baseline, so landings that predate
+        // tracking are not detected.
         if let Some(since) = &recorded {
             let Ok(changes) = crate::review::repo_changes(conn, repo_id, &db::ChangeFilter::open())
             else {
                 continue;
             };
-            // The sweep's working set -- looked up once per new commit.
             let open: HashMap<ChangeId, &ChangeProjection> =
                 changes.iter().map(|c| (c.change_id.clone(), c)).collect();
             for (change_number, sha) in gitscan::detect_merges(&repo, since, &head, &open) {

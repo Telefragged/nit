@@ -379,8 +379,9 @@ pub fn http_delete(url: &str) -> (u16, Value) {
     read(agent().delete(url).call().unwrap())
 }
 
-/// `POST /api/repos` over HTTP (≡ `nit repo create`). `base` pins the canonical
-/// canonical ref (any git ref that resolves to a commit). Returns `(status, Repo)`.
+/// `POST /api/repos` over HTTP (≡ `nit repo create`). `canonical_ref` pins the
+/// repo's canonical ref (any git ref that resolves to a commit). Returns
+/// `(status, Repo)`.
 pub fn create_repo(server: &TestServer, repo: &GitRepo, canonical_ref: &str) -> (u16, Value) {
     let body = json!({"git_dir": repo.git_dir(), "canonical_ref": canonical_ref});
     http_post(&server.url("/api/repos"), &body)
@@ -411,9 +412,6 @@ pub fn tag_change(server: &TestServer, change_number: u64, tags: &Value) -> (u16
 
 /// The change `tip` registers, as a fixture for a test about something
 /// other than pushing.
-///
-/// A change only comes into being through a push, so a test that needs
-/// one starts here.
 pub fn a_change(server: &TestServer, repo: &GitRepo, tip: &str) -> u64 {
     let (st, res) = push(server, repo, tip, "main");
     assert_eq!(st, 200, "{res}");
@@ -467,14 +465,13 @@ pub fn change_by_id(server: &TestServer, repo_id: u64, change_id: &str) -> Value
 /// One change's tags, by `Change-Id`.
 ///
 /// Absent when the change carries none, because `skip_serializing_if`
-/// omits an empty set rather than shipping `{}`.
+/// omits an empty set.
 pub fn change_tags(server: &TestServer, repo_id: u64, change_id: &str) -> Value {
     change_by_id(server, repo_id, change_id)["tags"].clone()
 }
 
-/// Publish a verdict on a change through the only publish path — draft the
-/// decision, then batch-submit that one change. Returns the
-/// `BatchSubmitResult`.
+/// Publish a verdict on a change: draft the decision, then batch-submit
+/// that one change. Returns the `BatchSubmitResult`.
 pub fn review(server: &TestServer, change_number: u64, verdict: &str, message: &str) -> Value {
     let (st, _) = http_put(
         &server.url(&format!("/api/changes/{change_number}/decision")),
@@ -553,8 +550,7 @@ pub fn msg(subject: &str, change_id: &str) -> String {
 }
 
 /// Drive one lifecycle sweep synchronously, in-process, against the server's
-/// own `AppState` — deterministic merge detection with no timer and no HTTP
-/// round-trip. Returns once the sweep has committed.
+/// own `AppState`. Returns once the sweep has committed.
 pub fn sweep(server: &TestServer) {
     let state = server.state.as_ref().expect("state");
     server
@@ -629,7 +625,7 @@ pub fn ws_read(socket: &mut WsSock) -> Value {
 /// A running `nit` process, so the test can act while a watch runs.
 ///
 /// A reader thread drains each of the child's pipes, so the test wakes on
-/// what the child writes and never on a clock.
+/// what the child writes.
 pub struct RunningNit {
     child: std::process::Child,
     /// The whole stdout, sent once the child closes the pipe.

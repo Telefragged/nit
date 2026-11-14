@@ -33,8 +33,8 @@ pub(crate) struct Sources {
 impl Sources {
     /// Fetches each file that a line comment in `entries` anchors to, once.
     ///
-    /// The lines come from the server, not from the local checkout, so the
-    /// quote works when the server runs on another machine. The quotes
+    /// The lines come from the server, so the quote works when the server
+    /// runs on another machine. The quotes
     /// fit the width of the terminal on stdout, or annotate-snippets'
     /// default width when stdout is not a terminal.
     ///
@@ -106,7 +106,7 @@ fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Si
 /// body goes under the quote, because a label breaks the gutter at each
 /// line break.
 ///
-/// `None` when the side does not hold the anchored lines.
+/// `None` when the side does not contain the anchored lines.
 fn quote(
     file: &str,
     side: Side,
@@ -276,10 +276,6 @@ mod tests {
                 ],
             }),
         };
-        // An underline starts at the first non-blank unless the selection
-        // starts later. A one-line body that fits labels the last
-        // underline, and any other body goes under the quote. A line the
-        // file does not hold keeps its anchor label.
         assert_eq!(
             render_entries(&[entry], &sources),
             "change 7  position 0  r1  reviewer: request_changes\n\

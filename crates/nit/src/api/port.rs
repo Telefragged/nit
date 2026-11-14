@@ -13,9 +13,9 @@
 //! revisions shows, and demote to the change when the later revision shows
 //! none.
 //!
-//! The tree diff is bounded to the anchored files, so the cost follows the
-//! threads and not the repository; the price is that a rename whose new
-//! name no anchor names reads as a deletion.
+//! The tree diff is bounded to the anchored files, so its cost scales with
+//! the threads. A rename whose new name is outside that bound is treated as
+//! a deletion.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -188,7 +188,6 @@ pub fn port_anchors(
                     old_oid,
                     new_oid,
                 }) => {
-                    // Only a line anchor reads the blobs.
                     let edits = if matches!(anchor, Anchor::Line { .. }) {
                         if !edits_of.contains_key(file) {
                             let old = diff::blob_bytes(repo, file, *old_oid)?;
@@ -260,8 +259,6 @@ fn port_attached(
     for (&(name, side), threads) in &by_name {
         let from = change.attachment_at(side.version(k), name);
         for &(i, target) in later {
-            // A version that shows no attachment of the name moves its
-            // threads to the change.
             let to = change.attachment_at(side.version(target.number), name);
             let edits = to
                 .as_ref()
