@@ -1021,6 +1021,7 @@ export default function ReviewPage() {
           opened={defaultRev ?? latest.number}
           latest={latest.number}
           selected={selected}
+          onOpen={onRight}
         />
         <div className="review-header">
           <div className="review-header-main">

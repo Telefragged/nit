@@ -87,6 +87,17 @@ describe("event-driven change page", () => {
     expect(screen.queryByText(/was pushed/)).toBeNull();
   });
 
+  it("shows the pushed revision on a press of the toast button", async () => {
+    await renderReview("/changes/10");
+    act(() => {
+      pushRevision(10, "c10r5");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(revHead().textContent).toBe("r4");
+    expect(screen.queryByText(/was pushed/)).toBeNull();
+  });
+
   it("lists the change log and appends a live entry to it", async () => {
     await renderReview("/changes/12");
     const rows = () => document.querySelectorAll(".change-log .log-row");

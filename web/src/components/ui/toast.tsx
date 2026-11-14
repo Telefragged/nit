@@ -5,7 +5,8 @@ import { Button } from "./button";
 export const ToastProvider = ToastPrimitive.Provider;
 
 /** The toasts of the enclosing `ToastProvider`, stacked in the bottom right
- * corner of the viewport. Each toast has a close button. */
+ * corner of the viewport. Each toast has a close button, and the button of
+ * its `actionProps` when it has them. */
 export function Toaster() {
   const { toasts } = ToastPrimitive.useToastManager();
   return (
@@ -22,6 +23,7 @@ export function Toaster() {
               <ToastPrimitive.Title className="font-semibold" />
               <ToastPrimitive.Description className="text-muted-foreground" />
             </ToastPrimitive.Content>
+            <ToastPrimitive.Action render={<Button size="sm" />} />
             <ToastPrimitive.Close
               aria-label="Close"
               render={<Button variant="ghost" size="icon" />}
