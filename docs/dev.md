@@ -53,8 +53,8 @@ drops the hanging indent of a wrapped markdown list item.
 ## Testing expectations
 
 - Rust: unit tests beside the code; scan/identity logic gets real-git
-  integration tests (`tempfile` + git2). `cargo test` runs as the `test`
-  flake check.
+  integration tests (`tempfile` + git2). The `test`, `test-nit-types` and
+  `test-nit-wasm` flake checks run them under nextest.
 - Frontend: tsc-clean always; test break-prone logic (diff rendering,
   comment anchoring) with vitest (`npm test`), which runs as the `web-test`
   flake check.

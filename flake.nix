@@ -150,7 +150,6 @@
         pkgs:
         let
           rust = rustFor pkgs;
-          inherit (rust) cargoNix;
         in
         {
           # The release build carries no `+<sha>` suffix, so a commit that
@@ -164,9 +163,7 @@
           # other crate and to run its unit tests; its lib has no
           # `cfg(target_arch)` branch, so the host build covers the same code
           # wasm32 compiles.
-          test-nit-wasm = cargoNix.workspaceMembers."nit-wasm".build.override {
-            runTests = true;
-          };
+          test-nit-wasm = rust.nextest "nit-wasm";
           treefmt = pkgs.stdenvNoCC.mkDerivation {
             name = "treefmt-check";
             src = self;
@@ -178,15 +175,11 @@
           # build). Tests run here, not in `nix build`. Rustdoc rides the same
           # build (rustdocPostBuild in rust.nix): the docs render and
           # the doc tests run.
-          test = cargoNix.workspaceMembers."nit".build.override {
-            runTests = true;
-          };
+          test = rust.nextest "nit";
           # Build and round-trip-test nit-types with NO optional features —
           # the no-feature baseline an optional feature (the server's
           # `features = ["clap"]`, the web's `features = ["ts"]`) would mask.
-          test-nit-types = cargoNix.workspaceMembers."nit-types".build.override {
-            runTests = true;
-          };
+          test-nit-types = rust.nextest "nit-types";
           contract = (rustFor pkgs).contract;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
             if ! diff -u ${./web/src/api/types.gen.ts} ${rust.wireTypes}; then
