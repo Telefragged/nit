@@ -23,9 +23,8 @@ Two moves buy that, and the rest of this skill is how they land:
    spell is a state nothing has to check, handle, or test.
 
 The measurable form: a `Result` in `crates/nit-types/src/domain/` that
-is not a constructor is an invariant being checked too late. That holds
-today — every one of them sits on `new`, `try_from`, or `from_str` —
-so it is a rule, not an aspiration.
+is not a constructor (`new`, `try_from`, `from_str`) or a `Serialize`
+impl is an invariant being checked too late.
 
 </the_bargain>
 
@@ -234,7 +233,7 @@ of them — a type whose invariant is checked three functions later
 passes every one of them.
 
 ```sh
-# Every hit must sit on new / try_from / from_str.
+# Every hit must sit on new / try_from / from_str / serialize.
 rg -n 'Result<' crates/nit-types/src/domain/
 
 # A validated type with a public payload, or a public field.
