@@ -1,5 +1,4 @@
 /**
- * The git dir is the repo's identity and display name — no separate name
- * field.
+ * The git dir is the repo's identity and display name.
  */
 export const repoPath = (gitDir: string) => gitDir.replace(/\/\.git\/?$/, "");

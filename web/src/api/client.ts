@@ -100,8 +100,7 @@ export const getTags = (repoId: number, statuses: ChangeStatus[]) =>
 export const getHistory = (repoId: number) =>
   request<RepoHistory>("GET", `/history?repo=${repoId}`);
 
-/** The reviewer's private overlay alone (drafts + draft decision); the change
- * page reads the published projection over the websocket instead. */
+/** The reviewer's private overlay: the drafts and the draft decision. */
 export const getChangeDrafts = (id: number) =>
   request<ChangeDrafts>("GET", `/changes/${id}/drafts`);
 
@@ -162,8 +161,6 @@ export const updateDraft = (id: number, req: EditDraft) =>
   request<Draft>("PATCH", `/drafts/${id}`, req);
 
 export const deleteDraft = (id: number) => request("DELETE", `/drafts/${id}`);
-
-// Reviewer decisions (drafted like comments, published in a batch)
 
 /** Set (or overwrite) a change's draft decision. */
 export const setDraftDecision = (changeNumber: number, req: DraftDecision) =>

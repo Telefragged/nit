@@ -114,8 +114,8 @@ function Code({
   className?: string;
 }) {
   const html = useMemo(() => {
-    // Line-at-a-time, so multi-line constructs (block comments) don't
-    // carry across rows — accepted for v1.
+    // Line-at-a-time, so a multi-line construct (a block comment) does not
+    // highlight as one across rows.
     let h = highlight(text, lang);
     for (const m of marks ?? []) h = markTextRange(h, m[0], m[1], "intraline");
     for (const r of rangeMarks ?? []) {
@@ -130,8 +130,8 @@ function Code({
   }, [text, lang, marks, rangeMarks]);
   // React re-applies dangerouslySetInnerHTML on the prop object's identity,
   // never comparing the html: an inline literal rewrites every cell's text
-  // nodes each render, dropping the reviewer's in-progress selection — the
-  // input `c` reads. The html memo alone won't do: a tinted line's
+  // nodes each render, dropping the reviewer's in-progress selection, which
+  // the `c` handler uses. The html memo alone won't do: a tinted line's
   // `rangeMarks` is a fresh array per render, so it recomputes an equal
   // string, and only keying on the string keeps the object.
   const inner = useMemo(() => ({ __html: html || "​" }), [html]);
@@ -193,13 +193,12 @@ function HunkSeparator({
 /** One file section: header, off-hunk/file-level threads, hunks with inline
  * threads and the draft editor. Threads place by the diff range — new-side
  * under the right column, old-side under the left. Collapsible: when
- * collapsed only the header row renders
- * (inline threads included — the rail's counts still signal them); the
+ * collapsed, only the header row renders, inline threads included. The
  * header click toggles.
  *
  * A line number links to its line. A shift-click on a line number extends
  * the linked span. `reveal` is the link that the section scrolls to: its
- * first linked line, or the section itself when the link names no lines.
+ * first linked line, or the section itself when the link specifies no lines.
  * The section calls `onRevealed` after it scrolls. */
 export default function DiffFileView({
   file,
@@ -239,7 +238,7 @@ export default function DiffFileView({
 
   const kind = renderedKind(file);
   const [view, setView] = useState<View>(file.attachment ? "rendered" : "raw");
-  // Of the rendered views, only Markdown shows the line that a link names.
+  // Of the rendered views, only Markdown shows the line that a link specifies.
   if (view === "rendered" && kind !== "markdown" && reveal?.lines) {
     setView("raw");
   }
@@ -376,13 +375,11 @@ export default function DiffFileView({
   }, [doc, hunks, showRendered]);
 
   // Bucket each thread by where its anchor lands in the current diff
-  // range. A thread pinned to a revision that
-  // is neither FROM nor TO is dropped — it is not part of this diff.
-  // A file thread has no line, so no column can hold it: it renders
-  // above the diff. A line thread whose line the shown hunks do not
-  // cover renders there too, under a separate heading.
+  // range. A file thread has no line, so it renders above the diff. A
+  // line thread whose line the shown hunks do not cover renders there
+  // too, under a separate heading.
   const fileThreads: UiThread[] = [];
-  // Carries the column it renders under, not the raw stored side — an
+  // Each entry has the column it renders under, not the stored side: an
   // interdiff-left thread is stored "new" on the FROM revision.
   const displaced: { t: UiThread; side: Side }[] = [];
   const inline = new Map<string, UiThread[]>();
@@ -436,8 +433,8 @@ export default function DiffFileView({
       });
     },
     onSuccess: () => {
-      // The body was saved, not discarded: clear dirtiness before the
-      // guarded setter closes the editor so it doesn't prompt.
+      // The body was saved: clear dirtiness before the guarded setter
+      // closes the editor so it doesn't prompt.
       ctx.setEditorDirty(false);
       ctx.setEditingTarget(null);
       void queryClient.invalidateQueries({
@@ -588,7 +585,7 @@ export default function DiffFileView({
     for (const t of inline.get(`${side}:${no}`) ?? []) {
       items.push(
         // The hover tint only points at the anchor; the line number beside
-        // the thread already tells a keyboard user where it hangs.
+        // the thread already shows a keyboard user where it hangs.
         // eslint-disable-next-line jsx-a11y/no-static-element-interactions
         <div
           className="meta-item"
@@ -687,8 +684,8 @@ export default function DiffFileView({
   }
 
   /** One side of a split row: its gutter + code-half spans. The code cell
-   * carries only data-{side} (never both) so lib/selection's sideOf
-   * resolves a one-column drag to this side. */
+   * has only data-{side}, so lib/selection's sideOf resolves a one-column
+   * drag to this side. */
   function sideCell(line: Line | null, side: "old" | "new") {
     const no = line?.[side];
     const cls = `${line ? line.kind : "void"}${driftClass(line)}${lineHover(
@@ -1064,10 +1061,9 @@ export default function DiffFileView({
                   {rendered === "unified" ? unifiedRows(hunk) : splitRows(hunk)}
                 </Fragment>
               ))}
-              {/* The run below the last hunk reveals from its top only (no
-                  hunk beneath to pull up from). Like the interior separators
-                  it always renders; skipped → 0 collapses it when the last
-                  hunk already reaches EOF. */}
+              {/* The run below the last hunk reveals from its top only. Like
+                  the interior separators it always renders; skipped → 0
+                  collapses it when the last hunk already reaches EOF. */}
               <HunkSeparator
                 more={skipped(hunks.at(-1), undefined, file)}
                 hunk={undefined}

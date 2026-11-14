@@ -12,7 +12,7 @@ export interface ReviewSettings {
   /** Which threads of earlier revisions are ported into the shown range:
    * `open` the unresolved ones, `all` the resolved ones too. */
   ported: "open" | "all";
-  /** `ignore` reads two lines that differ only in whitespace as one line. */
+  /** `ignore` treats two lines that differ only in whitespace as one line. */
   whitespace: Whitespace;
 }
 
@@ -23,8 +23,8 @@ export const DEFAULTS: ReviewSettings = {
   whitespace: "compare",
 };
 
-/** Each field falls back on its own, so a value this build does not know
- * costs that one knob rather than the whole page. */
+/** Each field falls back on its own, so a value that this build does not
+ * accept resets only that field. */
 function load(): ReviewSettings {
   const saved = readSaved(KEY) as Partial<ReviewSettings> | null;
   return {

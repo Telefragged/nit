@@ -48,8 +48,7 @@ function BreakMark({
 // rail is its own component, so a page can draw the same rail beside rows
 // of its own.
 
-/** The CSS modifier for a node's ring, matching branch-edge colors (not
- * review status, which lives in the STATUS column). */
+/** The CSS modifier for a node's ring, matching branch-edge colors. */
 function nodeColor(ln: LaidNode): string {
   if (ln.isHead) return "head";
   if (ln.node.section === "history") return "gray";

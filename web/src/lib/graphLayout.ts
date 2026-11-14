@@ -1,7 +1,6 @@
-// The change-graph layout pass — pure, kept separate from the render so the
-// geometry stays unit-testable. Input: a ChangeGraph (nodes already in
-// topological row order). Output: positioned nodes and
-// edge paths, ready for the SVG renderer.
+// The change-graph layout pass. Input: a ChangeGraph (nodes already in
+// topological row order). Output: positioned nodes and edge paths, ready
+// for the SVG renderer.
 //
 // Lanes are assigned gleisbau-style (git-graph 0.7's interval-graph coloring):
 // the canonical ref is pinned to lane 0 (the center column), every other
@@ -9,16 +8,16 @@
 // don't overlap it. A graph without a head (the tag graph) has no canonical
 // ref, so its branches pack from lane 0. The row coordinate is the array
 // index: children sit above their parents, so open changes ascend from the
-// HEAD anchor and merged history descends below it. An open change attaches to its base with a solid
-// edge whenever that base is a visible node (HEAD or a merged commit still in
-// the window); only a base older than the window — no node to anchor to —
-// dangles a dashed "behind" edge into the collapsed-history marker. An open
-// change whose parent is missing from the graph attaches to its fork
-// instead, and a break mark cuts that edge: the commits between the two are
-// not shown. The dash and the mark are independent, so a fork below the
-// window with hidden commits above it gets both. A grouped graph opens a
-// gap between two rows whose group differs, so each run of a group reads as
-// one block.
+// HEAD anchor and merged history descends below it. An open change attaches to
+// its base with a solid edge whenever that base is a visible node (HEAD or a
+// merged commit still in the window). Only a base older than the window has no
+// node to anchor to, so it dangles a dashed "behind" edge into the
+// collapsed-history marker. An open change whose parent is missing from the
+// graph attaches to its fork instead, and a break mark cuts that edge: the
+// commits between the two are not shown. The dash and the mark are
+// independent, so a fork below the window with hidden commits above it gets
+// both. A grouped graph opens a gap between two rows whose group differs, so
+// each run of a group shows as one block.
 
 import type { GraphNode, ChangeGraph } from "../api/types";
 
@@ -42,8 +41,8 @@ export interface LayoutMetrics {
   gapH: number;
 }
 
-/** Visual constants for the change-graph layout (the approved "trunk &
- * branches" design: dense rows, hollow ringed nodes, elbow connectors). */
+/** Visual constants for the change-graph layout (the "trunk & branches"
+ * design: dense rows, hollow ringed nodes, elbow connectors). */
 export const LAYOUT_B: LayoutMetrics = {
   rowH: 46,
   railPadL: 42,
@@ -339,9 +338,6 @@ export function layoutGraph(
       let kind: EdgeKind;
       let opacity = 1;
       if (ln.node.section === "open") {
-        // An open change anchored to a visible node — its real base is on
-        // screen, so the edge is solid (lane-colored), whether that base is
-        // HEAD, another open commit, or a merged commit still in the window.
         kind = "open";
       } else {
         kind = "history"; // the merged canonical ref below HEAD

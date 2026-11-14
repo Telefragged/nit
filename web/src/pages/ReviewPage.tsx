@@ -271,23 +271,20 @@ export default function ReviewPage() {
     ? Number(searchParams.get("revision"))
     : undefined;
 
-  // The change page is event-driven: the published projection (revisions,
-  // threads, tags) is folded from the change-event websocket into the
-  // ["change", id] cache by `useChangeStream` (below). This query only reads
-  // that cache (skipToken — never fetches). The diff, the repo, and the
-  // reviewer's drafts/draft decision are not in the log, so they stay REST; `change` composes the published projection with the drafts
-  // overlay (`useDrafts`).
+  // `useChangeStream` (below) folds the published projection (revisions,
+  // threads, tags) from the change-event websocket into the ["change", id]
+  // cache that this query returns. The diff, the repo, and the reviewer's
+  // drafts and draft decision are not in the log, so they come from REST.
+  // `change` composes the published projection with the drafts overlay
+  // (`useDrafts`).
 
   const publishedQ = useQuery<ChangeDetail>({
     queryKey: ["change", changeNumber],
     queryFn: skipToken,
   });
   const published = publishedQ.data;
-  // Opened beside the stream, not after it, so the log loads in parallel.
   const log = useChangeLog(changeNumber, published);
 
-  // The repo behind this change — the crumb shows its path. Fetched by id once
-  // the projection arrives; skipToken holds the hook's place until then.
   const repoQ = useQuery({
     queryKey: ["repo", published?.repo_id],
     queryFn: published ? () => getRepo(published.repo_id) : skipToken,
@@ -307,18 +304,15 @@ export default function ReviewPage() {
     (SelectionMiss & { top: number; left: number; diff: string }) | null
   >(null);
 
-  // --- derive revision/diff mode (before any early return: no hooks below)
   const revisions = published?.revisions ?? [];
   const latest = revisions[revisions.length - 1];
 
   // The revision the page defaults to (until the URL pins one) is frozen at
-  // first sight, not read from the live `latest`: a revision folding in over
-  // the websocket must not move it. A revision arriving before the pin effect
-  // (below) commits would otherwise slide the default forward and jump the
-  // view to the just-pushed revision.
-  // Keyed by change (the component is reused across /changes/:id without
-  // remounting) via the adjust-during-render idiom used for `shownChange`
-  // below.
+  // first sight: a revision folding in over the websocket must not move it.
+  // A revision arriving before the pin effect (below) commits would
+  // otherwise slide the default forward and jump the view to the
+  // just-pushed revision. Keyed by change, because the component is reused
+  // across /changes/:id without remounting.
   const [pinnedRev, setPinnedRev] = useState<{
     changeNumber: number;
     revision: number;
@@ -353,9 +347,6 @@ export default function ReviewPage() {
   const selectedTag = selectTag(tags, preferredKey);
   const tag =
     selectedTag === null ? undefined : `${selectedTag[0]}=${selectedTag[1]}`;
-  // This change alone, by number, until its projection names its tags;
-  // then every change that shares the selected one. Each projection + live
-  // fold is written into the ["change", id] cache the queries above read.
   const subscription: Subscription = {
     query:
       published === undefined || tag === undefined
@@ -397,10 +388,7 @@ export default function ReviewPage() {
   );
 
   // Pin the frozen default into the URL on first load, so the address reflects
-  // the viewed revision. It writes `defaultRev` (the first-seen revision), not
-  // the live latest — a revision arriving in this effect's post-commit gap
-  // can't be captured as the pin, and `selected` already falls back to
-  // `defaultRev`, so nothing moves regardless of when the effect flushes.
+  // the viewed revision.
   useEffect(() => {
     if (revisionParam === undefined && defaultRev !== undefined) {
       updateParams({ revision: String(defaultRev) });
@@ -440,8 +428,8 @@ export default function ReviewPage() {
         ? previous
         : undefined,
   });
-  // Tree order, not git's: the rail renders the same list as a tree, and
-  // the sections below must scroll in the order it reads (`treeOrder`).
+  // The rail renders the same list as a tree, so the sections below follow
+  // the tree's order.
   const files = useMemo(
     () => treeOrder(reviewFiles(diffQ.data?.files ?? [], shownAttachments)),
     [diffQ.data, shownAttachments],
@@ -523,8 +511,7 @@ export default function ReviewPage() {
 
   // An open editor's anchor is its *visual* column, which a range switch
   // would silently re-map to a different (revision, side) at save time
-  // (lib/comments draftAnchor). Confirm-and-clear it first, instead of
-  // re-anchoring behind the user.
+  // (lib/comments draftAnchor). Confirm-and-clear it first.
   const switchRange = useCallback(
     (patch: Record<string, string | null>) => {
       if (!confirmEditorCollapse(editingTarget !== null)) return;
@@ -614,15 +601,12 @@ export default function ReviewPage() {
   );
 
   // The reviewer's view of every thread: published threads merged with their
-  // pending drafts, plus draft-only new threads (lib/comments). Assembled
-  // once and reused for the diff grouping and the per-revision counts.
+  // pending drafts, plus draft-only new threads (lib/comments).
   const threads = useMemo(
     () => assembleThreads(change?.threads ?? [], change?.drafts ?? []),
     [change?.threads, change?.drafts],
   );
 
-  // Per-revision thread totals for the diff-range dropdowns (not filtered
-  // by the shown range — each revision's own count).
   const revisionCommentCounts = useMemo(
     () => threadCountByRevision(threads),
     [threads],
@@ -669,10 +653,9 @@ export default function ReviewPage() {
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
   // expanded, then scrolled), n / shift+n next/previous change, r the latest
   // revision, c comments on the selected text or else the linked lines, a
-  // opens the reply modal, ? opens the list of these keys. `shortcutKey`
-  // gives no key while a dialog is open. A layout effect, so the listener
-  // gets the link from the commit that marks the linked lines: a c pressed
-  // once they show comments on them.
+  // opens the reply modal, ? opens the list of these keys. A layout effect,
+  // so the listener gets the link from the commit that marks the linked
+  // lines: a c pressed once they show comments on them.
   useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const key = shortcutKey(e);
@@ -728,8 +711,8 @@ export default function ReviewPage() {
           }
           return;
         }
-        // The editor renders its own range highlight; the DOM selection
-        // would just shout over it. Keep it on a declined discard.
+        // The editor renders its own range highlight. A declined discard
+        // keeps the DOM selection.
         if (ctxValue.setEditingTarget(result)) sel?.removeAllRanges();
       } else if (key === "a") {
         // preventDefault, or the keystroke's own text insertion lands in
@@ -848,10 +831,7 @@ export default function ReviewPage() {
   // the sections' scroll-margin-top, read from computed style so the sticky
   // offsets live only in styles/review.css; it is the exact line scrollIntoView
   // targets, so a rail click / keystroke and the spy agree on the
-  // destination file instead of fighting (+1 absorbs fractional scrolls).
-  // During smooth programmatic scrolls the highlight follows live rather
-  // than being suppressed: the spy's fixed point is the scroll target, so
-  // the sweep self-corrects on arrival with no settle bookkeeping.
+  // destination file (+1 absorbs fractional scrolls).
   useEffect(() => {
     if (fileCount === 0) return;
     let raf = 0;
@@ -965,8 +945,6 @@ export default function ReviewPage() {
     overlaysLoading ||
     [repoQ, draftsQ, diffQ, portedQ].some((q) => q.isLoading);
 
-  // The change's published projection arrives over the websocket (no fetch to
-  // error on); a bad change number surfaces when its drafts read fails.
   if (draftsQ.isError) {
     return (
       <main className="page" aria-busy={false}>

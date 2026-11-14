@@ -1,19 +1,5 @@
-// Strict, type-aware linting for the web frontend — the first layer of
-// hardening against an agent's first output, mirroring `clippy::pedantic`
-// on the Rust side (see crates/nit/Cargo.toml).
-//
-// Two kinds of disable live here, and only two:
-//
-//   1. FORMATTER-OWNED (permanent) — rules that overlap with prettier
-//      (run via treefmt). eslint-config-prettier turns these off across
-//      core/ts/react; the @html-eslint formatting rules are turned off
-//      explicitly below. Formatting is prettier's job, always.
-//
-//   2. BURN-DOWN ALLOW-LIST (temporary) — rules the strict presets enable
-//      that the codebase doesn't satisfy yet. Each is silenced with its
-//      first-pass violation count, and removed (with the code fixed) one
-//      rule/group per commit until the block is empty. A silenced rule is
-//      a debt, never a verdict — this list only shrinks.
+// Strict, type-aware linting for the web frontend, the counterpart of
+// `clippy::pedantic` on the Rust side (`[workspace.lints]` in Cargo.toml).
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import react from "eslint-plugin-react";
@@ -45,9 +31,6 @@ export default tseslint.config(
     ],
   },
 
-  // An inline `eslint-disable` is a debt with a reason, never free: a
-  // stale one (the rule no longer fires) is itself an error — the
-  // `#[expect]` model from the Rust side.
   { linterOptions: { reportUnusedDisableDirectives: "error" } },
 
   {
@@ -93,7 +76,7 @@ export default tseslint.config(
 
       // The `web` wasm-bindgen target leaves instantiation to the caller,
       // so a wrapper reached any other way throws. lib/wasm.ts awaits
-      // `init()` and re-exports the fold; it is the only way in.
+      // `init()` and re-exports the fold.
       "no-restricted-imports": [
         "error",
         {
@@ -105,8 +88,6 @@ export default tseslint.config(
           ],
         },
       ],
-
-      // ── BURN-DOWN ALLOW-LIST (temporary; counts = first-pass hits) ──
     },
   },
 
@@ -187,7 +168,6 @@ export default tseslint.config(
     },
   },
 
-  // ── Node tooling, type-aware through tsconfig.node.json ──
   {
     files: ["*.ts", "gallery/*.ts"],
     languageOptions: {

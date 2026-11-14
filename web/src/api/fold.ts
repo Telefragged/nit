@@ -1,13 +1,11 @@
 // The shared change fold, compiled to WebAssembly (crates/nit-wasm). The change
 // page folds the websocket stream client-side with the same Rust code the
-// server runs: the server ships a ChangeProjection, the browser resumes
-// folding the live tail onto it and projects the published ChangeDetail — never
-// reimplementing the projection.
+// server runs: the server ships a ChangeProjection, and the browser resumes
+// folding the live tail onto it and projects the published ChangeDetail.
 //
 // serde-wasm-bindgen moves these values across the boundary as structured
-// objects, with no JSON text in between; `u64` rides as a plain `number`, the
-// representation the web already holds. A ChangeProjection is opaque to the web —
-// only these wrappers (re)hydrate it.
+// objects, and a `u64` arrives as a plain `number`. A ChangeProjection is
+// opaque to the web: only these wrappers (re)hydrate it.
 
 import {
   change_detail,

@@ -13,7 +13,8 @@ type End = "down" | "up";
  * edge when `down` is true, and from the bottom edge when it is false.
  * When `up` is true, a button with an up arrow shows the last `step` rows,
  * over the rows below the gap. When `down` is true, a button with a down
- * arrow shows the first `step` rows, under the rows above the gap. A gap that one step covers has no stepped buttons. */
+ * arrow shows the first `step` rows, under the rows above the gap. A gap
+ * that one step covers has no stepped buttons. */
 export default function GapSeparator({
   more,
   unit,

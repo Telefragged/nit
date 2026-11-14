@@ -62,9 +62,8 @@ export interface ReviewCtx {
    * move was applied. Same-anchor calls are no-ops (the editor stays
    * mounted). */
   setEditingTarget: (t: DraftTarget | null) => boolean;
-  /** Record whether the inline draft editor holds unsaved text (the editor
-   * reports it via onDirtyChange). The provider owns the backing ref, so the
-   * mutation lives where the ref is constructed. */
+  /** Record whether the inline draft editor contains unsaved text (the
+   * editor reports it via onDirtyChange). */
   setEditorDirty: (dirty: boolean) => void;
 }
 

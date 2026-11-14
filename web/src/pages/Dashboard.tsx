@@ -98,10 +98,8 @@ export default function Dashboard() {
   const groupKeys = pinned(Object.keys(tags), groupBy);
   const values = groupBy === null ? [] : pinned(tags[groupBy] ?? [], value);
 
-  // Each open node's activity badges read straight off the fold the bulk
-  // read already delivered. Only the reviewer's drafts and draft decision
-  // are outside the log, so that overlay is the one per-change read
-  // (GET /changes/{id}/drafts).
+  // The reviewer's drafts and draft decision are outside the log, so the
+  // page loads them per change (GET /changes/{id}/drafts).
   const activityIds = useMemo(
     () =>
       (graph?.nodes ?? []).flatMap((n) =>

@@ -137,8 +137,7 @@ function flip(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
  * and scrolls to it. A file with threads has a chevron in the form of its
  * mark of the highest rank, and opens to a row per thread. The comment
  * icon of a row has the form of its thread, and the row links to the
- * thread. The title row toggles all sections at once. A long diff needs
- * this bulk toggle, because every file starts collapsed. */
+ * thread. The title row toggles all sections at once. */
 export default function FileRail({
   files,
   threadsByFile,
@@ -300,7 +299,6 @@ export default function FileRail({
       <div className="rail-title">
         <span>
           {totals.count} file{totals.count === 1 ? "" : "s"}
-          {/* Diff still loading (or empty): no sums to summarize. */}
           {files.length > 0 ? (
             <span className="rail-total">
               <span className="plus">+{totals.additions}</span>{" "}

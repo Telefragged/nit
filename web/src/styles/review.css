@@ -1,5 +1,3 @@
-/* ---------------------------------------------------------- review page */
-
 .review-page {
   /* The height of the review bar, which is fixed at the bottom of the
      page, and room for it under the page. */
@@ -76,8 +74,6 @@
   color: var(--color-foreground);
 }
 
-/* diffbar */
-
 .diffbar {
   position: sticky;
   top: var(--topbar-h);
@@ -140,8 +136,6 @@
   gap: 12px;
   font-size: 12px;
 }
-
-/* layout: sidebar (file list) + diff column */
 
 /* The sidebar is the one sticky, height-bounded column; the file tree
    sizes its scrollport against it. It ends above the review bar. */
@@ -414,11 +408,9 @@ button.rail-toggle,
   position: relative;
 }
 
-/* file sections */
-
-/* A section has no box: its header and its rows reach both edges of the
-   column, and one hairline ends it. A file lands with its header directly
-   under the sticky bars. */
+/* A section's header and rows reach both edges of the column, and one
+   hairline ends it. A file lands with its header directly under the
+   sticky bars. */
 .file-section {
   --file-header-h: 36px;
 
@@ -569,8 +561,8 @@ button.rail-toggle,
   padding: 12px;
 }
 
-/* A Markdown file reads as a page, not as a comment: body-sized text,
-   headings that step down in size, and room between blocks. */
+/* A Markdown file is styled as a page: body-sized text, headings that
+   step down in size, and room between blocks. */
 .rendered-markdown {
   max-width: 980px;
   padding: 16px 24px 16px 0;

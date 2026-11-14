@@ -9,8 +9,6 @@ import { genWasmPlugin } from "./vite-plugin-gen-wasm.ts";
 // rust backend (`cargo run -- serve`). Production: `vite build` output is
 // served by the backend itself.
 export default defineConfig({
-  // genWasmPlugin(): generates src/wasm (gitignored) if missing, and in dev
-  // watches crates/nit-wasm to regenerate + reload on change.
   plugins: [react(), tailwindcss(), genWasmPlugin()],
   // The alias that shadcn/ui components import through (components.json).
   resolve: { alias: { "@": join(import.meta.dirname, "src") } },

@@ -43,8 +43,6 @@ export default function CommentEditor({
   const [body, setBody] = useState(initial);
   const [resolved, setResolved] = useState(initialResolved ?? false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Focus on open — the editor mounts when the user opens it — the
-  // accessible alternative to the autoFocus attribute.
   useLayoutEffect(() => {
     textareaRef.current?.focus();
   }, []);

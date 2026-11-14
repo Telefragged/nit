@@ -1,8 +1,7 @@
 import type { ChangeStatus, Decision, Verdict } from "./types";
 
 /** The displayed status a bare verdict maps to (mirrors the server's
- * `From<Verdict> for ChangeStatus`). Terminal statuses come from lifecycle,
- * not a verdict, so they are not here. */
+ * `From<Verdict> for ChangeStatus`). */
 export const verdictStatus: Record<Verdict, ChangeStatus> = {
   approve: "approved",
   request_changes: "changes_requested",

@@ -1,5 +1,3 @@
-// Pure diff-presentation logic, kept out of components so it stays testable.
-
 import type { CommentRange, DiffFile, Hunk, Line, Side } from "../api/types";
 import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../api/types";
 import type { ReviewFile } from "./attachments";
@@ -39,9 +37,9 @@ export const attachmentPaths = (files: readonly ReviewFile[]) =>
 
 /** The diff in tree order: the commit message first (it is not a file),
  * then the order of `buildTree`, then the attachments in the order of
- * their own tree. Git emits deltas in plain path order,
- * which interleaves directories and files, so the sections would
- * otherwise scroll in an order the rail never reads. */
+ * their own tree. Git emits deltas in plain path order, which interleaves
+ * directories and files, so the sections would otherwise scroll in an
+ * order that differs from the rail's. */
 export function treeOrder<F extends ReviewFile>(files: F[]): F[] {
   const message = files.filter((f) => f.path === COMMIT_MSG_PATH);
   const order = [
@@ -51,9 +49,7 @@ export function treeOrder<F extends ReviewFile>(files: F[]): F[] {
   return [...message, ...order.flatMap((i) => files[i] ?? [])];
 }
 
-/** The status a file shows. The commit message is not an added file, so
- * it shows `message`, and an attachment is not one of the commit's files,
- * so it shows `attachment`. */
+/** The status a file shows. */
 export const fileStatus = (file: ReviewFile) =>
   file.path === COMMIT_MSG_PATH
     ? "message"
@@ -182,8 +178,8 @@ interface RegionMarks {
 /**
  * Intraline emphasis for a hunk, keyed by line object identity; absent lines
  * render unmarked. Each replacement block is marked as a whole (crates/nit-wasm
- * `intraline`) rather than line against line, so a block whose sides differ in
- * length marks throughout and text that moved between lines still pairs up.
+ * `intraline`), so a block whose sides differ in length marks throughout and
+ * text that moved between lines still pairs up.
  */
 export function intralineMarks(lines: Line[]): Map<Line, IntralineRange[]> {
   const blocks = [...diffBlocks(lines)].flatMap((block) =>
@@ -237,7 +233,7 @@ export function rangeSliceOnLine(
 }
 
 /** The file lines a hunk holds on one side, as an inclusive `[first, last]`.
- * A side carrying no lines names the line it sits after (git's `-N,0`), so
+ * A side with no lines specifies the line it sits after (git's `-N,0`), so
  * its range comes back empty while both ends still bound the runs around
  * it. */
 export function span(hunk: Hunk, side: Side): [number, number] {
@@ -249,9 +245,9 @@ export function span(hunk: Hunk, side: Side): [number, number] {
 /** The two line counts that say where a file ends on each side. */
 export type Totals = Pick<DiffFile, "old_total" | "new_total">;
 
-/** Whether the file holds lines on one side only: an addition, a
- * deletion, or a commit message read against its parent. A binary file
- * declares no lines on either side, so it answers true as well. */
+/** Whether the file has lines on one side only: an addition, a
+ * deletion, or a commit message diffed against its parent. A binary file
+ * has no lines on either side, so it returns true as well. */
 export function oneSided(file: Totals): boolean {
   return onlySide(file) !== undefined;
 }
