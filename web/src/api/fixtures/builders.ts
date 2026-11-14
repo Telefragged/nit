@@ -167,10 +167,12 @@ export function sideEnd(
   return declared ?? (last ? span(last, side)[1] : 0);
 }
 
+const linesOf = (text: string) => text.replace(/\n$/, "").split("\n");
+
 /** The entry of a vs-parent diff for a file outside the tree: the whole
  * text, all-add. */
 export function addedFile(path: string, text: string): DiffFile {
-  const lines = text.replace(/\n$/, "").split("\n");
+  const lines = linesOf(text);
   return {
     path,
     status: "added",
@@ -187,6 +189,58 @@ export function addedFile(path: string, text: string): DiffFile {
         new_lines: lines.length,
         header: "",
         lines: lines.map((text, i) => add(i + 1, text)),
+      },
+    ],
+  };
+}
+
+/** The entry of a diff for a file outside the tree, from the text
+ * `before` to the text `after`. One hunk spans the whole file, and the
+ * lines between the common head and tail change. */
+export function changedFile(
+  path: string,
+  before: string,
+  after: string,
+): DiffFile {
+  const old = linesOf(before);
+  const next = linesOf(after);
+  let head = 0;
+  while (head < old.length && head < next.length && old[head] === next[head])
+    head++;
+  let tail = 0;
+  while (
+    tail < old.length - head &&
+    tail < next.length - head &&
+    old[old.length - 1 - tail] === next[next.length - 1 - tail]
+  )
+    tail++;
+  const oldEnd = old.length - tail;
+  const nextEnd = next.length - tail;
+  return {
+    path,
+    status: "modified",
+    binary: false,
+    additions: nextEnd - head,
+    deletions: oldEnd - head,
+    old_total: old.length,
+    new_total: next.length,
+    hunks: [
+      {
+        old_start: 1,
+        old_lines: old.length,
+        new_start: 1,
+        new_lines: next.length,
+        header: "",
+        lines: [
+          ...old.slice(0, head).map((text, i) => ctx(i + 1, i + 1, text)),
+          ...old.slice(head, oldEnd).map((text, i) => del(head + i + 1, text)),
+          ...next
+            .slice(head, nextEnd)
+            .map((text, i) => add(head + i + 1, text)),
+          ...old
+            .slice(oldEnd)
+            .map((text, i) => ctx(oldEnd + i + 1, nextEnd + i + 1, text)),
+        ],
       },
     ],
   };

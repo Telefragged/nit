@@ -21,12 +21,16 @@ export type AuthoredFile = Omit<DiffFile, "old_total" | "new_total"> & {
   new_total?: number;
 };
 /** A revision as authored in ./data: its subject, status and shown
- * attachments are folded, never written. `attachments` are the ones put on
- * this revision itself, which the synth log writes as `attach` entries. */
+ * attachments are folded, never written. `attachments` and
+ * `base_attachments` are the ones put on this revision itself and on its
+ * base, which the synth log writes as `attach` entries. */
 export type AuthoredRevision = Omit<
   Revision,
   "subject" | "status" | "attachments" | "base_attachments"
-> & { attachments?: AttachmentProjection[] };
+> & {
+  attachments?: AttachmentProjection[];
+  base_attachments?: AttachmentProjection[];
+};
 interface AuthoredDiff {
   files: AuthoredFile[];
 }

@@ -833,6 +833,9 @@ const change12: ChangeRecord = {
         { name: "openapi/index.html", hash: "c".repeat(64) },
         { name: "web/screenshots/flow.svg", hash: "d".repeat(64) },
       ],
+      // The plan before this change, so that the diff against the base
+      // shows the plan modified.
+      base_attachments: [{ name: "plan/rotation.md", hash: "e".repeat(64) }],
     },
   ],
   reviews: [],

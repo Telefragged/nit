@@ -58,6 +58,12 @@ export function synthLog(
     });
   }
   for (const r of change.revisions) {
+    for (const a of r.base_attachments ?? []) {
+      add(r.created_at, {
+        kind: "attach",
+        payload: { version: `r${r.number}^`, name: a.name, hash: a.hash },
+      });
+    }
     for (const a of r.attachments ?? []) {
       add(r.created_at, {
         kind: "attach",
