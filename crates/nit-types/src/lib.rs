@@ -30,10 +30,6 @@ pub mod log;
 pub mod push;
 pub mod repos;
 
-/// Fixture values for tests, in this crate and in the crates that use it.
-#[cfg(any(test, feature = "testing"))]
-pub mod testing;
-
 #[cfg(test)]
 mod tests;
 
