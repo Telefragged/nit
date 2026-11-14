@@ -8,11 +8,14 @@ use super::ChangeVersion;
 use super::Decision;
 use super::RevisionNumber;
 
-/// Which tree of a revision a line comment is anchored to.
+/// Which version of a revision a line comment is anchored to.
 ///
-/// `new` is the revision's commit tree, `old` its parent tree. An
-/// unspecified side is `new`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, utoipa::ToSchema)]
+/// `new` is the revision: its commit tree and attachments. `old` is its
+/// base: the parent tree and the base attachments. An unspecified side is
+/// `new`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]

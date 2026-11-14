@@ -186,15 +186,15 @@ pub(super) async fn revision_diff(
         let mut wire = contained_diff(&revs, 3, q.whitespace, None)?;
         // After tagging: the message and the attachments are not git
         // deltas, so they are never drift.
-        let shown = |r: Option<&RevisionProjection>| -> BTreeMap<_, _> {
-            r.map(|r| change.effective_attachments(ChangeVersion::Revision(r.number)))
-                .unwrap_or_default()
+        let shown = |version| -> BTreeMap<_, _> {
+            change
+                .effective_attachments(version)
                 .into_iter()
                 .map(|a| (a.name, a.hash))
                 .collect()
         };
-        let (old, new) = (shown(revs.against.as_ref()), shown(Some(&revs.revision)));
-        // An attachment that both revisions show with the same bytes stays
+        let (old, new) = (shown(revs.old_version()), shown(ChangeVersion::Revision(n)));
+        // An attachment that both sides show with the same bytes stays
         // out of the diff, as an unchanged file does.
         let names: BTreeSet<_> = old
             .keys()
@@ -271,15 +271,12 @@ pub(super) async fn revision_lines(
                 u32::MAX,
             ))
         } else if let Some(name) = diff::attachment_name(&wanted.path) {
-            let hash = |r: Option<&RevisionProjection>| {
-                r.and_then(|r| change.attachment_at(ChangeVersion::Revision(r.number), name))
-                    .map(|a| a.hash)
-            };
+            let hash = |version| change.attachment_at(version, name).map(|a| a.hash);
             Some(diff::attachment_file(
                 state.blobs(),
                 name,
-                hash(revs.against.as_ref()).as_ref(),
-                hash(Some(&revs.revision)).as_ref(),
+                hash(revs.old_version()).as_ref(),
+                hash(ChangeVersion::Revision(n)).as_ref(),
                 u32::MAX,
                 q.whitespace,
             ))
@@ -322,6 +319,18 @@ struct Revs {
     git_dir: String,
     revision: RevisionProjection,
     against: Option<RevisionProjection>,
+}
+
+impl Revs {
+    /// The change version that the old side of the diff shows: the
+    /// counterpart, else the base of the revision.
+    fn old_version(&self) -> ChangeVersion {
+        self.against
+            .as_ref()
+            .map_or(ChangeVersion::Base(self.revision.number), |a| {
+                ChangeVersion::Revision(a.number)
+            })
+    }
 }
 
 fn resolve_revs(
