@@ -17,8 +17,8 @@ in
     enable = lib.mkEnableOption "nit, commit-level code review for AI coding agents";
     package = lib.mkOption {
       type = lib.types.package;
-      default = self.packages.${pkgs.stdenv.hostPlatform.system}.nit-release;
-      defaultText = lib.literalExpression "nit.packages.\${system}.nit-release";
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      defaultText = lib.literalExpression "nit.packages.\${system}.default";
       description = "The nit package that the CLI and the server run.";
     };
   };
