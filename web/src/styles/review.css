@@ -218,6 +218,47 @@ button.rail-toggle,
   color: var(--color-foreground);
 }
 
+/* The rows under a directory, and the threads under a file. Guide lines
+   connect each row to the row that it is under, in the form that the
+   `tree` command prints: a vertical line passes each entry that has a
+   later sibling, and it ends at the last entry. A short horizontal line
+   goes from the vertical line to the entry. */
+.rail-children > li {
+  position: relative;
+}
+
+.rail-children > li::before,
+.rail-children > li::after {
+  content: "";
+  position: absolute;
+  left: var(--guide-x);
+  background: var(--color-border);
+}
+
+.rail-children > li::before {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+/* 11px is the middle of a row. */
+.rail-children > li:last-child::before {
+  bottom: auto;
+  height: 11px;
+}
+
+.rail-children > li::after {
+  top: 11px;
+  width: 8px;
+  height: 1px;
+}
+
+/* A row with no chevron has an empty toggle, so its line goes on to its
+   icon. */
+.rail-children > li:has(> .rail-row > .rail-toggle:empty)::after {
+  width: 27px;
+}
+
 .rail-toggle {
   flex: none;
   display: inline-block;
