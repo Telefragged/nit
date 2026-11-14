@@ -14,9 +14,12 @@ use std::sync::mpsc::{Receiver, channel};
 use serde_json::Value;
 
 use common::{
-    GitRepo, HANG, TestServer, change_by_label, first_repo_id, get_changes, in_checkout, msg, nit,
+    GitRepo, HANG, TestServer, change_by_id, first_repo_id, get_changes, in_checkout, msg, nit,
     nit_env, nit_register, nit_spawn, review,
 };
+
+const I001: &str = "I0010000000000000000000000000000000000000";
+const I002: &str = "I0020000000000000000000000000000000000000";
 
 /// A stand-in for the session's inbox socket.
 ///
@@ -79,7 +82,7 @@ fn posted_text(frames: &[Value]) -> String {
 /// review, and the inbox its watch will post to.
 fn session() -> (GitRepo, TestServer, Inbox, u64) {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -94,11 +97,11 @@ fn session() -> (GitRepo, TestServer, Inbox, u64) {
 
 /// A second commit on the branch, pushed for review.
 fn push_second(g: &GitRepo, server: &TestServer) -> u64 {
-    let c2 = g.commit(&[g.tip("feat")], &msg("two", "I002"), &[("b.txt", "b\n")]);
+    let c2 = g.commit(&[g.tip("feat")], &msg("two", I002), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
     let (ok, _, err) = nit(server, g, &["push"]);
     assert!(ok, "push failed: {err}");
-    change_by_label(server, first_repo_id(server), "I002")["id"]
+    change_by_id(server, first_repo_id(server), I002)["id"]
         .as_u64()
         .expect("the new change")
 }

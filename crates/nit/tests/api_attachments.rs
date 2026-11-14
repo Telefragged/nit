@@ -10,13 +10,15 @@ use jiff::{SignedDuration, Timestamp};
 use nit::api::Collected;
 use serde_json::{Value, json};
 
+const I001: &str = "I0010000000000000000000000000000000000000";
+
 fn server(g: &GitRepo) -> TestServer {
     TestServer::start(g.dir.path().join("nit.sqlite3"), None)
 }
 
 /// A server with one change of one revision, and that change's number.
 fn server_with_change(g: &GitRepo) -> (TestServer, u64) {
-    let a = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let a = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", a);
     let server = server(g);
     let change_number = a_change(&server, g, "feat");
@@ -306,7 +308,7 @@ fn comment_on_an_attachment_line_snapshots_its_text() {
 }
 
 fn amend(server: &TestServer, g: &GitRepo) {
-    let amended = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "b\n")]);
+    let amended = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "b\n")]);
     g.branch("feat", amended);
     a_change(server, g, "feat");
 }

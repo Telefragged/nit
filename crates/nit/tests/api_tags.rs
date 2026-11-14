@@ -5,10 +5,13 @@
 mod common;
 
 use common::{
-    GitRepo, TestServer, a_change, abandon, change_id, change_ids, change_log, change_tags,
-    first_repo_id, get_changes, http_get, msg, push, tag_change,
+    GitRepo, TestServer, a_change, abandon, change_ids, change_log, change_tags, first_repo_id,
+    get_changes, http_get, msg, push, tag_change,
 };
 use serde_json::{Value, json};
+
+const IA: &str = "Ia000000000000000000000000000000000000000";
+const IB: &str = "Ib000000000000000000000000000000000000000";
 
 /// Puts `tags` on a change built from `tip`, and returns its number.
 fn tagged(server: &TestServer, g: &GitRepo, tip: &str, tags: &Value) -> u64 {
@@ -23,7 +26,7 @@ fn tagged(server: &TestServer, g: &GitRepo, tip: &str, tags: &Value) -> u64 {
 #[test]
 fn later_tags_overlay_the_ones_before_them() {
     let g = GitRepo::new();
-    let one = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    let one = g.commit(&[g.root], &msg("a: one", IA), &[("a", "1\n")]);
     g.branch("topic", one);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -35,14 +38,14 @@ fn later_tags_overlay_the_ones_before_them() {
     );
     let repo_id = first_repo_id(&server);
     assert_eq!(
-        change_tags(&server, repo_id, "Ia"),
+        change_tags(&server, repo_id, IA),
         json!({"branch": "topic", "feature": "epic-saga"})
     );
 
     let (st, res) = tag_change(&server, number, &json!({"branch": "renamed"}));
     assert_eq!(st, 200, "{res}");
     assert_eq!(
-        change_tags(&server, repo_id, "Ia"),
+        change_tags(&server, repo_id, IA),
         json!({"branch": "renamed", "feature": "epic-saga"}),
         "the key nobody named carries forward"
     );
@@ -53,7 +56,7 @@ fn later_tags_overlay_the_ones_before_them() {
 #[test]
 fn tagging_a_change_records_no_revision() {
     let g = GitRepo::new();
-    let one = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    let one = g.commit(&[g.root], &msg("a: one", IA), &[("a", "1\n")]);
     g.branch("topic", one);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -63,7 +66,7 @@ fn tagging_a_change_records_no_revision() {
 
     let repo_id = first_repo_id(&server);
     assert_eq!(
-        change_tags(&server, repo_id, "Ia"),
+        change_tags(&server, repo_id, IA),
         json!({"branch": "topic", "feature": "epic-saga"})
     );
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{number}")));
@@ -76,7 +79,7 @@ fn tagging_a_change_records_no_revision() {
 #[test]
 fn tags_that_move_no_key_append_nothing() {
     let g = GitRepo::new();
-    let one = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    let one = g.commit(&[g.root], &msg("a: one", IA), &[("a", "1\n")]);
     g.branch("topic", one);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -114,9 +117,9 @@ fn tagging_an_unknown_change_is_404() {
 #[test]
 fn tag_filter_is_exact_and_ands_every_pair() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    let a = g.commit(&[g.root], &msg("a: one", IA), &[("a", "1\n")]);
     g.branch("topic-a", a);
-    let b = g.commit(&[g.root], &msg("b: two", "Ib"), &[("b", "2\n")]);
+    let b = g.commit(&[g.root], &msg("b: two", IB), &[("b", "2\n")]);
     g.branch("topic-b", b);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -130,21 +133,18 @@ fn tag_filter_is_exact_and_ands_every_pair() {
     let repo_id = first_repo_id(&server);
 
     let q = |filter: &str| change_ids(&get_changes(&server, &format!("?repo={repo_id}{filter}")));
-    assert_eq!(q(""), vec![change_id("Ia"), change_id("Ib")]);
-    assert_eq!(
-        q("&tag=session-id=s1"),
-        vec![change_id("Ia"), change_id("Ib")]
-    );
+    assert_eq!(q(""), vec![IA, IB]);
+    assert_eq!(q("&tag=session-id=s1"), vec![IA, IB]);
     assert_eq!(
         q("&tag=session-id=s1&tag=feature=epic-saga"),
-        vec![change_id("Ia")],
+        vec![IA],
         "every requested tag must match"
     );
     assert!(q("&tag=feature=epic").is_empty(), "no prefix matching");
     assert_eq!(q("&tag=session-id=s2"), Vec::<String>::new());
     assert_eq!(
-        q(&format!("&change_id={}", change_id("Ib"))),
-        vec![change_id("Ib")],
+        q("&change_id=Ib000000000000000000000000000000000000000"),
+        vec![IB],
         "`change_id` selects the one change that carries it"
     );
 }
@@ -152,9 +152,9 @@ fn tag_filter_is_exact_and_ands_every_pair() {
 #[test]
 fn repo_tags_group_every_value_under_its_key() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    let a = g.commit(&[g.root], &msg("a: one", IA), &[("a", "1\n")]);
     g.branch("topic-a", a);
-    let b = g.commit(&[g.root], &msg("b: two", "Ib"), &[("b", "2\n")]);
+    let b = g.commit(&[g.root], &msg("b: two", IB), &[("b", "2\n")]);
     g.branch("topic-b", b);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -178,9 +178,9 @@ fn repo_tags_group_every_value_under_its_key() {
 #[test]
 fn repo_tags_narrow_by_status() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    let a = g.commit(&[g.root], &msg("a: one", IA), &[("a", "1\n")]);
     g.branch("topic-a", a);
-    let b = g.commit(&[g.root], &msg("b: two", "Ib"), &[("b", "2\n")]);
+    let b = g.commit(&[g.root], &msg("b: two", IB), &[("b", "2\n")]);
     g.branch("topic-b", b);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -215,7 +215,7 @@ fn tags_of_an_unknown_repo_are_empty() {
 #[test]
 fn a_malformed_tag_is_rejected() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    let a = g.commit(&[g.root], &msg("a: one", IA), &[("a", "1\n")]);
     g.branch("topic", a);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -236,9 +236,9 @@ fn a_malformed_tag_is_rejected() {
 #[test]
 fn tags_survive_a_restart() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("a: one", "Ia"), &[("a", "1\n")]);
+    let a = g.commit(&[g.root], &msg("a: one", IA), &[("a", "1\n")]);
     g.branch("tagged", a);
-    let b = g.commit(&[g.root], &msg("b: two", "Ib"), &[("b", "2\n")]);
+    let b = g.commit(&[g.root], &msg("b: two", IB), &[("b", "2\n")]);
     g.branch("untagged", b);
     let db = g.dir.path().join("nit.sqlite3");
 
@@ -252,10 +252,10 @@ fn tags_survive_a_restart() {
 
     let server = TestServer::start(db, None);
     let matched = get_changes(&server, &format!("?repo={repo_id}&tag=track=perf"));
-    assert_eq!(change_ids(&matched), vec![change_id("Ia")]);
+    assert_eq!(change_ids(&matched), vec![IA]);
     assert_eq!(
         change_ids(&get_changes(&server, &format!("?repo={repo_id}"))),
-        vec![change_id("Ia"), change_id("Ib")]
+        vec![IA, IB]
     );
-    assert_eq!(change_tags(&server, repo_id, "Ib"), Value::Null);
+    assert_eq!(change_tags(&server, repo_id, IB), Value::Null);
 }

@@ -6,6 +6,9 @@ mod common;
 use common::*;
 use serde_json::{Value, json};
 
+const IPORT01: &str = "I706f727430310000000000000000000000000000";
+const IPORT02: &str = "I706f727430320000000000000000000000000000";
+
 /// Opens an author thread and returns its id.
 fn thread(server: &TestServer, id: u64, revision: u64, anchor: &Value, resolved: bool) -> u64 {
     let (st, t) = http_post(
@@ -51,7 +54,7 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
 
     let c1 = g.commit(
         &[base],
-        &msg("feat: thing", "Iport01"),
+        &msg("feat: thing", IPORT01),
         &[
             ("a.txt", &lines("a", 1..=8).replace("a4\n", "a4 v1\n")),
             ("b.txt", "b1 v1\n"),
@@ -90,7 +93,7 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
     a_v2.insert_str(0, "a0a\na0b\n");
     let c2 = g.commit_full(
         &[base],
-        &msg("feat: thing, reworded", "Iport01"),
+        &msg("feat: thing, reworded", IPORT01),
         &[("a.txt", a_v2.as_bytes())],
         &["b.txt"],
     );
@@ -149,7 +152,7 @@ fn against_ports_to_both_revisions() {
     let mut body = lines("a", 1..=8);
     let mut id = 0;
     for revision in 0..3 {
-        let c = g.commit(&[base], &msg("feat: thing", "Iport02"), &[("a.txt", &body)]);
+        let c = g.commit(&[base], &msg("feat: thing", IPORT02), &[("a.txt", &body)]);
         g.branch("feat", c);
         let (st, pushed) = push(&server, &g, "feat", "main");
         assert_eq!(st, 200, "{pushed}");

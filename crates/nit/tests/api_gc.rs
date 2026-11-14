@@ -10,6 +10,10 @@ use nit::gitscan::objects::keep_ref_prefix;
 use nit_types::domain::ChangeNumber;
 use serde_json::json;
 
+const I001: &str = "I0010000000000000000000000000000000000000";
+const I002: &str = "I0020000000000000000000000000000000000000";
+const I003: &str = "I0030000000000000000000000000000000000000";
+
 fn keep_refs(g: &GitRepo, change_number: u64) -> usize {
     g.repo
         .references_glob(&format!(
@@ -25,11 +29,11 @@ fn keep_refs(g: &GitRepo, change_number: u64) -> usize {
 #[test]
 fn collect_deletes_closed_changes_and_their_keep_refs() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let a = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("one", a);
-    let b = g.commit(&[g.root], &msg("two", "I002"), &[("b.txt", "b\n")]);
+    let b = g.commit(&[g.root], &msg("two", I002), &[("b.txt", "b\n")]);
     g.branch("two", b);
-    let c = g.commit(&[g.root], &msg("three", "I003"), &[("c.txt", "c\n")]);
+    let c = g.commit(&[g.root], &msg("three", I003), &[("c.txt", "c\n")]);
     g.branch("three", c);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let merged = a_change(&server, &g, "one");
@@ -57,7 +61,7 @@ fn collect_deletes_closed_changes_and_their_keep_refs() {
 #[test]
 fn collect_keeps_a_change_closed_after_the_cutoff() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let a = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", a);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let change_number = a_change(&server, &g, "feat");
@@ -75,7 +79,7 @@ fn collect_keeps_a_change_closed_after_the_cutoff() {
 #[test]
 fn collect_sends_left_for_a_followed_change() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let a = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("feat", a);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let change_number = a_change(&server, &g, "feat");

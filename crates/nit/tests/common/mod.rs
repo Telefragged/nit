@@ -457,21 +457,20 @@ pub fn change_ids(changes: &[Value]) -> Vec<String> {
     ids
 }
 
-/// One repo's change, by the label its `Change-Id` expands from.
-pub fn change_by_label(server: &TestServer, repo_id: u64, label: &str) -> Value {
-    let key = change_id(label);
+/// One repo's change, by its `Change-Id`.
+pub fn change_by_id(server: &TestServer, repo_id: u64, change_id: &str) -> Value {
     get_changes(server, &format!("?repo={repo_id}"))
         .into_iter()
-        .find(|c| c["change_id"] == key)
-        .unwrap_or_else(|| panic!("no change {label} in repo {repo_id}"))
+        .find(|c| c["change_id"] == change_id)
+        .unwrap_or_else(|| panic!("no change {change_id} in repo {repo_id}"))
 }
 
-/// One change's tags, by label.
+/// One change's tags, by `Change-Id`.
 ///
 /// Absent when the change carries none, because `skip_serializing_if`
 /// omits an empty set rather than shipping `{}`.
-pub fn change_tags(server: &TestServer, repo_id: u64, label: &str) -> Value {
-    change_by_label(server, repo_id, label)["tags"].clone()
+pub fn change_tags(server: &TestServer, repo_id: u64, change_id: &str) -> Value {
+    change_by_id(server, repo_id, change_id)["tags"].clone()
 }
 
 /// Publish a verdict on a change through the only publish path — draft the
@@ -540,24 +539,18 @@ pub fn published_reviews(server: &TestServer, change_number: u64) -> Vec<Value> 
 }
 
 /// Find a change's number by its Change-Id in a `PushResult`.
-pub fn member_id(value: &Value, label: &str) -> u64 {
-    let key = change_id(label);
+pub fn member_id(value: &Value, change_id: &str) -> u64 {
     value["changes"]
         .as_array()
         .expect("a PushResult `changes`")
         .iter()
-        .find(|m| m["change_id"].as_str() == Some(key.as_str()))
+        .find(|m| m["change_id"].as_str() == Some(change_id))
         .and_then(|m| m["change_number"].as_u64())
-        .unwrap_or_else(|| panic!("no change {label} in the push result"))
+        .unwrap_or_else(|| panic!("no change {change_id} in the push result"))
 }
 
-pub fn msg(subject: &str, label: &str) -> String {
-    format!("{subject}\n\nChange-Id: {}\n", change_id(label))
-}
-
-/// A distinct, well-formed `Change-Id` for `label`, as the wire spells it.
-pub fn change_id(label: &str) -> String {
-    nit_types::testing::change_id(label).to_string()
+pub fn msg(subject: &str, change_id: &str) -> String {
+    format!("{subject}\n\nChange-Id: {change_id}\n")
 }
 
 /// Drive one lifecycle sweep synchronously, in-process, against the server's

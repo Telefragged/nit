@@ -14,9 +14,13 @@ use std::io::Write;
 use std::process::Command;
 
 use common::{
-    GitRepo, TestServer, change_id, change_tags, first_repo_id, get_changes, msg, nit, nit_env,
-    nit_register,
+    GitRepo, TestServer, change_tags, first_repo_id, get_changes, msg, nit, nit_env, nit_register,
 };
+
+const IX: &str = "I7800000000000000000000000000000000000000";
+const IA: &str = "Ia000000000000000000000000000000000000000";
+const IB: &str = "Ib000000000000000000000000000000000000000";
+const IC: &str = "Ic000000000000000000000000000000000000000";
 
 /// The change number of the only change on the server.
 fn only_change(server: &TestServer) -> String {
@@ -32,7 +36,7 @@ fn only_change(server: &TestServer) -> String {
 #[test]
 fn push_prints_digest_then_status_and_log_read_it_back() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\nb\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap(); // the author's checkout
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -73,7 +77,7 @@ fn push_prints_digest_then_status_and_log_read_it_back() {
 #[test]
 fn amend_appends_a_revision_idempotent_repush_does_not() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\nb\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -81,7 +85,7 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
     let (ok, _push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
 
-    let c1b = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nB\n")]);
+    let c1b = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\nB\n")]);
     g.branch("feat", c1b);
     let (ok, push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
@@ -122,7 +126,7 @@ fn amend_appends_a_revision_idempotent_repush_does_not() {
 #[test]
 fn comment_opens_replies_resolves() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\nb\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -137,7 +141,7 @@ fn comment_opens_replies_resolves() {
         &[
             "comment",
             "--change-id",
-            &change_id("Ia"),
+            IA,
             "--file",
             "a.txt",
             "--line",
@@ -163,7 +167,7 @@ fn comment_opens_replies_resolves() {
         &[
             "comment",
             "--change-id",
-            &change_id("Ia"),
+            IA,
             "--thread",
             &thread_id.to_string(),
             "-m",
@@ -204,7 +208,7 @@ fn comment_opens_replies_resolves() {
 #[test]
 fn comment_body_from_file_and_stdin() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\nb\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\nb\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -219,7 +223,7 @@ fn comment_body_from_file_and_stdin() {
         &[
             "comment",
             "--change-id",
-            &change_id("Ia"),
+            IA,
             "-F",
             body_path.to_str().unwrap(),
         ],
@@ -231,7 +235,7 @@ fn comment_body_from_file_and_stdin() {
     );
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_nit"))
-        .args(["comment", "--change-id", &change_id("Ia"), "-F", "-"])
+        .args(["comment", "--change-id", IA, "-F", "-"])
         .current_dir(g.workdir())
         .env("NIT_SERVER", &server.base)
         .stdin(std::process::Stdio::piped())
@@ -274,7 +278,7 @@ fn field_after(text: &str, marker: &str) -> u64 {
 #[test]
 fn reopen_an_abandoned_change() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -282,7 +286,7 @@ fn reopen_an_abandoned_change() {
     let (ok, _push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
 
-    let (ok, detail, stderr) = nit(&server, &g, &["abandon", "--change-id", &change_id("Ia")]);
+    let (ok, detail, stderr) = nit(&server, &g, &["abandon", "--change-id", IA]);
     assert!(ok, "{stderr}");
     assert!(
         detail
@@ -291,7 +295,7 @@ fn reopen_an_abandoned_change() {
         "{detail}"
     );
 
-    let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change-id", &change_id("Ia")]);
+    let (ok, detail, stderr) = nit(&server, &g, &["reopen", "--change-id", IA]);
     assert!(ok, "{stderr}");
     assert!(
         detail
@@ -311,13 +315,13 @@ fn reopen_an_abandoned_change() {
 #[test]
 fn gc_prints_what_it_deleted() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (ok, _push, stderr) = nit_register(&server, &g);
     assert!(ok, "{stderr}");
-    let (ok, _, stderr) = nit(&server, &g, &["abandon", "--change-id", &change_id("Ia")]);
+    let (ok, _, stderr) = nit(&server, &g, &["abandon", "--change-id", IA]);
     assert!(ok, "{stderr}");
 
     let (ok, report, stderr) = nit(&server, &g, &["gc", "--retention-days", "1"]);
@@ -357,10 +361,10 @@ fn push_without_change_number_fails_with_a_helpful_message() {
 #[test]
 fn status_selects_by_the_session_worktree_or_branch_or_an_explicit_tag() {
     let g = GitRepo::new();
-    let a = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
-    let b = g.commit(&[a], &msg("core: add b", "Ib"), &[("b.txt", "b\n")]);
+    let a = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\n")]);
+    let b = g.commit(&[a], &msg("core: add b", IB), &[("b.txt", "b\n")]);
     g.branch("feat", b);
-    let c = g.commit(&[g.root], &msg("core: add c", "Ic"), &[("c.txt", "c\n")]);
+    let c = g.commit(&[g.root], &msg("core: add c", IC), &[("c.txt", "c\n")]);
     g.branch("other", c);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -414,7 +418,7 @@ fn status_selects_by_the_session_worktree_or_branch_or_an_explicit_tag() {
 #[test]
 fn status_before_any_push_says_run_nit_push_first() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", IX), &[("x.txt", "x\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -434,7 +438,7 @@ fn status_before_any_push_says_run_nit_push_first() {
 #[test]
 fn push_to_a_dead_server_reports_unreachable() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: x", "Ix"), &[("x.txt", "x\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: x", IX), &[("x.txt", "x\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
 
@@ -460,7 +464,7 @@ fn push_to_a_dead_server_reports_unreachable() {
 #[test]
 fn bare_push_resolves_head() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -477,7 +481,7 @@ fn bare_push_resolves_head() {
 #[test]
 fn push_resolves_detached_head() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: a", IA), &[("a.txt", "a\n")]);
     g.repo.set_head_detached(c1).unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -494,7 +498,7 @@ fn push_resolves_detached_head() {
 #[test]
 fn push_tags_derived_and_explicit_values() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: add a", "Ia"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -510,18 +514,18 @@ fn push_tags_derived_and_explicit_values() {
     assert!(ok, "{stderr}");
 
     let repo_id = first_repo_id(&server);
-    let tags = change_tags(&server, repo_id, "Ia");
+    let tags = change_tags(&server, repo_id, IA);
     assert_eq!(tags["branch"], "feat");
     assert_eq!(tags["worktree"], g.canonical_workdir());
     assert_eq!(tags["session-id"], "sess-1");
     assert_eq!(tags["feature"], "epic-saga");
 
     // An explicit rev names the same commit, but implies no ref.
-    let c2 = g.commit(&[c1], &msg("core: add b", "Ib"), &[("b.txt", "b\n")]);
+    let c2 = g.commit(&[c1], &msg("core: add b", IB), &[("b.txt", "b\n")]);
     g.branch("feat", c2);
     let (ok, _, stderr) = nit(&server, &g, &["push", "feat"]);
     assert!(ok, "{stderr}");
-    let tags = change_tags(&server, repo_id, "Ib");
+    let tags = change_tags(&server, repo_id, IB);
     assert!(
         tags.get("branch").is_none(),
         "no branch for an explicit rev: {tags}"

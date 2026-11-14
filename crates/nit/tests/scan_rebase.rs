@@ -11,6 +11,11 @@ use common::{
 };
 use serde_json::Value;
 
+const IX: &str = "I7800000000000000000000000000000000000000";
+const IA: &str = "Ia000000000000000000000000000000000000000";
+const IB: &str = "Ib000000000000000000000000000000000000000";
+const IC: &str = "Ic000000000000000000000000000000000000000";
+
 fn change_detail(server: &TestServer, change_number: u64) -> Value {
     let (st, v) = http_get(&server.url(&format!("/api/changes/{change_number}")));
     assert_eq!(st, 200, "{v}");
@@ -35,14 +40,14 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
     let g = GitRepo::new();
     let a_txt = "a1\na2\na3\n";
     let b_txt = "b1\nb2\n";
-    let c1 = g.commit(&[g.root], &msg("one", "Ia"), &[("a.txt", a_txt)]);
-    let c2 = g.commit(&[c1], &msg("two", "Ib"), &[("b.txt", b_txt)]);
+    let c1 = g.commit(&[g.root], &msg("one", IA), &[("a.txt", a_txt)]);
+    let c2 = g.commit(&[c1], &msg("two", IB), &[("b.txt", b_txt)]);
     g.branch("feat", c2);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    let tip_id = member_id(&pr, "Ib");
+    let tip_id = member_id(&pr, IB);
     assert_eq!(
         tip_change(&pr)["revision"],
         0,
@@ -54,8 +59,8 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
 
     let m1 = g.commit(&[g.root], "main: unrelated\n", &[("m.txt", "m\n")]);
     g.branch("main", m1);
-    let c1r = g.commit(&[m1], &msg("one", "Ia"), &[("a.txt", a_txt)]);
-    let c2r = g.commit(&[c1r], &msg("two", "Ib"), &[("b.txt", b_txt)]);
+    let c1r = g.commit(&[m1], &msg("one", IA), &[("a.txt", a_txt)]);
+    let c2r = g.commit(&[c1r], &msg("two", IB), &[("b.txt", b_txt)]);
     g.branch("feat", c2r);
 
     let (st, pr) = push(&server, &g, "feat", "main");
@@ -70,7 +75,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
         "approved",
         "the approval carries forward across a pure rebase"
     );
-    assert_eq!(member_id(&pr, "Ib"), tip_id, "same change identity");
+    assert_eq!(member_id(&pr, IB), tip_id, "same change identity");
 
     let detail = change_detail(&server, tip_id);
     let revs = detail["revisions"].as_array().unwrap();
@@ -87,7 +92,7 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
 
     // A reword changes reviewable content, so it resets to pending — a new
     // revision the reviewer hasn't seen.
-    let c2w = g.commit(&[c1r], &msg("two: explained", "Ib"), &[("b.txt", b_txt)]);
+    let c2w = g.commit(&[c1r], &msg("two: explained", IB), &[("b.txt", b_txt)]);
     g.branch("feat", c2w);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
@@ -112,13 +117,13 @@ fn pure_rebase_carries_status_forward_then_reword_resets() {
 #[test]
 fn re_push_of_an_unchanged_tip_is_idempotent() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("only", "Ic"), &[("c.txt", "c\n")]);
+    let c1 = g.commit(&[g.root], &msg("only", IC), &[("c.txt", "c\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    let change_number = member_id(&pr, "Ic");
+    let change_number = member_id(&pr, IC);
     approve(&server, change_number);
 
     let (st, pr) = push(&server, &g, "feat", "main");
@@ -140,20 +145,20 @@ fn re_push_of_an_unchanged_tip_is_idempotent() {
 fn pure_rebase_carries_request_changes_reword_resets() {
     let g = GitRepo::new();
     let txt = "x1\nx2\n";
-    let c1 = g.commit(&[g.root], &msg("feat: x", "Ix"), &[("x.txt", txt)]);
+    let c1 = g.commit(&[g.root], &msg("feat: x", IX), &[("x.txt", txt)]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
-    let change_number = member_id(&pr, "Ix");
+    let change_number = member_id(&pr, IX);
 
     review(&server, change_number, "request_changes", "rename");
     assert_eq!(latest_status(&server, change_number), "changes_requested");
 
     let m1 = g.commit(&[g.root], "main moves\n", &[("m.txt", "m\n")]);
     g.branch("main", m1);
-    let c1r = g.commit(&[m1], &msg("feat: x", "Ix"), &[("x.txt", txt)]);
+    let c1r = g.commit(&[m1], &msg("feat: x", IX), &[("x.txt", txt)]);
     g.branch("feat", c1r);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");
@@ -164,7 +169,7 @@ fn pure_rebase_carries_request_changes_reword_resets() {
         "request_changes carries forward across a pure rebase"
     );
 
-    let c1w = g.commit(&[m1], &msg("feat: x, reworded", "Ix"), &[("x.txt", txt)]);
+    let c1w = g.commit(&[m1], &msg("feat: x, reworded", IX), &[("x.txt", txt)]);
     g.branch("feat", c1w);
     let (st, pr) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{pr}");

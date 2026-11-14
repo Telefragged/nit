@@ -21,6 +21,19 @@ use common::{
 };
 use serde_json::json;
 
+const IM1: &str = "I6d31000000000000000000000000000000000000";
+const IR1: &str = "I7231000000000000000000000000000000000000";
+const IR2: &str = "I7232000000000000000000000000000000000000";
+const IS1: &str = "I7331000000000000000000000000000000000000";
+const IS2: &str = "I7332000000000000000000000000000000000000";
+const IS3: &str = "I7333000000000000000000000000000000000000";
+const IA1: &str = "Ia100000000000000000000000000000000000000";
+const IAB1: &str = "Iab10000000000000000000000000000000000000";
+const IB1: &str = "Ib100000000000000000000000000000000000000";
+const IB2: &str = "Ib200000000000000000000000000000000000000";
+const IC1: &str = "Ic100000000000000000000000000000000000000";
+const IC2: &str = "Ic200000000000000000000000000000000000000";
+
 /// Canonical git-common-dir of a checkout rooted at `root` (its `.git` child),
 /// as the string nit stores — for asserting a relocated path.
 fn git_dir_of(root: &std::path::Path) -> String {
@@ -48,13 +61,13 @@ fn open_changes(server: &TestServer, id: u64) -> u64 {
 #[test]
 fn repos_list_shape_canonical_ref_and_scoped_changes() {
     let a = GitRepo::new();
-    let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
+    let a1 = a.commit(&[a.root], &msg("a: one", IA1), &[("a.rs", "a\n")]);
     a.branch("feat", a1);
 
     let b = GitRepo::new();
-    let b1 = b.commit(&[b.root], &msg("b: one", "Ib1"), &[("b.rs", "b\n")]);
+    let b1 = b.commit(&[b.root], &msg("b: one", IB1), &[("b.rs", "b\n")]);
     b.branch("feat", b1);
-    let b2 = b.commit(&[b.root], &msg("b: two", "Ib2"), &[("b2.rs", "b2\n")]);
+    let b2 = b.commit(&[b.root], &msg("b: two", IB2), &[("b2.rs", "b2\n")]);
     b.branch("topic", b2);
 
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
@@ -111,9 +124,9 @@ fn repos_list_shape_canonical_ref_and_scoped_changes() {
 fn base_can_be_any_branch() {
     // nit never assumes `main`/`master` — the base must be named explicitly.
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("base: one", "Ib1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("base: one", IB1), &[("a.rs", "a\n")]);
     g.branch("trunk", c1);
-    let c2 = g.commit(&[c1], &msg("core: two", "Ic2"), &[("b.rs", "b\n")]);
+    let c2 = g.commit(&[c1], &msg("core: two", IC2), &[("b.rs", "b\n")]);
     g.branch("feat", c2);
     g.delete_branch("main");
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -129,7 +142,7 @@ fn base_can_be_a_remote_tracking_ref() {
     // branch — e.g. `origin/main`, which `find_branch` would reject. Tracking a
     // remote ref is the point: some repos review against `origin/main`.
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IC1), &[("a.rs", "a\n")]);
     g.repo
         .reference("refs/remotes/origin/main", c1, true, "test")
         .unwrap();
@@ -143,7 +156,7 @@ fn base_can_be_a_remote_tracking_ref() {
 #[test]
 fn create_repo_registers_and_pins_base() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IC1), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     g.branch("trunk", g.root);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -173,7 +186,7 @@ fn create_repo_registers_and_pins_base() {
 #[test]
 fn push_into_unregistered_repo_is_404() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IC1), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -205,7 +218,7 @@ fn push_into_unregistered_repo_is_404() {
 fn create_repo_rejects_unknown_base() {
     // A base that resolves to nothing is a 400 — nit never guesses a base.
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IC1), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -217,7 +230,7 @@ fn create_repo_rejects_unknown_base() {
 #[test]
 fn nit_repo_create_cli() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Ic1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IC1), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     g.repo.set_head("refs/heads/feat").unwrap();
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -255,7 +268,7 @@ fn nit_repo_create_cli() {
 #[test]
 fn relocate_repo_endpoint() {
     let a = GitRepo::new();
-    let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
+    let a1 = a.commit(&[a.root], &msg("a: one", IA1), &[("a.rs", "a\n")]);
     a.branch("feat", a1);
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &a, "feat", "main");
@@ -275,7 +288,7 @@ fn relocate_repo_endpoint() {
     assert_eq!(st, 400);
 
     let b = GitRepo::new();
-    let b1 = b.commit(&[b.root], &msg("b: one", "Ib1"), &[("b.rs", "b\n")]);
+    let b1 = b.commit(&[b.root], &msg("b: one", IB1), &[("b.rs", "b\n")]);
     b.branch("feat", b1);
     let (st, _) = push(&server, &b, "feat", "main");
     assert_eq!(st, 200);
@@ -310,7 +323,7 @@ fn relocate_repo_endpoint() {
 #[test]
 fn get_repo_by_id_endpoint() {
     let a = GitRepo::new();
-    let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
+    let a1 = a.commit(&[a.root], &msg("a: one", IA1), &[("a.rs", "a\n")]);
     a.branch("feat", a1);
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &a, "feat", "main");
@@ -331,7 +344,7 @@ fn get_repo_by_id_endpoint() {
 #[test]
 fn nit_repo_move_cli() {
     let a = GitRepo::new();
-    let a1 = a.commit(&[a.root], &msg("a: one", "Ia1"), &[("a.rs", "a\n")]);
+    let a1 = a.commit(&[a.root], &msg("a: one", IA1), &[("a.rs", "a\n")]);
     a.branch("feat", a1);
     let server = TestServer::start(a.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &a, "feat", "main");
@@ -369,7 +382,7 @@ fn nit_repo_move_cli() {
 #[test]
 fn set_canonical_ref_moves_merge_tracking_to_the_new_ref() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Is1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IS1), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     g.branch("trunk", g.root);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -396,7 +409,7 @@ fn set_canonical_ref_moves_merge_tracking_to_the_new_ref() {
 #[test]
 fn set_canonical_ref_rejects_a_ref_at_another_commit() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Is2"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IS2), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &g, "feat", "main");
@@ -419,7 +432,7 @@ fn set_canonical_ref_rejects_a_ref_at_another_commit() {
 #[test]
 fn nit_repo_set_ref_cli() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Is3"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IS3), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     g.branch("trunk", g.root);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -448,13 +461,13 @@ fn nit_repo_set_ref_cli() {
 #[test]
 fn remove_repo_deletes_the_repo_and_its_changes() {
     let g = GitRepo::new();
-    let one = g.commit(&[g.root], &msg("core: one", "Ir1"), &[("a.rs", "a\n")]);
-    let two = g.commit(&[one], &msg("core: two", "Ir2"), &[("b.rs", "b\n")]);
+    let one = g.commit(&[g.root], &msg("core: one", IR1), &[("a.rs", "a\n")]);
+    let two = g.commit(&[one], &msg("core: two", IR2), &[("b.rs", "b\n")]);
     g.branch("feat", two);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    let change_number = member_id(&res, "Ir1");
+    let change_number = member_id(&res, IR1);
     let id = first_repo(&server);
 
     let (st, _) = http_delete(&server.url(&format!("/api/repos/{id}")));
@@ -483,7 +496,7 @@ fn remove_unknown_repo_is_404() {
 #[test]
 fn nit_repo_remove_cli() {
     let g = GitRepo::new();
-    let one = g.commit(&[g.root], &msg("core: one", "Ir1"), &[("a.rs", "a\n")]);
+    let one = g.commit(&[g.root], &msg("core: one", IR1), &[("a.rs", "a\n")]);
     g.branch("feat", one);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &g, "feat", "main");
@@ -501,7 +514,7 @@ fn nit_repo_remove_cli() {
 #[test]
 fn merged_change_drops_out_of_open_changes() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Im1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IM1), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -524,13 +537,13 @@ fn merged_change_drops_out_of_open_changes() {
 #[test]
 fn abandoned_change_drops_out_of_open_changes() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("core: one", "Iab1"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("core: one", IAB1), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
 
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
-    let change_number = member_id(&res, "Iab1");
+    let change_number = member_id(&res, IAB1);
     let id = first_repo(&server);
     assert_eq!(open_changes(&server, id), 1);
 

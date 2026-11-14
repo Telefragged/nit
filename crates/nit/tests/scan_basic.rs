@@ -5,7 +5,14 @@
 
 mod common;
 
-use common::{GitRepo, TestServer, change_id, http_get, member_id, msg, push, tip_change};
+use common::{GitRepo, TestServer, http_get, member_id, msg, push, tip_change};
+
+const I001: &str = "I0010000000000000000000000000000000000000";
+const I002: &str = "I0020000000000000000000000000000000000000";
+const I003: &str = "I0030000000000000000000000000000000000000";
+const I00F: &str = "I00f0000000000000000000000000000000000000";
+const I00S: &str = "I3030730000000000000000000000000000000000";
+const I64757: &str = "I6475700000000000000000000000000000000000";
 
 /// Every change the server holds, ascending by change number.
 fn all_changes(server: &TestServer) -> Vec<serde_json::Value> {
@@ -19,12 +26,12 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     let g = GitRepo::new();
     let c1 = g.commit(
         &[g.root],
-        &msg("server: add health", "I001"),
+        &msg("server: add health", I001),
         &[("a.rs", "a\n")],
     );
     let c2 = g.commit(
         &[c1],
-        &msg("server: add chains api", "I002"),
+        &msg("server: add chains api", I002),
         &[("b.rs", "b\n")],
     );
     g.branch("feat", c2);
@@ -34,22 +41,22 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
     assert_eq!(st, 200, "{res}");
 
     let tip = tip_change(&res);
-    assert_eq!(tip["change_id"], change_id("I002"));
+    assert_eq!(tip["change_id"], I002);
     assert_eq!(tip["revision"], 0);
     assert_eq!(tip["status"], "pending");
 
     let pushed = res["changes"].as_array().unwrap();
     assert_eq!(pushed.len(), 2, "base first, tip last: {res}");
-    assert_eq!(pushed[0]["change_id"], change_id("I001"));
+    assert_eq!(pushed[0]["change_id"], I001);
     assert_eq!(pushed[0]["revision"], 0);
-    assert_eq!(pushed[1]["change_id"], change_id("I002"));
+    assert_eq!(pushed[1]["change_id"], I002);
     assert_eq!(pushed[1]["revision"], 0);
     let changes = all_changes(&server);
     assert_eq!(changes.len(), 2);
     assert_eq!(changes[0]["revisions"][0]["commit_sha"], c1.to_string());
     assert_eq!(changes[1]["revisions"][0]["commit_sha"], c2.to_string());
 
-    let id1 = member_id(&res, "I001");
+    let id1 = member_id(&res, I001);
     let (st, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
     assert_eq!(st, 200, "{detail}");
     let revs = detail["revisions"].as_array().unwrap();
@@ -64,9 +71,9 @@ fn push_creates_a_change_per_commit_at_revision_zero() {
 #[test]
 fn changes_are_numbered_base_first() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
-    let c3 = g.commit(&[c2], &msg("three", "I003"), &[("c.rs", "c\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.rs", "a\n")]);
+    let c2 = g.commit(&[c1], &msg("two", I002), &[("b.rs", "b\n")]);
+    let c3 = g.commit(&[c2], &msg("three", I003), &[("c.rs", "c\n")]);
     g.branch("feat", c3);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
@@ -78,10 +85,7 @@ fn changes_are_numbered_base_first() {
         .iter()
         .map(|m| m["change_id"].as_str().unwrap())
         .collect();
-    assert_eq!(
-        keys,
-        vec![change_id("I001"), change_id("I002"), change_id("I003")]
-    );
+    assert_eq!(keys, vec![I001, I002, I003]);
     let changes = all_changes(&server);
     for (i, c) in changes.iter().enumerate() {
         assert_eq!(c["change_id"].as_str(), Some(keys[i]));
@@ -94,7 +98,7 @@ fn changes_are_numbered_base_first() {
 #[test]
 fn no_op_repush_is_idempotent() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &g, "feat", "main");
@@ -115,24 +119,24 @@ fn no_op_repush_is_idempotent() {
 #[test]
 fn extending_the_branch_adds_a_change() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, _) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
 
-    let c2 = g.commit(&[c1], &msg("two", "I002"), &[("b.rs", "b\n")]);
+    let c2 = g.commit(&[c1], &msg("two", I002), &[("b.rs", "b\n")]);
     g.branch("feat", c2);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
-    assert_eq!(tip_change(&res)["change_id"], change_id("I002"));
+    assert_eq!(tip_change(&res)["change_id"], I002);
     assert_eq!(tip_change(&res)["revision"], 0);
 
     let changes = all_changes(&server);
     assert_eq!(changes.len(), 2);
-    assert_eq!(changes[1]["change_id"], change_id("I002"));
+    assert_eq!(changes[1]["change_id"], I002);
 
-    let id1 = member_id(&res, "I001");
+    let id1 = member_id(&res, I001);
     let (_, detail) = http_get(&server.url(&format!("/api/changes/{id1}")));
     assert_eq!(detail["revisions"].as_array().unwrap().len(), 1);
 }
@@ -140,14 +144,14 @@ fn extending_the_branch_adds_a_change() {
 #[test]
 fn amend_opens_revision_one_on_the_change() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.rs", "a\n")]);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200);
-    let id = member_id(&res, "I001");
+    let id = member_id(&res, I001);
 
-    let c1b = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "different\n")]);
+    let c1b = g.commit(&[g.root], &msg("one", I001), &[("a.rs", "different\n")]);
     g.branch("feat", c1b);
     let (st, res) = push(&server, &g, "feat", "main");
     assert_eq!(st, 200, "{res}");
@@ -168,8 +172,8 @@ fn amend_opens_revision_one_on_the_change() {
 #[test]
 fn merge_commit_rejects_the_push() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    let side = g.commit(&[g.root], &msg("side", "I00s"), &[("s.rs", "s\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.rs", "a\n")]);
+    let side = g.commit(&[g.root], &msg("side", I00S), &[("s.rs", "s\n")]);
     let merge = g.commit(&[c1, side], "Merge side into feat\n", &[]);
     g.branch("feat", merge);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -190,7 +194,7 @@ fn already_merged_commit_rejects_the_push() {
     // already merged. The push fails (409) rather than silently recording
     // nothing.
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.txt", "a\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "a\n")]);
     g.branch("main", c1);
     g.branch("feat", c1);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
@@ -226,8 +230,8 @@ fn missing_change_number_rejects_the_push() {
 #[test]
 fn duplicate_change_number_rejects_the_push() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "Idup"), &[("a.rs", "a\n")]);
-    let c2 = g.commit(&[c1], &msg("two", "Idup"), &[("b.rs", "b\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I64757), &[("a.rs", "a\n")]);
+    let c2 = g.commit(&[c1], &msg("two", I64757), &[("b.rs", "b\n")]);
     g.branch("feat", c2);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
@@ -237,7 +241,7 @@ fn duplicate_change_number_rejects_the_push() {
         e["error"]
             .as_str()
             .unwrap()
-            .contains(&format!("duplicate Change-Id {}", change_id("Idup"))),
+            .contains("duplicate Change-Id I6475700000000000000000000000000000000000"),
         "{e}"
     );
     assert!(all_changes(&server).is_empty(), "nothing recorded");
@@ -246,8 +250,8 @@ fn duplicate_change_number_rejects_the_push() {
 #[test]
 fn fixup_subject_rejects_the_push() {
     let g = GitRepo::new();
-    let c1 = g.commit(&[g.root], &msg("one", "I001"), &[("a.rs", "a\n")]);
-    let fx = g.commit(&[c1], &msg("fixup! one", "I00f"), &[("a.rs", "a2\n")]);
+    let c1 = g.commit(&[g.root], &msg("one", I001), &[("a.rs", "a\n")]);
+    let fx = g.commit(&[c1], &msg("fixup! one", I00F), &[("a.rs", "a2\n")]);
     g.branch("feat", fx);
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
 
