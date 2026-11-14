@@ -140,18 +140,20 @@ rec {
         buildTests = true;
       });
 
-  # The workspace that `cargoMetadata` and the test runs load: the
-  # manifests, the nextest config, and every Rust source as an empty
-  # file. cargo finds a target by its file name. No test loads a source
-  # file. An edit to a source file thus leaves this tree unchanged. Only
-  # a new or removed source file causes the tests to run again.
+  # The workspace that `cargoMetadata`, the test runs and the `hakari`
+  # check load: the manifests, the lock file, the configs in `.config`,
+  # and every Rust source as an empty file. cargo finds a target by its
+  # file name. No test loads a source file. An edit to a source file thus
+  # leaves this tree unchanged. Only a new or removed source file causes
+  # the tests to run again.
   workspaceSrc =
     let
       manifests = lib.fileset.toSource {
         root = ./.;
         fileset = lib.fileset.unions [
           ./Cargo.toml
-          ./.config/nextest.toml
+          ./Cargo.lock
+          ./.config
           (lib.fileset.fileFilter (f: f.name == "Cargo.toml") ./crates)
         ];
       };
