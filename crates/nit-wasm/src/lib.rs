@@ -1,15 +1,13 @@
 //! The Rust the browser runs: the change fold and the intraline diff.
 //!
 //! The fold is the shared one (`nit_types::fold`), so the websocket stream
-//! folds client-side with the very same code the server runs — the server
-//! ships a `ChangeProjection`, the browser resumes folding the live tail
-//! onto it and projects the published `ChangeDetail`, never reimplementing
-//! the fold. The intraline diff's per-character Myers wants a compiled
-//! language.
+//! folds client-side with the same code the server runs: the server ships a
+//! `ChangeProjection`, and the browser resumes folding the live tail onto it
+//! and projects the published `ChangeDetail`. The intraline diff runs a
+//! per-character Myers diff, which requires a compiled language.
 //!
-//! Values cross the boundary as structured `JsValue`s via `serde-wasm-bindgen`,
-//! with no JSON text in between. `u64` rides as a JS `number` — the same
-//! representation the web already holds — so the wire types are unchanged.
+//! Values cross the boundary as structured `JsValue`s via `serde-wasm-bindgen`.
+//! A `u64` crosses as a JS `number`, the type the generated wire types use.
 
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
@@ -31,7 +29,7 @@ mod intraline;
 /// `… | null` wire types depend on. `serialize_maps_as_objects` gives a
 /// map the shape the server's JSON gives it (`Tags` is the one that
 /// crosses), so a value the fold built and a value the REST routes
-/// returned read the same way.
+/// returned have the same shape.
 fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
     let serializer = serde_wasm_bindgen::Serializer::new()
         .serialize_missing_as_null(true)
@@ -41,8 +39,7 @@ fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
 
 /// The input to [`replay_proj`].
 ///
-/// A change's identity (not carried in the log) plus its log entries,
-/// ascending by `position`.
+/// A change's identity plus its log entries, ascending by `position`.
 #[derive(Deserialize)]
 struct ReplayInput {
     id: u64,
@@ -90,7 +87,7 @@ pub fn fold_entry(proj: JsValue, entry: JsValue) -> Result<JsValue, JsValue> {
 /// Assembles the repo's change graph from the two primitive reads.
 ///
 /// The reads are the change folds (`GET /api/changes`) and the canonical
-/// history (`GET /api/history`). `group_by` names the tag key to group
+/// history (`GET /api/history`). `group_by` specifies the tag key to group
 /// the open region on.
 ///
 /// # Errors
@@ -150,9 +147,9 @@ pub fn intraline_marks(regions: JsValue) -> Result<JsValue, JsValue> {
 
 /// Projects a `ChangeProjection` to its published `ChangeDetail`.
 ///
-/// The detail carries revisions, threads and reviews. The reviewer's drafts
-/// and draft decision are not log state, so they come back empty; the
-/// browser overlays its own from `GET /changes/{id}/drafts`.
+/// The reviewer's drafts and draft decision are not log state, so they
+/// come back empty; the browser overlays its own from
+/// `GET /changes/{id}/drafts`.
 ///
 /// # Errors
 ///

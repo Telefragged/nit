@@ -1,4 +1,4 @@
-//! Writes nit's public contract into the directory named by the first
+//! Writes nit's public contract into the directory given as the first
 //! argument: `openapi.json`, the document the routes' utoipa annotations
 //! produce, and `cli.json`, the syntax of every `nit` command.
 
@@ -31,8 +31,8 @@ fn main() -> Result<()> {
 /// The syntax a caller of `cmd` relies on: its arguments and subcommands,
 /// with no help text.
 ///
-/// An argument is named by its flag or its position, never by the Rust
-/// field behind it, which a caller never sees.
+/// An argument is identified by its flag or its position. The Rust field
+/// behind it is left out, because a caller never sees it.
 fn command(cmd: &clap::Command) -> serde_json::Value {
     let args: Vec<_> = cmd
         .get_arguments()

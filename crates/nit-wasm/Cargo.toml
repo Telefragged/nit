@@ -9,7 +9,7 @@ description = "WebAssembly bindings for the shared nit change fold"
 workspace = true
 
 [lib]
-# A cdylib for wasm-bindgen; the crate is only ever built for wasm32.
+# A cdylib for wasm-bindgen.
 crate-type = ["cdylib"]
 
 [dependencies]

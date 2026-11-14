@@ -5,8 +5,8 @@
 //! block whose two sides differ in length has no leftovers. A per-character
 //! diff on its own leaves marks too scattered to read, so two of Gerrit's
 //! `IntraLineLoader` rules follow it: near edits join, and matching edges go
-//! back to the context. Its slider is deliberately not among them: shifting
-//! one side's span alone does not preserve the transformation, so the marks
+//! back to the context. Its slider rule is not among them: shifting one
+//! side's span alone does not preserve the transformation, so the marks
 //! would stop describing the change.
 //!
 //! Offsets are UTF-16 code units throughout — how the browser indexes the
@@ -20,7 +20,7 @@ use std::slice;
 
 const NL: u16 = b'\n' as u16;
 
-/// Code units a side may hold before its block goes unmarked.
+/// Code units a side may contain before its block goes unmarked.
 ///
 /// Myers is O(N·D), and repetitive text — a generated file, a lockfile, a
 /// long run of near-identical lines — offers no unique anchor to cut the
@@ -92,8 +92,8 @@ impl Side {
     ///
     /// Clamping drops the newlines an edit swallowed, so every mark ends
     /// where its line's text does. A mark over a whole line is dropped: the
-    /// line already renders as added or deleted, and emphasising all of it —
-    /// indentation included — says nothing more.
+    /// line already renders as added or deleted, and emphasising all of it,
+    /// indentation included, adds no information.
     fn project<'a>(
         &self,
         spans: impl Iterator<Item = &'a Range<usize>>,
