@@ -75,7 +75,7 @@ describe("event-driven change page", () => {
     );
   });
 
-  it("takes the r shortcut while the toast is open", async () => {
+  it("takes the r shortcut while the toast is open, and closes the toast", async () => {
     await renderReview("/changes/10");
     act(() => {
       pushRevision(10, "c10r4");
@@ -84,6 +84,7 @@ describe("event-driven change page", () => {
 
     fireEvent.keyDown(window, { key: "r" });
     expect(revHead().textContent).toBe("r3");
+    expect(screen.queryByText(/was pushed/)).toBeNull();
   });
 
   it("lists the change log and appends a live entry to it", async () => {

@@ -6,7 +6,7 @@ import NewRevisionToast from "./NewRevisionToast";
 export function Pushed() {
   return (
     <div className="h-screen w-screen">
-      <NewRevisionToast opened={1} latest={2} />
+      <NewRevisionToast opened={1} latest={2} selected={1} />
     </div>
   );
 }
