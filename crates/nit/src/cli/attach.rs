@@ -1,4 +1,4 @@
-//! `nit attach` — puts a file on a revision of a change.
+//! `nit attach` — puts a file on a version of a change.
 
 use std::path::{Path, PathBuf};
 
@@ -7,7 +7,7 @@ use git2::Repository;
 
 use nit_types::attachments::UploadedAttachment;
 use nit_types::changes::ChangeDetail;
-use nit_types::domain::{AttachPayload, AttachmentName, ChangeVersion, RevisionNumber};
+use nit_types::domain::{AttachPayload, AttachmentName, ChangeVersion};
 
 use super::client::{Client, ServerOpt, server_url};
 use super::format::ChangeTarget;
@@ -19,9 +19,9 @@ pub struct AttachArgs {
     pub file: PathBuf,
     #[command(flatten)]
     pub target: ChangeTarget,
-    /// The revision to attach to. Default: the change's latest revision.
+    /// The change version to attach to: `rN` for revision N, or `rN^` for its base, the parent commit that its diff starts from. Default: the change's latest revision.
     #[arg(long)]
-    pub revision: Option<RevisionNumber>,
+    pub to: Option<ChangeVersion>,
     /// The name of the attachment, a relative path. Default: the file's path from the repository root, or its file name outside a repository.
     #[arg(long)]
     pub name: Option<String>,
@@ -29,7 +29,7 @@ pub struct AttachArgs {
     pub server: ServerOpt,
 }
 
-/// Uploads a file and attaches it to a revision of a change.
+/// Uploads a file and attaches it to a version of a change.
 ///
 /// # Errors
 ///
@@ -42,21 +42,23 @@ pub fn attach(args: AttachArgs) -> Result<()> {
     })?;
     let client = Client::new(server_url(args.server.server));
     let change_number = args.target.resolve(&client)?;
-    let revision = if let Some(revision) = args.revision {
-        revision
+    let version = if let Some(version) = args.to {
+        version
     } else {
         let detail: ChangeDetail = client.get(&format!("/api/changes/{change_number}"))?;
-        detail
-            .revisions
-            .last()
-            .context("the change has no revision")?
-            .number
+        ChangeVersion::Revision(
+            detail
+                .revisions
+                .last()
+                .context("the change has no revision")?
+                .number,
+        )
     };
     let file = std::fs::File::open(&args.file)
         .with_context(|| format!("opening {}", args.file.display()))?;
     let uploaded: UploadedAttachment = client.put_file("/api/attachments", file)?;
     let request = AttachPayload {
-        version: ChangeVersion::Revision(revision),
+        version,
         name,
         hash: uploaded.hash,
     };

@@ -54,6 +54,11 @@ fn attach_to(
     )
 }
 
+fn attach_to_base(server: &TestServer, change_number: u64, revision: u64, name: &str, hash: &str) {
+    let (st, res) = attach_to(server, change_number, &format!("r{revision}^"), name, hash);
+    assert_eq!(st, 200, "{res}");
+}
+
 fn attach_entries(server: &TestServer, change_number: u64) -> Vec<Value> {
     change_log(server, change_number)
         .into_iter()
@@ -369,16 +374,23 @@ fn attachments_carry_forward_by_name() {
     assert_eq!(attach_entries(&server, change_number).len(), 3);
 }
 
-fn comment_on_line(server: &TestServer, change_number: u64, file: &str, line: u64) {
+fn comment_on_line(
+    server: &TestServer,
+    change_number: u64,
+    file: &str,
+    side: &str,
+    line: u64,
+) -> Value {
     let (st, thread) = http_post(
         &server.url(&format!("/api/changes/{change_number}/comments")),
         &json!({
             "body": "here",
             "revision": 0,
-            "anchor": { "line": { "file": file, "side": "new", "at": { "whole": line } } },
+            "anchor": { "line": { "file": file, "side": side, "at": { "whole": line } } },
         }),
     );
     assert_eq!(st, 200, "{thread}");
+    thread
 }
 
 fn ported_anchors(server: &TestServer, change_number: u64, revision: u64) -> Vec<Value> {
@@ -402,7 +414,7 @@ fn a_thread_on_an_attachment_ports_through_its_edits() {
     let (server, change_number) = server_with_change(&g);
     let before = upload(&server, b"a\nb\nc\n");
     attach(&server, change_number, 0, "notes.txt", &before);
-    comment_on_line(&server, change_number, "/attachments/notes.txt", 2);
+    comment_on_line(&server, change_number, "/attachments/notes.txt", "new", 2);
     amend(&server, &g);
     let after = upload(&server, b"new\na\nb\nc\n");
     attach(&server, change_number, 1, "notes.txt", &after);
@@ -422,7 +434,7 @@ fn a_thread_on_a_carried_attachment_keeps_its_line() {
     let (server, change_number) = server_with_change(&g);
     let notes = upload(&server, b"a\nb\n");
     attach(&server, change_number, 0, "notes.txt", &notes);
-    comment_on_line(&server, change_number, "/attachments/notes.txt", 2);
+    comment_on_line(&server, change_number, "/attachments/notes.txt", "new", 2);
     amend(&server, &g);
 
     assert_eq!(
@@ -531,6 +543,137 @@ fn an_interdiff_compares_the_attachments_of_the_two_revisions() {
     );
 }
 
+/// The base of a revision shows only its own attachments, and the
+/// revision never shows them.
+#[test]
+fn the_base_shows_its_own_attachments() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let before = upload(&server, b"before\n");
+    attach_to_base(&server, change_number, 0, "shot.txt", &before);
+
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_number}")));
+
+    assert_eq!(st, 200, "{detail}");
+    assert_eq!(
+        detail["revisions"][0]["base_attachments"],
+        json!([{ "name": "shot.txt", "hash": before, "revision": 0 }])
+    );
+    assert_eq!(detail["revisions"][0]["attachments"], json!([]));
+}
+
+/// Against its base, the diff of a revision pairs each attachment of the
+/// revision with the base attachment of the same name.
+#[test]
+fn the_diff_compares_the_base_attachments() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let before = upload(&server, b"a\nb\n");
+    let after = upload(&server, b"a\nB\n");
+    let gone = upload(&server, b"gone\n");
+    attach_to_base(&server, change_number, 0, "shot.txt", &before);
+    attach_to_base(&server, change_number, 0, "gone.txt", &gone);
+    attach(&server, change_number, 0, "shot.txt", &after);
+
+    let shot = diff_file(&server, change_number, 0, "", "/attachments/shot.txt");
+    let gone = diff_file(&server, change_number, 0, "", "/attachments/gone.txt");
+
+    assert_eq!(shot["status"], "modified");
+    assert_eq!(
+        lines(&shot),
+        [
+            ("context".into(), json!(1), json!(1), "a".into()),
+            ("del".into(), json!(2), Value::Null, "b".into()),
+            ("add".into(), Value::Null, json!(2), "B".into()),
+        ]
+    );
+    assert_eq!(gone["status"], "deleted");
+}
+
+/// A base attachment carries forward to later revisions. A base
+/// attachment of a later revision leaves the base of an earlier one as it
+/// was.
+#[test]
+fn a_later_base_attachment_leaves_the_earlier_base() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let first = upload(&server, b"first\n");
+    let second = upload(&server, b"second\n");
+    attach_to_base(&server, change_number, 0, "shot.txt", &first);
+    amend(&server, &g);
+    amend(&server, &g);
+    attach_to_base(&server, change_number, 2, "shot.txt", &second);
+
+    let (st, detail) = http_get(&server.url(&format!("/api/changes/{change_number}")));
+
+    assert_eq!(st, 200, "{detail}");
+    let base = |n: usize| detail["revisions"][n]["base_attachments"][0]["hash"].clone();
+    assert_eq!(
+        [base(0), base(1), base(2)],
+        [json!(first), json!(first), json!(second)]
+    );
+}
+
+/// `/lines` serves the base attachment for the old side of a diff
+/// against the parent.
+#[test]
+fn lines_of_a_base_attachment() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let before = upload(&server, b"a\nb\n");
+    attach_to_base(&server, change_number, 0, "notes.txt", &before);
+
+    let (st, whole) = http_get(&server.url(&format!(
+        "/api/changes/{change_number}/revisions/0/lines?path=/attachments/notes.txt"
+    )));
+
+    assert_eq!(st, 200, "{whole}");
+    let texts: Vec<&str> = whole["lines"]
+        .as_array()
+        .expect("lines")
+        .iter()
+        .map(|l| l["text"].as_str().expect("text"))
+        .collect();
+    assert_eq!(texts, ["a", "b"]);
+}
+
+/// A comment on the old side of an attachment snapshots the line of the
+/// base attachment.
+#[test]
+fn comment_on_a_base_attachment_line_snapshots_its_text() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let before = upload(&server, b"old first\nold second\n");
+    let after = upload(&server, b"new first\n");
+    attach_to_base(&server, change_number, 0, "notes.txt", &before);
+    attach(&server, change_number, 0, "notes.txt", &after);
+
+    let thread = comment_on_line(&server, change_number, "/attachments/notes.txt", "old", 2);
+
+    assert_eq!(thread["anchor"]["line"]["line_text"], "old second");
+}
+
+/// A thread on the old side of an attachment ports through the edits
+/// between the base attachments of the two revisions.
+#[test]
+fn a_thread_on_a_base_attachment_ports_through_its_edits() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let before = upload(&server, b"a\nb\n");
+    let rebased = upload(&server, b"new\na\nb\n");
+    attach_to_base(&server, change_number, 0, "notes.txt", &before);
+    comment_on_line(&server, change_number, "/attachments/notes.txt", "old", 2);
+    amend(&server, &g);
+    attach_to_base(&server, change_number, 1, "notes.txt", &rebased);
+
+    assert_eq!(
+        ported_anchors(&server, change_number, 1),
+        [
+            json!({ "line": { "file": "/attachments/notes.txt", "side": "old", "at": { "whole": 3 } } })
+        ]
+    );
+}
+
 /// `/lines` serves the whole attachment, as the interdiff compares it.
 #[test]
 fn lines_of_an_attachment() {
@@ -579,6 +722,31 @@ fn nit_attach_names_the_file_by_its_path_from_the_root() {
         [json!({
             "version": "r0",
             "name": "web/screenshots/review.png",
+            "hash": blake3::hash(b"png").to_hex().to_string(),
+        })]
+    );
+}
+
+/// `nit attach --to rN^` puts the file on the base of revision N.
+#[test]
+fn nit_attach_to_a_base_puts_the_file_on_the_base() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    std::fs::write(g.workdir().join("before.png"), b"png").expect("file");
+    let change = change_number.to_string();
+
+    let (ok, _, stderr) = nit(
+        &server,
+        &g,
+        &["attach", "before.png", "--change", &change, "--to", "r0^"],
+    );
+
+    assert!(ok, "{stderr}");
+    assert_eq!(
+        attach_entries(&server, change_number),
+        [json!({
+            "version": "r0^",
+            "name": "before.png",
             "hash": blake3::hash(b"png").to_hex().to_string(),
         })]
     );

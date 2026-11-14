@@ -9,8 +9,9 @@
 //! anchor is ever discarded. The commit message is not in any tree, so its
 //! anchors shift through the edits between the two messages instead. An
 //! attachment is not in any tree either. Its anchors shift through the
-//! edits between the attachments of its name that the two revisions show,
-//! and demote to the change when the later revision shows none.
+//! edits between the attachments of its name that the same side of the two
+//! revisions shows, and demote to the change when the later revision shows
+//! none.
 //!
 //! The tree diff is bounded to the anchored files, so the cost follows the
 //! threads and not the repository; the price is that a rename whose new
@@ -22,8 +23,8 @@ use anyhow::{Context, Result};
 use git2::{Delta, Repository, Tree};
 
 use nit_types::domain::{
-    Anchor, ChangeProjection, ChangeVersion, CommentRange, EffectiveAttachment, LineAnchor,
-    PortedComment, RevisionProjection, Side, ThreadOrigin,
+    Anchor, ChangeProjection, CommentRange, EffectiveAttachment, LineAnchor, PortedComment,
+    RevisionNumber, RevisionProjection, Side, ThreadOrigin,
 };
 
 use super::attachments::Blobs;
@@ -74,35 +75,7 @@ pub fn port_threads(
         let (attached, in_trees): (Vec<_>, Vec<_>) = in_trees
             .into_iter()
             .partition(|t| t.anchor.file().and_then(diff::attachment_name).is_some());
-        // One diff per attachment and target: every thread on an attachment
-        // shifts through the same edits.
-        let mut by_name: BTreeMap<&str, Vec<&ThreadOrigin>> = BTreeMap::new();
-        for thread in attached {
-            if let Some(name) = thread.anchor.file().and_then(diff::attachment_name) {
-                by_name.entry(name).or_default().push(thread);
-            }
-        }
-        for (name, threads) in &by_name {
-            let from = change.attachment_at(ChangeVersion::Revision(k), name);
-            for &(i, target) in &later {
-                // A revision that shows no attachment of the name moves its
-                // threads to the change.
-                let to = change.attachment_at(ChangeVersion::Revision(target.number), name);
-                let edits = to
-                    .as_ref()
-                    .and_then(|to| attachment_edits(blobs, from.as_ref(), to));
-                ported[i].extend(threads.iter().map(|thread| PortedComment {
-                    thread_id: thread.thread_id,
-                    revision: target.number,
-                    anchor: match (&to, thread.anchor.file()) {
-                        (Some(_), Some(file)) => {
-                            port_in_file(&thread.anchor, file, edits.as_deref())
-                        }
-                        _ => Anchor::Change,
-                    },
-                }));
-            }
-        }
+        port_attached(blobs, change, k, &later, attached, &mut ported);
         if !messages.is_empty() {
             for &(i, target) in &later {
                 let edits =
@@ -244,11 +217,11 @@ enum FileDelta {
     },
 }
 
-/// The edits between the versions of one attachment that two revisions
+/// The edits between the attachments of one name that two change versions
 /// show.
 ///
-/// `None` when the lines cannot be mapped: a version is not text, or the
-/// earlier revision shows none.
+/// `None` when the lines cannot be mapped: an attachment is not text, or
+/// the earlier change version shows none.
 fn attachment_edits(
     blobs: &Blobs,
     from: Option<&EffectiveAttachment>,
@@ -261,6 +234,48 @@ fn attachment_edits(
     let old = blobs.text(&from.hash)?;
     let new = blobs.text(&to.hash)?;
     Some(position::buffer_edits(old.as_bytes(), new.as_bytes()))
+}
+
+/// The threads of revision `k` on attachments, ported to each of `later`
+/// into `ported`.
+fn port_attached(
+    blobs: &Blobs,
+    change: &ChangeProjection,
+    k: RevisionNumber,
+    later: &[(usize, &RevisionProjection)],
+    attached: Vec<&ThreadOrigin>,
+    ported: &mut [Vec<PortedComment>],
+) {
+    // One diff per attachment, side and target: every thread on one
+    // side of an attachment shifts through the same edits.
+    let mut by_name: HashMap<(&str, Side), Vec<&ThreadOrigin>> = HashMap::new();
+    for thread in attached {
+        if let Some(name) = thread.anchor.file().and_then(diff::attachment_name) {
+            by_name
+                .entry((name, thread.anchor.side()))
+                .or_default()
+                .push(thread);
+        }
+    }
+    for (&(name, side), threads) in &by_name {
+        let from = change.attachment_at(side.version(k), name);
+        for &(i, target) in later {
+            // A version that shows no attachment of the name moves its
+            // threads to the change.
+            let to = change.attachment_at(side.version(target.number), name);
+            let edits = to
+                .as_ref()
+                .and_then(|to| attachment_edits(blobs, from.as_ref(), to));
+            ported[i].extend(threads.iter().map(|thread| PortedComment {
+                thread_id: thread.thread_id,
+                revision: target.number,
+                anchor: match (&to, thread.anchor.file()) {
+                    (Some(_), Some(file)) => port_in_file(&thread.anchor, file, edits.as_deref()),
+                    _ => Anchor::Change,
+                },
+            }));
+        }
+    }
 }
 
 /// `anchor` under `path`, its lines shifted through `edits`.

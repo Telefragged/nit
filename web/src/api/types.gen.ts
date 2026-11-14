@@ -53,10 +53,11 @@ export type ChangeVersion = `r${number}` | `r${number}^`;
 export type ChangeNumber = number;
 
 /**
- * Which tree of a revision a line comment is anchored to.
+ * Which version of a revision a line comment is anchored to.
  *
- * `new` is the revision's commit tree, `old` its parent tree. An
- * unspecified side is `new`.
+ * `new` is the revision: its commit tree and attachments. `old` is its
+ * base: the parent tree and the base attachments. An unspecified side is
+ * `new`.
  */
 export type Side = "old" | "new";
 
