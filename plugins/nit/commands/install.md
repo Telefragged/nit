@@ -38,13 +38,13 @@ canonical ref (the ref mergedness is tracked against):
 nit repo create --canonical-ref <branch>
 ```
 
-`--canonical-ref` is **required** and must name an existing git ref — nit never guesses
-it, and **neither do you**. You **MUST ask the user (AskUserQuestion) to choose
-the canonical ref** before registering — never assume or infer it, not even when
-the repo has a single branch. Detect the likely candidates (the current
-branch, `main`/`master`, `git symbolic-ref refs/remotes/origin/HEAD`) and offer
-them as the suggested options, but the choice is the user's. A 409 means the
-repo is already registered — nothing to do.
+`--canonical-ref` is required, and its value must be an existing git ref. It
+has no default. Ask the user (AskUserQuestion) to choose the canonical ref before you
+register the repo, even when the repo has a single branch. Detect the likely
+candidates (the current branch, `main`/`master`,
+`git symbolic-ref refs/remotes/origin/HEAD`) and offer them as the suggested
+options. A 409 means that the repo is already registered, and there is nothing
+to do.
 
 ## 3. Choose where agent instructions live
 
