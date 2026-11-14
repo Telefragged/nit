@@ -7,8 +7,7 @@ const gallery = process.env.NIT_GALLERY;
 
 export default defineConfig({
   globalSetup: "./setup.ts",
-  // 0 turns the timeout off. A test waits on events, never on a clock.
-  timeout: 0,
+  timeout: 60_000,
   fullyParallel: true,
   // Playwright empties this directory before each run, so a run removes the
   // captures of a renamed or removed story.
