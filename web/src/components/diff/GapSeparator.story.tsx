@@ -9,7 +9,7 @@ const reveal = () => undefined;
  * - one over the first hunk, with the up button only
  * - one under the last hunk, with the down button only
  * - one that a single step covers
- * - one that the page cannot reveal.
+ * - one of hidden blocks in a rendered file.
  */
 export function Gaps() {
   return (
@@ -45,7 +45,7 @@ export function Gaps() {
         up={false}
         reveal={reveal}
       />
-      <GapSeparator more={3} unit="block" step={1} down up />
+      <GapSeparator more={3} unit="block" step={1} down up reveal={reveal} />
     </div>
   );
 }
