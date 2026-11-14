@@ -2,6 +2,7 @@
 # checks. flake.nix calls this with callPackage once per system.
 {
   lib,
+  stdenvNoCC,
   buildNpmPackage,
   fetchNpmDeps,
   nodejs,
@@ -68,13 +69,21 @@ let
       ];
     };
 
-  # The web npm closure, shared via `npmDeps` so the nit-web build and
-  # the web-lint / web-test checks don't each refetch it.
   npmDeps = fetchNpmDeps {
     src = src.npm;
     inherit nodejs;
     name = "nit-web-npm-deps";
     hash = "sha256-eloY97d+h8NMWGC1hr7TLK8Qyg28mnsBzmh0e+p8Few=";
+  };
+
+  # The installed npm dependencies. Every web derivation copies them, so
+  # `npm ci` runs once and not once per derivation.
+  nodeModules = buildNpmPackage {
+    pname = "nit-web-node-modules";
+    inherit version nodejs npmDeps;
+    src = src.npm;
+    dontNpmBuild = true;
+    installPhase = "cp -r node_modules $out";
   };
 
   # Drop the generated wasm glue into a web build's tree before it runs.
@@ -112,51 +121,50 @@ let
     };
   };
 
-  # A web validator that runs `script` against `src.<name>`. It sets
-  # dontNpmBuild, which disables the build phase (and its preBuild hook),
-  # so the wasm goes in at the head of the install phase.
-  webCheck =
+  # A web derivation that runs `script` against `src.<name>`, with the npm
+  # dependencies and the wasm in place. The tools write their caches into
+  # node_modules, so its top directory must be writable.
+  webBuild =
     name: env: script:
-    buildNpmPackage {
-      pname = "nit-web-${name}";
-      inherit version;
+    stdenvNoCC.mkDerivation {
+      pname = if name == "bundle" then "nit-web" else "nit-web-${name}";
+      inherit version env;
       src = src.${name};
-      inherit nodejs;
-      inherit env npmDeps;
-      dontNpmBuild = true;
-      installPhase = injectWasm + script;
+      nativeBuildInputs = [ nodejs ];
+      configurePhase = ''
+        export HOME=$TMPDIR
+        cp -r ${nodeModules} node_modules
+        chmod u+w node_modules
+      ''
+      + injectWasm;
+      buildPhase = script;
+      dontInstall = true;
     };
 in
 {
   inherit playwrightBrowsers;
 
-  bundle = buildNpmPackage {
-    pname = "nit-web";
-    inherit version npmDeps;
-    src = src.bundle;
-    inherit nodejs;
-    preBuild = injectWasm;
-    installPhase = "cp -r dist $out";
-  };
+  bundle = webBuild "bundle" { } ''
+    npm run build
+    cp -r dist $out
+  '';
 
   checks = {
     # The frontend type check and lint (tsc, eslint, stylelint, knip) as a
     # validator, the web counterpart to clippy. It runs the devShell
     # `npm run lint`, so `nix flake check` fails on a type, eslint,
     # stylelint or knip error.
-    web-lint = webCheck "lint" { } "npm run lint > $out";
-    web-test = webCheck "test" { } "npm run test > $out";
+    web-lint = webBuild "lint" { } "npm run lint > $out";
+    web-test = webBuild "test" { } "npm run test > $out";
     # The same `capture.mjs` agents run locally, but against the nix
     # `playwright-driver` browsers, so a driver/npm-pin skew fails the
     # check. Its output is the PNGs, not a marker file.
-    web-screenshots = webCheck "screenshots" browserEnv ''
-      export HOME=$TMPDIR
+    web-screenshots = webBuild "screenshots" browserEnv ''
       NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
     '';
     # Runs the gallery specs (docs/web.md "Component gallery"). Its output
     # is the PNG and the page of every story.
-    web-gallery = webCheck "gallery" browserEnv ''
-      export HOME=$TMPDIR
+    web-gallery = webBuild "gallery" browserEnv ''
       npm run gallery -- --output $out
     '';
   };
