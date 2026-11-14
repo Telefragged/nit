@@ -181,49 +181,45 @@ rec {
     ${cargoNix.workspaceMembers."nit-contract".build}/bin/nit-contract $out
   '';
 
-  # The shared change fold compiled to WebAssembly: nit-wasm built for
-  # wasm32, then run through wasm-bindgen (`--target web`) into the JS
-  # glue + `.wasm` the web imports. Offline and pinned like wireTypes; the
-  # `rust-toolchain.toml` wasm32 target and the wasm-bindgen-cli version
-  # (which must match nit-wasm's `wasm-bindgen` dep) come from this flake.
-  wasm = stdenv.mkDerivation {
-    name = "nit-wasm-pkg";
-    # Only nit-wasm and the nit-types it depends on: the server crate's
-    # sources are excluded so a server change leaves this derivation —
-    # and every web check that injects it — untouched.
-    src = lib.fileset.toSource {
-      root = ./.;
-      fileset = lib.fileset.unions [
-        ./Cargo.toml
-        ./Cargo.lock
-        ./rust-toolchain.toml
-        ./crates/nit-types
-        ./crates/nit-wasm
-        ./crates/nit/Cargo.toml
-        ./crates/nit-contract/Cargo.toml
-      ];
-    };
-    nativeBuildInputs = [
+  # The shared change fold compiled to WebAssembly: the crate2nix build of
+  # nit-wasm for wasm32, run through wasm-bindgen (`--target web`) into
+  # the JS glue + `.wasm` the web imports. The wasm-bindgen-cli version
+  # must match nit-wasm's `wasm-bindgen` dep.
+  wasm =
+    let
+      wasmPkgs = pkgs.pkgsCross.wasm32-unknown-none;
       # With rust-src in the sysroot, rustc writes its store path into
       # std's panic locations, and the server binary embeds this wasm.
-      (toolchain.override { extensions = [ ]; })
-      wasm-bindgen-cli
-      rustPlatform.cargoSetupHook
-    ];
-    cargoDeps = rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-    buildPhase =
-      stubMembers [
-        "crates/nit"
-        "crates/nit-contract"
-      ]
-      + ''
-        cargo build --offline --release --target wasm32-unknown-unknown -p nit-wasm
-        wasm-bindgen target/wasm32-unknown-unknown/release/nit_wasm.wasm \
-          --target web --out-dir pkg
-      '';
-    installPhase = "cp -r pkg $out";
-    dontFixup = true;
-  };
+      rustToolchain = (toolchainFor wasmPkgs.buildPackages).override { extensions = [ ]; };
+      cargoNixWasm = wasmPkgs.callPackage ./Cargo.nix {
+        buildRustCrateForPkgs =
+          p: crate:
+          p.buildRustCrate.override
+            {
+              rustc = rustToolchain;
+              cargo = rustToolchain;
+              defaultCodegenUnits = 16;
+            }
+            (
+              crate
+              // {
+                # buildRustCrate leaves CARGO_CFG_TARGET_FEATURE unset, so
+                # without this, wasm-bindgen's build script disables the
+                # externref support that rustc enables on wasm32.
+                preConfigure = ''
+                  export CARGO_CFG_TARGET_FEATURE=$(
+                    rustc --print cfg --target ${p.stdenv.hostPlatform.rust.rustcTarget} |
+                      sed -n 's/^target_feature="\(.*\)"$/\1/p' | paste -sd, -
+                  )
+                '';
+              }
+            );
+      };
+    in
+    runCommand "nit-wasm-pkg" { nativeBuildInputs = [ wasm-bindgen-cli ]; } ''
+      wasm-bindgen ${cargoNixWasm.workspaceMembers."nit-wasm".build.lib}/lib/nit_wasm-*.wasm \
+        --target web --out-name nit_wasm --out-dir $out
+    '';
 
   # Writes the WebAssembly fold into web/src/wasm for local dev. One
   # derivation shared two ways: `nix run .#gen-wasm` (no devShell needed)
