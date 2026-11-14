@@ -16,6 +16,7 @@ use nit_types::diff::{Diff, FileLines};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::ChangeStatus;
+use nit_types::domain::ChangeVersion;
 use nit_types::domain::PortedComment;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::RevisionProjection;
@@ -186,7 +187,7 @@ pub(super) async fn revision_diff(
         // After tagging: the message and the attachments are not git
         // deltas, so they are never drift.
         let shown = |r: Option<&RevisionProjection>| -> BTreeMap<_, _> {
-            r.map(|r| change.effective_attachments(r.number))
+            r.map(|r| change.effective_attachments(ChangeVersion::Revision(r.number)))
                 .unwrap_or_default()
                 .into_iter()
                 .map(|a| (a.name, a.hash))
@@ -271,7 +272,7 @@ pub(super) async fn revision_lines(
             ))
         } else if let Some(name) = diff::attachment_name(&wanted.path) {
             let hash = |r: Option<&RevisionProjection>| {
-                r.and_then(|r| change.attachment_at(r.number, name))
+                r.and_then(|r| change.attachment_at(ChangeVersion::Revision(r.number), name))
                     .map(|a| a.hash)
             };
             Some(diff::attachment_file(

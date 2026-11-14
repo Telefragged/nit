@@ -24,6 +24,27 @@ export type Sha = string;
 export type RevisionNumber = number;
 
 /**
+ * One version of a change: a revision, or the base of a revision.
+ *
+ * Spelled `r` and the revision number, with git's parent suffix `^` for
+ * the base of the revision. [`FromStr`](std::str::FromStr), `Display` and
+ * serde all use this spelling.
+ *
+ * # Examples
+ *
+ * ```rust
+ * use nit_types::domain::{ChangeVersion, RevisionNumber};
+ *
+ * let base: ChangeVersion = "r2^".parse().unwrap();
+ * assert_eq!(base, ChangeVersion::Base(RevisionNumber::new(2)));
+ * assert_eq!(base.to_string(), "r2^");
+ * assert_eq!(serde_json::to_value(ChangeVersion::Revision(RevisionNumber::new(0))).unwrap(), "r0");
+ * assert!("base".parse::<ChangeVersion>().is_err());
+ * ```
+ */
+export type ChangeVersion = `r${number}` | `r${number}^`;
+
+/**
  * A change's number: the handle nit assigns it and everything carries.
  *
  * Scoped to one nit instance, unlike the [`ChangeId`] that travels in the
@@ -358,6 +379,10 @@ export type Revision = {
    * The attachments this revision shows, ordered by name.
    */
   attachments: Array<EffectiveAttachment>;
+  /**
+   * The attachments the base of this revision shows, ordered by name.
+   */
+  base_attachments: Array<EffectiveAttachment>;
 };
 
 /**
@@ -641,13 +666,28 @@ export type LifecyclePayload = {
 };
 
 /**
- * An `attach` entry: one attachment put on one revision.
+ * An `attach` entry: one attachment put on one version of a change.
  *
- * An entry that names an attachment the revision already holds replaces
- * it.
+ * An entry whose `name` matches an attachment already on the version
+ * replaces it.
+ *
+ * # Examples
+ *
+ * An entry with a `revision` field puts the attachment on that revision:
+ *
+ * ```rust
+ * use nit_types::domain::{AttachPayload, ChangeVersion, RevisionNumber};
+ *
+ * let hash = "a".repeat(64);
+ * let stored: AttachPayload = serde_json::from_value(
+ *     serde_json::json!({ "revision": 1, "name": "plan.md", "hash": hash }),
+ * )
+ * .unwrap();
+ * assert_eq!(stored.version, ChangeVersion::Revision(RevisionNumber::new(1)));
+ * ```
  */
 export type AttachPayload = {
-  revision: RevisionNumber;
+  version: ChangeVersion;
   name: AttachmentName;
   hash: AttachmentHash;
 };
@@ -783,7 +823,7 @@ export type AttachmentHash = string;
 export type AttachmentName = string;
 
 /**
- * One attachment of a revision, as the fold leaves it.
+ * One attachment of a change version, as the fold leaves it.
  */
 export type AttachmentProjection = {
   name: AttachmentName;
@@ -791,17 +831,19 @@ export type AttachmentProjection = {
 };
 
 /**
- * An attachment as one revision shows it.
+ * An attachment as one version of a change shows it.
  *
  * A revision shows, for each name, the attachment of the latest revision
- * at or below it that holds that name. So an attachment carries forward
- * until a later revision replaces it.
+ * at or below it that has that name. The base of a revision shows the
+ * same for the bases of those revisions. So an attachment carries forward
+ * until a later revision, or the base of a later revision, replaces it.
  */
 export type EffectiveAttachment = {
   name: AttachmentName;
   hash: AttachmentHash;
   /**
-   * The revision that holds it, at or below the one that shows it.
+   * The revision that it, or its base, is attached to, at or below the
+   * revision of the version that shows it.
    */
   revision: RevisionNumber;
 };
@@ -825,6 +867,11 @@ export type RevisionProjection = {
    * were first attached.
    */
   attachments: Array<AttachmentProjection>;
+  /**
+   * The attachments put on the base of this revision itself, in the
+   * order they were first attached.
+   */
+  base_attachments: Array<AttachmentProjection>;
 };
 
 /**

@@ -6,6 +6,7 @@ use super::AttachmentProjection;
 use super::ChangeId;
 use super::ChangeNumber;
 use super::ChangeStatus;
+use super::ChangeVersion;
 use super::CommentInput;
 use super::EffectiveAttachment;
 use super::RevisionNumber;
@@ -45,6 +46,10 @@ pub struct RevisionProjection {
     /// were first attached.
     #[serde(default)]
     pub attachments: Vec<AttachmentProjection>,
+    /// The attachments put on the base of this revision itself, in the
+    /// order they were first attached.
+    #[serde(default)]
+    pub base_attachments: Vec<AttachmentProjection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,14 +145,14 @@ impl ChangeProjection {
         self.revisions.get(usize::try_from(number.get()).ok()?)
     }
 
-    /// The attachments that revision `number` shows, ordered by name.
+    /// The attachments that `version` shows, ordered by name.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use nit_types::domain::{
     ///     AttachmentHash, AttachmentName, AttachmentProjection, ChangeId, ChangeNumber,
-    ///     ChangeProjection, RevisionNumber, RevisionProjection, Sha,
+    ///     ChangeProjection, ChangeVersion, RevisionNumber, RevisionProjection, Sha,
     /// };
     ///
     /// let sha = Sha::new("a".repeat(40)).unwrap();
@@ -156,7 +161,7 @@ impl ChangeProjection {
     ///     name: AttachmentName::new(name).unwrap(),
     ///     hash: AttachmentHash::new(byte.repeat(64)).unwrap(),
     /// };
-    /// let revision = |n: u64, attachments| RevisionProjection {
+    /// let revision = |n: u64, attachments, base_attachments| RevisionProjection {
     ///     number: RevisionNumber::new(n),
     ///     commit_sha: sha.clone(),
     ///     parent_sha: sha.clone(),
@@ -165,26 +170,42 @@ impl ChangeProjection {
     ///     resets_status: true,
     ///     created_at: String::new(),
     ///     attachments,
+    ///     base_attachments,
     /// };
     /// let change_id = ChangeId::new(format!("I{}", "1".repeat(40))).unwrap();
     /// let mut change = ChangeProjection::new(ChangeNumber::new(1), 1, change_id);
     /// change.revisions = vec![
-    ///     revision(0, vec![attachment("plan.md", "a"), attachment("shot.png", "b")]),
-    ///     revision(1, vec![attachment("plan.md", "c")]),
+    ///     revision(
+    ///         0,
+    ///         vec![attachment("plan.md", "a"), attachment("shot.png", "b")],
+    ///         vec![attachment("shot.png", "d")],
+    ///     ),
+    ///     revision(1, vec![attachment("plan.md", "c")], vec![]),
     /// ];
     ///
-    /// let shown: Vec<(String, u64)> = change
-    ///     .effective_attachments(RevisionNumber::new(1))
-    ///     .into_iter()
-    ///     .map(|a| (a.name.to_string(), a.revision.get()))
-    ///     .collect();
-    /// assert_eq!(shown, [("plan.md".into(), 1), ("shot.png".into(), 0)]);
+    /// let shown = |version: &str| -> Vec<(String, u64)> {
+    ///     change
+    ///         .effective_attachments(version.parse().unwrap())
+    ///         .into_iter()
+    ///         .map(|a| (a.name.to_string(), a.revision.get()))
+    ///         .collect()
+    /// };
+    /// assert_eq!(shown("r1"), [("plan.md".into(), 1), ("shot.png".into(), 0)]);
+    /// assert_eq!(shown("r1^"), [("shot.png".into(), 0)]);
     /// ```
     #[must_use]
-    pub fn effective_attachments(&self, number: RevisionNumber) -> Vec<EffectiveAttachment> {
+    pub fn effective_attachments(&self, version: ChangeVersion) -> Vec<EffectiveAttachment> {
         let mut by_name = std::collections::BTreeMap::new();
-        for revision in self.revisions.iter().take_while(|r| r.number <= number) {
-            for a in &revision.attachments {
+        let revisions = self
+            .revisions
+            .iter()
+            .take_while(|r| r.number <= version.revision());
+        for revision in revisions {
+            let attachments = match version {
+                ChangeVersion::Base(_) => &revision.base_attachments,
+                ChangeVersion::Revision(_) => &revision.attachments,
+            };
+            for a in attachments {
                 by_name.insert(
                     a.name.clone(),
                     EffectiveAttachment {
@@ -198,10 +219,10 @@ impl ChangeProjection {
         by_name.into_values().collect()
     }
 
-    /// The attachment named `name` that revision `number` shows.
+    /// The attachment named `name` that `version` shows.
     #[must_use]
-    pub fn attachment_at(&self, number: RevisionNumber, name: &str) -> Option<EffectiveAttachment> {
-        self.effective_attachments(number)
+    pub fn attachment_at(&self, version: ChangeVersion, name: &str) -> Option<EffectiveAttachment> {
+        self.effective_attachments(version)
             .into_iter()
             .find(|a| a.name.as_str() == name)
     }

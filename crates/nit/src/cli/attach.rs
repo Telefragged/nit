@@ -7,7 +7,7 @@ use git2::Repository;
 
 use nit_types::attachments::UploadedAttachment;
 use nit_types::changes::ChangeDetail;
-use nit_types::domain::{AttachPayload, AttachmentName, RevisionNumber};
+use nit_types::domain::{AttachPayload, AttachmentName, ChangeVersion, RevisionNumber};
 
 use super::client::{Client, ServerOpt, server_url};
 use super::format::ChangeTarget;
@@ -56,7 +56,7 @@ pub fn attach(args: AttachArgs) -> Result<()> {
         .with_context(|| format!("opening {}", args.file.display()))?;
     let uploaded: UploadedAttachment = client.put_file("/api/attachments", file)?;
     let request = AttachPayload {
-        revision,
+        version: ChangeVersion::Revision(revision),
         name,
         hash: uploaded.hash,
     };
@@ -65,7 +65,8 @@ pub fn attach(args: AttachArgs) -> Result<()> {
         &request,
     )?;
     println!(
-        "change {change_number} r{revision} attached {} {}",
+        "change {change_number} {} attached {} {}",
+        request.version,
         request.name,
         &request.hash.as_str()[..12]
     );

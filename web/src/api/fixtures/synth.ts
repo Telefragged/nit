@@ -61,7 +61,7 @@ export function synthLog(
     for (const a of r.attachments ?? []) {
       add(r.created_at, {
         kind: "attach",
-        payload: { revision: r.number, name: a.name, hash: a.hash },
+        payload: { version: `r${r.number}`, name: a.name, hash: a.hash },
       });
     }
   }

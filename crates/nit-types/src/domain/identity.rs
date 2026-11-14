@@ -214,6 +214,107 @@ impl std::str::FromStr for RevisionNumber {
     }
 }
 
+/// One version of a change: a revision, or the base of a revision.
+///
+/// Spelled `r` and the revision number, with git's parent suffix `^` for
+/// the base of the revision. [`FromStr`](std::str::FromStr), `Display` and
+/// serde all use this spelling.
+///
+/// # Examples
+///
+/// ```rust
+/// use nit_types::domain::{ChangeVersion, RevisionNumber};
+///
+/// let base: ChangeVersion = "r2^".parse().unwrap();
+/// assert_eq!(base, ChangeVersion::Base(RevisionNumber::new(2)));
+/// assert_eq!(base.to_string(), "r2^");
+/// assert_eq!(serde_json::to_value(ChangeVersion::Revision(RevisionNumber::new(0))).unwrap(), "r0");
+/// assert!("base".parse::<ChangeVersion>().is_err());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[serde(try_from = "String")]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(type = "`r${number}` | `r${number}^`")
+)]
+pub enum ChangeVersion {
+    /// The parent of the revision, with the base attachments of the
+    /// revision.
+    Base(RevisionNumber),
+    Revision(RevisionNumber),
+}
+
+impl ChangeVersion {
+    /// The revision that this version is, or is the base of.
+    #[must_use]
+    pub fn revision(self) -> RevisionNumber {
+        match self {
+            ChangeVersion::Base(revision) | ChangeVersion::Revision(revision) => revision,
+        }
+    }
+}
+
+/// A string that is not a [`ChangeVersion`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("a change version is `r` and a revision number, with `^` for its base, not {0:?}")]
+pub struct ChangeVersionError(String);
+
+impl std::fmt::Display for ChangeVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ChangeVersion::Base(revision) => write!(f, "r{revision}^"),
+            ChangeVersion::Revision(revision) => write!(f, "r{revision}"),
+        }
+    }
+}
+
+impl std::str::FromStr for ChangeVersion {
+    type Err = ChangeVersionError;
+
+    fn from_str(s: &str) -> Result<ChangeVersion, ChangeVersionError> {
+        let (number, base) = match s.strip_suffix('^') {
+            Some(number) => (number, true),
+            None => (s, false),
+        };
+        let revision = number
+            .strip_prefix('r')
+            .filter(|n| n.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|n| n.parse().ok())
+            .ok_or_else(|| ChangeVersionError(s.to_string()))?;
+        Ok(if base {
+            ChangeVersion::Base(revision)
+        } else {
+            ChangeVersion::Revision(revision)
+        })
+    }
+}
+
+impl TryFrom<String> for ChangeVersion {
+    type Error = ChangeVersionError;
+
+    fn try_from(s: String) -> Result<ChangeVersion, ChangeVersionError> {
+        s.parse()
+    }
+}
+
+impl Serialize for ChangeVersion {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl utoipa::PartialSchema for ChangeVersion {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::Type::String)
+            .pattern(Some(r"^r[0-9]+\^?$"))
+            .into()
+    }
+}
+
+impl utoipa::ToSchema for ChangeVersion {}
+
 /// A change's number: the handle nit assigns it and everything carries.
 ///
 /// Scoped to one nit instance, unlike the [`ChangeId`] that travels in the
