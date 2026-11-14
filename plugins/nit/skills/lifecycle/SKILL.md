@@ -42,14 +42,22 @@ nit attach screenshots/review.png --change 42
 ```
 
 `--change` (or `--change-id`) is required. The attachment goes on the change's
-latest revision, unless `--revision` names another. Its name is the file's
+latest revision, unless `--to rN` selects revision N. Its name is the file's
 path from the repository root, unless `--name` gives another. The review page
 renders Markdown, images and HTML, and shows other text as lines that take
 line comments.
 
-An attachment carries forward to later revisions until you attach a new
-version under the same name. Attach again after a push only when the artifact
+An attachment carries forward to later revisions until you attach another
+file under the same name. Attach again after a push only when the artifact
 changed. Attaching unchanged bytes adds nothing.
+
+To show how something looked before the change, attach that file with
+`--to rN^`, the base of revision N, under the same name as the file of the
+change. The diff of the revision against its base then shows the two files as
+one modified attachment. Each revision has its own base, and a base attachment
+carries forward to later revisions. If a rebase changes the "before" file,
+attach it again to the base of the new revision. Earlier revisions keep their
+"before" file.
 
 ## Watch for feedback
 
