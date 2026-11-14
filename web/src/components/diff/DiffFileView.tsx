@@ -167,7 +167,7 @@ function HunkSeparator({
   sep: number;
   expansion: ReturnType<typeof useHunkExpansion>;
 }) {
-  const { expandable, expand, busyAt } = expansion;
+  const { expand, busyAt } = expansion;
   return (
     <GapSeparator
       more={more}
@@ -175,9 +175,7 @@ function HunkSeparator({
       step={EXPAND_STEP}
       down={sep > 0}
       up={hunk !== undefined}
-      reveal={
-        expandable ? (end, count) => void expand(end, sep, count) : undefined
-      }
+      reveal={(end, count) => void expand(end, sep, count)}
       busy={(end) => busyAt(end, sep)}
     >
       {hunk ? (
@@ -288,7 +286,7 @@ export default function DiffFileView({
   // The last reveal for which the effect opened a gap. The effect opens a
   // gap only once per reveal.
   const gapAsked = useRef<FileLink | null>(null);
-  const { expandable, revealLine } = expansion;
+  const { revealLine } = expansion;
   // A layout effect, so the scroll lands before the expanded section paints
   // at its old offset.
   useLayoutEffect(() => {
@@ -315,7 +313,7 @@ export default function DiffFileView({
       section.querySelector(`.code[data-${lines.side}="${lines.start}"]`);
     if (line) {
       scroll(line);
-    } else if (lines && expandable && gapAsked.current !== reveal) {
+    } else if (lines && gapAsked.current !== reveal) {
       // After the gap opens, the new hunks render the line. This effect
       // then runs again and scrolls to the line.
       gapAsked.current = reveal;
@@ -332,7 +330,6 @@ export default function DiffFileView({
     collapsed,
     onRevealed,
     hunks,
-    expandable,
     revealLine,
     showDoc,
     doc,

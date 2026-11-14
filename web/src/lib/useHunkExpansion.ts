@@ -1,12 +1,7 @@
 import { queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getFileLines } from "../api/client";
-import {
-  COMMIT_MSG_PATH,
-  type DiffFile,
-  type Line,
-  type Side,
-} from "../api/types";
+import type { DiffFile, Line, Side } from "../api/types";
 import type { ReviewFile } from "./attachments";
 import { gapLines, skipped } from "./diffview";
 import type { ReviewCtx } from "../pages/reviewContext";
@@ -58,17 +53,14 @@ export const EXPAND_STEP = 10;
  * is fetched once on the first expand, and the run hidden in each gap
  * is sliced from it and folded back into the bordering hunks as real Lines —
  * drift and all — so highlight/comment/placement and the drift tint flow
- * through unchanged. The synthetic commit message is the one file with no
- * diff to expand. Reveals are keyed by separator `i` (the gap before hunk
+ * through unchanged. Reveals are keyed by separator `i` (the gap before hunk
  * i): `down` counts the lines revealed from the gap's top into hunk i-1,
  * and `up` the lines revealed from its bottom into hunk i.
  *
- * Returns the spliced `hunks`, whether the file is expandable, the `expand`
- * and `revealLine` actions, and `busyAt` to check a given end/separator's
+ * Returns the spliced `hunks`, the `expand` and `revealLine` actions, and `busyAt` to check a given end/separator's
  * in-flight state. */
 export function useHunkExpansion(file: ReviewFile, ctx: ReviewCtx) {
   const queryClient = useQueryClient();
-  const expandable = file.path !== COMMIT_MSG_PATH;
   const [whole, setWhole] = useState<readonly Line[] | null>(null);
   const [down, setDown] = useState<ReadonlyMap<number, number>>(new Map());
   const [up, setUp] = useState<ReadonlyMap<number, number>>(new Map());
@@ -180,5 +172,5 @@ export function useHunkExpansion(file: ReviewFile, ctx: ReviewCtx) {
 
   const busyAt = (end: "down" | "up", sep: number) => busy.has(`${end}:${sep}`);
 
-  return { hunks, expandable, expand, revealLine, busyAt };
+  return { hunks, expand, revealLine, busyAt };
 }
