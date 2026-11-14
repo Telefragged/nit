@@ -35,8 +35,7 @@ export default defineConfig({
     environment: "jsdom",
     env: { VITE_MOCK: "1" },
     setupFiles: ["./wasm-test-setup.ts", "./src/test-setup.ts"],
-    // 0 turns the timeouts off. A test waits on events, never on a clock.
-    testTimeout: 0,
-    hookTimeout: 0,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 });
