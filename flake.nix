@@ -196,15 +196,7 @@
           # different features compiles twice.
           hakari = pkgs.stdenvNoCC.mkDerivation {
             name = "hakari-check";
-            src = pkgs.lib.fileset.toSource {
-              root = ./.;
-              fileset = pkgs.lib.fileset.unions [
-                ./Cargo.toml
-                ./Cargo.lock
-                ./.config/hakari.toml
-                ./crates
-              ];
-            };
+            src = rust.workspaceSrc;
             nativeBuildInputs = [
               rust.toolchain
               pkgs.cargo-hakari
