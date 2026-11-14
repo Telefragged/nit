@@ -138,6 +138,9 @@
           # a published release from a build of a git checkout.
           nit-release = nit.overrideAttrs { NIT_GIT_SUFFIX = ""; };
           contract = (rustFor pkgs).contract;
+          # The plugin directory at the store path's root, the shape that
+          # home-manager's `programs.claude-code.plugins` accepts.
+          claude-plugin = pkgs.runCommandLocal "nit-claude-plugin" { } "cp -r ${./plugins/nit} $out";
         }
       );
 

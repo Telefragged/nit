@@ -30,6 +30,8 @@ programs.nit.enable = true; # nit on PATH, and the Claude Code plugin
 services.nit.enable = true; # nit serve as a systemd user service
 ```
 
+When `programs.claude-code.enable` is set, `programs.nit` installs the plugin through `programs.claude-code.plugins`, from the flake's `claude-plugin` package. Otherwise it runs `nit install-plugin` on each switch.
+
 To update, run `nix flake update nit` and switch. The switch restarts the server, and each `nit watch` follows it.
 
 ## Run
