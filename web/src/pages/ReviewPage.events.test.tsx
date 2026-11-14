@@ -75,6 +75,17 @@ describe("event-driven change page", () => {
     );
   });
 
+  it("takes the r shortcut while the toast is open", async () => {
+    await renderReview("/changes/10");
+    act(() => {
+      pushRevision(10, "c10r4");
+    });
+    expect(screen.getByText(/was pushed/)).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "r" });
+    expect(revHead().textContent).toBe("r3");
+  });
+
   it("lists the change log and appends a live entry to it", async () => {
     await renderReview("/changes/12");
     const rows = () => document.querySelectorAll(".change-log .log-row");
