@@ -19,9 +19,7 @@ if [[ -d $fingerprints ]]; then
 fi
 
 nix develop -c sh -euc '
-  cargo check
   cargo check --all-targets
-  cargo build
   cargo build --all-targets
   cd web
   npm ci
