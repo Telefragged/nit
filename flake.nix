@@ -186,7 +186,6 @@
           # `features = ["clap"]`, the web's `features = ["ts"]`) would mask.
           test-nit-types = cargoNix.workspaceMembers."nit-types".build.override {
             runTests = true;
-            features = [ ];
           };
           contract = (rustFor pkgs).contract;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
