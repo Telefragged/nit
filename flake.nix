@@ -157,11 +157,11 @@
           # Compile the WebAssembly fold — surfaces a wasm32 build break or a
           # wasm-bindgen version skew independently of the web build.
           wasm-build = rust.wasm;
-          # `wasm-build` runs a bare `cargo build`, so it is the one crate the
-          # workspace lints and tests would otherwise miss. Built here through
-          # crate2nix (host target) to put it under clippy like every other
-          # crate and to run its unit tests; its lib has no `cfg(target_arch)`
-          # branch, so the host build covers the same code wasm32 compiles.
+          # `wasm-build` compiles nit-wasm without clippy and runs no tests.
+          # Built here for the host target to put it under clippy like every
+          # other crate and to run its unit tests; its lib has no
+          # `cfg(target_arch)` branch, so the host build covers the same code
+          # wasm32 compiles.
           test-nit-wasm = cargoNix.workspaceMembers."nit-wasm".build.override {
             runTests = true;
           };
