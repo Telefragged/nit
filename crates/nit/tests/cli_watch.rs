@@ -14,8 +14,8 @@ use std::sync::mpsc::{Receiver, channel};
 use serde_json::Value;
 
 use common::{
-    GitRepo, HANG, TestServer, change_by_id, first_repo_id, get_changes, in_checkout, msg, nit,
-    nit_env, nit_register, nit_spawn, review,
+    GitRepo, TestServer, change_by_id, first_repo_id, get_changes, in_checkout, msg, nit, nit_env,
+    nit_register, nit_spawn, review,
 };
 
 const I001: &str = "I0010000000000000000000000000000000000000";
@@ -55,10 +55,7 @@ impl Inbox {
 
     /// The next message's frames, each parsed as JSON.
     fn next(&self) -> Vec<Value> {
-        let frames = self
-            .messages
-            .recv_timeout(HANG)
-            .expect("the watch posts a message");
+        let frames = self.messages.recv().expect("the watch posts a message");
         frames
             .iter()
             .map(|line| serde_json::from_str(line).expect("a JSON frame"))

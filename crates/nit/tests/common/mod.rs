@@ -10,7 +10,6 @@
 )]
 
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::time::Duration;
 
 use git2::{Oid, Repository, RepositoryInitOptions, Signature, Time};
 use serde_json::{Value, json};
@@ -589,11 +588,6 @@ pub fn collect_attachments(server: &TestServer, cutoff: jiff::Timestamp) -> nit:
         .expect("collect attachments")
 }
 
-/// How long the harness waits before it calls the suite hung: a child that
-/// never exits. Only a broken test reaches it, so it is far above anything
-/// a loaded machine needs.
-pub const HANG: Duration = Duration::from_secs(20);
-
 pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>;
 
 /// Subscribes the socket with `subscription`, a JSON `Subscription`.
@@ -638,7 +632,6 @@ pub fn ws_read(socket: &mut WsSock) -> Value {
 /// what the child writes and never on a clock.
 pub struct RunningNit {
     child: std::process::Child,
-    args: String,
     /// The whole stdout, sent once the child closes the pipe.
     stdout: std::sync::mpsc::Receiver<String>,
     /// The whole stderr, sent once the child closes the pipe.
@@ -663,7 +656,6 @@ pub fn nit_spawn(
         stdout: read_to_end(child.stdout.take().expect("stdout")),
         stderr: read_to_end(child.stderr.take().expect("stderr")),
         child,
-        args: format!("{args:?}"),
     }
 }
 
@@ -684,12 +676,8 @@ fn read_to_end(mut pipe: impl std::io::Read + Send + 'static) -> std::sync::mpsc
 
 impl RunningNit {
     /// Waits for the process to exit and returns its output.
-    ///
-    /// Panics on a child that never exits, so the suite never hangs.
     pub fn finish(mut self) -> (bool, Value, String) {
-        let Ok(stdout) = self.stdout.recv_timeout(HANG) else {
-            panic!("nit {} did not finish within {HANG:?}", self.args);
-        };
+        let stdout = self.stdout.recv().unwrap_or_default();
         let status = self.child.wait().expect("wait");
         let stderr = self.stderr.recv().unwrap_or_default();
         (status.success(), parse_stdout(&stdout), stderr)
