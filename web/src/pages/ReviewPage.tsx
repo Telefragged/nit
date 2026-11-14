@@ -29,6 +29,7 @@ import type {
 import { StatusChip } from "../components/badges";
 
 import TagNav from "../components/TagNav";
+import NewThreadButton from "../components/NewThreadButton";
 import NewThreadEditor from "../components/NewThreadEditor";
 import ChangeLog from "../components/ChangeLog";
 import CommentThread from "../components/CommentThread";
@@ -40,7 +41,6 @@ import ReviewColumns from "../components/ReviewColumns";
 import ReviewSettingsMenu from "../components/ReviewSettings";
 import Select, { type SelectOption } from "../components/Select";
 import Shortcuts from "../components/Shortcuts";
-import { Button } from "../components/ui/button";
 import {
   allExpanded,
   collapseAll,
@@ -1058,14 +1058,12 @@ export default function ReviewPage() {
             />
           </div>
           <div className="diffbar-toggles">
-            <Button
-              variant="ghost"
+            <NewThreadButton
+              anchor="change"
               onClick={() => {
                 setChangeCommentOpen(true);
               }}
-            >
-              Comment on change
-            </Button>
+            />
             <Shortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
             <ReviewSettingsMenu settings={settings} onChange={saveSettings} />
           </div>
