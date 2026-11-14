@@ -75,20 +75,20 @@ let
   cargoToml = fromTOML (builtins.readFile ./Cargo.toml);
 
   cargoPkgs = if stdenv.hostPlatform.isLinux then pkgsStatic else pkgs;
+  cargoToolchain = toolchainFor cargoPkgs.buildPackages;
 
   # Our own crates (local `src`, not a crates.io `sha256`) compile with
   # clippy-driver under Cargo.toml's `[workspace.lints]`; deps stay plain.
   buildRustCrateForPkgs =
     let
-      rustToolchain = toolchainFor cargoPkgs.buildPackages;
       lints = cargoToml.workspace.lints;
     in
     p:
     let
       base = p.buildRustCrate.override {
-        rustc = rustToolchain;
-        cargo = rustToolchain;
-        clippy = rustToolchain;
+        rustc = cargoToolchain;
+        cargo = cargoToolchain;
+        clippy = cargoToolchain;
         # buildRustCrate defaults to codegen-units=1 (serial codegen),
         # ~3x slower per crate than cargo's release default. Match cargo.
         defaultCodegenUnits = 16;
@@ -167,30 +167,36 @@ rec {
       wasmPkgs = pkgs.pkgsCross.wasm32-unknown-none;
       # With rust-src in the sysroot, rustc writes its store path into
       # std's panic locations, and the server binary embeds this wasm.
-      rustToolchain = (toolchainFor wasmPkgs.buildPackages).override { extensions = [ ]; };
+      rustToolchain = cargoToolchain.override { extensions = [ ]; };
       cargoNixWasm = wasmPkgs.callPackage ./Cargo.nix {
+        # The proc-macros and build scripts run on the build platform, so
+        # they reuse the derivations of the host build.
         buildRustCrateForPkgs =
-          p: crate:
-          p.buildRustCrate.override
-            {
-              rustc = rustToolchain;
-              cargo = rustToolchain;
-              defaultCodegenUnits = 16;
-            }
-            (
-              crate
-              // {
-                # buildRustCrate leaves CARGO_CFG_TARGET_FEATURE unset, so
-                # without this, wasm-bindgen's build script disables the
-                # externref support that rustc enables on wasm32.
-                preConfigure = ''
-                  export CARGO_CFG_TARGET_FEATURE=$(
-                    rustc --print cfg --target ${p.stdenv.hostPlatform.rust.rustcTarget} |
-                      sed -n 's/^target_feature="\(.*\)"$/\1/p' | paste -sd, -
-                  )
-                '';
+          p:
+          if !p.stdenv.hostPlatform.isWasm then
+            buildRustCrateForPkgs p
+          else
+            crate:
+            p.buildRustCrate.override
+              {
+                rustc = rustToolchain;
+                cargo = rustToolchain;
+                defaultCodegenUnits = 16;
               }
-            );
+              (
+                crate
+                // {
+                  # buildRustCrate leaves CARGO_CFG_TARGET_FEATURE unset, so
+                  # without this, wasm-bindgen's build script disables the
+                  # externref support that rustc enables on wasm32.
+                  preConfigure = ''
+                    export CARGO_CFG_TARGET_FEATURE=$(
+                      rustc --print cfg --target ${p.stdenv.hostPlatform.rust.rustcTarget} |
+                        sed -n 's/^target_feature="\(.*\)"$/\1/p' | paste -sd, -
+                    )
+                  '';
+                }
+              );
       };
     in
     runCommand "nit-wasm-pkg" { nativeBuildInputs = [ wasm-bindgen-cli ]; } ''
