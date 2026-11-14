@@ -1,6 +1,7 @@
 # The home-manager module: `programs.nit` puts nit on PATH and installs
-# its Claude Code plugin, `services.nit` runs the review server as a
-# systemd user service.
+# its Claude Code plugin, through `programs.claude-code` when that module
+# is enabled. `services.nit` runs the review server as a systemd user
+# service.
 self:
 {
   config,
@@ -25,10 +26,13 @@ in
   options.services.nit.enable = lib.mkEnableOption "the nit review server";
 
   config = lib.mkMerge [
-    (lib.mkIf cfg.enable {
-      home.packages = [ cfg.package ];
+    (lib.mkIf cfg.enable { home.packages = [ cfg.package ]; })
+    (lib.mkIf (cfg.enable && config.programs.claude-code.enable) {
+      programs.claude-code.plugins.nit = self.packages.${pkgs.stdenv.hostPlatform.system}.claude-plugin;
+    })
+    (lib.mkIf (cfg.enable && !config.programs.claude-code.enable) {
       # Every switch runs this, so the plugin follows the package. The
-      # activation PATH holds neither place that Claude Code installs to.
+      # activation PATH contains neither place that Claude Code installs to.
       home.activation.nitClaudePlugin = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         (
           PATH="${config.home.profileDirectory}/bin:$HOME/.local/bin:$PATH"
