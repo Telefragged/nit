@@ -158,14 +158,15 @@ in
     web-test = webBuild "test" { } "npm run test > $out";
     # The same `capture.mjs` agents run locally, but against the nix
     # `playwright-driver` browsers, so a driver/npm-pin skew fails the
-    # check. Its output is the PNGs, not a marker file.
+    # check.
     web-screenshots = webBuild "screenshots" browserEnv ''
-      NIT_SCREENSHOT_OUT_DIR=$out node screenshots/capture.mjs
+      NIT_SCREENSHOT_OUT_DIR=$TMPDIR/screenshots node screenshots/capture.mjs
+      touch $out
     '';
-    # Runs the gallery specs (docs/web.md "Component gallery"). Its output
-    # is the PNG and the page of every story.
+    # Runs the gallery specs (docs/web.md "Component gallery").
     web-gallery = webBuild "gallery" browserEnv ''
-      npm run gallery -- --output $out
+      npm run gallery -- --output $TMPDIR/gallery
+      touch $out
     '';
   };
 }

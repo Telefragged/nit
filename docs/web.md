@@ -21,9 +21,8 @@ nit attach screenshots/review-attachments.html --change <number>
 
 The npm `@playwright/test` version must match
 `pkgs.playwright-driver` (the devShell sets `$PLAYWRIGHT_DRIVER_VERSION`) —
-the `web-screenshots` flake check runs it in the sandbox and its
-output _is_ the PNGs, so `nix build .#checks.<system>.web-screenshots` both
-catches a skew and gives you the PNGs in `result/`.
+the `web-screenshots` flake check runs it in the sandbox and catches a skew.
+The check keeps no PNGs, so run `npm run screenshots` to see them.
 
 ## Component gallery
 
@@ -66,6 +65,6 @@ story, so a spec acts on the page at once:
   because they retry until a timeout (golden rule 13).
 
 The `web-gallery` flake check runs `npm run gallery` in the sandbox. The
-output of the check is the PNGs and the pages. `npm run dev` also serves the
+check keeps no PNGs or pages, so run `npm run gallery` to see them. `npm run dev` also serves the
 gallery at `/gallery/`. To render a story there, call
 `mount({ story: "<id>" })` in the browser console.
