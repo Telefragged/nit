@@ -169,7 +169,7 @@ fn diff_vs_parent_leads_with_commit_msg() {
     );
 }
 
-/// `?against={m}` is an interdiff `tree(m) → tree(n)`: its `/COMMIT_MSG` is a
+/// `?against=r{m}` is an interdiff `tree(m) → tree(n)`: its `/COMMIT_MSG` is a
 /// real message diff (status modified), and a file the amend touched shows
 /// its r0 → r1 delta. Revision 1 is created by amending and re-pushing.
 #[test]
@@ -208,7 +208,7 @@ fn interdiff_against_earlier_revision() {
     assert_eq!(tip_change(&pushed)["revision"], 1, "amend mints revision 1");
 
     let (st, diff) =
-        http_get(&server.url(&format!("/api/changes/{id}/revisions/1/diff?against=0")));
+        http_get(&server.url(&format!("/api/changes/{id}/revisions/1/diff?against=r0")));
     assert_eq!(st, 200, "{diff}");
 
     // The message file leads and is a MODIFIED message diff (subject reworded),
@@ -272,8 +272,12 @@ fn missing_revision_is_404() {
     assert_eq!(st, 404, "{e}");
     assert!(e["error"].as_str().unwrap().contains("revision 1"));
 
-    let (st, e) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff?against=9")));
+    let (st, e) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff?against=r9")));
     assert_eq!(st, 404, "{e}");
+    let (st, e) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff?against=9")));
+    assert_eq!(st, 400, "{e}");
+    let (st, e) = http_get(&server.url(&format!("/api/changes/{id}/revisions/0/diff?against=r1^")));
+    assert_eq!(st, 400, "{e}");
 
     let missing = id + 999;
     let (st, _) = http_get(&server.url(&format!("/api/changes/{missing}/revisions/0/diff")));
@@ -379,7 +383,7 @@ fn lines_of_the_commit_message() {
     assert_eq!(count(&kinds(""), "add"), 12);
     // The reworded subject, then every unchanged line, not only the three
     // around the change.
-    let interdiff = kinds("&against=0");
+    let interdiff = kinds("&against=r0");
     assert_eq!((count(&interdiff, "del"), count(&interdiff, "add")), (1, 1));
     assert_eq!(count(&interdiff, "context"), 11);
 }

@@ -169,7 +169,9 @@ pub(super) async fn get_change_drafts(
 #[derive(Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub(super) struct DiffQuery {
-    against: Option<RevisionNumber>,
+    /// The old side of the diff: a revision, or the base of revision `n`,
+    /// which is also the default.
+    against: Option<ChangeVersion>,
     #[serde(default)]
     whitespace: Whitespace,
 }
@@ -235,7 +237,9 @@ pub(super) struct LinesQuery {
     /// paired only when the bound holds both of its ends: named by its new
     /// side alone, a renamed file would come back as a whole-file add.
     old_path: Option<String>,
-    against: Option<RevisionNumber>,
+    /// The old side of the diff: a revision, or the base of revision `n`,
+    /// which is also the default.
+    against: Option<ChangeVersion>,
     /// How the diff this reveal happens inside compares whitespace.
     ///
     /// A revealed line then carries the kind it would hold in a hunk.
@@ -337,7 +341,7 @@ fn resolve_revs(
     conn: &Connection,
     change: &ChangeProjection,
     n: RevisionNumber,
-    against: Option<RevisionNumber>,
+    against: Option<ChangeVersion>,
 ) -> Result<Revs, Error> {
     let find = |k: RevisionNumber| {
         change
@@ -348,7 +352,17 @@ fn resolve_revs(
     Ok(Revs {
         git_dir: git_dir(conn, change.repo_id)?,
         revision: find(n)?,
-        against: against.map(find).transpose()?,
+        against: match against.unwrap_or(ChangeVersion::Base(n)) {
+            ChangeVersion::Base(m) if m == n => None,
+            ChangeVersion::Revision(m) => Some(find(m)?),
+            base @ ChangeVersion::Base(_) => {
+                return Err(Error::bad_request(format!(
+                    "the old side of a diff of {} is {} or a revision, not {base}",
+                    ChangeVersion::Revision(n),
+                    ChangeVersion::Base(n),
+                )));
+            }
+        },
     })
 }
 
@@ -409,13 +423,16 @@ fn contained_diff(
 #[derive(Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub(super) struct PortedQuery {
-    against: Option<RevisionNumber>,
+    /// The old side of the diff: a revision, or the base of revision `n`,
+    /// which is also the default.
+    against: Option<ChangeVersion>,
 }
 
 /// `GET /api/changes/{id}/revisions/{n}/ported`.
 ///
 /// Ports every thread of a revision earlier than `n` to `n`, resolved or
-/// not, and with `?against={m}` to `m` as well, `n`'s entries first.
+/// not, and with `?against=r{m}` to revision `m` as well, `n`'s entries
+/// first.
 /// Entries for one revision are sorted by thread id.
 #[utoipa::path(get, path = "/api/changes/{id}/revisions/{n}/ported", params(("id" = ChangeNumber, Path), ("n" = RevisionNumber, Path), PortedQuery), responses((status = 200, body = Vec<PortedComment>)))]
 pub(super) async fn ported_comments(

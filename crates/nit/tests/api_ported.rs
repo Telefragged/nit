@@ -141,7 +141,7 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
     assert_eq!(st, 404, "{e}");
 }
 
-/// `?against={m}` ports to the interdiff's other tree too: `n`'s entries
+/// `?against=r{m}` ports to the interdiff's other tree too: `n`'s entries
 /// first, then `m`'s, each thread at its place in that revision.
 #[test]
 fn against_ports_to_both_revisions() {
@@ -163,7 +163,7 @@ fn against_ports_to_both_revisions() {
     }
     let t = thread(&server, id, 0, &line("a.txt", "new", 6), false);
 
-    let (st, p) = ported(&server, id, 2, "?against=1");
+    let (st, p) = ported(&server, id, 2, "?against=r1");
     assert_eq!(st, 200, "{p}");
     let places: Vec<(u64, Value)> = p
         .as_array()
