@@ -239,6 +239,13 @@ function changeDetail(c: ChangeRecord): ChangeDetail {
   return { ...foldDetail(projection(c.id)), ...changeDrafts(c) };
 }
 
+/** The revision that the query's `against` specifies, or `undefined`
+ * for the base. */
+const againstOf = (q: URLSearchParams) => {
+  const raw = q.get("against");
+  return raw === null || raw === "base" ? undefined : Number(raw.slice(1));
+};
+
 /** The reviewer's overlay alone (`GET /changes/{id}/drafts`). */
 function changeDrafts(c: ChangeRecord) {
   return {
@@ -397,7 +404,7 @@ export function mockRequest(
   ) {
     const c = getChange(Number(m[1]));
     const number = Number(m[2]);
-    const against = q.has("against") ? Number(q.get("against")) : undefined;
+    const against = againstOf(q);
     const revision = c.revisions[number];
     if (!revision) notFound(`revision ${number}`);
     const diff = c.diffs[diffKey(number, against)];
@@ -435,7 +442,7 @@ export function mockRequest(
     const c = getChange(Number(m[1]));
     const number = Number(m[2]);
     if (!c.revisions[number]) notFound(`revision ${number}`);
-    const against = q.has("against") ? Number(q.get("against")) : undefined;
+    const against = againstOf(q);
     const at = (revision: number | undefined) =>
       revision === undefined ? [] : (c.ported?.[revision] ?? []);
     return structuredClone([...at(number), ...at(against)]);
@@ -452,7 +459,7 @@ export function mockRequest(
   ) {
     const c = getChange(Number(m[1]));
     const revision = Number(m[2]);
-    const against = q.has("against") ? Number(q.get("against")) : undefined;
+    const against = againstOf(q);
     const path = q.get("path") ?? "";
     const file = c.diffs[diffKey(revision, against)]?.files.find(
       (f) => f.path === path,

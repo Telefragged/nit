@@ -519,7 +519,7 @@ fn an_interdiff_compares_the_attachments_of_the_two_revisions() {
     attach(&server, change_number, 1, "notes.txt", &after);
 
     let (st, diff) = http_get(&server.url(&format!(
-        "/api/changes/{change_number}/revisions/1/diff?against=0"
+        "/api/changes/{change_number}/revisions/1/diff?against=r0"
     )));
 
     assert_eq!(st, 200, "{diff}");
@@ -615,7 +615,7 @@ fn a_later_base_attachment_leaves_the_earlier_base() {
 }
 
 /// `/lines` serves the base attachment for the old side of a diff
-/// against the parent.
+/// against the base.
 #[test]
 fn lines_of_a_base_attachment() {
     let g = GitRepo::new();
@@ -624,7 +624,7 @@ fn lines_of_a_base_attachment() {
     attach_to_base(&server, change_number, 0, "notes.txt", &before);
 
     let (st, whole) = http_get(&server.url(&format!(
-        "/api/changes/{change_number}/revisions/0/lines?path=/attachments/notes.txt"
+        "/api/changes/{change_number}/revisions/0/lines?path=/attachments/notes.txt&against=r0^"
     )));
 
     assert_eq!(st, 200, "{whole}");
@@ -686,7 +686,7 @@ fn lines_of_an_attachment() {
     attach(&server, change_number, 1, "notes.txt", &after);
 
     let (st, whole) = http_get(&server.url(&format!(
-        "/api/changes/{change_number}/revisions/1/lines?path=/attachments/notes.txt&against=0"
+        "/api/changes/{change_number}/revisions/1/lines?path=/attachments/notes.txt&against=r0"
     )));
 
     assert_eq!(st, 200, "{whole}");

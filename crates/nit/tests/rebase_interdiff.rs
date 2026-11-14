@@ -683,7 +683,7 @@ fn http_interdiff_contains_a_pure_rebase() {
     // The r0 → r1 interdiff: shared.rs is entirely drift (C1's amendment) and
     // drops out, so only the (unchanged) commit message remains.
     let (st, diff) = http_get(&server.url(&format!(
-        "/api/changes/{change_number}/revisions/1/diff?against=0"
+        "/api/changes/{change_number}/revisions/1/diff?against=r0"
     )));
     assert_eq!(st, 200, "interdiff: {diff}");
     let paths: Vec<&str> = diff["files"]

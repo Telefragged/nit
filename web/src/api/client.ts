@@ -111,7 +111,7 @@ export const getDiff = (
   whitespace: Whitespace = "compare",
 ) => {
   const q = new URLSearchParams();
-  if (against !== undefined) q.set("against", String(against));
+  if (against !== undefined) q.set("against", `r${against}`);
   if (whitespace !== "compare") q.set("whitespace", whitespace);
   const query = q.size > 0 ? `?${q}` : "";
   return request<Diff>(
@@ -135,7 +135,7 @@ export const getFileLines = (
 ) => {
   const q = new URLSearchParams({ path: file.path });
   if (file.old_path !== undefined) q.set("old_path", file.old_path);
-  if (against !== undefined) q.set("against", String(against));
+  if (against !== undefined) q.set("against", `r${against}`);
   if (whitespace !== "compare") q.set("whitespace", whitespace);
   return request<FileLines>(
     "GET",
@@ -151,7 +151,7 @@ export const getPorted = (
   revision: number,
   against?: number,
 ) => {
-  const q = against === undefined ? "" : `?against=${against}`;
+  const q = against === undefined ? "" : `?against=r${against}`;
   return request<PortedComment[]>(
     "GET",
     `/changes/${changeNumber}/revisions/${revision}/ported${q}`,
