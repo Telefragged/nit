@@ -155,7 +155,10 @@ in
     # `npm run lint`, so `nix flake check` fails on a type, eslint,
     # stylelint or knip error.
     web-lint = webBuild "lint" { } "npm run lint > $out";
-    web-test = webBuild "test" { } "npm run test > $out";
+    web-test = webBuild "test" { } ''
+      npm run test
+      touch $out
+    '';
     # The same `capture.mjs` agents run locally, but against the nix
     # `playwright-driver` browsers, so a driver/npm-pin skew fails the
     # check.
