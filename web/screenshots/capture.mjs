@@ -76,6 +76,25 @@ const untilReady = (page) =>
       !document.querySelector('#root [aria-busy="true"]'),
   );
 
+/** Resolves once the base-ui popup that holds the element `selector`
+ * matches is open, and its opening transition has ended. A Select keeps its
+ * closed popup in the DOM, so the popup must carry `data-open`. base-ui
+ * sets `data-starting-style` in the render that sets `data-open`, and
+ * removes it one frame later. */
+const untilOpened = (page, selector) =>
+  untilDom(
+    page,
+    (s) => {
+      const popup = document.querySelector(s)?.closest("[data-open]");
+      return !!popup && !popup.hasAttribute("data-starting-style");
+    },
+    selector,
+  );
+
+/** Resolves once a modal popup has locked the page scroll. */
+const untilScrollLocked = (page) =>
+  untilDom(page, () => document.body.style.overflow === "hidden");
+
 /** Resolves once the font files for Latin text have loaded. A font that
  * loads later moves the text, so a capture loads the fonts before it
  * measures or scrolls. */
@@ -172,6 +191,19 @@ async function snapshot(colorScheme) {
   });
   const css = (await Promise.all(sheets)).join("\n");
   const doc = document.documentElement.cloneNode(true);
+  // A hidden element does not render. A closed base-ui popup stays in the
+  // DOM, hidden, with the measurements of its last position, and those
+  // vary between runs.
+  doc.querySelectorAll("[hidden]").forEach((el) => el.remove());
+  // base-ui adds the attributes of a popup in an order that varies between
+  // runs, so the copy lists the attributes of each element by name.
+  for (const el of [doc, ...doc.querySelectorAll("*")]) {
+    const attrs = [...el.attributes].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    for (const a of attrs) el.removeAttributeNode(a);
+    for (const a of attrs) el.setAttributeNode(a);
+  }
   doc.style.colorScheme = colorScheme;
   doc
     .querySelectorAll(
@@ -226,7 +258,8 @@ const expandAllFiles = (page) =>
  * list. The list mounts after the click. */
 const openPicker = async (page, label) => {
   await clickNow(page.getByLabel(label));
-  await untilDom(page, () => !!document.querySelector('[role="listbox"]'));
+  await untilOpened(page, '[role="listbox"]');
+  await untilScrollLocked(page);
 };
 
 /** Presses the option `name` in the settings popover of the diffbar cog,
@@ -519,6 +552,7 @@ const captures = [
     name: "review-linked-thread",
     path: "/changes/11?against=base&thread=71",
     fullPage: false,
+    actions: untilSpySettled,
   },
   // A link to lines 21-23 of rotate.rs: the page expands the file, scrolls
   // the first linked line into view, and tints the linked span. The pointer
@@ -609,7 +643,7 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Settings" }));
-      await untilDom(page, () => !!document.querySelector('[role="dialog"]'));
+      await untilOpened(page, '[role="dialog"]');
     },
   },
   // The list of the page's keys, which the ? key opens.
@@ -620,6 +654,8 @@ const captures = [
     actions: async (page) => {
       await page.keyboard.press("?");
       await one(page.getByRole("dialog", { name: "Keyboard shortcuts" }));
+      await untilOpened(page, '[role="dialog"]');
+      await untilScrollLocked(page);
     },
   },
   // Side-by-side, base → r1: new-side drafts sit under the right column,
@@ -767,6 +803,14 @@ const captures = [
     actions: async (page) => {
       await openPicker(page, "Diff base");
       await clickNow(page.getByRole("option", { name: "r0 6 comments" }));
+      // The closed Select hides its positioner once the closing transition
+      // has ended.
+      await untilDom(
+        page,
+        () =>
+          !!document.querySelector('[role="listbox"]')?.closest("[hidden]") &&
+          !document.querySelector("[data-ending-style]"),
+      );
       // data-diff-ready="r0" shows that the r0 diff read succeeded. A ready
       // page after it shows that the other reads have answered too.
       await untilDom(
@@ -997,6 +1041,8 @@ const captures = [
     fullPage: false,
     actions: async (page) => {
       await page.keyboard.press("a");
+      await untilOpened(page, '[role="dialog"]');
+      await untilScrollLocked(page);
       const cover = page.getByPlaceholder(
         "Cover message (saved with your decision)…",
       );
@@ -1016,6 +1062,8 @@ const captures = [
     actions: async (page) => {
       await clickNow(page.getByRole("button", { name: "Review", exact: true }));
       await one(page.getByRole("dialog", { name: "Review", exact: true }));
+      await untilOpened(page, '[role="dialog"]');
+      await untilScrollLocked(page);
     },
   },
   // Rename + binary file in one diff.
