@@ -44,6 +44,7 @@ import ChangeLog from "../components/ChangeLog";
 import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
 import FileRail from "../components/diff/FileRail";
+import NewRevisionToast from "../components/NewRevisionToast";
 import ReviewBar from "../components/ReviewBar";
 import ReviewColumns from "../components/ReviewColumns";
 import ReviewSettingsMenu from "../components/ReviewSettings";
@@ -1014,6 +1015,12 @@ export default function ReviewPage() {
   return (
     <ReviewContext.Provider value={ctxValue}>
       <main className="page-wide review-page" aria-busy={busy}>
+        {/* The key drops the toast of the previous change. */}
+        <NewRevisionToast
+          key={changeNumber}
+          opened={defaultRev ?? latest.number}
+          latest={latest.number}
+        />
         <div className="review-header">
           <div className="review-header-main">
             <div className="crumb-line">
