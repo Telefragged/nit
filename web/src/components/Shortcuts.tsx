@@ -4,16 +4,16 @@ import { Kbd } from "./ui/kbd";
 
 const SHORTCUTS: { keys: string[]; does: string }[] = [
   { keys: ["[", "]"], does: "Go to the previous or the next file" },
-  { keys: ["n", "shift+n"], does: "Go to the next or the previous change" },
-  { keys: ["r"], does: "Show the latest revision" },
+  { keys: ["N", "Shift+N"], does: "Go to the next or the previous change" },
+  { keys: ["R"], does: "Show the latest revision" },
   {
-    keys: ["c"],
+    keys: ["C"],
     does: "Comment on the selected text, or else on the linked lines",
   },
-  { keys: ["a"], does: "Review this change" },
-  { keys: ["s"], does: "Submit the drafted reviews" },
-  { keys: ["ctrl+enter"], does: "Save the draft in the editor" },
-  { keys: ["esc"], does: "Close the editor or the dialog" },
+  { keys: ["A"], does: "Review this change" },
+  { keys: ["S"], does: "Submit the drafted reviews" },
+  { keys: ["Ctrl+Enter"], does: "Save the draft in the editor" },
+  { keys: ["Esc"], does: "Close the editor or the dialog" },
   { keys: ["?"], does: "Show this list" },
 ];
 

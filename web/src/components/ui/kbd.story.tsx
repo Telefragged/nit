@@ -5,13 +5,13 @@ import { Kbd } from "./kbd";
 export function Keys() {
   return (
     <div className="flex items-center gap-3">
-      <Kbd>c</Kbd>
-      <Kbd>shift+n</Kbd>
+      <Kbd>C</Kbd>
+      <Kbd>Shift+N</Kbd>
       <Button variant="primary">
-        Submit <Kbd>s</Kbd>
+        Submit <Kbd>S</Kbd>
       </Button>
       <Button>
-        Review <Kbd>a</Kbd>
+        Review <Kbd>A</Kbd>
       </Button>
       <Button variant="ghost">
         Shortcuts <Kbd>?</Kbd>

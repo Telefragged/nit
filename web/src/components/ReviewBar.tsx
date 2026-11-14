@@ -198,7 +198,7 @@ export default function ReviewBar({
               onReplyOpenChange(true);
             }}
           >
-            Review <Kbd aria-hidden>a</Kbd>
+            Review <Kbd aria-hidden>A</Kbd>
           </Button>
           <Button
             variant="primary"
@@ -216,7 +216,7 @@ export default function ReviewBar({
             {drafted === 0
               ? "Submit"
               : `Submit ${drafted} review${drafted === 1 ? "" : "s"}`}{" "}
-            <Kbd aria-hidden>s</Kbd>
+            <Kbd aria-hidden>S</Kbd>
           </Button>
         </div>
       </div>
