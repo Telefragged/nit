@@ -90,25 +90,27 @@ pub fn require_change_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::testing::change_id;
 
     #[test]
     fn trailer_basic() {
-        let id = change_id("I0123abcd");
+        let id =
+            ChangeId::new("I0123abcd00000000000000000000000000000000").expect("valid change id");
         let msg = format!("subject\n\nbody text\n\nChange-Id: {id}\n");
         assert_eq!(change_id_trailer(&msg), Some(id));
     }
 
     #[test]
     fn trailer_case_insensitive_key() {
-        let id = change_id("Iaaa");
+        let id =
+            ChangeId::new("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").expect("valid change id");
         let msg = format!("s\n\nchange-id: {id}\n");
         assert_eq!(change_id_trailer(&msg), Some(id));
     }
 
     #[test]
     fn trailer_among_others() {
-        let id = change_id("Ixyz");
+        let id =
+            ChangeId::new("Icccccccccccccccccccccccccccccccccccccccc").expect("valid change id");
         let msg =
             format!("s\n\nbody\n\nSigned-off-by: A <a@b>\nChange-Id: {id}\nReviewed-by: B <b@c>\n");
         assert_eq!(change_id_trailer(&msg), Some(id));
@@ -116,7 +118,10 @@ mod tests {
 
     #[test]
     fn trailer_last_occurrence_wins() {
-        let (one, two) = (change_id("Ione"), change_id("Itwo"));
+        let (one, two) = (
+            ChangeId::new("I1111111111111111111111111111111111111111").expect("valid change id"),
+            ChangeId::new("I2222222222222222222222222222222222222222").expect("valid change id"),
+        );
         let msg = format!("s\n\nChange-Id: {one}\nChange-Id: {two}\n");
         assert_eq!(change_id_trailer(&msg), Some(two));
     }
@@ -125,7 +130,8 @@ mod tests {
     fn trailer_absent_or_not_a_trailer() {
         assert_eq!(change_id_trailer("subject only\n"), None);
         // In the body, not the trailer block.
-        let nope = change_id("Inope");
+        let nope =
+            ChangeId::new("Idddddddddddddddddddddddddddddddddddddddd").expect("valid change id");
         let msg = format!("s\n\nChange-Id: {nope}\n\nmore body, no trailers here");
         assert_eq!(change_id_trailer(&msg), None);
     }
@@ -140,7 +146,10 @@ mod tests {
 
     #[test]
     fn require_change_ids_happy_path() {
-        let (a, b) = (change_id("Iaaa"), change_id("Ibbb"));
+        let (a, b) = (
+            ChangeId::new("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").expect("valid change id"),
+            ChangeId::new("Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").expect("valid change id"),
+        );
         let messages = msgs(&[
             &format!("a\n\nChange-Id: {a}\n"),
             &format!("b\n\nChange-Id: {b}\n"),
@@ -150,7 +159,10 @@ mod tests {
 
     #[test]
     fn require_change_ids_rejects_fixup_and_squash_commits() {
-        let (a, b) = (change_id("Iaaa"), change_id("Ibbb"));
+        let (a, b) = (
+            ChangeId::new("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").expect("valid change id"),
+            ChangeId::new("Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").expect("valid change id"),
+        );
         let messages = msgs(&[
             &format!("a\n\nChange-Id: {a}\n"),
             "fixup! a\n",
@@ -163,7 +175,8 @@ mod tests {
 
     #[test]
     fn require_change_ids_rejects_missing_trailer() {
-        let a = change_id("Iaaa");
+        let a =
+            ChangeId::new("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").expect("valid change id");
         let messages = msgs(&[&format!("a\n\nChange-Id: {a}\n"), "no trailer\n"]);
         let err = require_change_ids(&messages, &shas(2)).expect_err("should be rejected");
         assert!(
@@ -175,7 +188,10 @@ mod tests {
 
     #[test]
     fn require_change_ids_rejects_duplicate_trailer() {
-        let (dup, b) = (change_id("Idup"), change_id("Ibbb"));
+        let (dup, b) = (
+            ChangeId::new("Ieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee").expect("valid change id"),
+            ChangeId::new("Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").expect("valid change id"),
+        );
         let messages = msgs(&[
             &format!("a\n\nChange-Id: {dup}\n"),
             &format!("b\n\nChange-Id: {b}\n"),

@@ -1395,8 +1395,7 @@ pub fn delete_draft_review(tx: &Transaction, change_number: ChangeNumber) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::domain::{CommentRange, LineAnchor, Side};
-    use nit_types::testing::{change_id, sha, tags};
+    use nit_types::domain::{CommentRange, LineAnchor, Side, Tag};
 
     fn mem() -> Connection {
         let mut conn = Connection::open_in_memory().expect("in-memory db");
@@ -1410,11 +1409,12 @@ mod tests {
 
     fn change(conn: &mut Connection) -> ChangeNumber {
         let repo = repo(conn, "/r/.git");
-        change_in(conn, repo.id, "I1")
+        change_in(conn, repo.id, "I1111111111111111111111111111111111111111")
     }
 
-    fn change_in(conn: &mut Connection, repo_id: u64, label: &str) -> ChangeNumber {
-        write(conn, |tx| upsert_change(tx, repo_id, &change_id(label))).expect("change")
+    fn change_in(conn: &mut Connection, repo_id: u64, key: &str) -> ChangeNumber {
+        let key = ChangeId::new(key).expect("valid change id");
+        write(conn, |tx| upsert_change(tx, repo_id, &key)).expect("change")
     }
 
     fn matching_tags(conn: &Connection, repo_id: u64, pairs: &[(&str, &str)]) -> Vec<ChangeNumber> {
@@ -1422,7 +1422,10 @@ mod tests {
             conn,
             repo_id,
             &ChangeFilter {
-                tags: tags(pairs),
+                tags: pairs
+                    .iter()
+                    .map(|(k, v)| Tag::new(*k, *v).expect("valid tag"))
+                    .collect(),
                 ..ChangeFilter::default()
             },
         )
@@ -1433,14 +1436,22 @@ mod tests {
     }
 
     fn set_tags(conn: &mut Connection, number: ChangeNumber, pairs: &[(&str, &str)]) {
-        write(conn, |tx| set_change_tags(tx, number, &tags(pairs))).expect("set");
+        let tags: Tags = pairs
+            .iter()
+            .map(|(k, v)| Tag::new(*k, *v).expect("valid tag"))
+            .collect();
+        write(conn, |tx| set_change_tags(tx, number, &tags)).expect("set");
     }
 
     #[test]
     fn change_tags_replace_wholesale() {
         let mut conn = mem();
         let repo = repo(&mut conn, "/r/.git");
-        let id = change_in(&mut conn, repo.id, "I1");
+        let id = change_in(
+            &mut conn,
+            repo.id,
+            "I1111111111111111111111111111111111111111",
+        );
         set_tags(&mut conn, id, &[("branch", "track/a"), ("feature", "epic")]);
         set_tags(&mut conn, id, &[("branch", "track/b")]);
 
@@ -1463,8 +1474,16 @@ mod tests {
     fn repo_changes_and_every_requested_tag() {
         let mut conn = mem();
         let repo = repo(&mut conn, "/r/.git");
-        let both = change_in(&mut conn, repo.id, "I1");
-        let one = change_in(&mut conn, repo.id, "I2");
+        let both = change_in(
+            &mut conn,
+            repo.id,
+            "I1111111111111111111111111111111111111111",
+        );
+        let one = change_in(
+            &mut conn,
+            repo.id,
+            "I2222222222222222222222222222222222222222",
+        );
         set_tags(
             &mut conn,
             both,
@@ -1499,12 +1518,10 @@ mod tests {
         let mut conn = mem();
         let a = repo(&mut conn, "/r/.git");
         assert_eq!(a.canonical_head, None, "no baseline until first observed");
-        write(&mut conn, |tx| {
-            update_repo_canonical_head(tx, a.id, &sha("deadbeef"))
-        })
-        .expect("record");
+        let head = Sha::new("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef").expect("valid sha");
+        write(&mut conn, |tx| update_repo_canonical_head(tx, a.id, &head)).expect("record");
         let found = find_repo(&conn, "/r/.git").expect("query").expect("found");
-        assert_eq!(found.canonical_head, Some(sha("deadbeef")));
+        assert_eq!(found.canonical_head, Some(head));
     }
 
     /// The location columns spell the three anchors, and each one has to
@@ -1567,7 +1584,8 @@ mod tests {
         let mut conn = Connection::open_in_memory().expect("in-memory db");
         // Stop at v8 and write rows the way that schema spells them.
         migrate_to(&mut conn, 8).expect("migrate to v8");
-        let key = change_id("Iabc");
+        let key =
+            ChangeId::new("Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").expect("valid change id");
         conn.execute_batch(&format!(
             "INSERT INTO repos (id, git_dir, canonical_ref) VALUES (1, '/r/.git', 'main');
              INSERT INTO changes (id, repo_id, change_key, created_at)
@@ -1615,21 +1633,29 @@ mod tests {
 
         conn.execute("DELETE FROM changes WHERE id = 7", [])
             .expect("delete");
-        assert_eq!(change_in(&mut conn, 1, "Idef"), ChangeNumber::new(8));
+        assert_eq!(
+            change_in(&mut conn, 1, "Idddddddddddddddddddddddddddddddddddddddd"),
+            ChangeNumber::new(8)
+        );
     }
 
     #[test]
     fn change_upsert_is_idempotent() {
         let mut conn = mem();
         let repo = repo(&mut conn, "/r/.git");
-        let a = change_in(&mut conn, repo.id, "Iabc");
-        let again = change_in(&mut conn, repo.id, "Iabc");
+        let key = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let a = change_in(&mut conn, repo.id, key);
+        let again = change_in(&mut conn, repo.id, key);
         assert_eq!(a, again);
-        let b = change_in(&mut conn, repo.id, "Idef");
+        let b = change_in(
+            &mut conn,
+            repo.id,
+            "Idddddddddddddddddddddddddddddddddddddddd",
+        );
         assert_ne!(a, b);
         assert_eq!(
             get_change(&conn, a).expect("get").expect("some").change_id,
-            change_id("Iabc")
+            ChangeId::new(key).expect("valid change id")
         );
     }
 
@@ -1692,8 +1718,16 @@ mod tests {
     fn sequence_is_global_across_changes() {
         let mut conn = mem();
         let repo = repo(&mut conn, "/r/.git");
-        let a = change_in(&mut conn, repo.id, "Ia");
-        let b = change_in(&mut conn, repo.id, "Ib");
+        let a = change_in(
+            &mut conn,
+            repo.id,
+            "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        );
+        let b = change_in(
+            &mut conn,
+            repo.id,
+            "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        );
         let sa = write(&mut conn, |tx| append_log(tx, a, 0, "comment", "{}", "t0")).expect("a0");
         let sb = write(&mut conn, |tx| append_log(tx, b, 0, "comment", "{}", "t1")).expect("b0");
         let sa1 = write(&mut conn, |tx| append_log(tx, a, 1, "comment", "{}", "t2")).expect("a1");
