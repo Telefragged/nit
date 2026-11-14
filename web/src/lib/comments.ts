@@ -9,6 +9,7 @@
 // side-effect-free, so the rules are unit-tested without a DOM.
 
 import { unresolvedThreads } from "../api/fold";
+import { anchorOf, revisionVersion, sideVersion } from "./version";
 import type {
   Anchor,
   ChangeDrafts,
@@ -20,6 +21,7 @@ import type {
   Draft,
   PortedComment,
   ThreadProjection,
+  ChangeVersion,
   ThreadComment,
 } from "../api/types";
 
@@ -116,7 +118,7 @@ export function portThreads(
   threads: readonly UiThread[],
   ported: readonly PortedComment[],
   selected: number,
-  against: number | undefined,
+  against: ChangeVersion,
 ): UiThread[] {
   const places = new Map<number, CommentAnchor[]>();
   for (const { thread_id, revision, anchor } of ported) {
@@ -164,8 +166,8 @@ export function assembleThreads(
 }
 
 /**
- * Where a thread lands in the diff range `[FROM] → [TO]` (`against`
- * undefined = base, else the interdiff's left revision `rM`), or null when
+ * Where a thread lands in the diff range `[FROM] → [TO]` (`against` the
+ * base, or the interdiff's left revision `rM`), or null when
  * its `(revision, side)` is neither displayed tree — it belongs to another
  * revision and is not shown in this diff at all.
  *
@@ -176,22 +178,14 @@ export function assembleThreads(
 export function commentPlacement(
   c: CommentAnchor,
   selected: number,
-  against: number | undefined,
+  against: ChangeVersion,
 ): Placement | null {
   const at = anchorAt(c.anchor);
   if (at === null) return null;
   const line = placementLine(at);
-  const side = anchorSide(c.anchor);
-  if (c.revision === selected && side === "new") {
-    return { side: "new", line };
-  }
-  if (against === undefined) {
-    if (c.revision === selected && side === "old") {
-      return { side: "old", line };
-    }
-  } else if (c.revision === against && side === "new") {
-    return { side: "old", line };
-  }
+  const version = sideVersion(c.revision, anchorSide(c.anchor));
+  if (version === revisionVersion(selected)) return { side: "new", line };
+  if (version === against) return { side: "old", line };
   return null;
 }
 
@@ -204,17 +198,16 @@ export function commentPlacement(
 export function draftAnchor(
   column: Side,
   selected: number,
-  against: number | undefined,
+  against: ChangeVersion,
 ): { revision: number; side: Side } {
-  if (column === "new") return { revision: selected, side: "new" };
-  if (against === undefined) return { revision: selected, side: "old" };
-  return { revision: against, side: "new" };
+  return column === "new"
+    ? { revision: selected, side: "new" }
+    : anchorOf(against);
 }
 
 /** A diff range as the page shows it: `[against] → [selected]`. */
 export interface DiffRange {
-  /** `undefined` is the base, as everywhere in this module. */
-  against: number | undefined;
+  against: ChangeVersion;
   selected: number;
 }
 
@@ -224,7 +217,7 @@ export interface DiffRange {
 export function threadInRange(
   c: CommentAnchor,
   selected: number,
-  against: number | undefined,
+  against: ChangeVersion,
 ): boolean {
   return (
     anchorKind(c.anchor) !== "line" ||
@@ -245,12 +238,12 @@ export function threadInRange(
 export function rangeSince(
   c: CommentAnchor,
   selected: number,
-  against: number | undefined,
+  against: ChangeVersion,
   latest: number,
 ): DiffRange | null {
   if (c.revision >= latest) return null;
-  const range = { against: c.revision, selected: latest };
-  if (against === range.against && selected === range.selected) return null;
+  const range = { against: revisionVersion(c.revision), selected: latest };
+  if (against === range.against && selected === latest) return null;
   return threadInRange(c, range.selected, range.against) ? range : null;
 }
 

@@ -311,12 +311,12 @@ const captures = [
       await applySetting(page, "All");
     },
   },
-  // Change 11 at rev1; ?against=0 shows the r0 → r1 interdiff.
-  { name: "review-interdiff", path: "/changes/11?against=0" },
+  // Change 11 at rev1; ?against=r0 shows the r0 → r1 interdiff.
+  { name: "review-interdiff", path: "/changes/11?against=r0" },
   // The change log below the files, every row opened.
   {
     name: "review-log",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     actions: async (page) => {
       await page.evaluate(() => {
         for (const row of document.querySelectorAll(".change-log details"))
@@ -328,7 +328,7 @@ const captures = [
   // rail stays pinned, because its last row is still above the log.
   {
     name: "review-log-scrolled",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     fullPage: false,
     actions: async (page) => {
       await page.evaluate(() => {
@@ -550,7 +550,7 @@ const captures = [
   // line 5 is a context line there), not in the base → r1 diff.
   {
     name: "review-commit-msg",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     fullPage: false,
   },
   // The resolve editor: Reply on the resolved commit-message thread opens the
@@ -558,7 +558,7 @@ const captures = [
   // state) beside Cancel / Save draft.
   {
     name: "review-resolve-editor",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     fullPage: false,
     actions: async (page) => {
       await expandThread(page, page.locator(".thread-collapsed"));
@@ -572,7 +572,7 @@ const captures = [
   // thread" draft are both visible.
   {
     name: "review-resolve-drafted",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     fullPage: false,
     actions: async (page) => {
       await expandThread(page, page.locator(".thread-collapsed"));
@@ -586,7 +586,7 @@ const captures = [
   // one row that shows its pending Resolved state.
   {
     name: "review-resolve-oneclick",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     actions: async (page) => {
       await expandAllFiles(page);
       await clickNow(
@@ -677,7 +677,7 @@ const captures = [
   // left column (FROM revision's content), drafts on r1 under the right.
   {
     name: "review-split-interdiff",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     actions: async (page) => {
       await expandAllFiles(page);
       await applySetting(page, "Side-by-side");
@@ -688,7 +688,7 @@ const captures = [
   // a rebase pulled in — the file count is the real edit only.
   {
     name: "review-drift",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     fullPage: false,
     actions: async (page) => {
       await expandAllFiles(page);
@@ -767,11 +767,11 @@ const captures = [
     actions: async (page) => {
       await openPicker(page, "Diff base");
       await clickNow(page.getByRole("option", { name: "r0 6 comments" }));
-      // data-diff-ready="0" shows that the r0 diff read succeeded. A ready
+      // data-diff-ready="r0" shows that the r0 diff read succeeded. A ready
       // page after it shows that the other reads have answered too.
       await untilDom(
         page,
-        () => !!document.querySelector('[data-diff-ready="0"]'),
+        () => !!document.querySelector('[data-diff-ready="r0"]'),
       );
       await untilReady(page);
     },
@@ -893,14 +893,14 @@ const captures = [
   // r0 → r1 interdiff renders them tinted on the left column.
   {
     name: "review-range-comments",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     actions: expandAllFiles,
   },
   // Markdown comment bodies: the RNG thread's author reply, its fence
   // highlighted like the diff.
   {
     name: "review-markdown-comment",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     fullPage: false,
     actions: async (page) => {
       await expandAllFiles(page);
@@ -914,7 +914,7 @@ const captures = [
   // Hovering a whole-line thread tints the line it hangs on.
   {
     name: "review-hover-line",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     fullPage: false,
     actions: (page) =>
       hoverThread(page, "Locking the RNG mutex", ".line-hover"),
@@ -922,7 +922,7 @@ const captures = [
   // Hovering a selection thread brightens its range.
   {
     name: "review-hover-range",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     fullPage: false,
     actions: (page) =>
       hoverThread(page, "Generate-then-mark", ".comment-range-active"),
@@ -970,7 +970,7 @@ const captures = [
   // (lib/comments).
   {
     name: "review-old-side-draft",
-    path: "/changes/11?against=0",
+    path: "/changes/11?against=r0",
     actions: async (page) => {
       await expandAllFiles(page);
       await applySetting(page, "Side-by-side");

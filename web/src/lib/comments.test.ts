@@ -88,19 +88,19 @@ describe("commentPlacement", () => {
   // side (the parent) the left column.
   describe("base → rN", () => {
     it("puts the TO new side on the right", () => {
-      expect(commentPlacement(anchor(2, "new", 14), 2, undefined)).toEqual({
+      expect(commentPlacement(anchor(2, "new", 14), 2, "r2^")).toEqual({
         side: "new",
         line: 14,
       });
     });
     it("puts the TO old side (the parent) on the left", () => {
-      expect(commentPlacement(anchor(2, "old", 9), 2, undefined)).toEqual({
+      expect(commentPlacement(anchor(2, "old", 9), 2, "r2^")).toEqual({
         side: "old",
         line: 9,
       });
     });
     it("hides a comment from another revision", () => {
-      expect(commentPlacement(anchor(1, "new", 5), 2, undefined)).toBeNull();
+      expect(commentPlacement(anchor(1, "new", 5), 2, "r2^")).toBeNull();
     });
   });
 
@@ -108,55 +108,55 @@ describe("commentPlacement", () => {
   // made on rM (its new side) renders there.
   describe("rM → rN", () => {
     it("puts the TO new side on the right", () => {
-      expect(commentPlacement(anchor(3, "new", 20), 3, 1)).toEqual({
+      expect(commentPlacement(anchor(3, "new", 20), 3, "r1")).toEqual({
         side: "new",
         line: 20,
       });
     });
     it("puts the FROM revision's new side on the left", () => {
-      expect(commentPlacement(anchor(1, "new", 7), 3, 1)).toEqual({
+      expect(commentPlacement(anchor(1, "new", 7), 3, "r1")).toEqual({
         side: "old",
         line: 7,
       });
     });
     it("hides a base-side (old) comment — there is no parent column", () => {
-      expect(commentPlacement(anchor(3, "old", 4), 3, 1)).toBeNull();
-      expect(commentPlacement(anchor(1, "old", 4), 3, 1)).toBeNull();
+      expect(commentPlacement(anchor(3, "old", 4), 3, "r1")).toBeNull();
+      expect(commentPlacement(anchor(1, "old", 4), 3, "r1")).toBeNull();
     });
     it("hides a comment on a revision that is neither FROM nor TO", () => {
-      expect(commentPlacement(anchor(2, "new", 9), 3, 1)).toBeNull();
+      expect(commentPlacement(anchor(2, "new", 9), 3, "r1")).toBeNull();
     });
   });
 
   it("never places a line-less (file-level) comment", () => {
-    expect(commentPlacement(anchor(2, "new", null), 2, undefined)).toBeNull();
+    expect(commentPlacement(anchor(2, "new", null), 2, "r2^")).toBeNull();
   });
 });
 
 describe("draftAnchor", () => {
   it("anchors a new-column draft to the selected revision", () => {
-    expect(draftAnchor("new", 3, undefined)).toEqual({
+    expect(draftAnchor("new", 3, "r3^")).toEqual({
       revision: 3,
       side: "new",
     });
-    expect(draftAnchor("new", 3, 1)).toEqual({ revision: 3, side: "new" });
+    expect(draftAnchor("new", 3, "r1")).toEqual({ revision: 3, side: "new" });
   });
 
   it("anchors a base old-column draft to the selected revision's parent", () => {
-    expect(draftAnchor("old", 3, undefined)).toEqual({
+    expect(draftAnchor("old", 3, "r3^")).toEqual({
       revision: 3,
       side: "old",
     });
   });
 
   it("anchors an interdiff old-column draft to the FROM revision's content", () => {
-    expect(draftAnchor("old", 3, 1)).toEqual({ revision: 1, side: "new" });
+    expect(draftAnchor("old", 3, "r1")).toEqual({ revision: 1, side: "new" });
   });
 
   it("is the inverse of commentPlacement", () => {
     for (const [selected, against] of [
-      [3, undefined],
-      [3, 1],
+      [3, "r3^"],
+      [3, "r1"],
     ] as const) {
       for (const column of ["old", "new"] as const) {
         const stored = draftAnchor(column, selected, against);
@@ -173,25 +173,25 @@ describe("draftAnchor", () => {
 
 describe("rangeSince", () => {
   it("offers the interdiff from the thread's revision to the latest", () => {
-    expect(rangeSince(anchor(1, "new", 5), 1, undefined, 3)).toEqual({
-      against: 1,
+    expect(rangeSince(anchor(1, "new", 5), 1, "r1^", 3)).toEqual({
+      against: "r1",
       selected: 3,
     });
   });
   it("offers nothing on the latest revision", () => {
-    expect(rangeSince(anchor(3, "new", 5), 3, undefined, 3)).toBeNull();
+    expect(rangeSince(anchor(3, "new", 5), 3, "r3^", 3)).toBeNull();
   });
   it("offers nothing while that range is on screen", () => {
-    expect(rangeSince(anchor(1, "new", 5), 3, 1, 3)).toBeNull();
+    expect(rangeSince(anchor(1, "new", 5), 3, "r1", 3)).toBeNull();
   });
   it("offers a change-level thread the range too", () => {
-    expect(rangeSince(anchor(1, "new", null), 1, undefined, 3)).toEqual({
-      against: 1,
+    expect(rangeSince(anchor(1, "new", null), 1, "r1^", 3)).toEqual({
+      against: "r1",
       selected: 3,
     });
   });
   it("offers nothing to an old-side thread, which the range would hide", () => {
-    expect(rangeSince(anchor(1, "old", 5), 1, undefined, 3)).toBeNull();
+    expect(rangeSince(anchor(1, "old", 5), 1, "r1^", 3)).toBeNull();
   });
 });
 
@@ -307,10 +307,10 @@ describe("anchorKind", () => {
 
   it("shows a file thread in every range, its own or not", () => {
     const t = { revision: 0, anchor: fileAnchor } satisfies CommentAnchor;
-    expect(threadInRange(t, 0, undefined)).toBe(true);
-    expect(threadInRange(t, 3, 2)).toBe(true);
+    expect(threadInRange(t, 0, "r0^")).toBe(true);
+    expect(threadInRange(t, 3, "r2")).toBe(true);
     // A line thread on the same revision has no column in that range.
-    expect(threadInRange(anchor(0, "new", 3), 3, 2)).toBe(false);
+    expect(threadInRange(anchor(0, "new", 3), 3, "r2")).toBe(false);
   });
 });
 
@@ -328,7 +328,7 @@ describe("portThreads", () => {
 
   it("shows a hidden thread at its ported place", () => {
     const t = ui({ id: 1, revision: 0, anchor: lineAnchor("new", 5) });
-    const shown = only(portThreads([t], ported, 2, undefined));
+    const shown = only(portThreads([t], ported, 2, "r2^"));
     expect(shown.ported).toEqual({ revision: 2, anchor: lineAnchor("new", 8) });
     expect(shownAt(shown)).toEqual(shown.ported);
     expect(shown.anchor).toEqual(lineAnchor("new", 5));
@@ -336,19 +336,19 @@ describe("portThreads", () => {
 
   it("keeps a thread the range already shows", () => {
     const t = ui({ id: 1, revision: 2, anchor: lineAnchor("new", 5) });
-    const shown = only(portThreads([t], ported, 2, undefined));
+    const shown = only(portThreads([t], ported, 2, "r2^"));
     expect(shown.ported).toBeUndefined();
     expect(shownAt(shown)).toBe(shown);
   });
 
   it("takes the first ported place the range shows", () => {
     const t = ui({ id: 1, revision: 0, anchor: lineAnchor("new", 5) });
-    expect(only(portThreads([t], ported, 2, 1)).ported?.revision).toBe(2);
+    expect(only(portThreads([t], ported, 2, "r1")).ported?.revision).toBe(2);
     // Vs base, FROM's tree is not shown, so only TO's place counts.
-    expect(only(portThreads([t], ported.slice(1), 2, undefined)).ported).toBe(
+    expect(only(portThreads([t], ported.slice(1), 2, "r2^")).ported).toBe(
       undefined,
     );
-    expect(only(portThreads([t], ported.slice(1), 2, 1)).ported).toEqual({
+    expect(only(portThreads([t], ported.slice(1), 2, "r1")).ported).toEqual({
       revision: 1,
       anchor: lineAnchor("new", 6),
     });
@@ -357,7 +357,7 @@ describe("portThreads", () => {
   it("leaves a thread the server did not port, and every draft-only thread", () => {
     const missing = ui({ id: 9, revision: 0, anchor: lineAnchor("new", 5) });
     const draftOnly = ui({ id: null, revision: 0 });
-    for (const t of portThreads([missing, draftOnly], ported, 2, undefined)) {
+    for (const t of portThreads([missing, draftOnly], ported, 2, "r2^")) {
       expect(t.ported).toBeUndefined();
     }
   });

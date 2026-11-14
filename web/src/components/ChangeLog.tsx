@@ -12,6 +12,7 @@ import { anchorAt, anchorFile, placementLine } from "../lib/comments";
 import { displayPath } from "../lib/diffview";
 import { shortSha } from "../lib/sha";
 import { timeAgo } from "../lib/time";
+import { isBase, revisionOf } from "../lib/version";
 import type { ChangeLogFeed, Note } from "../lib/useChangeLog";
 import { StatusChip } from "./badges";
 import { PublishedComment } from "./CommentThread";
@@ -250,8 +251,8 @@ const NoteRow = memo(function NoteRow({
           summary={
             <>
               attached <span className="mono">{p.name}</span> to{" "}
-              {p.version.endsWith("^")
-                ? `the base of ${p.version.slice(0, -1)}`
+              {isBase(p.version)
+                ? `the base of r${revisionOf(p.version)}`
                 : p.version}
             </>
           }

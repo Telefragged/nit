@@ -22,6 +22,7 @@ import type {
   RepoHistory,
   RepoList,
   TagList,
+  ChangeVersion,
   Whitespace,
 } from "./types";
 
@@ -107,16 +108,14 @@ export const getChangeDrafts = (id: number) =>
 export const getDiff = (
   changeNumber: number,
   revision: number,
-  against?: number,
+  against: ChangeVersion,
   whitespace: Whitespace = "compare",
 ) => {
-  const q = new URLSearchParams();
-  if (against !== undefined) q.set("against", `r${against}`);
+  const q = new URLSearchParams({ against });
   if (whitespace !== "compare") q.set("whitespace", whitespace);
-  const query = q.size > 0 ? `?${q}` : "";
   return request<Diff>(
     "GET",
-    `/changes/${changeNumber}/revisions/${revision}/diff${query}`,
+    `/changes/${changeNumber}/revisions/${revision}/diff?${q}`,
   );
 };
 
@@ -130,12 +129,11 @@ export const getFileLines = (
   changeNumber: number,
   revision: number,
   file: Pick<DiffFile, "path" | "old_path">,
-  against?: number,
+  against: ChangeVersion,
   whitespace: Whitespace = "compare",
 ) => {
-  const q = new URLSearchParams({ path: file.path });
+  const q = new URLSearchParams({ path: file.path, against });
   if (file.old_path !== undefined) q.set("old_path", file.old_path);
-  if (against !== undefined) q.set("against", `r${against}`);
   if (whitespace !== "compare") q.set("whitespace", whitespace);
   return request<FileLines>(
     "GET",
@@ -149,12 +147,11 @@ export const getFileLines = (
 export const getPorted = (
   changeNumber: number,
   revision: number,
-  against?: number,
+  against: ChangeVersion,
 ) => {
-  const q = against === undefined ? "" : `?against=r${against}`;
   return request<PortedComment[]>(
     "GET",
-    `/changes/${changeNumber}/revisions/${revision}/ported${q}`,
+    `/changes/${changeNumber}/revisions/${revision}/ported?against=${against}`,
   );
 };
 

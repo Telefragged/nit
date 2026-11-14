@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { LineAnchor, Side, Whitespace } from "../api/types";
+import type { LineAnchor, Side, ChangeVersion, Whitespace } from "../api/types";
 import type { DiffLink } from "../lib/diffLink";
 import { placementLine, type DiffRange } from "../lib/comments";
 
@@ -37,8 +37,8 @@ export interface ReviewCtx {
   /** The TO revision (right select) — the diff's new column. New-column
    * drafts anchor here, and comments place against this range. */
   selected: number;
-  /** The FROM side: undefined = base, else the interdiff's left revision. */
-  against: number | undefined;
+  /** The FROM side: the base, or the interdiff's left revision. */
+  against: ChangeVersion;
   /** The change's newest revision. */
   latestRevision: number;
   /** How the diff on screen compares whitespace. A reveal reads the file
