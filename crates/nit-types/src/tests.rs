@@ -7,7 +7,11 @@ use crate::domain::TagsPayload;
 use crate::domain::{Anchor, CommentInput, CommentRange, LineAnchor};
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
-use crate::testing::{sha, tags};
+use crate::domain::{Sha, Tag, Tags};
+
+const COMMIT: &str = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
+const PARENT: &str = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2";
+const FORK: &str = "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3";
 
 fn revision_entry() -> LogEntry {
     LogEntry {
@@ -15,9 +19,9 @@ fn revision_entry() -> LogEntry {
         position: 2,
         created_at: "t".to_string(),
         payload: LogPayload::Revision(RevisionPayload {
-            commit_sha: sha("a"),
-            parent_sha: sha("b"),
-            fork_sha: sha("c"),
+            commit_sha: Sha::new(COMMIT).expect("valid sha"),
+            parent_sha: Sha::new(PARENT).expect("valid sha"),
+            fork_sha: Sha::new(FORK).expect("valid sha"),
             message: "m".to_string(),
             resets_status: true,
         }),
@@ -30,10 +34,7 @@ fn log_entry_flattens_to_an_adjacent_tag() {
     assert_eq!(
         json,
         format!(
-            r#"{{"change_number":7,"position":2,"created_at":"t","kind":"revision","payload":{{"commit_sha":"{}","parent_sha":"{}","fork_sha":"{}","message":"m","resets_status":true}}}}"#,
-            sha("a"),
-            sha("b"),
-            sha("c")
+            r#"{{"change_number":7,"position":2,"created_at":"t","kind":"revision","payload":{{"commit_sha":"{COMMIT}","parent_sha":"{PARENT}","fork_sha":"{FORK}","message":"m","resets_status":true}}}}"#
         )
     );
 }
@@ -43,7 +44,7 @@ fn log_entry_round_trips() {
     let json = serde_json::to_string(&revision_entry()).expect("serialize");
     let back: LogEntry = serde_json::from_str(&json).expect("deserialize");
     match back.payload {
-        LogPayload::Revision(p) => assert_eq!(p.commit_sha, sha("a")),
+        LogPayload::Revision(p) => assert_eq!(p.commit_sha, Sha::new(COMMIT).expect("valid sha")),
         _ => panic!("expected a revision payload"),
     }
 }
@@ -53,9 +54,9 @@ fn payload_serializes_as_the_bare_inner_struct() {
     // The storage boundary serializes the inner struct alone (kind goes in its
     // own column) — never the adjacently-tagged LogPayload wrapper.
     let p = RevisionPayload {
-        commit_sha: sha("a"),
-        parent_sha: sha("b"),
-        fork_sha: sha("c"),
+        commit_sha: Sha::new(COMMIT).expect("valid sha"),
+        parent_sha: Sha::new(PARENT).expect("valid sha"),
+        fork_sha: Sha::new(FORK).expect("valid sha"),
         message: "m".to_string(),
         resets_status: true,
     };
@@ -63,10 +64,7 @@ fn payload_serializes_as_the_bare_inner_struct() {
     assert_eq!(
         json,
         format!(
-            r#"{{"commit_sha":"{}","parent_sha":"{}","fork_sha":"{}","message":"m","resets_status":true}}"#,
-            sha("a"),
-            sha("b"),
-            sha("c")
+            r#"{{"commit_sha":"{COMMIT}","parent_sha":"{PARENT}","fork_sha":"{FORK}","message":"m","resets_status":true}}"#
         )
     );
 }
@@ -74,7 +72,9 @@ fn payload_serializes_as_the_bare_inner_struct() {
 #[test]
 fn a_tags_payload_round_trips() {
     let p = TagsPayload {
-        tags: tags(&[("branch", "track/tags")]),
+        tags: [Tag::new("branch", "track/tags").expect("valid tag")]
+            .into_iter()
+            .collect::<Tags>(),
     };
     let json = serde_json::to_string(&p).expect("serialize");
     assert_eq!(json, r#"{"tags":{"branch":"track/tags"}}"#);
@@ -126,7 +126,7 @@ fn subscription_spells_its_query_like_the_change_list() {
     let msg = Subscription {
         query: ChangeQuery {
             repo: Some(1),
-            tag: vec![Tag::new("branch", "feat").expect("a tag")],
+            tag: vec![Tag::new("branch", "feat").expect("valid tag")],
             ..ChangeQuery::default()
         },
         positions: [(crate::domain::ChangeNumber::new(7), 3)].into(),
