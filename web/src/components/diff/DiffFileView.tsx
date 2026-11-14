@@ -79,6 +79,7 @@ import {
 import { useReview } from "../../pages/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
+import NewThreadEditor from "../NewThreadEditor";
 import Seg, { type SegOption } from "../Seg";
 import ThreadCount from "../ThreadCount";
 import DocBlock from "./DocBlock";
@@ -86,6 +87,7 @@ import GapSeparator from "./GapSeparator";
 import LineLink from "./LineLink";
 import RenderedView from "./RenderedView";
 import StatusMark from "./StatusMark";
+import { Button } from "../ui/button";
 
 /** A commented char window to tint on one line; `active` (brighter chrome)
  * marks the open editor's pending selection or the hovered thread's range. */
@@ -229,6 +231,8 @@ export default function DiffFileView({
     side: Side;
     at: LineAnchor | null;
   } | null>(null);
+
+  const [fileCommentOpen, setFileCommentOpen] = useState(false);
 
   const expansion = useHunkExpansion(file, ctx);
   const { hunks } = expansion;
@@ -970,11 +974,21 @@ export default function DiffFileView({
         {markCounts(threads).map(({ mark, count }) => (
           <ThreadCount key={mark} mark={mark} count={count} word />
         ))}
+        <Button
+          variant="ghost"
+          className="ml-auto"
+          onClick={() => {
+            setFileCommentOpen(true);
+            if (collapsed) onToggle();
+          }}
+        >
+          Comment on file
+        </Button>
       </header>
 
       {collapsed ? null : (
         <>
-          {fileThreads.length > 0 ? (
+          {fileThreads.length > 0 || fileCommentOpen ? (
             <div className="thread-group" data-threads="file">
               <div className="thread-group-title">File discussion</div>
               {fileThreads.map((t) => (
@@ -982,6 +996,16 @@ export default function DiffFileView({
                   <CommentThread thread={t} />
                 </div>
               ))}
+              {fileCommentOpen ? (
+                <div className="thread-group-item">
+                  <NewThreadEditor
+                    file={file.path}
+                    onClose={() => {
+                      setFileCommentOpen(false);
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
           ) : null}
 
