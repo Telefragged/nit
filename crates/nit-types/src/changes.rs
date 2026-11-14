@@ -25,11 +25,10 @@ use crate::domain::ThreadProjection;
 /// (`?status={s}&status={s}`) and matches each change's status at its
 /// **latest revision** (terminal states win). `tag` is repeatable too
 /// (`?tag=key=value&tag=key=value`); each one matches the change's tags,
-/// verbatim key and value, and every one given must match. There is no
-/// prefix, wildcard, or key-only form. `change` picks the change with that
-/// number, `change_id` the one with that `Change-Id`. Filters compose, so
-/// a tag match admits merged and abandoned changes like any other; narrow
-/// with `status` to exclude them.
+/// verbatim key and value, and every one given must match. `change` picks
+/// the change with that number, `change_id` the one with that
+/// `Change-Id`. Filters compose, so a tag match admits merged and
+/// abandoned changes like any other; narrow with `status` to exclude them.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema, utoipa::IntoParams)]
@@ -122,9 +121,8 @@ pub struct Revision {
 
 /// `POST /api/changes/{id}/tags` request: the tags to put on a change.
 ///
-/// Labelling is its own action, so it needs no push and no new revision.
-/// The tags land as a [`crate::domain::TagsPayload`], which says how they
-/// meet the tags the change already carries.
+/// The tags land as a [`crate::domain::TagsPayload`], which defines how
+/// they combine with the tags the change already has.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct TagsRequest {
     pub tags: Tags,
@@ -142,7 +140,7 @@ pub struct AbandonRequest {
 
 /// `GET /api/tags` response: every tag in use across one repo's changes.
 ///
-/// Each change contributes the tags it carries now, so a value a later
+/// Each change contributes its current tags, so a value that a later
 /// `tags` entry replaced does not appear. `status` is repeatable
 /// (`?status={s}&status={s}`) and admits only the changes at those
 /// statuses, as on the change read. Without it, terminal changes

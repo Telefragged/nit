@@ -1,12 +1,11 @@
-//! The names a thing is known by.
+//! The identifiers of changes, revisions and git objects.
 
 use serde::{Deserialize, Serialize};
 
 /// A change's identity: its `Change-Id` trailer, verbatim.
 ///
-/// It is carried in the commit message and survives the rewrites review
-/// provokes, which is what binds a new revision to the change it revises;
-/// a commit sha does not.
+/// It is stored in the commit message and survives the rewrites that
+/// review causes. So it binds a new revision to the change it revises.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "String")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -17,7 +16,7 @@ impl ChangeId {
     ///
     /// # Errors
     ///
-    /// [`ChangeIdError`], naming the rule the input broke.
+    /// [`ChangeIdError`], which identifies the rule the input broke.
     ///
     /// # Examples
     ///
@@ -66,8 +65,8 @@ impl TryFrom<String> for ChangeId {
     }
 }
 
-// Serialized by hand rather than `#[serde(transparent)]`, which serde
-// refuses to combine with the `try_from` that gates the way in.
+// serde rejects `#[serde(transparent)]` together with `try_from`, so
+// this impl serializes by hand.
 impl Serialize for ChangeId {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.0)
@@ -87,8 +86,6 @@ impl std::fmt::Display for ChangeId {
 }
 
 /// A git object name, in full: 40 hex characters.
-///
-/// Only display ever shortens it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "String")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -99,7 +96,7 @@ impl Sha {
     ///
     /// # Errors
     ///
-    /// [`ShaError`], naming the rule the input broke.
+    /// [`ShaError`], which identifies the rule the input broke.
     ///
     /// # Examples
     ///
@@ -143,8 +140,8 @@ impl TryFrom<String> for Sha {
     }
 }
 
-// Serialized by hand rather than `#[serde(transparent)]`, which serde
-// refuses to combine with the `try_from` that gates the way in.
+// serde rejects `#[serde(transparent)]` together with `try_from`, so
+// this impl serializes by hand.
 impl Serialize for Sha {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.0)
@@ -315,10 +312,11 @@ impl utoipa::PartialSchema for ChangeVersion {
 
 impl utoipa::ToSchema for ChangeVersion {}
 
-/// A change's number: the handle nit assigns it and everything carries.
+/// A change's number: the identifier that nit assigns and every
+/// component uses.
 ///
-/// Scoped to one nit instance, unlike the [`ChangeId`] that travels in the
-/// commit message.
+/// Scoped to one nit instance, unlike the [`ChangeId`] in the commit
+/// message.
 #[derive(
     Debug,
     Clone,

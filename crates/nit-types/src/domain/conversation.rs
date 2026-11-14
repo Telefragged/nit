@@ -85,8 +85,8 @@ pub enum Anchor {
 
 /// An anchor in either spelling, before it is an [`Anchor`].
 ///
-/// The log is append-only, so an entry written before a line anchor held
-/// one `at` keeps the `line` and `range` it was written with. Reading
+/// The log is append-only, so an entry written before a line anchor had
+/// one `at` keeps the `line` and `range` it was written with. Parsing
 /// resolves the two spellings into the same anchor.
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -123,7 +123,7 @@ impl From<StoredAnchor> for Anchor {
                 line,
                 range,
             } => {
-                // The older spelling held the selection in `range`, and the
+                // The older spelling stored the selection in `range`, and the
                 // line it ends on in `line`.
                 let at = at
                     .or_else(|| range.map(LineAnchor::Selection))
@@ -190,8 +190,7 @@ impl Anchor {
         }
     }
 
-    /// The text of the line, as the revision the anchor is pinned to
-    /// held it.
+    /// The text of the line in the revision the anchor is pinned to.
     #[must_use]
     pub fn line_text(&self) -> Option<&str> {
         match self {
@@ -200,8 +199,8 @@ impl Anchor {
         }
     }
 
-    /// Records the text of the line, read from the revision the anchor
-    /// is pinned to.
+    /// Records the text of the line in the revision the anchor is pinned
+    /// to.
     pub fn snapshot_line_text(&mut self, text: Option<String>) {
         if let Anchor::Line { line_text, .. } = self {
             *line_text = text;
@@ -242,9 +241,7 @@ pub struct ThreadComment {
 /// Selected-text anchor of a line comment.
 ///
 /// 1-based lines on the comment's side, 0-based chars, `end_char`
-/// exclusive, `end_line` = the comment's `line`. The JSON shape is these
-/// four fields. They are domain coordinates (always non-negative), so the
-/// shape is `u64`.
+/// exclusive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(try_from = "Selection")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -260,7 +257,7 @@ impl CommentRange {
     ///
     /// # Errors
     ///
-    /// [`CommentRangeError`], naming the rule the selection broke.
+    /// [`CommentRangeError`], which identifies the rule the selection broke.
     ///
     /// # Examples
     ///

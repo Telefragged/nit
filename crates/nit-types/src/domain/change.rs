@@ -1,4 +1,4 @@
-//! A change, and what folding its log says about it.
+//! A change, and what folding its log produces.
 
 use serde::{Deserialize, Serialize};
 
@@ -17,8 +17,7 @@ use super::Verdict;
 
 /// A change's terminal lifecycle, folded from its `lifecycle` entries.
 ///
-/// The merged commit's sha stays on the `merged` log entry, not here —
-/// the fold answers "is it merged", the log answers "as what".
+/// The sha of the merged commit is on the `merged` log entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
@@ -57,8 +56,6 @@ pub struct RevisionProjection {
 #[derive(utoipa::ToSchema)]
 pub struct ReviewProjection {
     /// The `position` of the `review` entry this is the fold of.
-    ///
-    /// A log coordinate, reproduced by replay with nothing stored.
     pub id: u64,
     pub revision: RevisionNumber,
     pub verdict: Verdict,
@@ -89,7 +86,7 @@ pub struct ChangeProjection {
     pub next_thread_id: u64,
     /// Count of entries folded = the next unconsumed `position`.
     ///
-    /// A high-water mark, carried in the projection so a resumed fold
+    /// A high-water mark, stored in the projection so a resumed fold
     /// starts at the right boundary and stays idempotent across the
     /// overlap.
     pub entries_folded: u64,
@@ -278,7 +275,7 @@ impl ChangeProjection {
     /// How many of the change's threads are unresolved.
     ///
     /// An open thread is owed an answer whichever revision it was written
-    /// on, so the count is the change's and not a revision's.
+    /// on, so the count covers the threads of every revision.
     #[must_use]
     pub fn unresolved(&self) -> usize {
         self.threads.iter().filter(|t| !t.resolved).count()
@@ -320,10 +317,9 @@ impl ChangeProjection {
 
     /// Resolves a comment's thread id and keeps `next_thread_id` past it.
     ///
-    /// `next_thread_id` is the single source of truth. Called before each
-    /// fold: a live append mints (the stored payload then carries the id)
-    /// while replay, seeing the id already set, only advances the
-    /// counter — no double count.
+    /// Called before each fold. A live append mints the id, and the stored
+    /// payload then contains it. Replay finds the id already set and only
+    /// advances the counter.
     pub fn mint_thread_id(&mut self, comment: &mut CommentInput) {
         if comment.thread_id.is_none() && !comment.body.trim().is_empty() {
             comment.thread_id = Some(self.next_thread_id);

@@ -11,8 +11,7 @@ pub struct Repo {
     pub git_dir: String,
     /// The one canonical ref; mergedness tracks it.
     pub canonical_ref: String,
-    /// How many changes are neither merged nor abandoned (derived, never
-    /// stored).
+    /// How many changes are neither merged nor abandoned.
     pub open_changes: u64,
 }
 
@@ -25,7 +24,7 @@ pub struct RepoList {
 
 /// `POST /api/repos` request — register a repo (`nit repo create`).
 ///
-/// `canonical_ref` names the ref the repo tracks; it must resolve to a
+/// `canonical_ref` is the ref the repo tracks; it must resolve to a
 /// commit — any git ref, e.g. `origin/main`.
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateRepo {

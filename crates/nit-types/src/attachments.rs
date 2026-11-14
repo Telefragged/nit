@@ -7,7 +7,7 @@ use crate::domain::AttachmentHash;
 /// `PUT /api/attachments` response: the stored blob.
 ///
 /// The upload stores bytes only. An attachment exists once an attach
-/// entry names this hash on a revision.
+/// entry on a revision contains this hash.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]

@@ -9,10 +9,6 @@
 //!
 //! Conventions: every non-2xx response is the [`error`] envelope and times
 //! are RFC3339 strings.
-//!
-//! Dependency-light by construction — `serde` only (the `clap` derive on
-//! `Side` is feature-gated off) and never `serde_json::Value` — so a future
-//! web build can share these types without pulling in the server.
 
 pub mod attachments;
 pub mod changes;
@@ -33,6 +29,5 @@ pub mod repos;
 #[cfg(test)]
 mod tests;
 
-// The single-file TypeScript export of the web-facing wire types.
 #[cfg(all(test, feature = "ts"))]
 mod export;

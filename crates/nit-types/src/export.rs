@@ -1,12 +1,12 @@
 //! Drift guard for `web/src/api/types.gen.ts`: with the `ts` feature this test
 //! concatenates every web-facing wire type's ts-rs declaration, and the wire's
-//! constants, into one module
-//! and writes it where the `gen-types` app / `types-drift` check ask (the
-//! `TYPES_GEN_OUT` env var). The exact TS shapes come from the types' own
-//! `ts`/`serde` attributes and their doc-comments, so a term defined on a wire
-//! type reaches the web with it; this file only fixes their order. No
-//! `TYPES_GEN_OUT`
-//! means a no-op, so `cargo test --features ts` stays read-only.
+//! constants, into one module. It writes the module to the path in the
+//! `TYPES_GEN_OUT` env var, which the `gen-types` app and the `types-drift`
+//! check set. The exact TS shapes come from the types' own `ts`/`serde`
+//! attributes and their doc-comments, so a term defined on a wire type reaches
+//! the web with it; this file only fixes their order. Without
+//! `TYPES_GEN_OUT` the test is a no-op, so `cargo test --features ts` stays
+//! read-only.
 
 use std::fmt::Write as _;
 
@@ -74,8 +74,6 @@ fn write_wire_types() {
         crate::decisions::BatchSubmitResult,
         crate::decisions::SubmitError,
         crate::changes::TagList,
-        // The websocket event stream: the change page folds these
-        // client-side.
         crate::domain::RevisionPayload,
         crate::domain::TagsPayload,
         crate::domain::ReviewPayload,
@@ -87,8 +85,6 @@ fn write_wire_types() {
         crate::events::Subscription,
         crate::events::StreamMessage,
         crate::events::Start,
-        // The folded projection the server ships over the stream; the web
-        // holds it opaque and only round-trips it through the wasm fold.
         crate::domain::Lifecycle,
         crate::domain::Anchor,
         crate::domain::LineAnchor,

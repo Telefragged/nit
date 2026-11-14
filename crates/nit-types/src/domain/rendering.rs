@@ -31,7 +31,7 @@ pub enum FileStatus {
 /// Whether whitespace is part of a line's identity.
 ///
 /// `Compare` compares a line as its whole text. `Ignore` compares two
-/// lines as one line when they hold the same characters apart from
+/// lines as one line when they contain the same characters apart from
 /// whitespace, so the diff does not show a block that was only
 /// re-indented.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

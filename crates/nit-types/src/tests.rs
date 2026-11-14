@@ -52,7 +52,7 @@ fn log_entry_round_trips() {
 #[test]
 fn payload_serializes_as_the_bare_inner_struct() {
     // The storage boundary serializes the inner struct alone (kind goes in its
-    // own column) — never the adjacently-tagged LogPayload wrapper.
+    // own column).
     let p = RevisionPayload {
         commit_sha: Sha::new(COMMIT).expect("valid sha"),
         parent_sha: Sha::new(PARENT).expect("valid sha"),
@@ -182,7 +182,7 @@ fn a_comment_logged_before_the_anchor_still_reads() {
 
 #[test]
 fn an_anchor_logged_before_the_line_anchor_still_reads() {
-    // The spelling an entry was written with when a line anchor held its
+    // The spelling an entry was written with when a line anchor stored its
     // line and its range side by side.
     let whole = r#"{"line":{"file":"a.rs","side":"new","line":3,
         "line_text":"x","range":null}}"#;
