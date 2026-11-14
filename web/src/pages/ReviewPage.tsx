@@ -1,9 +1,4 @@
-import {
-  skipToken,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -21,13 +16,7 @@ import {
   useNavigationType,
   useParams,
 } from "react-router-dom";
-import {
-  createDraft,
-  getChangeDrafts,
-  getDiff,
-  getPorted,
-  getRepo,
-} from "../api/client";
+import { getChangeDrafts, getDiff, getPorted, getRepo } from "../api/client";
 import { tagGraph } from "../api/fold";
 import type {
   ChangeDetail,
@@ -40,7 +29,7 @@ import type {
 import { StatusChip } from "../components/badges";
 
 import TagNav from "../components/TagNav";
-import CommentEditor from "../components/CommentEditor";
+import NewThreadEditor from "../components/NewThreadEditor";
 import ChangeLog from "../components/ChangeLog";
 import CommentThread from "../components/CommentThread";
 import DiffFileView from "../components/diff/DiffFileView";
@@ -288,7 +277,6 @@ export default function ReviewPage() {
   // that cache (skipToken — never fetches). The diff, the repo, and the
   // reviewer's drafts/draft decision are not in the log, so they stay REST; `change` composes the published projection with the drafts
   // overlay (`useDrafts`).
-  const queryClient = useQueryClient();
 
   const publishedQ = useQuery<ChangeDetail>({
     queryKey: ["change", changeNumber],
@@ -677,17 +665,6 @@ export default function ReviewPage() {
 
   const navigate = useNavigate();
   const fileCount = files.length;
-
-  const createChangeComment = useMutation({
-    mutationFn: (body: string) =>
-      createDraft(changeNumber, { revision: selected, body }),
-    onSuccess: () => {
-      setChangeCommentOpen(false);
-      void queryClient.invalidateQueries({
-        queryKey: ["drafts", changeNumber],
-      });
-    },
-  });
 
   // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
   // expanded, then scrolled), n / shift+n next/previous change, r the latest
@@ -1139,13 +1116,8 @@ export default function ReviewPage() {
                   <CommentThread key={threadKey(t)} thread={t} />
                 ))}
                 {changeCommentOpen ? (
-                  <CommentEditor
-                    placeholder="Comment on the whole change…"
-                    saving={createChangeComment.isPending}
-                    onSave={(body) => {
-                      createChangeComment.mutate(body);
-                    }}
-                    onCancel={() => {
+                  <NewThreadEditor
+                    onClose={() => {
                       setChangeCommentOpen(false);
                     }}
                   />

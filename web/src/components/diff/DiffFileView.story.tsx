@@ -116,7 +116,25 @@ const THREADS: UiThread[] = [
   }),
 ];
 
-function Section({ layout }: { layout: "unified" | "split" }) {
+/** A thread on the whole file. */
+const FILE_THREAD = uiThread({
+  id: 5,
+  anchor: { file: { file: PATH } },
+  comments: [
+    threadComment(
+      30,
+      "Move the rotation into its own module, beside the store.",
+    ),
+  ],
+});
+
+function Section({
+  layout,
+  threads = THREADS,
+}: {
+  layout: "unified" | "split";
+  threads?: UiThread[];
+}) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <MemoryRouter>
@@ -126,7 +144,7 @@ function Section({ layout }: { layout: "unified" | "split" }) {
             <DiffFileView
               file={FILE}
               layout={layout}
-              threads={THREADS}
+              threads={threads}
               domId="file-0"
               collapsed={collapsed}
               onToggle={() => {
@@ -150,4 +168,9 @@ export function Unified() {
 /** The same file with the old and the new side in two columns. */
 export function Split() {
   return <Section layout="split" />;
+}
+
+/** A thread on the whole file. */
+export function FileThread() {
+  return <Section layout="unified" threads={[FILE_THREAD]} />;
 }

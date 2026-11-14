@@ -450,7 +450,9 @@ button.rail-toggle,
   cursor: pointer; /* the header toggles the section's collapse */
 }
 
-.file-header:hover {
+/* A click on a link or a button in the header does not toggle the file, so
+   the header shows no hover fill while the pointer is on one. */
+.file-header:hover:not(:has(a:hover, button:hover)) {
   background: var(--color-accent);
 }
 

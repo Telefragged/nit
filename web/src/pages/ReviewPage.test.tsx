@@ -3,7 +3,7 @@
 // the full r1 diff: /COMMIT_MSG, src/auth/rotate.rs, src/auth/store.rs,
 // tests/rotation.rs — i.e. file-0 .. file-3.
 
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { Link, Route, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -930,5 +930,35 @@ describe("links to a comment thread", () => {
       thread(75).closest('[data-threads="displaced"]')?.closest("section"),
     ).toBe(byPath("src/auth/rotate.rs"));
     expect(scrolled).toEqual([thread(75)]);
+  });
+});
+
+// The saved draft stays in the module's fixtures, so this test uses a file
+// that no other test counts threads on.
+describe("the comment on file button", () => {
+  it("expands a collapsed file, and saves a draft on the whole file", async () => {
+    const { settle } = await renderReview();
+    const rotation = byPath("tests/rotation.rs");
+    expect(isExpanded(rotation)).toBe(false);
+    const group = () =>
+      must(
+        rotation.querySelector<HTMLElement>('[data-threads="file"]'),
+        "file thread group on rotation.rs",
+      );
+
+    fireEvent.click(
+      within(rotation).getByRole("button", { name: "Comment on file" }),
+    );
+    expect(isExpanded(rotation)).toBe(true);
+    fireEvent.change(must(group().querySelector("textarea"), "textarea"), {
+      target: { value: "Cover the expiry too" },
+    });
+    fireEvent.click(
+      within(group()).getByRole("button", { name: "Save draft" }),
+    );
+    await settle();
+
+    expect(group().querySelector("textarea")).toBeNull();
+    expect(group().textContent).toContain("Cover the expiry too");
   });
 });
