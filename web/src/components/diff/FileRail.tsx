@@ -114,8 +114,10 @@ const Chevron = ({ open }: { open: boolean }) => (
   />
 );
 
-/** The left padding of a row `depth` levels down the tree. */
-const indent = (depth: number) => ({ paddingLeft: depth * 12 + 4 });
+/** The left padding of a row `depth` levels down the tree. One level is
+ * the width of a toggle and its margin (`.rail-toggle`), so the toggle of
+ * a row is under the icon of its directory. */
+const indent = (depth: number) => ({ paddingLeft: depth * 19 + 4 });
 
 /** `set` with `key` added, or removed when it holds it. */
 function flip(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
