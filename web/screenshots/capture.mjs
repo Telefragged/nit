@@ -28,7 +28,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
@@ -1045,13 +1045,19 @@ async function withinLimit(work) {
   }
 }
 
-/** Renders `cap` in a new page of `context`, and writes its PNG and its
- * HTML snapshot. */
-async function capture(context, baseUrl, cap) {
+/** Renders `cap` in a new context of `browser`, and writes its PNG and its
+ * HTML snapshot. Each capture gets a context of its own, so captures that
+ * run at the same time share no storage. */
+async function capture(browser, baseUrl, cap) {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    colorScheme: cap.colorScheme ?? "dark",
+    reducedMotion: "reduce",
+  });
+  // No single wait has a time limit. Each wait ends on the event that
+  // produces its state, and withinLimit bounds a hung capture as a whole.
+  context.setDefaultTimeout(0);
   const page = await context.newPage();
-  // A capture is dark unless it sets `colorScheme`.
-  if (cap.colorScheme)
-    await page.emulateMedia({ colorScheme: cap.colorScheme });
   await page.route("**/api/attachments/**", (route) => {
     const hash = new URL(route.request().url()).pathname.split("/")[3];
     const blob = ATTACHMENT_BLOBS[hash];
@@ -1095,7 +1101,7 @@ async function capture(context, baseUrl, cap) {
     `captured ${cap.name}.png${errors.length ? `  PAGE ERRORS: ${errors.join("; ")}` : ""}`,
   );
   if (errors.length) process.exitCode = 1;
-  await page.close();
+  await context.close();
 }
 
 async function main() {
@@ -1127,29 +1133,19 @@ async function main() {
         : [],
       timeout: 0,
     });
-    const context = await browser.newContext({
-      viewport: { width: 1440, height: 900 },
-      colorScheme: "dark",
-      reducedMotion: "reduce",
-    });
-    // No single wait has a time limit. Each wait ends on the event that
-    // produces its state, and withinLimit bounds a hung capture as a whole.
-    context.setDefaultTimeout(0);
-    // Keep captures order-independent (e.g. the persisted diff layout).
-    // A sandboxed attachment frame has no storage to clear, and reading it
-    // there throws.
-    await context.addInitScript(() => {
-      if (window === window.top) localStorage.clear();
-    });
-
-    for (const cap of captures) {
-      try {
-        await withinLimit(capture(context, baseUrl, cap));
-      } catch (err) {
-        err.message = `capture ${cap.name}: ${err.message}`;
-        throw err;
-      }
-    }
+    const queue = [...captures];
+    await Promise.all(
+      Array.from({ length: availableParallelism() }, async () => {
+        for (let cap = queue.shift(); cap; cap = queue.shift()) {
+          try {
+            await withinLimit(capture(browser, baseUrl, cap));
+          } catch (err) {
+            err.message = `capture ${cap.name}: ${err.message}`;
+            throw err;
+          }
+        }
+      }),
+    );
 
     await browser.close();
     console.log(`done → ${outDir}`);
