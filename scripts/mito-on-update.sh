@@ -6,6 +6,18 @@
 #   [base]
 #   on-update = "scripts/mito-on-update.sh"
 set -euo pipefail
+
+# Cargo loads the fingerprint files of every unit that a build needs, also
+# of a fresh unit. If the access time of a file is older than its
+# modification time, the load sets the access time to now, also under
+# relatime. So after the builds, a unit whose fingerprint files still have
+# access time 0 is stale. On a noatime mount, every unit that the builds
+# do not compile is stale.
+fingerprints=target/debug/.fingerprint
+if [[ -d $fingerprints ]]; then
+  find "$fingerprints" -type f -exec touch -a -d @0 {} +
+fi
+
 nix develop -c sh -euc '
   cargo check
   cargo check --all-targets
@@ -15,6 +27,24 @@ nix develop -c sh -euc '
   npm ci
   gen-wasm
 '
+
+# Deletes the stale units. The name of every file and directory of a unit
+# ends in the unit hash, as in deps/libsyn-100700be8507aff7.rlib.
+declare -A stale
+for unit in "$fingerprints"/*; do
+  stale[${unit##*-}]=1
+done
+live=$(find "$fingerprints" -type f -newerat @0 -printf '%h\n')
+for unit in $live; do
+  unset "stale[${unit##*-}]"
+done
+for path in "$fingerprints"/* target/debug/{build,deps}/* target/debug/*; do
+  name=${path##*/}
+  name=${name%%.*}
+  if [[ -v stale[${name##*-}] ]]; then
+    rm -rf "$path"
+  fi
+done
 
 # Every derivation that the flake outputs for this system: the packages,
 # checks, dev shells and formatter, and the programs of the apps.
