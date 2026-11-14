@@ -21,13 +21,12 @@ nit-types = { path = "crates/nit-types" }
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
-# Suppressions must be #[expect] (flagged when stale) and say why.
+# Suppressions must be #[expect] (flagged when stale) and contain a reason.
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 
-# Fires on deliberately parallel names (change1/change2, draft_b/draft_c).
+# Fires on parallel names such as change1/change2 and draft_b/draft_c.
 similar_names = "allow"
 
 [workspace.lints.rust]
-# Warnings are errors everywhere — local `cargo` and the nix lint gate alike.
 warnings = "deny"

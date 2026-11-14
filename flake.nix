@@ -30,9 +30,9 @@
               inherit system;
               overlays = [
                 rust-overlay.overlays.default
-                # Build the npm-deps prefetcher with our pinned toolchain, not a
-                # second stock rustc. auditable off: cargo-auditable is its last
-                # edge back.
+                # Build the npm-deps prefetcher with the pinned toolchain, so
+                # the build closure contains one rustc. cargo-auditable is
+                # built with the stock rustc, so auditable is off.
                 (final: prev: {
                   prefetch-npm-deps = prev.prefetch-npm-deps.override {
                     rustPlatform =
@@ -77,8 +77,6 @@
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = with pkgs; [
-            # Rust backend — rustc/cargo/clippy/rustfmt/rust-analyzer all
-            # come from the one pinned toolchain.
             (rustFor pkgs).toolchain
             pkg-config
             sqlite
@@ -111,7 +109,6 @@
             shfmt
             taplo
 
-            # Screenshot harness / frontend checking
             playwright-driver
           ];
 
@@ -131,9 +128,8 @@
         in
         rec {
           inherit nit-web;
-          # Build only; tests live in the `test` check (the build/verify split).
-          # The crate's build.rs reads the git suffix, and it compiles in the
-          # web UI that NIT_WEB_DIST names.
+          # Build only; tests live in the `test` check. The crate's build.rs
+          # uses the git suffix, and it compiles in the web UI at NIT_WEB_DIST.
           nit = (rustFor pkgs).cargoNix.workspaceMembers."nit".build.overrideAttrs (_: {
             NIT_GIT_SUFFIX = gitSuffix;
             NIT_WEB_DIST = nit-web;
@@ -175,9 +171,8 @@
             installPhase = "touch $out";
           };
           # Also clippy-checks the test targets (lib/bins are linted in every
-          # build). Tests run here, not in `nix build`. Rustdoc rides the same
-          # build (rustdocPostBuild in rust.nix): the docs render and
-          # the doc tests run.
+          # build). Rustdoc runs in the same build (rustdocPostBuild in
+          # rust.nix): the docs render and the doc tests run.
           test = rust.nextest "nit";
           # Build and round-trip-test nit-types with NO optional features —
           # the no-feature baseline an optional feature (the server's
