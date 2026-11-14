@@ -1128,9 +1128,14 @@ async function main() {
     // check sets NIT_SCREENSHOT_NO_SANDBOX to drop both. Never set it for
     // host runs — it removes a real privilege boundary around page content.
     const browser = await chromium.launch({
-      args: process.env.NIT_SCREENSHOT_NO_SANDBOX
-        ? ["--no-sandbox", "--disable-dev-shm-usage"]
-        : [],
+      args: [
+        // With partial raster, the edge pixels of some boxes differ from
+        // one run to the next.
+        "--disable-partial-raster",
+        ...(process.env.NIT_SCREENSHOT_NO_SANDBOX
+          ? ["--no-sandbox", "--disable-dev-shm-usage"]
+          : []),
+      ],
       timeout: 0,
     });
     const queue = [...captures];
