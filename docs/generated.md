@@ -11,6 +11,11 @@ changing `web/package-lock.json` means refreshing the `hash` of
 prints it); a stale hash breaks `nix build` and every
 `nix run '…?ref=main#nit'` CLI invocation.
 
+After a dependency change, regenerate `crates/workspace-hack` with
+`nix develop -c cargo hakari generate` and
+`nix develop -c cargo hakari manage-deps`, then regenerate `Cargo.nix`. A
+stale workspace-hack fails the `hakari` check.
+
 ## Wire types
 
 The web's wire types (`web/src/api/types.gen.ts`) are generated the same

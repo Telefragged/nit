@@ -86,6 +86,8 @@
 
             # Regenerates Cargo.nix
             crate2nix
+            # Regenerates crates/workspace-hack (docs/generated.md).
+            cargo-hakari
 
             # `gen-wasm`, on PATH here, writes web/src/wasm (docs/generated.md).
             # wasm-bindgen-cli's version is pinned to nit-wasm's
@@ -194,6 +196,32 @@
             fi
             touch $out
           '';
+          # crate2nix resolves features once per root crate, so without the
+          # workspace-hack crate, a dependency that two roots use with
+          # different features compiles twice.
+          hakari = pkgs.stdenvNoCC.mkDerivation {
+            name = "hakari-check";
+            src = pkgs.lib.fileset.toSource {
+              root = ./.;
+              fileset = pkgs.lib.fileset.unions [
+                ./Cargo.toml
+                ./Cargo.lock
+                ./.config/hakari.toml
+                ./crates
+              ];
+            };
+            nativeBuildInputs = [
+              rust.toolchain
+              pkgs.cargo-hakari
+              pkgs.rustPlatform.cargoSetupHook
+            ];
+            cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
+            buildPhase = ''
+              cargo hakari generate --diff
+              cargo hakari manage-deps --dry-run
+            '';
+            installPhase = "touch $out";
+          };
         }
         // (webFor pkgs).checks
       );
