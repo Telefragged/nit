@@ -1,7 +1,7 @@
 # The home-manager module: `programs.nit` puts nit on PATH and installs
 # its Claude Code plugin, through `programs.claude-code` when that module
 # is enabled. `services.nit` runs the review server as a systemd user
-# service.
+# service, and enables `programs.nit` by default.
 self:
 {
   config,
@@ -43,6 +43,7 @@ in
     # A new package changes the unit, and the switch restarts a changed
     # unit.
     (lib.mkIf config.services.nit.enable {
+      programs.nit.enable = lib.mkDefault true;
       systemd.user.services.nit = {
         Unit.Description = "nit review server";
         Service = {
