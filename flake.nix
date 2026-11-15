@@ -141,7 +141,7 @@
           contract = (rustFor pkgs).contract;
           # The plugin directory at the store path's root, the shape that
           # home-manager's `programs.claude-code.plugins` accepts.
-          claude-plugin = pkgs.runCommandLocal "nit-claude-plugin" { } "cp -r ${./plugins/nit} $out";
+          claude-plugin = pkgs.runCommandLocal "nit-claude-plugin" { } "cp -r ${./crates/nit/plugin} $out";
         }
       );
 
