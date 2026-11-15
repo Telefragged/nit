@@ -5,8 +5,8 @@
 //! check set. The exact TS shapes come from the types' own `ts`/`serde`
 //! attributes and their doc-comments, so a term defined on a wire type reaches
 //! the web with it; this file only fixes their order. Without
-//! `TYPES_GEN_OUT` the test is a no-op, so `cargo test --features ts` stays
-//! read-only.
+//! `TYPES_GEN_OUT` the test is a no-op, so `cargo nextest run --features ts`
+//! stays read-only.
 
 use std::fmt::Write as _;
 
