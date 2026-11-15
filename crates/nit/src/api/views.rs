@@ -20,7 +20,6 @@ pub fn draft_view(d: &db::DraftRow) -> Draft {
         id: d.id,
         change_number: d.change_number,
         thread_id: d.thread_id,
-        revision: d.revision,
         anchor: d.anchor.clone(),
         body: d.body.clone(),
         resolved: d.resolved.unwrap_or(false),

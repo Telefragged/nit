@@ -5,7 +5,12 @@ import { Link } from "react-router-dom";
 import { createDraft, deleteDraft, updateDraft } from "../api/client";
 import type { Draft, ThreadComment } from "../api/types";
 import type { UiThread } from "../lib/comments";
-import { anchorKind, pendingResolved, rangeSince } from "../lib/comments";
+import {
+  anchorKind,
+  anchorRevision,
+  pendingResolved,
+  rangeSince,
+} from "../lib/comments";
 import { linksThread } from "../lib/diffLink";
 import { timeAgo } from "../lib/time";
 import { baseVersion } from "../lib/version";
@@ -210,13 +215,9 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
   const resolved = pendingResolved(thread);
   const pending = resolved !== thread.resolved;
 
-  // A reply reuses the thread's anchor and revision. Its coordinates then
-  // match the thread's own, like the server's author replies.
   const saveDraft = useMutation({
     mutationFn: (vars: { body: string; resolved?: boolean }) =>
       createDraft(changeNumber, {
-        revision: thread.revision,
-        anchor: thread.anchor,
         body: vars.body,
         // Always a published thread here — the reply / resolve / reopen
         // actions render only when `thread.id !== null` (the !isDraftThread
@@ -239,12 +240,13 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
     (resolved &&
       !linked &&
       thread.drafts.every((d) => d.body.trim().length === 0));
-  const since = rangeSince(thread, selected, against, latestRevision);
+  const since = rangeSince(thread.anchor, selected, against, latestRevision);
+  const revision = anchorRevision(thread.anchor);
   // A ported line thread whose lines the amend rewrote is shown on its file.
   const lineLost =
     thread.ported !== undefined &&
     anchorKind(thread.anchor) === "line" &&
-    anchorKind(thread.ported.anchor) !== "line";
+    anchorKind(thread.ported) !== "line";
 
   const classes = `thread${isDraftThread ? " thread-draft" : ""}${
     linked ? " thread-linked" : ""
@@ -312,12 +314,12 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
           title="Show the revision this thread was written on"
           onClick={() => {
             showRange({
-              against: baseVersion(thread.revision),
-              selected: thread.revision,
+              against: baseVersion(revision),
+              selected: revision,
             });
           }}
         >
-          ported from r{thread.revision}
+          ported from r{revision}
           {lineLost ? ", line rewritten" : ""}
         </Button>
       ) : null}

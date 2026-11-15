@@ -6,11 +6,11 @@
 
 use anyhow::{Result, bail};
 
-use nit_types::domain::Anchor;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::LineAnchor;
+use nit_types::domain::LogAnchor;
 use nit_types::domain::Tags;
 use nit_types::domain::ThreadProjection;
 use nit_types::domain::{CommentInput, LogEntry, LogPayload};
@@ -167,7 +167,7 @@ pub(crate) fn print_comment(thread: &ThreadProjection, change_number: ChangeNumb
         println!(
             "opened thread {} on change {change_number}  {}  {state}",
             thread.id,
-            anchor_label(&thread.anchor),
+            anchor_label(&thread.anchor.clone().into_log().1),
         );
     }
 }
@@ -262,7 +262,7 @@ fn render_comment(c: &CommentInput, quote: Option<String>) -> String {
 ///
 /// A `quote` of the anchored lines contains both, so it replaces the label
 /// and the body.
-fn shown(c: &CommentInput, quote: Option<String>) -> (Option<&Anchor>, String) {
+fn shown(c: &CommentInput, quote: Option<String>) -> (Option<&LogAnchor>, String) {
     match quote {
         Some(quote) => (None, quote),
         None => (c.anchor.as_ref(), c.body.clone()),
@@ -270,7 +270,7 @@ fn shown(c: &CommentInput, quote: Option<String>) -> (Option<&Anchor>, String) {
 }
 
 /// The `thread N (location)` target of an author `comment` entry.
-fn comment_target(thread_id: Option<u64>, anchor: Option<&Anchor>) -> Option<String> {
+fn comment_target(thread_id: Option<u64>, anchor: Option<&LogAnchor>) -> Option<String> {
     let tid = thread_id?;
     Some(match anchor {
         Some(anchor) => format!("thread {tid} ({})", anchor_label(anchor)),
@@ -282,16 +282,16 @@ fn comment_target(thread_id: Option<u64>, anchor: Option<&Anchor>) -> Option<Str
 ///
 /// `(change-level)`, `file`, `file:line`, or the full
 /// `file:start_line:start_char-end_line:end_char` for a selection.
-fn anchor_label(anchor: &Anchor) -> String {
+fn anchor_label(anchor: &LogAnchor) -> String {
     match anchor {
-        Anchor::Change => "(change-level)".to_string(),
-        Anchor::File { file } => file.clone(),
-        Anchor::Line {
+        LogAnchor::Change => "(change-level)".to_string(),
+        LogAnchor::File { file } => file.clone(),
+        LogAnchor::Line {
             file,
             at: LineAnchor::Whole(line),
             ..
         } => format!("{file}:{line}"),
-        Anchor::Line {
+        LogAnchor::Line {
             file,
             at: LineAnchor::Selection(r),
             ..
@@ -409,16 +409,16 @@ mod tests {
                 verdict: Verdict::RequestChanges,
                 message: "Cover one.\nCover two.".to_string(),
                 comments: vec![
-                    opening(3, Anchor::Change, None, "Change-level question?"),
+                    opening(3, LogAnchor::Change, None, "Change-level question?"),
                     opening(
                         4,
-                        Anchor::line("src/queue.rs".into(), Side::New, LineAnchor::Whole(42)),
+                        LogAnchor::line("src/queue.rs".into(), Side::New, LineAnchor::Whole(42)),
                         None,
                         "Bounded channel.",
                     ),
                     opening(
                         5,
-                        Anchor::line(
+                        LogAnchor::line(
                             "src/queue.rs".into(),
                             Side::New,
                             LineAnchor::Selection(
@@ -485,7 +485,7 @@ mod tests {
 
     #[test]
     fn tagged_digest_lists_changes_by_number_at_their_latest_revision() {
-        use nit_types::domain::{Lifecycle, RevisionProjection, ThreadProjection};
+        use nit_types::domain::{Anchor, Lifecycle, RevisionProjection, ThreadProjection};
         let revision = |number: u64, message: &str| RevisionProjection {
             number: RevisionNumber::new(number),
             commit_sha: Sha::new("0000000000000000000000000000000000000000").expect("valid sha"),
@@ -499,8 +499,9 @@ mod tests {
         };
         let thread = |revision: u64, resolved: bool| ThreadProjection {
             id: 0,
-            revision: RevisionNumber::new(revision),
-            anchor: Anchor::Change,
+            anchor: Anchor::Change {
+                revision: RevisionNumber::new(revision),
+            },
             resolved,
             comments: vec![],
             created_at: String::new(),

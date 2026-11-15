@@ -12,10 +12,9 @@ use nit_types::domain::Draft;
 
 use crate::db;
 
-use super::state::git_dir;
 use super::views;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
-use super::{anchor_of, change_or_404, snapshot_line_text};
+use super::{change_or_404, new_thread_anchor};
 
 #[utoipa::path(post, path = "/api/changes/{id}/drafts", params(("id" = ChangeNumber, Path)), request_body = NewDraft, responses((status = 200, body = Draft)))]
 pub(super) async fn create_draft(
@@ -25,38 +24,27 @@ pub(super) async fn create_draft(
 ) -> Result<Json<Draft>, Error> {
     with_conn(state.pool(), move |conn| {
         let proj = change_or_404(conn, id)?;
-        let revision = proj
-            .revision(req.revision)
-            .ok_or_else(|| Error::bad_request(format!("revision {} not found", req.revision)))?;
-        let mut anchor = anchor_of(req.anchor.clone())?;
         let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
         if req.body.trim().is_empty() && !resolution_only {
             return Err(Error::bad_request(
                 "a draft needs a body, or a thread_id with a resolution decision",
             ));
         }
-        let thread_id = match req.thread_id {
-            Some(tid) => {
-                if proj.thread(tid).is_none() {
-                    return Err(Error::bad_request("thread not found on this change"));
-                }
-                Some(tid)
-            }
-            None => None,
+        let anchor = if let Some(tid) = req.thread_id {
+            proj.thread(tid)
+                .ok_or_else(|| Error::bad_request("thread not found on this change"))?
+                .anchor
+                .clone()
+        } else {
+            let anchor = req
+                .anchor
+                .ok_or_else(|| Error::bad_request("a new thread needs an anchor"))?;
+            new_thread_anchor(&state, conn, &proj, anchor)?
         };
-        let git_dir = git_dir(conn, proj.repo_id)?;
-        anchor.snapshot_line_text(snapshot_line_text(
-            state.blobs(),
-            &git_dir,
-            &proj,
-            revision,
-            &anchor,
-        ));
         let draft_id = state.alloc_id();
         let new = db::NewDraft {
             change_number: id,
-            revision: req.revision,
-            thread_id,
+            thread_id: req.thread_id,
             anchor: &anchor,
             body: &req.body,
             resolved: req.resolved,

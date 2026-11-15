@@ -6,11 +6,38 @@
 // drafts reference; a review's id is its entry's `position`, so the records number
 // their reviews by where this places them.
 
-import type { CommentInput, LogEntry, LogPayload } from "../types";
+import { isBase, revisionOf } from "../../lib/version";
+import type {
+  Anchor,
+  CommentInput,
+  LogAnchor,
+  LogEntry,
+  LogPayload,
+} from "../types";
 import type { ChangeRecord, ThreadRecord } from "./store";
 
+/** The revision and the anchor that the log records for `anchor`, as the
+ * server's `Anchor::into_log` returns them. */
+export function intoLog(anchor: Anchor): {
+  revision: number;
+  anchor: LogAnchor;
+} {
+  if ("change" in anchor) {
+    return { revision: anchor.change.revision, anchor: "change" };
+  }
+  if ("file" in anchor) {
+    const { revision, file } = anchor.file;
+    return { revision, anchor: { file: { file } } };
+  }
+  const { version, ...line } = anchor.line;
+  return {
+    revision: revisionOf(version),
+    anchor: { line: { ...line, side: isBase(version) ? "old" : "new" } },
+  };
+}
+
 /** One thread comment → its wire `CommentInput`. The opening comment (index 0)
- * carries the anchor + explicit thread id; the last carries the rolled-up
+ * contains the anchor + explicit thread id; the last contains the rolled-up
  * `resolved` state, so the fold lands on the record's final value. */
 function commentInput(
   thread: ThreadRecord,
@@ -20,8 +47,7 @@ function commentInput(
 ): CommentInput {
   return {
     thread_id: thread.id,
-    revision: open ? thread.revision : null,
-    anchor: open ? thread.anchor : null,
+    ...(open ? intoLog(thread.anchor) : { revision: null, anchor: null }),
     body,
     resolved: last ? thread.resolved : null,
   };
@@ -80,7 +106,7 @@ export function synthLog(
   }
 
   // Group each thread comment under the review that published it (one review
-  // entry carries all of its comments) or emit it as a standalone author
+  // entry contains all of its comments) or emit it as a standalone author
   // comment. `sort` breaks created_at ties so a review opens a thread before
   // an author reply in the same instant.
   const events: { created_at: string; sort: number; payload: LogPayload }[] =

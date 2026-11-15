@@ -3,9 +3,9 @@
 use anyhow::{Context, Result, anyhow};
 
 use nit_types::comments::NewComment;
-use nit_types::domain::Anchor;
 use nit_types::domain::CommentRange;
 use nit_types::domain::LineAnchor;
+use nit_types::domain::LogAnchor;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Side;
 use nit_types::domain::ThreadProjection;
@@ -86,9 +86,9 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         revision: args.revision,
         // clap requires --file with --line and --range.
         anchor: Some(match (args.file, at) {
-            (Some(file), Some(at)) => Anchor::line(file, args.side.unwrap_or_default(), at),
-            (Some(file), None) => Anchor::File { file },
-            (None, _) => Anchor::Change,
+            (Some(file), Some(at)) => LogAnchor::line(file, args.side.unwrap_or_default(), at),
+            (Some(file), None) => LogAnchor::File { file },
+            (None, _) => LogAnchor::Change,
         }),
         body,
         resolved,

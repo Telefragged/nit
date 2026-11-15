@@ -773,23 +773,24 @@ const change11: ChangeRecord = {
     1: [
       {
         thread_id: 71,
-        revision: 1,
         anchor: {
-          line: { file: "src/auth/rotate.rs", side: "new", at: { whole: 30 } },
+          line: {
+            file: "src/auth/rotate.rs",
+            version: "r1",
+            at: { whole: 30 },
+          },
         },
       },
       {
         thread_id: 73,
-        revision: 1,
-        anchor: { file: { file: "src/auth/store.rs" } },
+        anchor: { file: { revision: 1, file: "src/auth/store.rs" } },
       },
       {
         thread_id: 79,
-        revision: 1,
         anchor: {
           line: {
             file: "src/auth/rotate.rs",
-            side: "new",
+            version: "r1",
             at: {
               selection: {
                 start_line: 30,
@@ -1700,8 +1701,7 @@ export const threads: ThreadRecord[] = [
   {
     id: 70,
     change_number: 10,
-    revision: 0,
-    anchor: "change",
+    anchor: { change: { revision: 0 } },
     resolved: true,
     comments: [
       {
@@ -1717,11 +1717,10 @@ export const threads: ThreadRecord[] = [
   {
     id: 71,
     change_number: 11,
-    revision: 0,
     anchor: {
       line: {
         file: "src/auth/rotate.rs",
-        side: "new",
+        version: "r0",
         line_text: "        let fresh = Token::generate(&mut self.rng.lock());",
         at: { whole: 22 },
       },
@@ -1755,11 +1754,10 @@ export const threads: ThreadRecord[] = [
   {
     id: 73,
     change_number: 11,
-    revision: 0,
     anchor: {
       line: {
         file: "src/auth/store.rs",
-        side: "new",
+        version: "r0",
         line_text: "        let conn = self.pool.clone().get();",
         at: { whole: 58 },
       },
@@ -1789,8 +1787,7 @@ export const threads: ThreadRecord[] = [
   {
     id: 74,
     change_number: 11,
-    revision: 0,
-    anchor: { file: { file: "src/auth/store.rs" } },
+    anchor: { file: { revision: 0, file: "src/auth/store.rs" } },
     resolved: false,
     comments: [
       {
@@ -1809,11 +1806,10 @@ export const threads: ThreadRecord[] = [
   {
     id: 79,
     change_number: 11,
-    revision: 0,
     anchor: {
       line: {
         file: "src/auth/rotate.rs",
-        side: "new",
+        version: "r0",
         line_text: "        self.store.mark_rotated(entry.id, &fresh);",
         at: {
           selection: {
@@ -1843,11 +1839,10 @@ export const threads: ThreadRecord[] = [
   {
     id: 75,
     change_number: 11,
-    revision: 0,
     anchor: {
       line: {
         file: "src/auth/rotate.rs",
-        side: "new",
+        version: "r0",
         line_text: "        let entry = self.store.lookup(presented).unwrap();",
         at: { whole: 21 },
       },
@@ -1877,11 +1872,10 @@ export const threads: ThreadRecord[] = [
   {
     id: 77,
     change_number: 11,
-    revision: 0,
     anchor: {
       line: {
         file: COMMIT_MSG_PATH,
-        side: "new",
+        version: "r0",
         line_text: "moment the legitimate client refreshes.",
         at: {
           selection: {
@@ -1917,11 +1911,10 @@ export const threads: ThreadRecord[] = [
   {
     id: 80,
     change_number: 20,
-    revision: 0,
     anchor: {
       line: {
         file: "src/wal.rs",
-        side: "new",
+        version: "r0",
         line_text: "        if self.backlog_bytes() < CHECKPOINT_BACKLOG {",
         at: { whole: 94 },
       },
@@ -1940,11 +1933,10 @@ export const threads: ThreadRecord[] = [
   {
     id: 81,
     change_number: 20,
-    revision: 0,
     anchor: {
       line: {
         file: "src/wal/backoff.rs",
-        side: "old",
+        version: "r0^",
         line_text: "pub fn jitter(base: Duration) -> Duration {",
         at: { whole: 3 },
       },
@@ -1965,11 +1957,10 @@ export const threads: ThreadRecord[] = [
   {
     id: 82,
     change_number: 51,
-    revision: 0,
     anchor: {
       line: {
         file: "src/sched/fair.rs",
-        side: "new",
+        version: "r0",
         line_text: "// fair-share v0",
         at: { whole: 2 },
       },
@@ -1997,11 +1988,10 @@ export const drafts: DraftRecord[] = [
     id: 100,
     change_number: 11,
     thread_id: null,
-    revision: 1,
     anchor: {
       line: {
         file: "src/auth/rotate.rs",
-        side: "new",
+        version: "r1",
         line_text:
           "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
         at: { whole: 26 },
@@ -2017,11 +2007,10 @@ export const drafts: DraftRecord[] = [
     id: 101,
     change_number: 11,
     thread_id: null,
-    revision: 1,
     anchor: {
       line: {
         file: "tests/rotation.rs",
-        side: "new",
+        version: "r1",
         line_text: "    let _ = rotator.rotate(&seeded).unwrap();",
         at: { whole: 13 },
       },
@@ -2036,11 +2025,10 @@ export const drafts: DraftRecord[] = [
     id: 102,
     change_number: 11,
     thread_id: null,
-    revision: 1,
     anchor: {
       line: {
         file: "src/auth/rotate.rs",
-        side: "old",
+        version: "r1^",
         line_text: "    pub fn rotate(&self, presented: &str) -> Token {",
         at: { whole: 20 },
       },

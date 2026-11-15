@@ -2,11 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::Anchor;
 use super::AttachPayload;
 use super::ChangeNumber;
 use super::CommentRange;
 use super::LineAnchor;
+use super::LogAnchor;
 use super::RevisionNumber;
 use super::Sha;
 use super::Side;
@@ -146,7 +146,7 @@ pub struct CommentInput {
     /// Where a new thread is anchored; `None` on a reply, which uses the
     /// anchor of its thread.
     #[serde(default)]
-    pub anchor: Option<Anchor>,
+    pub anchor: Option<LogAnchor>,
     pub body: String,
     /// Thread-resolution decision.
     ///
@@ -160,7 +160,7 @@ pub struct CommentInput {
 /// A comment as the log stores it, in either spelling.
 ///
 /// The log is append-only, so entries written before a comment had one
-/// [`Anchor`] keep the five loose fields it was spelled with. Parsing
+/// [`LogAnchor`] keep the five loose fields it was spelled with. Parsing
 /// resolves the two spellings into the anchor.
 #[derive(Deserialize)]
 struct LoggedComment {
@@ -169,7 +169,7 @@ struct LoggedComment {
     #[serde(default)]
     revision: Option<RevisionNumber>,
     #[serde(default)]
-    anchor: Option<Anchor>,
+    anchor: Option<LogAnchor>,
     #[serde(default)]
     file: Option<String>,
     #[serde(default)]
@@ -199,14 +199,14 @@ impl From<LoggedComment> for CommentInput {
                 .map(LineAnchor::Selection)
                 .or(c.line.map(LineAnchor::Whole));
             match (c.file, at) {
-                (Some(file), Some(at)) => Some(Anchor::Line {
+                (Some(file), Some(at)) => Some(LogAnchor::Line {
                     file,
                     side,
                     line_text: c.line_text,
                     at,
                 }),
-                (Some(file), None) => Some(Anchor::File { file }),
-                (None, None) => Some(Anchor::Change),
+                (Some(file), None) => Some(LogAnchor::File { file }),
+                (None, None) => Some(LogAnchor::Change),
                 (None, Some(_)) => None,
             }
         });

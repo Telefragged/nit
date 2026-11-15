@@ -3,12 +3,13 @@ import { memo, useSyncExternalStore, type ReactNode } from "react";
 import type {
   Anchor,
   CommentInput,
+  LogAnchor,
   LogEntry,
   ThreadComment,
   ThreadProjection,
 } from "../api/types";
 import { verdictStatus } from "../api/verdict";
-import { anchorAt, anchorFile, placementLine } from "../lib/comments";
+import { anchorRevision, placementLine } from "../lib/comments";
 import { displayPath } from "../lib/diffview";
 import { shortSha } from "../lib/sha";
 import { timeAgo } from "../lib/time";
@@ -20,18 +21,15 @@ import Markdown from "./Markdown";
 
 const firstLine = (text: string) => text.split("\n", 1)[0] ?? "";
 
-/** Whether `text` holds more than its first line. A row summary shows only
+/** Whether `text` contains more than its first line. A row summary shows only
  * the first line. */
 const hasMore = (text: string) => text.trim() !== firstLine(text).trim();
 
 /** Where an anchor points: `change`, a file, or `file:line`. */
-function anchorLabel(anchor: Anchor): string {
-  const file = anchorFile(anchor);
-  if (file === null) return "change";
-  const at = anchorAt(anchor);
-  return at === null
-    ? displayPath(file)
-    : `${displayPath(file)}:${placementLine(at)}`;
+function anchorLabel(anchor: Anchor | LogAnchor): string {
+  if (anchor === "change" || "change" in anchor) return "change";
+  if ("file" in anchor) return displayPath(anchor.file.file);
+  return `${displayPath(anchor.line.file)}:${placementLine(anchor.line.at)}`;
 }
 
 /** Where a comment lands, and what it does to its thread's resolution. A
@@ -40,7 +38,7 @@ function placeLine(c: CommentInput, threads: ThreadProjection[]): string {
   const thread = threads.find((t) => t.id === c.thread_id);
   let place: string;
   if (thread !== undefined) {
-    place = `Revision ${thread.revision} ${anchorLabel(thread.anchor)}`;
+    place = `Revision ${anchorRevision(thread.anchor)} ${anchorLabel(thread.anchor)}`;
   } else if (c.thread_id !== null) {
     place = `thread ${c.thread_id}`;
   } else {

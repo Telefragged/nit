@@ -392,17 +392,13 @@ export type DraftDecision = { decision: Decision; message: string };
  * A thread's anchor ported to a revision it was not written on.
  *
  * The thread keeps the anchor it was written with. `anchor` is where that
- * one lands in the trees of `revision`, derived from the diff between
- * them: the same lines when the diff left them alone, shifted lines when
- * it inserted or deleted lines above them, and the next place up (the
- * file, then the change) when it rewrote those lines or dropped the file.
- * A ported line anchor contains no `line_text`.
+ * one lands in the trees of another revision, derived from the diff
+ * between them: the same lines when the diff left them alone, shifted
+ * lines when it inserted or deleted lines above them, and the next place
+ * up (the file, then the change) when it rewrote those lines or dropped
+ * the file. A ported line anchor contains no `line_text`.
  */
-export type PortedComment = {
-  thread_id: number;
-  revision: RevisionNumber;
-  anchor: Anchor;
-};
+export type PortedComment = { thread_id: number; anchor: Anchor };
 
 /**
  * Selected-text anchor of a line comment.
@@ -425,9 +421,8 @@ export type Draft = {
   change_number: ChangeNumber;
   thread_id: number | null;
   /**
-   * The request's anchor revision; only a new thread uses it.
+   * The anchor of a new thread, or the anchor of the thread of a reply.
    */
-  revision: RevisionNumber;
   anchor: Anchor;
   /**
    * May be empty for a resolution-only reply draft.
@@ -445,9 +440,9 @@ export type Draft = {
  * `POST /api/changes/{id}/drafts` request.
  */
 export type NewDraft = {
-  revision: RevisionNumber;
   /**
-   * The anchor of a new thread. A reply keeps the anchor of its thread.
+   * The anchor of a new thread, with `line_text` unset. A reply has
+   * the anchor of its thread, so it leaves this unset.
    */
   anchor?: Anchor;
   body: string;
@@ -637,7 +632,7 @@ export type CommentInput = {
    * Where a new thread is anchored; `None` on a reply, which uses the
    * anchor of its thread.
    */
-  anchor: Anchor | null;
+  anchor: LogAnchor | null;
   body: string;
   /**
    * Thread-resolution decision.
@@ -775,9 +770,33 @@ export type Start = "projection" | "log";
 export type Lifecycle = "active" | "merged" | "abandoned";
 
 /**
- * Where a thread is anchored within a revision.
+ * Where a comment is anchored: the change, a file, or lines of a file.
+ *
+ * A change or file anchor sits on a revision. A line anchor sits in one
+ * version of the change: a revision, or the base of a revision.
  */
 export type Anchor =
+  | { change: { revision: RevisionNumber } }
+  | { file: { revision: RevisionNumber; file: string } }
+  | {
+      line: {
+        version: ChangeVersion;
+        file: string;
+        /**
+         * The text of the line in `version`.
+         */
+        line_text?: string;
+        at: LineAnchor;
+      };
+    };
+
+/**
+ * Where a logged comment is anchored within its revision.
+ *
+ * The log records the revision of a comment beside this anchor. A line
+ * anchor records the version as a [`Side`] of that revision.
+ */
+export type LogAnchor =
   | "change"
   | { file: { file: string } }
   | {
@@ -889,7 +908,6 @@ export type ThreadComment = {
  */
 export type ThreadProjection = {
   id: number;
-  revision: RevisionNumber;
   anchor: Anchor;
   resolved: boolean;
   comments: Array<ThreadComment>;

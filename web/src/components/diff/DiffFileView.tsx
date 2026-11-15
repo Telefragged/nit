@@ -23,9 +23,9 @@ import {
   anchorKind,
   anchorLineText,
   anchorRange,
-  anchorSide,
+  lineVersion,
   commentPlacement,
-  draftAnchor,
+  columnVersion,
   markCounts,
   placementLine,
   shownAt,
@@ -379,23 +379,21 @@ export default function DiffFileView({
   // line thread whose line the shown hunks do not cover renders there
   // too, under a separate heading.
   const fileThreads: UiThread[] = [];
-  // Each entry has the column it renders under, not the stored side: an
-  // interdiff-left thread is stored "new" on the FROM revision.
-  const displaced: { t: UiThread; side: Side }[] = [];
+  const displaced: UiThread[] = [];
   const inline = new Map<string, UiThread[]>();
   // The mark of each line that an inline thread covers: its whole line,
   // or every line of its selection.
   const gutterMarks = new Map<string, ThreadMark>();
   for (const t of threads) {
     const at = shownAt(t);
-    if (anchorKind(at.anchor) === "file") {
+    if (anchorKind(at) === "file") {
       fileThreads.push(t);
       continue;
     }
     const p = commentPlacement(at, ctx.selected, ctx.against);
     if (!p) {
       // Only the linked thread arrives without a column in the range.
-      displaced.push({ t, side: anchorSide(at.anchor) });
+      displaced.push(t);
       continue;
     }
     const key = `${p.side}:${shownLine(p.side, p.line)}`;
@@ -403,29 +401,28 @@ export default function DiffFileView({
       const list = inline.get(key) ?? [];
       list.push(t);
       inline.set(key, list);
-      const range = anchorRange(at.anchor);
+      const range = anchorRange(at);
       const mark = threadMark(t);
       for (let no = range?.start_line ?? p.line; no <= p.line; no++) {
         const lineKey = `${p.side}:${no}`;
         gutterMarks.set(lineKey, strongerMark(gutterMarks.get(lineKey), mark));
       }
     } else {
-      displaced.push({ t, side: p.side });
+      displaced.push(t);
     }
   }
 
   const create = useMutation({
     mutationFn: (input: { target: DraftTarget; body: string }) => {
-      // The visual column maps back to a stored (revision, side): the new
-      // column is the selected revision; the old column is its parent
-      // (base) or, in an interdiff, the FROM revision's own side.
-      const anchor = draftAnchor(input.target.side, ctx.selected, ctx.against);
       return createDraft(ctx.changeNumber, {
-        revision: anchor.revision,
         anchor: {
           line: {
+            version: columnVersion(
+              input.target.side,
+              ctx.selected,
+              ctx.against,
+            ),
             file: input.target.file,
-            side: anchor.side,
             at: input.target.at,
           },
         },
@@ -476,7 +473,7 @@ export default function DiffFileView({
     }[] = [];
     for (const t of threads) {
       const at = shownAt(t);
-      const range = anchorRange(at.anchor);
+      const range = anchorRange(at);
       if (!range) continue;
       const p = commentPlacement(at, ctx.selected, ctx.against);
       if (p)
@@ -594,7 +591,7 @@ export default function DiffFileView({
             setHovered({
               thread: threadKey(t),
               side,
-              at: anchorAt(shownAt(t).anchor),
+              at: anchorAt(shownAt(t)),
             });
           }}
           onMouseLeave={() => {
@@ -1009,11 +1006,11 @@ export default function DiffFileView({
               <div className="thread-group-title">
                 Comments not on a shown line
               </div>
-              {displaced.map(({ t, side }) => (
+              {displaced.map((t) => (
                 <div className="thread-group-item" key={threadKey(t)}>
                   <div className="line-excerpt">
                     <span className="excerpt-line">
-                      r{t.revision} · {side}
+                      {lineVersion(shownAt(t))}
                     </span>
                     <Code text={anchorLineText(t.anchor) ?? ""} lang={lang} />
                   </div>

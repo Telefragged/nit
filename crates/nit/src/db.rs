@@ -28,7 +28,7 @@ use nit_types::changes::ChangeQuery;
 use nit_types::domain::AttachmentHash;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::Tags;
-use nit_types::domain::{Anchor, CommentRange, LineAnchor};
+use nit_types::domain::{Anchor, CommentRange, LineAnchor, Side};
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
@@ -1067,7 +1067,6 @@ pub fn log_entries_from(
 pub struct DraftRow {
     pub id: u64,
     pub change_number: ChangeNumber,
-    pub revision: RevisionNumber,
     /// The thread this draft replies to; `None` opens a new thread.
     pub thread_id: Option<u64>,
     pub anchor: Anchor,
@@ -1083,11 +1082,12 @@ pub struct DraftRow {
 /// The anchor a draft row's location columns spell.
 ///
 /// The four range columns win when they are set, because a selection
-/// carries the lines it covers. `line` then names a whole line, and no
-/// file at all is the change itself.
+/// contains the lines it covers. `line` then specifies a whole line, and
+/// no file at all is the change itself.
 fn col_anchor(row: &rusqlite::Row) -> rusqlite::Result<Anchor> {
+    let revision = RevisionNumber::new(col_u64(row.get("revision")?)?);
     let Some(file) = row.get::<_, Option<String>>("file")? else {
-        return Ok(Anchor::Change);
+        return Ok(Anchor::Change { revision });
     };
     let range = match (
         row.get::<_, Option<i64>>("range_start_line")?,
@@ -1109,11 +1109,11 @@ fn col_anchor(row: &rusqlite::Row) -> rusqlite::Result<Anchor> {
     let at = match (range, col_u64_opt(row.get("line")?)?) {
         (Some(range), _) => LineAnchor::Selection(range),
         (None, Some(line)) => LineAnchor::Whole(line),
-        (None, None) => return Ok(Anchor::File { file }),
+        (None, None) => return Ok(Anchor::File { revision, file }),
     };
     Ok(Anchor::Line {
+        version: col_enum::<Side>(&row.get::<_, String>("side")?)?.version(revision),
         file,
-        side: col_enum(&row.get::<_, String>("side")?)?,
         line_text: row.get("line_text")?,
         at,
     })
@@ -1123,7 +1123,6 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
     Ok(DraftRow {
         id: col_u64(row.get("id")?)?,
         change_number: ChangeNumber::new(col_u64(row.get("change_number")?)?),
-        revision: RevisionNumber::new(col_u64(row.get("revision")?)?),
         thread_id: col_u64_opt(row.get("thread_id")?)?,
         anchor: col_anchor(row)?,
         body: row.get("body")?,
@@ -1135,7 +1134,6 @@ fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
 
 pub struct NewDraft<'a> {
     pub change_number: ChangeNumber,
-    pub revision: RevisionNumber,
     pub thread_id: Option<u64>,
     pub anchor: &'a Anchor,
     pub body: &'a str,
@@ -1177,7 +1175,7 @@ pub fn insert_draft(tx: &Transaction, id: u64, d: &NewDraft, now: &str) -> Resul
          VALUES (?14, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?15, ?13, ?13)",
         params![
             i64::try_from(d.change_number.get())?,
-            i64::try_from(d.revision.get())?,
+            i64::try_from(d.anchor.revision().get())?,
             thread_id,
             d.anchor.file(),
             line,
@@ -1360,7 +1358,7 @@ pub fn delete_draft_review(tx: &Transaction, change_number: ChangeNumber) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::domain::{CommentRange, LineAnchor, Side, Tag};
+    use nit_types::domain::{ChangeVersion, Tag};
 
     fn mem() -> Connection {
         let mut conn = Connection::open_in_memory().expect("in-memory db");
@@ -1497,23 +1495,26 @@ mod tests {
         let c = change(&mut conn);
         let anchors = [
             Anchor::Line {
+                version: ChangeVersion::Base(RevisionNumber::new(0)),
                 file: "a.rs".to_string(),
-                side: Side::Old,
                 line_text: Some("x1".to_string()),
                 at: LineAnchor::Whole(3),
             },
             Anchor::Line {
+                version: ChangeVersion::Revision(RevisionNumber::new(0)),
                 file: "a.rs".to_string(),
-                side: Side::New,
                 line_text: Some("x2".to_string()),
                 at: LineAnchor::Selection(
                     CommentRange::new(4, 1, 4, 6).expect("a forward selection"),
                 ),
             },
             Anchor::File {
+                revision: RevisionNumber::new(0),
                 file: "a.rs".to_string(),
             },
-            Anchor::Change,
+            Anchor::Change {
+                revision: RevisionNumber::new(0),
+            },
         ];
         for (id, anchor) in anchors.iter().enumerate() {
             write(&mut conn, |tx| {
@@ -1522,7 +1523,6 @@ mod tests {
                     id as u64,
                     &NewDraft {
                         change_number: c,
-                        revision: RevisionNumber::new(0),
                         thread_id: None,
                         anchor,
                         body: "note",
@@ -1708,11 +1708,10 @@ mod tests {
                 7,
                 &NewDraft {
                     change_number: c,
-                    revision: RevisionNumber::new(1),
                     thread_id: None,
                     anchor: &Anchor::Line {
+                        version: ChangeVersion::Revision(RevisionNumber::new(1)),
                         file: "src/main.rs".to_string(),
-                        side: Side::New,
                         line_text: Some("fn main".to_string()),
                         at: LineAnchor::Whole(3),
                     },

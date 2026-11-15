@@ -79,7 +79,6 @@ export interface RepoRecord {
 export interface ThreadRecord {
   id: number;
   change_number: number;
-  revision: number;
   anchor: Anchor;
   resolved: boolean;
   comments: ThreadComment[];
@@ -93,7 +92,6 @@ export interface DraftRecord {
   id: number;
   change_number: number;
   thread_id: number | null;
-  revision: number;
   anchor: Anchor;
   body: string;
   /** The draft's thread-resolution decision. */

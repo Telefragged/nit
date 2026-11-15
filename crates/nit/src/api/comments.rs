@@ -11,14 +11,14 @@ use nit_types::comments::NewComment;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
 use nit_types::domain::ThreadProjection;
+use nit_types::domain::{Anchor, LogAnchor};
 use nit_types::domain::{CommentInput, LogPayload};
 
 use nit_types::domain::Lifecycle;
 
-use super::state::git_dir;
 use super::views;
 use super::{AppJson, AppPath, AppState, Error, append, with_conn};
-use super::{anchor_of, change_or_404, snapshot_line_text};
+use super::{change_or_404, new_thread_anchor};
 
 #[utoipa::path(post, path = "/api/changes/{id}/comments", params(("id" = ChangeNumber, Path)), request_body = NewComment, responses((status = 200, body = ThreadProjection)))]
 pub(super) async fn create_comment(
@@ -49,7 +49,6 @@ pub(super) async fn create_comment(
                 resolved: req.resolved,
             }
         } else {
-            let mut anchor = anchor_of(req.anchor)?;
             let number = match req.revision {
                 Some(r) => r,
                 None => {
@@ -61,20 +60,12 @@ pub(super) async fn create_comment(
                         .number
                 }
             };
-            let revision = change.revision(number).ok_or_else(|| {
-                Error::bad_request(format!("revision {number} is absent from change {id}"))
-            })?;
-            let git_dir = git_dir(conn, change.repo_id)?;
-            anchor.snapshot_line_text(snapshot_line_text(
-                state.blobs(),
-                &git_dir,
-                &change,
-                revision,
-                &anchor,
-            ));
+            let anchor = Anchor::from_log(number, req.anchor.unwrap_or(LogAnchor::Change));
+            let anchor = new_thread_anchor(&state, conn, &change, anchor)?;
+            let (revision, anchor) = anchor.into_log();
             CommentInput {
                 thread_id: None,
-                revision: Some(number),
+                revision: Some(revision),
                 anchor: Some(anchor),
                 body: req.body,
                 resolved: req.resolved,

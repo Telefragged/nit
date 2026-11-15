@@ -275,8 +275,8 @@ export function selectionAnchorSide(anchor: Node | null): Side | null {
  * diff.
  *
  * Either column is commentable: the old column reports `side: "old"`, the
- * new column `side: "new"`; the caller maps that to a stored
- * (revision, side) for the current diff range (lib/comments). In split
+ * new column `side: "new"`; the caller maps that to a version for the
+ * current diff range (lib/comments columnVersion). In split
  * view the swept DOM region covers both columns; cells of the other side
  * are dropped here, so a one-column drag (which styles/diff.css `sel-old`/
  * `sel-new` also bias toward where the engine honors user-select) maps to

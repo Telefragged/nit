@@ -20,8 +20,7 @@ import type {
 export const uiThread = (
   over: Partial<UiThread> & { id: number | null },
 ): UiThread => ({
-  revision: 1,
-  anchor: { line: { file: "src/main.rs", side: "new", at: { whole: 1 } } },
+  anchor: { line: { file: "src/main.rs", version: "r1", at: { whole: 1 } } },
   resolved: false,
   comments: [],
   drafts: [],
@@ -57,8 +56,7 @@ export const draft = (over: Partial<Draft> = {}): Draft => ({
   id: 1,
   change_number: 1,
   thread_id: null,
-  revision: 1,
-  anchor: "change",
+  anchor: { change: { revision: 1 } },
   body: "",
   resolved: false,
   created_at: ago(22),

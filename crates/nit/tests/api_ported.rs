@@ -39,6 +39,11 @@ fn line(file: &str, side: &str, at: u64) -> Value {
     json!({"line": {"file": file, "side": side, "at": {"whole": at}}})
 }
 
+/// A ported line anchor on line `at` of `file` in `version`.
+fn ported_line(version: &str, file: &str, at: u64) -> Value {
+    json!({"line": {"version": version, "file": file, "at": {"whole": at}}})
+}
+
 /// Each anchor lands where its lines went: shifted past an insertion,
 /// dropped to the file where its line was rewritten, to the change where
 /// its file was deleted, and untouched on a tree the amend left alone.
@@ -105,22 +110,28 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
 
     let (st, p) = ported(&server, id, 1, "");
     assert_eq!(st, 200, "{p}");
-    assert_eq!(anchor_of(&p, shifted), line("a.txt", "new", 8));
+    assert_eq!(anchor_of(&p, shifted), ported_line("r1", "a.txt", 8));
     assert_eq!(
         anchor_of(&p, selection),
-        json!({"line": {"file": "a.txt", "side": "new", "at": {"selection": {"start_line": 9, "start_char": 0, "end_line": 10, "end_char": 1}}}})
+        json!({"line": {"version": "r1", "file": "a.txt", "at": {"selection": {"start_line": 9, "start_char": 0, "end_line": 10, "end_char": 1}}}})
     );
-    assert_eq!(anchor_of(&p, rewritten), json!({"file": {"file": "a.txt"}}));
+    assert_eq!(
+        anchor_of(&p, rewritten),
+        json!({"file": {"revision": 1, "file": "a.txt"}})
+    );
     // The parents are the same tree, so the old side did not move.
-    assert_eq!(anchor_of(&p, old_side), line("a.txt", "old", 2));
-    assert_eq!(anchor_of(&p, file), json!({"file": {"file": "a.txt"}}));
-    assert_eq!(anchor_of(&p, change), json!("change"));
-    assert_eq!(anchor_of(&p, deleted), json!("change"));
+    assert_eq!(anchor_of(&p, old_side), ported_line("r1^", "a.txt", 2));
+    assert_eq!(
+        anchor_of(&p, file),
+        json!({"file": {"revision": 1, "file": "a.txt"}})
+    );
+    assert_eq!(anchor_of(&p, change), json!({"change": {"revision": 1}}));
+    assert_eq!(anchor_of(&p, deleted), json!({"change": {"revision": 1}}));
     assert_eq!(
         anchor_of(&p, subject),
-        json!({"file": {"file": "/COMMIT_MSG"}})
+        json!({"file": {"revision": 1, "file": "/COMMIT_MSG"}})
     );
-    assert_eq!(anchor_of(&p, resolved), line("a.txt", "new", 3));
+    assert_eq!(anchor_of(&p, resolved), ported_line("r1", "a.txt", 3));
     let ids: Vec<u64> = p
         .as_array()
         .unwrap()
@@ -132,10 +143,6 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
         "a thread on the target is not ported"
     );
     assert_eq!(ids.len(), 9);
-    assert!(
-        p.as_array().unwrap().iter().all(|x| x["revision"] == 1),
-        "every entry names the target"
-    );
 
     let (st, e) = ported(&server, id, 9, "");
     assert_eq!(st, 404, "{e}");
@@ -165,15 +172,15 @@ fn against_ports_to_both_revisions() {
 
     let (st, p) = ported(&server, id, 2, "?against=r1");
     assert_eq!(st, 200, "{p}");
-    let places: Vec<(u64, Value)> = p
+    let places: Vec<Value> = p
         .as_array()
         .unwrap()
         .iter()
-        .map(|x| (x["revision"].as_u64().unwrap(), x["anchor"].clone()))
+        .map(|x| x["anchor"].clone())
         .collect();
     assert_eq!(
         places,
-        vec![(2, line("a.txt", "new", 8)), (1, line("a.txt", "new", 7))]
+        vec![ported_line("r2", "a.txt", 8), ported_line("r1", "a.txt", 7)]
     );
-    assert_eq!(anchor_of(&p, t), line("a.txt", "new", 8));
+    assert_eq!(anchor_of(&p, t), ported_line("r2", "a.txt", 8));
 }
