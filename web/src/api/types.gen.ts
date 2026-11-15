@@ -439,16 +439,33 @@ export type Draft = {
 /**
  * `POST /api/changes/{id}/drafts` request.
  */
-export type NewDraft = {
-  /**
-   * The anchor of a new thread, with `line_text` unset. A reply has
-   * the anchor of its thread, so it leaves this unset.
-   */
-  anchor?: Anchor;
-  body: string;
-  thread_id?: number;
-  resolved?: boolean;
-};
+export type NewDraft =
+  | {
+      thread: {
+        /**
+         * The anchor of the thread, with `line_text` unset.
+         */
+        anchor: Anchor;
+        body: string;
+        /**
+         * Whether the thread opens resolved.
+         */
+        resolved?: boolean;
+      };
+    }
+  | {
+      reply: {
+        thread_id: number;
+        /**
+         * May be empty when `resolved` is set.
+         */
+        body: string;
+        /**
+         * The resolution decision of the reply.
+         */
+        resolved?: boolean;
+      };
+    };
 
 /**
  * `PATCH /api/drafts/{id}` request.

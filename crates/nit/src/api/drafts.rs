@@ -24,30 +24,43 @@ pub(super) async fn create_draft(
 ) -> Result<Json<Draft>, Error> {
     with_conn(state.pool(), move |conn| {
         let proj = change_or_404(conn, id)?;
-        let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
-        if req.body.trim().is_empty() && !resolution_only {
-            return Err(Error::bad_request(
-                "a draft needs a body, or a thread_id with a resolution decision",
-            ));
-        }
-        let anchor = if let Some(tid) = req.thread_id {
-            proj.thread(tid)
-                .ok_or_else(|| Error::bad_request("thread not found on this change"))?
-                .anchor
-                .clone()
-        } else {
-            let anchor = req
-                .anchor
-                .ok_or_else(|| Error::bad_request("a new thread needs an anchor"))?;
-            new_thread_anchor(&state, conn, &proj, anchor)?
+        let (thread_id, anchor, body, resolved) = match req {
+            NewDraft::Thread {
+                anchor,
+                body,
+                resolved,
+            } => {
+                if body.trim().is_empty() {
+                    return Err(Error::bad_request("a new thread needs a body"));
+                }
+                let anchor = new_thread_anchor(&state, conn, &proj, anchor)?;
+                (None, anchor, body, resolved)
+            }
+            NewDraft::Reply {
+                thread_id,
+                body,
+                resolved,
+            } => {
+                if body.trim().is_empty() && resolved.is_none() {
+                    return Err(Error::bad_request(
+                        "a reply needs a body or a resolution decision",
+                    ));
+                }
+                let anchor = proj
+                    .thread(thread_id)
+                    .ok_or_else(|| Error::bad_request("thread not found on this change"))?
+                    .anchor
+                    .clone();
+                (Some(thread_id), anchor, body, resolved)
+            }
         };
         let draft_id = state.alloc_id();
         let new = db::NewDraft {
             change_number: id,
-            thread_id: req.thread_id,
+            thread_id,
             anchor: &anchor,
-            body: &req.body,
-            resolved: req.resolved,
+            body: &body,
+            resolved,
         };
         let row = db::write(conn, |tx| {
             db::insert_draft(tx, draft_id, &new, &db::now_rfc3339())

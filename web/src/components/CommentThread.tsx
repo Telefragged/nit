@@ -216,15 +216,18 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
   const pending = resolved !== thread.resolved;
 
   const saveDraft = useMutation({
-    mutationFn: (vars: { body: string; resolved?: boolean }) =>
-      createDraft(changeNumber, {
-        body: vars.body,
-        // Always a published thread here — the reply / resolve / reopen
-        // actions render only when `thread.id !== null` (the !isDraftThread
-        // guard).
-        ...(thread.id !== null ? { thread_id: thread.id } : {}),
-        ...(vars.resolved !== undefined ? { resolved: vars.resolved } : {}),
-      }),
+    mutationFn: (vars: { body: string; resolved?: boolean }) => {
+      // The reply, resolve and reopen actions render only on a published
+      // thread (the !isDraftThread guard).
+      if (thread.id === null) throw new Error("a draft-only thread");
+      return createDraft(changeNumber, {
+        reply: {
+          thread_id: thread.id,
+          body: vars.body,
+          ...(vars.resolved !== undefined ? { resolved: vars.resolved } : {}),
+        },
+      });
+    },
     onSuccess: () => {
       setEditor(null);
       void invalidate();

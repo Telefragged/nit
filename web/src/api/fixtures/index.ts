@@ -455,21 +455,27 @@ export function mockRequest(
     const c = getChange(Number(m[1]));
     const req = body as NewDraft;
     const now = new Date().toISOString();
-    // A reply has the anchor of its thread, as on the server.
-    const anchor =
-      req.thread_id === undefined
-        ? req.anchor && snapshotLineText(c, req.anchor)
-        : projection(c.id).threads.find((t) => t.id === req.thread_id)?.anchor;
-    if (anchor === undefined) {
-      throw new ApiError(400, "a new thread needs an anchor");
-    }
+    const draft =
+      "thread" in req
+        ? {
+            ...req.thread,
+            thread_id: null,
+            anchor: snapshotLineText(c, req.thread.anchor),
+          }
+        : {
+            ...req.reply,
+            // A reply has the anchor of its thread, as on the server.
+            anchor:
+              projection(c.id).threads.find((t) => t.id === req.reply.thread_id)
+                ?.anchor ?? notFound(`thread ${req.reply.thread_id}`),
+          };
     const record: DraftRecord = {
       id: nextDraftId++,
       change_number: c.id,
-      thread_id: req.thread_id ?? null,
-      anchor,
-      body: req.body,
-      resolved: req.resolved ?? false,
+      thread_id: draft.thread_id,
+      anchor: draft.anchor,
+      body: draft.body,
+      resolved: draft.resolved ?? false,
       created_at: now,
       updated_at: now,
     };
