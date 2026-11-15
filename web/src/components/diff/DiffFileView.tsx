@@ -415,18 +415,20 @@ export default function DiffFileView({
   const create = useMutation({
     mutationFn: (input: { target: DraftTarget; body: string }) => {
       return createDraft(ctx.changeNumber, {
-        anchor: {
-          line: {
-            version: columnVersion(
-              input.target.side,
-              ctx.selected,
-              ctx.against,
-            ),
-            file: input.target.file,
-            at: input.target.at,
+        thread: {
+          anchor: {
+            line: {
+              version: columnVersion(
+                input.target.side,
+                ctx.selected,
+                ctx.against,
+              ),
+              file: input.target.file,
+              at: input.target.at,
+            },
           },
+          body: input.body,
         },
-        body: input.body,
       });
     },
     onSuccess: () => {

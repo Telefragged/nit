@@ -10,19 +10,28 @@ use crate::domain::RevisionNumber;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
-pub struct NewDraft {
-    /// The anchor of a new thread, with `line_text` unset. A reply has
-    /// the anchor of its thread, so it leaves this unset.
-    #[serde(default)]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub anchor: Option<Anchor>,
-    pub body: String,
-    #[serde(default)]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub thread_id: Option<u64>,
-    #[serde(default)]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub resolved: Option<bool>,
+#[serde(rename_all = "snake_case")]
+pub enum NewDraft {
+    /// A draft that opens a new thread.
+    Thread {
+        /// The anchor of the thread, with `line_text` unset.
+        anchor: Anchor,
+        body: String,
+        /// Whether the thread opens resolved.
+        #[serde(default)]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        resolved: Option<bool>,
+    },
+    /// A draft reply to a published thread, on the anchor of that thread.
+    Reply {
+        thread_id: u64,
+        /// May be empty when `resolved` is set.
+        body: String,
+        /// The resolution decision of the reply.
+        #[serde(default)]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        resolved: Option<bool>,
+    },
 }
 
 /// `PATCH /api/drafts/{id}` request.
