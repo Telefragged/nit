@@ -21,11 +21,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
 
-#[cfg(nit_plugin_dir)]
-static PLUGIN: include_dir::Dir = include_dir::include_dir!("$NIT_PLUGIN_DIR");
-#[cfg(not(nit_plugin_dir))]
-static PLUGIN: include_dir::Dir =
-    include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../plugins/nit");
+static PLUGIN: include_dir::Dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/plugin");
 
 /// Installs this build's plugin into the store and registers it with Claude
 /// Code.
