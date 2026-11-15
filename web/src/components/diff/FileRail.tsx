@@ -16,11 +16,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../../api/types";
+import {
+  ATTACHMENT_PREFIX,
+  COMMIT_MSG_PATH,
+  type ChangeVersion,
+} from "../../api/types";
 import type { ReviewFile } from "../../lib/attachments";
 import {
   anchorAt,
-  anchorSide,
+  anchorRevision,
+  commentPlacement,
   markCountsLabel,
   shownAt,
   strongerMark,
@@ -44,7 +49,7 @@ import StatusMark from "./StatusMark";
 
 /** Where in its file the diff shows a thread. */
 function threadLines(t: UiThread): string {
-  const at = anchorAt(shownAt(t).anchor);
+  const at = anchorAt(shownAt(t));
   if (at === null) return "file";
   if ("whole" in at) return `line ${at.whole}`;
   const { start_line, start_char, end_line, end_char } = at.selection;
@@ -52,17 +57,24 @@ function threadLines(t: UiThread): string {
 }
 
 /** The link to a thread: a published thread by its id, and a thread of
- * drafts only by the lines of its anchor. */
-function threadLink(file: string, t: UiThread): DiffLink {
+ * drafts only by the lines of its anchor in the diff range
+ * `[against] → [selected]`. */
+function threadLink(
+  file: string,
+  t: UiThread,
+  selected: number,
+  against: ChangeVersion,
+): DiffLink {
   if (t.id !== null) return { thread: t.id };
-  const { anchor } = shownAt(t);
+  const anchor = shownAt(t);
   const at = anchorAt(anchor);
-  if (at === null) return { file, lines: null };
+  const place = commentPlacement(anchor, selected, against);
+  if (at === null || place === null) return { file, lines: null };
   const [start, end] =
     "whole" in at
       ? [at.whole, at.whole]
       : [at.selection.start_line, at.selection.end_line];
-  return { file, lines: { side: anchorSide(anchor), start, end } };
+  return { file, lines: { side: place.side, start, end } };
 }
 
 /** The row's trailing lane: the +/- churn, then the status letter. A
@@ -153,7 +165,7 @@ export default function FileRail({
   allExpanded: boolean;
   onToggleAll: () => void;
 }) {
-  const { linkHref } = useReview();
+  const { linkHref, selected, against } = useReview();
   const message = files.findIndex((f) => f.path === COMMIT_MSG_PATH);
   const tree = useMemo(() => buildTree(treePaths(files)), [files]);
   const attachments = useMemo(() => buildTree(attachmentPaths(files)), [files]);
@@ -236,7 +248,7 @@ export default function FileRail({
               <li key={threadKey(t)}>
                 <Link
                   className="rail-row rail-thread"
-                  to={linkHref(threadLink(file.path, t))}
+                  to={linkHref(threadLink(file.path, t, selected, against))}
                   state={REVEAL}
                   title={threadMark(t)}
                   style={indent(depth + 1)}
@@ -248,7 +260,9 @@ export default function FileRail({
                     aria-hidden
                   />
                   <span className="rail-name">{threadLines(t)}</span>
-                  <span className="rail-counts">r{shownAt(t).revision}</span>
+                  <span className="rail-counts">
+                    r{anchorRevision(shownAt(t))}
+                  </span>
                 </Link>
               </li>
             ))}

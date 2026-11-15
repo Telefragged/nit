@@ -68,8 +68,8 @@ const FILE: DiffFile = {
   ],
 };
 
-const at = (side: "old" | "new", line: LineAnchor): Anchor => ({
-  line: { file: PATH, side, at: line },
+const at = (line: LineAnchor): Anchor => ({
+  line: { file: PATH, version: "r1", at: line },
 });
 
 /** A draft on a line, a resolved thread, and an open thread on a selection
@@ -77,10 +77,10 @@ const at = (side: "old" | "new", line: LineAnchor): Anchor => ({
 const THREADS: UiThread[] = [
   uiThread({
     id: null,
-    anchor: at("new", { whole: 20 }),
+    anchor: at({ whole: 20 }),
     drafts: [
       draft({
-        anchor: at("new", { whole: 20 }),
+        anchor: at({ whole: 20 }),
         body: "Every caller has to handle the `Result`. Make sure that none unwraps it silently.",
       }),
     ],
@@ -88,7 +88,7 @@ const THREADS: UiThread[] = [
   uiThread({
     id: 4,
     resolved: true,
-    anchor: at("new", { whole: 24 }),
+    anchor: at({ whole: 24 }),
     comments: [
       threadComment(
         21 * 60,
@@ -99,7 +99,7 @@ const THREADS: UiThread[] = [
   }),
   uiThread({
     id: 3,
-    anchor: at("new", {
+    anchor: at({
       selection: { start_line: 30, start_char: 8, end_line: 31, end_char: 50 },
     }),
     comments: [
@@ -119,7 +119,7 @@ const THREADS: UiThread[] = [
 /** A thread on the whole file. */
 const FILE_THREAD = uiThread({
   id: 5,
-  anchor: { file: { file: PATH } },
+  anchor: { file: { revision: 1, file: PATH } },
   comments: [
     threadComment(
       30,

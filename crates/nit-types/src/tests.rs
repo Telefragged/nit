@@ -4,7 +4,7 @@
 
 use crate::domain::ChangeNumber;
 use crate::domain::TagsPayload;
-use crate::domain::{Anchor, CommentInput, CommentRange, LineAnchor};
+use crate::domain::{CommentInput, CommentRange, LineAnchor, LogAnchor};
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 use crate::domain::{Sha, Tag, Tags};
@@ -151,7 +151,7 @@ fn a_comment_logged_before_the_anchor_still_reads() {
     let opening: CommentInput = serde_json::from_str(opening).expect("deserialize");
     assert_eq!(
         opening.anchor,
-        Some(Anchor::Line {
+        Some(LogAnchor::Line {
             file: "a.rs".to_string(),
             side: Side::New,
             line_text: Some("x".to_string()),
@@ -169,7 +169,7 @@ fn a_comment_logged_before_the_anchor_still_reads() {
         "line_text":"x","body":"this","resolved":null}"#;
     let ranged: CommentInput = serde_json::from_str(ranged).expect("deserialize");
     let at = match ranged.anchor {
-        Some(Anchor::Line { at, .. }) => Some(at),
+        Some(LogAnchor::Line { at, .. }) => Some(at),
         _ => None,
     };
     assert_eq!(
@@ -189,10 +189,10 @@ fn an_anchor_logged_before_the_line_anchor_still_reads() {
     let selection = r#"{"line":{"file":"a.rs","side":"old","line":4,
         "line_text":"y","range":{"start_line":4,"start_char":1,"end_line":4,"end_char":6}}}"#;
 
-    let whole: Anchor = serde_json::from_str(whole).expect("deserialize");
+    let whole: LogAnchor = serde_json::from_str(whole).expect("deserialize");
     assert_eq!(
         whole,
-        Anchor::Line {
+        LogAnchor::Line {
             file: "a.rs".to_string(),
             side: Side::New,
             line_text: Some("x".to_string()),
@@ -200,10 +200,10 @@ fn an_anchor_logged_before_the_line_anchor_still_reads() {
         }
     );
 
-    let selection: Anchor = serde_json::from_str(selection).expect("deserialize");
+    let selection: LogAnchor = serde_json::from_str(selection).expect("deserialize");
     assert_eq!(
         selection,
-        Anchor::Line {
+        LogAnchor::Line {
             file: "a.rs".to_string(),
             side: Side::Old,
             line_text: Some("y".to_string()),

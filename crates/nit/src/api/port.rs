@@ -23,8 +23,8 @@ use anyhow::{Context, Result};
 use git2::{Delta, Repository, Tree};
 
 use nit_types::domain::{
-    Anchor, ChangeProjection, CommentRange, EffectiveAttachment, LineAnchor, PortedComment,
-    RevisionNumber, RevisionProjection, Side, ThreadOrigin,
+    Anchor, ChangeProjection, CommentRange, EffectiveAttachment, LineAnchor, LogAnchor,
+    PortedComment, RevisionNumber, RevisionProjection, Side, ThreadOrigin,
 };
 
 use super::attachments::Blobs;
@@ -36,8 +36,8 @@ use super::position::{self, Edit, Span};
 /// Every thread of `threads` written on a revision before a target comes
 /// back at the place its anchor maps to in that target's trees. The
 /// entries of one target are sorted by thread id, and the targets keep
-/// the order given. `change` must hold every revision such a thread
-/// names.
+/// the order given. `change` must contain the revision of the anchor of
+/// every such thread.
 ///
 /// # Errors
 ///
@@ -51,7 +51,10 @@ pub fn port_threads(
 ) -> Result<Vec<PortedComment>> {
     let mut by_source: BTreeMap<_, Vec<&ThreadOrigin>> = BTreeMap::new();
     for thread in threads {
-        by_source.entry(thread.revision).or_default().push(thread);
+        by_source
+            .entry(thread.anchor.revision())
+            .or_default()
+            .push(thread);
     }
     let tree =
         |sha| diff::commit_tree(repo, sha).with_context(|| format!("tree for {sha} missing"));
@@ -82,8 +85,10 @@ pub fn port_threads(
                     position::buffer_edits(source.message.as_bytes(), target.message.as_bytes());
                 ported[i].extend(messages.iter().map(|thread| PortedComment {
                     thread_id: thread.thread_id,
-                    revision: target.number,
-                    anchor: port_in_file(&thread.anchor, diff::COMMIT_MSG_PATH, Some(&edits)),
+                    anchor: Anchor::from_log(
+                        target.number,
+                        port_in_file(&thread.anchor, diff::COMMIT_MSG_PATH, Some(&edits)),
+                    ),
                 }));
             }
         }
@@ -114,8 +119,7 @@ pub fn port_threads(
                         .zip(carried)
                         .map(|(t, anchor)| PortedComment {
                             thread_id: t.thread_id,
-                            revision: target.number,
-                            anchor,
+                            anchor: Anchor::from_log(target.number, anchor),
                         }),
                 );
             }
@@ -127,7 +131,7 @@ pub fn port_threads(
     Ok(ported.into_iter().flatten().collect())
 }
 
-/// Carries `anchors`, written against `src`, into `dst`.
+/// Ports `anchors`, written against `src`, into `dst`.
 ///
 /// Every anchor is returned ported, in the order given.
 ///
@@ -139,11 +143,11 @@ pub fn port_anchors(
     src: &Tree<'_>,
     dst: &Tree<'_>,
     anchors: &[&Anchor],
-) -> Result<Vec<Anchor>> {
+) -> Result<Vec<LogAnchor>> {
     let unchanged = |anchor: &Anchor| {
-        anchor
-            .file()
-            .map_or(Anchor::Change, |file| port_in_file(anchor, file, Some(&[])))
+        anchor.file().map_or(LogAnchor::Change, |file| {
+            port_in_file(anchor, file, Some(&[]))
+        })
     };
     if src.id() == dst.id() {
         return Ok(anchors.iter().map(|a| unchanged(a)).collect());
@@ -178,11 +182,11 @@ pub fn port_anchors(
         .iter()
         .map(|anchor| {
             let Some(file) = anchor.file() else {
-                return Ok(Anchor::Change);
+                return Ok(LogAnchor::Change);
             };
             Ok(match deltas.get(file) {
                 None => unchanged(anchor),
-                Some(FileDelta::Deleted) => Anchor::Change,
+                Some(FileDelta::Deleted) => LogAnchor::Change,
                 Some(FileDelta::Present {
                     path,
                     old_oid,
@@ -265,30 +269,35 @@ fn port_attached(
                 .and_then(|to| attachment_edits(blobs, from.as_ref(), to));
             ported[i].extend(threads.iter().map(|thread| PortedComment {
                 thread_id: thread.thread_id,
-                revision: target.number,
-                anchor: match (&to, thread.anchor.file()) {
-                    (Some(_), Some(file)) => port_in_file(&thread.anchor, file, edits.as_deref()),
-                    _ => Anchor::Change,
-                },
+                anchor: Anchor::from_log(
+                    target.number,
+                    match (&to, thread.anchor.file()) {
+                        (Some(_), Some(file)) => {
+                            port_in_file(&thread.anchor, file, edits.as_deref())
+                        }
+                        _ => LogAnchor::Change,
+                    },
+                ),
             }));
         }
     }
 }
 
-/// `anchor` under `path`, its lines shifted through `edits`.
+/// `anchor` under `path`, its lines shifted through `edits`, on the same
+/// side of the revision.
 ///
-/// `None` edits mean a binary file, whose lines cannot be mapped. A line
-/// an edit rewrote cannot be mapped either. Both give the file anchor.
-fn port_in_file(anchor: &Anchor, path: &str, edits: Option<&[Edit]>) -> Anchor {
+/// With `None` edits the file is binary, and its lines cannot be mapped. A
+/// line an edit rewrote cannot be mapped either. Both give the file anchor.
+fn port_in_file(anchor: &Anchor, path: &str, edits: Option<&[Edit]>) -> LogAnchor {
     let at = match anchor {
-        Anchor::Change => return Anchor::Change,
+        Anchor::Change { .. } => return LogAnchor::Change,
         Anchor::File { .. } => None,
         Anchor::Line { at, .. } => edits.and_then(|edits| port_line(at, edits)),
     };
     let file = path.to_owned();
     match at {
-        Some(at) => Anchor::line(file, anchor.side(), at),
-        None => Anchor::File { file },
+        Some(at) => LogAnchor::line(file, anchor.side(), at),
+        None => LogAnchor::File { file },
     }
 }
 

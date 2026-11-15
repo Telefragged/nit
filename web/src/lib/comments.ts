@@ -1,15 +1,15 @@
 // Comment placement: which column of a diff range a thread renders in, and
-// the inverse — which (revision, side) a new draft on a column stores to.
-// Threads are pinned to their revision — one renders at its own anchor only
-// when its (revision, side) names a displayed tree. A thread the range
-// hides may be shown at the place the server ported it to in a displayed
-// tree (`portThreads`); the server stores anchors verbatim and this module
-// is the sole owner of the placement rules. Plus assembling the server's
+// the inverse, which version a new draft on a column anchors to. A line
+// thread renders at its own anchor only when the version of its anchor is
+// a displayed tree. A thread the range hides
+// may be shown at the place the server ported it to in a displayed tree
+// (`portThreads`); the server stores anchors verbatim and this module is
+// the sole owner of the placement rules. Plus assembling the server's
 // published threads + reviewer drafts into the UI thread model. Pure and
 // side-effect-free, so the rules are unit-tested without a DOM.
 
 import { unresolvedThreads } from "../api/fold";
-import { anchorOf, revisionVersion, sideVersion } from "./version";
+import { revisionOf, revisionVersion } from "./version";
 import type {
   Anchor,
   ChangeDrafts,
@@ -26,7 +26,7 @@ import type {
 } from "../api/types";
 
 /** The line anchor's payload, or null when the anchor has no line. */
-const lineOf = (a: Anchor) => (a === "change" || "file" in a ? null : a.line);
+const lineOf = (a: Anchor) => ("line" in a ? a.line : null);
 
 /** Which arm of the anchor union a thread is on. Placement tests this
  * first, and a kind answers it directly: "has no line" is true of a change
@@ -34,11 +34,23 @@ const lineOf = (a: Anchor) => (a === "change" || "file" in a ? null : a.line);
 export type AnchorKind = "change" | "file" | "line";
 
 export const anchorKind = (a: Anchor): AnchorKind =>
-  a === "change" ? "change" : "file" in a ? "file" : "line";
+  "change" in a ? "change" : "file" in a ? "file" : "line";
 
-/** The file an anchor names, or null for a change-level one. */
+/** The file of an anchor, or null for a change-level one. */
 export const anchorFile = (a: Anchor): string | null =>
-  a === "change" ? null : "file" in a ? a.file.file : a.line.file;
+  "change" in a ? null : "file" in a ? a.file.file : a.line.file;
+
+/** The revision that an anchor sits on, or whose base its version is. */
+export const anchorRevision = (a: Anchor): number =>
+  "change" in a
+    ? a.change.revision
+    : "file" in a
+      ? a.file.revision
+      : revisionOf(a.line.version);
+
+/** The version of a line anchor, or null when the anchor has no line. */
+export const lineVersion = (a: Anchor): ChangeVersion | null =>
+  lineOf(a)?.version ?? null;
 
 /** Where in the file an anchor hangs, or null when it has no line. */
 export const anchorAt = (a: Anchor): LineAnchor | null => lineOf(a)?.at ?? null;
@@ -53,23 +65,15 @@ export const placementLine = (at: LineAnchor): number =>
 export const firstLine = (at: LineAnchor): number =>
   "whole" in at ? at.whole : at.selection.start_line;
 
-/** The side a line anchor reads. Off a line, the side is `new`. */
-export const anchorSide = (a: Anchor): Side => lineOf(a)?.side ?? "new";
-
-/** The selection inside the line, if the anchor holds one. */
+/** The selection inside the line, if the anchor contains one. */
 export const anchorRange = (a: Anchor): CommentRange | null => {
   const at = lineOf(a)?.at;
   return at && "selection" in at ? at.selection : null;
 };
 
-/** The line's text as the anchored revision held it. */
+/** The text of the line in the version of the anchor. */
 export const anchorLineText = (a: Anchor): string | null =>
   lineOf(a)?.line_text ?? null;
-
-export interface CommentAnchor {
-  revision: number;
-  anchor: Anchor;
-}
 
 export interface Placement {
   side: Side;
@@ -85,7 +89,6 @@ export interface Placement {
  */
 export interface UiThread {
   id: number | null;
-  revision: number;
   anchor: Anchor;
   resolved: boolean;
   /** Published comments (chronological). */
@@ -98,13 +101,13 @@ export interface UiThread {
   /** Where a ported comment is shown: a displayed revision's trees, at the
    * place the server ported its anchor to. Absent when the thread is shown
    * at its own anchor. */
-  ported?: CommentAnchor;
+  ported?: Anchor;
 }
 
 /** The place a thread is shown: its ported place when it has one, else its
- * own anchor. Placement and grouping read this, never `anchor` directly. */
-export function shownAt(t: UiThread): CommentAnchor {
-  return t.ported ?? t;
+ * own anchor. Placement and grouping use this, never `anchor` directly. */
+export function shownAt(t: UiThread): Anchor {
+  return t.ported ?? t.anchor;
 }
 
 /**
@@ -120,14 +123,14 @@ export function portThreads(
   selected: number,
   against: ChangeVersion,
 ): UiThread[] {
-  const places = new Map<number, CommentAnchor[]>();
-  for (const { thread_id, revision, anchor } of ported) {
+  const places = new Map<number, Anchor[]>();
+  for (const { thread_id, anchor } of ported) {
     const list = places.get(thread_id) ?? [];
-    list.push({ revision, anchor });
+    list.push(anchor);
     places.set(thread_id, list);
   }
   return threads.map((t) => {
-    if (t.id === null || threadInRange(t, selected, against)) return t;
+    if (t.id === null || threadInRange(t.anchor, selected, against)) return t;
     const at = places
       .get(t.id)
       ?.find((p) => threadInRange(p, selected, against));
@@ -155,7 +158,6 @@ export function assembleThreads(
     .filter((d) => d.thread_id === null)
     .map((d) => ({
       id: null,
-      revision: d.revision,
       anchor: d.anchor,
       resolved: false,
       comments: [],
@@ -166,43 +168,33 @@ export function assembleThreads(
 }
 
 /**
- * Where a thread lands in the diff range `[FROM] → [TO]` (`against` the
- * base, or the interdiff's left revision `rM`), or null when its
- * `(revision, side)` is neither displayed tree.
- *
- * - `(TO, new)` → the right/new column;
- * - `(TO, old)` vs base, or `(FROM, new)` in an interdiff → the left/old
- *   column (the old column of an interdiff is the FROM revision's own tree).
+ * Where a thread lands in the diff range `[against] → [selected]`, or null
+ * when the anchor has no line or its version is neither displayed tree.
+ * The new column shows `selected`, and the old column shows `against`.
  */
 export function commentPlacement(
-  c: CommentAnchor,
+  anchor: Anchor,
   selected: number,
   against: ChangeVersion,
 ): Placement | null {
-  const at = anchorAt(c.anchor);
+  const at = lineOf(anchor);
   if (at === null) return null;
-  const line = placementLine(at);
-  const version = sideVersion(c.revision, anchorSide(c.anchor));
-  if (version === revisionVersion(selected)) return { side: "new", line };
-  if (version === against) return { side: "old", line };
+  const line = placementLine(at.at);
+  if (at.version === revisionVersion(selected)) return { side: "new", line };
+  if (at.version === against) return { side: "old", line };
   return null;
 }
 
 /**
- * The `(revision, side)` a new draft stores to when written on the given
- * diff column of the range `[FROM] → [TO]` — the inverse of
- * {@link commentPlacement}. The old column of an interdiff is the FROM
- * revision's own content, so a draft there anchors to FROM's new side.
+ * The version that a diff column of the range `[against] → [selected]`
+ * shows, which a new draft on that column anchors to. The inverse of
+ * {@link commentPlacement}.
  */
-export function draftAnchor(
+export const columnVersion = (
   column: Side,
   selected: number,
   against: ChangeVersion,
-): { revision: number; side: Side } {
-  return column === "new"
-    ? { revision: selected, side: "new" }
-    : anchorOf(against);
-}
+): ChangeVersion => (column === "new" ? revisionVersion(selected) : against);
 
 /** A diff range as the page shows it: `[against] → [selected]`. */
 export interface DiffRange {
@@ -214,36 +206,37 @@ export interface DiffRange {
  * a column there. A change or file thread has no line, so no single tree
  * contains it and it shows in every range. */
 export function threadInRange(
-  c: CommentAnchor,
+  anchor: Anchor,
   selected: number,
   against: ChangeVersion,
 ): boolean {
   return (
-    anchorKind(c.anchor) !== "line" ||
-    commentPlacement(c, selected, against) !== null
+    anchorKind(anchor) !== "line" ||
+    commentPlacement(anchor, selected, against) !== null
   );
 }
 
 /**
- * The interdiff that reads a thread against the author's later work,
+ * The interdiff from the revision of a thread to the latest revision,
  * `[the thread's revision] → [latest]`, or null when the page must not
  * offer it.
  *
  * There is nothing to offer when the change ends at the thread's own
  * revision, when that range is already on screen, or when the thread has no
- * column in it. The last case is the old-side thread: it reads the tree
- * before its revision, and an interdiff never shows that tree.
+ * column in it. The last case is a thread on the base of its revision: an
+ * interdiff never shows a base version.
  */
 export function rangeSince(
-  c: CommentAnchor,
+  anchor: Anchor,
   selected: number,
   against: ChangeVersion,
   latest: number,
 ): DiffRange | null {
-  if (c.revision >= latest) return null;
-  const range = { against: revisionVersion(c.revision), selected: latest };
+  const revision = anchorRevision(anchor);
+  if (revision >= latest) return null;
+  const range = { against: revisionVersion(revision), selected: latest };
   if (against === range.against && selected === latest) return null;
-  return threadInRange(c, range.selected, range.against) ? range : null;
+  return threadInRange(anchor, range.selected, range.against) ? range : null;
 }
 
 /**
@@ -257,7 +250,8 @@ export function threadCountByRevision(
 ): Map<number, number> {
   const counts = new Map<number, number>();
   for (const t of threads) {
-    counts.set(t.revision, (counts.get(t.revision) ?? 0) + 1);
+    const revision = anchorRevision(t.anchor);
+    counts.set(revision, (counts.get(revision) ?? 0) + 1);
   }
   return counts;
 }

@@ -52,7 +52,8 @@ import {
 import {
   anchorAt,
   anchorFile,
-  anchorSide,
+  anchorRevision,
+  commentPlacement,
   firstLine,
   anchorLineText,
   assembleThreads,
@@ -118,11 +119,12 @@ const TAG_KEY = "nit.review-tag";
 /** The location state of a navigation that must not move the view. */
 const QUIET = "quiet";
 
-/** The element that shows `line` on `side` in the file section of the
- * thread `el`: a row of the diff, or a block of a rendered file. Null when
- * the thread does not render under a line, or the section shows no such
- * line. A thread whose line the shown range does not have renders in a
- * group of its own, and its anchor names a line of another revision. */
+/** The element that shows `line` in the diff column `side` of the file
+ * section of the thread `el`: a row of the diff, or a block of a rendered
+ * file. Null when the thread does not render under a line, or the section
+ * shows no such line. A thread whose line the shown range does not have
+ * renders in a group of its own, and its anchor is on a line of another
+ * version. */
 function anchorTop(el: Element, side: Side, line: number): Element | null {
   const section = el.closest(".meta-row")?.closest(".file-section");
   if (!section) return null;
@@ -510,8 +512,8 @@ export default function ReviewPage() {
   }, []);
 
   // An open editor's anchor is its *visual* column, which a range switch
-  // would silently re-map to a different (revision, side) at save time
-  // (lib/comments draftAnchor). Confirm-and-clear it first.
+  // would silently re-map to a different version at save time
+  // (lib/comments columnVersion). Confirm-and-clear it first.
   const switchRange = useCallback(
     (patch: Record<string, string | null>) => {
       if (!confirmEditorCollapse(editingTarget !== null)) return;
@@ -622,7 +624,7 @@ export default function ReviewPage() {
   const portKey = useMemo(
     () =>
       threads
-        .filter((t) => t.id !== null && t.revision < selected)
+        .filter((t) => t.id !== null && anchorRevision(t.anchor) < selected)
         .map((t) => t.id)
         .join(","),
     [threads, selected],
@@ -863,7 +865,7 @@ export default function ReviewPage() {
   }, [fileCount]);
 
   // File threads shown in the current diff range: a line comment whose
-  // (revision, side) is one of the displayed columns, or a file-level
+  // version is one of the displayed columns, or a file-level
   // comment (no column to filter by). Everything pinned to another
   // revision drops out — of the diff, the rail counts, and the leftover
   // group alike.
@@ -871,7 +873,7 @@ export default function ReviewPage() {
     const map = new Map<string, UiThread[]>();
     for (const t of shownThreads) {
       const at = shownAt(t);
-      const path = anchorFile(at.anchor);
+      const path = anchorFile(at);
       if (path === null) continue;
       // The linked thread shows even outside the range, so the page can
       // always scroll to it.
@@ -907,7 +909,7 @@ export default function ReviewPage() {
           ? shownThreads.find((t) => linksThread(link, t.id))
           : undefined;
       const path =
-        linked?.file ?? (thread ? anchorFile(shownAt(thread).anchor) : null);
+        linked?.file ?? (thread ? anchorFile(shownAt(thread)) : null);
       const file = path === null ? undefined : fileAt(files, path);
       if (linked !== null ? file !== undefined : thread !== undefined) {
         setRevealed({ link, key: location.key });
@@ -927,13 +929,13 @@ export default function ReviewPage() {
     // goes to the first line, so the page shows the code that the thread
     // is about. A thread with no line on the page is the target itself.
     const thread = shownThreads.find((t) => t.id === pendingThread);
-    const anchor = thread && shownAt(thread).anchor;
+    const anchor = thread && shownAt(thread);
     const at = anchor && anchorAt(anchor);
-    const top =
-      anchor && at && anchorTop(el, anchorSide(anchor), firstLine(at));
+    const place = anchor && commentPlacement(anchor, selected, against);
+    const top = at && place && anchorTop(el, place.side, firstLine(at));
     (top ?? el).scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     scrolledThread.current = pending;
-  }, [pending, pendingThread, expanded, shownThreads]);
+  }, [pending, pendingThread, expanded, shownThreads, selected, against]);
 
   // Busy until the stream has delivered the change and a member of its tag
   // graph, and every read has its first answer. A read that this render enables
@@ -966,7 +968,7 @@ export default function ReviewPage() {
   const allFilesExpanded = allExpanded(expanded, files);
 
   const changeLevelThreads = shownThreads.filter(
-    (t) => anchorFile(shownAt(t).anchor) === null,
+    (t) => anchorFile(shownAt(t)) === null,
   );
   const orphanFileThreads = [...threadsByFile.entries()].filter(
     ([path]) => !files.some((f) => f.path === path),
@@ -1161,7 +1163,7 @@ export default function ReviewPage() {
                           {lineText ? (
                             <div className="line-excerpt">
                               <span className="excerpt-line">
-                                r{t.revision}
+                                r{anchorRevision(t.anchor)}
                                 {line !== null ? `:${line}` : ""}
                               </span>
                               <span

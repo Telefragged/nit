@@ -34,8 +34,8 @@ use crate::domain::ChangeVersion;
 use crate::domain::RevisionNumber;
 use crate::domain::subject_of;
 use crate::domain::{
-    Anchor, ChangeProjection, Lifecycle, LifecycleAction, ReviewProjection, RevisionProjection,
-    ThreadComment, ThreadProjection,
+    Anchor, ChangeProjection, Lifecycle, LifecycleAction, LogAnchor, ReviewProjection,
+    RevisionProjection, ThreadComment, ThreadProjection,
 };
 use crate::domain::{
     AttachPayload, AttachmentProjection, CommentInput, LifecyclePayload, LogEntry, LogPayload,
@@ -170,8 +170,7 @@ fn open_thread(
         .unwrap_or_else(|| change.latest_revision_number());
     change.threads.push(ThreadProjection {
         id,
-        revision,
-        anchor: c.anchor.clone().unwrap_or(Anchor::Change),
+        anchor: Anchor::from_log(revision, c.anchor.clone().unwrap_or(LogAnchor::Change)),
         resolved: c.resolved.unwrap_or(false),
         comments: vec![ThreadComment {
             body: c.body.clone(),
@@ -303,7 +302,7 @@ mod tests {
         CommentInput {
             thread_id: None,
             revision: Some(RevisionNumber::new(0)),
-            anchor: Some(Anchor::Line {
+            anchor: Some(LogAnchor::Line {
                 file: file.to_string(),
                 side: Side::New,
                 line_text: None,

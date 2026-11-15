@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::Anchor;
+use crate::domain::LogAnchor;
 use crate::domain::RevisionNumber;
 
 /// `POST /api/changes/{id}/drafts` request.
@@ -10,8 +11,8 @@ use crate::domain::RevisionNumber;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 pub struct NewDraft {
-    pub revision: RevisionNumber,
-    /// The anchor of a new thread. A reply keeps the anchor of its thread.
+    /// The anchor of a new thread, with `line_text` unset. A reply has
+    /// the anchor of its thread, so it leaves this unset.
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub anchor: Option<Anchor>,
@@ -45,7 +46,7 @@ pub struct NewComment {
     #[serde(default)]
     pub revision: Option<RevisionNumber>,
     #[serde(default)]
-    pub anchor: Option<Anchor>,
+    pub anchor: Option<LogAnchor>,
     pub body: String,
     #[serde(default)]
     pub resolved: Option<bool>,

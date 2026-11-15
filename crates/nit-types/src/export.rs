@@ -87,6 +87,7 @@ fn write_wire_types() {
         crate::events::Start,
         crate::domain::Lifecycle,
         crate::domain::Anchor,
+        crate::domain::LogAnchor,
         crate::domain::LineAnchor,
         crate::domain::AttachmentHash,
         crate::domain::AttachmentName,

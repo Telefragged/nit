@@ -41,11 +41,12 @@ use axum::Router;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use git2::Repository;
+use rusqlite::Connection;
 
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
+use nit_types::domain::ChangeVersion;
 use nit_types::domain::RevisionProjection;
-use nit_types::domain::Side;
 use nit_types::domain::{Anchor, LineAnchor};
 use nit_types::health::Health;
 
@@ -269,63 +270,76 @@ async fn health() -> Json<Health> {
 /// many commits.
 pub const MERGED_WINDOW: u64 = 5;
 
-/// The anchor a request names, checked against the route's own rule.
+/// Returns the anchor of a new thread, with the text of its line.
 ///
-/// The synthetic commit-message file is the route's own rule. An
-/// anchor's old side is the revision's parent, and the parent commit
-/// contains no commit message of this change. So that file has no old
-/// side. The old side of an attachment is the base of the revision.
-fn anchor_of(anchor: Option<Anchor>) -> Result<Anchor, Error> {
-    let anchor = anchor.unwrap_or(Anchor::Change);
-    if let Some(file) = anchor.file()
+/// The synthetic commit-message file is the route's own rule. The base of
+/// a revision is its parent commit, and the parent commit contains no
+/// commit message of this change. So that file has no base version. The
+/// base of an attachment is the base attachment of the revision.
+///
+/// # Errors
+///
+/// A bad request when `change` has no revision of the anchor, or when the
+/// anchor is on the base version of the commit message.
+fn new_thread_anchor(
+    state: &AppState,
+    conn: &Connection,
+    change: &ChangeProjection,
+    mut anchor: Anchor,
+) -> Result<Anchor, Error> {
+    let number = anchor.revision();
+    let revision = change.revision(number).ok_or_else(|| {
+        Error::bad_request(format!(
+            "revision {number} is absent from change {}",
+            change.id
+        ))
+    })?;
+    if let Anchor::Line {
+        version: ChangeVersion::Base(_),
+        file,
+        ..
+    } = &anchor
         && file == diff::COMMIT_MSG_PATH
-        && anchor.side() == Side::Old
     {
-        return Err(Error::bad_request(format!(
-            "{file} has no old side — comment with side \"new\""
-        )));
+        return Err(Error::bad_request(format!("{file} has no base version")));
     }
+    let git_dir = state::git_dir(conn, change.repo_id)?;
+    let text = line_text(state.blobs(), &git_dir, change, revision, &anchor);
+    anchor.snapshot_line_text(text);
     Ok(anchor)
 }
 
-/// The line a thread with this anchor hangs under.
-///
-/// A whole-line anchor names that line itself. A selection hangs under
-/// the line it ends on.
-pub(super) fn hangs_under(anchor: &Anchor) -> Option<u64> {
-    match anchor {
-        Anchor::Line { at, .. } => Some(match at {
-            LineAnchor::Whole(line) => *line,
-            LineAnchor::Selection(range) => range.end_line(),
-        }),
-        _ => None,
-    }
-}
-
-fn snapshot_line_text(
+/// The text of the line that a line anchor hangs under, in the version of
+/// the anchor. A selection hangs under the line it ends on.
+fn line_text(
     blobs: &attachments::Blobs,
     git_dir: &str,
     change: &ChangeProjection,
     revision: &RevisionProjection,
     anchor: &Anchor,
 ) -> Option<String> {
-    let side = anchor.side();
-    match (anchor.file(), hangs_under(anchor)) {
-        (Some(diff::COMMIT_MSG_PATH), Some(line)) => diff::nth_line(&revision.message, line),
-        (Some(file), Some(line)) if let Some(name) = diff::attachment_name(file) => {
-            let attachment = change.attachment_at(side.version(revision.number), name)?;
-            diff::nth_line(&blobs.text(&attachment.hash)?, line)
-        }
-        (Some(file), Some(line)) => {
-            let sha = if side == Side::Old {
-                &revision.parent_sha
-            } else {
-                &revision.commit_sha
-            };
-            Repository::open(git_dir).ok().and_then(|repo| {
-                diff::commit_tree(&repo, sha).and_then(|t| diff::line_text(&repo, &t, file, line))
-            })
-        }
-        _ => None,
+    let Anchor::Line {
+        version, file, at, ..
+    } = anchor
+    else {
+        return None;
+    };
+    let line = match at {
+        LineAnchor::Whole(line) => *line,
+        LineAnchor::Selection(range) => range.end_line(),
+    };
+    if file == diff::COMMIT_MSG_PATH {
+        return diff::nth_line(&revision.message, line);
     }
+    if let Some(name) = diff::attachment_name(file) {
+        let attachment = change.attachment_at(*version, name)?;
+        return diff::nth_line(&blobs.text(&attachment.hash)?, line);
+    }
+    let sha = match version {
+        ChangeVersion::Base(_) => &revision.parent_sha,
+        ChangeVersion::Revision(_) => &revision.commit_sha,
+    };
+    Repository::open(git_dir).ok().and_then(|repo| {
+        diff::commit_tree(&repo, sha).and_then(|t| diff::line_text(&repo, &t, file, line))
+    })
 }

@@ -422,7 +422,7 @@ fn a_thread_on_an_attachment_ports_through_its_edits() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "line": { "file": "/attachments/notes.txt", "side": "new", "at": { "whole": 3 } } })
+            json!({ "line": { "version": "r1", "file": "/attachments/notes.txt", "at": { "whole": 3 } } })
         ]
     );
 }
@@ -440,7 +440,7 @@ fn a_thread_on_a_carried_attachment_keeps_its_line() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "line": { "file": "/attachments/notes.txt", "side": "new", "at": { "whole": 2 } } })
+            json!({ "line": { "version": "r1", "file": "/attachments/notes.txt", "at": { "whole": 2 } } })
         ]
     );
 }
@@ -669,7 +669,7 @@ fn a_thread_on_a_base_attachment_ports_through_its_edits() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "line": { "file": "/attachments/notes.txt", "side": "old", "at": { "whole": 3 } } })
+            json!({ "line": { "version": "r1^", "file": "/attachments/notes.txt", "at": { "whole": 3 } } })
         ]
     );
 }

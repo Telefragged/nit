@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { uiThread as ui } from "../api/fixtures/builders";
-import type { Anchor, Draft, ThreadProjection } from "../api/types";
-import type { CommentAnchor, UiThread } from "./comments";
+import type {
+  Anchor,
+  ChangeVersion,
+  Draft,
+  ThreadProjection,
+} from "../api/types";
+import type { UiThread } from "./comments";
+import { revisionOf } from "./version";
 import {
   anchorKind,
   assembleThreads,
+  columnVersion,
   commentCountLabel,
   commentPlacement,
-  draftAnchor,
   pendingResolved,
   rangeSince,
   pendingUnresolvedCount,
@@ -17,23 +23,22 @@ import {
   threadInRange,
 } from "./comments";
 
-/** A line anchor on src/main.rs, on the side and line given. */
-const lineAnchor = (side: "old" | "new", line: number): Anchor => ({
-  line: { file: "src/main.rs", side, at: { whole: line } },
+/** A line anchor on src/main.rs, in the version and on the line given. */
+const lineAnchor = (version: ChangeVersion, line: number): Anchor => ({
+  line: { version, file: "src/main.rs", at: { whole: line } },
 });
 
-const anchor = (revision: number, side: "old" | "new", line: number | null) =>
-  ({
-    revision,
-    anchor: line === null ? "change" : lineAnchor(side, line),
-  }) satisfies CommentAnchor;
+/** {@link lineAnchor}, or with no line the change anchor of the revision. */
+const anchor = (version: ChangeVersion, line: number | null): Anchor =>
+  line === null
+    ? { change: { revision: revisionOf(version) } }
+    : lineAnchor(version, line);
 
 /** A published thread anchored on src/main.rs. */
 const thread = (
   over: Partial<ThreadProjection> & { id: number },
 ): ThreadProjection => ({
-  revision: 1,
-  anchor: lineAnchor("new", 1),
+  anchor: lineAnchor("r1", 1),
   resolved: false,
   comments: [],
   created_at: "2026-01-01T00:00:00Z",
@@ -45,8 +50,7 @@ const thread = (
 const draft = (over: Partial<Draft> & { id: number }): Draft => ({
   change_number: 1,
   thread_id: null,
-  revision: 1,
-  anchor: lineAnchor("new", 1),
+  anchor: lineAnchor("r1", 1),
   body: "",
   resolved: false,
   created_at: "2026-01-01T00:00:00Z",
@@ -88,19 +92,19 @@ describe("commentPlacement", () => {
   // side (the parent) the left column.
   describe("base → rN", () => {
     it("puts the TO new side on the right", () => {
-      expect(commentPlacement(anchor(2, "new", 14), 2, "r2^")).toEqual({
+      expect(commentPlacement(anchor("r2", 14), 2, "r2^")).toEqual({
         side: "new",
         line: 14,
       });
     });
     it("puts the TO old side (the parent) on the left", () => {
-      expect(commentPlacement(anchor(2, "old", 9), 2, "r2^")).toEqual({
+      expect(commentPlacement(anchor("r2^", 9), 2, "r2^")).toEqual({
         side: "old",
         line: 9,
       });
     });
     it("hides a comment from another revision", () => {
-      expect(commentPlacement(anchor(1, "new", 5), 2, "r2^")).toBeNull();
+      expect(commentPlacement(anchor("r1", 5), 2, "r2^")).toBeNull();
     });
   });
 
@@ -108,49 +112,43 @@ describe("commentPlacement", () => {
   // made on rM (its new side) renders there.
   describe("rM → rN", () => {
     it("puts the TO new side on the right", () => {
-      expect(commentPlacement(anchor(3, "new", 20), 3, "r1")).toEqual({
+      expect(commentPlacement(anchor("r3", 20), 3, "r1")).toEqual({
         side: "new",
         line: 20,
       });
     });
     it("puts the FROM revision's new side on the left", () => {
-      expect(commentPlacement(anchor(1, "new", 7), 3, "r1")).toEqual({
+      expect(commentPlacement(anchor("r1", 7), 3, "r1")).toEqual({
         side: "old",
         line: 7,
       });
     });
     it("hides a base-side (old) comment — there is no parent column", () => {
-      expect(commentPlacement(anchor(3, "old", 4), 3, "r1")).toBeNull();
-      expect(commentPlacement(anchor(1, "old", 4), 3, "r1")).toBeNull();
+      expect(commentPlacement(anchor("r3^", 4), 3, "r1")).toBeNull();
+      expect(commentPlacement(anchor("r1^", 4), 3, "r1")).toBeNull();
     });
     it("hides a comment on a revision that is neither FROM nor TO", () => {
-      expect(commentPlacement(anchor(2, "new", 9), 3, "r1")).toBeNull();
+      expect(commentPlacement(anchor("r2", 9), 3, "r1")).toBeNull();
     });
   });
 
   it("never places a line-less (file-level) comment", () => {
-    expect(commentPlacement(anchor(2, "new", null), 2, "r2^")).toBeNull();
+    expect(commentPlacement(anchor("r2", null), 2, "r2^")).toBeNull();
   });
 });
 
-describe("draftAnchor", () => {
+describe("columnVersion", () => {
   it("anchors a new-column draft to the selected revision", () => {
-    expect(draftAnchor("new", 3, "r3^")).toEqual({
-      revision: 3,
-      side: "new",
-    });
-    expect(draftAnchor("new", 3, "r1")).toEqual({ revision: 3, side: "new" });
+    expect(columnVersion("new", 3, "r3^")).toBe("r3");
+    expect(columnVersion("new", 3, "r1")).toBe("r3");
   });
 
-  it("anchors a base old-column draft to the selected revision's parent", () => {
-    expect(draftAnchor("old", 3, "r3^")).toEqual({
-      revision: 3,
-      side: "old",
-    });
+  it("anchors a base old-column draft to the base of the selected revision", () => {
+    expect(columnVersion("old", 3, "r3^")).toBe("r3^");
   });
 
-  it("anchors an interdiff old-column draft to the FROM revision's content", () => {
-    expect(draftAnchor("old", 3, "r1")).toEqual({ revision: 1, side: "new" });
+  it("anchors an interdiff old-column draft to the FROM revision", () => {
+    expect(columnVersion("old", 3, "r1")).toBe("r1");
   });
 
   it("is the inverse of commentPlacement", () => {
@@ -159,9 +157,9 @@ describe("draftAnchor", () => {
       [3, "r1"],
     ] as const) {
       for (const column of ["old", "new"] as const) {
-        const stored = draftAnchor(column, selected, against);
+        const version = columnVersion(column, selected, against);
         const placed = commentPlacement(
-          { revision: stored.revision, anchor: lineAnchor(stored.side, 12) },
+          lineAnchor(version, 12),
           selected,
           against,
         );
@@ -173,34 +171,34 @@ describe("draftAnchor", () => {
 
 describe("rangeSince", () => {
   it("offers the interdiff from the thread's revision to the latest", () => {
-    expect(rangeSince(anchor(1, "new", 5), 1, "r1^", 3)).toEqual({
+    expect(rangeSince(anchor("r1", 5), 1, "r1^", 3)).toEqual({
       against: "r1",
       selected: 3,
     });
   });
   it("offers nothing on the latest revision", () => {
-    expect(rangeSince(anchor(3, "new", 5), 3, "r3^", 3)).toBeNull();
+    expect(rangeSince(anchor("r3", 5), 3, "r3^", 3)).toBeNull();
   });
   it("offers nothing while that range is on screen", () => {
-    expect(rangeSince(anchor(1, "new", 5), 3, "r1", 3)).toBeNull();
+    expect(rangeSince(anchor("r1", 5), 3, "r1", 3)).toBeNull();
   });
   it("offers a change-level thread the range too", () => {
-    expect(rangeSince(anchor(1, "new", null), 1, "r1^", 3)).toEqual({
+    expect(rangeSince(anchor("r1", null), 1, "r1^", 3)).toEqual({
       against: "r1",
       selected: 3,
     });
   });
   it("offers nothing to an old-side thread, which the range would hide", () => {
-    expect(rangeSince(anchor(1, "old", 5), 1, "r1^", 3)).toBeNull();
+    expect(rangeSince(anchor("r1^", 5), 1, "r1^", 3)).toBeNull();
   });
 });
 
 describe("threadCountByRevision", () => {
   it("counts UiThreads per revision", () => {
     const counts = threadCountByRevision([
-      ui({ id: 1, revision: 1 }),
-      ui({ id: 2, revision: 1 }),
-      ui({ id: 3, revision: 2 }),
+      ui({ id: 1, anchor: lineAnchor("r1", 1) }),
+      ui({ id: 2, anchor: lineAnchor("r1^", 1) }),
+      ui({ id: 3, anchor: lineAnchor("r2", 1) }),
     ]);
     expect(counts.get(1)).toBe(2);
     expect(counts.get(2)).toBe(1);
@@ -210,8 +208,8 @@ describe("threadCountByRevision", () => {
 
   it("counts a reviewer's draft-only threads alongside published ones", () => {
     const counts = threadCountByRevision([
-      ui({ id: 1, revision: 2 }),
-      ui({ id: null, revision: 2 }),
+      ui({ id: 1, anchor: lineAnchor("r2", 1) }),
+      ui({ id: null, anchor: lineAnchor("r2", 1) }),
     ]);
     expect(counts.get(2)).toBe(2);
   });
@@ -297,28 +295,27 @@ describe("commentCountLabel", () => {
 // The three anchor kinds answer the range question differently. Only a
 // line anchor can lose its column.
 describe("anchorKind", () => {
-  const fileAnchor: Anchor = { file: { file: "src/main.rs" } };
+  const fileAnchor: Anchor = { file: { revision: 0, file: "src/main.rs" } };
 
   it("returns the arm the anchor is on", () => {
-    expect(anchorKind("change")).toBe("change");
+    expect(anchorKind({ change: { revision: 0 } })).toBe("change");
     expect(anchorKind(fileAnchor)).toBe("file");
-    expect(anchorKind(lineAnchor("new", 3))).toBe("line");
+    expect(anchorKind(lineAnchor("r0", 3))).toBe("line");
   });
 
   it("shows a file thread in every range, its own or not", () => {
-    const t = { revision: 0, anchor: fileAnchor } satisfies CommentAnchor;
-    expect(threadInRange(t, 0, "r0^")).toBe(true);
-    expect(threadInRange(t, 3, "r2")).toBe(true);
+    expect(threadInRange(fileAnchor, 0, "r0^")).toBe(true);
+    expect(threadInRange(fileAnchor, 3, "r2")).toBe(true);
     // A line thread on the same revision has no column in that range.
-    expect(threadInRange(anchor(0, "new", 3), 3, "r2")).toBe(false);
+    expect(threadInRange(anchor("r0", 3), 3, "r2")).toBe(false);
   });
 });
 
 describe("portThreads", () => {
   // The server lists TO's places before FROM's.
   const ported = [
-    { thread_id: 1, revision: 2, anchor: lineAnchor("new", 8) },
-    { thread_id: 1, revision: 1, anchor: lineAnchor("new", 6) },
+    { thread_id: 1, anchor: lineAnchor("r2", 8) },
+    { thread_id: 1, anchor: lineAnchor("r1", 6) },
   ];
   const only = (threads: UiThread[]): UiThread => {
     const t = threads[0];
@@ -327,36 +324,37 @@ describe("portThreads", () => {
   };
 
   it("shows a hidden thread at its ported place", () => {
-    const t = ui({ id: 1, revision: 0, anchor: lineAnchor("new", 5) });
+    const t = ui({ id: 1, anchor: lineAnchor("r0", 5) });
     const shown = only(portThreads([t], ported, 2, "r2^"));
-    expect(shown.ported).toEqual({ revision: 2, anchor: lineAnchor("new", 8) });
+    expect(shown.ported).toEqual(lineAnchor("r2", 8));
     expect(shownAt(shown)).toEqual(shown.ported);
-    expect(shown.anchor).toEqual(lineAnchor("new", 5));
+    expect(shown.anchor).toEqual(lineAnchor("r0", 5));
   });
 
   it("keeps a thread the range already shows", () => {
-    const t = ui({ id: 1, revision: 2, anchor: lineAnchor("new", 5) });
+    const t = ui({ id: 1, anchor: lineAnchor("r2", 5) });
     const shown = only(portThreads([t], ported, 2, "r2^"));
     expect(shown.ported).toBeUndefined();
-    expect(shownAt(shown)).toBe(shown);
+    expect(shownAt(shown)).toBe(shown.anchor);
   });
 
   it("takes the first ported place the range shows", () => {
-    const t = ui({ id: 1, revision: 0, anchor: lineAnchor("new", 5) });
-    expect(only(portThreads([t], ported, 2, "r1")).ported?.revision).toBe(2);
+    const t = ui({ id: 1, anchor: lineAnchor("r0", 5) });
+    expect(only(portThreads([t], ported, 2, "r1")).ported).toEqual(
+      lineAnchor("r2", 8),
+    );
     // Vs base, FROM's tree is not shown, so only TO's place counts.
     expect(only(portThreads([t], ported.slice(1), 2, "r2^")).ported).toBe(
       undefined,
     );
-    expect(only(portThreads([t], ported.slice(1), 2, "r1")).ported).toEqual({
-      revision: 1,
-      anchor: lineAnchor("new", 6),
-    });
+    expect(only(portThreads([t], ported.slice(1), 2, "r1")).ported).toEqual(
+      lineAnchor("r1", 6),
+    );
   });
 
   it("leaves a thread the server did not port, and every draft-only thread", () => {
-    const missing = ui({ id: 9, revision: 0, anchor: lineAnchor("new", 5) });
-    const draftOnly = ui({ id: null, revision: 0 });
+    const missing = ui({ id: 9, anchor: lineAnchor("r0", 5) });
+    const draftOnly = ui({ id: null, anchor: lineAnchor("r0", 1) });
     for (const t of portThreads([missing, draftOnly], ported, 2, "r2^")) {
       expect(t.ported).toBeUndefined();
     }

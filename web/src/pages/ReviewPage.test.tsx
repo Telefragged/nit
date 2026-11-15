@@ -849,6 +849,19 @@ describe("links to a comment thread", () => {
     expect(thread(79).classList).toContain("thread-linked");
   });
 
+  it("scrolls to the old column for a thread on the FROM revision of an interdiff", async () => {
+    // Thread 71 is on line 22 of rotate.rs at r0. The r0 → r1 interdiff
+    // shows r0 in the old column, and r1 has its own line 22 in the new
+    // column.
+    await renderReview("/changes/11?against=r0&thread=71");
+
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0]?.getAttribute("data-old")).toBe("22");
+    expect(
+      byPath("src/auth/rotate.rs").querySelector('.code[data-new="22"]'),
+    ).not.toBe(scrolled[0]);
+  });
+
   it("links a thread from the time of its comment", async () => {
     let search = "";
     function LocationProbe() {

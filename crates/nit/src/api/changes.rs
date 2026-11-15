@@ -450,10 +450,9 @@ pub(super) async fn ported_comments(
         let threads: Vec<_> = change
             .threads
             .iter()
-            .filter(|t| t.revision < latest)
+            .filter(|t| t.anchor.revision() < latest)
             .map(|t| ThreadOrigin {
                 thread_id: t.id,
-                revision: t.revision,
                 anchor: t.anchor.clone(),
             })
             .collect();

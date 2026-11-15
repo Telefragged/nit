@@ -254,8 +254,7 @@ describe("a file with lines on one side only", () => {
 const threadAt = (id: number, at: LineAnchor): UiThread =>
   uiThread({
     id,
-    revision: 2,
-    anchor: { line: { file: "src/base.rs", side: "new", at } },
+    anchor: { line: { file: "src/base.rs", version: "r2", at } },
   });
 
 /** Points at the one rendered thread, returning its wrapper. */
@@ -327,8 +326,7 @@ describe("a rendered attachment", () => {
   const threadOn = (at: LineAnchor) =>
     uiThread({
       id: 1,
-      revision: 2,
-      anchor: { line: { file: plan.path, side: "new", at } },
+      anchor: { line: { file: plan.path, version: "r2", at } },
     });
   /** The source lines of the block that the one thread shows under. */
   const threadBlock = (container: HTMLElement) => {
@@ -369,8 +367,7 @@ describe("a rendered attachment", () => {
     const hovered = (at: LineAnchor) => {
       const thread = uiThread({
         id: 1,
-        revision: 2,
-        anchor: { line: { file: table.path, side: "new", at } },
+        anchor: { line: { file: table.path, version: "r2", at } },
       });
       const { container } = renderFile("unified", table, [thread]);
       hoverThread(container);
@@ -389,8 +386,7 @@ describe("a rendered attachment", () => {
     const doc = attachedFile("d.md", "First.\n\nLast one.\n", 2);
     const thread = uiThread({
       id: 1,
-      revision: 2,
-      anchor: { line: { file: doc.path, side: "new", at: { whole: 2 } } },
+      anchor: { line: { file: doc.path, version: "r2", at: { whole: 2 } } },
     });
     const { container } = renderFile("unified", doc, [thread]);
     hoverThread(container);
@@ -404,11 +400,10 @@ describe("a rendered attachment", () => {
     const doc = attachedFile("d.md", "First.\n\n- a\n- b\n\nLast one.\n", 2);
     const thread = uiThread({
       id: 1,
-      revision: 2,
       anchor: {
         line: {
           file: doc.path,
-          side: "new",
+          version: "r2",
           at: {
             selection: {
               start_line: 1,
@@ -573,8 +568,7 @@ describe("a rendered Markdown diff", () => {
   it("shows a block with a thread", () => {
     const thread = uiThread({
       id: 1,
-      revision: 2,
-      anchor: { line: { file: doc.path, side: "new", at: { whole: 3 } } },
+      anchor: { line: { file: doc.path, version: "r2", at: { whole: 3 } } },
     });
     const { container } = renderFile("unified", doc, [thread]);
     fireEvent.click(screen.getByRole("button", { name: "Rendered" }));

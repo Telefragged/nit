@@ -64,7 +64,7 @@ const FILES: ReviewFile[] = [
 ];
 
 const line = (path: string, whole: number) => ({
-  line: { file: path, side: "new" as const, at: { whole } },
+  line: { file: path, version: "r1" as const, at: { whole } },
 });
 
 const THREADS = new Map<string, UiThread[]>([
@@ -74,11 +74,10 @@ const THREADS = new Map<string, UiThread[]>([
       uiThread({ id: 3, anchor: line("crates/nit/src/server.rs", 41) }),
       uiThread({
         id: 7,
-        revision: 0,
         anchor: {
           line: {
             file: "crates/nit/src/server.rs",
-            side: "new",
+            version: "r0",
             at: {
               selection: {
                 start_line: 88,

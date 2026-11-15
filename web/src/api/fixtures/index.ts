@@ -31,6 +31,7 @@ import {
 } from "../../lib/version";
 import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, picks, projection } from "./stream";
+import { intoLog } from "./synth";
 import { addedFile, changedFile, diffKey, sideEnd } from "./builders";
 import blobs from "./blobs.json";
 import { changes, draftReviews, drafts, repos } from "./data";
@@ -67,8 +68,7 @@ function drainComments(c: ChangeRecord): CommentInput[] {
     } else if (d.body.trim() !== "") {
       comments.push({
         thread_id: nextThreadId++,
-        revision: d.revision,
-        anchor: d.anchor,
+        ...intoLog(d.anchor),
         body: d.body,
         resolved: d.resolved,
       });
@@ -250,18 +250,14 @@ function changeDrafts(c: ChangeRecord) {
 }
 
 /** Find the text of a diff line so new drafts get a line_text snapshot. */
-function snapshotLineText(
-  c: ChangeRecord,
-  revision: number,
-  anchor: Anchor,
-): Anchor {
-  if (anchor === "change" || "file" in anchor) return anchor;
-  const { file, side } = anchor.line;
+function snapshotLineText(c: ChangeRecord, anchor: Anchor): Anchor {
+  if (!("line" in anchor)) return anchor;
+  const { file, version } = anchor.line;
   const line = placementLine(anchor.line.at);
-  const diff = c.diffs[diffKey(revision)];
+  const diff = c.diffs[diffKey(revisionOf(version))];
   const f = diff?.files.find((x) => x.path === file || x.old_path === file);
   const lines = f?.hunks.flatMap((hunk) => hunk.lines) ?? [];
-  const hit = lines.find((l) => (side === "new" ? l.new : l.old) === line);
+  const hit = lines.find((l) => (isBase(version) ? l.old : l.new) === line);
   return { line: { ...anchor.line, line_text: hit?.text } };
 }
 
@@ -459,12 +455,19 @@ export function mockRequest(
     const c = getChange(Number(m[1]));
     const req = body as NewDraft;
     const now = new Date().toISOString();
+    // A reply has the anchor of its thread, as on the server.
+    const anchor =
+      req.thread_id === undefined
+        ? req.anchor && snapshotLineText(c, req.anchor)
+        : projection(c.id).threads.find((t) => t.id === req.thread_id)?.anchor;
+    if (anchor === undefined) {
+      throw new ApiError(400, "a new thread needs an anchor");
+    }
     const record: DraftRecord = {
       id: nextDraftId++,
       change_number: c.id,
       thread_id: req.thread_id ?? null,
-      revision: req.revision,
-      anchor: snapshotLineText(c, req.revision, req.anchor ?? "change"),
+      anchor,
       body: req.body,
       resolved: req.resolved ?? false,
       created_at: now,

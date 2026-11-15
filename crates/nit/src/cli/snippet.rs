@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use nit_types::diff::{FileLines, Line};
 use nit_types::domain::{
-    Anchor, ChangeNumber, CommentInput, LineAnchor, LogEntry, LogPayload, RevisionNumber, Side,
+    ChangeNumber, CommentInput, LineAnchor, LogAnchor, LogEntry, LogPayload, RevisionNumber, Side,
 };
 
 use super::client::{Client, Retry};
@@ -90,7 +90,7 @@ impl Sources {
 /// The file, side and place that a line comment anchors to.
 fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Side, LineAnchor)> {
     match (&comment.anchor, comment.revision) {
-        (Some(Anchor::Line { file, side, at, .. }), Some(revision)) => {
+        (Some(LogAnchor::Line { file, side, at, .. }), Some(revision)) => {
             Some(((change, revision, file.clone()), *side, *at))
         }
         _ => None,
@@ -227,7 +227,7 @@ mod tests {
         CommentInput {
             thread_id: Some(tid),
             revision: Some(RevisionNumber::new(1)),
-            anchor: Some(Anchor::line("src/queue.rs".into(), Side::New, at)),
+            anchor: Some(LogAnchor::line("src/queue.rs".into(), Side::New, at)),
             body: body.to_string(),
             resolved: None,
         }

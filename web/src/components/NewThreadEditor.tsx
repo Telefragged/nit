@@ -17,8 +17,10 @@ export default function NewThreadEditor({
   const create = useMutation({
     mutationFn: (body: string) =>
       createDraft(ctx.changeNumber, {
-        revision: ctx.selected,
-        anchor: file === undefined ? "change" : { file: { file } },
+        anchor:
+          file === undefined
+            ? { change: { revision: ctx.selected } }
+            : { file: { revision: ctx.selected, file } },
         body,
       }),
     onSuccess: () => {

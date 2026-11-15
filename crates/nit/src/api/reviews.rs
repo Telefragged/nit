@@ -33,13 +33,16 @@ fn drafts_to_comments(
 ) -> anyhow::Result<Vec<CommentInput>> {
     Ok(db::drafts_for_change(conn, change_number)?
         .into_iter()
-        .map(|d| CommentInput {
-            thread_id: d.thread_id,
-            revision: Some(d.revision),
-            // A reply takes the anchor its thread already holds.
-            anchor: d.thread_id.is_none().then_some(d.anchor),
-            body: d.body,
-            resolved: d.resolved,
+        .map(|d| {
+            let (revision, anchor) = d.anchor.into_log();
+            CommentInput {
+                thread_id: d.thread_id,
+                revision: Some(revision),
+                // A reply has the anchor of its thread.
+                anchor: d.thread_id.is_none().then_some(anchor),
+                body: d.body,
+                resolved: d.resolved,
+            }
         })
         .collect())
 }
