@@ -31,9 +31,8 @@ jobs:
           fi
           echo "shas=$shas" >> "$GITHUB_OUTPUT"
 
-  # Build and run the full check suite on each commit, in parallel — one runner
-  # per commit. fail-fast is off so every commit is reported, not just the
-  # first to break.
+  # fail-fast is off so that every commit is reported, not only the first
+  # to break.
   check:
     needs: commits
     if: ${{ needs.commits.outputs.shas != '[]' }}
@@ -50,8 +49,6 @@ jobs:
         with:
           ref: ${{ matrix.sha }}
       - uses: DeterminateSystems/nix-installer-action@main
-      # Only a push to main writes to the cache. Every other event only reads
-      # from it.
       - uses: cachix/cachix-action@v17
         with:
           name: nit-ci-cache
