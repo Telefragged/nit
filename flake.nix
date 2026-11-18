@@ -135,8 +135,6 @@
             NIT_WEB_DIST = nit-web;
           });
           default = nit;
-          # The release drops the `+<sha>` suffix, so `nit --version` tells
-          # a published release from a build of a git checkout.
           nit-release = nit.overrideAttrs { NIT_GIT_SUFFIX = ""; };
           contract = (rustFor pkgs).contract;
           claude-plugin = pkgs.runCommandLocal "nit-claude-plugin" { } "cp -r ${./crates/nit/plugin} $out";

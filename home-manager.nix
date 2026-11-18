@@ -36,8 +36,8 @@ in
         self.packages.${pkgs.stdenv.hostPlatform.system}.claude-plugin;
     })
     (lib.mkIf (cfg.enable && !config.programs.claude-code.enable) {
-      # Every switch runs this, so the plugin follows the package. The
-      # activation PATH contains neither place that Claude Code installs to.
+      # The activation PATH contains neither place that Claude Code installs
+      # to.
       home.activation.nitClaudePlugin = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         (
           PATH="${config.home.profileDirectory}/bin:$HOME/.local/bin:$PATH"
