@@ -1,7 +1,7 @@
 # The home-manager module: `programs.nit` puts nit on PATH and installs
-# its Claude Code plugin, through `programs.claude-code` when that module
-# is enabled. `services.nit` runs the review server as a systemd user
-# service, and enables `programs.nit` by default.
+# its Claude Code plugin, into the skills folder of `programs.claude-code`
+# when that module is enabled. `services.nit` runs the review server as a
+# systemd user service, and enables `programs.nit` by default.
 self:
 {
   config,
@@ -27,8 +27,13 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable { home.packages = [ cfg.package ]; })
+    # `programs.claude-code.plugins` links each top-level entry of a plugin
+    # on its own, and Claude Code loads no hooks module whose path resolves
+    # outside the plugin directory. One link to the whole plugin keeps every
+    # path inside it.
     (lib.mkIf (cfg.enable && config.programs.claude-code.enable) {
-      programs.claude-code.plugins.nit = self.packages.${pkgs.stdenv.hostPlatform.system}.claude-plugin;
+      home.file."${config.programs.claude-code.configDir}/skills/nit".source =
+        self.packages.${pkgs.stdenv.hostPlatform.system}.claude-plugin;
     })
     (lib.mkIf (cfg.enable && !config.programs.claude-code.enable) {
       # Every switch runs this, so the plugin follows the package. The
