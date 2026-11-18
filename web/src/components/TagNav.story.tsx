@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { graphNode } from "../api/fixtures/builders";
+import { draft, graphNode } from "../api/fixtures/builders";
 import type { ChangeGraph } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
 import TagNav from "./TagNav";
@@ -33,13 +33,21 @@ const GRAPH: ChangeGraph = {
 };
 
 const ACTIVITY = new Map<number, NodeActivity>([
-  [11, { drafts: [], unresolved: 3, decision: null }],
+  [12, { drafts: [], unresolved: 0, decision: "approve" }],
+  [
+    11,
+    {
+      drafts: [draft({ id: 1 }), draft({ id: 2 })],
+      unresolved: 3,
+      decision: "request_changes",
+    },
+  ],
 ]);
 
 const TAGS = { branch: "track/auth-rotation", "session-id": "auth-rotation" };
 
 /** A stack of three changes that share a tag. The current change, in the
- * middle, has open threads. */
+ * middle, has drafts, open threads and a draft decision. */
 export function Default() {
   const [key, setKey] = useState("session-id");
   const [expanded, setExpanded] = useState(false);

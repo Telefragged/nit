@@ -352,7 +352,7 @@ button.rail-toggle,
    window fits beside the header's own lines. */
 .tag-nav {
   flex: none;
-  width: 480px;
+  width: 640px;
 }
 
 .tag-nav-title {
@@ -367,7 +367,7 @@ button.rail-toggle,
    cell. */
 .tag-nav .graph-body {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) repeat(5, auto);
   column-gap: 6px;
 }
 
