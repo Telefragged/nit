@@ -3,5 +3,6 @@
   "description": "Drive code review through nit: push completed commits for review, annotate decisions instead of blocking on questions, fork competing approaches into parallel changes, and turn plans into reviewable commits.",
   "homepage": "https://github.com/Telefragged/nit",
   "repository": "https://github.com/Telefragged/nit",
-  "keywords": ["code-review", "nit", "review", "agent", "gerrit"]
+  "keywords": ["code-review", "nit", "review", "agent", "gerrit"],
+  "types": "./types/index.d.ts"
 }

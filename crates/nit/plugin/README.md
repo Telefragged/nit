@@ -39,6 +39,18 @@ session's own
 The hook runs it as a child of the session, and no timeout applies to it. It
 exits when the session exits.
 
+## The badge — the branch's first change
+
+Above the prompt, the plugin shows a link to the oldest active change on the
+current branch, for example `nit #412 cli: add --tag`. The reviewer usually
+starts a review there. Click the link to open the change page.
+
+The plugin finds the change from `git log <canonical ref>..HEAD`. It matches
+each commit by its `Change-Id` to a change that has the tag `branch=<branch>`.
+It updates the link when the session starts, and when each turn starts and
+ends. `nit watch` starts a turn for each review, so the link follows the
+reviewer. Tests run with `claude plugin test crates/nit/plugin`.
+
 ## Commands — things you initiate
 
 User-invoked workflows built on the skills above.
