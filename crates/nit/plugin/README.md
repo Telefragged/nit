@@ -8,7 +8,7 @@ anchored to the exact lines it concerns.
 
 ## Install
 
-`nit install-plugin` installs the plugin that your `nit` binary carries, so
+`nit install-plugin` installs the plugin that your `nit` binary contains, so
 the plugin always matches your nit version. It registers the plugin with
 Claude Code as `nit@nit`.
 
@@ -46,13 +46,13 @@ User-invoked workflows built on the skills above.
 | Command        | What it does                                                                                                                                                                      |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/nit:install` | Set nit up for this project: make the `nit` CLI reachable, register the repo, ensure commits get a Change-Id, and record the project's approve action in `CLAUDE.md`/`AGENTS.md`. |
-| `/nit:goal`    | Pursue a goal to completion without blocking on questions — decide, implement, and annotate the call on the exact lines for the reviewer, then keep going.                        |
+| `/nit:goal`    | Pursue a goal to completion without blocking on questions — decide, implement, and annotate the decision on the exact lines for the reviewer, then keep going.                    |
 | `/nit:fork`    | Facing several viable approaches? Fork into parallel sub-agents, implement each variation, and push them all as separate changes to compare.                                      |
 | `/nit:plan`    | Push the plan as a reviewable commit and raise every open question as an inline comment, then implement once it's approved.                                                       |
 
 `/nit:goal`, `/nit:fork`, and `/nit:plan` turn off the question prompt: an
 unclear point becomes an annotation on the code or plan, not an interruption.
-`/nit:install` is the one command that asks the user directly.
+`/nit:install` is the one command that prompts the user directly.
 
 ## Prerequisites
 

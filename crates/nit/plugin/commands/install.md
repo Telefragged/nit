@@ -5,8 +5,8 @@ description: Set nit up for this project — verify the server, ensure commits g
 
 # /nit:install — onboard this project to nit
 
-Setup the user initiates. This is the interactive command — it asks the user
-directly, unlike `/nit:goal`, `/nit:fork`, and `/nit:plan`, which never ask
+Setup the user initiates. This is the interactive command — it prompts the user
+directly, unlike `/nit:goal`, `/nit:fork`, and `/nit:plan`, which never prompt
 and route everything through `nit comment`.
 
 **Work the steps below in order, one at a time** — don't read ahead and batch
@@ -43,7 +43,7 @@ has no default. Ask the user (AskUserQuestion) to choose the canonical ref befor
 register the repo, even when the repo has a single branch. Detect the likely
 candidates (the current branch, `main`/`master`,
 `git symbolic-ref refs/remotes/origin/HEAD`) and offer them as the suggested
-options. A 409 means that the repo is already registered, and there is nothing
+options. A 409 response shows that the repo is already registered, and there is nothing
 to do.
 
 ## 3. Choose where agent instructions live
@@ -117,7 +117,7 @@ lands approved work (e.g. rebase-and-fast-forward, merge the PR, run a deploy
 script). This is project-specific; nit does not prescribe it.
 
 Then append a short section to the file you chose in step 3, so every agent
-knows to route work through review (filling in `<base>` with the registered
+routes work through review (filling in `<base>` with the registered
 canonical ref and their approve action verbatim):
 
 ```markdown
