@@ -340,6 +340,13 @@ export interface NodeActivity {
   decision: Decision | null;
 }
 
+/** The count of the drafts in `act` that anchor to `revision`. */
+export const draftsAt = (
+  act: NodeActivity | undefined,
+  revision: number | null,
+): number =>
+  act?.drafts.filter((d) => anchorRevision(d.anchor) === revision).length ?? 0;
+
 /** Each change's activity, keyed by change number: its open threads off
  * its projection, and its drafts and draft decision off the reviewer's
  * overlay (`GET /changes/{id}/drafts`) when that has arrived. */

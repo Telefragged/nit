@@ -1,9 +1,9 @@
 import { type CSSProperties, useLayoutEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, Tags } from "../api/types";
-import type { NodeActivity } from "../lib/comments";
+import { draftsAt, type NodeActivity } from "../lib/comments";
 import { LAYOUT_DENSE, type LaidNode, layoutGraph } from "../lib/graphLayout";
-import { StatusDot } from "./badges";
+import { DraftDecision, StatusDot } from "./badges";
 import { GraphRail } from "./GraphTable";
 import Select from "./Select";
 import ThreadCount from "./ThreadCount";
@@ -16,8 +16,9 @@ const WINDOW = 7;
 /**
  * The review header's graph of the changes that share a tag with the
  * current one: the tag graph (api/fold tagGraph) drawn as the dashboard's
- * rail beside one-line rows (status dot, subject, count of open threads,
- * revision, change number), the current change highlighted and the
+ * rail beside one-line rows (status dot, subject, count of drafts at the
+ * node's revision, count of open threads, draft decision, revision,
+ * change number), the current change highlighted and the
  * others linking through. The selector picks which of the current
  * change's tag keys the graph follows. Unless `expanded`, the graph
  * scrolls inside a seven-row window centered on the current change.
@@ -41,7 +42,7 @@ export default function TagNav({
   onSelectKey: (key: string) => void;
   /** The tag graph of every change carrying the selected key's value. */
   graph: ChangeGraph;
-  /** Per-change activity, keyed by change number: the unresolved count. */
+  /** Per-change activity, keyed by change number. */
   activity: Map<number, NodeActivity>;
   currentId: number;
   /** Whether the graph shows every row instead of the scroll window. */
@@ -139,6 +140,7 @@ function Row({
   current: boolean;
 }) {
   const { node } = ln;
+  const drafts = draftsAt(act, node.revision);
   const unresolved = act?.unresolved ?? 0;
   const title = `${node.subject} · ${node.status}`;
   const inner = (
@@ -146,7 +148,13 @@ function Row({
       <StatusDot status={node.status} />
       <span className="subj">{node.subject}</span>
       <span>
+        {drafts > 0 ? <ThreadCount mark="draft" count={drafts} /> : null}
+      </span>
+      <span>
         {unresolved > 0 ? <ThreadCount mark="open" count={unresolved} /> : null}
+      </span>
+      <span>
+        {act?.decision ? <DraftDecision decision={act.decision} /> : null}
       </span>
       <span className="rev mono dim">
         {node.revision === null ? "" : `r${node.revision}`}

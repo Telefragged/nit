@@ -1,7 +1,7 @@
 import { type CSSProperties, Fragment, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { ChangeGraph, GraphNode } from "../api/types";
-import { anchorRevision, type NodeActivity } from "../lib/comments";
+import { draftsAt, type NodeActivity } from "../lib/comments";
 import type { GraphLayout, LaidEdge, LaidNode } from "../lib/graphLayout";
 import { layoutGraph } from "../lib/graphLayout";
 import { shortSha } from "../lib/sha";
@@ -66,9 +66,7 @@ function Activity({
   act: NodeActivity | undefined;
 }) {
   if (!act || node.revision === null) return null;
-  const drafts = act.drafts.filter(
-    (d) => anchorRevision(d.anchor) === node.revision,
-  ).length;
+  const drafts = draftsAt(act, node.revision);
   const { unresolved, decision } = act;
   if (drafts === 0 && unresolved === 0 && !decision) return null;
   return (

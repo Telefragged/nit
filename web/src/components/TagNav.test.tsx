@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { draft } from "../api/fixtures/builders";
 import type { ChangeGraph, ChangeStatus, GraphNode } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
 import { LAYOUT_DENSE } from "../lib/graphLayout";
@@ -67,7 +68,12 @@ const three: ChangeGraph = {
 const renderNav = (
   graph: ChangeGraph,
   currentId: number,
-  { onSelectKey = vi.fn(), expanded = false, onExpandedChange = vi.fn() } = {},
+  {
+    onSelectKey = vi.fn(),
+    expanded = false,
+    onExpandedChange = vi.fn(),
+    acts = new Map([[11, activity(2)]]),
+  } = {},
 ) =>
   render(
     <MemoryRouter>
@@ -76,7 +82,7 @@ const renderNav = (
         selectedKey="session-id"
         onSelectKey={onSelectKey}
         graph={graph}
-        activity={new Map([[11, activity(2)]])}
+        activity={acts}
         currentId={currentId}
         expanded={expanded}
         onExpandedChange={onExpandedChange}
@@ -175,6 +181,31 @@ describe("TagNav", () => {
     expect(current.querySelector(".num")?.textContent).toBe("#11");
     // Nothing to expand: the whole graph fits the window.
     expect(screen.queryByRole("button", { name: "Show all" })).toBeNull();
+  });
+
+  it("counts the drafts at the node's revision, and shows the draft decision", () => {
+    const at = (id: number, revision: number) =>
+      draft({ id, anchor: { change: { revision } } });
+    renderNav(three, 11, {
+      acts: new Map<number, NodeActivity>([
+        [
+          12,
+          {
+            drafts: [at(1, 0), at(2, 0), at(3, 1)],
+            unresolved: 0,
+            decision: null,
+          },
+        ],
+        [10, { drafts: [], unresolved: 0, decision: "approve" }],
+      ]),
+    });
+    const [top, , bottom] = rows();
+    expect(top?.querySelector(".count")?.getAttribute("title")).toBe(
+      "2 drafts",
+    );
+    expect(top?.querySelector(".pill")).toBeNull();
+    expect(bottom?.querySelector(".count")).toBeNull();
+    expect(bottom?.querySelector(".pill")?.textContent).toBe("Approve");
   });
 
   it("scrolls a seven-row window to center the current change", () => {
