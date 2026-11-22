@@ -12,9 +12,8 @@ use nit_types::domain::Draft;
 
 use crate::db;
 
-use super::views;
 use super::{AppJson, AppPath, AppState, Error, with_conn};
-use super::{change_or_404, new_thread_anchor};
+use super::{change_or_404, new_thread, reply};
 
 #[utoipa::path(post, path = "/api/changes/{id}/drafts", params(("id" = ChangeNumber, Path)), request_body = NewDraft, responses((status = 200, body = Draft)))]
 pub(super) async fn create_draft(
@@ -24,48 +23,23 @@ pub(super) async fn create_draft(
 ) -> Result<Json<Draft>, Error> {
     with_conn(state.pool(), move |conn| {
         let proj = change_or_404(conn, id)?;
-        let (thread_id, anchor, body, resolved) = match req {
+        let comment = match req {
             NewDraft::Thread {
                 anchor,
                 body,
                 resolved,
-            } => {
-                if body.trim().is_empty() {
-                    return Err(Error::bad_request("a new thread needs a body"));
-                }
-                let anchor = new_thread_anchor(&proj, anchor)?;
-                (None, anchor, body, resolved)
-            }
+            } => new_thread(&proj, anchor, body, resolved)?,
             NewDraft::Reply {
                 thread_id,
                 body,
                 resolved,
-            } => {
-                if body.trim().is_empty() && resolved.is_none() {
-                    return Err(Error::bad_request(
-                        "a reply needs a body or a resolution decision",
-                    ));
-                }
-                let anchor = proj
-                    .thread(thread_id)
-                    .ok_or_else(|| Error::bad_request("thread not found on this change"))?
-                    .anchor
-                    .clone();
-                (Some(thread_id), anchor, body, resolved)
-            }
+            } => reply(&proj, thread_id, body, resolved)?,
         };
         let draft_id = state.alloc_id();
-        let new = db::NewDraft {
-            change_number: id,
-            thread_id,
-            anchor: &anchor,
-            body: &body,
-            resolved,
-        };
-        let row = db::write(conn, |tx| {
-            db::insert_draft(tx, draft_id, &new, &db::now_rfc3339())
+        let draft = db::write(conn, |tx| {
+            db::insert_draft(tx, draft_id, id, comment, &db::now_rfc3339())
         })?;
-        Ok(Json(views::draft_view(&row)))
+        Ok(Json(draft))
     })
     .await
 }
@@ -78,11 +52,10 @@ pub(super) async fn edit_draft(
 ) -> Result<Json<Draft>, Error> {
     with_conn(state.pool(), move |conn| {
         let updated = db::write(conn, |tx| {
-            db::update_draft(tx, id, &req.body, req.resolved, &db::now_rfc3339())?;
-            db::get_draft(tx, id)
+            db::update_draft(tx, id, &req.body, req.resolved, &db::now_rfc3339())
         })?
         .ok_or_else(|| Error::not_found(format!("draft {id} not found")))?;
-        Ok(Json(views::draft_view(&updated)))
+        Ok(Json(updated))
     })
     .await
 }

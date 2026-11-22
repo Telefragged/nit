@@ -11,6 +11,7 @@ import { revisionOf } from "./version";
 import {
   anchorKind,
   assembleThreads,
+  intoLog,
   columnVersion,
   commentCountLabel,
   commentPlacement,
@@ -54,9 +55,9 @@ const thread = (
 const draft = (over: Partial<Draft> & { id: number }): Draft => ({
   change_number: 1,
   thread_id: null,
-  anchor: lineAnchor("r1", 1),
+  ...intoLog(lineAnchor("r1", 1)),
   body: "",
-  resolved: false,
+  resolved: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
   ...over,
@@ -79,7 +80,7 @@ describe("assembleThreads", () => {
     expect(u?.comments).toEqual([]);
     expect(u?.drafts).toEqual([d]);
     // The anchor comes from the lone draft.
-    expect(u?.anchor).toEqual(d.anchor);
+    expect(u?.anchor).toEqual(lineAnchor("r1", 1));
   });
 
   it("sorts published and draft-only threads together by creation time", () => {

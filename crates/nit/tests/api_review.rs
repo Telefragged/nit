@@ -58,7 +58,8 @@ fn review_drains_drafts_and_sets_status() {
         &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "a.txt", "anchor": {"line": 2}}}, "body": "why a2?"}}),
     );
     assert_eq!(st, 200, "{d1}");
-    assert_eq!(d1["anchor"]["file"]["version"], "r0");
+    assert_eq!(d1["revision"], 0);
+    assert_eq!(d1["anchor"]["file"]["side"], "new");
     let (st, _) = http_post(
         &drafts_url(&server, id),
         &json!({"thread": {"anchor": {"change": {"revision": 0}}, "body": "overall: looks fine"}}),
@@ -115,7 +116,7 @@ fn reply_draft_appends_to_thread() {
     );
     assert_eq!(st, 200, "{reply}");
     assert_eq!(reply["thread_id"], thread_id);
-    assert_eq!(reply["anchor"], thread["anchor"]);
+    assert_eq!(reply["anchor"], Value::Null);
     review(&server, id, "comment", "");
     let t = thread_of(&server, id, thread_id);
     let comments = t["comments"].as_array().unwrap();

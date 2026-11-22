@@ -44,7 +44,7 @@
 // real server.
 
 import { COMMIT_MSG_PATH } from "../types";
-import type { Decision } from "../types";
+import type { Decision, Draft } from "../types";
 import {
   add,
   ago,
@@ -57,13 +57,7 @@ import {
   sha,
   trivialDiff,
 } from "./builders";
-import type {
-  ChangeRecord,
-  DraftRecord,
-  HistNode,
-  RepoRecord,
-  ThreadRecord,
-} from "./store";
+import type { ChangeRecord, HistNode, RepoRecord, ThreadRecord } from "./store";
 
 // ---------------------------------------------------------------------------
 // Canonical histories (served by GET /api/history). The merged history below
@@ -1989,22 +1983,17 @@ export const threads: ThreadRecord[] = [
 // Reviewer's in-progress drafts on r1: two new-side threads plus one old-side
 // remark on the pre-change code (the old/red diff column). All are
 // opening threads.
-export const drafts: DraftRecord[] = [
+export const drafts: Draft[] = [
   {
     id: 100,
     change_number: 11,
     thread_id: null,
+    revision: 1,
     anchor: {
-      file: {
-        version: "r1",
-        path: "src/auth/rotate.rs",
-        anchor: {
-          line: 26,
-        },
-      },
+      file: { path: "src/auth/rotate.rs", side: "new", anchor: { line: 26 } },
     },
     body: "Put the RFC section in the error message too — operators grep for it.",
-    resolved: false,
+    resolved: null,
     created_at: ago(30),
     updated_at: ago(30),
     // The anchored line does not exist in revision 0's tree.
@@ -2013,17 +2002,12 @@ export const drafts: DraftRecord[] = [
     id: 101,
     change_number: 11,
     thread_id: null,
+    revision: 1,
     anchor: {
-      file: {
-        version: "r1",
-        path: "tests/rotation.rs",
-        anchor: {
-          line: 13,
-        },
-      },
+      file: { path: "tests/rotation.rs", side: "new", anchor: { line: 13 } },
     },
     body: "Also assert the family row is revoked — this only checks the error value.",
-    resolved: false,
+    resolved: null,
     created_at: ago(25),
     updated_at: ago(25),
     // tests/rotation.rs does not exist at revision 0.
@@ -2032,19 +2016,14 @@ export const drafts: DraftRecord[] = [
     id: 102,
     change_number: 11,
     thread_id: null,
+    revision: 1,
     anchor: {
-      file: {
-        version: "r1^",
-        path: "src/auth/rotate.rs",
-        anchor: {
-          line: 20,
-        },
-      },
+      file: { path: "src/auth/rotate.rs", side: "old", anchor: { line: 20 } },
     },
     body:
       "The old signature returned Token directly; every caller now has to " +
       "handle the Result — make sure none silently unwraps it.",
-    resolved: false,
+    resolved: null,
     created_at: ago(22),
     updated_at: ago(22),
   },

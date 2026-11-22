@@ -184,8 +184,7 @@ describe("TagNav", () => {
   });
 
   it("counts the drafts at the node's revision, and shows the draft decision", () => {
-    const at = (id: number, revision: number) =>
-      draft({ id, anchor: { change: { revision } } });
+    const at = (id: number, revision: number) => draft({ id, revision });
     renderNav(three, 11, {
       acts: new Map<number, NodeActivity>([
         [

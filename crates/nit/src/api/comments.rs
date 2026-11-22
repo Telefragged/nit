@@ -10,15 +10,15 @@ use nit_types::changes::{AbandonRequest, ChangeDetail};
 use nit_types::comments::NewComment;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::LifecycleAction;
+use nit_types::domain::LogPayload;
 use nit_types::domain::ThreadProjection;
 use nit_types::domain::{Anchor, LogAnchor};
-use nit_types::domain::{CommentInput, LogPayload};
 
 use nit_types::domain::Lifecycle;
 
 use super::views;
 use super::{AppJson, AppPath, AppState, Error, append, with_conn};
-use super::{change_or_404, new_thread_anchor};
+use super::{change_or_404, new_thread, reply};
 
 #[utoipa::path(post, path = "/api/changes/{id}/comments", params(("id" = ChangeNumber, Path)), request_body = NewComment, responses((status = 200, body = ThreadProjection)))]
 pub(super) async fn create_comment(
@@ -26,28 +26,13 @@ pub(super) async fn create_comment(
     AppPath(id): AppPath<ChangeNumber>,
     AppJson(req): AppJson<NewComment>,
 ) -> Result<Json<ThreadProjection>, Error> {
-    let resolution_only = req.thread_id.is_some() && req.resolved.is_some();
-    if req.body.trim().is_empty() && !resolution_only {
-        return Err(Error::bad_request("an author comment must have a body"));
-    }
     with_conn(state.pool(), move |conn| {
         // A thread or a revision, once it exists, never goes away. So the
         // decision holds at the commit, and its git read runs before the
         // write transaction.
         let change = change_or_404(conn, id)?;
         let comment = if let Some(tid) = req.thread_id {
-            if change.thread(tid).is_none() {
-                return Err(Error::bad_request(format!(
-                    "thread {tid} is absent from change {id}"
-                )));
-            }
-            CommentInput {
-                thread_id: Some(tid),
-                revision: None,
-                anchor: None,
-                body: req.body,
-                resolved: req.resolved,
-            }
+            reply(&change, tid, req.body, req.resolved)?
         } else {
             let number = match req.revision {
                 Some(r) => r,
@@ -61,15 +46,7 @@ pub(super) async fn create_comment(
                 }
             };
             let anchor = Anchor::from_log(number, req.anchor.unwrap_or(LogAnchor::Change));
-            let anchor = new_thread_anchor(&change, anchor)?;
-            let (revision, anchor) = anchor.into_log();
-            CommentInput {
-                thread_id: None,
-                revision: Some(revision),
-                anchor: Some(anchor),
-                body: req.body,
-                resolved: req.resolved,
-            }
+            new_thread(&change, anchor, req.body, req.resolved)?
         };
         let appended = append(&state, conn, id, |_, _| {
             Ok(vec![LogPayload::Comment(comment)])

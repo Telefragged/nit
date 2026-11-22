@@ -9,7 +9,7 @@
 // side-effect-free, so the rules are unit-tested without a DOM.
 
 import { unresolvedThreads } from "../api/fold";
-import { revisionOf, revisionVersion } from "./version";
+import { baseVersion, isBase, revisionOf, revisionVersion } from "./version";
 import type {
   Anchor,
   ChangeDrafts,
@@ -19,6 +19,7 @@ import type {
   FileAnchor,
   Side,
   Draft,
+  LogAnchor,
   PortedComment,
   ThreadProjection,
   ChangeVersion,
@@ -46,6 +47,38 @@ export type AnchorKind = "change" | "file" | "line";
 
 export const anchorKind = (a: Anchor): AnchorKind =>
   "change" in a ? "change" : lineOf(a) ? "line" : "file";
+
+/** The revision and the anchor that the log records for `anchor`, as the
+ * server's `Anchor::into_log` returns them. The inverse of `fromLog`. */
+export function intoLog(anchor: Anchor): {
+  revision: number;
+  anchor: LogAnchor;
+} {
+  if ("change" in anchor) {
+    return { revision: anchor.change.revision, anchor: "change" };
+  }
+  const { version, ...file } = anchor.file;
+  return {
+    revision: revisionOf(version),
+    anchor: { file: { ...file, side: isBase(version) ? "old" : "new" } },
+  };
+}
+
+/** The anchor of a comment that the log records on `revision`, as the
+ * server's `Anchor::from_log` returns it. */
+const fromLog = (revision: number, anchor: LogAnchor | null): Anchor =>
+  anchor === null || anchor === "change"
+    ? { change: { revision } }
+    : {
+        file: {
+          version:
+            anchor.file.side === "old"
+              ? baseVersion(revision)
+              : revisionVersion(revision),
+          path: anchor.file.path,
+          anchor: anchor.file.anchor,
+        },
+      };
 
 /** The file of an anchor, or null for a change-level one. */
 export const anchorFile = (a: Anchor): string | null => fileOf(a)?.path ?? null;
@@ -158,7 +191,7 @@ export function assembleThreads(
     .filter((d) => d.thread_id === null)
     .map((d) => ({
       id: null,
-      anchor: d.anchor,
+      anchor: fromLog(d.revision ?? 0, d.anchor),
       resolved: false,
       comments: [],
       drafts: [d],
@@ -262,6 +295,10 @@ export function commentCountLabel(n: number): string {
   return `${n} comment${n === 1 ? "" : "s"}`;
 }
 
+/** The resolution decision of a draft. A draft without one counts as
+ * open. */
+export const draftResolved = (d: Draft): boolean => d.resolved ?? false;
+
 /**
  * A thread's resolution as it *would* be after the reviewer's pending drafts
  * publish: the newest draft on the thread carries the draft decision, so it
@@ -270,7 +307,7 @@ export function commentCountLabel(n: number): string {
  */
 export function pendingResolved(thread: UiThread): boolean {
   const latest = thread.drafts.at(-1); // assembleThreads keeps drafts oldest-first
-  return latest ? latest.resolved : thread.resolved;
+  return latest ? draftResolved(latest) : thread.resolved;
 }
 
 /** The form in which the UI marks a thread: a thread of unsent drafts
@@ -344,8 +381,7 @@ export interface NodeActivity {
 export const draftsAt = (
   act: NodeActivity | undefined,
   revision: number | null,
-): number =>
-  act?.drafts.filter((d) => anchorRevision(d.anchor) === revision).length ?? 0;
+): number => act?.drafts.filter((d) => d.revision === revision).length ?? 0;
 
 /** Each change's activity, keyed by change number: its open threads off
  * its projection, and its drafts and draft decision off the reviewer's

@@ -88,17 +88,6 @@ export interface ThreadRecord {
 
 /** A reviewer's unpublished comment: a new thread (`thread_id` null) or a
  * reply to a published one (`thread_id` set). */
-export interface DraftRecord {
-  id: number;
-  change_number: number;
-  thread_id: number | null;
-  anchor: Anchor;
-  body: string;
-  /** The draft's thread-resolution decision. */
-  resolved: boolean;
-  created_at: string;
-  updated_at: string;
-}
 
 /** A synthetic canonical-history node (the merged history below HEAD the mock
  * has no git to walk). `change_id` marks a landed change's commit — the graph

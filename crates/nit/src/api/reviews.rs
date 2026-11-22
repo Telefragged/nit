@@ -23,30 +23,6 @@ use super::change_or_404;
 use super::state::repo_ids_matching;
 use super::{AppJson, AppPath, AppQuery, AppState, Error, append, with_conn};
 
-/// One change's reviewer comment drafts as `CommentInput`s.
-///
-/// Ready to drain into a `review` entry (a reply keeps its thread, a new
-/// thread carries its anchor).
-fn drafts_to_comments(
-    conn: &rusqlite::Connection,
-    change_number: ChangeNumber,
-) -> anyhow::Result<Vec<CommentInput>> {
-    Ok(db::drafts_for_change(conn, change_number)?
-        .into_iter()
-        .map(|d| {
-            let (revision, anchor) = d.anchor.into_log();
-            CommentInput {
-                thread_id: d.thread_id,
-                revision: Some(revision),
-                // A reply has the anchor of its thread.
-                anchor: d.thread_id.is_none().then_some(anchor),
-                body: d.body,
-                resolved: d.resolved,
-            }
-        })
-        .collect())
-}
-
 /// Publishes the draft decision of a change.
 ///
 /// Returns `true` when the change had a draft decision.
@@ -83,7 +59,10 @@ fn publish_change(
         if let Some(reason) = decision_block(change.lifecycle, decision) {
             return Err(Error::conflict(reason));
         }
-        let comments = drafts_to_comments(tx, change_number)?;
+        let comments: Vec<CommentInput> = db::drafts_for_change(tx, change_number)?
+            .into_iter()
+            .map(|d| d.comment)
+            .collect();
         let drained = !comments.is_empty();
         let verdict = decision
             .as_verdict()
