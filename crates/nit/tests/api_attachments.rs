@@ -424,6 +424,40 @@ fn a_thread_on_a_carried_attachment_keeps_its_line() {
     );
 }
 
+#[test]
+fn a_region_on_an_attachment_ports_only_through_unchanged_bytes() {
+    let g = GitRepo::new();
+    let (server, change_number) = server_with_change(&g);
+    let shot = upload(&server, b"\x89PNG\x00\x01");
+    attach(&server, change_number, 0, "shot.png", &shot);
+    let rect = json!({"rect": {"x": 1, "y": 2, "width": 3, "height": 4}});
+    let (st, thread) = http_post(
+        &server.url(&format!("/api/changes/{change_number}/comments")),
+        &json!({
+            "body": "here",
+            "revision": 0,
+            "anchor": { "file": {"path": "/attachments/shot.png", "side": "new", "anchor": {"region": rect}} },
+        }),
+    );
+    assert_eq!(st, 200, "{thread}");
+    amend(&server, &g);
+
+    assert_eq!(
+        ported_anchors(&server, change_number, 1),
+        [
+            json!({ "file": {"version": "r1", "path": "/attachments/shot.png", "anchor": {"region": rect}} })
+        ]
+    );
+
+    let reshot = upload(&server, b"\x89PNG\x00\x02");
+    attach(&server, change_number, 1, "shot.png", &reshot);
+
+    assert_eq!(
+        ported_anchors(&server, change_number, 1),
+        [json!({ "file": {"version": "r1", "path": "/attachments/shot.png", "anchor": "file"} })]
+    );
+}
+
 /// The file at `path` of the diff of `revision`, with `query` appended.
 fn diff_file(
     server: &TestServer,

@@ -25,12 +25,19 @@ const firstLine = (text: string) => text.split("\n", 1)[0] ?? "";
  * the first line. */
 const hasMore = (text: string) => text.trim() !== firstLine(text).trim();
 
-/** Where an anchor points: `change`, a file, or `file:line`. */
+/** Where an anchor points: `change`, a file, `file:line`, `file@x,y
+ * widthxheight` for a rectangle, or `file#path` for an element. */
 function anchorLabel(anchor: Anchor | LogAnchor): string {
   if (anchor === "change" || "change" in anchor) return "change";
   const { path, anchor: at } = anchor.file;
-  if (at === "file") return displayPath(path);
-  return `${displayPath(path)}:${placementLine(at)}`;
+  const file = displayPath(path);
+  if (at === "file") return file;
+  if ("region" in at) {
+    const { x, y, width, height } = at.region.rect;
+    return `${file}@${x},${y} ${width}x${height}`;
+  }
+  if ("element" in at) return `${file}#${at.element}`;
+  return `${file}:${placementLine(at)}`;
 }
 
 /** Where a comment lands, and what it does to its thread's resolution. A

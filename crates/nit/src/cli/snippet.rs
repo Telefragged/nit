@@ -102,7 +102,7 @@ fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Si
         return None;
     };
     let covered = match anchor {
-        FileAnchor::File => return None,
+        FileAnchor::File | FileAnchor::Region(_) | FileAnchor::Element(_) => return None,
         FileAnchor::Line(line) => (*line, *line, None, None),
         FileAnchor::Range(r) => (
             r.start_line(),

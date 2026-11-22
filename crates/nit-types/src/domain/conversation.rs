@@ -72,7 +72,7 @@ pub enum Anchor {
 }
 
 /// Where inside a file an anchor sits.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -83,6 +83,10 @@ pub enum FileAnchor {
     Line(u64),
     /// A run of characters.
     Range(CommentRange),
+    /// An area of the file rendered as an image.
+    Region(Shape),
+    /// An element of the file rendered as an HTML page.
+    Element(ElementPath),
 }
 
 impl FileAnchor {
@@ -99,12 +103,203 @@ impl FileAnchor {
 
     /// The line that a line or range anchor ends on.
     #[must_use]
-    pub fn end_line(self) -> Option<u64> {
+    pub fn end_line(&self) -> Option<u64> {
         match self {
-            FileAnchor::File => None,
-            FileAnchor::Line(line) => Some(line),
+            FileAnchor::File | FileAnchor::Region(_) | FileAnchor::Element(_) => None,
+            FileAnchor::Line(line) => Some(*line),
             FileAnchor::Range(range) => Some(range.end_line()),
         }
+    }
+}
+
+/// The outline of an area of an image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Shape {
+    Rect(Rect),
+}
+
+/// A rectangle in the pixels of an image.
+///
+/// `x` and `y` are its top left corner, 0-based from the top left corner
+/// of the image. It spans `width` pixels to the right and `height` pixels
+/// down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(try_from = "RectParts")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Rect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl Rect {
+    /// A rectangle of at least one pixel, in the coordinates above.
+    ///
+    /// # Errors
+    ///
+    /// [`RectError`], which identifies the rule the rectangle broke.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::Rect;
+    ///
+    /// assert!(Rect::new(10, 20, 40, 30).is_ok());
+    /// assert!(Rect::new(10, 20, 0, 30).is_err());
+    /// assert!(Rect::new(u32::MAX, 0, 1, 1).is_err());
+    /// ```
+    pub fn new(x: u32, y: u32, width: u32, height: u32) -> Result<Rect, RectError> {
+        if width == 0 || height == 0 {
+            return Err(RectError::Empty);
+        }
+        if x.checked_add(width).is_none() || y.checked_add(height).is_none() {
+            return Err(RectError::OutOfRange);
+        }
+        Ok(Rect {
+            x,
+            y,
+            width,
+            height,
+        })
+    }
+
+    #[must_use]
+    pub fn x(self) -> u32 {
+        self.x
+    }
+
+    #[must_use]
+    pub fn y(self) -> u32 {
+        self.y
+    }
+
+    #[must_use]
+    pub fn width(self) -> u32 {
+        self.width
+    }
+
+    #[must_use]
+    pub fn height(self) -> u32 {
+        self.height
+    }
+}
+
+/// Why four numbers are not a [`Rect`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum RectError {
+    #[error("a rectangle is at least one pixel wide and one pixel high")]
+    Empty,
+    #[error("a rectangle ends before pixel 4294967296")]
+    OutOfRange,
+}
+
+#[derive(Deserialize)]
+struct RectParts {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl TryFrom<RectParts> for Rect {
+    type Error = RectError;
+
+    fn try_from(r: RectParts) -> Result<Rect, RectError> {
+        Rect::new(r.x, r.y, r.width, r.height)
+    }
+}
+
+/// The absolute path of an element in an HTML page, such as
+/// `/html/body/div[2]/p`.
+///
+/// It has one step per element, from the root element down. A step is the
+/// tag name of the element. When the element has siblings with the same
+/// tag name, a step can add `[n]`, the 1-based position of the element
+/// among them, as an `XPath` step does. A step without `[n]` is the first of them.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, utoipa::ToSchema)]
+#[serde(try_from = "String")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ElementPath(String);
+
+impl ElementPath {
+    /// An element path in the form above.
+    ///
+    /// # Errors
+    ///
+    /// [`ElementPathError`], which identifies the rule the path broke.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::ElementPath;
+    ///
+    /// assert!(ElementPath::new("/html/body/div[2]/p").is_ok());
+    /// assert!(ElementPath::new("body/div").is_err());
+    /// assert!(ElementPath::new("/html/body/div[0]").is_err());
+    /// ```
+    pub fn new(path: impl Into<String>) -> Result<ElementPath, ElementPathError> {
+        let path = path.into();
+        let Some(steps) = path.strip_prefix('/') else {
+            return Err(ElementPathError::Relative);
+        };
+        if let Some(step) = steps.split('/').find(|step| !is_step(step)) {
+            return Err(ElementPathError::Step(step.to_owned()));
+        }
+        Ok(ElementPath(path))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn is_step(step: &str) -> bool {
+    let (tag, position) = match step.strip_suffix(']').and_then(|s| s.split_once('[')) {
+        Some((tag, n)) => (tag, Some(n)),
+        None => (step, None),
+    };
+    let mut chars = tag.chars();
+    let tag_ok = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '-');
+    let position_ok = position.is_none_or(|n| {
+        !n.starts_with('0') && !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())
+    });
+    tag_ok && position_ok
+}
+
+/// Why a string is not an [`ElementPath`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ElementPathError {
+    #[error("an element path starts with '/'")]
+    Relative,
+    #[error("an element path step is a tag name with an optional [n] from 1, and {0:?} is not")]
+    Step(String),
+}
+
+impl TryFrom<String> for ElementPath {
+    type Error = ElementPathError;
+
+    fn try_from(path: String) -> Result<ElementPath, ElementPathError> {
+        ElementPath::new(path)
+    }
+}
+
+// serde rejects `#[serde(transparent)]` together with `try_from`, so
+// this impl serializes by hand.
+impl Serialize for ElementPath {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl std::fmt::Display for ElementPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -257,10 +452,10 @@ impl Anchor {
 
     /// The place inside the file of a file anchor.
     #[must_use]
-    pub fn file_anchor(&self) -> Option<FileAnchor> {
+    pub fn file_anchor(&self) -> Option<&FileAnchor> {
         match self {
             Anchor::Change { .. } => None,
-            Anchor::File { anchor, .. } => Some(*anchor),
+            Anchor::File { anchor, .. } => Some(anchor),
         }
     }
 }

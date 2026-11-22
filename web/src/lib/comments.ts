@@ -32,9 +32,13 @@ export type LineOrRange = Extract<
 
 const fileOf = (a: Anchor) => ("file" in a ? a.file : null);
 
+/** Whether `at` covers lines of the file. */
+const isLineOrRange = (at: FileAnchor): at is LineOrRange =>
+  typeof at === "object" && ("line" in at || "range" in at);
+
 const lineOf = (a: Anchor) => {
   const file = fileOf(a);
-  return file && typeof file.anchor === "object"
+  return file && isLineOrRange(file.anchor)
     ? { version: file.version, at: file.anchor }
     : null;
 };

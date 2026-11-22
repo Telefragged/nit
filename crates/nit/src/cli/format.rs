@@ -11,6 +11,7 @@ use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::FileAnchor;
 use nit_types::domain::LogAnchor;
+use nit_types::domain::Shape;
 use nit_types::domain::Tags;
 use nit_types::domain::ThreadProjection;
 use nit_types::domain::{CommentInput, CommentTarget, LogEntry, LogPayload};
@@ -283,9 +284,6 @@ fn comment_target(thread_id: Option<u64>, anchor: Option<&LogAnchor>) -> Option<
 }
 
 /// The anchor label.
-///
-/// `(change-level)`, `file`, `file:line`, or the full
-/// `file:start_line:start_char-end_line:end_char` for a selection.
 fn anchor_label(anchor: &LogAnchor) -> String {
     match anchor {
         LogAnchor::Change => "(change-level)".to_string(),
@@ -299,6 +297,10 @@ fn anchor_label(anchor: &LogAnchor) -> String {
                 r.end_line(),
                 r.end_char()
             ),
+            FileAnchor::Region(Shape::Rect(r)) => {
+                format!("{path}@{},{} {}x{}", r.x(), r.y(), r.width(), r.height())
+            }
+            FileAnchor::Element(element) => format!("{path}#{element}"),
         },
     }
 }
@@ -336,6 +338,26 @@ mod tests {
 
     use nit_types::domain::CommentRange;
     use nit_types::domain::{Sha, Tag};
+
+    #[test]
+    fn anchor_label_spells_a_region_and_an_element() {
+        use nit_types::domain::{ElementPath, Rect, Side};
+        let file = |path: &str, anchor| LogAnchor::File {
+            path: path.into(),
+            side: Side::New,
+            anchor,
+        };
+        let rect = Rect::new(10, 20, 40, 30).expect("a rectangle");
+        let element = ElementPath::new("/html/body/div[2]").expect("an element path");
+        assert_eq!(
+            anchor_label(&file("ui.png", FileAnchor::Region(Shape::Rect(rect)))),
+            "ui.png@10,20 40x30"
+        );
+        assert_eq!(
+            anchor_label(&file("page.html", FileAnchor::Element(element))),
+            "page.html#/html/body/div[2]"
+        );
+    }
 
     #[test]
     fn entry_summary_digests_each_kind() {
