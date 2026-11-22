@@ -189,10 +189,15 @@ pub(super) fn fill_lines(
     whitespace: Whitespace,
 ) {
     let (old, new) = (String::from_utf8_lossy(old), String::from_utf8_lossy(new));
+    let hunks = hunks::of_file(&old, &new, context, whitespace);
+    set_hunks(file, &old, &new, hunks);
+}
+
+fn set_hunks(file: &mut DiffFile, old: &str, new: &str, hunks: Vec<Hunk>) {
     file.binary = false;
     file.old_total = old.lines().count() as u64;
     file.new_total = new.lines().count() as u64;
-    file.hunks = hunks::of_file(&old, &new, context, whitespace);
+    file.hunks = hunks;
     (file.additions, file.deletions) = stats(&file.hunks);
 }
 
@@ -304,12 +309,19 @@ fn outside_tree(path: String, old: bool, new: bool) -> DiffFile {
     }
 }
 
+pub(super) const MAX_DIFF_BYTES: usize = 8 * 1024 * 1024;
+
 /// Fills `file` with the lines of `old → new`.
 ///
 /// Identical texts render as a single all-`context` hunk, so the file
 /// stays visible and commentable.
 fn fill_text(file: &mut DiffFile, old: &str, new: &str, context: u32, whitespace: Whitespace) {
-    fill_lines(file, old.as_bytes(), new.as_bytes(), context, whitespace);
+    let hunks = if old.len().max(new.len()) > MAX_DIFF_BYTES {
+        hunks::rewrite(old, new)
+    } else {
+        hunks::of_file(old, new, context, whitespace)
+    };
+    set_hunks(file, old, new, hunks);
     if file.hunks.is_empty() && !new.is_empty() {
         let lines: Vec<Line> = new
             .lines()
@@ -583,6 +595,22 @@ mod tests {
         // Past the ceiling the pair is left unpaired — the reviewer sees an
         // add and a delete, as git's own `diff.renameLimit` leaves them.
         assert_eq!(renamed_status(RENAME_LIMIT + 1), FileStatus::Added);
+    }
+
+    #[test]
+    fn a_text_too_large_to_diff_is_one_edit() {
+        let line = "x".repeat(1023) + "\n";
+        let old = format!("a\n{}", line.repeat(MAX_DIFF_BYTES / line.len()));
+        let new = format!("b\n{old}");
+        let f = commit_msg_file(Some(&old), &new, 3);
+        assert!(!f.binary);
+        assert_eq!(f.hunks.len(), 1);
+        assert_eq!(
+            (f.deletions, f.additions),
+            (f.old_total, f.new_total),
+            "every old line removed and every new line added"
+        );
+        assert_eq!(f.hunks[0].lines[0].text, "a");
     }
 
     #[test]

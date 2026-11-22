@@ -16,7 +16,26 @@ use nit_types::domain::{LineKind, Whitespace};
 pub fn of_file(old: &str, new: &str, context: u32, whitespace: Whitespace) -> Vec<Hunk> {
     let before: Vec<&str> = old.split_inclusive('\n').collect();
     let after: Vec<&str> = new.split_inclusive('\n').collect();
-    line_hunks(&before, &after, context, whitespace)
+    let mut input = InternedInput::default();
+    input.update_before(before.iter().map(|line| compared(line, whitespace)));
+    input.update_after(after.iter().map(|line| compared(line, whitespace)));
+    let edits: Vec<(Range<usize>, Range<usize>)> = line_edits(&input)
+        .into_iter()
+        .map(|h| (range(h.before), range(h.after)))
+        .collect();
+    line_hunks(&before, &after, &edits, context)
+}
+
+#[must_use]
+pub fn rewrite(old: &str, new: &str) -> Vec<Hunk> {
+    let before: Vec<&str> = old.split_inclusive('\n').collect();
+    let after: Vec<&str> = new.split_inclusive('\n').collect();
+    let edits = if old == new {
+        Vec::new()
+    } else {
+        vec![(0..before.len(), 0..after.len())]
+    };
+    line_hunks(&before, &after, &edits, 0)
 }
 
 /// The line diff `old → new`, as the ranges of changed lines on each side.
@@ -41,19 +60,15 @@ fn compared(line: &str, whitespace: Whitespace) -> String {
     }
 }
 
-/// The wire hunks of `old → new`.
-///
 /// Each run of changed lines with `context` unchanged lines on either
 /// side, runs closer than twice that merged into one hunk (git's
 /// grouping, so a hunk never shows the same line twice).
-fn line_hunks(before: &[&str], after: &[&str], context: u32, whitespace: Whitespace) -> Vec<Hunk> {
-    let mut input = InternedInput::default();
-    input.update_before(before.iter().map(|line| compared(line, whitespace)));
-    input.update_after(after.iter().map(|line| compared(line, whitespace)));
-    let edits: Vec<(Range<usize>, Range<usize>)> = line_edits(&input)
-        .into_iter()
-        .map(|h| (range(h.before), range(h.after)))
-        .collect();
+fn line_hunks(
+    before: &[&str],
+    after: &[&str],
+    edits: &[(Range<usize>, Range<usize>)],
+    context: u32,
+) -> Vec<Hunk> {
     // The lines contain their separator; the wire text never does.
     let text = |line: &str| line.strip_suffix('\n').unwrap_or(line).to_string();
     let number = |index: usize| Some(index as u64 + 1);

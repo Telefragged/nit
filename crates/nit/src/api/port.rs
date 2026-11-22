@@ -249,7 +249,7 @@ fn attachment_edits(
     to: &EffectiveAttachment,
 ) -> LineMap {
     match (blobs.text(&from.hash), blobs.text(&to.hash)) {
-        (Some(old), Some(new)) => {
+        (Some(old), Some(new)) if old.len().max(new.len()) <= diff::MAX_DIFF_BYTES => {
             LineMap::Edits(position::buffer_edits(old.as_bytes(), new.as_bytes()))
         }
         _ => LineMap::Unmapped,
