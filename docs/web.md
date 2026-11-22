@@ -62,7 +62,7 @@ story, so a spec acts on the page at once:
   element or several.
 - Fetch a value once, then assert on it with `node:assert/strict`. ESLint
   reports an error for the `expect` of Playwright and for a Playwright wait,
-  because they retry until a timeout (golden rule 13).
+  because they retry until a timeout (golden rule 12).
 
 The `web-gallery` flake check runs `npm run gallery` in the sandbox. The
 check keeps no PNGs or pages, so run `npm run gallery` to see them. `npm run dev` also serves the

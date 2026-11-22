@@ -56,15 +56,7 @@ trailer carries identity across rewrites.
    crate2nix checks, every crate of ours compiled under `clippy`
    (`-D warnings`). A green `nix build` is necessary but not sufficient — it
    skips tests (docs/dev.md "Verification").
-10. **One home per fact — load the `comment-style` skill before
-    writing.** Code comments, doc-comments, commit messages, and nit
-    threads, and the domain model each carry a distinct kind of
-    information; the rules, litmus tests, and examples live in
-    `.claude/skills/comment-style/SKILL.md`. Read it before writing or
-    amending code, comments, or commit messages, and at the start of
-    every review pass. A `/simplify` or `/code-review` run additionally
-    spawns the comment-audit agent that skill defines.
-11. **The domain model is `crates/nit-types/src/domain.rs` — load the
+10. **The domain model is `crates/nit-types/src/domain.rs` — load the
     `domain-modeling` skill before touching a type.** What a term means
     is defined there once, on the type that carries it, and that type
     lives there too; a shape a route needs stays with the route. How
@@ -73,14 +65,13 @@ trailer carries identity across rewrites.
     `.claude/skills/domain-modeling/SKILL.md`. Read it before adding or
     changing a type in `nit-types`, and at the start of every review
     pass.
-12. **Every sentence we emit obeys `simplified-english`** — one idea
+11. **Every sentence we emit obeys `simplified-english`** — one idea
     per sentence, one reading per sentence, plain words, active voice,
     six sentences per paragraph. There is no word limit; a metaphor or a
     word with four meanings fails even when it is short. Load the skill
     before writing chat output, a commit message, a comment or
-    doc-comment, a nit reply, a `docs/` page, or UI copy; `comment-style`
-    picks the fact's home, this one shapes the sentence.
-13. **Nothing waits on the clock.** A test synchronizes on the event
+    doc-comment, a nit reply, a `docs/` page, or UI copy.
+12. **Nothing waits on the clock.** A test synchronizes on the event
     that produces the state it checks: the call's return or promise, a
     channel message, pipe EOF, process exit, a socket frame, a DOM
     mutation, a cache that reports idle. Better still, the test makes
