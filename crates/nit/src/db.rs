@@ -1653,15 +1653,13 @@ mod tests {
     fn draft_lifecycle() {
         let mut conn = mem();
         let c = change(&mut conn);
-        let comment = CommentInput {
-            target: nit_types::domain::CommentTarget::Open {
-                thread_id: None,
-                revision: nit_types::domain::RevisionNumber::new(1),
-                anchor: nit_types::domain::LogAnchor::Change,
-            },
-            body: "look".to_string(),
-            resolved: None,
-        };
+        let comment = CommentInput::open(
+            nit_types::domain::RevisionNumber::new(1),
+            nit_types::domain::LogAnchor::Change,
+            "look".to_string(),
+            None,
+        )
+        .expect("a comment with a body");
         let d = write(&mut conn, |tx| {
             insert_draft(tx, 7, c, comment.clone(), "t0")
         })
@@ -1672,9 +1670,9 @@ mod tests {
         })
         .expect("edit")
         .expect("some");
-        assert_eq!(edited.comment.body, "look again");
-        assert_eq!(edited.comment.resolved, Some(true));
-        assert_eq!(edited.comment.target, comment.target);
+        assert_eq!(edited.comment.body(), "look again");
+        assert_eq!(edited.comment.resolved(), Some(true));
+        assert_eq!(edited.comment.target(), comment.target());
         write(&mut conn, |tx| delete_drafts_for_change(tx, c)).expect("drain");
         assert!(drafts_for_change(&conn, c).expect("list").is_empty());
     }

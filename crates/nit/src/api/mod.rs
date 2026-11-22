@@ -46,7 +46,6 @@ use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::ChangeVersion;
 use nit_types::domain::CommentInput;
-use nit_types::domain::CommentTarget;
 use nit_types::health::Health;
 
 pub use attachments::Collected;
@@ -278,9 +277,6 @@ fn new_thread(
     body: String,
     resolved: Option<bool>,
 ) -> Result<CommentInput, Error> {
-    if body.trim().is_empty() {
-        return Err(Error::bad_request("a new thread needs a body"));
-    }
     let number = anchor.revision();
     if change.revision(number).is_none() {
         return Err(Error::bad_request(format!(
@@ -298,15 +294,8 @@ fn new_thread(
         return Err(Error::bad_request(format!("{path} has no base version")));
     }
     let (revision, anchor) = anchor.into_log();
-    Ok(CommentInput {
-        target: CommentTarget::Open {
-            thread_id: None,
-            revision,
-            anchor,
-        },
-        body,
-        resolved,
-    })
+    CommentInput::open(revision, anchor, body, resolved)
+        .map_err(|e| Error::bad_request(e.to_string()))
 }
 
 fn reply(
@@ -315,20 +304,11 @@ fn reply(
     body: String,
     resolved: Option<bool>,
 ) -> Result<CommentInput, Error> {
-    if body.trim().is_empty() && resolved.is_none() {
-        return Err(Error::bad_request(
-            "a reply needs a body or a resolution decision",
-        ));
-    }
     if change.thread(thread_id).is_none() {
         return Err(Error::bad_request(format!(
             "thread {thread_id} is absent from change {}",
             change.id
         )));
     }
-    Ok(CommentInput {
-        target: CommentTarget::Reply { thread_id },
-        body,
-        resolved,
-    })
+    CommentInput::reply(thread_id, body, resolved).map_err(|e| Error::bad_request(e.to_string()))
 }

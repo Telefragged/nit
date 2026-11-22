@@ -150,7 +150,7 @@ fn a_comment_logged_before_the_anchor_still_reads() {
 
     let opening: CommentInput = serde_json::from_str(opening).expect("deserialize");
     assert_eq!(
-        opening.target,
+        *opening.target(),
         CommentTarget::Open {
             thread_id: Some(1),
             revision: RevisionNumber::new(0),
@@ -163,15 +163,15 @@ fn a_comment_logged_before_the_anchor_still_reads() {
     );
 
     let reply: CommentInput = serde_json::from_str(reply).expect("deserialize");
-    assert_eq!(reply.target, CommentTarget::Reply { thread_id: 1 });
-    assert_eq!(reply.resolved, Some(true));
+    assert_eq!(*reply.target(), CommentTarget::Reply { thread_id: 1 });
+    assert_eq!(reply.resolved(), Some(true));
 
     // An older entry spelled a selection as the range plus its end line.
     let ranged = r#"{"thread_id":2,"revision":0,"file":"a.rs","line":3,"side":"new",
         "range":{"start_line":3,"start_char":1,"end_line":3,"end_char":4},
         "line_text":"x","body":"this","resolved":null}"#;
     let ranged: CommentInput = serde_json::from_str(ranged).expect("deserialize");
-    let anchor = match ranged.target {
+    let anchor = match *ranged.target() {
         CommentTarget::Open {
             anchor: LogAnchor::File { anchor, .. },
             ..
@@ -238,4 +238,12 @@ fn a_comment_without_a_target_does_not_parse() {
     let orphan = r#"{"thread_id":null,"anchor":null,"body":"x"}"#;
     assert!(serde_json::from_str::<CommentInput>(opening).is_err());
     assert!(serde_json::from_str::<CommentInput>(orphan).is_err());
+}
+
+#[test]
+fn an_empty_comment_does_not_parse() {
+    let opening = r#"{"thread_id":null,"revision":0,"anchor":"change","body":" "}"#;
+    let reply = r#"{"thread_id":1,"body":"","resolved":null}"#;
+    assert!(serde_json::from_str::<CommentInput>(opening).is_err());
+    assert!(serde_json::from_str::<CommentInput>(reply).is_err());
 }

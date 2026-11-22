@@ -128,8 +128,7 @@ fn fold_lifecycle(change: &mut ChangeProjection, p: &LifecyclePayload) {
 /// Applies one comment to a change's threads.
 ///
 /// Its `thread_id` is already resolved by [`ChangeProjection::mint_thread_id`];
-/// shared by `review` and `comment`. An unset id is a no-op: the mint left
-/// it alone because the body was empty.
+/// shared by `review` and `comment`.
 fn apply_comment(
     change: &mut ChangeProjection,
     c: &CommentInput,
@@ -138,21 +137,20 @@ fn apply_comment(
 ) {
     let Some(tid) = c.thread_id() else { return };
     if let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) {
-        if !c.body.trim().is_empty() {
+        if !c.body().trim().is_empty() {
             thread.comments.push(ThreadComment {
-                body: c.body.clone(),
+                body: c.body().to_owned(),
                 review_id,
                 created_at: now.to_string(),
             });
         }
-        if let Some(state) = c.resolved {
+        if let Some(state) = c.resolved() {
             thread.resolved = state;
         }
         thread.updated_at = now.to_string();
     } else if let CommentTarget::Open {
         revision, anchor, ..
-    } = &c.target
-        && !c.body.trim().is_empty()
+    } = c.target()
     {
         let anchor = Anchor::from_log(*revision, anchor.clone());
         open_thread(change, c, tid, anchor, review_id, now);
@@ -172,9 +170,9 @@ fn open_thread(
     change.threads.push(ThreadProjection {
         id,
         anchor,
-        resolved: c.resolved.unwrap_or(false),
+        resolved: c.resolved().unwrap_or(false),
         comments: vec![ThreadComment {
-            body: c.body.clone(),
+            body: c.body().to_owned(),
             review_id,
             created_at: now.to_string(),
         }],
@@ -304,27 +302,22 @@ mod tests {
     }
 
     fn stamped(thread_id: Option<u64>, file: &str, line: u64, body: &str) -> CommentInput {
-        CommentInput {
-            target: CommentTarget::Open {
-                thread_id,
-                revision: RevisionNumber::new(0),
-                anchor: LogAnchor::File {
-                    path: file.to_string(),
-                    side: Side::New,
-                    anchor: FileAnchor::Line(line),
-                },
-            },
-            body: body.to_string(),
-            resolved: None,
+        let anchor = LogAnchor::File {
+            path: file.to_string(),
+            side: Side::New,
+            anchor: FileAnchor::Line(line),
+        };
+        let mut comment =
+            CommentInput::open(RevisionNumber::new(0), anchor, body.to_string(), None)
+                .expect("a comment with a body");
+        if let Some(id) = thread_id {
+            comment.assign_thread_id(id);
         }
+        comment
     }
 
     fn reply(thread_id: u64, body: &str) -> CommentInput {
-        CommentInput {
-            target: CommentTarget::Reply { thread_id },
-            body: body.to_string(),
-            resolved: None,
-        }
+        CommentInput::reply(thread_id, body.to_string(), None).expect("a reply with a body")
     }
 
     fn folded(payloads: Vec<LogPayload>) -> ChangeProjection {
@@ -553,10 +546,10 @@ mod tests {
                 revision: RevisionNumber::new(0),
                 verdict: Verdict::Approve,
                 message: String::new(),
-                comments: vec![CommentInput {
-                    resolved: Some(true),
-                    ..reply(0, "fixed")
-                }],
+                comments: vec![
+                    CommentInput::reply(0, "fixed".to_string(), Some(true))
+                        .expect("a reply with a body"),
+                ],
             }),
         ]);
         assert_eq!(c.threads.len(), 1);
@@ -585,10 +578,6 @@ mod tests {
         let mut answer = reply(0, "reply");
         c.mint_thread_id(&mut answer);
         assert_eq!(answer.thread_id(), Some(0));
-        assert_eq!(c.next_thread_id, 1);
-        let mut empty_body = anchored("a.rs", 1, "");
-        c.mint_thread_id(&mut empty_body);
-        assert_eq!(empty_body.thread_id(), None);
         assert_eq!(c.next_thread_id, 1);
         // A stamped id past the counter (a replayed open) pulls it forward.
         let mut replayed = stamped(Some(5), "a.rs", 1, "stamped");
