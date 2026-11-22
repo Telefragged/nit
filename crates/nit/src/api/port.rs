@@ -81,13 +81,15 @@ pub fn port_threads(
         port_attached(blobs, change, k, &later, attached, &mut ported);
         if !messages.is_empty() {
             for &(i, target) in &later {
-                let edits =
-                    position::buffer_edits(source.message.as_bytes(), target.message.as_bytes());
+                let lines = LineMap::Edits(position::buffer_edits(
+                    source.message.as_bytes(),
+                    target.message.as_bytes(),
+                ));
                 ported[i].extend(messages.iter().map(|thread| PortedComment {
                     thread_id: thread.thread_id,
                     anchor: Anchor::from_log(
                         target.number,
-                        port_in_file(&thread.anchor, diff::COMMIT_MSG_PATH, Some(&edits)),
+                        port_in_file(&thread.anchor, diff::COMMIT_MSG_PATH, &lines),
                     ),
                 }));
             }
@@ -146,7 +148,7 @@ pub fn port_anchors(
 ) -> Result<Vec<LogAnchor>> {
     let unchanged = |anchor: &Anchor| {
         anchor.path().map_or(LogAnchor::Change, |file| {
-            port_in_file(anchor, file, Some(&[]))
+            port_in_file(anchor, file, &LineMap::Edits(Vec::new()))
         })
     };
     if src.id() == dst.id() {
@@ -177,7 +179,8 @@ pub fn port_anchors(
             deltas.insert(old, file_delta);
         }
     }
-    let mut edits_of: HashMap<&str, Option<Vec<Edit>>> = HashMap::new();
+    let unmoved = LineMap::Edits(Vec::new());
+    let mut lines_of: HashMap<&str, LineMap> = HashMap::new();
     anchors
         .iter()
         .map(|anchor| {
@@ -192,22 +195,24 @@ pub fn port_anchors(
                     old_oid,
                     new_oid,
                 }) => {
-                    let edits = if anchor
+                    let lines = if anchor
                         .file_anchor()
                         .and_then(FileAnchor::end_line)
                         .is_some()
                     {
-                        if !edits_of.contains_key(file) {
+                        if !lines_of.contains_key(file) {
                             let old = diff::blob_bytes(repo, file, *old_oid)?;
                             let new = diff::blob_bytes(repo, path, *new_oid)?;
-                            let edits = old.zip(new).map(|(o, n)| position::buffer_edits(&o, &n));
-                            edits_of.insert(file, edits);
+                            let lines = old.zip(new).map_or(LineMap::Unmapped, |(o, n)| {
+                                LineMap::Edits(position::buffer_edits(&o, &n))
+                            });
+                            lines_of.insert(file, lines);
                         }
-                        edits_of[file].as_deref()
+                        &lines_of[file]
                     } else {
-                        Some(&[][..])
+                        &unmoved
                     };
-                    port_in_file(anchor, path, edits)
+                    port_in_file(anchor, path, lines)
                 }
             })
         })
@@ -224,23 +229,32 @@ enum FileDelta {
     },
 }
 
-/// The edits between the attachments of one name that two change versions
-/// show.
-///
-/// `None` when the lines cannot be mapped: an attachment is not text, or
-/// the earlier change version shows none.
-fn attachment_edits(
+/// How the lines of an anchored file map from one version to another.
+enum LineMap {
+    /// Through these edits.
+    Edits(Vec<Edit>),
+    /// Not at all: a version of the file is not text, or the earlier
+    /// version shows no attachment of its name.
+    Unmapped,
+}
+
+fn attachment_lines(
     blobs: &Blobs,
     from: Option<&EffectiveAttachment>,
     to: &EffectiveAttachment,
-) -> Option<Vec<Edit>> {
-    let from = from?;
+) -> LineMap {
+    let Some(from) = from else {
+        return LineMap::Unmapped;
+    };
     if from.hash == to.hash {
-        return Some(Vec::new());
+        return LineMap::Edits(Vec::new());
     }
-    let old = blobs.text(&from.hash)?;
-    let new = blobs.text(&to.hash)?;
-    Some(position::buffer_edits(old.as_bytes(), new.as_bytes()))
+    match (blobs.text(&from.hash), blobs.text(&to.hash)) {
+        (Some(old), Some(new)) => {
+            LineMap::Edits(position::buffer_edits(old.as_bytes(), new.as_bytes()))
+        }
+        _ => LineMap::Unmapped,
+    }
 }
 
 /// The threads of revision `k` on attachments, ported to each of `later`
@@ -268,17 +282,15 @@ fn port_attached(
         let from = change.attachment_at(side.version(k), name);
         for &(i, target) in later {
             let to = change.attachment_at(side.version(target.number), name);
-            let edits = to
+            let lines = to
                 .as_ref()
-                .and_then(|to| attachment_edits(blobs, from.as_ref(), to));
+                .map(|to| attachment_lines(blobs, from.as_ref(), to));
             ported[i].extend(threads.iter().map(|thread| PortedComment {
                 thread_id: thread.thread_id,
                 anchor: Anchor::from_log(
                     target.number,
-                    match (&to, thread.anchor.path()) {
-                        (Some(_), Some(file)) => {
-                            port_in_file(&thread.anchor, file, edits.as_deref())
-                        }
+                    match (&lines, thread.anchor.path()) {
+                        (Some(lines), Some(file)) => port_in_file(&thread.anchor, file, lines),
                         _ => LogAnchor::Change,
                     },
                 ),
@@ -287,16 +299,18 @@ fn port_attached(
     }
 }
 
-fn port_in_file(anchor: &Anchor, path: &str, edits: Option<&[Edit]>) -> LogAnchor {
+fn port_in_file(anchor: &Anchor, path: &str, lines: &LineMap) -> LogAnchor {
     let Anchor::File { anchor: at, .. } = anchor else {
         return LogAnchor::Change;
     };
     LogAnchor::File {
         path: path.to_owned(),
         side: anchor.side(),
-        anchor: edits
-            .and_then(|edits| port_line(at, edits))
-            .unwrap_or(FileAnchor::File),
+        anchor: match lines {
+            LineMap::Edits(edits) => port_line(at, edits),
+            LineMap::Unmapped => None,
+        }
+        .unwrap_or(FileAnchor::File),
     }
 }
 
