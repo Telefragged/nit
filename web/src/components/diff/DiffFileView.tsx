@@ -412,7 +412,11 @@ export default function DiffFileView({
   }
 
   const create = useMutation({
-    mutationFn: (input: { target: DraftTarget; body: string }) => {
+    mutationFn: (input: {
+      target: DraftTarget;
+      body: string;
+      resolved?: boolean;
+    }) => {
       return createDraft(ctx.changeNumber, {
         thread: {
           anchor: {
@@ -427,6 +431,7 @@ export default function DiffFileView({
             },
           },
           body: input.body,
+          resolved: input.resolved,
         },
       });
     },
@@ -605,9 +610,11 @@ export default function DiffFileView({
       items.push(
         <div className="meta-item" key={`editor-${side}-${no}`}>
           <CommentEditor
+            initialResolved={false}
+            needsBody
             saving={create.isPending}
-            onSave={(body) => {
-              create.mutate({ target, body });
+            onSave={(body, resolved) => {
+              create.mutate({ target, body, resolved });
             }}
             onCancel={() => ctx.setEditingTarget(null)}
             onDirtyChange={(dirty) => {

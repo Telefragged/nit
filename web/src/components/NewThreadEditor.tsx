@@ -16,7 +16,7 @@ export default function NewThreadEditor({
   const ctx = useReview();
   const queryClient = useQueryClient();
   const create = useMutation({
-    mutationFn: (body: string) =>
+    mutationFn: ({ body, resolved }: { body: string; resolved?: boolean }) =>
       createDraft(ctx.changeNumber, {
         thread: {
           anchor:
@@ -30,6 +30,7 @@ export default function NewThreadEditor({
                   },
                 },
           body,
+          resolved,
         },
       }),
     onSuccess: () => {
@@ -42,9 +43,11 @@ export default function NewThreadEditor({
   return (
     <CommentEditor
       placeholder={`Comment on the whole ${file === undefined ? "change" : "file"}…`}
+      initialResolved={false}
+      needsBody
       saving={create.isPending}
-      onSave={(body) => {
-        create.mutate(body);
+      onSave={(body, resolved) => {
+        create.mutate({ body, resolved });
       }}
       onCancel={onClose}
     />

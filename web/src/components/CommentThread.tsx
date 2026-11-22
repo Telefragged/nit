@@ -95,8 +95,6 @@ function DraftComment({
     onSuccess: invalidate,
   });
 
-  const editResolved =
-    "anchor" in draft.comment ? undefined : draftResolved(draft);
   const resolutionOnly = draft.comment.body.trim().length === 0;
 
   return (
@@ -133,7 +131,8 @@ function DraftComment({
       {editing ? (
         <CommentEditor
           initial={draft.comment.body}
-          initialResolved={editResolved}
+          initialResolved={draftResolved(draft)}
+          needsBody={"anchor" in draft.comment}
           saving={update.isPending}
           onSave={(body, resolved) => {
             update.mutate({ body, resolved });

@@ -14,7 +14,8 @@ import { Button } from "./ui/button";
  * Pass `initialResolved` (gerrit-style thread resolution) to
  * show a Resolved checkbox defaulting to it; `onSave` then reports the
  * checkbox state, and the editor saves even with an empty body when the
- * checkbox alone changed (a resolve/reopen with no message). */
+ * checkbox alone changed (a resolve/reopen with no message), unless
+ * `needsBody` is set. */
 export default function CommentEditor({
   initial = "",
   placeholder = "Leave a comment…",
@@ -24,6 +25,7 @@ export default function CommentEditor({
   onDirtyChange,
   initialResolved,
   resolvedFrom,
+  needsBody = false,
 }: {
   initial?: string;
   placeholder?: string;
@@ -39,6 +41,9 @@ export default function CommentEditor({
    * judged savable. Defaults to `initialResolved` (e.g. Resolve opens the box
    * pre-checked but the thread is still open, so saving it is a real change). */
   resolvedFrom?: boolean;
+  /** Requires a body to save, also when the checkbox changed. A comment
+   * that opens a thread requires one. */
+  needsBody?: boolean;
 }) {
   const [body, setBody] = useState(initial);
   const [resolved, setResolved] = useState(initialResolved ?? false);
@@ -51,7 +56,7 @@ export default function CommentEditor({
   const resolveChanges =
     showResolve && resolved !== (resolvedFrom ?? initialResolved);
   const hasBody = body.trim().length > 0;
-  const canSave = (hasBody || resolveChanges) && !saving;
+  const canSave = (hasBody || (resolveChanges && !needsBody)) && !saving;
   // Only typed text counts as discardable work — flipping the checkbox is
   // cheap to redo, so cancelling it never prompts.
   const dirty = hasBody && body.trim() !== initial.trim();

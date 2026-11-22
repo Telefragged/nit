@@ -2,11 +2,18 @@ import CommentEditor from "./CommentEditor";
 
 const nothing = () => undefined;
 
-/** The editor of a new comment. It has no text, so Save draft is off. */
+/** The editor of a new thread. It has no text, so Save draft is off,
+ * and the thread can open resolved. */
 export function New() {
   return (
     <div style={{ width: 840 }}>
-      <CommentEditor saving={false} onSave={nothing} onCancel={nothing} />
+      <CommentEditor
+        initialResolved={false}
+        needsBody
+        saving={false}
+        onSave={nothing}
+        onCancel={nothing}
+      />
     </div>
   );
 }

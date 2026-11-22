@@ -71,4 +71,16 @@ describe("CommentEditor", () => {
     fireEvent.click(save());
     expect(onSave).toHaveBeenCalledWith("", true);
   });
+
+  it("opens a thread resolved, and needs a body to do it", () => {
+    const { onSave, text } = renderEditor({
+      initialResolved: false,
+      needsBody: true,
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Resolved" }));
+    expect(save().disabled).toBe(true);
+    fireEvent.change(text, { target: { value: "Fixed in the next change" } });
+    fireEvent.click(save());
+    expect(onSave).toHaveBeenCalledWith("Fixed in the next change", true);
+  });
 });
