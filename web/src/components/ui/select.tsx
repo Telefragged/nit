@@ -47,7 +47,7 @@ export function SelectContent({
         align="start"
         sideOffset={2}
         alignItemWithTrigger={false}
-        className="z-50"
+        className="z-(--z-overlay)"
       >
         <SelectPrimitive.Popup
           data-slot="select-content"
