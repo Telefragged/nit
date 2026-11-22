@@ -16,20 +16,24 @@ import { changes, threads } from "./data";
 import type { ChangeRecord } from "./store";
 import { synthLog } from "./synth";
 
-const logs = new Map<number, LogEntry[]>();
-for (const change of changes) {
-  logs.set(
-    change.id,
-    synthLog(
-      change,
-      threads.filter((t) => t.change_number === change.id),
-    ),
-  );
-}
+// Synthesizing the logs runs the WebAssembly fold, which cannot run until
+// its module loads.
+let logs: Map<number, LogEntry[]> | undefined;
+
+const allLogs = (): Map<number, LogEntry[]> =>
+  (logs ??= new Map(
+    changes.map((change) => [
+      change.id,
+      synthLog(
+        change,
+        threads.filter((t) => t.change_number === change.id),
+      ),
+    ]),
+  ));
 
 /** A change's current synth log — the source the REST read folds (./index). */
 export function logFor(changeNumber: number): LogEntry[] {
-  return logs.get(changeNumber) ?? [];
+  return allLogs().get(changeNumber) ?? [];
 }
 
 /** A change's projection: its synth log folded to a ChangeProjection, the same shape the
@@ -153,7 +157,7 @@ export function mockAppend(
     ...payload,
   };
   log.push(entry);
-  logs.set(change_number, log);
+  allLogs().set(change_number, log);
   for (const sub of subs) sync(sub);
   return entry;
 }

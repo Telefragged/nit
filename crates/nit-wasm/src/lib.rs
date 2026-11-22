@@ -9,10 +9,13 @@
 //! Values cross the boundary as structured `JsValue`s via `serde-wasm-bindgen`.
 //! A `u64` crosses as a JS `number`, the type the generated wire types use.
 
+use nit_types::domain::Anchor;
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
+use nit_types::domain::LogAnchor;
 use nit_types::domain::LogEntry;
+use nit_types::domain::RevisionNumber;
 use nit_types::fold;
 use nit_types::graph::RepoHistory;
 use serde::{Deserialize, Serialize};
@@ -66,6 +69,36 @@ pub fn replay_proj(input: JsValue) -> Result<JsValue, JsValue> {
         input.entries,
     );
     to_js(&proj)
+}
+
+#[derive(Serialize, Deserialize)]
+struct LoggedAnchor {
+    revision: RevisionNumber,
+    anchor: LogAnchor,
+}
+
+/// Returns the anchor of a comment that the log records on a revision.
+///
+/// # Errors
+///
+/// When `logged` is not a revision and a log anchor, or the anchor fails
+/// to serialize.
+#[wasm_bindgen]
+pub fn anchor_from_log(logged: JsValue) -> Result<JsValue, JsValue> {
+    let logged: LoggedAnchor = serde_wasm_bindgen::from_value(logged)?;
+    to_js(&Anchor::from_log(logged.revision, logged.anchor))
+}
+
+/// Returns the revision and the anchor that the log records for `anchor`.
+///
+/// # Errors
+///
+/// When `anchor` is not an anchor, or the result fails to serialize.
+#[wasm_bindgen]
+pub fn anchor_into_log(anchor: JsValue) -> Result<JsValue, JsValue> {
+    let anchor: Anchor = serde_wasm_bindgen::from_value(anchor)?;
+    let (revision, anchor) = anchor.into_log();
+    to_js(&LoggedAnchor { revision, anchor })
 }
 
 /// Applies one live log entry to a `ChangeProjection`.

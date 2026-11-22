@@ -8,6 +8,8 @@
 // opaque to the web: only these wrappers (re)hydrate it.
 
 import {
+  anchor_from_log,
+  anchor_into_log,
   change_detail,
   fold_entry,
   repo_graph,
@@ -16,8 +18,10 @@ import {
   unresolved_threads,
 } from "../lib/wasm";
 import type {
+  Anchor,
   ChangeDetail,
   ChangeProjection,
+  LogAnchor,
   LogEntry,
   ChangeGraph,
   RepoHistory,
@@ -75,4 +79,17 @@ export function unresolvedThreads(proj: ChangeProjection): number {
  * latest revisions. */
 export function tagGraph(changes: ChangeProjection[]): ChangeGraph {
   return tag_graph(changes) as ChangeGraph;
+}
+
+export interface LoggedAnchor {
+  revision: number;
+  anchor: LogAnchor;
+}
+
+export function fromLog(revision: number, anchor: LogAnchor): Anchor {
+  return anchor_from_log({ revision, anchor }) as Anchor;
+}
+
+export function intoLog(anchor: Anchor): LoggedAnchor {
+  return anchor_into_log(anchor) as LoggedAnchor;
 }

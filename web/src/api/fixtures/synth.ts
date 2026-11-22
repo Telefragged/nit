@@ -6,7 +6,7 @@
 // drafts reference; a review's id is its entry's `position`, so the records number
 // their reviews by where this places them.
 
-import { intoLog } from "../../lib/comments";
+import { intoLog } from "../fold";
 import type { CommentInput, LogEntry, LogPayload } from "../types";
 import type { ChangeRecord, ThreadRecord } from "./store";
 
