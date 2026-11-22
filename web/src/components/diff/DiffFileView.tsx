@@ -41,6 +41,7 @@ import {
   type UiThread,
 } from "../../lib/comments";
 import {
+  type DiffLink,
   fileLink,
   linksLine,
   linksThread,
@@ -75,8 +76,10 @@ import {
   type Outline,
   plainOutline,
   renderedKind,
+  type RenderedKind,
   renderedSide,
   showsAnchor,
+  showsLines,
 } from "../../lib/rendered";
 import { scrollBehavior, whenPresent } from "../../lib/scrollspy";
 import { plainClick } from "../../lib/shortcutKey";
@@ -159,6 +162,17 @@ function Code({
 /** How a file section shows a file that renders: as lines, or rendered. */
 type View = "raw" | "rendered";
 
+function requiredView(
+  link: DiffLink | null,
+  file: string,
+  kind: RenderedKind | null,
+): View | null {
+  const at = fileLink(link);
+  if (kind === null || at?.file !== file) return null;
+  if (at.rendered) return "rendered";
+  return at.lines && !showsLines(kind) ? "raw" : null;
+}
+
 const VIEW_OPTIONS: SegOption<View>[] = [
   { value: "raw", label: "Raw", title: "The lines of the diff" },
   { value: "rendered", label: "Rendered", title: "The file, rendered" },
@@ -237,6 +251,9 @@ export default function DiffFileView({
   onRevealed: () => void;
 }) {
   const ctx = useReview();
+  const linkWholeFile = () => {
+    ctx.selectLink({ file: file.path, lines: null });
+  };
   const queryClient = useQueryClient();
   const lang = languageFor(file.path);
 
@@ -254,14 +271,11 @@ export default function DiffFileView({
   const { hunks } = expansion;
 
   const kind = renderedKind(file);
-  const [view, setView] = useState<View>(file.attachment ? "rendered" : "raw");
-  // Of the rendered views, only Markdown shows the line that a link specifies.
-  if (view === "rendered" && kind !== "markdown" && reveal?.lines) {
-    setView("raw");
-  }
-  if (view === "raw" && kind !== null && reveal?.rendered) {
-    setView("rendered");
-  }
+  const [chosen, setView] = useState<View>(
+    file.attachment ? "rendered" : "raw",
+  );
+  const required = requiredView(ctx.link, file.path, kind);
+  const view = required ?? chosen;
   // A file without lines has only its rendered view.
   const showRendered = kind !== null && (file.binary || view === "rendered");
   const renderedView = showRendered && kind !== "markdown" ? kind : null;
@@ -985,7 +999,7 @@ export default function DiffFileView({
       label={renderedLabel(at)}
       onClose={() => {
         if (editingAt && !ctx.setEditingTarget(null)) return;
-        ctx.selectLink({ file: file.path, lines: null });
+        linkWholeFile();
       }}
     >
       {panelThreads.map(({ thread }) => hoverable(thread, side))}
@@ -1046,7 +1060,7 @@ export default function DiffFileView({
           onClick={(e) => {
             if (!plainClick(e) || e.shiftKey) return;
             e.preventDefault();
-            ctx.selectLink({ file: file.path, lines: null });
+            linkWholeFile();
           }}
         >
           #
@@ -1063,6 +1077,7 @@ export default function DiffFileView({
                 !ctx.setEditingTarget(null)
               )
                 return;
+              if (required !== null && required !== next) linkWholeFile();
               setView(next);
             }}
           />

@@ -42,6 +42,10 @@ export function renderedKind(file: ReviewFile): RenderedKind | null {
   return fromUrl || (kind !== "image" && !file.binary) ? kind : null;
 }
 
+/** Whether the rendered view of `kind` shows the lines of the file. Only
+ * a rendered Markdown file does. */
+export const showsLines = (kind: RenderedKind) => kind === "markdown";
+
 /** The text of one side of a file, from the whole file as diff lines. */
 export const sideText = (lines: readonly Line[], side: Side) =>
   lines
