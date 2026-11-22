@@ -244,7 +244,7 @@ fn render_entry(entry: &LogEntry, sources: &Sources) -> String {
 /// The body follows on its own line indented one level deeper. The anchor
 /// shows only when this entry opened the thread; a reply carries none.
 fn render_comment(c: &CommentInput, quote: Option<String>) -> String {
-    let resolved = if c.resolved == Some(true) {
+    let resolved = if c.resolved() == Some(true) {
         "  [resolved]"
     } else {
         ""
@@ -266,11 +266,11 @@ fn shown(c: &CommentInput, quote: Option<String>) -> (Option<&LogAnchor>, String
     if let Some(quote) = quote {
         return (None, quote);
     }
-    let anchor = match &c.target {
+    let anchor = match c.target() {
         CommentTarget::Open { anchor, .. } => Some(anchor),
         CommentTarget::Reply { .. } => None,
     };
-    (anchor, c.body.clone())
+    (anchor, c.body().to_owned())
 }
 
 /// The `thread N (location)` target of an author `comment` entry.
@@ -347,14 +347,9 @@ mod tests {
             created_at: String::new(),
             payload,
         };
-        let comment = || CommentInput {
-            target: CommentTarget::Open {
-                thread_id: None,
-                revision: RevisionNumber::new(0),
-                anchor: LogAnchor::Change,
-            },
-            body: String::new(),
-            resolved: None,
+        let comment = || {
+            CommentInput::open(RevisionNumber::new(0), LogAnchor::Change, "x".into(), None)
+                .expect("a comment with a body")
         };
         let revision = entry(LogPayload::Revision(RevisionPayload {
             commit_sha: Sha::new("abcdef0123456789000000000000000000000000").expect("valid sha"),
@@ -393,14 +388,12 @@ mod tests {
             created_at: String::new(),
             payload,
         };
-        let opening = |tid, anchor, resolved, body: &str| CommentInput {
-            target: CommentTarget::Open {
-                thread_id: Some(tid),
-                revision: RevisionNumber::new(2),
-                anchor,
-            },
-            body: body.to_string(),
-            resolved,
+        let opening = |tid, anchor, resolved, body: &str| {
+            let mut comment =
+                CommentInput::open(RevisionNumber::new(2), anchor, body.to_string(), resolved)
+                    .expect("a comment with a body");
+            comment.assign_thread_id(tid);
+            comment
         };
         let queue = |anchor| LogAnchor::File {
             path: "src/queue.rs".into(),

@@ -84,7 +84,7 @@ impl Sources {
     pub(crate) fn quote(&self, change: ChangeNumber, comment: &CommentInput) -> Option<String> {
         let (key, side, at) = anchored(change, comment)?;
         let lines = self.files.get(&key)?;
-        quote(&key.2, side, at, lines, &comment.body, self.width)
+        quote(&key.2, side, at, lines, comment.body(), self.width)
     }
 }
 
@@ -97,7 +97,7 @@ fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Si
         revision,
         anchor: LogAnchor::File { path, side, anchor },
         ..
-    } = &comment.target
+    } = comment.target()
     else {
         return None;
     };
@@ -233,19 +233,16 @@ mod tests {
     }
 
     fn comment(tid: u64, anchor: FileAnchor, body: &str) -> CommentInput {
-        CommentInput {
-            target: CommentTarget::Open {
-                thread_id: Some(tid),
-                revision: RevisionNumber::new(1),
-                anchor: LogAnchor::File {
-                    path: "src/queue.rs".into(),
-                    side: Side::New,
-                    anchor,
-                },
-            },
-            body: body.to_string(),
-            resolved: None,
-        }
+        let anchor = LogAnchor::File {
+            path: "src/queue.rs".into(),
+            side: Side::New,
+            anchor,
+        };
+        let mut comment =
+            CommentInput::open(RevisionNumber::new(1), anchor, body.to_string(), None)
+                .expect("a comment with a body");
+        comment.assign_thread_id(tid);
+        comment
     }
 
     #[test]

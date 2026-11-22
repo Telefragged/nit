@@ -131,15 +131,15 @@ pub struct ReviewPayload {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentInput {
     #[serde(flatten)]
-    pub target: CommentTarget,
-    pub body: String,
+    target: CommentTarget,
+    body: String,
     /// Thread-resolution decision.
     ///
     /// `Some(true/false)` = resolve/reopen, `None` = no decision. On a new
     /// thread it is the birth state; a reply with an empty `body` contains
     /// only this.
     #[serde(default)]
-    pub resolved: Option<bool>,
+    resolved: Option<bool>,
 }
 
 /// The thread that a comment opens or replies to.
@@ -161,6 +161,100 @@ pub enum CommentTarget {
 }
 
 impl CommentInput {
+    /// Returns the comment that opens a thread at `anchor` of `revision`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommentInputError::EmptyOpening`] when `body` is blank.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::{CommentInput, LogAnchor, RevisionNumber};
+    ///
+    /// let r0 = RevisionNumber::new(0);
+    /// assert!(CommentInput::open(r0, LogAnchor::Change, "why?".into(), None).is_ok());
+    /// assert!(CommentInput::open(r0, LogAnchor::Change, " ".into(), None).is_err());
+    /// ```
+    pub fn open(
+        revision: RevisionNumber,
+        anchor: LogAnchor,
+        body: String,
+        resolved: Option<bool>,
+    ) -> Result<CommentInput, CommentInputError> {
+        if body.trim().is_empty() {
+            return Err(CommentInputError::EmptyOpening);
+        }
+        Ok(CommentInput {
+            target: CommentTarget::Open {
+                thread_id: None,
+                revision,
+                anchor,
+            },
+            body,
+            resolved,
+        })
+    }
+
+    /// Returns the comment that replies to thread `thread_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`CommentInputError::EmptyReply`] when `body` is blank and the reply
+    /// sets no resolution.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use nit_types::domain::CommentInput;
+    ///
+    /// assert!(CommentInput::reply(0, String::new(), Some(true)).is_ok());
+    /// assert!(CommentInput::reply(0, String::new(), None).is_err());
+    /// ```
+    pub fn reply(
+        thread_id: u64,
+        body: String,
+        resolved: Option<bool>,
+    ) -> Result<CommentInput, CommentInputError> {
+        if body.trim().is_empty() && resolved.is_none() {
+            return Err(CommentInputError::EmptyReply);
+        }
+        Ok(CommentInput {
+            target: CommentTarget::Reply { thread_id },
+            body,
+            resolved,
+        })
+    }
+
+    /// Records `id` as the thread that the comment opens.
+    ///
+    /// A reply, and a comment that opens a thread with an id already, stay
+    /// as they are.
+    pub fn assign_thread_id(&mut self, id: u64) {
+        if let CommentTarget::Open {
+            thread_id: thread_id @ None,
+            ..
+        } = &mut self.target
+        {
+            *thread_id = Some(id);
+        }
+    }
+
+    #[must_use]
+    pub fn target(&self) -> &CommentTarget {
+        &self.target
+    }
+
+    #[must_use]
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
+    #[must_use]
+    pub fn resolved(&self) -> Option<bool> {
+        self.resolved
+    }
+
     #[must_use]
     pub fn thread_id(&self) -> Option<u64> {
         match self.target {
@@ -201,6 +295,10 @@ pub enum CommentInputError {
     OpeningWithoutRevision,
     #[error("a comment opens a thread at an anchor or replies to a thread")]
     NoTarget,
+    #[error("a new thread requires a body")]
+    EmptyOpening,
+    #[error("a reply requires a body or a resolution decision")]
+    EmptyReply,
 }
 
 impl TryFrom<LoggedComment> for CommentInput {
@@ -218,22 +316,20 @@ impl TryFrom<LoggedComment> for CommentInput {
                 None => LogAnchor::Change,
             })
         });
-        let target = match (anchor, c.thread_id) {
-            (Some(anchor), thread_id) => CommentTarget::Open {
-                thread_id,
-                revision: c
+        match (anchor, c.thread_id) {
+            (Some(anchor), thread_id) => {
+                let revision = c
                     .revision
-                    .ok_or(CommentInputError::OpeningWithoutRevision)?,
-                anchor,
-            },
-            (None, Some(thread_id)) => CommentTarget::Reply { thread_id },
-            (None, None) => return Err(CommentInputError::NoTarget),
-        };
-        Ok(CommentInput {
-            target,
-            body: c.body,
-            resolved: c.resolved,
-        })
+                    .ok_or(CommentInputError::OpeningWithoutRevision)?;
+                let mut comment = CommentInput::open(revision, anchor, c.body, c.resolved)?;
+                if let Some(id) = thread_id {
+                    comment.assign_thread_id(id);
+                }
+                Ok(comment)
+            }
+            (None, Some(thread_id)) => CommentInput::reply(thread_id, c.body, c.resolved),
+            (None, None) => Err(CommentInputError::NoTarget),
+        }
     }
 }
 
