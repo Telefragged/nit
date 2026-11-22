@@ -335,38 +335,6 @@ fn fill_text(file: &mut DiffFile, old: &str, new: &str, context: u32, whitespace
     }
 }
 
-/// Line `line` (1-based) of `text`, `None` out of range.
-///
-/// The snapshot primitive behind `comments.line_text`, applied to commit
-/// messages ([`COMMIT_MSG_PATH`] drafts) and tree files ([`line_text`])
-/// alike.
-#[must_use]
-pub fn nth_line(text: &str, line: u64) -> Option<String> {
-    if line < 1 {
-        return None;
-    }
-    let position = usize::try_from(line - 1).ok()?;
-    text.lines().nth(position).map(str::to_string)
-}
-
-/// The full text of `file` in `tree`, `None` for a missing/binary path.
-///
-/// The shared read behind [`line_text`] and [`line_range`].
-fn blob_text(repo: &Repository, tree: &Tree, file: &str) -> Option<String> {
-    let oid = tree.get_path(Path::new(file)).ok()?.id();
-    let bytes = blob_bytes(repo, file, oid).ok()??;
-    Some(String::from_utf8_lossy(&bytes).into_owned())
-}
-
-/// Snapshot of line `line` (1-based) of `file` in `tree`.
-///
-/// For `comments.line_text`; `None` when the path/line/encoding make that
-/// impossible.
-#[must_use]
-pub fn line_text(repo: &Repository, tree: &Tree, file: &str, line: u64) -> Option<String> {
-    nth_line(&blob_text(repo, tree, file)?, line)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -715,33 +683,6 @@ mod tests {
         let t_new = r.tree(&[("b.rs", new.as_bytes())]);
         let diff = shown(&r.repo, &r.find(t_old), &r.find(t_new));
         assert_eq!(diff.files[0].hunks[0].header, "");
-    }
-
-    #[test]
-    fn nth_line_snapshot() {
-        let msg = "subject\n\nbody\n";
-        assert_eq!(nth_line(msg, 1).as_deref(), Some("subject"));
-        assert_eq!(nth_line(msg, 2).as_deref(), Some(""));
-        assert_eq!(nth_line(msg, 3).as_deref(), Some("body"));
-        assert_eq!(nth_line(msg, 4), None);
-        assert_eq!(nth_line(msg, 0), None);
-    }
-
-    #[test]
-    fn line_text_snapshot() {
-        let r = Repo::new();
-        let tree = r.find(r.tree(&[
-            ("a.txt", b"first\nsecond\n".as_slice()),
-            ("bin.dat", b"\x00\x01".as_slice()),
-        ]));
-        assert_eq!(
-            line_text(&r.repo, &tree, "a.txt", 2).as_deref(),
-            Some("second")
-        );
-        assert_eq!(line_text(&r.repo, &tree, "a.txt", 3), None);
-        assert_eq!(line_text(&r.repo, &tree, "a.txt", 0), None);
-        assert_eq!(line_text(&r.repo, &tree, "missing.txt", 1), None);
-        assert_eq!(line_text(&r.repo, &tree, "bin.dat", 1), None);
     }
 
     #[test]

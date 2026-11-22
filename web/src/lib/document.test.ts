@@ -130,12 +130,12 @@ describe("coveringPart", () => {
   it("finds the innermost part that covers an anchor", () => {
     const sel = { start_line: 3, start_char: 6, end_line: 3, end_char: 7 };
     expect(covering({ range: sel })).toBe("td");
-    expect(covering({ line: { line: 3 } })).toBe("tr");
+    expect(covering({ line: 3 })).toBe("tr");
   });
 
   it("falls back to the block for an anchor that no part covers, and to none outside", () => {
-    expect(coveringPart(table, { line: { line: 2 } })).toBe(table.parts[0]);
-    expect(coveringPart(table, { line: { line: 20 } })).toBeUndefined();
+    expect(coveringPart(table, { line: 2 })).toBe(table.parts[0]);
+    expect(coveringPart(table, { line: 20 })).toBeUndefined();
   });
 
   it("covers the portion of an anchor inside each block that it spans", () => {

@@ -154,10 +154,7 @@ fn a_comment_logged_before_the_anchor_still_reads() {
         Some(LogAnchor::File {
             path: "a.rs".to_string(),
             side: Side::New,
-            anchor: FileAnchor::Line {
-                line: 3,
-                line_text: Some("x".to_string()),
-            },
+            anchor: FileAnchor::Line(3),
         })
     );
 
@@ -176,10 +173,9 @@ fn a_comment_logged_before_the_anchor_still_reads() {
     };
     assert_eq!(
         anchor,
-        Some(FileAnchor::Range {
-            range: CommentRange::new(3, 1, 3, 4).expect("a forward selection"),
-            line_text: Some("x".to_string()),
-        })
+        Some(FileAnchor::Range(
+            CommentRange::new(3, 1, 3, 4).expect("a forward selection")
+        ))
     );
 }
 
@@ -192,7 +188,6 @@ fn an_anchor_logged_before_the_file_anchor_still_reads() {
         anchor,
     };
     let range = CommentRange::new(4, 1, 4, 6).expect("a forward selection");
-    let y = || Some("y".to_string());
 
     assert_eq!(
         read(r#"{"file":{"file":"a.rs"}}"#),
@@ -201,50 +196,26 @@ fn an_anchor_logged_before_the_file_anchor_still_reads() {
 
     assert_eq!(
         read(r#"{"line":{"file":"a.rs","side":"new","line_text":"y","at":{"whole":3}}}"#),
-        file(
-            Side::New,
-            FileAnchor::Line {
-                line: 3,
-                line_text: y()
-            }
-        )
+        file(Side::New, FileAnchor::Line(3))
     );
     assert_eq!(
         read(
             r#"{"line":{"file":"a.rs","side":"old","line_text":"y",
             "at":{"selection":{"start_line":4,"start_char":1,"end_line":4,"end_char":6}}}}"#
         ),
-        file(
-            Side::Old,
-            FileAnchor::Range {
-                range,
-                line_text: y()
-            }
-        )
+        file(Side::Old, FileAnchor::Range(range))
     );
 
     assert_eq!(
         read(r#"{"line":{"file":"a.rs","side":"new","line":3,"line_text":"y","range":null}}"#),
-        file(
-            Side::New,
-            FileAnchor::Line {
-                line: 3,
-                line_text: y()
-            }
-        )
+        file(Side::New, FileAnchor::Line(3))
     );
     assert_eq!(
         read(
             r#"{"line":{"file":"a.rs","side":"old","line":4,"line_text":"y",
             "range":{"start_line":4,"start_char":1,"end_line":4,"end_char":6}}}"#
         ),
-        file(
-            Side::Old,
-            FileAnchor::Range {
-                range,
-                line_text: y()
-            }
-        )
+        file(Side::Old, FileAnchor::Range(range))
     );
 
     let current = file(Side::Old, FileAnchor::File);

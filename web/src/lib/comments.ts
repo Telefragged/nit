@@ -62,10 +62,10 @@ export const lineVersion = (a: Anchor): ChangeVersion | null =>
   lineOf(a)?.version ?? null;
 
 export const placementLine = (at: LineOrRange): number =>
-  "line" in at ? at.line.line : at.range.end_line;
+  "line" in at ? at.line : at.range.end_line;
 
 export const firstLine = (at: LineOrRange): number =>
-  "line" in at ? at.line.line : at.range.start_line;
+  "line" in at ? at.line : at.range.start_line;
 
 export const rangeOf = (at: LineOrRange): CommentRange | null =>
   "range" in at ? at.range : null;
@@ -73,13 +73,6 @@ export const rangeOf = (at: LineOrRange): CommentRange | null =>
 export const anchorRange = (a: Anchor): CommentRange | null => {
   const at = anchorAt(a);
   return at && rangeOf(at);
-};
-
-/** The text of the line in the version of the anchor. */
-export const anchorLineText = (a: Anchor): string | null => {
-  const at = anchorAt(a);
-  if (!at) return null;
-  return ("line" in at ? at.line.line_text : at.range.line_text) ?? null;
 };
 
 export interface Placement {

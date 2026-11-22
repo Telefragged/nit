@@ -80,10 +80,7 @@ pub enum Anchor {
 }
 
 /// Where inside a file an anchor sits.
-///
-/// `line_text` is a copy of the line that a line or range anchor ends on,
-/// as the version of the anchor contains it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -91,56 +88,30 @@ pub enum FileAnchor {
     /// The whole file.
     File,
     /// One whole line, 1-based.
-    Line {
-        line: u64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts", ts(optional))]
-        line_text: Option<String>,
-    },
+    Line(u64),
     /// A run of characters.
-    Range {
-        #[serde(flatten)]
-        range: CommentRange,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts", ts(optional))]
-        line_text: Option<String>,
-    },
+    Range(CommentRange),
 }
 
 impl FileAnchor {
     /// Returns the anchor on `range` when it is set, else on `line`, else
     /// on the whole file.
     #[must_use]
-    pub fn from_parts(
-        range: Option<CommentRange>,
-        line: Option<u64>,
-        line_text: Option<String>,
-    ) -> FileAnchor {
+    pub fn from_parts(range: Option<CommentRange>, line: Option<u64>) -> FileAnchor {
         match (range, line) {
-            (Some(range), _) => FileAnchor::Range { range, line_text },
-            (None, Some(line)) => FileAnchor::Line { line, line_text },
+            (Some(range), _) => FileAnchor::Range(range),
+            (None, Some(line)) => FileAnchor::Line(line),
             (None, None) => FileAnchor::File,
         }
     }
 
     /// The line that a line or range anchor ends on.
     #[must_use]
-    pub fn end_line(&self) -> Option<u64> {
+    pub fn end_line(self) -> Option<u64> {
         match self {
             FileAnchor::File => None,
-            FileAnchor::Line { line, .. } => Some(*line),
-            FileAnchor::Range { range, .. } => Some(range.end_line()),
-        }
-    }
-
-    /// The text of the line that the anchor ends on.
-    #[must_use]
-    pub fn line_text(&self) -> Option<&str> {
-        match self {
-            FileAnchor::File => None,
-            FileAnchor::Line { line_text, .. } | FileAnchor::Range { line_text, .. } => {
-                line_text.as_deref()
-            }
+            FileAnchor::Line(line) => Some(line),
+            FileAnchor::Range(range) => Some(range.end_line()),
         }
     }
 }
@@ -186,8 +157,6 @@ enum StoredAnchor {
         #[serde(default)]
         side: Side,
         #[serde(default)]
-        line_text: Option<String>,
-        #[serde(default)]
         at: Option<StoredLine>,
         #[serde(default)]
         line: Option<u64>,
@@ -215,7 +184,6 @@ impl From<StoredAnchor> for LogAnchor {
             StoredAnchor::Line {
                 file,
                 side,
-                line_text,
                 at,
                 line,
                 range,
@@ -230,7 +198,7 @@ impl From<StoredAnchor> for LogAnchor {
                 LogAnchor::File {
                     path: file,
                     side,
-                    anchor: FileAnchor::from_parts(range, line, line_text),
+                    anchor: FileAnchor::from_parts(range, line),
                 }
             }
         }
@@ -297,21 +265,10 @@ impl Anchor {
 
     /// The place inside the file of a file anchor.
     #[must_use]
-    pub fn file_anchor(&self) -> Option<&FileAnchor> {
+    pub fn file_anchor(&self) -> Option<FileAnchor> {
         match self {
             Anchor::Change { .. } => None,
-            Anchor::File { anchor, .. } => Some(anchor),
-        }
-    }
-
-    /// Records the text of the line that a line or range anchor ends on.
-    pub fn snapshot_line_text(&mut self, text: Option<String>) {
-        if let Anchor::File {
-            anchor: FileAnchor::Line { line_text, .. } | FileAnchor::Range { line_text, .. },
-            ..
-        } = self
-        {
-            *line_text = text;
+            Anchor::File { anchor, .. } => Some(*anchor),
         }
     }
 }

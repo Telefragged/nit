@@ -30,7 +30,7 @@ const ported = {
   file: {
     version: "r1" as const,
     path: "src/main.rs",
-    anchor: { line: { line: 1 } },
+    anchor: { line: 1 },
   },
 };
 

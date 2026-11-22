@@ -61,7 +61,7 @@ pub(super) async fn create_comment(
                 }
             };
             let anchor = Anchor::from_log(number, req.anchor.unwrap_or(LogAnchor::Change));
-            let anchor = new_thread_anchor(&state, conn, &change, anchor)?;
+            let anchor = new_thread_anchor(&change, anchor)?;
             let (revision, anchor) = anchor.into_log();
             CommentInput {
                 thread_id: None,

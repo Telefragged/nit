@@ -53,7 +53,7 @@ import StatusMark from "./StatusMark";
 function threadLines(t: UiThread): string {
   const at = anchorAt(shownAt(t));
   if (at === null) return "file";
-  if ("line" in at) return `line ${at.line.line}`;
+  if ("line" in at) return `line ${at.line}`;
   const { start_line, start_char, end_line, end_char } = at.range;
   return `range ${start_line}:${start_char}-${end_line}:${end_char}`;
 }

@@ -43,7 +43,7 @@ fn status_at(server: &TestServer, change_number: u64) -> String {
 fn draft_comment(server: &TestServer, change_number: u64, file: &str, line: u64, body: &str) {
     let (st, _) = http_post(
         &server.url(&format!("/api/changes/{change_number}/drafts")),
-        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": file, "anchor": {"line": {"line": line}}}}, "body": body}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": file, "anchor": {"line": line}}}, "body": body}}),
     );
     assert_eq!(st, 200);
 }

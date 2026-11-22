@@ -28,7 +28,7 @@ const lineAnchor = (version: ChangeVersion, line: number): Anchor => ({
   file: {
     version: version,
     path: "src/main.rs",
-    anchor: { line: { line: line } },
+    anchor: { line },
   },
 });
 

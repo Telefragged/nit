@@ -215,7 +215,7 @@ export function linkedPart(
 export function coveringPart(block: Block, at: LineOrRange): Part | undefined {
   let [sl, sc, el, ec] =
     "line" in at
-      ? [at.line.line, 0, at.line.line, Infinity]
+      ? [at.line, 0, at.line, Infinity]
       : [
           at.range.start_line,
           at.range.start_char,

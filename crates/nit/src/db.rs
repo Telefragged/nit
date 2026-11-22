@@ -290,6 +290,8 @@ const MIGRATIONS: &[&str] = &[
       PRIMARY KEY (change_number, hash)
     );
     ",
+    // v14: a draft stores no copy of its anchored line.
+    "ALTER TABLE draft_comments DROP COLUMN line_text;",
 ];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
@@ -1107,11 +1109,7 @@ fn col_anchor(row: &rusqlite::Row) -> rusqlite::Result<Anchor> {
     Ok(Anchor::File {
         version: col_enum::<Side>(&row.get::<_, String>("side")?)?.version(revision),
         path,
-        anchor: FileAnchor::from_parts(
-            range,
-            col_u64_opt(row.get("line")?)?,
-            row.get("line_text")?,
-        ),
+        anchor: FileAnchor::from_parts(range, col_u64_opt(row.get("line")?)?),
     })
 }
 
@@ -1148,8 +1146,8 @@ pub struct NewDraft<'a> {
 pub fn insert_draft(tx: &Transaction, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
     let thread_id = d.thread_id.map(i64::try_from).transpose()?;
     let (line, range) = match d.anchor.file_anchor() {
-        Some(FileAnchor::Line { line, .. }) => (Some(i64::try_from(*line)?), None),
-        Some(FileAnchor::Range { range, .. }) => (None, Some(range)),
+        Some(FileAnchor::Line(line)) => (Some(i64::try_from(line)?), None),
+        Some(FileAnchor::Range(range)) => (None, Some(range)),
         Some(FileAnchor::File) | None => (None, None),
     };
     let (rsl, rsc, rel, rec) = match range {
@@ -1164,8 +1162,8 @@ pub fn insert_draft(tx: &Transaction, id: u64, d: &NewDraft, now: &str) -> Resul
     tx.execute(
         "INSERT INTO draft_comments (id, change_number, revision, thread_id, file, line, side,
             range_start_line, range_start_char, range_end_line, range_end_char,
-            line_text, body, resolved, created_at, updated_at)
-         VALUES (?14, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?15, ?13, ?13)",
+            body, resolved, created_at, updated_at)
+         VALUES (?13, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?14, ?12, ?12)",
         params![
             i64::try_from(d.change_number.get())?,
             i64::try_from(d.anchor.revision().get())?,
@@ -1177,7 +1175,6 @@ pub fn insert_draft(tx: &Transaction, id: u64, d: &NewDraft, now: &str) -> Resul
             rsc,
             rel,
             rec,
-            d.anchor.file_anchor().and_then(FileAnchor::line_text),
             d.body,
             now,
             i64::try_from(id)?,
@@ -1494,19 +1491,10 @@ mod tests {
             ChangeVersion::Revision(RevisionNumber::new(0)),
         );
         let anchors = [
-            file(
-                base,
-                FileAnchor::Line {
-                    line: 3,
-                    line_text: Some("x1".to_string()),
-                },
-            ),
+            file(base, FileAnchor::Line(3)),
             file(
                 revision,
-                FileAnchor::Range {
-                    range: CommentRange::new(4, 1, 4, 6).expect("a forward selection"),
-                    line_text: Some("x2".to_string()),
-                },
+                FileAnchor::Range(CommentRange::new(4, 1, 4, 6).expect("a forward selection")),
             ),
             file(revision, FileAnchor::File),
             file(base, FileAnchor::File),
@@ -1710,10 +1698,7 @@ mod tests {
                     anchor: &Anchor::File {
                         version: ChangeVersion::Revision(RevisionNumber::new(1)),
                         path: "src/main.rs".to_string(),
-                        anchor: FileAnchor::Line {
-                            line: 3,
-                            line_text: Some("fn main".to_string()),
-                        },
+                        anchor: FileAnchor::Line(3),
                     },
                     body: "look",
                     resolved: None,

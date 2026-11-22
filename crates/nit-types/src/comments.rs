@@ -14,7 +14,7 @@ use crate::domain::RevisionNumber;
 pub enum NewDraft {
     /// A draft that opens a new thread.
     Thread {
-        /// The anchor of the thread, with `line_text` unset.
+        /// The anchor of the thread.
         anchor: Anchor,
         body: String,
         /// Whether the thread opens resolved.

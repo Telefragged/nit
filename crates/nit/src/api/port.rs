@@ -328,21 +328,15 @@ fn has_lines(anchor: &Anchor) -> bool {
 fn port_line(at: &FileAnchor, edits: &[Edit]) -> Option<FileAnchor> {
     match at {
         FileAnchor::File => None,
-        FileAnchor::Line { line, .. } => {
+        FileAnchor::Line(line) => {
             let (line, _) = shifted(*line, *line, edits)?;
-            Some(FileAnchor::Line {
-                line,
-                line_text: None,
-            })
+            Some(FileAnchor::Line(line))
         }
-        FileAnchor::Range { range, .. } => {
+        FileAnchor::Range(range) => {
             let (start, end) = shifted(range.start_line(), range.end_line(), edits)?;
             CommentRange::new(start, range.start_char(), end, range.end_char())
                 .ok()
-                .map(|range| FileAnchor::Range {
-                    range,
-                    line_text: None,
-                })
+                .map(FileAnchor::Range)
         }
     }
 }

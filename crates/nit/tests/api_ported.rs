@@ -40,12 +40,12 @@ fn whole(file: &str, side: &str) -> Value {
 }
 
 fn line(file: &str, side: &str, at: u64) -> Value {
-    json!({"file": {"path": file, "side": side, "anchor": {"line": {"line": at}}}})
+    json!({"file": {"path": file, "side": side, "anchor": {"line": at}}})
 }
 
 /// A ported line anchor on line `at` of `file` in `version`.
 fn ported_line(version: &str, file: &str, at: u64) -> Value {
-    json!({"file": {"version": version, "path": file, "anchor": {"line": {"line": at}}}})
+    json!({"file": {"version": version, "path": file, "anchor": {"line": at}}})
 }
 
 /// Each anchor lands where its lines went: shifted past an insertion,

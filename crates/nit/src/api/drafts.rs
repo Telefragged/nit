@@ -33,7 +33,7 @@ pub(super) async fn create_draft(
                 if body.trim().is_empty() {
                     return Err(Error::bad_request("a new thread needs a body"));
                 }
-                let anchor = new_thread_anchor(&state, conn, &proj, anchor)?;
+                let anchor = new_thread_anchor(&proj, anchor)?;
                 (None, anchor, body, resolved)
             }
             NewDraft::Reply {

@@ -287,8 +287,8 @@ fn anchor_label(anchor: &LogAnchor) -> String {
         LogAnchor::Change => "(change-level)".to_string(),
         LogAnchor::File { path, anchor, .. } => match anchor {
             FileAnchor::File => path.clone(),
-            FileAnchor::Line { line, .. } => format!("{path}:{line}"),
-            FileAnchor::Range { range: r, .. } => format!(
+            FileAnchor::Line(line) => format!("{path}:{line}"),
+            FileAnchor::Range(r) => format!(
                 "{path}:{}:{}-{}:{}",
                 r.start_line(),
                 r.start_char(),
@@ -408,21 +408,12 @@ mod tests {
                 message: "Cover one.\nCover two.".to_string(),
                 comments: vec![
                     opening(3, LogAnchor::Change, None, "Change-level question?"),
-                    opening(
-                        4,
-                        queue(FileAnchor::Line {
-                            line: 42,
-                            line_text: None,
-                        }),
-                        None,
-                        "Bounded channel.",
-                    ),
+                    opening(4, queue(FileAnchor::Line(42)), None, "Bounded channel."),
                     opening(
                         5,
-                        queue(FileAnchor::Range {
-                            range: CommentRange::new(42, 8, 42, 30).expect("a forward range"),
-                            line_text: None,
-                        }),
+                        queue(FileAnchor::Range(
+                            CommentRange::new(42, 8, 42, 30).expect("a forward range"),
+                        )),
                         Some(true),
                         "Overflow on 32-bit.",
                     ),
