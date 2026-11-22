@@ -9,7 +9,12 @@ import type {
   ThreadProjection,
 } from "../api/types";
 import { verdictStatus } from "../api/verdict";
-import { anchorRevision, placementLine } from "../lib/comments";
+import {
+  anchorRevision,
+  isLineOrRange,
+  placementLine,
+  renderedLabel,
+} from "../lib/comments";
 import { displayPath } from "../lib/diffview";
 import { shortSha } from "../lib/sha";
 import { timeAgo } from "../lib/time";
@@ -25,19 +30,13 @@ const firstLine = (text: string) => text.split("\n", 1)[0] ?? "";
  * the first line. */
 const hasMore = (text: string) => text.trim() !== firstLine(text).trim();
 
-/** Where an anchor points: `change`, a file, `file:line`, `file@x,y
- * widthxheight` for a rectangle, or `file#path` for an element. */
 function anchorLabel(anchor: Anchor | LogAnchor): string {
   if (anchor === "change" || "change" in anchor) return "change";
   const { path, anchor: at } = anchor.file;
   const file = displayPath(path);
   if (at === "file") return file;
-  if ("region" in at) {
-    const { x, y, width, height } = at.region.rect;
-    return `${file}@${x},${y} ${width}x${height}`;
-  }
-  if ("element" in at) return `${file}#${at.element}`;
-  return `${file}:${placementLine(at)}`;
+  if (isLineOrRange(at)) return `${file}:${placementLine(at)}`;
+  return `${file} ${renderedLabel(at)}`;
 }
 
 /** Where a comment lands, and what it does to its thread's resolution. A

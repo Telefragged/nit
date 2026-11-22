@@ -90,7 +90,7 @@ import {
 } from "../lib/diffLink";
 import { displayPath, fileAt, fileDomId, treeOrder } from "../lib/diffview";
 import { repoPath } from "../lib/repo";
-import { activeIndexAt, scrollBehavior } from "../lib/scrollspy";
+import { activeIndexAt, scrollBehavior, whenPresent } from "../lib/scrollspy";
 import { plainClick, shortcutKey } from "../lib/shortcutKey";
 import type { SelectionMiss } from "../lib/selection";
 import {
@@ -677,10 +677,6 @@ export default function ReviewPage() {
         // comment editor — the latest revision is where they already are.
         if (selected !== latestRevision) onRight(latestRevision);
       } else if (key === "c") {
-        // Draft a comment on the selected diff text (gerrit's c), or else
-        // on the linked span: one line whole, the characters of a table
-        // cell, or several lines from the start of the first to the end of
-        // the last.
         const sel = document.getSelection();
         const linked = fileLink(link);
         let range: Range | null = null;
@@ -696,6 +692,9 @@ export default function ReviewPage() {
             range = linesRange({ file: linked.file, lines: linked.lines });
             result = range && selectionTarget(range, side);
           }
+        } else if (linked?.rendered) {
+          const { side, at } = linked.rendered;
+          result = { file: linked.file, side, at };
         }
         if (!result) return;
         // preventDefault, or the keystroke lands in the editor's textarea.
@@ -921,18 +920,25 @@ export default function ReviewPage() {
   // at its old offset.
   useLayoutEffect(() => {
     if (pendingThread === null || scrolledThread.current === pending) return;
-    const el = document.querySelector(`[data-thread="${pendingThread}"]`);
-    if (el === null) return;
-    // The thread renders under the last line of its anchor. The scroll
-    // goes to the first line, so the page shows the code that the thread
-    // is about. A thread with no line on the page is the target itself.
     const thread = shownThreads.find((t) => t.id === pendingThread);
     const anchor = thread && shownAt(thread);
-    const at = anchor && anchorAt(anchor);
-    const place = anchor && commentPlacement(anchor, selected, against);
-    const top = at && place && anchorTop(el, place.side, firstLine(at));
-    (top ?? el).scrollIntoView({ behavior: scrollBehavior(), block: "start" });
-    scrolledThread.current = pending;
+    const scroll = (el: Element) => {
+      // The thread renders under the last line of its anchor. The scroll
+      // goes to the first line, so the page shows the code that the
+      // thread is about. A thread with no line on the page is the target
+      // itself.
+      const at = anchor && anchorAt(anchor);
+      const place = anchor && commentPlacement(anchor, selected, against);
+      const top = at && place && anchorTop(el, place.side, firstLine(at));
+      (top ?? el).scrollIntoView({
+        behavior: scrollBehavior(),
+        block: "start",
+      });
+      scrolledThread.current = pending;
+    };
+    const find = () =>
+      document.querySelector(`[data-thread="${pendingThread}"]`);
+    return whenPresent(document.body, find, scroll);
   }, [pending, pendingThread, expanded, shownThreads, selected, against]);
 
   // Busy until the stream has delivered the change and a member of its tag

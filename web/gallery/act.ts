@@ -58,6 +58,11 @@ export const untilSelector = (page: Page, selector: string) =>
     `(${OBSERVE})((s) => !!document.querySelector(s), ${JSON.stringify(selector)})`,
   );
 
+export const untilIdle = (page: Page) =>
+  page.evaluate(
+    `(${OBSERVE})(() => !document.querySelector('[aria-busy="true"]'))`,
+  );
+
 /** Resolves once the one element that `selector` matches is `width` pixels
  * wide. */
 export const untilWidth = (page: Page, selector: string, width: number) =>

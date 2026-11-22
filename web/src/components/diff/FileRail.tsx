@@ -24,8 +24,11 @@ import {
 import type { ReviewFile } from "../../lib/attachments";
 import {
   anchorAt,
+  anchorRendered,
   anchorRevision,
   commentPlacement,
+  renderedLabel,
+  renderedPlacement,
   firstLine,
   markCountsLabel,
   placementLine,
@@ -51,6 +54,8 @@ import StatusMark from "./StatusMark";
 
 /** Where in its file the diff shows a thread. */
 function threadLines(t: UiThread): string {
+  const rendered = anchorRendered(shownAt(t));
+  if (rendered) return renderedLabel(rendered);
   const at = anchorAt(shownAt(t));
   if (at === null) return "file";
   if ("line" in at) return `line ${at.line}`;
@@ -58,9 +63,6 @@ function threadLines(t: UiThread): string {
   return `range ${start_line}:${start_char}-${end_line}:${end_char}`;
 }
 
-/** The link to a thread: a published thread by its id, and a thread of
- * drafts only by the lines of its anchor in the diff range
- * `[against] → [selected]`. */
 function threadLink(
   file: string,
   t: UiThread,
@@ -69,6 +71,8 @@ function threadLink(
 ): DiffLink {
   if (t.id !== null) return { thread: t.id };
   const anchor = shownAt(t);
+  const rendered = renderedPlacement(anchor, selected, against);
+  if (rendered) return { file, lines: null, rendered };
   const at = anchorAt(anchor);
   const place = commentPlacement(anchor, selected, against);
   if (at === null || place === null) return { file, lines: null };

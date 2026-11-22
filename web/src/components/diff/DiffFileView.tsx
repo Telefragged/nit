@@ -21,20 +21,31 @@ import {
   anchorAt,
   anchorKind,
   anchorRange,
-  lineVersion,
+  placeVersion,
   commentPlacement,
   columnVersion,
+  isLineOrRange,
   markCounts,
   placementLine,
+  renderedLabel,
+  renderedPlacement,
+  type RenderedAnchor,
+  sameRendered,
   shownAt,
   strongerMark,
   threadKey,
   threadMark,
+  type FilePlace,
   type LineOrRange,
   type ThreadMark,
   type UiThread,
 } from "../../lib/comments";
-import { fileLink, linksLine, type FileLink } from "../../lib/diffLink";
+import {
+  fileLink,
+  linksLine,
+  linksThread,
+  type FileLink,
+} from "../../lib/diffLink";
 import type { IntralineRange } from "../../lib/diffview";
 import {
   displayPath,
@@ -60,8 +71,14 @@ import {
   shownRows,
 } from "../../lib/document";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
-import { renderedKind } from "../../lib/rendered";
-import { scrollBehavior } from "../../lib/scrollspy";
+import {
+  type Outline,
+  plainOutline,
+  renderedKind,
+  renderedSide,
+  showsAnchor,
+} from "../../lib/rendered";
+import { scrollBehavior, whenPresent } from "../../lib/scrollspy";
 import { plainClick } from "../../lib/shortcutKey";
 import { selectionAnchorSide } from "../../lib/selection";
 import {
@@ -83,6 +100,7 @@ import NewThreadEditor from "../NewThreadEditor";
 import Seg, { type SegOption } from "../Seg";
 import ThreadCount from "../ThreadCount";
 import DocBlock from "./DocBlock";
+import FloatingPanel from "./FloatingPanel";
 import GapSeparator from "./GapSeparator";
 import LineLink from "./LineLink";
 import RenderedView from "./RenderedView";
@@ -227,7 +245,7 @@ export default function DiffFileView({
   const [hovered, setHovered] = useState<{
     thread: string;
     side: Side;
-    at: LineOrRange | null;
+    at: FilePlace | null;
   } | null>(null);
 
   const [fileCommentOpen, setFileCommentOpen] = useState(false);
@@ -241,8 +259,12 @@ export default function DiffFileView({
   if (view === "rendered" && kind !== "markdown" && reveal?.lines) {
     setView("raw");
   }
+  if (view === "raw" && kind !== null && reveal?.rendered) {
+    setView("rendered");
+  }
   // A file without lines has only its rendered view.
   const showRendered = kind !== null && (file.binary || view === "rendered");
+  const renderedView = showRendered && kind !== "markdown" ? kind : null;
 
   // A rendered Markdown file, as blocks. A file with one side renders
   // that side with no changes.
@@ -281,7 +303,8 @@ export default function DiffFileView({
    * that contains that line. */
   const editorAt = (side: Side, no: number) => {
     const target = editingOn(side);
-    return target !== null && shownLine(side, targetLine(target)) === no;
+    const line = target && targetLine(target);
+    return line !== null && shownLine(side, line) === no;
   };
 
   const sectionRef = useRef<HTMLElement>(null);
@@ -309,6 +332,13 @@ export default function DiffFileView({
         ) ?? section,
       );
       return;
+    }
+    if (reveal.rendered) {
+      return whenPresent(
+        section,
+        () => section.querySelector(".outline-linked"),
+        scroll,
+      );
     }
     const line =
       lines &&
@@ -380,6 +410,7 @@ export default function DiffFileView({
   const fileThreads: UiThread[] = [];
   const displaced: UiThread[] = [];
   const inline = new Map<string, UiThread[]>();
+  const placed: { thread: UiThread; side: Side; at: RenderedAnchor }[] = [];
   // The mark of each line that an inline thread covers: its whole line,
   // or every line of its selection.
   const gutterMarks = new Map<string, ThreadMark>();
@@ -387,6 +418,17 @@ export default function DiffFileView({
     const at = shownAt(t);
     if (anchorKind(at) === "file") {
       fileThreads.push(t);
+      continue;
+    }
+    if (anchorKind(at) === "rendered") {
+      const r = renderedPlacement(at, ctx.selected, ctx.against);
+      const shows =
+        r !== null &&
+        renderedView !== null &&
+        showsAnchor(renderedView, r.at) &&
+        r.side === renderedSide(file);
+      if (shows) placed.push({ thread: t, ...r });
+      else displaced.push(t);
       continue;
     }
     const p = commentPlacement(at, ctx.selected, ctx.against);
@@ -583,49 +625,54 @@ export default function DiffFileView({
     if (no === undefined) return [];
     const items: ReactNode[] = [];
     for (const t of inline.get(`${side}:${no}`) ?? []) {
-      items.push(
-        // The hover tint only points at the anchor; the line number beside
-        // the thread already shows a keyboard user where it hangs.
-        // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-        <div
-          className="meta-item"
-          key={`t-${side}-${threadKey(t)}`}
-          onMouseEnter={() => {
-            setHovered({
-              thread: threadKey(t),
-              side,
-              at: anchorAt(shownAt(t)),
-            });
-          }}
-          onMouseLeave={() => {
-            setHovered(null);
-          }}
-        >
-          <CommentThread thread={t} />
-        </div>,
-      );
+      items.push(hoverable(t, side));
     }
     if (ctx.editingTarget && editorAt(side, no)) {
-      const target = ctx.editingTarget;
       items.push(
         <div className="meta-item" key={`editor-${side}-${no}`}>
-          <CommentEditor
-            initialResolved={false}
-            needsBody
-            saving={create.isPending}
-            onSave={(body, resolved) => {
-              create.mutate({ target, body, resolved });
-            }}
-            onCancel={() => ctx.setEditingTarget(null)}
-            onDirtyChange={(dirty) => {
-              ctx.setEditorDirty(dirty);
-            }}
-          />
+          {draftEditor(ctx.editingTarget)}
         </div>,
       );
     }
     return items;
   }
+
+  const draftEditor = (target: DraftTarget) => (
+    <CommentEditor
+      initialResolved={false}
+      needsBody
+      saving={create.isPending}
+      onSave={(body, resolved) => {
+        create.mutate({ target, body, resolved });
+      }}
+      onCancel={() => ctx.setEditingTarget(null)}
+      onDirtyChange={(dirty) => {
+        ctx.setEditorDirty(dirty);
+      }}
+    />
+  );
+
+  const hoverable = (t: UiThread, side: Side) => (
+    // The hover tint only points at the anchor; the line number beside
+    // the thread already shows a keyboard user where it hangs.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+    <div
+      className="meta-item"
+      key={`t-${side}-${threadKey(t)}`}
+      onMouseEnter={() => {
+        setHovered({
+          thread: threadKey(t),
+          side,
+          at: anchorAt(shownAt(t)),
+        });
+      }}
+      onMouseLeave={() => {
+        setHovered(null);
+      }}
+    >
+      <CommentThread thread={t} />
+    </div>
+  );
 
   /** Unified meta row: a line owns both sides (context) or one (add/del);
    * all its items stack in one full-width row below it. */
@@ -752,8 +799,12 @@ export default function DiffFileView({
     const hovering = hovered?.side === side ? hovered.at : null;
     const editing = editingOn(side)?.at;
     return (
-      (hovering ? tintOf(side, block, hovering) : undefined) ??
-      (editing ? tintOf(side, block, editing) : undefined)
+      (hovering && isLineOrRange(hovering)
+        ? tintOf(side, block, hovering)
+        : undefined) ??
+      (editing && isLineOrRange(editing)
+        ? tintOf(side, block, editing)
+        : undefined)
     );
   };
 
@@ -882,6 +933,62 @@ export default function DiffFileView({
       );
     });
   }
+
+  const side = renderedSide(file);
+  const linkedAt = (() => {
+    const at = fileLink(ctx.link);
+    return at?.file === file.path && at.rendered?.side === side
+      ? at.rendered.at
+      : null;
+  })();
+  const editingAt = (() => {
+    const at = editingOn(side)?.at;
+    return at && !isLineOrRange(at) ? at : null;
+  })();
+
+  const outlines = (): Outline[] => {
+    const threaded: (Outline & { form: ThreadMark })[] = [];
+    for (const { thread, at } of placed) {
+      let outline = threaded.find((o) => sameRendered(o.at, at));
+      if (!outline) {
+        outline = { ...plainOutline(at, "open"), form: threadMark(thread) };
+        threaded.push(outline);
+      }
+      outline.form = strongerMark(outline.form, threadMark(thread));
+      if (thread.id !== null) outline.threads.push(thread.id);
+      outline.active ||= threadKey(thread) === hovered?.thread;
+    }
+    return [
+      ...threaded,
+      ...(linkedAt ? [plainOutline(linkedAt, "linked")] : []),
+      ...(editingAt ? [plainOutline(editingAt, "editing")] : []),
+    ];
+  };
+
+  const panelThreads = placed.filter(
+    (p) =>
+      linksThread(ctx.link, p.thread.id) ||
+      (linkedAt !== null && sameRendered(linkedAt, p.at)),
+  );
+  const panelAt = editingAt ?? panelThreads[0]?.at ?? null;
+
+  /** The floating panel of the rendered view: the threads of the linked
+   * place, then the editor of a new thread. Closing it closes the editor,
+   * then links the whole file. */
+  const panel = (at: RenderedAnchor) => (
+    <FloatingPanel
+      label={renderedLabel(at)}
+      onClose={() => {
+        if (editingAt && !ctx.setEditingTarget(null)) return;
+        ctx.selectLink({ file: file.path, lines: null });
+      }}
+    >
+      {panelThreads.map(({ thread }) => hoverable(thread, side))}
+      {ctx.editingTarget && editingAt ? (
+        <div className="meta-item">{draftEditor(ctx.editingTarget)}</div>
+      ) : null}
+    </FloatingPanel>
+  );
 
   const letter = statusLetter(file);
 
@@ -1015,7 +1122,7 @@ export default function DiffFileView({
                 <div className="thread-group-item" key={threadKey(t)}>
                   <div className="line-excerpt">
                     <span className="excerpt-line">
-                      {lineVersion(shownAt(t))}
+                      {placeVersion(shownAt(t))}
                     </span>
                   </div>
                   <CommentThread thread={t} />
@@ -1038,8 +1145,20 @@ export default function DiffFileView({
                 {whole.isError ? "The file did not load" : "Loading the file…"}
               </div>
             )
-          ) : showRendered && kind !== "markdown" ? (
-            <RenderedView file={file} kind={kind} />
+          ) : renderedView !== null ? (
+            <RenderedView
+              file={file}
+              kind={renderedView}
+              outlines={outlines()}
+              onLink={(at) => {
+                ctx.selectLink(
+                  at
+                    ? { file: file.path, lines: null, rendered: { side, at } }
+                    : { file: file.path, lines: null },
+                );
+              }}
+              panel={panelAt && { at: panelAt, content: panel(panelAt) }}
+            />
           ) : file.binary ? (
             <div className="diff-note">Binary file — contents not shown</div>
           ) : hunks.length === 0 ? (

@@ -3,7 +3,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   add,
   attachedFile,
@@ -15,7 +15,12 @@ import {
 } from "../../api/fixtures/builders";
 import { COMMIT_MSG_PATH, type DiffFile } from "../../api/types";
 import type { DiffLink, LinkSpan } from "../../lib/diffLink";
-import type { LineOrRange, UiThread } from "../../lib/comments";
+import type {
+  FilePlace,
+  LineOrRange,
+  RenderedAnchor,
+  UiThread,
+} from "../../lib/comments";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
 import { ReviewContext } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
@@ -623,5 +628,136 @@ describe("a Markdown file", () => {
     expect(container.querySelector(".doc-added")?.textContent).toBe(
       "3new text",
     );
+  });
+});
+
+describe("a rendered image", () => {
+  const shot = attachedFile("ui.png", "", 2);
+  const rect = { x: 10, y: 20, width: 40, height: 30 };
+  const region: RenderedAnchor = { region: { rect } };
+  const threadOn = (version: "r1" | "r2", at: FilePlace = region) =>
+    uiThread({
+      id: 1,
+      anchor: { file: { version, path: shot.path, anchor: at } },
+    });
+  const linked: DiffLink = {
+    file: shot.path,
+    lines: null,
+    rendered: { side: "new", at: region },
+  };
+  const load = (container: HTMLElement) => {
+    const img = container.querySelector("img");
+    if (!img) throw new Error("no image");
+    Object.defineProperty(img, "naturalWidth", { value: 200 });
+    Object.defineProperty(img, "naturalHeight", { value: 100 });
+    fireEvent.load(img);
+    img.getBoundingClientRect = () => new DOMRect(0, 0, 200, 100);
+    return img;
+  };
+
+  it("outlines the region of a thread, in percent of the image", () => {
+    const { container } = renderFile("unified", shot, [threadOn("r2")]);
+    expect(container.querySelector(".rendered-outline")).toBeNull();
+    load(container);
+    const outline = container.querySelector<HTMLElement>(
+      ".rendered-outline.outline-open",
+    );
+    expect(outline?.style.left).toBe("5%");
+    expect(outline?.style.top).toBe("20%");
+    expect(outline?.style.width).toBe("20%");
+    expect(outline?.style.height).toBe("30%");
+    expect(outline?.querySelector('[data-thread="1"]')).not.toBeNull();
+    expect(container.querySelector(".floating-panel")).toBeNull();
+  });
+
+  it("lists a region of another version with the comments not shown", () => {
+    const { container } = renderFile("unified", shot, [threadOn("r1")]);
+    load(container);
+    expect(container.querySelector(".rendered-outline")).toBeNull();
+    expect(
+      container.querySelector('[data-threads="displaced"] [data-thread="1"]'),
+    ).not.toBeNull();
+  });
+
+  it("shows the threads of the linked region in the floating panel", () => {
+    const { container } = render(
+      tree("unified", shot, [threadOn("r2")], undefined, {
+        ...ctx,
+        link: linked,
+      }),
+    );
+    load(container);
+    expect(container.querySelector(".outline-linked")).not.toBeNull();
+    const panel = container.querySelector(".floating-panel");
+    expect(panel?.textContent).toContain("region 10,20 40x30");
+    expect(panel?.querySelector('[data-thread="1"]')).not.toBeNull();
+  });
+
+  it("opens the editor of a draft on a region in the floating panel", () => {
+    const { container } = render(
+      tree("unified", shot, [], undefined, {
+        ...ctx,
+        editingTarget: { file: shot.path, side: "new", at: region },
+      }),
+    );
+    load(container);
+    expect(container.querySelector(".outline-editing")).not.toBeNull();
+    expect(container.querySelector(".floating-panel textarea")).not.toBeNull();
+  });
+
+  it("unlinks the rectangle on a click without a drag", () => {
+    const selectLink = vi.fn();
+    const { container } = render(
+      tree("unified", shot, [], undefined, {
+        ...ctx,
+        link: linked,
+        selectLink,
+      }),
+    );
+    const img = load(container);
+    fireEvent.mouseDown(img, { button: 0, clientX: 50, clientY: 50 });
+    fireEvent.mouseUp(document);
+    expect(selectLink).toHaveBeenCalledWith({ file: shot.path, lines: null });
+  });
+
+  it("unlinks the rectangle when text elsewhere is selected", () => {
+    const selectLink = vi.fn();
+    render(
+      tree("unified", shot, [], undefined, {
+        ...ctx,
+        link: linked,
+        selectLink,
+      }),
+    );
+    const text = document.createElement("p");
+    text.textContent = "elsewhere";
+    document.body.append(text);
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    fireEvent(document, new Event("selectionchange"));
+    expect(selectLink).toHaveBeenCalledWith({ file: shot.path, lines: null });
+    document.getSelection()?.removeAllRanges();
+    text.remove();
+  });
+
+  it("links the rectangle that a drag covers, in the pixels of the image", () => {
+    const selectLink = vi.fn();
+    const { container } = render(
+      tree("unified", shot, [], undefined, { ...ctx, selectLink }),
+    );
+    const img = load(container);
+    fireEvent.mouseDown(img, { button: 0, clientX: 50, clientY: 50 });
+    fireEvent.mouseMove(document, { clientX: 10, clientY: 20 });
+    fireEvent.mouseUp(document);
+    expect(selectLink).toHaveBeenCalledWith({
+      file: shot.path,
+      lines: null,
+      rendered: {
+        side: "new",
+        at: { region: { rect: { x: 10, y: 20, width: 40, height: 30 } } },
+      },
+    });
   });
 });

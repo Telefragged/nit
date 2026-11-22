@@ -1,6 +1,7 @@
 import { test } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { untilIdle } from "./act";
 
 const dir = process.env.NIT_GALLERY ?? "";
 const gallery = readFileSync(join(dir, "index.html"), "utf8");
@@ -13,6 +14,7 @@ const ids = JSON.parse(
 for (const id of ids) {
   test(`captures ${id}`, async ({ page, mount }, testInfo) => {
     const root = await mount(id);
+    await untilIdle(page);
     const out = join(testInfo.project.outputDir, id);
     // root.screenshot() would first retry until the root is visible and
     // stable.
