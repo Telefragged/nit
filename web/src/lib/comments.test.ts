@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { uiThread as ui } from "../api/fixtures/builders";
+import { intoLog } from "../api/fold";
 import type {
   Anchor,
   ChangeVersion,
@@ -11,7 +12,6 @@ import { revisionOf } from "./version";
 import {
   anchorKind,
   assembleThreads,
-  intoLog,
   columnVersion,
   commentCountLabel,
   commentPlacement,

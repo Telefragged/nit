@@ -20,7 +20,7 @@ import type {
   ChangeVersion,
 } from "../types";
 import { ATTACHMENT_PREFIX } from "../types";
-import { anchorRevision, intoLog } from "../../lib/comments";
+import { anchorRevision } from "../../lib/comments";
 import { attachmentsOf } from "../../lib/attachments";
 import {
   baseVersion,
@@ -29,7 +29,7 @@ import {
   revisionOf,
   revisionVersion,
 } from "../../lib/version";
-import { changeDetail as foldDetail } from "../fold";
+import { changeDetail as foldDetail, intoLog } from "../fold";
 import { mockAppend, picks, projection } from "./stream";
 import { addedFile, changedFile, diffKey, sideEnd } from "./builders";
 import blobs from "./blobs.json";

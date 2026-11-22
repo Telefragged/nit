@@ -8,8 +8,8 @@
 // published threads + reviewer drafts into the UI thread model. Pure and
 // side-effect-free, so the rules are unit-tested without a DOM.
 
-import { unresolvedThreads } from "../api/fold";
-import { baseVersion, isBase, revisionOf, revisionVersion } from "./version";
+import { fromLog, unresolvedThreads } from "../api/fold";
+import { revisionOf, revisionVersion } from "./version";
 import type {
   Anchor,
   ChangeDrafts,
@@ -19,7 +19,6 @@ import type {
   FileAnchor,
   Side,
   Draft,
-  LogAnchor,
   PortedComment,
   ThreadProjection,
   ChangeVersion,
@@ -47,38 +46,6 @@ export type AnchorKind = "change" | "file" | "line";
 
 export const anchorKind = (a: Anchor): AnchorKind =>
   "change" in a ? "change" : lineOf(a) ? "line" : "file";
-
-/** The revision and the anchor that the log records for `anchor`, as the
- * server's `Anchor::into_log` returns them. The inverse of `fromLog`. */
-export function intoLog(anchor: Anchor): {
-  revision: number;
-  anchor: LogAnchor;
-} {
-  if ("change" in anchor) {
-    return { revision: anchor.change.revision, anchor: "change" };
-  }
-  const { version, ...file } = anchor.file;
-  return {
-    revision: revisionOf(version),
-    anchor: { file: { ...file, side: isBase(version) ? "old" : "new" } },
-  };
-}
-
-/** The anchor of a comment that the log records on `revision`, as the
- * server's `Anchor::from_log` returns it. */
-const fromLog = (revision: number, anchor: LogAnchor | null): Anchor =>
-  anchor === null || anchor === "change"
-    ? { change: { revision } }
-    : {
-        file: {
-          version:
-            anchor.file.side === "old"
-              ? baseVersion(revision)
-              : revisionVersion(revision),
-          path: anchor.file.path,
-          anchor: anchor.file.anchor,
-        },
-      };
 
 /** The file of an anchor, or null for a change-level one. */
 export const anchorFile = (a: Anchor): string | null => fileOf(a)?.path ?? null;
@@ -191,7 +158,7 @@ export function assembleThreads(
     .filter((d) => d.thread_id === null)
     .map((d) => ({
       id: null,
-      anchor: fromLog(d.revision ?? 0, d.anchor),
+      anchor: fromLog(d.revision ?? 0, d.anchor ?? "change"),
       resolved: false,
       comments: [],
       drafts: [d],

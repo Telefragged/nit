@@ -11,7 +11,7 @@ import {
   uiThread,
 } from "../../api/fixtures/builders";
 import type { Anchor, DiffFile } from "../../api/types";
-import { intoLog, type LineOrRange, type UiThread } from "../../lib/comments";
+import type { LineOrRange, UiThread } from "../../lib/comments";
 import { ReviewContext } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
 
@@ -80,7 +80,8 @@ const THREADS: UiThread[] = [
     anchor: at({ line: 20 }),
     drafts: [
       draft({
-        ...intoLog(at({ line: 20 })),
+        revision: 1,
+        anchor: { file: { path: PATH, side: "new", anchor: { line: 20 } } },
         body: "Every caller has to handle the `Result`. Make sure that none unwraps it silently.",
       }),
     ],
