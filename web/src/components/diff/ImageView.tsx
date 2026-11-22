@@ -23,29 +23,40 @@ const under = (rect: Rect, size: Size): CSSProperties => ({
   top: `${((rect.y + rect.height) / size.height) * 100}%`,
 });
 
-/** The outline of a place on a rendered file, with the threads at the
- * place. Each published thread has an element with its `data-thread`, so
- * that a link to the thread scrolls to the place. The button of a thread
- * outline calls `onLink`, which links the place and so opens its threads. */
-function OutlineBox({
+/** The elements that the links to the place of `outline` scroll to: one
+ * per published thread at the place, and one for the linked place. */
+export function ScrollTargets({ outline }: { outline: Outline }) {
+  return (
+    <>
+      {outline.threads.map((id) => (
+        <span key={id} className="outline-thread" data-thread={id} />
+      ))}
+      {outline.form === "linked" ? (
+        <span className="outline-thread" data-linked-place="" />
+      ) : null}
+    </>
+  );
+}
+
+export function OutlineBox({
   outline,
   style,
   onLink,
+  children,
 }: {
   outline: Outline;
   style: CSSProperties;
   onLink: (at: RenderedAnchor) => void;
+  children?: ReactNode;
 }) {
-  const { form, threads, active, at } = outline;
+  const { form, active, at } = outline;
   const threaded = form !== "linked" && form !== "editing";
   return (
     <div
       className={`rendered-outline outline-${form}${active ? " active" : ""}`}
       style={style}
     >
-      {threads.map((id) => (
-        <span key={id} className="outline-thread" data-thread={id} />
-      ))}
+      {children}
       {threaded ? (
         <button
           type="button"
@@ -180,7 +191,9 @@ export default function ImageView({
                       outline={o}
                       style={placed(o.at.region.rect, size)}
                       onLink={onLink}
-                    />,
+                    >
+                      <ScrollTargets outline={o} />
+                    </OutlineBox>,
                   ]
                 : [],
             )

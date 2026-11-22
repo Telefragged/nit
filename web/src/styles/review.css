@@ -845,8 +845,21 @@ button.rail-toggle,
   background: var(--color-mark-tint);
 }
 
-/* The comment icon of a place with threads, on its top right corner. A
-   click links the place, which shows its threads in the floating panel. */
+.rendered-outline.outline-hover {
+  border: 1px solid var(--color-muted-foreground);
+}
+
+.frame-stage {
+  position: relative;
+}
+
+.frame-marks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .outline-button {
   position: absolute;
   top: -11px;

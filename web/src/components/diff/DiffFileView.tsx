@@ -336,7 +336,7 @@ export default function DiffFileView({
     if (reveal.rendered) {
       return whenPresent(
         section,
-        () => section.querySelector(".outline-linked"),
+        () => section.querySelector("[data-linked-place]"),
         scroll,
       );
     }
@@ -972,9 +972,14 @@ export default function DiffFileView({
   );
   const panelAt = editingAt ?? panelThreads[0]?.at ?? null;
 
-  /** The floating panel of the rendered view: the threads of the linked
-   * place, then the editor of a new thread. Closing it closes the editor,
-   * then links the whole file. */
+  const frameReveal = (() => {
+    const at =
+      reveal?.rendered?.side === side
+        ? reveal.rendered.at
+        : placed.find((p) => linksThread(ctx.link, p.thread.id))?.at;
+    return at && "element" in at ? at.element : null;
+  })();
+
   const panel = (at: RenderedAnchor) => (
     <FloatingPanel
       label={renderedLabel(at)}
@@ -1157,6 +1162,10 @@ export default function DiffFileView({
                     : { file: file.path, lines: null },
                 );
               }}
+              openEditor={(at) =>
+                ctx.setEditingTarget({ file: file.path, side, at })
+              }
+              reveal={frameReveal}
               panel={panelAt && { at: panelAt, content: panel(panelAt) }}
             />
           ) : file.binary ? (
