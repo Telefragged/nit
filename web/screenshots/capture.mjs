@@ -863,6 +863,19 @@ const captures = [
     },
   },
   {
+    name: "review-element-editor",
+    path: "/changes/12?against=base&file=/attachments/openapi/index.html&element=/html/body/h2",
+    fullPage: false,
+    actions: async (page) => {
+      await untilDom(page, () => !!document.querySelector(".outline-linked"));
+      await page.keyboard.press("c");
+      await fillNow(
+        page.locator(".floating-panel textarea"),
+        "Document the error responses next to the path.",
+      );
+    },
+  },
+  {
     name: "review-draft-editor",
     path: "/changes/11?against=base",
     actions: async (page) => {
