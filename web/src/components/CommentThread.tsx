@@ -96,8 +96,8 @@ function DraftComment({
   });
 
   const editResolved =
-    draft.thread_id !== null ? draftResolved(draft) : undefined;
-  const resolutionOnly = draft.body.trim().length === 0;
+    draft.comment.thread_id !== null ? draftResolved(draft) : undefined;
+  const resolutionOnly = draft.comment.body.trim().length === 0;
 
   return (
     <div className="comment comment-draft">
@@ -132,7 +132,7 @@ function DraftComment({
       </div>
       {editing ? (
         <CommentEditor
-          initial={draft.body}
+          initial={draft.comment.body}
           initialResolved={editResolved}
           saving={update.isPending}
           onSave={(body, resolved) => {
@@ -144,11 +144,13 @@ function DraftComment({
         />
       ) : resolutionOnly ? (
         <div className="comment-body comment-resolution-only">
-          {draft.resolved ? "Resolving this thread" : "Reopening this thread"}
+          {draft.comment.resolved
+            ? "Resolving this thread"
+            : "Reopening this thread"}
         </div>
       ) : (
         <div className="comment-body">
-          <Markdown text={draft.body} />
+          <Markdown text={draft.comment.body} />
         </div>
       )}
     </div>
@@ -242,7 +244,7 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
     toggled ??
     (resolved &&
       !linked &&
-      thread.drafts.every((d) => d.body.trim().length === 0));
+      thread.drafts.every((d) => d.comment.body.trim().length === 0));
   const since = rangeSince(thread.anchor, selected, against, latestRevision);
   const revision = anchorRevision(thread.anchor);
   // A ported line thread whose lines the amend rewrote is shown on its file.

@@ -54,14 +54,10 @@ function drainComments(c: ChangeRecord): CommentInput[] {
     .filter((x) => x.change_number === c.id)
     .sort((a, b) => a.id - b.id);
   for (const d of changeDrafts) {
-    if (d.thread_id !== null || d.body.trim() !== "") {
-      const { revision, anchor, body, resolved } = d;
+    if (d.comment.thread_id !== null || d.comment.body.trim() !== "") {
       comments.push({
-        thread_id: d.thread_id ?? nextThreadId++,
-        revision,
-        anchor,
-        body,
-        resolved,
+        ...d.comment,
+        thread_id: d.comment.thread_id ?? nextThreadId++,
       });
     }
     drafts.splice(drafts.indexOf(d), 1);
@@ -455,7 +451,7 @@ export function mockRequest(
     const record: Draft = {
       id: nextDraftId++,
       change_number: c.id,
-      ...comment,
+      comment,
       created_at: now,
       updated_at: now,
     };
@@ -468,8 +464,8 @@ export function mockRequest(
     const d = drafts.find((x) => x.id === id);
     if (!d) return notFound(`draft ${id}`);
     const req = body as { body: string; resolved?: boolean };
-    d.body = req.body;
-    d.resolved = req.resolved ?? null;
+    d.comment.body = req.body;
+    d.comment.resolved = req.resolved ?? null;
     d.updated_at = new Date().toISOString();
     return d;
   }

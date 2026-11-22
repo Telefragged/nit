@@ -419,34 +419,9 @@ export type CommentRange = {
 export type Draft = {
   id: number;
   change_number: ChangeNumber;
+  comment: CommentInput;
   created_at: string;
   updated_at: string;
-  /**
-   * `None` opens a new thread; `Some` appends to that thread.
-   */
-  thread_id: number | null;
-  /**
-   * Anchor revision for a new thread.
-   *
-   * A draft's own revision — an interdiff old side pins to an earlier
-   * revision. Always set on a recorded comment; the fold falls back to
-   * the change's latest only for a malformed payload.
-   */
-  revision: RevisionNumber | null;
-  /**
-   * Where a new thread is anchored; `None` on a reply, which uses the
-   * anchor of its thread.
-   */
-  anchor: LogAnchor | null;
-  body: string;
-  /**
-   * Thread-resolution decision.
-   *
-   * `Some(true/false)` = resolve/reopen, `None` = no decision. On a new
-   * thread it is the birth state; a `thread_id` reply with an empty
-   * `body` contains only this.
-   */
-  resolved: boolean | null;
 };
 
 /**

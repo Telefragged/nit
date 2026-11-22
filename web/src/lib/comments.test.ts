@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { uiThread as ui } from "../api/fixtures/builders";
+import {
+  draft as build,
+  uiThread as ui,
+  type DraftFields,
+} from "../api/fixtures/builders";
 import { intoLog } from "../api/fold";
 import type {
   Anchor,
@@ -52,16 +56,12 @@ const thread = (
 });
 
 /** A reviewer draft on src/main.rs (a new thread unless `thread_id` is set). */
-const draft = (over: Partial<Draft> & { id: number }): Draft => ({
-  change_number: 1,
-  thread_id: null,
-  ...intoLog(lineAnchor("r1", 1)),
-  body: "",
-  resolved: null,
-  created_at: "2026-01-01T00:00:00Z",
-  updated_at: "2026-01-01T00:00:00Z",
-  ...over,
-});
+const draft = (over: DraftFields & { id: number }): Draft =>
+  build({
+    ...intoLog(lineAnchor("r1", 1)),
+    created_at: "2026-01-01T00:00:00Z",
+    ...over,
+  });
 
 describe("assembleThreads", () => {
   it("merges a published thread with its reply drafts, oldest first", () => {

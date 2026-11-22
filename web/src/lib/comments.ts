@@ -152,13 +152,13 @@ export function assembleThreads(
     a.created_at.localeCompare(b.created_at);
   const published: UiThread[] = threads.map((t) => ({
     ...t,
-    drafts: drafts.filter((d) => d.thread_id === t.id).sort(byCreated),
+    drafts: drafts.filter((d) => d.comment.thread_id === t.id).sort(byCreated),
   }));
   const draftThreads: UiThread[] = drafts
-    .filter((d) => d.thread_id === null)
+    .filter((d) => d.comment.thread_id === null)
     .map((d) => ({
       id: null,
-      anchor: fromLog(d.revision ?? 0, d.anchor ?? "change"),
+      anchor: fromLog(d.comment.revision ?? 0, d.comment.anchor ?? "change"),
       resolved: false,
       comments: [],
       drafts: [d],
@@ -262,9 +262,7 @@ export function commentCountLabel(n: number): string {
   return `${n} comment${n === 1 ? "" : "s"}`;
 }
 
-/** The resolution decision of a draft. A draft without one counts as
- * open. */
-export const draftResolved = (d: Draft): boolean => d.resolved ?? false;
+export const draftResolved = (d: Draft): boolean => d.comment.resolved ?? false;
 
 /**
  * A thread's resolution as it *would* be after the reviewer's pending drafts
@@ -348,7 +346,8 @@ export interface NodeActivity {
 export const draftsAt = (
   act: NodeActivity | undefined,
   revision: number | null,
-): number => act?.drafts.filter((d) => d.revision === revision).length ?? 0;
+): number =>
+  act?.drafts.filter((d) => d.comment.revision === revision).length ?? 0;
 
 /** Each change's activity, keyed by change number: its open threads off
  * its projection, and its drafts and draft decision off the reviewer's

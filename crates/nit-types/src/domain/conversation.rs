@@ -405,7 +405,6 @@ impl TryFrom<Selection> for CommentRange {
 pub struct Draft {
     pub id: u64,
     pub change_number: ChangeNumber,
-    #[serde(flatten)]
     pub comment: CommentInput,
     pub created_at: String,
     pub updated_at: String,
