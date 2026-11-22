@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { draft } from "../api/fixtures/builders";
 import type { ChangeGraph, ChangeStatus, GraphNode } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
 import { LAYOUT_DENSE } from "../lib/graphLayout";
@@ -38,7 +37,7 @@ function node(
 
 /** The activity of a change with `count` unresolved threads. */
 const activity = (count: number): NodeActivity => ({
-  drafts: [],
+  draftRevisions: [],
   unresolved: count,
   decision: null,
 });
@@ -184,18 +183,17 @@ describe("TagNav", () => {
   });
 
   it("counts the drafts at the node's revision, and shows the draft decision", () => {
-    const at = (id: number, revision: number) => draft({ id, revision });
     renderNav(three, 11, {
       acts: new Map<number, NodeActivity>([
         [
           12,
           {
-            drafts: [at(1, 0), at(2, 0), at(3, 1)],
+            draftRevisions: [0, 0, 1],
             unresolved: 0,
             decision: null,
           },
         ],
-        [10, { drafts: [], unresolved: 0, decision: "approve" }],
+        [10, { draftRevisions: [], unresolved: 0, decision: "approve" }],
       ]),
     });
     const [top, , bottom] = rows();

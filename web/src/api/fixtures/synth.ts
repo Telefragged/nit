@@ -21,7 +21,7 @@ function commentInput(
 ): CommentInput {
   return {
     thread_id: thread.id,
-    ...(open ? intoLog(thread.anchor) : { revision: null, anchor: null }),
+    ...(open ? intoLog(thread.anchor) : {}),
     body,
     resolved: last ? thread.resolved : null,
   };

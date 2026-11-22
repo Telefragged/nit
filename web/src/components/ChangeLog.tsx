@@ -40,11 +40,10 @@ function placeLine(c: CommentInput, threads: ThreadProjection[]): string {
   let place: string;
   if (thread !== undefined) {
     place = `Revision ${anchorRevision(thread.anchor)} ${anchorLabel(thread.anchor)}`;
-  } else if (c.thread_id !== null) {
-    place = `thread ${c.thread_id}`;
+  } else if ("anchor" in c) {
+    place = `Revision ${c.revision} ${anchorLabel(c.anchor)}`;
   } else {
-    const where = c.anchor === null ? "change" : anchorLabel(c.anchor);
-    place = c.revision === null ? where : `Revision ${c.revision} ${where}`;
+    place = `thread ${c.thread_id}`;
   }
   if (c.resolved === null) return place;
   return `${place}, ${c.resolved ? "resolved" : "reopened"}`;

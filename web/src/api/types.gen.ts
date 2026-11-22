@@ -616,38 +616,21 @@ export type ReviewPayload = {
 
 /**
  * A comment inside a `review` or `comment` payload.
- *
- * With `thread_id` unset it **opens a new thread** at its anchor; with
- * it set it **replies** to that thread, which owns the anchor.
  */
 export type CommentInput = {
-  /**
-   * `None` opens a new thread; `Some` appends to that thread.
-   */
-  thread_id: number | null;
-  /**
-   * Anchor revision for a new thread.
-   *
-   * A draft's own revision — an interdiff old side pins to an earlier
-   * revision. Always set on a recorded comment; the fold falls back to
-   * the change's latest only for a malformed payload.
-   */
-  revision: RevisionNumber | null;
-  /**
-   * Where a new thread is anchored; `None` on a reply, which uses the
-   * anchor of its thread.
-   */
-  anchor: LogAnchor | null;
   body: string;
   /**
    * Thread-resolution decision.
    *
    * `Some(true/false)` = resolve/reopen, `None` = no decision. On a new
-   * thread it is the birth state; a `thread_id` reply with an empty
-   * `body` contains only this.
+   * thread it is the birth state; a reply with an empty `body` contains
+   * only this.
    */
   resolved: boolean | null;
-};
+} & (
+  | { thread_id: number | null; revision: RevisionNumber; anchor: LogAnchor }
+  | { thread_id: number }
+);
 
 /**
  * A `lifecycle` entry: a merge, an abandon, or a reopen.

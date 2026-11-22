@@ -53,7 +53,7 @@ pub(super) async fn create_comment(
         })?;
         // A new thread's id is minted during the append, so read it back here.
         let thread_id = match appended.entries.first().map(|e| &e.payload) {
-            Some(LogPayload::Comment(c)) => c.thread_id,
+            Some(LogPayload::Comment(c)) => c.thread_id(),
             _ => None,
         }
         .ok_or_else(|| Error::internal("comment append minted no thread"))?;

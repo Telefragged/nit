@@ -154,16 +154,20 @@ export function assembleThreads(
     ...t,
     drafts: drafts.filter((d) => d.comment.thread_id === t.id).sort(byCreated),
   }));
-  const draftThreads: UiThread[] = drafts
-    .filter((d) => d.comment.thread_id === null)
-    .map((d) => ({
-      id: null,
-      anchor: fromLog(d.comment.revision ?? 0, d.comment.anchor ?? "change"),
-      resolved: false,
-      comments: [],
-      drafts: [d],
-      created_at: d.created_at,
-    }));
+  const draftThreads: UiThread[] = drafts.flatMap((d) => {
+    const c = d.comment;
+    if (!("anchor" in c)) return [];
+    return [
+      {
+        id: null,
+        anchor: fromLog(c.revision, c.anchor),
+        resolved: false,
+        comments: [],
+        drafts: [d],
+        created_at: d.created_at,
+      },
+    ];
+  });
   return [...published, ...draftThreads].sort(byCreated);
 }
 
@@ -336,7 +340,9 @@ export function threadKey(t: UiThread): string {
 /** What a node's activity badges draw, derived from the bulk change
  * folds and the reviewer's drafts overlay. */
 export interface NodeActivity {
-  drafts: readonly Draft[];
+  /** The revision of each draft: the revision that a new thread opens
+   * on, or the revision of the thread that a reply answers. */
+  draftRevisions: readonly number[];
   /** Unresolved threads over every revision (`unresolvedThreads`). */
   unresolved: number;
   decision: Decision | null;
@@ -346,8 +352,7 @@ export interface NodeActivity {
 export const draftsAt = (
   act: NodeActivity | undefined,
   revision: number | null,
-): number =>
-  act?.drafts.filter((d) => d.comment.revision === revision).length ?? 0;
+): number => act?.draftRevisions.filter((r) => r === revision).length ?? 0;
 
 /** Each change's activity, keyed by change number: its open threads off
  * its projection, and its drafts and draft decision off the reviewer's
@@ -362,7 +367,11 @@ export function nodeActivity(
       return [
         p.id,
         {
-          drafts: overlay?.drafts ?? [],
+          draftRevisions: (overlay?.drafts ?? []).flatMap(({ comment }) => {
+            if ("anchor" in comment) return [comment.revision];
+            const thread = p.threads.find((t) => t.id === comment.thread_id);
+            return thread ? [anchorRevision(thread.anchor)] : [];
+          }),
           unresolved: unresolvedThreads(p),
           decision: overlay?.draft_decision?.decision ?? null,
         },

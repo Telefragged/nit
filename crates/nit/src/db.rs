@@ -1488,8 +1488,7 @@ mod tests {
                     Some(false)
                 ),
                 opening(0, serde_json::json!("change"), "change", none),
-                serde_json::json!({"thread_id": 9, "revision": 0, "anchor": null,
-                                   "body": "", "resolved": true}),
+                serde_json::json!({"thread_id": 9, "body": "", "resolved": true}),
             ]
         );
     }
@@ -1655,9 +1654,11 @@ mod tests {
         let mut conn = mem();
         let c = change(&mut conn);
         let comment = CommentInput {
-            thread_id: None,
-            revision: Some(nit_types::domain::RevisionNumber::new(1)),
-            anchor: Some(nit_types::domain::LogAnchor::Change),
+            target: nit_types::domain::CommentTarget::Open {
+                thread_id: None,
+                revision: nit_types::domain::RevisionNumber::new(1),
+                anchor: nit_types::domain::LogAnchor::Change,
+            },
             body: "look".to_string(),
             resolved: None,
         };
@@ -1673,7 +1674,7 @@ mod tests {
         .expect("some");
         assert_eq!(edited.comment.body, "look again");
         assert_eq!(edited.comment.resolved, Some(true));
-        assert_eq!(edited.comment.anchor, comment.anchor);
+        assert_eq!(edited.comment.target, comment.target);
         write(&mut conn, |tx| delete_drafts_for_change(tx, c)).expect("drain");
         assert!(drafts_for_change(&conn, c).expect("list").is_empty());
     }

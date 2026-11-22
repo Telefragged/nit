@@ -13,7 +13,7 @@ use nit_types::domain::FileAnchor;
 use nit_types::domain::LogAnchor;
 use nit_types::domain::Tags;
 use nit_types::domain::ThreadProjection;
-use nit_types::domain::{CommentInput, LogEntry, LogPayload};
+use nit_types::domain::{CommentInput, CommentTarget, LogEntry, LogPayload};
 
 use crate::gitscan::short_sha;
 use nit_types::domain::subject_of;
@@ -75,7 +75,7 @@ fn entry_summary(entry: &LogEntry) -> String {
             p.revision,
             p.comments.len()
         ),
-        LogPayload::Comment(c) => match c.thread_id {
+        LogPayload::Comment(c) => match c.thread_id() {
             Some(thread) => format!("author commented on thread {thread} (change {change})"),
             None => format!("author opened a thread on change {change}"),
         },
@@ -216,7 +216,7 @@ fn render_entry(entry: &LogEntry, sources: &Sources) -> String {
         }
         LogPayload::Comment(c) => {
             let (anchor, body) = shown(c, sources.quote(change, c));
-            let head = match comment_target(c.thread_id, anchor) {
+            let head = match comment_target(c.thread_id(), anchor) {
                 Some(target) => {
                     format!("change {change}  position {position}  comment on {target}")
                 }
@@ -251,7 +251,7 @@ fn render_comment(c: &CommentInput, quote: Option<String>) -> String {
     };
     let (anchor, body) = shown(c, quote);
     let loc = anchor.map_or(String::new(), |a| format!("  {}", anchor_label(a)));
-    let head = match c.thread_id {
+    let head = match c.thread_id() {
         Some(id) => format!("    t{id}{loc}{resolved}"),
         None => format!("    {loc}{resolved}"),
     };
@@ -263,10 +263,14 @@ fn render_comment(c: &CommentInput, quote: Option<String>) -> String {
 /// A `quote` of the anchored lines contains both, so it replaces the label
 /// and the body.
 fn shown(c: &CommentInput, quote: Option<String>) -> (Option<&LogAnchor>, String) {
-    match quote {
-        Some(quote) => (None, quote),
-        None => (c.anchor.as_ref(), c.body.clone()),
+    if let Some(quote) = quote {
+        return (None, quote);
     }
+    let anchor = match &c.target {
+        CommentTarget::Open { anchor, .. } => Some(anchor),
+        CommentTarget::Reply { .. } => None,
+    };
+    (anchor, c.body.clone())
 }
 
 /// The `thread N (location)` target of an author `comment` entry.
@@ -344,9 +348,11 @@ mod tests {
             payload,
         };
         let comment = || CommentInput {
-            thread_id: None,
-            revision: None,
-            anchor: None,
+            target: CommentTarget::Open {
+                thread_id: None,
+                revision: RevisionNumber::new(0),
+                anchor: LogAnchor::Change,
+            },
             body: String::new(),
             resolved: None,
         };
@@ -388,9 +394,11 @@ mod tests {
             payload,
         };
         let opening = |tid, anchor, resolved, body: &str| CommentInput {
-            thread_id: Some(tid),
-            revision: Some(RevisionNumber::new(2)),
-            anchor: Some(anchor),
+            target: CommentTarget::Open {
+                thread_id: Some(tid),
+                revision: RevisionNumber::new(2),
+                anchor,
+            },
             body: body.to_string(),
             resolved,
         };

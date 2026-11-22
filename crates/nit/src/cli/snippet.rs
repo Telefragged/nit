@@ -8,7 +8,8 @@ use anyhow::Result;
 
 use nit_types::diff::{FileLines, Line};
 use nit_types::domain::{
-    ChangeNumber, CommentInput, FileAnchor, LogAnchor, LogEntry, LogPayload, RevisionNumber, Side,
+    ChangeNumber, CommentInput, CommentTarget, FileAnchor, LogAnchor, LogEntry, LogPayload,
+    RevisionNumber, Side,
 };
 
 use super::client::{Client, Retry};
@@ -92,8 +93,11 @@ impl Sources {
 type Covered = (u64, u64, Option<u64>, Option<u64>);
 
 fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Side, Covered)> {
-    let (Some(LogAnchor::File { path, side, anchor }), Some(revision)) =
-        (&comment.anchor, comment.revision)
+    let CommentTarget::Open {
+        revision,
+        anchor: LogAnchor::File { path, side, anchor },
+        ..
+    } = &comment.target
     else {
         return None;
     };
@@ -107,7 +111,7 @@ fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Si
             Some(r.end_char()),
         ),
     };
-    Some(((change, revision, path.clone()), *side, covered))
+    Some(((change, *revision, path.clone()), *side, covered))
 }
 
 /// Renders the lines of `side` that `at` covers, with [`CONTEXT`] lines
@@ -230,13 +234,15 @@ mod tests {
 
     fn comment(tid: u64, anchor: FileAnchor, body: &str) -> CommentInput {
         CommentInput {
-            thread_id: Some(tid),
-            revision: Some(RevisionNumber::new(1)),
-            anchor: Some(LogAnchor::File {
-                path: "src/queue.rs".into(),
-                side: Side::New,
-                anchor,
-            }),
+            target: CommentTarget::Open {
+                thread_id: Some(tid),
+                revision: RevisionNumber::new(1),
+                anchor: LogAnchor::File {
+                    path: "src/queue.rs".into(),
+                    side: Side::New,
+                    anchor,
+                },
+            },
             body: body.to_string(),
             resolved: None,
         }

@@ -126,42 +126,52 @@ pub struct ReviewPayload {
 }
 
 /// A comment inside a `review` or `comment` payload.
-///
-/// With `thread_id` unset it **opens a new thread** at its anchor; with
-/// it set it **replies** to that thread, which owns the anchor.
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-#[serde(from = "LoggedComment")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(try_from = "LoggedComment")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommentInput {
-    /// `None` opens a new thread; `Some` appends to that thread.
-    #[serde(default)]
-    pub thread_id: Option<u64>,
-    /// Anchor revision for a new thread.
-    ///
-    /// A draft's own revision — an interdiff old side pins to an earlier
-    /// revision. Always set on a recorded comment; the fold falls back to
-    /// the change's latest only for a malformed payload.
-    #[serde(default)]
-    pub revision: Option<RevisionNumber>,
-    /// Where a new thread is anchored; `None` on a reply, which uses the
-    /// anchor of its thread.
-    #[serde(default)]
-    pub anchor: Option<LogAnchor>,
+    #[serde(flatten)]
+    pub target: CommentTarget,
     pub body: String,
     /// Thread-resolution decision.
     ///
     /// `Some(true/false)` = resolve/reopen, `None` = no decision. On a new
-    /// thread it is the birth state; a `thread_id` reply with an empty
-    /// `body` contains only this.
+    /// thread it is the birth state; a reply with an empty `body` contains
+    /// only this.
     #[serde(default)]
     pub resolved: Option<bool>,
 }
 
-/// A comment as the log stores it, in either spelling.
-///
+/// The thread that a comment opens or replies to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(untagged)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub enum CommentTarget {
+    /// Opens a new thread at `anchor` of `revision`.
+    ///
+    /// `thread_id` is the id of the new thread. The append that records
+    /// the comment assigns it, so a draft has none.
+    Open {
+        thread_id: Option<u64>,
+        revision: RevisionNumber,
+        anchor: LogAnchor,
+    },
+    /// Replies to thread `thread_id`, at the anchor of that thread.
+    Reply { thread_id: u64 },
+}
+
+impl CommentInput {
+    #[must_use]
+    pub fn thread_id(&self) -> Option<u64> {
+        match self.target {
+            CommentTarget::Open { thread_id, .. } => thread_id,
+            CommentTarget::Reply { thread_id } => Some(thread_id),
+        }
+    }
+}
+
 /// The log is append-only, so entries written before a comment had one
-/// [`LogAnchor`] keep the five loose fields it was spelled with. Parsing
-/// resolves the two spellings into the anchor.
+/// [`LogAnchor`] keep the five loose fields it was spelled with.
 #[derive(Deserialize)]
 struct LoggedComment {
     #[serde(default)]
@@ -185,30 +195,45 @@ struct LoggedComment {
     resolved: Option<bool>,
 }
 
-impl From<LoggedComment> for CommentInput {
-    fn from(c: LoggedComment) -> CommentInput {
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CommentInputError {
+    #[error("a comment that opens a thread records the revision of its anchor")]
+    OpeningWithoutRevision,
+    #[error("a comment opens a thread at an anchor or replies to a thread")]
+    NoTarget,
+}
+
+impl TryFrom<LoggedComment> for CommentInput {
+    type Error = CommentInputError;
+
+    fn try_from(c: LoggedComment) -> Result<CommentInput, CommentInputError> {
         let anchor = c.anchor.or_else(|| {
             let side = c.side?;
-            // A stored entry with a line and no file gets no anchor, so it
-            // is change-level. An error here would make the whole change
-            // unfoldable.
-            match c.file {
-                Some(path) => Some(LogAnchor::File {
+            Some(match c.file {
+                Some(path) => LogAnchor::File {
                     path,
                     side,
                     anchor: FileAnchor::from_parts(c.range, c.line),
-                }),
-                None if c.range.is_none() && c.line.is_none() => Some(LogAnchor::Change),
-                None => None,
-            }
+                },
+                None => LogAnchor::Change,
+            })
         });
-        CommentInput {
-            thread_id: c.thread_id,
-            revision: c.revision,
-            anchor,
+        let target = match (anchor, c.thread_id) {
+            (Some(anchor), thread_id) => CommentTarget::Open {
+                thread_id,
+                revision: c
+                    .revision
+                    .ok_or(CommentInputError::OpeningWithoutRevision)?,
+                anchor,
+            },
+            (None, Some(thread_id)) => CommentTarget::Reply { thread_id },
+            (None, None) => return Err(CommentInputError::NoTarget),
+        };
+        Ok(CommentInput {
+            target,
             body: c.body,
             resolved: c.resolved,
-        }
+        })
     }
 }
 

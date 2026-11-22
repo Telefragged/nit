@@ -96,7 +96,7 @@ function DraftComment({
   });
 
   const editResolved =
-    draft.comment.thread_id !== null ? draftResolved(draft) : undefined;
+    "anchor" in draft.comment ? undefined : draftResolved(draft);
   const resolutionOnly = draft.comment.body.trim().length === 0;
 
   return (

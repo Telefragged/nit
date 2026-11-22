@@ -160,7 +160,9 @@ mod tests {
     #[test]
     fn incoming_drops_the_authors_own_entries() {
         use nit_types::domain::Verdict;
-        use nit_types::domain::{CommentInput, ReviewPayload, RevisionPayload};
+        use nit_types::domain::{
+            CommentInput, CommentTarget, LogAnchor, ReviewPayload, RevisionPayload,
+        };
         let dropped = |payload| {
             dropped_by_incoming(&LogEntry {
                 change_number: ChangeNumber::new(1),
@@ -181,9 +183,11 @@ mod tests {
         };
         let comment = || {
             LogPayload::Comment(CommentInput {
-                thread_id: None,
-                revision: None,
-                anchor: None,
+                target: CommentTarget::Open {
+                    thread_id: None,
+                    revision: RevisionNumber::new(0),
+                    anchor: LogAnchor::Change,
+                },
                 body: String::new(),
                 resolved: None,
             })

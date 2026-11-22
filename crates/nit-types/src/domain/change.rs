@@ -8,6 +8,7 @@ use super::ChangeNumber;
 use super::ChangeStatus;
 use super::ChangeVersion;
 use super::CommentInput;
+use super::CommentTarget;
 use super::EffectiveAttachment;
 use super::RevisionNumber;
 use super::Sha;
@@ -321,10 +322,16 @@ impl ChangeProjection {
     /// payload then contains it. Replay finds the id already set and only
     /// advances the counter.
     pub fn mint_thread_id(&mut self, comment: &mut CommentInput) {
-        if comment.thread_id.is_none() && !comment.body.trim().is_empty() {
-            comment.thread_id = Some(self.next_thread_id);
+        let has_body = !comment.body.trim().is_empty();
+        if let CommentTarget::Open {
+            thread_id: thread_id @ None,
+            ..
+        } = &mut comment.target
+            && has_body
+        {
+            *thread_id = Some(self.next_thread_id);
         }
-        if let Some(id) = comment.thread_id {
+        if let Some(id) = comment.thread_id() {
             self.next_thread_id = self.next_thread_id.max(id + 1);
         }
     }

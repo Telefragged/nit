@@ -20,7 +20,6 @@ import type {
   ChangeVersion,
 } from "../types";
 import { ATTACHMENT_PREFIX } from "../types";
-import { anchorRevision } from "../../lib/comments";
 import { attachmentsOf } from "../../lib/attachments";
 import {
   baseVersion,
@@ -439,12 +438,9 @@ export function mockRequest(
             resolved: req.thread.resolved ?? null,
           }
         : {
-            thread_id: req.reply.thread_id,
-            revision: anchorRevision(
+            thread_id:
               projection(c.id).threads.find((t) => t.id === req.reply.thread_id)
-                ?.anchor ?? notFound(`thread ${req.reply.thread_id}`),
-            ),
-            anchor: null,
+                ?.id ?? notFound(`thread ${req.reply.thread_id}`),
             body: req.reply.body,
             resolved: req.reply.resolved ?? null,
           };
