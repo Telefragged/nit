@@ -4,9 +4,12 @@ use anyhow::{Context, Result, anyhow};
 
 use nit_types::comments::NewComment;
 use nit_types::domain::CommentRange;
+use nit_types::domain::ElementPath;
 use nit_types::domain::FileAnchor;
 use nit_types::domain::LogAnchor;
+use nit_types::domain::Rect;
 use nit_types::domain::RevisionNumber;
+use nit_types::domain::Shape;
 use nit_types::domain::Side;
 use nit_types::domain::ThreadProjection;
 
@@ -21,8 +24,8 @@ pub struct CommentArgs {
     /// a new one.
     #[arg(long)]
     pub thread: Option<u64>,
-    /// New thread: file to anchor to. Without `--line` or `--range`, the
-    /// thread is on the whole file.
+    /// New thread: file to anchor to. Without `--line`, `--range`, `--rect`
+    /// or `--element`, the thread is on the whole file.
     #[arg(long, conflicts_with = "thread")]
     pub file: Option<String>,
     /// New thread: line to anchor to (1-based).
@@ -36,6 +39,14 @@ pub struct CommentArgs {
     /// `--line`).
     #[arg(long, conflicts_with_all = ["thread", "line"], requires = "file")]
     pub range: Option<String>,
+    /// New thread: rectangle of an image to anchor to, `X,Y,WIDTH,HEIGHT`
+    /// in pixels, from the top left corner of the image.
+    #[arg(long, conflicts_with_all = ["thread", "line", "range"], requires = "file", value_parser = parse_rect)]
+    pub rect: Option<Rect>,
+    /// New thread: element of an HTML page to anchor to, an absolute path
+    /// such as `/html/body/div[2]/p`.
+    #[arg(long, conflicts_with_all = ["thread", "line", "range", "rect"], requires = "file", value_parser = parse_element)]
+    pub element: Option<ElementPath>,
     /// New thread: revision to anchor to (defaults to the change's latest).
     #[arg(long, conflicts_with = "thread")]
     pub revision: Option<RevisionNumber>,
@@ -72,11 +83,24 @@ pub fn comment(args: CommentArgs) -> Result<()> {
     } else {
         None
     };
-    let range = args
-        .range
-        .map(|spec| parse_comment_range(&spec))
-        .transpose()?;
-    let anchor = FileAnchor::from_parts(range, args.line);
+    let anchor = match args.file {
+        Some(path) => {
+            let range = args
+                .range
+                .map(|spec| parse_comment_range(&spec))
+                .transpose()?;
+            LogAnchor::File {
+                path,
+                side: args.side.unwrap_or_default(),
+                anchor: match (args.rect, args.element) {
+                    (Some(rect), _) => FileAnchor::Region(Shape::Rect(rect)),
+                    (None, Some(element)) => FileAnchor::Element(element),
+                    (None, None) => FileAnchor::from_parts(range, args.line),
+                },
+            }
+        }
+        None => LogAnchor::Change,
+    };
     let body = match args.message_file {
         Some(path) => read_body(&path)?,
         None => args.message.unwrap_or_default(),
@@ -85,15 +109,7 @@ pub fn comment(args: CommentArgs) -> Result<()> {
     let req = NewComment {
         thread_id: args.thread,
         revision: args.revision,
-        // clap requires --file with --line and --range.
-        anchor: Some(match args.file {
-            Some(path) => LogAnchor::File {
-                path,
-                side: args.side.unwrap_or_default(),
-                anchor,
-            },
-            None => LogAnchor::Change,
-        }),
+        anchor: Some(anchor),
         body,
         resolved,
     };
@@ -115,6 +131,27 @@ fn read_body(path: &str) -> Result<String> {
     };
     text.truncate(text.trim_end_matches(['\n', '\r']).len());
     Ok(text)
+}
+
+fn parse_rect(spec: &str) -> Result<Rect> {
+    let numbers = spec
+        .split(',')
+        .map(|n| {
+            n.trim()
+                .parse::<u32>()
+                .with_context(|| format!("bad number {n:?} in {spec:?}"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let [x, y, width, height] = numbers[..] else {
+        return Err(anyhow!(
+            "rect must be X,Y,WIDTH,HEIGHT (e.g. 10,20,40,30), got {spec:?}"
+        ));
+    };
+    Ok(Rect::new(x, y, width, height)?)
+}
+
+fn parse_element(path: &str) -> Result<ElementPath> {
+    Ok(ElementPath::new(path)?)
 }
 
 /// Parses a `--range` spec `START-END`, each endpoint `line:char`.
