@@ -6,6 +6,7 @@ import { span } from "../../lib/diffview";
 import type { ReviewCtx } from "../../pages/reviewContext";
 import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../types";
 import type {
+  CommentInput,
   Diff,
   DiffFile,
   Draft,
@@ -53,18 +54,28 @@ const NOW = Date.now();
 export const ago = (minutes: number) =>
   new Date(NOW - minutes * 60_000).toISOString();
 
+export type DraftFields = Partial<Omit<Draft, "comment"> & CommentInput>;
+
 /** A draft on change 1 with no text, written 22 minutes ago. */
-export const draft = (over: Partial<Draft> = {}): Draft => ({
-  id: 1,
-  change_number: 1,
-  thread_id: null,
-  revision: 1,
-  anchor: "change",
-  body: "",
-  resolved: null,
-  created_at: ago(22),
-  updated_at: ago(22),
-  ...over,
+export const draft = ({
+  id = 1,
+  change_number = 1,
+  created_at = ago(22),
+  updated_at = created_at,
+  ...comment
+}: DraftFields = {}): Draft => ({
+  id,
+  change_number,
+  comment: {
+    thread_id: null,
+    revision: 1,
+    anchor: "change",
+    body: "",
+    resolved: null,
+    ...comment,
+  },
+  created_at,
+  updated_at,
 });
 
 /** A published comment of the reviewer or of the author. */

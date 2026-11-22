@@ -48,6 +48,7 @@ import type { Decision, Draft } from "../types";
 import {
   add,
   ago,
+  draft,
   changeId,
   ctx,
   del,
@@ -1984,7 +1985,7 @@ export const threads: ThreadRecord[] = [
 // remark on the pre-change code (the old/red diff column). All are
 // opening threads.
 export const drafts: Draft[] = [
-  {
+  draft({
     id: 100,
     change_number: 11,
     thread_id: null,
@@ -1997,8 +1998,8 @@ export const drafts: Draft[] = [
     created_at: ago(30),
     updated_at: ago(30),
     // The anchored line does not exist in revision 0's tree.
-  },
-  {
+  }),
+  draft({
     id: 101,
     change_number: 11,
     thread_id: null,
@@ -2011,8 +2012,8 @@ export const drafts: Draft[] = [
     created_at: ago(25),
     updated_at: ago(25),
     // tests/rotation.rs does not exist at revision 0.
-  },
-  {
+  }),
+  draft({
     id: 102,
     change_number: 11,
     thread_id: null,
@@ -2026,7 +2027,7 @@ export const drafts: Draft[] = [
     resolved: null,
     created_at: ago(22),
     updated_at: ago(22),
-  },
+  }),
 ];
 
 // Reviewer decision drafts: one draft decision per change, published by

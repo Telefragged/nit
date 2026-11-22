@@ -58,8 +58,8 @@ fn review_drains_drafts_and_sets_status() {
         &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "a.txt", "anchor": {"line": 2}}}, "body": "why a2?"}}),
     );
     assert_eq!(st, 200, "{d1}");
-    assert_eq!(d1["revision"], 0);
-    assert_eq!(d1["anchor"]["file"]["side"], "new");
+    assert_eq!(d1["comment"]["revision"], 0);
+    assert_eq!(d1["comment"]["anchor"]["file"]["side"], "new");
     let (st, _) = http_post(
         &drafts_url(&server, id),
         &json!({"thread": {"anchor": {"change": {"revision": 0}}, "body": "overall: looks fine"}}),
@@ -115,8 +115,8 @@ fn reply_draft_appends_to_thread() {
         &json!({"reply": {"thread_id": thread_id, "body": "a follow-up"}}),
     );
     assert_eq!(st, 200, "{reply}");
-    assert_eq!(reply["thread_id"], thread_id);
-    assert_eq!(reply["anchor"], Value::Null);
+    assert_eq!(reply["comment"]["thread_id"], thread_id);
+    assert_eq!(reply["comment"]["anchor"], Value::Null);
     review(&server, id, "comment", "");
     let t = thread_of(&server, id, thread_id);
     let comments = t["comments"].as_array().unwrap();
@@ -182,7 +182,7 @@ fn draft_anchor_validation() {
     );
     assert_eq!(st, 200, "{ranged}");
     assert_eq!(
-        ranged["anchor"]["file"]["anchor"]["range"],
+        ranged["comment"]["anchor"]["file"]["anchor"]["range"],
         json!({"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 2})
     );
 
@@ -255,10 +255,10 @@ fn patch_and_delete_draft() {
         &json!({"body": "second", "resolved": true}),
     );
     assert_eq!(st, 200, "{edited}");
-    assert_eq!(edited["body"], "second");
-    assert_eq!(edited["resolved"], true);
+    assert_eq!(edited["comment"]["body"], "second");
+    assert_eq!(edited["comment"]["resolved"], true);
     let d = detail(&server, id);
-    assert_eq!(d["drafts"][0]["body"], "second");
+    assert_eq!(d["drafts"][0]["comment"]["body"], "second");
 
     let (st, _) = http_delete(&server.url(&format!("/api/drafts/{draft_id}")));
     assert_eq!(st, 204);
@@ -312,7 +312,7 @@ fn drafted_thread_resolution() {
         &json!({"reply": {"thread_id": thread_id, "body": "", "resolved": true}}),
     );
     assert_eq!(st, 200, "{res_draft}");
-    assert_eq!(res_draft["resolved"], true);
+    assert_eq!(res_draft["comment"]["resolved"], true);
     review(&server, id, "comment", "");
     assert!(is_resolved(&server), "drafted resolve applied on publish");
 
