@@ -4,8 +4,8 @@
 
 use crate::domain::ChangeNumber;
 use crate::domain::TagsPayload;
-use crate::domain::{CommentInput, CommentRange, FileAnchor, LogAnchor};
-use crate::domain::{LifecycleAction, Side};
+use crate::domain::{CommentInput, CommentRange, CommentTarget, FileAnchor, LogAnchor};
+use crate::domain::{LifecycleAction, RevisionNumber, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 use crate::domain::{Sha, Tag, Tags};
 
@@ -150,16 +150,20 @@ fn a_comment_logged_before_the_anchor_still_reads() {
 
     let opening: CommentInput = serde_json::from_str(opening).expect("deserialize");
     assert_eq!(
-        opening.anchor,
-        Some(LogAnchor::File {
-            path: "a.rs".to_string(),
-            side: Side::New,
-            anchor: FileAnchor::Line(3),
-        })
+        opening.target,
+        CommentTarget::Open {
+            thread_id: Some(1),
+            revision: RevisionNumber::new(0),
+            anchor: LogAnchor::File {
+                path: "a.rs".to_string(),
+                side: Side::New,
+                anchor: FileAnchor::Line(3),
+            },
+        }
     );
 
     let reply: CommentInput = serde_json::from_str(reply).expect("deserialize");
-    assert_eq!(reply.anchor, None);
+    assert_eq!(reply.target, CommentTarget::Reply { thread_id: 1 });
     assert_eq!(reply.resolved, Some(true));
 
     // An older entry spelled a selection as the range plus its end line.
@@ -167,8 +171,11 @@ fn a_comment_logged_before_the_anchor_still_reads() {
         "range":{"start_line":3,"start_char":1,"end_line":3,"end_char":4},
         "line_text":"x","body":"this","resolved":null}"#;
     let ranged: CommentInput = serde_json::from_str(ranged).expect("deserialize");
-    let anchor = match ranged.anchor {
-        Some(LogAnchor::File { anchor, .. }) => Some(anchor),
+    let anchor = match ranged.target {
+        CommentTarget::Open {
+            anchor: LogAnchor::File { anchor, .. },
+            ..
+        } => Some(anchor),
         _ => None,
     };
     assert_eq!(
@@ -223,4 +230,12 @@ fn an_anchor_logged_before_the_file_anchor_still_reads() {
         read(&serde_json::to_string(&current).expect("serialize")),
         current
     );
+}
+
+#[test]
+fn a_comment_without_a_target_does_not_parse() {
+    let opening = r#"{"thread_id":null,"revision":null,"anchor":"change","body":"x"}"#;
+    let orphan = r#"{"thread_id":null,"anchor":null,"body":"x"}"#;
+    assert!(serde_json::from_str::<CommentInput>(opening).is_err());
+    assert!(serde_json::from_str::<CommentInput>(orphan).is_err());
 }

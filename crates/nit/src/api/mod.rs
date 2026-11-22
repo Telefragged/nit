@@ -46,6 +46,7 @@ use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::ChangeVersion;
 use nit_types::domain::CommentInput;
+use nit_types::domain::CommentTarget;
 use nit_types::health::Health;
 
 pub use attachments::Collected;
@@ -298,9 +299,11 @@ fn new_thread(
     }
     let (revision, anchor) = anchor.into_log();
     Ok(CommentInput {
-        thread_id: None,
-        revision: Some(revision),
-        anchor: Some(anchor),
+        target: CommentTarget::Open {
+            thread_id: None,
+            revision,
+            anchor,
+        },
         body,
         resolved,
     })
@@ -317,16 +320,14 @@ fn reply(
             "a reply needs a body or a resolution decision",
         ));
     }
-    let thread = change.thread(thread_id).ok_or_else(|| {
-        Error::bad_request(format!(
+    if change.thread(thread_id).is_none() {
+        return Err(Error::bad_request(format!(
             "thread {thread_id} is absent from change {}",
             change.id
-        ))
-    })?;
+        )));
+    }
     Ok(CommentInput {
-        thread_id: Some(thread_id),
-        revision: Some(thread.anchor.revision()),
-        anchor: None,
+        target: CommentTarget::Reply { thread_id },
         body,
         resolved,
     })

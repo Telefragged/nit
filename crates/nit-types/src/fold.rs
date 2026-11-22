@@ -34,12 +34,12 @@ use crate::domain::ChangeVersion;
 use crate::domain::RevisionNumber;
 use crate::domain::subject_of;
 use crate::domain::{
-    Anchor, ChangeProjection, Lifecycle, LifecycleAction, LogAnchor, ReviewProjection,
-    RevisionProjection, ThreadComment, ThreadProjection,
+    Anchor, ChangeProjection, Lifecycle, LifecycleAction, ReviewProjection, RevisionProjection,
+    ThreadComment, ThreadProjection,
 };
 use crate::domain::{
-    AttachPayload, AttachmentProjection, CommentInput, LifecyclePayload, LogEntry, LogPayload,
-    RevisionPayload,
+    AttachPayload, AttachmentProjection, CommentInput, CommentTarget, LifecyclePayload, LogEntry,
+    LogPayload, RevisionPayload,
 };
 
 /// Applies one wire entry to a change's projection.
@@ -136,7 +136,7 @@ fn apply_comment(
     review_id: Option<u64>,
     now: &str,
 ) {
-    let Some(tid) = c.thread_id else { return };
+    let Some(tid) = c.thread_id() else { return };
     if let Some(thread) = change.threads.iter_mut().find(|t| t.id == tid) {
         if !c.body.trim().is_empty() {
             thread.comments.push(ThreadComment {
@@ -149,28 +149,29 @@ fn apply_comment(
             thread.resolved = state;
         }
         thread.updated_at = now.to_string();
-    } else if !c.body.trim().is_empty() {
-        open_thread(change, c, tid, review_id, now);
+    } else if let CommentTarget::Open {
+        revision, anchor, ..
+    } = &c.target
+        && !c.body.trim().is_empty()
+    {
+        let anchor = Anchor::from_log(*revision, anchor.clone());
+        open_thread(change, c, tid, anchor, review_id, now);
     }
 }
 
-/// Opens a new thread carrying `id` at the comment's anchor.
-///
 /// `next_thread_id` is kept ahead by [`ChangeProjection::mint_thread_id`], the
 /// sole owner of the counter.
 fn open_thread(
     change: &mut ChangeProjection,
     c: &CommentInput,
     id: u64,
+    anchor: Anchor,
     review_id: Option<u64>,
     now: &str,
 ) {
-    let revision = c
-        .revision
-        .unwrap_or_else(|| change.latest_revision_number());
     change.threads.push(ThreadProjection {
         id,
-        anchor: Anchor::from_log(revision, c.anchor.clone().unwrap_or(LogAnchor::Change)),
+        anchor,
         resolved: c.resolved.unwrap_or(false),
         comments: vec![ThreadComment {
             body: c.body.clone(),
@@ -242,7 +243,7 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
 #[cfg(test)]
 mod tests {
     use crate::domain::ReviewPayload;
-    use crate::domain::{ChangeStatus, FileAnchor, LifecycleAction, Side, Verdict};
+    use crate::domain::{ChangeStatus, FileAnchor, LifecycleAction, LogAnchor, Side, Verdict};
 
     use super::*;
     use crate::domain::TagsPayload;
@@ -299,24 +300,28 @@ mod tests {
     }
 
     fn anchored(file: &str, line: u64, body: &str) -> CommentInput {
+        stamped(None, file, line, body)
+    }
+
+    fn stamped(thread_id: Option<u64>, file: &str, line: u64, body: &str) -> CommentInput {
         CommentInput {
-            thread_id: None,
-            revision: Some(RevisionNumber::new(0)),
-            anchor: Some(LogAnchor::File {
-                path: file.to_string(),
-                side: Side::New,
-                anchor: FileAnchor::Line(line),
-            }),
+            target: CommentTarget::Open {
+                thread_id,
+                revision: RevisionNumber::new(0),
+                anchor: LogAnchor::File {
+                    path: file.to_string(),
+                    side: Side::New,
+                    anchor: FileAnchor::Line(line),
+                },
+            },
             body: body.to_string(),
             resolved: None,
         }
     }
 
-    fn cinput(thread_id: Option<u64>, body: &str) -> CommentInput {
+    fn reply(thread_id: u64, body: &str) -> CommentInput {
         CommentInput {
-            thread_id,
-            revision: None,
-            anchor: None,
+            target: CommentTarget::Reply { thread_id },
             body: body.to_string(),
             resolved: None,
         }
@@ -549,9 +554,8 @@ mod tests {
                 verdict: Verdict::Approve,
                 message: String::new(),
                 comments: vec![CommentInput {
-                    thread_id: Some(0),
                     resolved: Some(true),
-                    ..cinput(None, "fixed")
+                    ..reply(0, "fixed")
                 }],
             }),
         ]);
@@ -574,21 +578,21 @@ mod tests {
     #[test]
     fn mint_thread_id_assigns_then_keeps_the_counter_ahead() {
         let mut c = empty();
-        let mut open = cinput(None, "opens");
+        let mut open = anchored("a.rs", 1, "opens");
         c.mint_thread_id(&mut open);
-        assert_eq!(open.thread_id, Some(0));
+        assert_eq!(open.thread_id(), Some(0));
         assert_eq!(c.next_thread_id, 1);
-        let mut reply = cinput(Some(0), "reply");
-        c.mint_thread_id(&mut reply);
-        assert_eq!(reply.thread_id, Some(0));
+        let mut answer = reply(0, "reply");
+        c.mint_thread_id(&mut answer);
+        assert_eq!(answer.thread_id(), Some(0));
         assert_eq!(c.next_thread_id, 1);
-        let mut empty_body = cinput(None, "");
+        let mut empty_body = anchored("a.rs", 1, "");
         c.mint_thread_id(&mut empty_body);
-        assert_eq!(empty_body.thread_id, None);
+        assert_eq!(empty_body.thread_id(), None);
         assert_eq!(c.next_thread_id, 1);
         // A stamped id past the counter (a replayed open) pulls it forward.
-        let mut stamped = cinput(Some(5), "stamped");
-        c.mint_thread_id(&mut stamped);
+        let mut replayed = stamped(Some(5), "a.rs", 1, "stamped");
+        c.mint_thread_id(&mut replayed);
         assert_eq!(c.next_thread_id, 6);
     }
 
@@ -598,18 +602,12 @@ mod tests {
         fold(&mut c, entry(0, revision(A, BASE, BASE, true)));
         fold(
             &mut c,
-            entry(
-                1,
-                LogPayload::Comment(CommentInput {
-                    thread_id: Some(3),
-                    ..anchored("a.rs", 1, "why?")
-                }),
-            ),
+            entry(1, LogPayload::Comment(stamped(Some(3), "a.rs", 1, "why?"))),
         );
         assert_eq!(c.threads.len(), 1);
         assert_eq!(c.threads[0].id, 3);
         assert_eq!(c.next_thread_id, 4);
-        fold(&mut c, entry(2, LogPayload::Comment(cinput(Some(3), "ok"))));
+        fold(&mut c, entry(2, LogPayload::Comment(reply(3, "ok"))));
         assert_eq!(c.threads.len(), 1);
         assert_eq!(c.threads[0].comments.len(), 2);
     }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { draft, graphNode } from "../api/fixtures/builders";
+import { graphNode } from "../api/fixtures/builders";
 import type { ChangeGraph } from "../api/types";
 import type { NodeActivity } from "../lib/comments";
 import TagNav from "./TagNav";
@@ -33,11 +33,11 @@ const GRAPH: ChangeGraph = {
 };
 
 const ACTIVITY = new Map<number, NodeActivity>([
-  [12, { drafts: [], unresolved: 0, decision: "approve" }],
+  [12, { draftRevisions: [], unresolved: 0, decision: "approve" }],
   [
     11,
     {
-      drafts: [draft({ id: 1 }), draft({ id: 2 })],
+      draftRevisions: [1, 1],
       unresolved: 3,
       decision: "request_changes",
     },
