@@ -12,10 +12,8 @@ Everything this repo emits to a human obeys these rules: chat output,
 commit messages, code comments and doc-comments, nit comments and
 replies, `docs/` pages, plan documents, and UI strings.
 
-Two neighbours own the adjacent questions. `comment-style` decides which
-home a fact belongs in and whether to write it at all, and
 `CLAUDE.local.md` decides which facts to surface. This skill decides how
-the surviving sentence is built, so apply it last.
+each sentence is built.
 
 Quoted output, log lines, error text and identifiers are reproduced
 exactly. Never rewrite them.
@@ -263,9 +261,8 @@ The rules above, stated as the symptom to catch in your own draft.
 | An intransitive verb taking an object — "fails the push" | 9.3    |
 | A phrasing you chose because it was shorter              | draft  |
 
-Check a draft in this order: cut what has no home (`comment-style`),
-split what carries two ideas, then replace every word and figure that
-has a second reading.
+Check a draft in this order: split what carries two ideas, then replace
+every word and figure that has a second reading.
 
 </failure_modes>
 

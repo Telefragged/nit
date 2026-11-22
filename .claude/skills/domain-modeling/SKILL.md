@@ -208,8 +208,7 @@ the name. The exemptions are a closed set — `id`, `sha`, `repo`,
 
 A term is defined once, on the type that carries it, in
 `crates/nit-types/src/domain.rs`; a shape that exists to serve a route
-belongs to that route's module. `comment-style` covers how those
-definitions are written.
+belongs to that route's module.
 
 </naming>
 
