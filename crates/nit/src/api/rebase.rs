@@ -54,7 +54,7 @@ use nit_types::domain::Sha;
 use nit_types::domain::{LineKind, Whitespace};
 
 use super::diff;
-use super::position::{Edit, Span, buffer_edits, project_clipped};
+use super::position::{Edit, Span, buffer_edits, line_index, project_clipped};
 
 /// One file's drifted lines, on the old (`m`) and new (`n`) side.
 type DriftRanges = (Vec<Span>, Vec<Span>);
@@ -142,10 +142,8 @@ fn is_real_change(line: &Line) -> bool {
 /// Marks the file's drifted lines, drops its fully-drift hunks and recounts
 /// what is left.
 fn tag(file: &mut DiffFile, (old_ranges, new_ranges): &DriftRanges) {
-    // The wire numbers lines from 1; the spans index from 0.
     let hit = |ranges: &[Span], n: Option<u64>| {
-        n.and_then(|n| u32::try_from(n).ok()?.checked_sub(1))
-            .is_some_and(|l| drifted(ranges, l))
+        n.and_then(line_index).is_some_and(|l| drifted(ranges, l))
     };
     for line in file.hunks.iter_mut().flat_map(|h| h.lines.iter_mut()) {
         line.drift = match line.kind {

@@ -339,7 +339,7 @@ fn port_line(at: &FileAnchor, edits: &[Edit]) -> Option<FileAnchor> {
 /// The lines from `first` to `last`, which count from 1, moved through
 /// `edits`.
 fn shifted(first: u64, last: u64, edits: &[Edit]) -> Option<(u64, u64)> {
-    let span = u32::try_from(first).ok()?.checked_sub(1)?..u32::try_from(last).ok()?;
+    let span = position::line_index(first)?..u32::try_from(last).ok()?;
     let moved = position::shift(&span, edits)?;
     Some((u64::from(moved.start) + 1, u64::from(moved.end)))
 }

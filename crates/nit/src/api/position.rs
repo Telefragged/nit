@@ -20,6 +20,14 @@ use imara_diff::InternedInput;
 pub type Span = Range<u32>;
 pub type Edit = imara_diff::Hunk;
 
+/// The 0-based index of `line`, which counts from 1.
+///
+/// `None` for line 0, and for a line past the range of a [`Span`].
+#[must_use]
+pub fn line_index(line: u64) -> Option<u32> {
+    u32::try_from(line).ok()?.checked_sub(1)
+}
+
 /// One edit per contiguous change region of `old → new`.
 pub fn buffer_edits(old: &[u8], new: &[u8]) -> Vec<Edit> {
     crate::hunks::line_edits(&InternedInput::new(old, new))
