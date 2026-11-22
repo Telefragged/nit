@@ -242,7 +242,7 @@ pub fn change_detail(change: &ChangeProjection) -> ChangeDetail {
 #[cfg(test)]
 mod tests {
     use crate::domain::ReviewPayload;
-    use crate::domain::{ChangeStatus, LifecycleAction, LineAnchor, Side, Verdict};
+    use crate::domain::{ChangeStatus, FileAnchor, LifecycleAction, Side, Verdict};
 
     use super::*;
     use crate::domain::TagsPayload;
@@ -302,11 +302,13 @@ mod tests {
         CommentInput {
             thread_id: None,
             revision: Some(RevisionNumber::new(0)),
-            anchor: Some(LogAnchor::Line {
-                file: file.to_string(),
+            anchor: Some(LogAnchor::File {
+                path: file.to_string(),
                 side: Side::New,
-                line_text: None,
-                at: LineAnchor::Whole(line),
+                anchor: FileAnchor::Line {
+                    line,
+                    line_text: None,
+                },
             }),
             body: body.to_string(),
             resolved: None,

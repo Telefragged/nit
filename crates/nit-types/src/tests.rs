@@ -4,7 +4,7 @@
 
 use crate::domain::ChangeNumber;
 use crate::domain::TagsPayload;
-use crate::domain::{CommentInput, CommentRange, LineAnchor, LogAnchor};
+use crate::domain::{CommentInput, CommentRange, FileAnchor, LogAnchor};
 use crate::domain::{LifecycleAction, Side};
 use crate::domain::{LifecyclePayload, LogEntry, LogPayload, RevisionPayload};
 use crate::domain::{Sha, Tag, Tags};
@@ -151,11 +151,13 @@ fn a_comment_logged_before_the_anchor_still_reads() {
     let opening: CommentInput = serde_json::from_str(opening).expect("deserialize");
     assert_eq!(
         opening.anchor,
-        Some(LogAnchor::Line {
-            file: "a.rs".to_string(),
+        Some(LogAnchor::File {
+            path: "a.rs".to_string(),
             side: Side::New,
-            line_text: Some("x".to_string()),
-            at: LineAnchor::Whole(3),
+            anchor: FileAnchor::Line {
+                line: 3,
+                line_text: Some("x".to_string()),
+            },
         })
     );
 
@@ -168,46 +170,86 @@ fn a_comment_logged_before_the_anchor_still_reads() {
         "range":{"start_line":3,"start_char":1,"end_line":3,"end_char":4},
         "line_text":"x","body":"this","resolved":null}"#;
     let ranged: CommentInput = serde_json::from_str(ranged).expect("deserialize");
-    let at = match ranged.anchor {
-        Some(LogAnchor::Line { at, .. }) => Some(at),
+    let anchor = match ranged.anchor {
+        Some(LogAnchor::File { anchor, .. }) => Some(anchor),
         _ => None,
     };
     assert_eq!(
-        at,
-        Some(LineAnchor::Selection(
-            CommentRange::new(3, 1, 3, 4).expect("a forward selection")
-        ))
+        anchor,
+        Some(FileAnchor::Range {
+            range: CommentRange::new(3, 1, 3, 4).expect("a forward selection"),
+            line_text: Some("x".to_string()),
+        })
     );
 }
 
 #[test]
-fn an_anchor_logged_before_the_line_anchor_still_reads() {
-    // The spelling an entry was written with when a line anchor stored its
-    // line and its range side by side.
-    let whole = r#"{"line":{"file":"a.rs","side":"new","line":3,
-        "line_text":"x","range":null}}"#;
-    let selection = r#"{"line":{"file":"a.rs","side":"old","line":4,
-        "line_text":"y","range":{"start_line":4,"start_char":1,"end_line":4,"end_char":6}}}"#;
+fn an_anchor_logged_before_the_file_anchor_still_reads() {
+    let read = |json: &str| serde_json::from_str::<LogAnchor>(json).expect("deserialize");
+    let file = |side, anchor| LogAnchor::File {
+        path: "a.rs".to_string(),
+        side,
+        anchor,
+    };
+    let range = CommentRange::new(4, 1, 4, 6).expect("a forward selection");
+    let y = || Some("y".to_string());
 
-    let whole: LogAnchor = serde_json::from_str(whole).expect("deserialize");
     assert_eq!(
-        whole,
-        LogAnchor::Line {
-            file: "a.rs".to_string(),
-            side: Side::New,
-            line_text: Some("x".to_string()),
-            at: LineAnchor::Whole(3),
-        }
+        read(r#"{"file":{"file":"a.rs"}}"#),
+        file(Side::New, FileAnchor::File)
     );
 
-    let selection: LogAnchor = serde_json::from_str(selection).expect("deserialize");
     assert_eq!(
-        selection,
-        LogAnchor::Line {
-            file: "a.rs".to_string(),
-            side: Side::Old,
-            line_text: Some("y".to_string()),
-            at: LineAnchor::Selection(CommentRange::new(4, 1, 4, 6).expect("a forward selection")),
-        }
+        read(r#"{"line":{"file":"a.rs","side":"new","line_text":"y","at":{"whole":3}}}"#),
+        file(
+            Side::New,
+            FileAnchor::Line {
+                line: 3,
+                line_text: y()
+            }
+        )
+    );
+    assert_eq!(
+        read(
+            r#"{"line":{"file":"a.rs","side":"old","line_text":"y",
+            "at":{"selection":{"start_line":4,"start_char":1,"end_line":4,"end_char":6}}}}"#
+        ),
+        file(
+            Side::Old,
+            FileAnchor::Range {
+                range,
+                line_text: y()
+            }
+        )
+    );
+
+    assert_eq!(
+        read(r#"{"line":{"file":"a.rs","side":"new","line":3,"line_text":"y","range":null}}"#),
+        file(
+            Side::New,
+            FileAnchor::Line {
+                line: 3,
+                line_text: y()
+            }
+        )
+    );
+    assert_eq!(
+        read(
+            r#"{"line":{"file":"a.rs","side":"old","line":4,"line_text":"y",
+            "range":{"start_line":4,"start_char":1,"end_line":4,"end_char":6}}}"#
+        ),
+        file(
+            Side::Old,
+            FileAnchor::Range {
+                range,
+                line_text: y()
+            }
+        )
+    );
+
+    let current = file(Side::Old, FileAnchor::File);
+    assert_eq!(
+        read(&serde_json::to_string(&current).expect("serialize")),
+        current
     );
 }

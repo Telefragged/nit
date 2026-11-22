@@ -15,7 +15,6 @@ import {
   type CommentRange,
   type Hunk,
   type Line,
-  type LineAnchor,
   type Side,
 } from "../../api/types";
 import {
@@ -32,6 +31,7 @@ import {
   strongerMark,
   threadKey,
   threadMark,
+  type LineOrRange,
   type ThreadMark,
   type UiThread,
 } from "../../lib/comments";
@@ -228,7 +228,7 @@ export default function DiffFileView({
   const [hovered, setHovered] = useState<{
     thread: string;
     side: Side;
-    at: LineAnchor | null;
+    at: LineOrRange | null;
   } | null>(null);
 
   const [fileCommentOpen, setFileCommentOpen] = useState(false);
@@ -417,14 +417,14 @@ export default function DiffFileView({
       return createDraft(ctx.changeNumber, {
         thread: {
           anchor: {
-            line: {
+            file: {
               version: columnVersion(
                 input.target.side,
                 ctx.selected,
                 ctx.against,
               ),
-              file: input.target.file,
-              at: input.target.at,
+              path: input.target.file,
+              anchor: input.target.at,
             },
           },
           body: input.body,
@@ -500,12 +500,9 @@ export default function DiffFileView({
     file.path,
   ]);
 
-  /** The class suffix tinting a cell when it shows the line that the
-   * hovered thread anchors to whole. A selection thread tints its range
-   * instead. */
   const lineHover = (side: Side, no: number | undefined) => {
     const at = hovered?.side === side ? hovered.at : null;
-    return at && "whole" in at && at.whole === no ? " line-hover" : "";
+    return at && "line" in at && at.line.line === no ? " line-hover" : "";
   };
 
   const { linked, press } = useLineDrag(file.path, sectionRef);
@@ -735,7 +732,7 @@ export default function DiffFileView({
   /** The part of a rendered block to mark for anchor `at` on `side`: the
    * innermost part that covers the anchor inside the block, or else the
    * whole block that a thread on a blank line below it shows under. */
-  const tintOf = (side: Side, block: Block, at: LineAnchor) =>
+  const tintOf = (side: Side, block: Block, at: LineOrRange) =>
     coveringPart(block, at) ??
     (shownLine(side, placementLine(at)) === block.lines[1]
       ? block.parts[0]

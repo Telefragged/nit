@@ -51,7 +51,7 @@ export type ChangeVersion = `r${number}` | `r${number}^`;
 export type ChangeNumber = number;
 
 /**
- * Which version of a revision a line comment is anchored to.
+ * Which version of a revision a file comment is anchored to.
  *
  * `new` is the revision: its commit tree and attachments. `old` is its
  * base: the parent tree and the base attachments. An unspecified side is
@@ -396,12 +396,12 @@ export type DraftDecision = { decision: Decision; message: string };
  * between them: the same lines when the diff left them alone, shifted
  * lines when it inserted or deleted lines above them, and the next place
  * up (the file, then the change) when it rewrote those lines or dropped
- * the file. A ported line anchor contains no `line_text`.
+ * the file. A ported line or range anchor contains no `line_text`.
  */
 export type PortedComment = { thread_id: number; anchor: Anchor };
 
 /**
- * Selected-text anchor of a line comment.
+ * Selected-text anchor of a range comment.
  *
  * 1-based lines on the comment's side, 0-based chars, `end_char`
  * exclusive.
@@ -787,54 +787,42 @@ export type Start = "projection" | "log";
 export type Lifecycle = "active" | "merged" | "abandoned";
 
 /**
- * Where a comment is anchored: the change, a file, or lines of a file.
+ * Where a comment is anchored: the change, or a place in a file.
  *
- * A change or file anchor sits on a revision. A line anchor sits in one
- * version of the change: a revision, or the base of a revision.
+ * A file anchor sits in one version of the change: a revision, or the
+ * base of a revision.
  */
 export type Anchor =
   | { change: { revision: RevisionNumber } }
-  | { file: { revision: RevisionNumber; file: string } }
-  | {
-      line: {
-        version: ChangeVersion;
-        file: string;
-        /**
-         * The text of the line in `version`.
-         */
-        line_text?: string;
-        at: LineAnchor;
-      };
-    };
+  | { file: { version: ChangeVersion; path: string; anchor: FileAnchor } };
 
 /**
  * Where a logged comment is anchored within its revision.
  *
- * The log records the revision of a comment beside this anchor. A line
+ * The log records the revision of a comment beside this anchor. A file
  * anchor records the version as a [`Side`] of that revision.
  */
 export type LogAnchor =
-  | "change"
-  | { file: { file: string } }
-  | {
-      line: {
-        file: string;
-        side: Side;
-        /**
-         * The server snapshots it. A request leaves it unset.
-         */
-        line_text?: string;
-        at: LineAnchor;
-      };
-    };
+  "change" | { file: { path: string; side: Side; anchor: FileAnchor } };
 
 /**
- * Where inside a file a line anchor sits.
+ * Where inside a file an anchor sits.
  *
- * A selection ends on the line of its anchor, so each variant has
- * exactly one line.
+ * `line_text` is a copy of the line that a line or range anchor ends on,
+ * as the version of the anchor contains it.
  */
-export type LineAnchor = { whole: number } | { selection: CommentRange };
+export type FileAnchor =
+  | "file"
+  | { line: { line: number; line_text?: string } }
+  | {
+      range: {
+        line_text?: string;
+        start_line: number;
+        start_char: number;
+        end_line: number;
+        end_char: number;
+      };
+    };
 
 /**
  * The BLAKE3 hash of an attachment's bytes: 64 lowercase hex characters.

@@ -35,13 +35,17 @@ fn anchor_of(ported: &Value, thread_id: u64) -> Value {
         .clone()
 }
 
+fn whole(file: &str, side: &str) -> Value {
+    json!({"file": {"path": file, "side": side, "anchor": "file"}})
+}
+
 fn line(file: &str, side: &str, at: u64) -> Value {
-    json!({"line": {"file": file, "side": side, "at": {"whole": at}}})
+    json!({"file": {"path": file, "side": side, "anchor": {"line": {"line": at}}}})
 }
 
 /// A ported line anchor on line `at` of `file` in `version`.
 fn ported_line(version: &str, file: &str, at: u64) -> Value {
-    json!({"line": {"version": version, "file": file, "at": {"whole": at}}})
+    json!({"file": {"version": version, "path": file, "anchor": {"line": {"line": at}}}})
 }
 
 /// Each anchor lands where its lines went: shifted past an insertion,
@@ -76,12 +80,13 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
         &server,
         id,
         0,
-        &json!({"line": {"file": "a.txt", "side": "new", "at": {"selection": {"start_line": 7, "start_char": 0, "end_line": 8, "end_char": 1}}}}),
+        &json!({"file": {"path": "a.txt", "side": "new", "anchor": {"range": {"start_line": 7, "start_char": 0, "end_line": 8, "end_char": 1}}}}),
         false,
     );
     let rewritten = thread(&server, id, 0, &line("a.txt", "new", 4), false);
     let old_side = thread(&server, id, 0, &line("a.txt", "old", 2), false);
-    let file = thread(&server, id, 0, &json!({"file": {"file": "a.txt"}}), false);
+    let file = thread(&server, id, 0, &whole("a.txt", "new"), false);
+    let old_file = thread(&server, id, 0, &whole("a.txt", "old"), false);
     let change = thread(&server, id, 0, &json!("change"), false);
     let deleted = thread(&server, id, 0, &line("b.txt", "new", 1), false);
     let subject = thread(&server, id, 0, &line("/COMMIT_MSG", "new", 1), false);
@@ -113,23 +118,27 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
     assert_eq!(anchor_of(&p, shifted), ported_line("r1", "a.txt", 8));
     assert_eq!(
         anchor_of(&p, selection),
-        json!({"line": {"version": "r1", "file": "a.txt", "at": {"selection": {"start_line": 9, "start_char": 0, "end_line": 10, "end_char": 1}}}})
+        json!({"file": {"version": "r1", "path": "a.txt", "anchor": {"range": {"start_line": 9, "start_char": 0, "end_line": 10, "end_char": 1}}}})
     );
     assert_eq!(
         anchor_of(&p, rewritten),
-        json!({"file": {"revision": 1, "file": "a.txt"}})
+        json!({"file": {"version": "r1", "path": "a.txt", "anchor": "file"}})
     );
     // The parents are the same tree, so the old side did not move.
     assert_eq!(anchor_of(&p, old_side), ported_line("r1^", "a.txt", 2));
     assert_eq!(
         anchor_of(&p, file),
-        json!({"file": {"revision": 1, "file": "a.txt"}})
+        json!({"file": {"version": "r1", "path": "a.txt", "anchor": "file"}})
+    );
+    assert_eq!(
+        anchor_of(&p, old_file),
+        json!({"file": {"version": "r1^", "path": "a.txt", "anchor": "file"}})
     );
     assert_eq!(anchor_of(&p, change), json!({"change": {"revision": 1}}));
     assert_eq!(anchor_of(&p, deleted), json!({"change": {"revision": 1}}));
     assert_eq!(
         anchor_of(&p, subject),
-        json!({"file": {"revision": 1, "file": "/COMMIT_MSG"}})
+        json!({"file": {"version": "r1", "path": "/COMMIT_MSG", "anchor": "file"}})
     );
     assert_eq!(anchor_of(&p, resolved), ported_line("r1", "a.txt", 3));
     let ids: Vec<u64> = p
@@ -142,7 +151,7 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
         !ids.contains(&later),
         "a thread on the target is not ported"
     );
-    assert_eq!(ids.len(), 9);
+    assert_eq!(ids.len(), 10);
 
     let (st, e) = ported(&server, id, 9, "");
     assert_eq!(st, 404, "{e}");

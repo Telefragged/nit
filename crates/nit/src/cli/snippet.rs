@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use nit_types::diff::{FileLines, Line};
 use nit_types::domain::{
-    ChangeNumber, CommentInput, LineAnchor, LogAnchor, LogEntry, LogPayload, RevisionNumber, Side,
+    ChangeNumber, CommentInput, FileAnchor, LogAnchor, LogEntry, LogPayload, RevisionNumber, Side,
 };
 
 use super::client::{Client, Retry};
@@ -87,14 +87,27 @@ impl Sources {
     }
 }
 
-/// The file, side and place that a line comment anchors to.
-fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Side, LineAnchor)> {
-    match (&comment.anchor, comment.revision) {
-        (Some(LogAnchor::Line { file, side, at, .. }), Some(revision)) => {
-            Some(((change, revision, file.clone()), *side, *at))
-        }
-        _ => None,
-    }
+/// The first and the last line that a comment covers, and the first and
+/// the end character of a range.
+type Covered = (u64, u64, Option<u64>, Option<u64>);
+
+fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Side, Covered)> {
+    let (Some(LogAnchor::File { path, side, anchor }), Some(revision)) =
+        (&comment.anchor, comment.revision)
+    else {
+        return None;
+    };
+    let covered = match anchor {
+        FileAnchor::File => return None,
+        FileAnchor::Line { line, .. } => (*line, *line, None, None),
+        FileAnchor::Range { range: r, .. } => (
+            r.start_line(),
+            r.end_line(),
+            Some(r.start_char()),
+            Some(r.end_char()),
+        ),
+    };
+    Some(((change, revision, path.clone()), *side, covered))
 }
 
 /// Renders the lines of `side` that `at` covers, with [`CONTEXT`] lines
@@ -110,20 +123,12 @@ fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Si
 fn quote(
     file: &str,
     side: Side,
-    at: LineAnchor,
+    at: Covered,
     lines: &[Line],
     body: &str,
     width: usize,
 ) -> Option<String> {
-    let (start_line, end_line, start_char, end_char) = match at {
-        LineAnchor::Whole(line) => (line, line, None, None),
-        LineAnchor::Selection(r) => (
-            r.start_line(),
-            r.end_line(),
-            Some(r.start_char()),
-            Some(r.end_char()),
-        ),
-    };
+    let (start_line, end_line, start_char, end_char) = at;
     let first = start_line.saturating_sub(CONTEXT).max(1);
     let last = end_line + CONTEXT;
     let window: Vec<(u64, &str)> = lines
@@ -223,11 +228,15 @@ mod tests {
             .collect()
     }
 
-    fn comment(tid: u64, at: LineAnchor, body: &str) -> CommentInput {
+    fn comment(tid: u64, anchor: FileAnchor, body: &str) -> CommentInput {
         CommentInput {
             thread_id: Some(tid),
             revision: Some(RevisionNumber::new(1)),
-            anchor: Some(LogAnchor::line("src/queue.rs".into(), Side::New, at)),
+            anchor: Some(LogAnchor::File {
+                path: "src/queue.rs".into(),
+                side: Side::New,
+                anchor,
+            }),
             body: body.to_string(),
             resolved: None,
         }
@@ -261,18 +270,38 @@ mod tests {
                 verdict: Verdict::RequestChanges,
                 message: String::new(),
                 comments: vec![
-                    comment(0, LineAnchor::Whole(2), "Bounded channel."),
+                    comment(
+                        0,
+                        FileAnchor::Line {
+                            line: 2,
+                            line_text: None,
+                        },
+                        "Bounded channel.",
+                    ),
                     comment(
                         1,
-                        LineAnchor::Selection(range),
+                        FileAnchor::Range {
+                            range,
+                            line_text: None,
+                        },
                         "Spans two lines.\nSecond line.",
                     ),
                     comment(
                         2,
-                        LineAnchor::Whole(3),
+                        FileAnchor::Line {
+                            line: 3,
+                            line_text: None,
+                        },
                         "A one-line body too long to fit after the underline.",
                     ),
-                    comment(3, LineAnchor::Whole(40), "Past the end."),
+                    comment(
+                        3,
+                        FileAnchor::Line {
+                            line: 40,
+                            line_text: None,
+                        },
+                        "Past the end.",
+                    ),
                 ],
             }),
         };

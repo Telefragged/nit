@@ -100,7 +100,7 @@ describe("selectionTarget, unified layout", () => {
       file: "src/a.rs",
       side: "new",
       at: {
-        selection: { start_line: 13, start_char: 2, end_line: 13, end_char: 7 },
+        range: { start_line: 13, start_char: 2, end_line: 13, end_char: 7 },
       },
     });
   });
@@ -112,7 +112,7 @@ describe("selectionTarget, unified layout", () => {
       file: "src/a.rs",
       side: "new",
       at: {
-        selection: { start_line: 12, start_char: 6, end_line: 13, end_char: 5 },
+        range: { start_line: 12, start_char: 6, end_line: 13, end_char: 5 },
       },
     });
   });
@@ -124,7 +124,7 @@ describe("selectionTarget, unified layout", () => {
       file: "src/a.rs",
       side: "old",
       at: {
-        selection: { start_line: 11, start_char: 0, end_line: 12, end_char: 4 },
+        range: { start_line: 11, start_char: 0, end_line: 12, end_char: 4 },
       },
     });
   });
@@ -143,7 +143,7 @@ describe("selectionTarget, unified layout", () => {
       file: "src/a.rs",
       side: "new",
       at: {
-        selection: {
+        range: {
           start_line: 13,
           start_char: 0,
           end_line: 13,
@@ -159,7 +159,7 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(rangeOf(t, 3, t, 3))).toEqual({
       file: "src/a.rs",
       side: "new",
-      at: { whole: 14 },
+      at: { line: { line: 14 } },
     });
   });
 
@@ -173,7 +173,7 @@ describe("selectionTarget, unified layout", () => {
       file: "src/a.rs",
       side: "new",
       at: {
-        selection: { start_line: 13, start_char: 0, end_line: 13, end_char: 5 },
+        range: { start_line: 13, start_char: 0, end_line: 13, end_char: 5 },
       },
     });
   });
@@ -211,7 +211,7 @@ describe("selectionTarget, unified layout", () => {
       file: "src/a.rs",
       side: "new",
       at: {
-        selection: {
+        range: {
           start_line: 13,
           start_char: 0,
           end_line: 13,
@@ -227,7 +227,7 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(rangeOf(t, 0, t, 1))).toEqual({
       file: "src/a.rs",
       side: "new",
-      at: { whole: 14 },
+      at: { line: { line: 14 } },
     });
   });
 });
@@ -289,7 +289,7 @@ describe("selectionTarget, split layout", () => {
       file: "src/b.rs",
       side: "new",
       at: {
-        selection: { start_line: 30, start_char: 2, end_line: 32, end_char: 5 },
+        range: { start_line: 30, start_char: 2, end_line: 32, end_char: 5 },
       },
     });
   });
@@ -301,7 +301,7 @@ describe("selectionTarget, split layout", () => {
       file: "src/b.rs",
       side: "old",
       at: {
-        selection: { start_line: 20, start_char: 1, end_line: 21, end_char: 4 },
+        range: { start_line: 20, start_char: 1, end_line: 21, end_char: 4 },
       },
     });
   });
@@ -362,7 +362,7 @@ describe("linked lines", () => {
       file: "src/a.rs",
       side: "old",
       at: {
-        selection: { start_line: 4, start_char: 0, end_line: 6, end_char: 1 },
+        range: { start_line: 4, start_char: 0, end_line: 6, end_char: 1 },
       },
     });
   });
@@ -380,7 +380,7 @@ describe("linked lines", () => {
 
 describe("a rendered Markdown block", () => {
   const anchor = {
-    selection: { start_line: 3, start_char: 0, end_line: 4, end_char: 8 },
+    range: { start_line: 3, start_char: 0, end_line: 4, end_char: 8 },
   };
   const mountDoc = () => {
     const section = document.createElement("section");
@@ -419,7 +419,7 @@ describe("a rendered Markdown block", () => {
     if (!h1 || !em) throw new Error("no text");
     expect(selectionTarget(rangeOf(h1, 2, em, 2))).toEqual({
       ...target,
-      at: { selection: { ...anchor.selection, start_line: 1 } },
+      at: { range: { ...anchor.range, start_line: 1 } },
     });
   });
 
@@ -429,7 +429,7 @@ describe("a rendered Markdown block", () => {
     expect(selectionTarget(rangeOf(cell, 0, cell, 2))).toEqual({
       ...target,
       at: {
-        selection: { start_line: 6, start_char: 6, end_line: 6, end_char: 9 },
+        range: { start_line: 6, start_char: 6, end_line: 6, end_char: 9 },
       },
     });
   });
@@ -439,7 +439,7 @@ describe("a rendered Markdown block", () => {
     if (!a?.firstChild || !bcd?.firstChild) throw new Error("no cells");
     expect(
       selectionTarget(rangeOf(a.firstChild, 0, bcd.firstChild, 1)),
-    ).toEqual({ ...target, at: { whole: 6 } });
+    ).toEqual({ ...target, at: { line: { line: 6 } } });
   });
 
   it("targets the code line that contains a selection", () => {
@@ -447,7 +447,7 @@ describe("a rendered Markdown block", () => {
     if (!line) throw new Error("no code line");
     expect(selectionTarget(rangeOf(line, 0, line, 3))).toEqual({
       ...target,
-      at: { whole: 11 },
+      at: { line: { line: 11 } },
     });
   });
 
@@ -475,14 +475,14 @@ describe("a rendered Markdown block", () => {
     expect(linked(3, 4)).toEqual(target);
     expect(linked(1, 4)).toEqual({
       ...target,
-      at: { selection: { ...anchor.selection, start_line: 1 } },
+      at: { range: { ...anchor.range, start_line: 1 } },
     });
     expect(linked(3, 3)).toBeNull();
-    expect(linked(11, 11)).toEqual({ ...target, at: { whole: 11 } });
+    expect(linked(11, 11)).toEqual({ ...target, at: { line: { line: 11 } } });
     expect(linked(6, 6, [6, 9])).toEqual({
       ...target,
       at: {
-        selection: { start_line: 6, start_char: 6, end_line: 6, end_char: 9 },
+        range: { start_line: 6, start_char: 6, end_line: 6, end_char: 9 },
       },
     });
   });

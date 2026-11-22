@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createDraft } from "../api/client";
 import { useReview } from "../pages/reviewContext";
+import { revisionVersion } from "../lib/version";
 import CommentEditor from "./CommentEditor";
 
 /** The editor of a new thread on the whole change, or on the whole `file`.
@@ -21,7 +22,13 @@ export default function NewThreadEditor({
           anchor:
             file === undefined
               ? { change: { revision: ctx.selected } }
-              : { file: { revision: ctx.selected, file } },
+              : {
+                  file: {
+                    version: revisionVersion(ctx.selected),
+                    path: file,
+                    anchor: "file",
+                  },
+                },
           body,
         },
       }),

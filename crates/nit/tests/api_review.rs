@@ -56,11 +56,11 @@ fn review_drains_drafts_and_sets_status() {
     // Drafts are reviewer-private until published.
     let (st, d1) = http_post(
         &drafts_url(&server, id),
-        &json!({"thread": {"anchor": {"line": {"version": "r0", "file": "a.txt", "at": {"whole": 2}}}, "body": "why a2?"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "a.txt", "anchor": {"line": {"line": 2}}}}, "body": "why a2?"}}),
     );
     assert_eq!(st, 200, "{d1}");
-    assert_eq!(d1["anchor"]["line"]["version"], "r0");
-    assert_eq!(d1["anchor"]["line"]["line_text"], "a2");
+    assert_eq!(d1["anchor"]["file"]["version"], "r0");
+    assert_eq!(d1["anchor"]["file"]["anchor"]["line"]["line_text"], "a2");
     let (st, _) = http_post(
         &drafts_url(&server, id),
         &json!({"thread": {"anchor": {"change": {"revision": 0}}, "body": "overall: looks fine"}}),
@@ -105,7 +105,7 @@ fn reply_draft_appends_to_thread() {
 
     let (_, _) = http_post(
         &drafts_url(&server, id),
-        &json!({"thread": {"anchor": {"line": {"version": "r0", "file": "x.txt", "at": {"whole": 1}}}, "body": "root question"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "x.txt", "anchor": {"line": {"line": 1}}}}, "body": "root question"}}),
     );
     review(&server, id, "comment", "");
     let thread = detail(&server, id)["threads"][0].clone();
@@ -144,8 +144,7 @@ fn ranged_draft_publishes_with_its_range() {
     let (st, d) = http_post(
         &drafts_url(&server, id),
         &json!({"thread": {"body": "this selection",
-                "anchor": {"line": {"version": "r0", "file": "a.txt",
-                                    "at": {"selection": range}}}}}),
+                "anchor": {"file": {"version": "r0", "path": "a.txt", "anchor": {"range": range}}}}}),
     );
     assert_eq!(st, 200, "{d}");
 
@@ -156,8 +155,9 @@ fn ranged_draft_publishes_with_its_range() {
     assert_eq!(threads.as_array().unwrap().len(), 1, "{threads}");
     assert_eq!(
         threads[0]["anchor"],
-        json!({"line": {"version": "r0", "file": "a.txt", "line_text": "a2",
-                        "at": {"selection": range}}}),
+        json!({"file": {"version": "r0", "path": "a.txt",
+                        "anchor": {"range": {"start_line": 2, "start_char": 0, "end_line": 2, "end_char": 2,
+                                              "line_text": "a2"}}}}),
         "{threads}"
     );
 }
@@ -180,20 +180,18 @@ fn draft_anchor_validation() {
     let (st, ranged) = http_post(
         &url,
         &json!({"thread": {"body": "sel",
-                "anchor": {"line": {"version": "r0", "file": "x.txt", "at": {"selection":
-                    {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 2}}}}}}),
+                "anchor": {"file": {"version": "r0", "path": "x.txt", "anchor": {"range": {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 2}}}}}}),
     );
     assert_eq!(st, 200, "{ranged}");
     assert_eq!(
-        ranged["anchor"]["line"]["at"],
-        json!({"selection":
-            {"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 2}})
+        ranged["anchor"]["file"]["anchor"]["range"],
+        json!({"start_line": 1, "start_char": 0, "end_line": 1, "end_char": 2, "line_text": "x1"})
     );
 
     // A selection that the four coordinates cannot spell.
     let selection = |sel: Value| {
         json!({"thread": {"body": "x",
-               "anchor": {"line": {"version": "r0", "file": "x.txt", "at": {"selection": sel}}}}})
+               "anchor": {"file": {"version": "r0", "path": "x.txt", "anchor": {"range": sel}}}}})
     };
     let range_400s: &[(Value, &str)] = &[
         (
@@ -228,16 +226,19 @@ fn draft_anchor_validation() {
 
     let (st, e) = http_post(
         &url,
-        &json!({"thread": {"anchor": {"line": {"version": "r0^", "file": "/COMMIT_MSG", "at": {"whole": 1}}}, "body": "x"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0^", "path": "/COMMIT_MSG", "anchor": {"line": {"line": 1}}}}, "body": "x"}}),
     );
     assert_eq!(st, 400, "{e}");
     assert!(e["error"].as_str().unwrap().contains("no base version"));
     let (st, m) = http_post(
         &url,
-        &json!({"thread": {"anchor": {"line": {"version": "r0", "file": "/COMMIT_MSG", "at": {"whole": 1}}}, "body": "subject nit"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "/COMMIT_MSG", "anchor": {"line": {"line": 1}}}}, "body": "subject nit"}}),
     );
     assert_eq!(st, 200, "{m}");
-    assert_eq!(m["anchor"]["line"]["line_text"], "core: x");
+    assert_eq!(
+        m["anchor"]["file"]["anchor"]["line"]["line_text"],
+        "core: x"
+    );
 }
 
 #[test]
@@ -258,21 +259,21 @@ fn old_side_draft_snapshots_parent_tree() {
 
     let (st, old) = http_post(
         &url,
-        &json!({"thread": {"anchor": {"line": {"version": "r0^", "file": "f.txt", "at": {"whole": 2}}}, "body": "was?"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0^", "path": "f.txt", "anchor": {"line": {"line": 2}}}}, "body": "was?"}}),
     );
     assert_eq!(st, 200, "{old}");
-    assert_eq!(old["anchor"]["line"]["version"], "r0^");
+    assert_eq!(old["anchor"]["file"]["version"], "r0^");
     assert_eq!(
-        old["anchor"]["line"]["line_text"], "old2",
+        old["anchor"]["file"]["anchor"]["line"]["line_text"], "old2",
         "old side reads the parent tree"
     );
 
     let (_, new) = http_post(
         &url,
-        &json!({"thread": {"anchor": {"line": {"version": "r0", "file": "f.txt", "at": {"whole": 2}}}, "body": "now"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "f.txt", "anchor": {"line": {"line": 2}}}}, "body": "now"}}),
     );
     assert_eq!(
-        new["anchor"]["line"]["line_text"], "NEW2",
+        new["anchor"]["file"]["anchor"]["line"]["line_text"], "NEW2",
         "new side reads the commit tree"
     );
 }
@@ -288,7 +289,7 @@ fn patch_and_delete_draft() {
 
     let (_, d) = http_post(
         &url,
-        &json!({"thread": {"anchor": {"line": {"version": "r0", "file": "x.txt", "at": {"whole": 1}}}, "body": "first"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "x.txt", "anchor": {"line": {"line": 1}}}}, "body": "first"}}),
     );
     let draft_id = d["id"].as_u64().unwrap();
 
@@ -329,7 +330,7 @@ fn drafted_thread_resolution() {
 
     let (_, _) = http_post(
         &url,
-        &json!({"thread": {"anchor": {"line": {"version": "r0", "file": "x.txt", "at": {"whole": 1}}}, "body": "why?"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "x.txt", "anchor": {"line": {"line": 1}}}}, "body": "why?"}}),
     );
     review(&server, id, "comment", "");
     let thread = detail(&server, id)["threads"][0].clone();
@@ -380,7 +381,7 @@ fn resolution_applied_in_draft_order() {
 
     let (_, _) = http_post(
         &url,
-        &json!({"thread": {"anchor": {"line": {"version": "r0", "file": "x.txt", "at": {"whole": 1}}}, "body": "q"}}),
+        &json!({"thread": {"anchor": {"file": {"version": "r0", "path": "x.txt", "anchor": {"line": {"line": 1}}}}, "body": "q"}}),
     );
     review(&server, id, "comment", "");
     let thread = detail(&server, id)["threads"][0].clone();
@@ -453,7 +454,7 @@ fn agent_comment_opens_thread_without_review_status() {
     // A new author thread (published immediately; review_id null → author).
     let (st, thread) = http_post(
         &comments_url,
-        &json!({"revision": 0, "anchor": {"line": {"file": "x.txt", "side": "new", "at": {"whole": 1}}}, "body": "chose x1 deliberately"}),
+        &json!({"revision": 0, "anchor": {"file": {"path": "x.txt", "side": "new", "anchor": {"line": {"line": 1}}}}, "body": "chose x1 deliberately"}),
     );
     assert_eq!(st, 200, "{thread}");
     let thread_id = thread["id"].as_u64().unwrap();
@@ -499,7 +500,7 @@ fn reviewer_replies_to_agent_thread() {
 
     let (st, thread) = http_post(
         &server.url(&format!("/api/changes/{id}/comments")),
-        &json!({"revision": 0, "anchor": {"line": {"file": "x.txt", "side": "new", "at": {"whole": 1}}}, "body": "note: intentional"}),
+        &json!({"revision": 0, "anchor": {"file": {"path": "x.txt", "side": "new", "anchor": {"line": {"line": 1}}}}, "body": "note: intentional"}),
     );
     assert_eq!(st, 200, "{thread}");
     let thread_id = thread["id"].as_u64().unwrap();

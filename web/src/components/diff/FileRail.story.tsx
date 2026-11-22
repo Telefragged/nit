@@ -63,8 +63,8 @@ const FILES: ReviewFile[] = [
   attachedFile("plan/rail.md", "# Rail\n", 1),
 ];
 
-const line = (path: string, whole: number) => ({
-  line: { file: path, version: "r1" as const, at: { whole } },
+const line = (path: string, line: number) => ({
+  file: { version: "r1" as const, path, anchor: { line: { line } } },
 });
 
 const THREADS = new Map<string, UiThread[]>([
@@ -75,11 +75,11 @@ const THREADS = new Map<string, UiThread[]>([
       uiThread({
         id: 7,
         anchor: {
-          line: {
-            file: "crates/nit/src/server.rs",
+          file: {
             version: "r0",
-            at: {
-              selection: {
+            path: "crates/nit/src/server.rs",
+            anchor: {
+              range: {
                 start_line: 88,
                 start_char: 4,
                 end_line: 90,

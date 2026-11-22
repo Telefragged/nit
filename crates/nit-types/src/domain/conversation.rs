@@ -8,7 +8,7 @@ use super::ChangeVersion;
 use super::Decision;
 use super::RevisionNumber;
 
-/// Which version of a revision a line comment is anchored to.
+/// Which version of a revision a file comment is anchored to.
 ///
 /// `new` is the revision: its commit tree and attachments. `old` is its
 /// base: the parent tree and the base attachments. An unspecified side is
@@ -60,10 +60,10 @@ impl std::str::FromStr for Side {
     }
 }
 
-/// Where a comment is anchored: the change, a file, or lines of a file.
+/// Where a comment is anchored: the change, or a place in a file.
 ///
-/// A change or file anchor sits on a revision. A line anchor sits in one
-/// version of the change: a revision, or the base of a revision.
+/// A file anchor sits in one version of the change: a revision, or the
+/// base of a revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
@@ -71,60 +71,115 @@ impl std::str::FromStr for Side {
 pub enum Anchor {
     /// The change as a whole.
     Change { revision: RevisionNumber },
-    /// A whole file of the revision.
+    /// A place in a file of one version.
     File {
-        revision: RevisionNumber,
-        file: String,
-    },
-    /// A place inside a file of one version.
-    Line {
         version: ChangeVersion,
-        file: String,
-        /// The text of the line in `version`.
+        path: String,
+        anchor: FileAnchor,
+    },
+}
+
+/// Where inside a file an anchor sits.
+///
+/// `line_text` is a copy of the line that a line or range anchor ends on,
+/// as the version of the anchor contains it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FileAnchor {
+    /// The whole file.
+    File,
+    /// One whole line, 1-based.
+    Line {
+        line: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "ts", ts(optional))]
         line_text: Option<String>,
-        at: LineAnchor,
     },
+    /// A run of characters.
+    Range {
+        #[serde(flatten)]
+        range: CommentRange,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        line_text: Option<String>,
+    },
+}
+
+impl FileAnchor {
+    /// Returns the anchor on `range` when it is set, else on `line`, else
+    /// on the whole file.
+    #[must_use]
+    pub fn from_parts(
+        range: Option<CommentRange>,
+        line: Option<u64>,
+        line_text: Option<String>,
+    ) -> FileAnchor {
+        match (range, line) {
+            (Some(range), _) => FileAnchor::Range { range, line_text },
+            (None, Some(line)) => FileAnchor::Line { line, line_text },
+            (None, None) => FileAnchor::File,
+        }
+    }
+
+    /// The line that a line or range anchor ends on.
+    #[must_use]
+    pub fn end_line(&self) -> Option<u64> {
+        match self {
+            FileAnchor::File => None,
+            FileAnchor::Line { line, .. } => Some(*line),
+            FileAnchor::Range { range, .. } => Some(range.end_line()),
+        }
+    }
+
+    /// The text of the line that the anchor ends on.
+    #[must_use]
+    pub fn line_text(&self) -> Option<&str> {
+        match self {
+            FileAnchor::File => None,
+            FileAnchor::Line { line_text, .. } | FileAnchor::Range { line_text, .. } => {
+                line_text.as_deref()
+            }
+        }
+    }
 }
 
 /// Where a logged comment is anchored within its revision.
 ///
-/// The log records the revision of a comment beside this anchor. A line
+/// The log records the revision of a comment beside this anchor. A file
 /// anchor records the version as a [`Side`] of that revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]
 #[serde(rename_all = "snake_case", from = "StoredAnchor")]
 pub enum LogAnchor {
-    /// The change as a whole (no file).
+    /// The change as a whole.
     Change,
-    /// A whole file (no line).
-    File { file: String },
-    /// A place inside a file, on one side of the revision.
-    Line {
-        file: String,
+    /// A place in a file, on one side of the revision.
+    File {
+        path: String,
         #[serde(default)]
         side: Side,
-        /// The server snapshots it. A request leaves it unset.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts", ts(optional))]
-        line_text: Option<String>,
-        at: LineAnchor,
+        anchor: FileAnchor,
     },
 }
 
-/// An anchor in either spelling, before it is a [`LogAnchor`].
+/// An anchor in any of its spellings, before it is a [`LogAnchor`].
 ///
-/// The log is append-only, so an entry written before a line anchor had
-/// one `at` keeps the `line` and `range` it was written with. Parsing
-/// resolves the two spellings into the same anchor.
+/// The log is append-only, so an entry keeps the spelling it was written
+/// with. Parsing resolves every spelling into the same anchor.
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum StoredAnchor {
     Change,
     File {
-        file: String,
+        #[serde(alias = "file")]
+        path: String,
+        #[serde(default)]
+        side: Side,
+        #[serde(default)]
+        anchor: Option<FileAnchor>,
     },
     Line {
         file: String,
@@ -133,7 +188,7 @@ enum StoredAnchor {
         #[serde(default)]
         line_text: Option<String>,
         #[serde(default)]
-        at: Option<LineAnchor>,
+        at: Option<StoredLine>,
         #[serde(default)]
         line: Option<u64>,
         #[serde(default)]
@@ -141,11 +196,22 @@ enum StoredAnchor {
     },
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StoredLine {
+    Whole(u64),
+    Selection(CommentRange),
+}
+
 impl From<StoredAnchor> for LogAnchor {
     fn from(stored: StoredAnchor) -> LogAnchor {
         match stored {
             StoredAnchor::Change => LogAnchor::Change,
-            StoredAnchor::File { file } => LogAnchor::File { file },
+            StoredAnchor::File { path, side, anchor } => LogAnchor::File {
+                path,
+                side,
+                anchor: anchor.unwrap_or(FileAnchor::File),
+            },
             StoredAnchor::Line {
                 file,
                 side,
@@ -154,51 +220,19 @@ impl From<StoredAnchor> for LogAnchor {
                 line,
                 range,
             } => {
-                // The older spelling stored the selection in `range`, and the
-                // line it ends on in `line`.
-                let at = at
-                    .or_else(|| range.map(LineAnchor::Selection))
-                    .or_else(|| line.map(LineAnchor::Whole));
-                match at {
-                    Some(at) => LogAnchor::Line {
-                        file,
-                        side,
-                        line_text,
-                        at,
-                    },
-                    None => LogAnchor::File { file },
+                let (range, line) = match at {
+                    Some(StoredLine::Whole(line)) => (None, Some(line)),
+                    Some(StoredLine::Selection(range)) => (Some(range), None),
+                    // The oldest spelling stored the selection in `range`,
+                    // and the line it ends on in `line`.
+                    None => (range, line),
+                };
+                LogAnchor::File {
+                    path: file,
+                    side,
+                    anchor: FileAnchor::from_parts(range, line, line_text),
                 }
             }
-        }
-    }
-}
-
-/// Where inside a file a line anchor sits.
-///
-/// A selection ends on the line of its anchor, so each variant has
-/// exactly one line.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[derive(utoipa::ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum LineAnchor {
-    /// The whole line.
-    Whole(u64),
-    /// A run of characters inside the line.
-    Selection(CommentRange),
-}
-
-impl LogAnchor {
-    /// Returns the anchor on line `at` of `file`, on `side`.
-    ///
-    /// The text of the line stays unset until the server snapshots it.
-    #[must_use]
-    pub fn line(file: String, side: Side, at: LineAnchor) -> LogAnchor {
-        LogAnchor::Line {
-            file,
-            side,
-            line_text: None,
-            at,
         }
     }
 }
@@ -209,17 +243,10 @@ impl Anchor {
     pub fn from_log(revision: RevisionNumber, anchor: LogAnchor) -> Anchor {
         match anchor {
             LogAnchor::Change => Anchor::Change { revision },
-            LogAnchor::File { file } => Anchor::File { revision, file },
-            LogAnchor::Line {
-                file,
-                side,
-                line_text,
-                at,
-            } => Anchor::Line {
+            LogAnchor::File { path, side, anchor } => Anchor::File {
                 version: side.version(revision),
-                file,
-                line_text,
-                at,
+                path,
+                anchor,
             },
         }
     }
@@ -231,18 +258,7 @@ impl Anchor {
         let (revision, side) = (self.revision(), self.side());
         let anchor = match self {
             Anchor::Change { .. } => LogAnchor::Change,
-            Anchor::File { file, .. } => LogAnchor::File { file },
-            Anchor::Line {
-                file,
-                line_text,
-                at,
-                ..
-            } => LogAnchor::Line {
-                file,
-                side,
-                line_text,
-                at,
-            },
+            Anchor::File { path, anchor, .. } => LogAnchor::File { path, side, anchor },
         };
         (revision, anchor)
     }
@@ -252,17 +268,17 @@ impl Anchor {
     #[must_use]
     pub fn revision(&self) -> RevisionNumber {
         match self {
-            Anchor::Change { revision } | Anchor::File { revision, .. } => *revision,
-            Anchor::Line { version, .. } => version.revision(),
+            Anchor::Change { revision } => *revision,
+            Anchor::File { version, .. } => version.revision(),
         }
     }
 
-    /// The side of its revision that a line anchor is on, and `new` for
-    /// any other anchor.
+    /// The side of its revision that a file anchor is on, and `new` for
+    /// a change anchor.
     #[must_use]
     pub fn side(&self) -> Side {
         match self {
-            Anchor::Line {
+            Anchor::File {
                 version: ChangeVersion::Base(_),
                 ..
             } => Side::Old,
@@ -270,27 +286,31 @@ impl Anchor {
         }
     }
 
-    /// The file of the anchor, if it has one.
+    /// The path of the file of the anchor, if it has one.
     #[must_use]
-    pub fn file(&self) -> Option<&str> {
+    pub fn path(&self) -> Option<&str> {
         match self {
             Anchor::Change { .. } => None,
-            Anchor::File { file, .. } | Anchor::Line { file, .. } => Some(file),
+            Anchor::File { path, .. } => Some(path),
         }
     }
 
-    /// The text of the line of a line anchor.
+    /// The place inside the file of a file anchor.
     #[must_use]
-    pub fn line_text(&self) -> Option<&str> {
+    pub fn file_anchor(&self) -> Option<&FileAnchor> {
         match self {
-            Anchor::Line { line_text, .. } => line_text.as_deref(),
-            _ => None,
+            Anchor::Change { .. } => None,
+            Anchor::File { anchor, .. } => Some(anchor),
         }
     }
 
-    /// Records the text of the line of a line anchor.
+    /// Records the text of the line that a line or range anchor ends on.
     pub fn snapshot_line_text(&mut self, text: Option<String>) {
-        if let Anchor::Line { line_text, .. } = self {
+        if let Anchor::File {
+            anchor: FileAnchor::Line { line_text, .. } | FileAnchor::Range { line_text, .. },
+            ..
+        } = self
+        {
             *line_text = text;
         }
     }
@@ -325,7 +345,7 @@ pub struct ThreadComment {
     pub created_at: String,
 }
 
-/// Selected-text anchor of a line comment.
+/// Selected-text anchor of a range comment.
 ///
 /// 1-based lines on the comment's side, 0-based chars, `end_char`
 /// exclusive.

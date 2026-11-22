@@ -10,8 +10,8 @@ import {
   threadComment,
   uiThread,
 } from "../../api/fixtures/builders";
-import type { Anchor, DiffFile, LineAnchor } from "../../api/types";
-import type { UiThread } from "../../lib/comments";
+import type { Anchor, DiffFile } from "../../api/types";
+import type { LineOrRange, UiThread } from "../../lib/comments";
 import { ReviewContext } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
 
@@ -68,8 +68,8 @@ const FILE: DiffFile = {
   ],
 };
 
-const at = (line: LineAnchor): Anchor => ({
-  line: { file: PATH, version: "r1", at: line },
+const at = (line: LineOrRange): Anchor => ({
+  file: { version: "r1", path: PATH, anchor: line },
 });
 
 /** A draft on a line, a resolved thread, and an open thread on a selection
@@ -77,10 +77,10 @@ const at = (line: LineAnchor): Anchor => ({
 const THREADS: UiThread[] = [
   uiThread({
     id: null,
-    anchor: at({ whole: 20 }),
+    anchor: at({ line: { line: 20 } }),
     drafts: [
       draft({
-        anchor: at({ whole: 20 }),
+        anchor: at({ line: { line: 20 } }),
         body: "Every caller has to handle the `Result`. Make sure that none unwraps it silently.",
       }),
     ],
@@ -88,7 +88,7 @@ const THREADS: UiThread[] = [
   uiThread({
     id: 4,
     resolved: true,
-    anchor: at({ whole: 24 }),
+    anchor: at({ line: { line: 24 } }),
     comments: [
       threadComment(
         21 * 60,
@@ -100,7 +100,7 @@ const THREADS: UiThread[] = [
   uiThread({
     id: 3,
     anchor: at({
-      selection: { start_line: 30, start_char: 8, end_line: 31, end_char: 50 },
+      range: { start_line: 30, start_char: 8, end_line: 31, end_char: 50 },
     }),
     comments: [
       threadComment(
@@ -119,7 +119,7 @@ const THREADS: UiThread[] = [
 /** A thread on the whole file. */
 const FILE_THREAD = uiThread({
   id: 5,
-  anchor: { file: { revision: 1, file: PATH } },
+  anchor: { file: { version: "r1", path: PATH, anchor: "file" } },
   comments: [
     threadComment(
       30,

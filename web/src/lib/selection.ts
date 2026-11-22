@@ -11,7 +11,8 @@
 // its last line. A table cell also has `data-chars`, the range of its
 // content's characters.
 
-import type { LineAnchor, Side } from "../api/types";
+import type { Side } from "../api/types";
+import type { LineOrRange } from "./comments";
 import { parseChars, type LinkSpan, type Lines } from "./diffLink";
 import type { DraftTarget } from "../pages/reviewContext";
 
@@ -61,11 +62,11 @@ const linesAnchor = (
   start: number,
   end: number,
   endChar: number,
-): LineAnchor =>
+): LineOrRange =>
   start === end
-    ? { whole: start }
+    ? { line: { line: start } }
     : {
-        selection: {
+        range: {
           start_line: start,
           start_char: 0,
           end_line: end,
@@ -87,9 +88,9 @@ function partsTarget(
   const start = Number(first.dataset.start);
   const end = Number(last.dataset.end);
   const chars = first === last ? parseChars(first.dataset.chars) : undefined;
-  const at: LineAnchor = chars
+  const at: LineOrRange = chars
     ? {
-        selection: {
+        range: {
           start_line: start,
           start_char: chars[0],
           end_line: end,
@@ -358,14 +359,14 @@ export function selectionTarget(
   if (cells.length === 1) {
     startChar = Math.min(startChar, endChar);
     if (startChar === endChar) {
-      return { file: path, side, at: { whole: line } };
+      return { file: path, side, at: { line: { line } } };
     }
   }
   return {
     file: path,
     side,
     at: {
-      selection: {
+      range: {
         start_line: startLine,
         start_char: startChar,
         end_line: line,

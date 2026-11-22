@@ -251,14 +251,23 @@ function changeDrafts(c: ChangeRecord) {
 
 /** Find the text of a diff line so new drafts get a line_text snapshot. */
 function snapshotLineText(c: ChangeRecord, anchor: Anchor): Anchor {
-  if (!("line" in anchor)) return anchor;
-  const { file, version } = anchor.line;
-  const line = placementLine(anchor.line.at);
+  if (!("file" in anchor) || anchor.file.anchor === "file") return anchor;
+  const { path: file, version, anchor: at } = anchor.file;
+  const line = placementLine(at);
   const diff = c.diffs[diffKey(revisionOf(version))];
   const f = diff?.files.find((x) => x.path === file || x.old_path === file);
   const lines = f?.hunks.flatMap((hunk) => hunk.lines) ?? [];
   const hit = lines.find((l) => (isBase(version) ? l.old : l.new) === line);
-  return { line: { ...anchor.line, line_text: hit?.text } };
+  const line_text = hit?.text;
+  return {
+    file: {
+      ...anchor.file,
+      anchor:
+        "line" in at
+          ? { line: { ...at.line, line_text } }
+          : { range: { ...at.range, line_text } },
+    },
+  };
 }
 
 /** Reconstruct the whole file as diff lines from its shown hunks,

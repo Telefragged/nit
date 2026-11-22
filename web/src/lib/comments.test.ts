@@ -25,7 +25,11 @@ import {
 
 /** A line anchor on src/main.rs, in the version and on the line given. */
 const lineAnchor = (version: ChangeVersion, line: number): Anchor => ({
-  line: { version, file: "src/main.rs", at: { whole: line } },
+  file: {
+    version: version,
+    path: "src/main.rs",
+    anchor: { line: { line: line } },
+  },
 });
 
 /** {@link lineAnchor}, or with no line the change anchor of the revision. */
@@ -295,7 +299,9 @@ describe("commentCountLabel", () => {
 // The three anchor kinds answer the range question differently. Only a
 // line anchor can lose its column.
 describe("anchorKind", () => {
-  const fileAnchor: Anchor = { file: { revision: 0, file: "src/main.rs" } };
+  const fileAnchor: Anchor = {
+    file: { version: "r0", path: "src/main.rs", anchor: "file" },
+  };
 
   it("returns the arm the anchor is on", () => {
     expect(anchorKind({ change: { revision: 0 } })).toBe("change");

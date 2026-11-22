@@ -9,7 +9,7 @@ use anyhow::{Result, bail};
 use nit_types::domain::ChangeId;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
-use nit_types::domain::LineAnchor;
+use nit_types::domain::FileAnchor;
 use nit_types::domain::LogAnchor;
 use nit_types::domain::Tags;
 use nit_types::domain::ThreadProjection;
@@ -285,23 +285,17 @@ fn comment_target(thread_id: Option<u64>, anchor: Option<&LogAnchor>) -> Option<
 fn anchor_label(anchor: &LogAnchor) -> String {
     match anchor {
         LogAnchor::Change => "(change-level)".to_string(),
-        LogAnchor::File { file } => file.clone(),
-        LogAnchor::Line {
-            file,
-            at: LineAnchor::Whole(line),
-            ..
-        } => format!("{file}:{line}"),
-        LogAnchor::Line {
-            file,
-            at: LineAnchor::Selection(r),
-            ..
-        } => format!(
-            "{file}:{}:{}-{}:{}",
-            r.start_line(),
-            r.start_char(),
-            r.end_line(),
-            r.end_char()
-        ),
+        LogAnchor::File { path, anchor, .. } => match anchor {
+            FileAnchor::File => path.clone(),
+            FileAnchor::Line { line, .. } => format!("{path}:{line}"),
+            FileAnchor::Range { range: r, .. } => format!(
+                "{path}:{}:{}-{}:{}",
+                r.start_line(),
+                r.start_char(),
+                r.end_line(),
+                r.end_char()
+            ),
+        },
     }
 }
 
@@ -337,7 +331,6 @@ mod tests {
     use nit_types::domain::RevisionNumber;
 
     use nit_types::domain::CommentRange;
-    use nit_types::domain::LineAnchor;
     use nit_types::domain::{Sha, Tag};
 
     #[test]
@@ -401,6 +394,11 @@ mod tests {
             body: body.to_string(),
             resolved,
         };
+        let queue = |anchor| LogAnchor::File {
+            path: "src/queue.rs".into(),
+            side: Side::New,
+            anchor,
+        };
         let review = entry(
             ChangeNumber::new(42),
             5,
@@ -412,19 +410,19 @@ mod tests {
                     opening(3, LogAnchor::Change, None, "Change-level question?"),
                     opening(
                         4,
-                        LogAnchor::line("src/queue.rs".into(), Side::New, LineAnchor::Whole(42)),
+                        queue(FileAnchor::Line {
+                            line: 42,
+                            line_text: None,
+                        }),
                         None,
                         "Bounded channel.",
                     ),
                     opening(
                         5,
-                        LogAnchor::line(
-                            "src/queue.rs".into(),
-                            Side::New,
-                            LineAnchor::Selection(
-                                CommentRange::new(42, 8, 42, 30).expect("a forward range"),
-                            ),
-                        ),
+                        queue(FileAnchor::Range {
+                            range: CommentRange::new(42, 8, 42, 30).expect("a forward range"),
+                            line_text: None,
+                        }),
                         Some(true),
                         "Overflow on 32-bit.",
                     ),

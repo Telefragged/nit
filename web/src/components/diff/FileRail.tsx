@@ -26,7 +26,9 @@ import {
   anchorAt,
   anchorRevision,
   commentPlacement,
+  firstLine,
   markCountsLabel,
+  placementLine,
   shownAt,
   strongerMark,
   threadKey,
@@ -51,8 +53,8 @@ import StatusMark from "./StatusMark";
 function threadLines(t: UiThread): string {
   const at = anchorAt(shownAt(t));
   if (at === null) return "file";
-  if ("whole" in at) return `line ${at.whole}`;
-  const { start_line, start_char, end_line, end_char } = at.selection;
+  if ("line" in at) return `line ${at.line.line}`;
+  const { start_line, start_char, end_line, end_char } = at.range;
   return `range ${start_line}:${start_char}-${end_line}:${end_char}`;
 }
 
@@ -70,11 +72,10 @@ function threadLink(
   const at = anchorAt(anchor);
   const place = commentPlacement(anchor, selected, against);
   if (at === null || place === null) return { file, lines: null };
-  const [start, end] =
-    "whole" in at
-      ? [at.whole, at.whole]
-      : [at.selection.start_line, at.selection.end_line];
-  return { file, lines: { side: place.side, start, end } };
+  return {
+    file,
+    lines: { side: place.side, start: firstLine(at), end: placementLine(at) },
+  };
 }
 
 /** The row's trailing lane: the +/- churn, then the status letter. A

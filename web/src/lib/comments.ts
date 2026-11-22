@@ -16,7 +16,7 @@ import type {
   ChangeProjection,
   CommentRange,
   Decision,
-  LineAnchor,
+  FileAnchor,
   Side,
   Draft,
   PortedComment,
@@ -25,8 +25,19 @@ import type {
   ThreadComment,
 } from "../api/types";
 
-/** The line anchor's payload, or null when the anchor has no line. */
-const lineOf = (a: Anchor) => ("line" in a ? a.line : null);
+export type LineOrRange = Extract<
+  FileAnchor,
+  { line: unknown } | { range: unknown }
+>;
+
+const fileOf = (a: Anchor) => ("file" in a ? a.file : null);
+
+const lineOf = (a: Anchor) => {
+  const file = fileOf(a);
+  return file && typeof file.anchor === "object"
+    ? { version: file.version, at: file.anchor }
+    : null;
+};
 
 /** Which arm of the anchor union a thread is on. Placement tests this
  * first, and a kind answers it directly: "has no line" is true of a change
@@ -34,46 +45,42 @@ const lineOf = (a: Anchor) => ("line" in a ? a.line : null);
 export type AnchorKind = "change" | "file" | "line";
 
 export const anchorKind = (a: Anchor): AnchorKind =>
-  "change" in a ? "change" : "file" in a ? "file" : "line";
+  "change" in a ? "change" : lineOf(a) ? "line" : "file";
 
 /** The file of an anchor, or null for a change-level one. */
-export const anchorFile = (a: Anchor): string | null =>
-  "change" in a ? null : "file" in a ? a.file.file : a.line.file;
+export const anchorFile = (a: Anchor): string | null => fileOf(a)?.path ?? null;
 
 /** The revision that an anchor sits on, or whose base its version is. */
 export const anchorRevision = (a: Anchor): number =>
-  "change" in a
-    ? a.change.revision
-    : "file" in a
-      ? a.file.revision
-      : revisionOf(a.line.version);
+  "change" in a ? a.change.revision : revisionOf(a.file.version);
 
-/** The version of a line anchor, or null when the anchor has no line. */
+/** Where in the file an anchor hangs, or null when it has no line. */
+export const anchorAt = (a: Anchor): LineOrRange | null =>
+  lineOf(a)?.at ?? null;
+
 export const lineVersion = (a: Anchor): ChangeVersion | null =>
   lineOf(a)?.version ?? null;
 
-/** Where in the file an anchor hangs, or null when it has no line. */
-export const anchorAt = (a: Anchor): LineAnchor | null => lineOf(a)?.at ?? null;
+export const placementLine = (at: LineOrRange): number =>
+  "line" in at ? at.line.line : at.range.end_line;
 
-/** The line a thread renders on: a selection hangs under the line it ends
- * on, a whole-line anchor on its own line. */
-export const placementLine = (at: LineAnchor): number =>
-  "whole" in at ? at.whole : at.selection.end_line;
+export const firstLine = (at: LineOrRange): number =>
+  "line" in at ? at.line.line : at.range.start_line;
 
-/** The first line that an anchor covers: the line where a selection
- * starts, or the line of a whole-line anchor. */
-export const firstLine = (at: LineAnchor): number =>
-  "whole" in at ? at.whole : at.selection.start_line;
+export const rangeOf = (at: LineOrRange): CommentRange | null =>
+  "range" in at ? at.range : null;
 
-/** The selection inside the line, if the anchor contains one. */
 export const anchorRange = (a: Anchor): CommentRange | null => {
-  const at = lineOf(a)?.at;
-  return at && "selection" in at ? at.selection : null;
+  const at = anchorAt(a);
+  return at && rangeOf(at);
 };
 
 /** The text of the line in the version of the anchor. */
-export const anchorLineText = (a: Anchor): string | null =>
-  lineOf(a)?.line_text ?? null;
+export const anchorLineText = (a: Anchor): string | null => {
+  const at = anchorAt(a);
+  if (!at) return null;
+  return ("line" in at ? at.line.line_text : at.range.line_text) ?? null;
+};
 
 export interface Placement {
   side: Side;
@@ -177,11 +184,11 @@ export function commentPlacement(
   selected: number,
   against: ChangeVersion,
 ): Placement | null {
-  const at = lineOf(anchor);
-  if (at === null) return null;
-  const line = placementLine(at.at);
-  if (at.version === revisionVersion(selected)) return { side: "new", line };
-  if (at.version === against) return { side: "old", line };
+  const place = lineOf(anchor);
+  if (place === null) return null;
+  const line = placementLine(place.at);
+  if (place.version === revisionVersion(selected)) return { side: "new", line };
+  if (place.version === against) return { side: "old", line };
   return null;
 }
 
