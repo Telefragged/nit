@@ -31,13 +31,6 @@ use super::{AppJson, AppPath, AppState, Error, append, views, with_conn};
 /// The largest upload the store accepts, in bytes.
 const MAX_SIZE: u64 = 64 * 1024 * 1024;
 
-/// The largest attachment that the server loads as text, in bytes.
-///
-/// The server snapshots a line and ports a thread only on text this size
-/// or smaller. A larger attachment is binary in a diff, so no thread
-/// anchors on a line the server could not load.
-const MAX_TEXT_SIZE: u64 = 8 * 1024 * 1024;
-
 /// What a collection of the blob store deleted.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Collected {
@@ -144,14 +137,8 @@ impl Blobs {
         Ok(collected)
     }
 
-    /// The blob's content, when it is UTF-8 text of at most
-    /// [`MAX_TEXT_SIZE`] bytes.
     pub(super) fn text(&self, hash: &AttachmentHash) -> Option<String> {
-        let path = self.path(hash);
-        if std::fs::metadata(&path).ok()?.len() > MAX_TEXT_SIZE {
-            return None;
-        }
-        String::from_utf8(std::fs::read(path).ok()?).ok()
+        String::from_utf8(std::fs::read(self.path(hash)).ok()?).ok()
     }
 
     /// Streams `body` into a temp file, hashing it on the way.
