@@ -6,31 +6,9 @@
 // drafts reference; a review's id is its entry's `position`, so the records number
 // their reviews by where this places them.
 
-import { isBase, revisionOf } from "../../lib/version";
-import type {
-  Anchor,
-  CommentInput,
-  LogAnchor,
-  LogEntry,
-  LogPayload,
-} from "../types";
+import { intoLog } from "../../lib/comments";
+import type { CommentInput, LogEntry, LogPayload } from "../types";
 import type { ChangeRecord, ThreadRecord } from "./store";
-
-/** The revision and the anchor that the log records for `anchor`, as the
- * server's `Anchor::into_log` returns them. */
-export function intoLog(anchor: Anchor): {
-  revision: number;
-  anchor: LogAnchor;
-} {
-  if ("change" in anchor) {
-    return { revision: anchor.change.revision, anchor: "change" };
-  }
-  const { version, ...file } = anchor.file;
-  return {
-    revision: revisionOf(version),
-    anchor: { file: { ...file, side: isBase(version) ? "old" : "new" } },
-  };
-}
 
 /** One thread comment → its wire `CommentInput`. The opening comment (index 0)
  * contains the anchor + explicit thread id; the last contains the rolled-up

@@ -28,8 +28,8 @@ use nit_types::changes::ChangeQuery;
 use nit_types::domain::AttachmentHash;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::Tags;
-use nit_types::domain::{Anchor, CommentRange, FileAnchor, Side};
-use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
+use nit_types::domain::{ChangeId, ChangeStatus, Decision, Sha};
+use nit_types::domain::{CommentInput, Draft};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
 /// RFC3339 timestamp for "now" (UTC).
@@ -292,6 +292,45 @@ const MIGRATIONS: &[&str] = &[
     ",
     // v14: a draft stores no copy of its anchored line.
     "ALTER TABLE draft_comments DROP COLUMN line_text;",
+    // v15: `json(...)` keeps each CASE result a JSON value, not a string,
+    // and turns the INTEGER `resolved` into a JSON boolean.
+    "
+    CREATE TABLE draft_comments_new (
+      id            INTEGER PRIMARY KEY,
+      change_number INTEGER NOT NULL REFERENCES changes(id),
+      comment       TEXT NOT NULL,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+    INSERT INTO draft_comments_new (id, change_number, comment, created_at, updated_at)
+    SELECT id, change_number, json_object(
+      'thread_id', thread_id,
+      'revision', revision,
+      'anchor', json(CASE
+        WHEN thread_id IS NOT NULL THEN 'null'
+        WHEN file IS NULL THEN json_quote('change')
+        ELSE json_object('file', json_object(
+          'path', file,
+          'side', side,
+          'anchor', json(CASE
+            WHEN range_start_line IS NOT NULL THEN json_object('range', json_object(
+              'start_line', range_start_line, 'start_char', range_start_char,
+              'end_line', range_end_line, 'end_char', range_end_char))
+            WHEN line IS NOT NULL THEN json_object('line', line)
+            ELSE json_quote('file')
+          END)))
+      END),
+      'body', body,
+      'resolved', json(CASE
+        WHEN resolved IS NULL THEN 'null'
+        WHEN resolved THEN 'true'
+        ELSE 'false'
+      END)
+    ), created_at, updated_at
+    FROM draft_comments;
+    DROP TABLE draft_comments;
+    ALTER TABLE draft_comments_new RENAME TO draft_comments;
+    ",
 ];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
@@ -1065,73 +1104,17 @@ pub fn log_entries_from(
     Ok(rows)
 }
 
-#[derive(Debug, Clone)]
-pub struct DraftRow {
-    pub id: u64,
-    pub change_number: ChangeNumber,
-    /// The thread this draft replies to; `None` opens a new thread.
-    pub thread_id: Option<u64>,
-    pub anchor: Anchor,
-    pub body: String,
-    /// Draft thread-resolution decision; `None` = none.
-    ///
-    /// Stored as the `resolved` INTEGER column.
-    pub resolved: Option<bool>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-/// The anchor a draft row's location columns spell.
-///
-/// A row without a file is the change itself.
-fn col_anchor(row: &rusqlite::Row) -> rusqlite::Result<Anchor> {
-    let revision = RevisionNumber::new(col_u64(row.get("revision")?)?);
-    let Some(path) = row.get::<_, Option<String>>("file")? else {
-        return Ok(Anchor::Change { revision });
-    };
-    let range = match (
-        row.get::<_, Option<i64>>("range_start_line")?,
-        row.get::<_, Option<i64>>("range_start_char")?,
-        row.get::<_, Option<i64>>("range_end_line")?,
-        row.get::<_, Option<i64>>("range_end_char")?,
-    ) {
-        (Some(start_line), Some(start_char), Some(end_line), Some(end_char)) => Some(stored(
-            CommentRange::new(
-                col_u64(start_line)?,
-                col_u64(start_char)?,
-                col_u64(end_line)?,
-                col_u64(end_char)?,
-            ),
-            rusqlite::types::Type::Integer,
-        )?),
-        _ => None,
-    };
-    Ok(Anchor::File {
-        version: col_enum::<Side>(&row.get::<_, String>("side")?)?.version(revision),
-        path,
-        anchor: FileAnchor::from_parts(range, col_u64_opt(row.get("line")?)?),
-    })
-}
-
-fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<DraftRow> {
-    Ok(DraftRow {
+fn map_draft(row: &rusqlite::Row) -> rusqlite::Result<Draft> {
+    Ok(Draft {
         id: col_u64(row.get("id")?)?,
         change_number: ChangeNumber::new(col_u64(row.get("change_number")?)?),
-        thread_id: col_u64_opt(row.get("thread_id")?)?,
-        anchor: col_anchor(row)?,
-        body: row.get("body")?,
-        resolved: row.get::<_, Option<i64>>("resolved")?.map(|v| v != 0),
+        comment: stored(
+            serde_json::from_str(&row.get::<_, String>("comment")?),
+            rusqlite::types::Type::Text,
+        )?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
     })
-}
-
-pub struct NewDraft<'a> {
-    pub change_number: ChangeNumber,
-    pub thread_id: Option<u64>,
-    pub anchor: &'a Anchor,
-    pub body: &'a str,
-    pub resolved: Option<bool>,
 }
 
 /// Inserts a draft with a caller-allocated `id`.
@@ -1143,45 +1126,30 @@ pub struct NewDraft<'a> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn insert_draft(tx: &Transaction, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
-    let thread_id = d.thread_id.map(i64::try_from).transpose()?;
-    let (line, range) = match d.anchor.file_anchor() {
-        Some(FileAnchor::Line(line)) => (Some(i64::try_from(line)?), None),
-        Some(FileAnchor::Range(range)) => (None, Some(range)),
-        Some(FileAnchor::File) | None => (None, None),
-    };
-    let (rsl, rsc, rel, rec) = match range {
-        Some(r) => (
-            Some(i64::try_from(r.start_line())?),
-            Some(i64::try_from(r.start_char())?),
-            Some(i64::try_from(r.end_line())?),
-            Some(i64::try_from(r.end_char())?),
-        ),
-        None => (None, None, None, None),
-    };
+pub fn insert_draft(
+    tx: &Transaction,
+    id: u64,
+    change_number: ChangeNumber,
+    comment: CommentInput,
+    now: &str,
+) -> Result<Draft> {
     tx.execute(
-        "INSERT INTO draft_comments (id, change_number, revision, thread_id, file, line, side,
-            range_start_line, range_start_char, range_end_line, range_end_char,
-            body, resolved, created_at, updated_at)
-         VALUES (?13, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?14, ?12, ?12)",
+        "INSERT INTO draft_comments (id, change_number, comment, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?4)",
         params![
-            i64::try_from(d.change_number.get())?,
-            i64::try_from(d.anchor.revision().get())?,
-            thread_id,
-            d.anchor.path(),
-            line,
-            d.anchor.side().as_str(),
-            rsl,
-            rsc,
-            rel,
-            rec,
-            d.body,
-            now,
             i64::try_from(id)?,
-            d.resolved.map(i64::from),
+            i64::try_from(change_number.get())?,
+            serde_json::to_string(&comment)?,
+            now,
         ],
     )?;
-    get_draft(tx, id)?.ok_or_else(|| anyhow!("draft {id} vanished"))
+    Ok(Draft {
+        id,
+        change_number,
+        comment,
+        created_at: now.to_owned(),
+        updated_at: now.to_owned(),
+    })
 }
 
 /// The maximum draft id, for seeding the global id counter on startup.
@@ -1201,31 +1169,28 @@ pub fn max_draft_id(conn: &Connection) -> Result<u64> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn get_draft(conn: &Connection, id: u64) -> Result<Option<DraftRow>> {
-    conn.query_row(
-        "SELECT * FROM draft_comments WHERE id = ?1",
-        params![i64::try_from(id)?],
-        map_draft,
-    )
-    .optional()
-    .map_err(Into::into)
-}
-
-/// # Errors
-///
-/// On a database failure.
 pub fn update_draft(
     tx: &Transaction,
     id: u64,
     body: &str,
     resolved: Option<bool>,
     now: &str,
-) -> Result<()> {
-    tx.execute(
-        "UPDATE draft_comments SET body = ?1, resolved = ?4, updated_at = ?2 WHERE id = ?3",
-        params![body, now, i64::try_from(id)?, resolved.map(i64::from)],
-    )?;
-    Ok(())
+) -> Result<Option<Draft>> {
+    tx.query_row(
+        "UPDATE draft_comments
+         SET comment = json_set(comment, '$.body', ?1, '$.resolved', json(?2)), updated_at = ?3
+         WHERE id = ?4
+         RETURNING *",
+        params![
+            body,
+            serde_json::to_string(&resolved)?,
+            now,
+            i64::try_from(id)?
+        ],
+        map_draft,
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
 /// Whether a draft was there to delete.
@@ -1246,7 +1211,7 @@ pub fn delete_draft(tx: &Transaction, id: u64) -> Result<bool> {
 /// # Errors
 ///
 /// On a database failure.
-pub fn drafts_for_change(conn: &Connection, change_number: ChangeNumber) -> Result<Vec<DraftRow>> {
+pub fn drafts_for_change(conn: &Connection, change_number: ChangeNumber) -> Result<Vec<Draft>> {
     let mut stmt =
         conn.prepare("SELECT * FROM draft_comments WHERE change_number = ?1 ORDER BY id")?;
     let rows = stmt
@@ -1348,7 +1313,7 @@ pub fn delete_draft_review(tx: &Transaction, change_number: ChangeNumber) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nit_types::domain::{ChangeVersion, Tag};
+    use nit_types::domain::Tag;
 
     fn mem() -> Connection {
         let mut conn = Connection::open_in_memory().expect("in-memory db");
@@ -1478,54 +1443,55 @@ mod tests {
     }
 
     #[test]
-    fn draft_rows_read_back_as_their_anchors() {
-        let mut conn = mem();
-        let c = change(&mut conn);
-        let file = |version, anchor| Anchor::File {
-            version,
-            path: "a.rs".to_string(),
-            anchor,
-        };
-        let (base, revision) = (
-            ChangeVersion::Base(RevisionNumber::new(0)),
-            ChangeVersion::Revision(RevisionNumber::new(0)),
-        );
-        let anchors = [
-            file(base, FileAnchor::Line(3)),
-            file(
-                revision,
-                FileAnchor::Range(CommentRange::new(4, 1, 4, 6).expect("a forward selection")),
-            ),
-            file(revision, FileAnchor::File),
-            file(base, FileAnchor::File),
-            Anchor::Change {
-                revision: RevisionNumber::new(0),
-            },
-        ];
-        for (id, anchor) in anchors.iter().enumerate() {
-            write(&mut conn, |tx| {
-                insert_draft(
-                    tx,
-                    id as u64,
-                    &NewDraft {
-                        change_number: c,
-                        thread_id: None,
-                        anchor,
-                        body: "note",
-                        resolved: None,
-                    },
-                    "t0",
-                )
-            })
-            .expect("insert");
-        }
+    fn v15_stores_each_draft_as_its_comment() {
+        let mut conn = Connection::open_in_memory().expect("in-memory db");
+        migrate_to(&mut conn, 14).expect("migrate to v14");
+        conn.execute_batch(
+            "INSERT INTO repos (id, git_dir, canonical_ref) VALUES (1, '/r/.git', 'main');
+             INSERT INTO changes (id, repo_id, change_id, created_at) VALUES (7, 1, 'Iabc', 't');
+             INSERT INTO draft_comments (id, change_number, revision, thread_id, file, line,
+                 side, range_start_line, range_start_char, range_end_line, range_end_char,
+                 body, resolved, created_at, updated_at)
+             VALUES
+               (1, 7, 0, NULL, 'a.rs', 3, 'old', NULL, NULL, NULL, NULL, 'line', NULL, 't', 't'),
+               (2, 7, 1, NULL, 'a.rs', NULL, 'new', 4, 1, 5, 6, 'range', 1, 't', 't'),
+               (3, 7, 0, NULL, 'a.rs', NULL, 'old', NULL, NULL, NULL, NULL, 'file', 0, 't', 't'),
+               (4, 7, 0, NULL, NULL, NULL, 'new', NULL, NULL, NULL, NULL, 'change', NULL, 't', 't'),
+               (5, 7, 0, 9, 'a.rs', 3, 'new', NULL, NULL, NULL, NULL, '', 1, 't', 'u');",
+        )
+        .expect("v14-shaped rows");
 
-        let read: Vec<Anchor> = drafts_for_change(&conn, c)
+        migrate(&mut conn).expect("migrate the rest");
+
+        let comments: Vec<serde_json::Value> = drafts_for_change(&conn, ChangeNumber::new(7))
             .expect("list")
-            .into_iter()
-            .map(|d| d.anchor)
+            .iter()
+            .map(|d| serde_json::to_value(&d.comment).expect("serialize"))
             .collect();
-        assert_eq!(read, anchors);
+        let opening = |revision: u64, anchor: serde_json::Value, body: &str, resolved| {
+            serde_json::json!({"thread_id": null, "revision": revision, "anchor": anchor,
+                               "body": body, "resolved": resolved})
+        };
+        let file = |side: &str, anchor| serde_json::json!({"file": {"path": "a.rs", "side": side, "anchor": anchor}});
+        let range = serde_json::json!({"range":
+            {"start_line": 4, "start_char": 1, "end_line": 5, "end_char": 6}});
+        let none: Option<bool> = None;
+        assert_eq!(
+            comments,
+            [
+                opening(0, file("old", serde_json::json!({"line": 3})), "line", none),
+                opening(1, file("new", range), "range", Some(true)),
+                opening(
+                    0,
+                    file("old", serde_json::json!("file")),
+                    "file",
+                    Some(false)
+                ),
+                opening(0, serde_json::json!("change"), "change", none),
+                serde_json::json!({"thread_id": 9, "revision": 0, "anchor": null,
+                                   "body": "", "resolved": true}),
+            ]
+        );
     }
 
     /// v9 renames a change column on four tables; the rows written under
@@ -1688,33 +1654,26 @@ mod tests {
     fn draft_lifecycle() {
         let mut conn = mem();
         let c = change(&mut conn);
+        let comment = CommentInput {
+            thread_id: None,
+            revision: Some(nit_types::domain::RevisionNumber::new(1)),
+            anchor: Some(nit_types::domain::LogAnchor::Change),
+            body: "look".to_string(),
+            resolved: None,
+        };
         let d = write(&mut conn, |tx| {
-            insert_draft(
-                tx,
-                7,
-                &NewDraft {
-                    change_number: c,
-                    thread_id: None,
-                    anchor: &Anchor::File {
-                        version: ChangeVersion::Revision(RevisionNumber::new(1)),
-                        path: "src/main.rs".to_string(),
-                        anchor: FileAnchor::Line(3),
-                    },
-                    body: "look",
-                    resolved: None,
-                },
-                "t0",
-            )
+            insert_draft(tx, 7, c, comment.clone(), "t0")
         })
         .expect("insert");
         assert_eq!(drafts_for_change(&conn, c).expect("list").len(), 1);
-        write(&mut conn, |tx| {
+        let edited = write(&mut conn, |tx| {
             update_draft(tx, d.id, "look again", Some(true), "t1")
         })
-        .expect("edit");
-        let edited = get_draft(&conn, d.id).expect("get").expect("some");
-        assert_eq!(edited.body, "look again");
-        assert_eq!(edited.resolved, Some(true));
+        .expect("edit")
+        .expect("some");
+        assert_eq!(edited.comment.body, "look again");
+        assert_eq!(edited.comment.resolved, Some(true));
+        assert_eq!(edited.comment.anchor, comment.anchor);
         write(&mut conn, |tx| delete_drafts_for_change(tx, c)).expect("drain");
         assert!(drafts_for_change(&conn, c).expect("list").is_empty());
     }

@@ -45,6 +45,7 @@ use nit_types::domain::Anchor;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::ChangeVersion;
+use nit_types::domain::CommentInput;
 use nit_types::health::Health;
 
 pub use attachments::Collected;
@@ -267,17 +268,18 @@ async fn health() -> Json<Health> {
 /// many commits.
 pub const MERGED_WINDOW: u64 = 5;
 
-/// Returns the anchor of a new thread, checked against `change`.
-///
 /// The synthetic commit-message file is the route's own rule. The base of
 /// a revision is its parent commit, and the parent commit contains no
 /// commit message of this change. So that file has no base version.
-///
-/// # Errors
-///
-/// A bad request when `change` has no revision of the anchor, or when the
-/// anchor is on the base version of the commit message.
-fn new_thread_anchor(change: &ChangeProjection, anchor: Anchor) -> Result<Anchor, Error> {
+fn new_thread(
+    change: &ChangeProjection,
+    anchor: Anchor,
+    body: String,
+    resolved: Option<bool>,
+) -> Result<CommentInput, Error> {
+    if body.trim().is_empty() {
+        return Err(Error::bad_request("a new thread needs a body"));
+    }
     let number = anchor.revision();
     if change.revision(number).is_none() {
         return Err(Error::bad_request(format!(
@@ -294,5 +296,38 @@ fn new_thread_anchor(change: &ChangeProjection, anchor: Anchor) -> Result<Anchor
     {
         return Err(Error::bad_request(format!("{path} has no base version")));
     }
-    Ok(anchor)
+    let (revision, anchor) = anchor.into_log();
+    Ok(CommentInput {
+        thread_id: None,
+        revision: Some(revision),
+        anchor: Some(anchor),
+        body,
+        resolved,
+    })
+}
+
+fn reply(
+    change: &ChangeProjection,
+    thread_id: u64,
+    body: String,
+    resolved: Option<bool>,
+) -> Result<CommentInput, Error> {
+    if body.trim().is_empty() && resolved.is_none() {
+        return Err(Error::bad_request(
+            "a reply needs a body or a resolution decision",
+        ));
+    }
+    let thread = change.thread(thread_id).ok_or_else(|| {
+        Error::bad_request(format!(
+            "thread {thread_id} is absent from change {}",
+            change.id
+        ))
+    })?;
+    Ok(CommentInput {
+        thread_id: Some(thread_id),
+        revision: Some(thread.anchor.revision()),
+        anchor: None,
+        body,
+        resolved,
+    })
 }

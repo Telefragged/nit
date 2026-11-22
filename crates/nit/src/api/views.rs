@@ -9,24 +9,9 @@ use rusqlite::Connection;
 use nit_types::changes::{ChangeDetail, ChangeDrafts};
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
-use nit_types::domain::Draft;
 use nit_types::domain::DraftDecision;
 
 use crate::db;
-
-#[must_use]
-pub fn draft_view(d: &db::DraftRow) -> Draft {
-    Draft {
-        id: d.id,
-        change_number: d.change_number,
-        thread_id: d.thread_id,
-        anchor: d.anchor.clone(),
-        body: d.body.clone(),
-        resolved: d.resolved.unwrap_or(false),
-        created_at: d.created_at.clone(),
-        updated_at: d.updated_at.clone(),
-    }
-}
 
 /// The reviewer's private overlay, read straight from the database.
 ///
@@ -37,10 +22,7 @@ pub fn draft_view(d: &db::DraftRow) -> Draft {
 /// When reading drafts fails.
 pub fn change_overlay(conn: &Connection, change_number: ChangeNumber) -> Result<ChangeDrafts> {
     Ok(ChangeDrafts {
-        drafts: db::drafts_for_change(conn, change_number)?
-            .iter()
-            .map(draft_view)
-            .collect(),
+        drafts: db::drafts_for_change(conn, change_number)?,
         draft_decision: db::get_draft_review(conn, change_number)?.map(|r| DraftDecision {
             decision: r.decision,
             message: r.message,

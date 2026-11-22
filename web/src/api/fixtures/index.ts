@@ -6,6 +6,7 @@
 import { ApiError } from "../client";
 import type {
   ChangeDetail,
+  Draft,
   ChangeQuery,
   ChangeStatus,
   CommentInput,
@@ -19,6 +20,7 @@ import type {
   ChangeVersion,
 } from "../types";
 import { ATTACHMENT_PREFIX } from "../types";
+import { anchorRevision, intoLog } from "../../lib/comments";
 import { attachmentsOf } from "../../lib/attachments";
 import {
   baseVersion,
@@ -29,7 +31,6 @@ import {
 } from "../../lib/version";
 import { changeDetail as foldDetail } from "../fold";
 import { mockAppend, picks, projection } from "./stream";
-import { intoLog } from "./synth";
 import { addedFile, changedFile, diffKey, sideEnd } from "./builders";
 import blobs from "./blobs.json";
 import { changes, draftReviews, drafts, repos } from "./data";
@@ -37,7 +38,6 @@ import type {
   AuthoredFile,
   AuthoredRevision,
   ChangeRecord,
-  DraftRecord,
   Review,
 } from "./store";
 
@@ -54,21 +54,14 @@ function drainComments(c: ChangeRecord): CommentInput[] {
     .filter((x) => x.change_number === c.id)
     .sort((a, b) => a.id - b.id);
   for (const d of changeDrafts) {
-    if (d.thread_id !== null) {
-      // A reply: the folded thread owns the anchor, so only id/body/resolved.
+    if (d.thread_id !== null || d.body.trim() !== "") {
+      const { revision, anchor, body, resolved } = d;
       comments.push({
-        thread_id: d.thread_id,
-        revision: null,
-        anchor: null,
-        body: d.body,
-        resolved: d.resolved,
-      });
-    } else if (d.body.trim() !== "") {
-      comments.push({
-        thread_id: nextThreadId++,
-        ...intoLog(d.anchor),
-        body: d.body,
-        resolved: d.resolved,
+        thread_id: d.thread_id ?? nextThreadId++,
+        revision,
+        anchor,
+        body,
+        resolved,
       });
     }
     drafts.splice(drafts.indexOf(d), 1);
@@ -441,27 +434,28 @@ export function mockRequest(
     const c = getChange(Number(m[1]));
     const req = body as NewDraft;
     const now = new Date().toISOString();
-    const draft =
+    const comment =
       "thread" in req
         ? {
-            ...req.thread,
             thread_id: null,
-            anchor: req.thread.anchor,
+            ...intoLog(req.thread.anchor),
+            body: req.thread.body,
+            resolved: req.thread.resolved ?? null,
           }
         : {
-            ...req.reply,
-            // A reply has the anchor of its thread, as on the server.
-            anchor:
+            thread_id: req.reply.thread_id,
+            revision: anchorRevision(
               projection(c.id).threads.find((t) => t.id === req.reply.thread_id)
                 ?.anchor ?? notFound(`thread ${req.reply.thread_id}`),
+            ),
+            anchor: null,
+            body: req.reply.body,
+            resolved: req.reply.resolved ?? null,
           };
-    const record: DraftRecord = {
+    const record: Draft = {
       id: nextDraftId++,
       change_number: c.id,
-      thread_id: draft.thread_id,
-      anchor: draft.anchor,
-      body: draft.body,
-      resolved: draft.resolved ?? false,
+      ...comment,
       created_at: now,
       updated_at: now,
     };
@@ -475,7 +469,7 @@ export function mockRequest(
     if (!d) return notFound(`draft ${id}`);
     const req = body as { body: string; resolved?: boolean };
     d.body = req.body;
-    if (req.resolved !== undefined) d.resolved = req.resolved;
+    d.resolved = req.resolved ?? null;
     d.updated_at = new Date().toISOString();
     return d;
   }

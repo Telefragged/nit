@@ -8,6 +8,7 @@ import type { UiThread } from "../lib/comments";
 import {
   anchorKind,
   anchorRevision,
+  draftResolved,
   pendingResolved,
   rangeSince,
 } from "../lib/comments";
@@ -94,9 +95,8 @@ function DraftComment({
     onSuccess: invalidate,
   });
 
-  // A reply draft carries a resolve decision; offer the checkbox when editing
-  // it. A new-thread draft has none.
-  const editResolved = draft.thread_id !== null ? draft.resolved : undefined;
+  const editResolved =
+    draft.thread_id !== null ? draftResolved(draft) : undefined;
   const resolutionOnly = draft.body.trim().length === 0;
 
   return (

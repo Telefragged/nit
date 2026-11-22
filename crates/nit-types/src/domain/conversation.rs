@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ChangeNumber;
 use super::ChangeVersion;
+use super::CommentInput;
 use super::Decision;
 use super::RevisionNumber;
 
@@ -26,15 +27,6 @@ pub enum Side {
 }
 
 impl Side {
-    /// The wire spelling (mirrors the serde renaming).
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Side::Old => "old",
-            Side::New => "new",
-        }
-    }
-
     /// The change version that this side of revision `revision` shows, in
     /// the diff of the revision against its base.
     #[must_use]
@@ -413,13 +405,8 @@ impl TryFrom<Selection> for CommentRange {
 pub struct Draft {
     pub id: u64,
     pub change_number: ChangeNumber,
-    pub thread_id: Option<u64>,
-    /// The anchor of a new thread, or the anchor of the thread of a reply.
-    pub anchor: Anchor,
-    /// May be empty for a resolution-only reply draft.
-    pub body: String,
-    /// The draft's thread-resolution decision (false when unset).
-    pub resolved: bool,
+    #[serde(flatten)]
+    pub comment: CommentInput,
     pub created_at: String,
     pub updated_at: String,
 }
