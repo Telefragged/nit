@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::AttachPayload;
 use super::ChangeNumber;
 use super::CommentRange;
-use super::LineAnchor;
+use super::FileAnchor;
 use super::LogAnchor;
 use super::RevisionNumber;
 use super::Sha;
@@ -194,20 +194,14 @@ impl From<LoggedComment> for CommentInput {
             // A stored entry with a line and no file gets no anchor, so it
             // is change-level. An error here would make the whole change
             // unfoldable.
-            let at = c
-                .range
-                .map(LineAnchor::Selection)
-                .or(c.line.map(LineAnchor::Whole));
-            match (c.file, at) {
-                (Some(file), Some(at)) => Some(LogAnchor::Line {
-                    file,
+            match c.file {
+                Some(path) => Some(LogAnchor::File {
+                    path,
                     side,
-                    line_text: c.line_text,
-                    at,
+                    anchor: FileAnchor::from_parts(c.range, c.line, c.line_text),
                 }),
-                (Some(file), None) => Some(LogAnchor::File { file }),
-                (None, None) => Some(LogAnchor::Change),
-                (None, Some(_)) => None,
+                None if c.range.is_none() && c.line.is_none() => Some(LogAnchor::Change),
+                None => None,
             }
         });
         CommentInput {

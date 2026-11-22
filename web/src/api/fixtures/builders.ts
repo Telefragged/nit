@@ -20,7 +20,9 @@ import type {
 export const uiThread = (
   over: Partial<UiThread> & { id: number | null },
 ): UiThread => ({
-  anchor: { line: { file: "src/main.rs", version: "r1", at: { whole: 1 } } },
+  anchor: {
+    file: { version: "r1", path: "src/main.rs", anchor: { line: { line: 1 } } },
+  },
   resolved: false,
   comments: [],
   drafts: [],

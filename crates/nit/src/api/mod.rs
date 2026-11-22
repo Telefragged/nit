@@ -43,11 +43,11 @@ use axum::response::IntoResponse;
 use git2::Repository;
 use rusqlite::Connection;
 
+use nit_types::domain::Anchor;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::ChangeVersion;
 use nit_types::domain::RevisionProjection;
-use nit_types::domain::{Anchor, LineAnchor};
 use nit_types::health::Health;
 
 pub use attachments::Collected;
@@ -294,14 +294,14 @@ fn new_thread_anchor(
             change.id
         ))
     })?;
-    if let Anchor::Line {
+    if let Anchor::File {
         version: ChangeVersion::Base(_),
-        file,
+        path,
         ..
     } = &anchor
-        && file == diff::COMMIT_MSG_PATH
+        && path == diff::COMMIT_MSG_PATH
     {
-        return Err(Error::bad_request(format!("{file} has no base version")));
+        return Err(Error::bad_request(format!("{path} has no base version")));
     }
     let git_dir = state::git_dir(conn, change.repo_id)?;
     let text = line_text(state.blobs(), &git_dir, change, revision, &anchor);
@@ -309,8 +309,6 @@ fn new_thread_anchor(
     Ok(anchor)
 }
 
-/// The text of the line that a line anchor hangs under, in the version of
-/// the anchor. A selection hangs under the line it ends on.
 fn line_text(
     blobs: &attachments::Blobs,
     git_dir: &str,
@@ -318,16 +316,15 @@ fn line_text(
     revision: &RevisionProjection,
     anchor: &Anchor,
 ) -> Option<String> {
-    let Anchor::Line {
-        version, file, at, ..
+    let Anchor::File {
+        version,
+        path: file,
+        anchor,
     } = anchor
     else {
         return None;
     };
-    let line = match at {
-        LineAnchor::Whole(line) => *line,
-        LineAnchor::Selection(range) => range.end_line(),
-    };
+    let line = anchor.end_line()?;
     if file == diff::COMMIT_MSG_PATH {
         return diff::nth_line(&revision.message, line);
     }

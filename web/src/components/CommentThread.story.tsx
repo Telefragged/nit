@@ -27,7 +27,11 @@ function Frame({ children }: { children: ReactNode }) {
 }
 
 const ported = {
-  line: { file: "src/main.rs", version: "r1" as const, at: { whole: 1 } },
+  file: {
+    version: "r1" as const,
+    path: "src/main.rs",
+    anchor: { line: { line: 1 } },
+  },
 };
 
 const ATOMIC = threadComment(
@@ -60,7 +64,7 @@ export function Open() {
       <CommentThread
         thread={uiThread({
           id: 3,
-          anchor: { line: { ...ported.line, version: "r0" } },
+          anchor: { file: { ...ported.file, version: "r0" } },
           ported,
           comments: [
             ATOMIC,

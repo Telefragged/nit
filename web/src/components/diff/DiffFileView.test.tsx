@@ -13,13 +13,9 @@ import {
   reviewCtx,
   uiThread,
 } from "../../api/fixtures/builders";
-import {
-  COMMIT_MSG_PATH,
-  type DiffFile,
-  type LineAnchor,
-} from "../../api/types";
+import { COMMIT_MSG_PATH, type DiffFile } from "../../api/types";
 import type { DiffLink, LinkSpan } from "../../lib/diffLink";
-import type { UiThread } from "../../lib/comments";
+import type { LineOrRange, UiThread } from "../../lib/comments";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
 import { ReviewContext } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
@@ -251,10 +247,10 @@ describe("a file with lines on one side only", () => {
 });
 
 /** A published thread on `mixed`'s new side at revision `ctx.selected`. */
-const threadAt = (id: number, at: LineAnchor): UiThread =>
+const threadAt = (id: number, at: LineOrRange): UiThread =>
   uiThread({
     id,
-    anchor: { line: { file: "src/base.rs", version: "r2", at } },
+    anchor: { file: { version: "r2", path: "src/base.rs", anchor: at } },
   });
 
 /** Points at the one rendered thread, returning its wrapper. */
@@ -296,7 +292,7 @@ describe("hovering a thread", () => {
     "tints its whole line while the pointer is over it (%s)",
     (layout) => {
       const { container } = renderFile(layout, mixed, [
-        threadAt(1, { whole: 3 }),
+        threadAt(1, { line: { line: 3 } }),
       ]);
       expect(container.querySelector(".line-hover")).toBeNull();
       const item = hoverThread(container);
@@ -310,7 +306,7 @@ describe("hovering a thread", () => {
   it("brightens its selection instead of the line", () => {
     const { container } = renderFile("unified", mixed, [
       threadAt(1, {
-        selection: { start_line: 3, start_char: 4, end_line: 3, end_char: 8 },
+        range: { start_line: 3, start_char: 4, end_line: 3, end_char: 8 },
       }),
     ]);
     hoverThread(container);
@@ -323,10 +319,10 @@ describe("hovering a thread", () => {
 
 describe("a rendered attachment", () => {
   const plan = attachedFile("plan.md", "# Plan\n\nStep one\nand two.\n", 2);
-  const threadOn = (at: LineAnchor) =>
+  const threadOn = (at: LineOrRange) =>
     uiThread({
       id: 1,
-      anchor: { line: { file: plan.path, version: "r2", at } },
+      anchor: { file: { version: "r2", path: plan.path, anchor: at } },
     });
   /** The source lines of the block that the one thread shows under. */
   const threadBlock = (container: HTMLElement) => {
@@ -337,19 +333,23 @@ describe("a rendered attachment", () => {
   };
 
   it("shows a line's thread under the block that holds the line", () => {
-    const { container } = renderFile("unified", plan, [threadOn({ whole: 4 })]);
+    const { container } = renderFile("unified", plan, [
+      threadOn({ line: { line: 4 } }),
+    ]);
     expect(threadBlock(container)).toEqual(["3", "4"]);
     expect(container.querySelector('[data-threads="displaced"]')).toBeNull();
   });
 
   it("shows a thread on a blank line under the block above", () => {
-    const { container } = renderFile("unified", plan, [threadOn({ whole: 2 })]);
+    const { container } = renderFile("unified", plan, [
+      threadOn({ line: { line: 2 } }),
+    ]);
     expect(threadBlock(container)).toEqual(["1", "1"]);
   });
 
   it("opens the editor under the block of its draft", () => {
-    const at: LineAnchor = {
-      selection: { start_line: 3, start_char: 0, end_line: 4, end_char: 8 },
+    const at: LineOrRange = {
+      range: { start_line: 3, start_char: 0, end_line: 4, end_char: 8 },
     };
     const { container } = render(
       tree("unified", plan, [], undefined, {
@@ -364,10 +364,10 @@ describe("a rendered attachment", () => {
 
   it("tints the innermost part that a hovered thread's anchor covers", () => {
     const table = attachedFile("t.md", "| A | B |\n|---|---|\n| x | y |\n", 2);
-    const hovered = (at: LineAnchor) => {
+    const hovered = (at: LineOrRange) => {
       const thread = uiThread({
         id: 1,
-        anchor: { line: { file: table.path, version: "r2", at } },
+        anchor: { file: { version: "r2", path: table.path, anchor: at } },
       });
       const { container } = renderFile("unified", table, [thread]);
       hoverThread(container);
@@ -378,15 +378,17 @@ describe("a rendered attachment", () => {
       return tinted;
     };
     const cell = { start_line: 3, start_char: 6, end_line: 3, end_char: 7 };
-    expect(hovered({ selection: cell })).toEqual(["TD"]);
-    expect(hovered({ whole: 3 })).toEqual(["TR"]);
+    expect(hovered({ range: cell })).toEqual(["TD"]);
+    expect(hovered({ line: { line: 3 } })).toEqual(["TR"]);
   });
 
   it("tints the block above a hovered thread on a blank line", () => {
     const doc = attachedFile("d.md", "First.\n\nLast one.\n", 2);
     const thread = uiThread({
       id: 1,
-      anchor: { line: { file: doc.path, version: "r2", at: { whole: 2 } } },
+      anchor: {
+        file: { version: "r2", path: doc.path, anchor: { line: { line: 2 } } },
+      },
     });
     const { container } = renderFile("unified", doc, [thread]);
     hoverThread(container);
@@ -401,16 +403,11 @@ describe("a rendered attachment", () => {
     const thread = uiThread({
       id: 1,
       anchor: {
-        line: {
-          file: doc.path,
+        file: {
           version: "r2",
-          at: {
-            selection: {
-              start_line: 1,
-              start_char: 2,
-              end_line: 6,
-              end_char: 4,
-            },
+          path: doc.path,
+          anchor: {
+            range: { start_line: 1, start_char: 2, end_line: 6, end_char: 4 },
           },
         },
       },
@@ -470,7 +467,11 @@ describe("a rendered attachment", () => {
     const { container } = render(
       tree("unified", list, [], undefined, {
         ...ctx,
-        editingTarget: { file: list.path, side: "new", at: { whole: 2 } },
+        editingTarget: {
+          file: list.path,
+          side: "new",
+          at: { line: { line: 2 } },
+        },
       }),
     );
     const block = container.querySelector('.doc-block[data-end="3"]');
@@ -568,7 +569,9 @@ describe("a rendered Markdown diff", () => {
   it("shows a block with a thread", () => {
     const thread = uiThread({
       id: 1,
-      anchor: { line: { file: doc.path, version: "r2", at: { whole: 3 } } },
+      anchor: {
+        file: { version: "r2", path: doc.path, anchor: { line: { line: 3 } } },
+      },
     });
     const { container } = renderFile("unified", doc, [thread]);
     fireEvent.click(screen.getByRole("button", { name: "Rendered" }));

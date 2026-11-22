@@ -4,7 +4,7 @@ use anyhow::{Context, Result, anyhow};
 
 use nit_types::comments::NewComment;
 use nit_types::domain::CommentRange;
-use nit_types::domain::LineAnchor;
+use nit_types::domain::FileAnchor;
 use nit_types::domain::LogAnchor;
 use nit_types::domain::RevisionNumber;
 use nit_types::domain::Side;
@@ -72,10 +72,11 @@ pub fn comment(args: CommentArgs) -> Result<()> {
     } else {
         None
     };
-    let at = match args.range {
-        Some(spec) => Some(LineAnchor::Selection(parse_comment_range(&spec)?)),
-        None => args.line.map(LineAnchor::Whole),
-    };
+    let range = args
+        .range
+        .map(|spec| parse_comment_range(&spec))
+        .transpose()?;
+    let anchor = FileAnchor::from_parts(range, args.line, None);
     let body = match args.message_file {
         Some(path) => read_body(&path)?,
         None => args.message.unwrap_or_default(),
@@ -85,10 +86,13 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         thread_id: args.thread,
         revision: args.revision,
         // clap requires --file with --line and --range.
-        anchor: Some(match (args.file, at) {
-            (Some(file), Some(at)) => LogAnchor::line(file, args.side.unwrap_or_default(), at),
-            (Some(file), None) => LogAnchor::File { file },
-            (None, _) => LogAnchor::Change,
+        anchor: Some(match args.file {
+            Some(path) => LogAnchor::File {
+                path,
+                side: args.side.unwrap_or_default(),
+                anchor,
+            },
+            None => LogAnchor::Change,
         }),
         body,
         resolved,

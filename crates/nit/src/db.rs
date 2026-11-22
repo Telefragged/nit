@@ -28,7 +28,7 @@ use nit_types::changes::ChangeQuery;
 use nit_types::domain::AttachmentHash;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::Tags;
-use nit_types::domain::{Anchor, CommentRange, LineAnchor, Side};
+use nit_types::domain::{Anchor, CommentRange, FileAnchor, Side};
 use nit_types::domain::{ChangeId, ChangeStatus, Decision, RevisionNumber, Sha};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
@@ -1081,12 +1081,10 @@ pub struct DraftRow {
 
 /// The anchor a draft row's location columns spell.
 ///
-/// The four range columns win when they are set, because a selection
-/// contains the lines it covers. `line` then specifies a whole line, and
-/// no file at all is the change itself.
+/// A row without a file is the change itself.
 fn col_anchor(row: &rusqlite::Row) -> rusqlite::Result<Anchor> {
     let revision = RevisionNumber::new(col_u64(row.get("revision")?)?);
-    let Some(file) = row.get::<_, Option<String>>("file")? else {
+    let Some(path) = row.get::<_, Option<String>>("file")? else {
         return Ok(Anchor::Change { revision });
     };
     let range = match (
@@ -1106,16 +1104,14 @@ fn col_anchor(row: &rusqlite::Row) -> rusqlite::Result<Anchor> {
         )?),
         _ => None,
     };
-    let at = match (range, col_u64_opt(row.get("line")?)?) {
-        (Some(range), _) => LineAnchor::Selection(range),
-        (None, Some(line)) => LineAnchor::Whole(line),
-        (None, None) => return Ok(Anchor::File { revision, file }),
-    };
-    Ok(Anchor::Line {
+    Ok(Anchor::File {
         version: col_enum::<Side>(&row.get::<_, String>("side")?)?.version(revision),
-        file,
-        line_text: row.get("line_text")?,
-        at,
+        path,
+        anchor: FileAnchor::from_parts(
+            range,
+            col_u64_opt(row.get("line")?)?,
+            row.get("line_text")?,
+        ),
     })
 }
 
@@ -1151,22 +1147,19 @@ pub struct NewDraft<'a> {
 /// On a database failure.
 pub fn insert_draft(tx: &Transaction, id: u64, d: &NewDraft, now: &str) -> Result<DraftRow> {
     let thread_id = d.thread_id.map(i64::try_from).transpose()?;
-    let at = match d.anchor {
-        Anchor::Line { at, .. } => Some(*at),
-        _ => None,
+    let (line, range) = match d.anchor.file_anchor() {
+        Some(FileAnchor::Line { line, .. }) => (Some(i64::try_from(*line)?), None),
+        Some(FileAnchor::Range { range, .. }) => (None, Some(range)),
+        Some(FileAnchor::File) | None => (None, None),
     };
-    let line = match at {
-        Some(LineAnchor::Whole(line)) => Some(i64::try_from(line)?),
-        _ => None,
-    };
-    let (rsl, rsc, rel, rec) = match at {
-        Some(LineAnchor::Selection(r)) => (
+    let (rsl, rsc, rel, rec) = match range {
+        Some(r) => (
             Some(i64::try_from(r.start_line())?),
             Some(i64::try_from(r.start_char())?),
             Some(i64::try_from(r.end_line())?),
             Some(i64::try_from(r.end_char())?),
         ),
-        _ => (None, None, None, None),
+        None => (None, None, None, None),
     };
     tx.execute(
         "INSERT INTO draft_comments (id, change_number, revision, thread_id, file, line, side,
@@ -1177,14 +1170,14 @@ pub fn insert_draft(tx: &Transaction, id: u64, d: &NewDraft, now: &str) -> Resul
             i64::try_from(d.change_number.get())?,
             i64::try_from(d.anchor.revision().get())?,
             thread_id,
-            d.anchor.file(),
+            d.anchor.path(),
             line,
             d.anchor.side().as_str(),
             rsl,
             rsc,
             rel,
             rec,
-            d.anchor.line_text(),
+            d.anchor.file_anchor().and_then(FileAnchor::line_text),
             d.body,
             now,
             i64::try_from(id)?,
@@ -1487,31 +1480,36 @@ mod tests {
         assert_eq!(found.canonical_head, Some(head));
     }
 
-    /// The location columns spell the three anchors, and each one has to
-    /// come back as the anchor it spells.
     #[test]
     fn draft_rows_read_back_as_their_anchors() {
         let mut conn = mem();
         let c = change(&mut conn);
+        let file = |version, anchor| Anchor::File {
+            version,
+            path: "a.rs".to_string(),
+            anchor,
+        };
+        let (base, revision) = (
+            ChangeVersion::Base(RevisionNumber::new(0)),
+            ChangeVersion::Revision(RevisionNumber::new(0)),
+        );
         let anchors = [
-            Anchor::Line {
-                version: ChangeVersion::Base(RevisionNumber::new(0)),
-                file: "a.rs".to_string(),
-                line_text: Some("x1".to_string()),
-                at: LineAnchor::Whole(3),
-            },
-            Anchor::Line {
-                version: ChangeVersion::Revision(RevisionNumber::new(0)),
-                file: "a.rs".to_string(),
-                line_text: Some("x2".to_string()),
-                at: LineAnchor::Selection(
-                    CommentRange::new(4, 1, 4, 6).expect("a forward selection"),
-                ),
-            },
-            Anchor::File {
-                revision: RevisionNumber::new(0),
-                file: "a.rs".to_string(),
-            },
+            file(
+                base,
+                FileAnchor::Line {
+                    line: 3,
+                    line_text: Some("x1".to_string()),
+                },
+            ),
+            file(
+                revision,
+                FileAnchor::Range {
+                    range: CommentRange::new(4, 1, 4, 6).expect("a forward selection"),
+                    line_text: Some("x2".to_string()),
+                },
+            ),
+            file(revision, FileAnchor::File),
+            file(base, FileAnchor::File),
             Anchor::Change {
                 revision: RevisionNumber::new(0),
             },
@@ -1709,11 +1707,13 @@ mod tests {
                 &NewDraft {
                     change_number: c,
                     thread_id: None,
-                    anchor: &Anchor::Line {
+                    anchor: &Anchor::File {
                         version: ChangeVersion::Revision(RevisionNumber::new(1)),
-                        file: "src/main.rs".to_string(),
-                        line_text: Some("fn main".to_string()),
-                        at: LineAnchor::Whole(3),
+                        path: "src/main.rs".to_string(),
+                        anchor: FileAnchor::Line {
+                            line: 3,
+                            line_text: Some("fn main".to_string()),
+                        },
                     },
                     body: "look",
                     resolved: None,

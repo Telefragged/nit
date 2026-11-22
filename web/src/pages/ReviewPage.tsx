@@ -693,7 +693,7 @@ export default function ReviewPage() {
         } else if (linked?.lines) {
           const { side, start, end, chars } = linked.lines;
           if (start === end && !chars) {
-            result = { file: linked.file, side, at: { whole: start } };
+            result = { file: linked.file, side, at: { line: { line: start } } };
           } else {
             range = linesRange({ file: linked.file, lines: linked.lines });
             result = range && selectionTarget(range, side);

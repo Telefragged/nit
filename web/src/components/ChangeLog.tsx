@@ -28,8 +28,9 @@ const hasMore = (text: string) => text.trim() !== firstLine(text).trim();
 /** Where an anchor points: `change`, a file, or `file:line`. */
 function anchorLabel(anchor: Anchor | LogAnchor): string {
   if (anchor === "change" || "change" in anchor) return "change";
-  if ("file" in anchor) return displayPath(anchor.file.file);
-  return `${displayPath(anchor.line.file)}:${placementLine(anchor.line.at)}`;
+  const { path, anchor: at } = anchor.file;
+  if (at === "file") return displayPath(path);
+  return `${displayPath(path)}:${placementLine(at)}`;
 }
 
 /** Where a comment lands, and what it does to its thread's resolution. A

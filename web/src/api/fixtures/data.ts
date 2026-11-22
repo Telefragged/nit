@@ -774,25 +774,27 @@ const change11: ChangeRecord = {
       {
         thread_id: 71,
         anchor: {
-          line: {
-            file: "src/auth/rotate.rs",
+          file: {
             version: "r1",
-            at: { whole: 30 },
+            path: "src/auth/rotate.rs",
+            anchor: { line: { line: 30 } },
           },
         },
       },
       {
         thread_id: 73,
-        anchor: { file: { revision: 1, file: "src/auth/store.rs" } },
+        anchor: {
+          file: { version: "r1", path: "src/auth/store.rs", anchor: "file" },
+        },
       },
       {
         thread_id: 79,
         anchor: {
-          line: {
-            file: "src/auth/rotate.rs",
+          file: {
             version: "r1",
-            at: {
-              selection: {
+            path: "src/auth/rotate.rs",
+            anchor: {
+              range: {
                 start_line: 30,
                 start_char: 8,
                 end_line: 31,
@@ -1718,11 +1720,16 @@ export const threads: ThreadRecord[] = [
     id: 71,
     change_number: 11,
     anchor: {
-      line: {
-        file: "src/auth/rotate.rs",
+      file: {
         version: "r0",
-        line_text: "        let fresh = Token::generate(&mut self.rng.lock());",
-        at: { whole: 22 },
+        path: "src/auth/rotate.rs",
+        anchor: {
+          line: {
+            line: 22,
+            line_text:
+              "        let fresh = Token::generate(&mut self.rng.lock());",
+          },
+        },
       },
     },
     resolved: true,
@@ -1755,11 +1762,15 @@ export const threads: ThreadRecord[] = [
     id: 73,
     change_number: 11,
     anchor: {
-      line: {
-        file: "src/auth/store.rs",
+      file: {
         version: "r0",
-        line_text: "        let conn = self.pool.clone().get();",
-        at: { whole: 58 },
+        path: "src/auth/store.rs",
+        anchor: {
+          line: {
+            line: 58,
+            line_text: "        let conn = self.pool.clone().get();",
+          },
+        },
       },
     },
     resolved: false,
@@ -1787,7 +1798,9 @@ export const threads: ThreadRecord[] = [
   {
     id: 74,
     change_number: 11,
-    anchor: { file: { revision: 0, file: "src/auth/store.rs" } },
+    anchor: {
+      file: { version: "r0", path: "src/auth/store.rs", anchor: "file" },
+    },
     resolved: false,
     comments: [
       {
@@ -1807,16 +1820,16 @@ export const threads: ThreadRecord[] = [
     id: 79,
     change_number: 11,
     anchor: {
-      line: {
-        file: "src/auth/rotate.rs",
+      file: {
         version: "r0",
-        line_text: "        self.store.mark_rotated(entry.id, &fresh);",
-        at: {
-          selection: {
+        path: "src/auth/rotate.rs",
+        anchor: {
+          range: {
             start_line: 22,
             start_char: 8,
             end_line: 23,
             end_char: 50,
+            line_text: "        self.store.mark_rotated(entry.id, &fresh);",
           },
         },
       },
@@ -1840,11 +1853,16 @@ export const threads: ThreadRecord[] = [
     id: 75,
     change_number: 11,
     anchor: {
-      line: {
-        file: "src/auth/rotate.rs",
+      file: {
         version: "r0",
-        line_text: "        let entry = self.store.lookup(presented).unwrap();",
-        at: { whole: 21 },
+        path: "src/auth/rotate.rs",
+        anchor: {
+          line: {
+            line: 21,
+            line_text:
+              "        let entry = self.store.lookup(presented).unwrap();",
+          },
+        },
       },
     },
     resolved: true,
@@ -1873,16 +1891,16 @@ export const threads: ThreadRecord[] = [
     id: 77,
     change_number: 11,
     anchor: {
-      line: {
-        file: COMMIT_MSG_PATH,
+      file: {
         version: "r0",
-        line_text: "moment the legitimate client refreshes.",
-        at: {
-          selection: {
+        path: COMMIT_MSG_PATH,
+        anchor: {
+          range: {
             start_line: 5,
             start_char: 7,
             end_line: 5,
             end_char: 40,
+            line_text: "moment the legitimate client refreshes.",
           },
         },
       },
@@ -1912,11 +1930,15 @@ export const threads: ThreadRecord[] = [
     id: 80,
     change_number: 20,
     anchor: {
-      line: {
-        file: "src/wal.rs",
+      file: {
         version: "r0",
-        line_text: "        if self.backlog_bytes() < CHECKPOINT_BACKLOG {",
-        at: { whole: 94 },
+        path: "src/wal.rs",
+        anchor: {
+          line: {
+            line: 94,
+            line_text: "        if self.backlog_bytes() < CHECKPOINT_BACKLOG {",
+          },
+        },
       },
     },
     resolved: false,
@@ -1934,11 +1956,15 @@ export const threads: ThreadRecord[] = [
     id: 81,
     change_number: 20,
     anchor: {
-      line: {
-        file: "src/wal/backoff.rs",
+      file: {
         version: "r0^",
-        line_text: "pub fn jitter(base: Duration) -> Duration {",
-        at: { whole: 3 },
+        path: "src/wal/backoff.rs",
+        anchor: {
+          line: {
+            line: 3,
+            line_text: "pub fn jitter(base: Duration) -> Duration {",
+          },
+        },
       },
     },
     resolved: false,
@@ -1958,11 +1984,10 @@ export const threads: ThreadRecord[] = [
     id: 82,
     change_number: 51,
     anchor: {
-      line: {
-        file: "src/sched/fair.rs",
+      file: {
         version: "r0",
-        line_text: "// fair-share v0",
-        at: { whole: 2 },
+        path: "src/sched/fair.rs",
+        anchor: { line: { line: 2, line_text: "// fair-share v0" } },
       },
     },
     resolved: false,
@@ -1989,12 +2014,16 @@ export const drafts: DraftRecord[] = [
     change_number: 11,
     thread_id: null,
     anchor: {
-      line: {
-        file: "src/auth/rotate.rs",
+      file: {
         version: "r1",
-        line_text:
-          "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
-        at: { whole: 26 },
+        path: "src/auth/rotate.rs",
+        anchor: {
+          line: {
+            line: 26,
+            line_text:
+              "            // Reuse detected: revoke the whole family (RFC 6819 §5.2.2.3).",
+          },
+        },
       },
     },
     body: "Put the RFC section in the error message too — operators grep for it.",
@@ -2008,11 +2037,15 @@ export const drafts: DraftRecord[] = [
     change_number: 11,
     thread_id: null,
     anchor: {
-      line: {
-        file: "tests/rotation.rs",
+      file: {
         version: "r1",
-        line_text: "    let _ = rotator.rotate(&seeded).unwrap();",
-        at: { whole: 13 },
+        path: "tests/rotation.rs",
+        anchor: {
+          line: {
+            line: 13,
+            line_text: "    let _ = rotator.rotate(&seeded).unwrap();",
+          },
+        },
       },
     },
     body: "Also assert the family row is revoked — this only checks the error value.",
@@ -2026,11 +2059,15 @@ export const drafts: DraftRecord[] = [
     change_number: 11,
     thread_id: null,
     anchor: {
-      line: {
-        file: "src/auth/rotate.rs",
+      file: {
         version: "r1^",
-        line_text: "    pub fn rotate(&self, presented: &str) -> Token {",
-        at: { whole: 20 },
+        path: "src/auth/rotate.rs",
+        anchor: {
+          line: {
+            line: 20,
+            line_text: "    pub fn rotate(&self, presented: &str) -> Token {",
+          },
+        },
       },
     },
     body:

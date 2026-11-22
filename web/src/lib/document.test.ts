@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RootContent } from "hast";
-import type { LineAnchor } from "../api/types";
+import type { LineOrRange } from "./comments";
 import { add, ctx as both, del, drift } from "../api/fixtures/builders";
 import {
   blockAt,
@@ -125,25 +125,25 @@ describe("linkedPart", () => {
 describe("coveringPart", () => {
   const [table] = parseBlocks("| A | B |\n|---|---|\n| x | y |");
   if (!table) throw new Error("no table");
-  const covering = (at: LineAnchor) => coveringPart(table, at)?.node?.tagName;
+  const covering = (at: LineOrRange) => coveringPart(table, at)?.node?.tagName;
 
   it("finds the innermost part that covers an anchor", () => {
     const sel = { start_line: 3, start_char: 6, end_line: 3, end_char: 7 };
-    expect(covering({ selection: sel })).toBe("td");
-    expect(covering({ whole: 3 })).toBe("tr");
+    expect(covering({ range: sel })).toBe("td");
+    expect(covering({ line: { line: 3 } })).toBe("tr");
   });
 
   it("falls back to the block for an anchor that no part covers, and to none outside", () => {
-    expect(coveringPart(table, { whole: 2 })).toBe(table.parts[0]);
-    expect(coveringPart(table, { whole: 20 })).toBeUndefined();
+    expect(coveringPart(table, { line: { line: 2 } })).toBe(table.parts[0]);
+    expect(coveringPart(table, { line: { line: 20 } })).toBeUndefined();
   });
 
   it("covers the portion of an anchor inside each block that it spans", () => {
     const blocks = parseBlocks(
       "| A | B |\n|---|---|\n| x | y |\n\n> note\n\n```js\nlet a;\n```",
     );
-    const at: LineAnchor = {
-      selection: { start_line: 3, start_char: 2, end_line: 8, end_char: 3 },
+    const at: LineOrRange = {
+      range: { start_line: 3, start_char: 2, end_line: 8, end_char: 3 },
     };
     const marked = blocks.map((b) => {
       const part = coveringPart(b, at);

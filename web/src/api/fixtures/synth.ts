@@ -25,14 +25,10 @@ export function intoLog(anchor: Anchor): {
   if ("change" in anchor) {
     return { revision: anchor.change.revision, anchor: "change" };
   }
-  if ("file" in anchor) {
-    const { revision, file } = anchor.file;
-    return { revision, anchor: { file: { file } } };
-  }
-  const { version, ...line } = anchor.line;
+  const { version, ...file } = anchor.file;
   return {
     revision: revisionOf(version),
-    anchor: { line: { ...line, side: isBase(version) ? "old" : "new" } },
+    anchor: { file: { ...file, side: isBase(version) ? "old" : "new" } },
   };
 }
 

@@ -7,7 +7,8 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import type { Line, LineAnchor, Side } from "../api/types";
+import type { Line, Side } from "../api/types";
+import type { LineOrRange } from "./comments";
 import type { Lines } from "./diffLink";
 import { sideText } from "./rendered";
 
@@ -211,15 +212,15 @@ export function linkedPart(
 /** The innermost part of `block` that covers all of `at` that lies
  * inside the block, or else the block itself. Undefined when `at` lies
  * outside the block. A part without characters covers its lines whole. */
-export function coveringPart(block: Block, at: LineAnchor): Part | undefined {
+export function coveringPart(block: Block, at: LineOrRange): Part | undefined {
   let [sl, sc, el, ec] =
-    "whole" in at
-      ? [at.whole, 0, at.whole, Infinity]
+    "line" in at
+      ? [at.line.line, 0, at.line.line, Infinity]
       : [
-          at.selection.start_line,
-          at.selection.start_char,
-          at.selection.end_line,
-          at.selection.end_char,
+          at.range.start_line,
+          at.range.start_char,
+          at.range.end_line,
+          at.range.end_char,
         ];
   if (outside(block, sl, el)) return undefined;
   const [first, last] = block.lines;

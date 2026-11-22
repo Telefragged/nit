@@ -1,31 +1,34 @@
 import { createContext, useContext } from "react";
-import type { LineAnchor, Side, ChangeVersion, Whitespace } from "../api/types";
+import type { Side, ChangeVersion, Whitespace } from "../api/types";
 import type { DiffLink } from "../lib/diffLink";
-import { placementLine, type DiffRange } from "../lib/comments";
+import {
+  placementLine,
+  rangeOf,
+  type DiffRange,
+  type LineOrRange,
+} from "../lib/comments";
 
 /** Anchor of the draft editor currently open in the diff. */
 export interface DraftTarget {
   file: string;
   side: Side;
-  /** The whole line, or the selection inside it. */
-  at: LineAnchor;
+  at: LineOrRange;
 }
 
 /** The line a target hangs under. A selection ends on that line. */
 export const targetLine = (t: DraftTarget) => placementLine(t.at);
 
 /** The selection a target holds, if it holds one. */
-export const targetRange = (t: DraftTarget) =>
-  "selection" in t.at ? t.at.selection : null;
+export const targetRange = (t: DraftTarget) => rangeOf(t.at);
 
-const sameAt = (a: LineAnchor, b: LineAnchor) =>
-  "whole" in a
-    ? "whole" in b && a.whole === b.whole
-    : "selection" in b &&
-      a.selection.start_line === b.selection.start_line &&
-      a.selection.start_char === b.selection.start_char &&
-      a.selection.end_line === b.selection.end_line &&
-      a.selection.end_char === b.selection.end_char;
+const sameAt = (a: LineOrRange, b: LineOrRange) =>
+  "line" in a
+    ? "line" in b && a.line.line === b.line.line
+    : "range" in b &&
+      a.range.start_line === b.range.start_line &&
+      a.range.start_char === b.range.start_char &&
+      a.range.end_line === b.range.end_line &&
+      a.range.end_char === b.range.end_char;
 
 /** Whole-anchor equality. A same-line target with a different selection
  * is a different target, so the editor re-anchors. */

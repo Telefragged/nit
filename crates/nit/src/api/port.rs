@@ -23,13 +23,13 @@ use anyhow::{Context, Result};
 use git2::{Delta, Repository, Tree};
 
 use nit_types::domain::{
-    Anchor, ChangeProjection, CommentRange, EffectiveAttachment, LineAnchor, LogAnchor,
+    Anchor, ChangeProjection, CommentRange, EffectiveAttachment, FileAnchor, LogAnchor,
     PortedComment, RevisionNumber, RevisionProjection, Side, ThreadOrigin,
 };
 
 use super::attachments::Blobs;
 use super::diff;
-use super::position::{self, Edit, Span};
+use super::position::{self, Edit};
 
 /// The threads of earlier revisions, ported to each of `targets`.
 ///
@@ -74,10 +74,10 @@ pub fn port_threads(
         }
         let (messages, in_trees): (Vec<_>, Vec<_>) = threads
             .into_iter()
-            .partition(|t| t.anchor.file() == Some(diff::COMMIT_MSG_PATH));
+            .partition(|t| t.anchor.path() == Some(diff::COMMIT_MSG_PATH));
         let (attached, in_trees): (Vec<_>, Vec<_>) = in_trees
             .into_iter()
-            .partition(|t| t.anchor.file().and_then(diff::attachment_name).is_some());
+            .partition(|t| t.anchor.path().and_then(diff::attachment_name).is_some());
         port_attached(blobs, change, k, &later, attached, &mut ported);
         if !messages.is_empty() {
             for &(i, target) in &later {
@@ -145,7 +145,7 @@ pub fn port_anchors(
     anchors: &[&Anchor],
 ) -> Result<Vec<LogAnchor>> {
     let unchanged = |anchor: &Anchor| {
-        anchor.file().map_or(LogAnchor::Change, |file| {
+        anchor.path().map_or(LogAnchor::Change, |file| {
             port_in_file(anchor, file, Some(&[]))
         })
     };
@@ -154,7 +154,7 @@ pub fn port_anchors(
     }
     let files: Vec<String> = anchors
         .iter()
-        .filter_map(|anchor| anchor.file())
+        .filter_map(|anchor| anchor.path())
         .map(str::to_owned)
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -181,7 +181,7 @@ pub fn port_anchors(
     anchors
         .iter()
         .map(|anchor| {
-            let Some(file) = anchor.file() else {
+            let Some(file) = anchor.path() else {
                 return Ok(LogAnchor::Change);
             };
             Ok(match deltas.get(file) {
@@ -192,7 +192,11 @@ pub fn port_anchors(
                     old_oid,
                     new_oid,
                 }) => {
-                    let edits = if matches!(anchor, Anchor::Line { .. }) {
+                    let edits = if anchor
+                        .file_anchor()
+                        .and_then(FileAnchor::end_line)
+                        .is_some()
+                    {
                         if !edits_of.contains_key(file) {
                             let old = diff::blob_bytes(repo, file, *old_oid)?;
                             let new = diff::blob_bytes(repo, path, *new_oid)?;
@@ -253,7 +257,7 @@ fn port_attached(
     // side of an attachment shifts through the same edits.
     let mut by_name: HashMap<(&str, Side), Vec<&ThreadOrigin>> = HashMap::new();
     for thread in attached {
-        if let Some(name) = thread.anchor.file().and_then(diff::attachment_name) {
+        if let Some(name) = thread.anchor.path().and_then(diff::attachment_name) {
             by_name
                 .entry((name, thread.anchor.side()))
                 .or_default()
@@ -271,7 +275,7 @@ fn port_attached(
                 thread_id: thread.thread_id,
                 anchor: Anchor::from_log(
                     target.number,
-                    match (&to, thread.anchor.file()) {
+                    match (&to, thread.anchor.path()) {
                         (Some(_), Some(file)) => {
                             port_in_file(&thread.anchor, file, edits.as_deref())
                         }
@@ -283,42 +287,45 @@ fn port_attached(
     }
 }
 
-/// `anchor` under `path`, its lines shifted through `edits`, on the same
-/// side of the revision.
-///
-/// With `None` edits the file is binary, and its lines cannot be mapped. A
-/// line an edit rewrote cannot be mapped either. Both give the file anchor.
 fn port_in_file(anchor: &Anchor, path: &str, edits: Option<&[Edit]>) -> LogAnchor {
-    let at = match anchor {
-        Anchor::Change { .. } => return LogAnchor::Change,
-        Anchor::File { .. } => None,
-        Anchor::Line { at, .. } => edits.and_then(|edits| port_line(at, edits)),
+    let Anchor::File { anchor: at, .. } = anchor else {
+        return LogAnchor::Change;
     };
-    let file = path.to_owned();
-    match at {
-        Some(at) => LogAnchor::line(file, anchor.side(), at),
-        None => LogAnchor::File { file },
+    LogAnchor::File {
+        path: path.to_owned(),
+        side: anchor.side(),
+        anchor: edits
+            .and_then(|edits| port_line(at, edits))
+            .unwrap_or(FileAnchor::File),
     }
 }
 
-/// The anchor's lines through `edits`, or `None` when an edit rewrote them.
-///
-/// Anchors count lines from 1 and spans from 0.
-fn port_line(at: &LineAnchor, edits: &[Edit]) -> Option<LineAnchor> {
-    let line = |n: u64| u32::try_from(n).ok();
-    let span: Span = match at {
-        LineAnchor::Whole(n) => {
-            let n = line(*n)?;
-            n.checked_sub(1)?..n
-        }
-        LineAnchor::Selection(r) => line(r.start_line())?.checked_sub(1)?..line(r.end_line())?,
-    };
-    let moved = position::shift(&span, edits)?;
-    let (start, end) = (u64::from(moved.start) + 1, u64::from(moved.end));
+fn port_line(at: &FileAnchor, edits: &[Edit]) -> Option<FileAnchor> {
     match at {
-        LineAnchor::Whole(_) => Some(LineAnchor::Whole(start)),
-        LineAnchor::Selection(r) => CommentRange::new(start, r.start_char(), end, r.end_char())
-            .ok()
-            .map(LineAnchor::Selection),
+        FileAnchor::File => None,
+        FileAnchor::Line { line, .. } => {
+            let (line, _) = shifted(*line, *line, edits)?;
+            Some(FileAnchor::Line {
+                line,
+                line_text: None,
+            })
+        }
+        FileAnchor::Range { range, .. } => {
+            let (start, end) = shifted(range.start_line(), range.end_line(), edits)?;
+            CommentRange::new(start, range.start_char(), end, range.end_char())
+                .ok()
+                .map(|range| FileAnchor::Range {
+                    range,
+                    line_text: None,
+                })
+        }
     }
+}
+
+/// The lines from `first` to `last`, which count from 1, moved through
+/// `edits`.
+fn shifted(first: u64, last: u64, edits: &[Edit]) -> Option<(u64, u64)> {
+    let span = u32::try_from(first).ok()?.checked_sub(1)?..u32::try_from(last).ok()?;
+    let moved = position::shift(&span, edits)?;
+    Some((u64::from(moved.start) + 1, u64::from(moved.end)))
 }

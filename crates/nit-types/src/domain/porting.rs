@@ -20,7 +20,7 @@ pub struct ThreadOrigin {
 /// between them: the same lines when the diff left them alone, shifted
 /// lines when it inserted or deleted lines above them, and the next place
 /// up (the file, then the change) when it rewrote those lines or dropped
-/// the file. A ported line anchor contains no `line_text`.
+/// the file. A ported line or range anchor contains no `line_text`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema)]

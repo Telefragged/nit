@@ -332,12 +332,15 @@ fn comment_on_an_attachment_line_snapshots_its_text() {
         &json!({
             "body": "why?",
             "revision": 0,
-            "anchor": { "line": { "file": "/attachments/notes.txt", "side": "new", "at": { "whole": 2 } } },
+            "anchor": { "file": {"path": "/attachments/notes.txt", "side": "new", "anchor": {"line": {"line": 2}}} },
         }),
     );
 
     assert_eq!(st, 200, "{thread}");
-    assert_eq!(thread["anchor"]["line"]["line_text"], "second");
+    assert_eq!(
+        thread["anchor"]["file"]["anchor"]["line"]["line_text"],
+        "second"
+    );
 }
 
 fn amend(server: &TestServer, g: &GitRepo) {
@@ -386,7 +389,7 @@ fn comment_on_line(
         &json!({
             "body": "here",
             "revision": 0,
-            "anchor": { "line": { "file": file, "side": side, "at": { "whole": line } } },
+            "anchor": { "file": {"path": file, "side": side, "anchor": {"line": {"line": line}}} },
         }),
     );
     assert_eq!(st, 200, "{thread}");
@@ -422,7 +425,7 @@ fn a_thread_on_an_attachment_ports_through_its_edits() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "line": { "version": "r1", "file": "/attachments/notes.txt", "at": { "whole": 3 } } })
+            json!({ "file": {"version": "r1", "path": "/attachments/notes.txt", "anchor": {"line": {"line": 3}}} })
         ]
     );
 }
@@ -440,7 +443,7 @@ fn a_thread_on_a_carried_attachment_keeps_its_line() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "line": { "version": "r1", "file": "/attachments/notes.txt", "at": { "whole": 2 } } })
+            json!({ "file": {"version": "r1", "path": "/attachments/notes.txt", "anchor": {"line": {"line": 2}}} })
         ]
     );
 }
@@ -650,7 +653,10 @@ fn comment_on_a_base_attachment_line_snapshots_its_text() {
 
     let thread = comment_on_line(&server, change_number, "/attachments/notes.txt", "old", 2);
 
-    assert_eq!(thread["anchor"]["line"]["line_text"], "old second");
+    assert_eq!(
+        thread["anchor"]["file"]["anchor"]["line"]["line_text"],
+        "old second"
+    );
 }
 
 /// A thread on the old side of an attachment ports through the edits
@@ -669,7 +675,7 @@ fn a_thread_on_a_base_attachment_ports_through_its_edits() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "line": { "version": "r1^", "file": "/attachments/notes.txt", "at": { "whole": 3 } } })
+            json!({ "file": {"version": "r1^", "path": "/attachments/notes.txt", "anchor": {"line": {"line": 3}}} })
         ]
     );
 }
