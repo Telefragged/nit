@@ -3,13 +3,14 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { join } from "node:path";
+import { frameScriptPlugin } from "./vite-plugin-frame-script.ts";
 import { genWasmPlugin } from "./vite-plugin-gen-wasm.ts";
 
 // Dev mode: vite serves the frontend with HMR and proxies API calls to the
 // rust backend (`cargo run -- serve`). Production: `vite build` output is
 // served by the backend itself.
 export default defineConfig({
-  plugins: [react(), tailwindcss(), genWasmPlugin()],
+  plugins: [react(), tailwindcss(), genWasmPlugin(), frameScriptPlugin()],
   // The alias that shadcn/ui components import through (components.json).
   resolve: { alias: { "@": join(import.meta.dirname, "src") } },
   build: {

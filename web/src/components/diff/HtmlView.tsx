@@ -12,8 +12,8 @@ import {
   type FrameBox,
   type FrameMessage,
   type PageMessage,
-  withPicker,
 } from "../../lib/framePicker";
+import picker from "../../frame/picker?frame-script";
 import type { Outline } from "../../lib/rendered";
 import { shortcutKey } from "../../lib/shortcutKey";
 import { useUnlinkOnSelection } from "../../lib/useUnlinkOnSelection";
@@ -58,7 +58,12 @@ export default function HtmlView({
 }) {
   const stage = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
-  const srcDoc = useMemo(() => withPicker(html), [html]);
+  // The parser moves a script after the end of the page into its body.
+  const srcDoc = useMemo(
+    () =>
+      `${html}<script>${picker.replaceAll("</script", "<\\/script")}</script>`,
+    [html],
+  );
   const [boxes, setBoxes] = useState<ReadonlyMap<string, FrameBox | null>>();
   const [hover, setHover] = useState<FrameBox | null>(null);
   const [view, setView] = useState({ width: 0, height: 0 });
