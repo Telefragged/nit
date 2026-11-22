@@ -171,7 +171,7 @@ fn a_comment_logged_before_the_anchor_still_reads() {
         "range":{"start_line":3,"start_char":1,"end_line":3,"end_char":4},
         "line_text":"x","body":"this","resolved":null}"#;
     let ranged: CommentInput = serde_json::from_str(ranged).expect("deserialize");
-    let anchor = match *ranged.target() {
+    let anchor = match ranged.target() {
         CommentTarget::Open {
             anchor: LogAnchor::File { anchor, .. },
             ..
@@ -180,7 +180,7 @@ fn a_comment_logged_before_the_anchor_still_reads() {
     };
     assert_eq!(
         anchor,
-        Some(FileAnchor::Range(
+        Some(&FileAnchor::Range(
             CommentRange::new(3, 1, 3, 4).expect("a forward selection")
         ))
     );

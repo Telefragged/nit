@@ -779,7 +779,37 @@ export type LogAnchor =
 /**
  * Where inside a file an anchor sits.
  */
-export type FileAnchor = "file" | { line: number } | { range: CommentRange };
+export type FileAnchor =
+  | "file"
+  | { line: number }
+  | { range: CommentRange }
+  | { region: Shape }
+  | { element: ElementPath };
+
+/**
+ * The outline of an area of an image.
+ */
+export type Shape = { rect: Rect };
+
+/**
+ * A rectangle in the pixels of an image.
+ *
+ * `x` and `y` are its top left corner, 0-based from the top left corner
+ * of the image. It spans `width` pixels to the right and `height` pixels
+ * down.
+ */
+export type Rect = { x: number; y: number; width: number; height: number };
+
+/**
+ * The absolute path of an element in an HTML page, such as
+ * `/html/body/div[2]/p`.
+ *
+ * It has one step per element, from the root element down. A step is the
+ * tag name of the element. When the element has siblings with the same
+ * tag name, a step can add `[n]`, the 1-based position of the element
+ * among them, as an `XPath` step does. A step without `[n]` is the first of them.
+ */
+export type ElementPath = string;
 
 /**
  * The BLAKE3 hash of an attachment's bytes: 64 lowercase hex characters.

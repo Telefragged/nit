@@ -157,6 +157,57 @@ fn threads_of_earlier_revisions_port_to_the_target_trees() {
     assert_eq!(st, 404, "{e}");
 }
 
+#[test]
+fn a_region_or_an_element_ports_only_through_unchanged_bytes() {
+    let g = GitRepo::new();
+    let base = g.commit(
+        &[g.root],
+        "base\n",
+        &[("page.html", "<p>a</p>\n"), ("shot.png", "png 0\n")],
+    );
+    g.branch("main", base);
+    let c1 = g.commit(
+        &[base],
+        &msg("feat: thing", IPORT01),
+        &[("page.html", "<p>b</p>\n"), ("shot.png", "png 1\n")],
+    );
+    g.branch("feat", c1);
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (st, pushed) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{pushed}");
+    let id = tip_change(&pushed)["change_number"].as_u64().unwrap();
+
+    let element = |side| json!({"file": {"path": "page.html", "side": side, "anchor": {"element": "/html/body/p"}}});
+    let region = json!({"file": {"path": "shot.png", "side": "new", "anchor": {"region": {"rect": {"x": 1, "y": 2, "width": 3, "height": 4}}}}});
+    let edited = thread(&server, id, 0, &element("new"), false);
+    let old_side = thread(&server, id, 0, &element("old"), false);
+    let kept = thread(&server, id, 0, &region, false);
+
+    let c2 = g.commit(
+        &[base],
+        &msg("feat: thing", IPORT01),
+        &[("page.html", "<p>c</p>\n"), ("shot.png", "png 1\n")],
+    );
+    g.branch("feat", c2);
+    let (st, pushed) = push(&server, &g, "feat", "main");
+    assert_eq!(st, 200, "{pushed}");
+
+    let (st, p) = ported(&server, id, 1, "");
+    assert_eq!(st, 200, "{p}");
+    assert_eq!(
+        anchor_of(&p, edited),
+        json!({"file": {"version": "r1", "path": "page.html", "anchor": "file"}})
+    );
+    assert_eq!(
+        anchor_of(&p, old_side),
+        json!({"file": {"version": "r1^", "path": "page.html", "anchor": {"element": "/html/body/p"}}})
+    );
+    assert_eq!(
+        anchor_of(&p, kept),
+        json!({"file": {"version": "r1", "path": "shot.png", "anchor": {"region": {"rect": {"x": 1, "y": 2, "width": 3, "height": 4}}}}})
+    );
+}
+
 /// `?against=r{m}` ports to the interdiff's other tree too: `n`'s entries
 /// first, then `m`'s, each thread at its place in that revision.
 #[test]
