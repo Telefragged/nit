@@ -22,6 +22,7 @@ import {
   pendingResolved,
   rangeSince,
   pendingUnresolvedCount,
+  renderedPlacement,
   portThreads,
   shownAt,
   threadCountByRevision,
@@ -297,8 +298,6 @@ describe("commentCountLabel", () => {
   });
 });
 
-// The three anchor kinds answer the range question differently. Only a
-// line anchor can lose its column.
 describe("anchorKind", () => {
   const fileAnchor: Anchor = {
     file: { version: "r0", path: "src/main.rs", anchor: "file" },
@@ -315,6 +314,26 @@ describe("anchorKind", () => {
     expect(threadInRange(fileAnchor, 3, "r2")).toBe(true);
     // A line thread on the same revision has no column in that range.
     expect(threadInRange(anchor("r0", 3), 3, "r2")).toBe(false);
+  });
+
+  it("places a region or an element in the column of its version", () => {
+    const region: Anchor = {
+      file: {
+        version: "r2",
+        path: "ui.png",
+        anchor: { region: { rect: { x: 1, y: 2, width: 3, height: 4 } } },
+      },
+    };
+    const element: Anchor = {
+      file: { version: "r1", path: "a.html", anchor: { element: "/html" } },
+    };
+    expect(anchorKind(region)).toBe("rendered");
+    expect(renderedPlacement(region, 2, "r1")).toEqual({
+      side: "new",
+      at: { region: { rect: { x: 1, y: 2, width: 3, height: 4 } } },
+    });
+    expect(renderedPlacement(element, 2, "r1")?.side).toBe("old");
+    expect(threadInRange(element, 3, "r2")).toBe(false);
   });
 });
 

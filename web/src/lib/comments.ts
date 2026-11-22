@@ -30,11 +30,20 @@ export type LineOrRange = Extract<
   { line: unknown } | { range: unknown }
 >;
 
+export type RenderedAnchor = Extract<
+  FileAnchor,
+  { region: unknown } | { element: unknown }
+>;
+
+export type FilePlace = LineOrRange | RenderedAnchor;
+
 const fileOf = (a: Anchor) => ("file" in a ? a.file : null);
 
-/** Whether `at` covers lines of the file. */
-const isLineOrRange = (at: FileAnchor): at is LineOrRange =>
+export const isLineOrRange = (at: FileAnchor): at is LineOrRange =>
   typeof at === "object" && ("line" in at || "range" in at);
+
+const isRendered = (at: FileAnchor): at is RenderedAnchor =>
+  typeof at === "object" && ("region" in at || "element" in at);
 
 const lineOf = (a: Anchor) => {
   const file = fileOf(a);
@@ -43,13 +52,26 @@ const lineOf = (a: Anchor) => {
     : null;
 };
 
+const renderedOf = (a: Anchor) => {
+  const file = fileOf(a);
+  return file && isRendered(file.anchor)
+    ? { version: file.version, at: file.anchor }
+    : null;
+};
+
 /** Which arm of the anchor union a thread is on. Placement tests this
  * first, and a kind answers it directly: "has no line" is true of a change
  * anchor and a file anchor alike. */
-export type AnchorKind = "change" | "file" | "line";
+export type AnchorKind = "change" | "file" | "line" | "rendered";
 
 export const anchorKind = (a: Anchor): AnchorKind =>
-  "change" in a ? "change" : lineOf(a) ? "line" : "file";
+  "change" in a
+    ? "change"
+    : lineOf(a)
+      ? "line"
+      : renderedOf(a)
+        ? "rendered"
+        : "file";
 
 /** The file of an anchor, or null for a change-level one. */
 export const anchorFile = (a: Anchor): string | null => fileOf(a)?.path ?? null;
@@ -62,8 +84,26 @@ export const anchorRevision = (a: Anchor): number =>
 export const anchorAt = (a: Anchor): LineOrRange | null =>
   lineOf(a)?.at ?? null;
 
-export const lineVersion = (a: Anchor): ChangeVersion | null =>
-  lineOf(a)?.version ?? null;
+export const anchorRendered = (a: Anchor): RenderedAnchor | null =>
+  renderedOf(a)?.at ?? null;
+
+export const placeVersion = (a: Anchor): ChangeVersion | null =>
+  (lineOf(a) ?? renderedOf(a))?.version ?? null;
+
+export function sameRendered(a: RenderedAnchor, b: RenderedAnchor): boolean {
+  if ("element" in a) return "element" in b && a.element === b.element;
+  if (!("region" in b)) return false;
+  const [p, q] = [a.region.rect, b.region.rect];
+  return (
+    p.x === q.x && p.y === q.y && p.width === q.width && p.height === q.height
+  );
+}
+
+export function renderedLabel(at: RenderedAnchor): string {
+  if ("element" in at) return `element ${at.element}`;
+  const { x, y, width, height } = at.region.rect;
+  return `region ${x},${y} ${width}x${height}`;
+}
 
 export const placementLine = (at: LineOrRange): number =>
   "line" in at ? at.line : at.range.end_line;
@@ -187,11 +227,31 @@ export function commentPlacement(
 ): Placement | null {
   const place = lineOf(anchor);
   if (place === null) return null;
-  const line = placementLine(place.at);
-  if (place.version === revisionVersion(selected)) return { side: "new", line };
-  if (place.version === against) return { side: "old", line };
-  return null;
+  const side = versionColumn(place.version, selected, against);
+  return side && { side, line: placementLine(place.at) };
 }
+
+export function renderedPlacement(
+  anchor: Anchor,
+  selected: number,
+  against: ChangeVersion,
+): { side: Side; at: RenderedAnchor } | null {
+  const place = renderedOf(anchor);
+  if (place === null) return null;
+  const side = versionColumn(place.version, selected, against);
+  return side && { side, at: place.at };
+}
+
+const versionColumn = (
+  version: ChangeVersion,
+  selected: number,
+  against: ChangeVersion,
+): Side | null =>
+  version === revisionVersion(selected)
+    ? "new"
+    : version === against
+      ? "old"
+      : null;
 
 /**
  * The version that a diff column of the range `[against] → [selected]`
@@ -210,18 +270,13 @@ export interface DiffRange {
   selected: number;
 }
 
-/** Whether a thread shows in the range `[FROM] → [TO]`. A line thread needs
- * a column there. A change or file thread has no line, so no single tree
- * contains it and it shows in every range. */
 export function threadInRange(
   anchor: Anchor,
   selected: number,
   against: ChangeVersion,
 ): boolean {
-  return (
-    anchorKind(anchor) !== "line" ||
-    commentPlacement(anchor, selected, against) !== null
-  );
+  const version = placeVersion(anchor);
+  return version === null || versionColumn(version, selected, against) !== null;
 }
 
 /**

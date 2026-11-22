@@ -37,12 +37,38 @@ describe("parseLink", () => {
     });
   });
 
+  it("parses a rectangle or an element of the rendered view", () => {
+    expect(parse("file=ui.png&rect=10,20,40,30")).toEqual({
+      file: "ui.png",
+      lines: null,
+      rendered: {
+        side: "new",
+        at: { region: { rect: { x: 10, y: 20, width: 40, height: 30 } } },
+      },
+    });
+    expect(parse("file=a.html&element=/html/body&side=old")).toEqual({
+      file: "a.html",
+      lines: null,
+      rendered: { side: "old", at: { element: "/html/body" } },
+    });
+    expect(parse("file=ui.png&rect=10,20,0,30")).toEqual({
+      file: "ui.png",
+      lines: null,
+    });
+    expect(parse("file=a.html&element=body")).toEqual({
+      file: "a.html",
+      lines: null,
+    });
+  });
+
   it("is the inverse of linkParams", () => {
     for (const query of [
       "file=a.rs",
       "file=a.rs&line=7",
       "file=a&line=4-9",
       "file=a.md&line=6&chars=2-5",
+      "file=ui.png&rect=1,2,3,4",
+      "file=a.html&element=/html/body/div[2]&side=old",
       "thread=42",
     ]) {
       const link = parse(query);

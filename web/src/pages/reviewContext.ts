@@ -2,9 +2,12 @@ import { createContext, useContext } from "react";
 import type { Side, ChangeVersion, Whitespace } from "../api/types";
 import type { DiffLink } from "../lib/diffLink";
 import {
+  isLineOrRange,
   placementLine,
   rangeOf,
+  sameRendered,
   type DiffRange,
+  type FilePlace,
   type LineOrRange,
 } from "../lib/comments";
 
@@ -12,16 +15,17 @@ import {
 export interface DraftTarget {
   file: string;
   side: Side;
-  at: LineOrRange;
+  at: FilePlace;
 }
 
-/** The line a target hangs under. A selection ends on that line. */
-export const targetLine = (t: DraftTarget) => placementLine(t.at);
+export const targetLine = (t: DraftTarget) =>
+  isLineOrRange(t.at) ? placementLine(t.at) : null;
 
 /** The selection a target holds, if it holds one. */
-export const targetRange = (t: DraftTarget) => rangeOf(t.at);
+export const targetRange = (t: DraftTarget) =>
+  isLineOrRange(t.at) ? rangeOf(t.at) : null;
 
-const sameAt = (a: LineOrRange, b: LineOrRange) =>
+const sameLines = (a: LineOrRange, b: LineOrRange) =>
   "line" in a
     ? "line" in b && a.line === b.line
     : "range" in b &&
@@ -29,6 +33,11 @@ const sameAt = (a: LineOrRange, b: LineOrRange) =>
       a.range.start_char === b.range.start_char &&
       a.range.end_line === b.range.end_line &&
       a.range.end_char === b.range.end_char;
+
+const sameAt = (a: FilePlace, b: FilePlace) =>
+  isLineOrRange(a)
+    ? isLineOrRange(b) && sameLines(a, b)
+    : !isLineOrRange(b) && sameRendered(a, b);
 
 /** Whole-anchor equality. A same-line target with a different selection
  * is a different target, so the editor re-anchors. */

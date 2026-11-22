@@ -850,6 +850,19 @@ const captures = [
     },
   },
   {
+    name: "review-region-editor",
+    path: "/changes/12?against=base&file=/attachments/web/screenshots/flow.svg&rect=246,26,108,68",
+    fullPage: false,
+    actions: async (page) => {
+      await untilDom(page, () => !!document.querySelector(".outline-linked"));
+      await page.keyboard.press("c");
+      await fillNow(
+        page.locator(".floating-panel textarea"),
+        "Label the arrow with the request that it stands for.",
+      );
+    },
+  },
+  {
     name: "review-draft-editor",
     path: "/changes/11?against=base",
     actions: async (page) => {

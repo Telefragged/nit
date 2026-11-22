@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { createDraft, deleteDraft, updateDraft } from "../api/client";
 import type { Draft, ThreadComment } from "../api/types";
-import type { UiThread } from "../lib/comments";
+import type { AnchorKind, UiThread } from "../lib/comments";
 import {
   anchorKind,
   anchorRevision,
@@ -190,6 +190,11 @@ function ThreadState({
   );
 }
 
+const LOST: Partial<Record<AnchorKind, string>> = {
+  line: "line rewritten",
+  rendered: "file changed",
+};
+
 /**
  * A comment thread: published comments + pending drafts, with reply / resolve
  * / reopen actions. Resolve is one click — it drafts an empty resolution-only
@@ -247,10 +252,11 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
   const since = rangeSince(thread.anchor, selected, against, latestRevision);
   const revision = anchorRevision(thread.anchor);
   // A ported line thread whose lines the amend rewrote is shown on its file.
-  const lineLost =
-    thread.ported !== undefined &&
-    anchorKind(thread.anchor) === "line" &&
-    anchorKind(thread.ported) !== "line";
+  const kind = anchorKind(thread.anchor);
+  const lost =
+    thread.ported && anchorKind(thread.ported) !== kind
+      ? LOST[kind]
+      : undefined;
 
   const classes = `thread${isDraftThread ? " thread-draft" : ""}${
     linked ? " thread-linked" : ""
@@ -324,7 +330,7 @@ export default function CommentThread({ thread }: { thread: UiThread }) {
           }}
         >
           ported from r{revision}
-          {lineLost ? ", line rewritten" : ""}
+          {lost ? `, ${lost}` : ""}
         </Button>
       ) : null}
       {state}

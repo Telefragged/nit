@@ -1,4 +1,5 @@
 import type { Side } from "../api/types";
+import type { RenderedAnchor } from "./comments";
 
 /** Lines `start` through `end` on one side of a file's diff. Both ends are
  * inclusive, and `start` never exceeds `end`. `chars`, when set, narrows
@@ -12,12 +13,14 @@ interface LineSpan {
   chars?: [number, number];
 }
 
-/** A place in the diff that a link points at: a whole file, or a span of
- * its lines. */
-export interface FileLink {
-  file: string;
-  lines: LineSpan | null;
+interface RenderedSpan {
+  side: Side;
+  at: RenderedAnchor;
 }
+
+export type FileLink =
+  | { file: string; lines: LineSpan | null; rendered?: undefined }
+  | { file: string; lines: null; rendered: RenderedSpan };
 
 /** A file link that names a span of lines. */
 export type LinkSpan = FileLink & { lines: LineSpan };
@@ -31,6 +34,24 @@ interface ThreadLink {
 export type DiffLink = FileLink | ThreadLink;
 
 const LINE = /^(\d+)(?:-(\d+))?$/;
+
+const RECT = /^(\d+),(\d+),(\d+),(\d+)$/;
+
+function parseRendered(params: URLSearchParams): RenderedAnchor | undefined {
+  const element = params.get("element");
+  if (element?.startsWith("/")) return { element };
+  const m = RECT.exec(params.get("rect") ?? "");
+  if (!m) return undefined;
+  const [x, y, width, height] = m.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  return width > 0 && height > 0
+    ? { region: { rect: { x, y, width, height } } }
+    : undefined;
+}
 
 /** A range of characters written as `A-B`, or undefined when `text` is
  * not one. */
@@ -53,6 +74,9 @@ export function parseLink(params: URLSearchParams): DiffLink | null {
   if (thread) return { thread: Number(thread[0]) };
   const file = params.get("file");
   if (file === null) return null;
+  const side: Side = params.get("side") === "old" ? "old" : "new";
+  const rendered = parseRendered(params);
+  if (rendered) return { file, lines: null, rendered: { side, at: rendered } };
   const m = LINE.exec(params.get("line") ?? "");
   if (!m) return { file, lines: null };
   const a = Number(m[1]);
@@ -61,7 +85,7 @@ export function parseLink(params: URLSearchParams): DiffLink | null {
   return {
     file,
     lines: {
-      side: params.get("side") === "old" ? "old" : "new",
+      side,
       start: Math.min(a, b),
       end: Math.max(a, b),
       ...(chars && { chars }),
@@ -78,12 +102,18 @@ export function linkParams(link: DiffLink): Record<string, string | null> {
       line: null,
       chars: null,
       side: null,
+      rect: null,
+      element: null,
     };
   }
-  const { lines } = link;
+  const { lines, rendered } = link;
+  const at = rendered?.at;
+  const rect = at && "region" in at ? at.region.rect : null;
   return {
     thread: null,
     file: link.file,
+    rect: rect && `${rect.x},${rect.y},${rect.width},${rect.height}`,
+    element: at && "element" in at ? at.element : null,
     line:
       lines === null
         ? null
@@ -91,7 +121,7 @@ export function linkParams(link: DiffLink): Record<string, string | null> {
           ? String(lines.start)
           : `${lines.start}-${lines.end}`,
     chars: lines?.chars ? lines.chars.join("-") : null,
-    side: lines?.side === "old" ? "old" : null,
+    side: (lines ?? rendered)?.side === "old" ? "old" : null,
   };
 }
 

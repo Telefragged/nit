@@ -1,7 +1,8 @@
 // How the review page renders a file in place of its lines.
 
-import type { Line, Side } from "../api/types";
+import type { Line, Rect, Side } from "../api/types";
 import type { ReviewFile } from "./attachments";
+import type { RenderedAnchor, ThreadMark } from "./comments";
 import { splitExtension } from "./diffview";
 
 /** How a file renders in place of its lines. */
@@ -46,3 +47,32 @@ export const sideText = (lines: readonly Line[], side: Side) =>
   lines
     .flatMap((line) => (line[side] === undefined ? [] : [line.text]))
     .join("\n");
+
+export const renderedSide = (file: ReviewFile): Side =>
+  file.status === "deleted" ? "old" : "new";
+
+export const showsAnchor = (kind: RenderedKind, at: RenderedAnchor) =>
+  "region" in at ? kind === "image" : kind === "html";
+
+export interface Outline {
+  at: RenderedAnchor;
+  form: ThreadMark | "linked" | "editing";
+  threads: number[];
+  active: boolean;
+}
+
+export const plainOutline = (
+  at: RenderedAnchor,
+  form: Outline["form"],
+): Outline => ({ at, form, threads: [], active: false });
+
+export function rectBetween(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): Rect | null {
+  const width = Math.abs(a.x - b.x);
+  const height = Math.abs(a.y - b.y);
+  return width > 0 && height > 0
+    ? { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width, height }
+    : null;
+}

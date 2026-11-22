@@ -8,7 +8,7 @@ export default function NewThreadButton({
   onClick,
   className,
 }: {
-  anchor: Exclude<AnchorKind, "line">;
+  anchor: Exclude<AnchorKind, "line" | "rendered">;
   onClick: () => void;
   className?: string;
 }) {
