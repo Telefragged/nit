@@ -23,7 +23,7 @@ export const targetRange = (t: DraftTarget) => rangeOf(t.at);
 
 const sameAt = (a: LineOrRange, b: LineOrRange) =>
   "line" in a
-    ? "line" in b && a.line.line === b.line.line
+    ? "line" in b && a.line === b.line
     : "range" in b &&
       a.range.start_line === b.range.start_line &&
       a.range.start_char === b.range.start_char &&

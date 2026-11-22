@@ -319,30 +319,6 @@ fn collect_deletes_stray_files() {
     assert!(!rowless.exists());
 }
 
-/// A comment on a line of a text attachment snapshots that line.
-#[test]
-fn comment_on_an_attachment_line_snapshots_its_text() {
-    let g = GitRepo::new();
-    let (server, change_number) = server_with_change(&g);
-    let text = upload(&server, b"first\nsecond\n");
-    attach(&server, change_number, 0, "notes.txt", &text);
-
-    let (st, thread) = http_post(
-        &server.url(&format!("/api/changes/{change_number}/comments")),
-        &json!({
-            "body": "why?",
-            "revision": 0,
-            "anchor": { "file": {"path": "/attachments/notes.txt", "side": "new", "anchor": {"line": {"line": 2}}} },
-        }),
-    );
-
-    assert_eq!(st, 200, "{thread}");
-    assert_eq!(
-        thread["anchor"]["file"]["anchor"]["line"]["line_text"],
-        "second"
-    );
-}
-
 fn amend(server: &TestServer, g: &GitRepo) {
     let amended = g.commit(&[g.root], &msg("one", I001), &[("a.txt", "b\n")]);
     g.branch("feat", amended);
@@ -389,7 +365,7 @@ fn comment_on_line(
         &json!({
             "body": "here",
             "revision": 0,
-            "anchor": { "file": {"path": file, "side": side, "anchor": {"line": {"line": line}}} },
+            "anchor": { "file": {"path": file, "side": side, "anchor": {"line": line}} },
         }),
     );
     assert_eq!(st, 200, "{thread}");
@@ -425,7 +401,7 @@ fn a_thread_on_an_attachment_ports_through_its_edits() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "file": {"version": "r1", "path": "/attachments/notes.txt", "anchor": {"line": {"line": 3}}} })
+            json!({ "file": {"version": "r1", "path": "/attachments/notes.txt", "anchor": {"line": 3}} })
         ]
     );
 }
@@ -443,7 +419,7 @@ fn a_thread_on_a_carried_attachment_keeps_its_line() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "file": {"version": "r1", "path": "/attachments/notes.txt", "anchor": {"line": {"line": 2}}} })
+            json!({ "file": {"version": "r1", "path": "/attachments/notes.txt", "anchor": {"line": 2}} })
         ]
     );
 }
@@ -640,25 +616,6 @@ fn lines_of_a_base_attachment() {
     assert_eq!(texts, ["a", "b"]);
 }
 
-/// A comment on the old side of an attachment snapshots the line of the
-/// base attachment.
-#[test]
-fn comment_on_a_base_attachment_line_snapshots_its_text() {
-    let g = GitRepo::new();
-    let (server, change_number) = server_with_change(&g);
-    let before = upload(&server, b"old first\nold second\n");
-    let after = upload(&server, b"new first\n");
-    attach_to_base(&server, change_number, 0, "notes.txt", &before);
-    attach(&server, change_number, 0, "notes.txt", &after);
-
-    let thread = comment_on_line(&server, change_number, "/attachments/notes.txt", "old", 2);
-
-    assert_eq!(
-        thread["anchor"]["file"]["anchor"]["line"]["line_text"],
-        "old second"
-    );
-}
-
 /// A thread on the old side of an attachment ports through the edits
 /// between the base attachments of the two revisions.
 #[test]
@@ -675,7 +632,7 @@ fn a_thread_on_a_base_attachment_ports_through_its_edits() {
     assert_eq!(
         ported_anchors(&server, change_number, 1),
         [
-            json!({ "file": {"version": "r1^", "path": "/attachments/notes.txt", "anchor": {"line": {"line": 3}}} })
+            json!({ "file": {"version": "r1^", "path": "/attachments/notes.txt", "anchor": {"line": 3}} })
         ]
     );
 }

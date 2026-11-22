@@ -64,7 +64,7 @@ const FILES: ReviewFile[] = [
 ];
 
 const line = (path: string, line: number) => ({
-  file: { version: "r1" as const, path, anchor: { line: { line } } },
+  file: { version: "r1" as const, path, anchor: { line } },
 });
 
 const THREADS = new Map<string, UiThread[]>([

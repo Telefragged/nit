@@ -55,7 +55,6 @@ import {
   anchorRevision,
   commentPlacement,
   firstLine,
-  anchorLineText,
   assembleThreads,
   commentCountLabel,
   nodeActivity,
@@ -90,7 +89,6 @@ import {
   type LinkSpan,
 } from "../lib/diffLink";
 import { displayPath, fileAt, fileDomId, treeOrder } from "../lib/diffview";
-import { highlight } from "../lib/highlight";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt, scrollBehavior } from "../lib/scrollspy";
 import { plainClick, shortcutKey } from "../lib/shortcutKey";
@@ -693,7 +691,7 @@ export default function ReviewPage() {
         } else if (linked?.lines) {
           const { side, start, end, chars } = linked.lines;
           if (start === end && !chars) {
-            result = { file: linked.file, side, at: { line: { line: start } } };
+            result = { file: linked.file, side, at: { line: start } };
           } else {
             range = linesRange({ file: linked.file, lines: linked.lines });
             result = range && selectionTarget(range, side);
@@ -1155,22 +1153,14 @@ export default function ReviewPage() {
                       {displayPath(path)}
                     </div>
                     {fileThreads.map((t) => {
-                      const lineText = anchorLineText(t.anchor);
                       const at = anchorAt(t.anchor);
-                      const line = at && placementLine(at);
                       return (
                         <div className="thread-group-item" key={threadKey(t)}>
-                          {lineText ? (
+                          {at ? (
                             <div className="line-excerpt">
                               <span className="excerpt-line">
-                                r{anchorRevision(t.anchor)}
-                                {line !== null ? `:${line}` : ""}
+                                r{anchorRevision(t.anchor)}:{placementLine(at)}
                               </span>
-                              <span
-                                dangerouslySetInnerHTML={{
-                                  __html: highlight(lineText, null),
-                                }}
-                              />
                             </div>
                           ) : null}
                           <CommentThread thread={t} />

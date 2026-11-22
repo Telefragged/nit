@@ -396,7 +396,7 @@ export type DraftDecision = { decision: Decision; message: string };
  * between them: the same lines when the diff left them alone, shifted
  * lines when it inserted or deleted lines above them, and the next place
  * up (the file, then the change) when it rewrote those lines or dropped
- * the file. A ported line or range anchor contains no `line_text`.
+ * the file.
  */
 export type PortedComment = { thread_id: number; anchor: Anchor };
 
@@ -443,7 +443,7 @@ export type NewDraft =
   | {
       thread: {
         /**
-         * The anchor of the thread, with `line_text` unset.
+         * The anchor of the thread.
          */
         anchor: Anchor;
         body: string;
@@ -807,22 +807,8 @@ export type LogAnchor =
 
 /**
  * Where inside a file an anchor sits.
- *
- * `line_text` is a copy of the line that a line or range anchor ends on,
- * as the version of the anchor contains it.
  */
-export type FileAnchor =
-  | "file"
-  | { line: { line: number; line_text?: string } }
-  | {
-      range: {
-        line_text?: string;
-        start_line: number;
-        start_char: number;
-        end_line: number;
-        end_char: number;
-      };
-    };
+export type FileAnchor = "file" | { line: number } | { range: CommentRange };
 
 /**
  * The BLAKE3 hash of an attachment's bytes: 64 lowercase hex characters.

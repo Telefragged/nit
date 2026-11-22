@@ -99,8 +99,8 @@ fn anchored(change: ChangeNumber, comment: &CommentInput) -> Option<(FileKey, Si
     };
     let covered = match anchor {
         FileAnchor::File => return None,
-        FileAnchor::Line { line, .. } => (*line, *line, None, None),
-        FileAnchor::Range { range: r, .. } => (
+        FileAnchor::Line(line) => (*line, *line, None, None),
+        FileAnchor::Range(r) => (
             r.start_line(),
             r.end_line(),
             Some(r.start_char()),
@@ -270,38 +270,18 @@ mod tests {
                 verdict: Verdict::RequestChanges,
                 message: String::new(),
                 comments: vec![
-                    comment(
-                        0,
-                        FileAnchor::Line {
-                            line: 2,
-                            line_text: None,
-                        },
-                        "Bounded channel.",
-                    ),
+                    comment(0, FileAnchor::Line(2), "Bounded channel."),
                     comment(
                         1,
-                        FileAnchor::Range {
-                            range,
-                            line_text: None,
-                        },
+                        FileAnchor::Range(range),
                         "Spans two lines.\nSecond line.",
                     ),
                     comment(
                         2,
-                        FileAnchor::Line {
-                            line: 3,
-                            line_text: None,
-                        },
+                        FileAnchor::Line(3),
                         "A one-line body too long to fit after the underline.",
                     ),
-                    comment(
-                        3,
-                        FileAnchor::Line {
-                            line: 40,
-                            line_text: None,
-                        },
-                        "Past the end.",
-                    ),
+                    comment(3, FileAnchor::Line(40), "Past the end."),
                 ],
             }),
         };

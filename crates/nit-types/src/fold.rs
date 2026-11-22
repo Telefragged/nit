@@ -305,10 +305,7 @@ mod tests {
             anchor: Some(LogAnchor::File {
                 path: file.to_string(),
                 side: Side::New,
-                anchor: FileAnchor::Line {
-                    line,
-                    line_text: None,
-                },
+                anchor: FileAnchor::Line(line),
             }),
             body: body.to_string(),
             resolved: None,

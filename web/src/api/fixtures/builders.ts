@@ -21,7 +21,7 @@ export const uiThread = (
   over: Partial<UiThread> & { id: number | null },
 ): UiThread => ({
   anchor: {
-    file: { version: "r1", path: "src/main.rs", anchor: { line: { line: 1 } } },
+    file: { version: "r1", path: "src/main.rs", anchor: { line: 1 } },
   },
   resolved: false,
   comments: [],

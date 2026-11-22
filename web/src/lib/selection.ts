@@ -64,7 +64,7 @@ const linesAnchor = (
   endChar: number,
 ): LineOrRange =>
   start === end
-    ? { line: { line: start } }
+    ? { line: start }
     : {
         range: {
           start_line: start,
@@ -359,7 +359,7 @@ export function selectionTarget(
   if (cells.length === 1) {
     startChar = Math.min(startChar, endChar);
     if (startChar === endChar) {
-      return { file: path, side, at: { line: { line } } };
+      return { file: path, side, at: { line } };
     }
   }
   return {

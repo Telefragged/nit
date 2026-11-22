@@ -179,8 +179,6 @@ struct LoggedComment {
     #[serde(default)]
     side: Option<Side>,
     #[serde(default)]
-    line_text: Option<String>,
-    #[serde(default)]
     range: Option<CommentRange>,
     body: String,
     #[serde(default)]
@@ -198,7 +196,7 @@ impl From<LoggedComment> for CommentInput {
                 Some(path) => Some(LogAnchor::File {
                     path,
                     side,
-                    anchor: FileAnchor::from_parts(c.range, c.line, c.line_text),
+                    anchor: FileAnchor::from_parts(c.range, c.line),
                 }),
                 None if c.range.is_none() && c.line.is_none() => Some(LogAnchor::Change),
                 None => None,

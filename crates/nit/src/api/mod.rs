@@ -40,14 +40,11 @@ use axum::Json;
 use axum::Router;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use git2::Repository;
-use rusqlite::Connection;
 
 use nit_types::domain::Anchor;
 use nit_types::domain::ChangeNumber;
 use nit_types::domain::ChangeProjection;
 use nit_types::domain::ChangeVersion;
-use nit_types::domain::RevisionProjection;
 use nit_types::health::Health;
 
 pub use attachments::Collected;
@@ -270,30 +267,24 @@ async fn health() -> Json<Health> {
 /// many commits.
 pub const MERGED_WINDOW: u64 = 5;
 
-/// Returns the anchor of a new thread, with the text of its line.
+/// Returns the anchor of a new thread, checked against `change`.
 ///
 /// The synthetic commit-message file is the route's own rule. The base of
 /// a revision is its parent commit, and the parent commit contains no
-/// commit message of this change. So that file has no base version. The
-/// base of an attachment is the base attachment of the revision.
+/// commit message of this change. So that file has no base version.
 ///
 /// # Errors
 ///
 /// A bad request when `change` has no revision of the anchor, or when the
 /// anchor is on the base version of the commit message.
-fn new_thread_anchor(
-    state: &AppState,
-    conn: &Connection,
-    change: &ChangeProjection,
-    mut anchor: Anchor,
-) -> Result<Anchor, Error> {
+fn new_thread_anchor(change: &ChangeProjection, anchor: Anchor) -> Result<Anchor, Error> {
     let number = anchor.revision();
-    let revision = change.revision(number).ok_or_else(|| {
-        Error::bad_request(format!(
+    if change.revision(number).is_none() {
+        return Err(Error::bad_request(format!(
             "revision {number} is absent from change {}",
             change.id
-        ))
-    })?;
+        )));
+    }
     if let Anchor::File {
         version: ChangeVersion::Base(_),
         path,
@@ -303,40 +294,5 @@ fn new_thread_anchor(
     {
         return Err(Error::bad_request(format!("{path} has no base version")));
     }
-    let git_dir = state::git_dir(conn, change.repo_id)?;
-    let text = line_text(state.blobs(), &git_dir, change, revision, &anchor);
-    anchor.snapshot_line_text(text);
     Ok(anchor)
-}
-
-fn line_text(
-    blobs: &attachments::Blobs,
-    git_dir: &str,
-    change: &ChangeProjection,
-    revision: &RevisionProjection,
-    anchor: &Anchor,
-) -> Option<String> {
-    let Anchor::File {
-        version,
-        path: file,
-        anchor,
-    } = anchor
-    else {
-        return None;
-    };
-    let line = anchor.end_line()?;
-    if file == diff::COMMIT_MSG_PATH {
-        return diff::nth_line(&revision.message, line);
-    }
-    if let Some(name) = diff::attachment_name(file) {
-        let attachment = change.attachment_at(*version, name)?;
-        return diff::nth_line(&blobs.text(&attachment.hash)?, line);
-    }
-    let sha = match version {
-        ChangeVersion::Base(_) => &revision.parent_sha,
-        ChangeVersion::Revision(_) => &revision.commit_sha,
-    };
-    Repository::open(git_dir).ok().and_then(|repo| {
-        diff::commit_tree(&repo, sha).and_then(|t| diff::line_text(&repo, &t, file, line))
-    })
 }

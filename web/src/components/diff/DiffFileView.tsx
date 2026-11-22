@@ -20,7 +20,6 @@ import {
 import {
   anchorAt,
   anchorKind,
-  anchorLineText,
   anchorRange,
   lineVersion,
   commentPlacement,
@@ -502,7 +501,7 @@ export default function DiffFileView({
 
   const lineHover = (side: Side, no: number | undefined) => {
     const at = hovered?.side === side ? hovered.at : null;
-    return at && "line" in at && at.line.line === no ? " line-hover" : "";
+    return at && "line" in at && at.line === no ? " line-hover" : "";
   };
 
   const { linked, press } = useLineDrag(file.path, sectionRef);
@@ -1011,7 +1010,6 @@ export default function DiffFileView({
                     <span className="excerpt-line">
                       {lineVersion(shownAt(t))}
                     </span>
-                    <Code text={anchorLineText(t.anchor) ?? ""} lang={lang} />
                   </div>
                   <CommentThread thread={t} />
                 </div>

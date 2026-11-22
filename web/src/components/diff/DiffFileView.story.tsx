@@ -77,10 +77,10 @@ const at = (line: LineOrRange): Anchor => ({
 const THREADS: UiThread[] = [
   uiThread({
     id: null,
-    anchor: at({ line: { line: 20 } }),
+    anchor: at({ line: 20 }),
     drafts: [
       draft({
-        anchor: at({ line: { line: 20 } }),
+        anchor: at({ line: 20 }),
         body: "Every caller has to handle the `Result`. Make sure that none unwraps it silently.",
       }),
     ],
@@ -88,7 +88,7 @@ const THREADS: UiThread[] = [
   uiThread({
     id: 4,
     resolved: true,
-    anchor: at({ line: { line: 24 } }),
+    anchor: at({ line: 24 }),
     comments: [
       threadComment(
         21 * 60,

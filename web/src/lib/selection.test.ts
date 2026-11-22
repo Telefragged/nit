@@ -159,7 +159,7 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(rangeOf(t, 3, t, 3))).toEqual({
       file: "src/a.rs",
       side: "new",
-      at: { line: { line: 14 } },
+      at: { line: 14 },
     });
   });
 
@@ -227,7 +227,7 @@ describe("selectionTarget, unified layout", () => {
     expect(selectionTarget(rangeOf(t, 0, t, 1))).toEqual({
       file: "src/a.rs",
       side: "new",
-      at: { line: { line: 14 } },
+      at: { line: 14 },
     });
   });
 });
@@ -439,7 +439,7 @@ describe("a rendered Markdown block", () => {
     if (!a?.firstChild || !bcd?.firstChild) throw new Error("no cells");
     expect(
       selectionTarget(rangeOf(a.firstChild, 0, bcd.firstChild, 1)),
-    ).toEqual({ ...target, at: { line: { line: 6 } } });
+    ).toEqual({ ...target, at: { line: 6 } });
   });
 
   it("targets the code line that contains a selection", () => {
@@ -447,7 +447,7 @@ describe("a rendered Markdown block", () => {
     if (!line) throw new Error("no code line");
     expect(selectionTarget(rangeOf(line, 0, line, 3))).toEqual({
       ...target,
-      at: { line: { line: 11 } },
+      at: { line: 11 },
     });
   });
 
@@ -478,7 +478,7 @@ describe("a rendered Markdown block", () => {
       at: { range: { ...anchor.range, start_line: 1 } },
     });
     expect(linked(3, 3)).toBeNull();
-    expect(linked(11, 11)).toEqual({ ...target, at: { line: { line: 11 } } });
+    expect(linked(11, 11)).toEqual({ ...target, at: { line: 11 } });
     expect(linked(6, 6, [6, 9])).toEqual({
       ...target,
       at: {

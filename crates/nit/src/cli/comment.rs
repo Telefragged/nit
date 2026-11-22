@@ -76,7 +76,7 @@ pub fn comment(args: CommentArgs) -> Result<()> {
         .range
         .map(|spec| parse_comment_range(&spec))
         .transpose()?;
-    let anchor = FileAnchor::from_parts(range, args.line, None);
+    let anchor = FileAnchor::from_parts(range, args.line);
     let body = match args.message_file {
         Some(path) => read_body(&path)?,
         None => args.message.unwrap_or_default(),
