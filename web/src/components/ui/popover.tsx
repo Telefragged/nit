@@ -15,7 +15,11 @@ export function PopoverContent({
 }: PopoverPrimitive.Popup.Props) {
   return (
     <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Positioner align="end" sideOffset={6} className="z-50">
+      <PopoverPrimitive.Positioner
+        align="end"
+        sideOffset={6}
+        className="z-(--z-overlay)"
+      >
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(

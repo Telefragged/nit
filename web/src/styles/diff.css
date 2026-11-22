@@ -250,9 +250,7 @@
    act is to select again, right underneath it. */
 .selection-miss {
   position: absolute;
-
-  /* over the sticky file headers (10), under the sticky diffbar (20) */
-  z-index: 15;
+  z-index: var(--z-file-popup);
 
   /* `right` only caps the width — `left` wins the placement — so a bubble
      anchored in a narrow column shrinks instead of overhanging the page. */

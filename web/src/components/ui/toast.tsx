@@ -11,7 +11,7 @@ export function Toaster() {
   const { toasts } = ToastPrimitive.useToastManager();
   return (
     <ToastPrimitive.Portal>
-      <ToastPrimitive.Viewport className="fixed right-4 bottom-4 z-50 flex w-80 flex-col gap-2 outline-none">
+      <ToastPrimitive.Viewport className="fixed right-4 bottom-4 z-(--z-overlay) flex w-80 flex-col gap-2 outline-none">
         {toasts.map((toast) => (
           <ToastPrimitive.Root
             key={toast.id}

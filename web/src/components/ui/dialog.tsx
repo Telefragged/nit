@@ -14,12 +14,12 @@ export function DialogContent({
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop
         data-slot="dialog-overlay"
-        className="fixed inset-0 z-50 bg-scrim"
+        className="fixed inset-0 z-(--z-overlay) bg-scrim"
       />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 flex max-w-[calc(100vw-48px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-input bg-card shadow-overlay outline-none",
+          "fixed top-1/2 left-1/2 z-(--z-overlay) flex max-w-[calc(100vw-48px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-input bg-card shadow-overlay outline-none",
           className,
         )}
         {...props}
