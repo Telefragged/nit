@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   add,
+  addedFile,
   attachedFile,
   ctx as both,
   del,
@@ -759,5 +760,34 @@ describe("a rendered image", () => {
         at: { region: { rect: { x: 10, y: 20, width: 40, height: 30 } } },
       },
     });
+  });
+});
+
+describe("the view of a file that renders", () => {
+  const page = addedFile("page.html", "<p>x</p>");
+  const element: DiffLink = {
+    file: page.path,
+    lines: null,
+    rendered: { side: "new", at: { element: "/html/body/p" } },
+  };
+
+  it("is the raw view, until a link specifies an element", () => {
+    const { container, rerender } = render(tree("unified", page));
+    expect(container.querySelector(".frame-stage")).toBeNull();
+    rerender(tree("unified", page, [], undefined, { ...ctx, link: element }));
+    expect(container.querySelector(".frame-stage")).not.toBeNull();
+  });
+
+  it("unlinks the element when the reviewer chooses the raw view", () => {
+    const selectLink = vi.fn();
+    render(
+      tree("unified", page, [], undefined, {
+        ...ctx,
+        link: element,
+        selectLink,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Raw" }));
+    expect(selectLink).toHaveBeenCalledWith({ file: page.path, lines: null });
   });
 });

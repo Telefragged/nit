@@ -1,7 +1,7 @@
 import { MessageSquare } from "lucide-react";
 import { type CSSProperties, type ReactNode, useRef, useState } from "react";
 import type { Rect } from "../../api/types";
-import { type RenderedAnchor, sameRendered } from "../../lib/comments";
+import type { RenderedAnchor } from "../../lib/comments";
 import { type Outline, plainOutline, rectBetween } from "../../lib/rendered";
 import { plainClick } from "../../lib/shortcutKey";
 import { useUnlinkOnSelection } from "../../lib/useUnlinkOnSelection";
@@ -97,15 +97,17 @@ export default function ImageView({
     loaded === "failed" || loaded?.width === 0 || loaded?.height === 0
       ? null
       : loaded;
-  const [drag, setDrag] = useState<Rect | null>(null);
-  const dragged: RenderedAnchor | null = drag && { region: { rect: drag } };
-  if (
-    dragged &&
-    outlines.some((o) => o.form === "linked" && sameRendered(o.at, dragged))
-  )
-    setDrag(null);
+  const linkedAt = outlines.find((o) => o.form === "linked")?.at ?? null;
+  const [pendingDrag, setPendingDrag] = useState<{
+    rect: Rect;
+    linkAtStart: RenderedAnchor | null;
+  } | null>(null);
+  const dragged: RenderedAnchor | null =
+    pendingDrag?.linkAtStart === linkedAt
+      ? { region: { rect: pendingDrag.rect } }
+      : null;
 
-  const linked = outlines.some((o) => o.form === "linked");
+  const linked = linkedAt !== null;
   useUnlinkOnSelection(stage, linked, () => {
     onLink(null);
   });
@@ -154,7 +156,7 @@ export default function ImageView({
             let rect: Rect | null = null;
             const move = (ev: MouseEvent) => {
               rect = rectBetween(start, pixel(ev, img, size));
-              setDrag(rect);
+              setPendingDrag(rect && { rect, linkAtStart: linkedAt });
             };
             document.addEventListener("mousemove", move);
             document.addEventListener(
@@ -164,7 +166,7 @@ export default function ImageView({
                 if (rect) {
                   onLink({ region: { rect } });
                 } else {
-                  setDrag(null);
+                  setPendingDrag(null);
                   if (linked) onLink(null);
                 }
               },
