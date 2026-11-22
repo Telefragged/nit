@@ -222,6 +222,57 @@ fn comment_opens_replies_resolves() {
     assert!(!on_file.contains("a.txt:"), "no line: {on_file}");
 }
 
+#[test]
+fn comment_on_a_rect_and_an_element() {
+    let g = GitRepo::new();
+    let c1 = g.commit(&[g.root], &msg("core: add a", IA), &[("a.txt", "a\nb\n")]);
+    g.branch("feat", c1);
+    g.repo.set_head("refs/heads/feat").unwrap();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    let (ok, _push, stderr) = nit_register(&server, &g);
+    assert!(ok, "{stderr}");
+    for (flag, value, label) in [
+        ("--rect", "10,20,40,30", "a.txt@10,20 40x30"),
+        ("--element", "/html/body/div[2]", "a.txt#/html/body/div[2]"),
+    ] {
+        let (ok, out, stderr) = nit(
+            &server,
+            &g,
+            &[
+                "comment",
+                "--change-id",
+                IA,
+                "--file",
+                "a.txt",
+                flag,
+                value,
+                "-m",
+                "here",
+            ],
+        );
+        assert!(ok, "{stderr}");
+        let out = out.as_str().expect("comment prints text");
+        assert!(out.contains(label), "anchor shown: {out}");
+    }
+    let (ok, _, stderr) = nit(
+        &server,
+        &g,
+        &[
+            "comment",
+            "--change-id",
+            IA,
+            "--file",
+            "a.txt",
+            "--rect",
+            "1,2,0,4",
+            "-m",
+            "x",
+        ],
+    );
+    assert!(!ok, "an empty rect is refused");
+    assert!(stderr.contains("one pixel"), "{stderr}");
+}
+
 /// `-F` reads the body from a file; `-F -` reads stdin. `nit log` shows
 /// both bodies back.
 #[test]

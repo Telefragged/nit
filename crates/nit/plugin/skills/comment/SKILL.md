@@ -13,7 +13,7 @@ about — not scattered through the chat.
 
 ```sh
 # open a NEW thread, anchored to code:
-nit comment --change-id <Change-Id> --file <path> [--line <n> | --range S-E] [--side new|old] -m "…"
+nit comment --change-id <Change-Id> --file <path> [--line <n> | --range S-E | --rect X,Y,W,H | --element <path>] [--side new|old] -m "…"
 # reply to an EXISTING thread (anchor flags are an error here):
 nit comment --change-id <Change-Id> --thread <thread-id> [--resolve|--unresolve] -m "…"
 # body from stdin instead of -m (also: -F <path> for a file):
@@ -23,7 +23,9 @@ nit comment --change-id <Change-Id> --thread <thread-id> -F -
 Target a change by the `Change-Id:` trailer on the commit you're commenting on,
 with `--change-id <Change-Id>`. (`--change <number>` takes the change number
 instead, for when a human hands you one.) A range is `START-END`, each endpoint
-`line:char` (e.g. `42:8-42:30`).
+`line:char` (e.g. `42:8-42:30`). In an image, `--rect` is a rectangle in the
+pixels of the image, from its top left corner (e.g. `10,20,40,30`). In an HTML
+page, `--element` is the absolute path of an element (e.g. `/html/body/div[2]/p`).
 
 Write the body as markdown. Quote code in a fenced block with a language
 tag — it renders with the same syntax highlighting as the diff, so the
@@ -53,6 +55,8 @@ nit comment --change-id <Change-Id> --file src/queue.rs --range 42:8-42:30 \
       blocking the producer."
 # LINE — when the whole line is the point
 nit comment --change-id <Change-Id> --file src/config.rs --line 14 -m "Defaulted to 30s."
+# RECT or ELEMENT — an area of an image, or an element of an HTML page
+nit comment --change-id <Change-Id> --file /attachments/ui.png --rect 10,20,40,30 -m "Misaligned."
 # FILE — when the note is about the whole file
 nit comment --change-id <Change-Id> --file src/queue.rs -m "Split the queue into its own crate."
 # CHANGE-LEVEL — last resort, when it isn't about specific lines
