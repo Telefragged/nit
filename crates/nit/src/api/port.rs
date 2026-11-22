@@ -81,10 +81,11 @@ pub fn port_threads(
         port_attached(blobs, change, k, &later, attached, &mut ported);
         if !messages.is_empty() {
             for &(i, target) in &later {
-                let lines = LineMap::Edits(position::buffer_edits(
-                    source.message.as_bytes(),
-                    target.message.as_bytes(),
-                ));
+                let lines = LineMap::Edits(if messages.iter().any(|t| has_lines(&t.anchor)) {
+                    position::buffer_edits(source.message.as_bytes(), target.message.as_bytes())
+                } else {
+                    Vec::new()
+                });
                 ported[i].extend(messages.iter().map(|thread| PortedComment {
                     thread_id: thread.thread_id,
                     anchor: Anchor::from_log(
@@ -195,11 +196,7 @@ pub fn port_anchors(
                     old_oid,
                     new_oid,
                 }) => {
-                    let lines = if anchor
-                        .file_anchor()
-                        .and_then(FileAnchor::end_line)
-                        .is_some()
-                    {
+                    let lines = if has_lines(anchor) {
                         if !lines_of.contains_key(file) {
                             let old = diff::blob_bytes(repo, file, *old_oid)?;
                             let new = diff::blob_bytes(repo, path, *new_oid)?;
@@ -280,11 +277,16 @@ fn port_attached(
     }
     for (&(name, side), threads) in &by_name {
         let from = change.attachment_at(side.version(k), name);
+        let lined = threads.iter().any(|t| has_lines(&t.anchor));
         for &(i, target) in later {
             let to = change.attachment_at(side.version(target.number), name);
-            let lines = to
-                .as_ref()
-                .map(|to| attachment_lines(blobs, from.as_ref(), to));
+            let lines = to.as_ref().map(|to| {
+                if lined {
+                    attachment_lines(blobs, from.as_ref(), to)
+                } else {
+                    LineMap::Edits(Vec::new())
+                }
+            });
             ported[i].extend(threads.iter().map(|thread| PortedComment {
                 thread_id: thread.thread_id,
                 anchor: Anchor::from_log(
@@ -312,6 +314,15 @@ fn port_in_file(anchor: &Anchor, path: &str, lines: &LineMap) -> LogAnchor {
         }
         .unwrap_or(FileAnchor::File),
     }
+}
+
+/// Whether `anchor` covers lines, which porting moves through the edits of
+/// its file.
+fn has_lines(anchor: &Anchor) -> bool {
+    anchor
+        .file_anchor()
+        .and_then(FileAnchor::end_line)
+        .is_some()
 }
 
 fn port_line(at: &FileAnchor, edits: &[Edit]) -> Option<FileAnchor> {
