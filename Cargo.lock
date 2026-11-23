@@ -1151,7 +1151,7 @@ dependencies = [
 
 [[package]]
 name = "nit"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "annotate-snippets",
  "anyhow",
@@ -1188,7 +1188,7 @@ dependencies = [
 
 [[package]]
 name = "nit-contract"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1199,7 +1199,7 @@ dependencies = [
 
 [[package]]
 name = "nit-types"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "serde",
@@ -1212,7 +1212,7 @@ dependencies = [
 
 [[package]]
 name = "nit-wasm"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "imara-diff",
  "nit-types",
