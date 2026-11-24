@@ -13,6 +13,7 @@ ts = ["dep:ts-rs", "ts-rs/no-serde-warnings", "nit-types/ts"]
 
 [dependencies]
 form_urlencoded = "1"
+jiff = "0.2"
 loro = "1.19"
 nit-types = { workspace = true }
 percent-encoding = "2"
