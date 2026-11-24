@@ -14,6 +14,7 @@
 mod attach;
 mod client;
 mod comment;
+mod doc;
 mod format;
 mod gc;
 mod git;
@@ -33,6 +34,7 @@ mod watch;
 
 pub use attach::{AttachArgs, attach};
 pub use comment::{CommentArgs, comment};
+pub use doc::{DocArgs, doc};
 pub use gc::{GcArgs, gc};
 pub use lifecycle::{AbandonArgs, ReopenArgs, abandon, reopen};
 pub use log::{LogArgs, log};
