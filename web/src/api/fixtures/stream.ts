@@ -64,7 +64,9 @@ const subs = new Set<Sub>();
 export function picks(query: ChangeQuery, c: ChangeRecord): boolean {
   return (
     (query.repo === undefined || query.repo === c.repo_id) &&
-    (query.change === undefined || query.change === c.id) &&
+    (query.change === undefined ||
+      query.change.length === 0 ||
+      query.change.includes(c.id)) &&
     (query.change_id === undefined || query.change_id === c.change_id) &&
     (query.tag ?? []).every((t) => {
       const at = t.indexOf("=");

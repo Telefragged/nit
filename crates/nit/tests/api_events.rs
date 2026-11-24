@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 const I001: &str = "I0010000000000000000000000000000000000000";
 const I002: &str = "I0020000000000000000000000000000000000000";
+const I003: &str = "I0030000000000000000000000000000000000000";
 
 /// The next frame's `projection`, which must be the next frame.
 fn ws_projection(socket: &mut common::WsSock) -> Value {
@@ -44,7 +45,7 @@ fn subscribe_ships_the_projection_then_streams_live() {
     assert_eq!(st, 200, "{res}");
     let change_number = member_id(&res, I001);
 
-    let query = json!({ "change": change_number });
+    let query = json!({ "change": [change_number] });
     let mut socket = ws_subscribe(&server, &json!({ "query": query }));
     let snap = ws_projection(&mut socket);
     assert_eq!(snap["id"], change_number);
@@ -55,6 +56,40 @@ fn subscribe_ships_the_projection_then_streams_live() {
     let live = ws_entry(&mut socket);
     assert_eq!(live["kind"], "review");
     assert_eq!(live["position"], 1);
+}
+
+#[test]
+fn several_change_numbers_match_each_of_the_changes() {
+    let g = GitRepo::new();
+    let mut numbers = Vec::new();
+    let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
+    for (branch, change_id) in [("a", I001), ("b", I002), ("c", I003)] {
+        let commit = g.commit(&[g.root], &msg(branch, change_id), &[(branch, "x\n")]);
+        g.branch(branch, commit);
+        let (st, res) = push(&server, &g, branch, "main");
+        assert_eq!(st, 200, "{res}");
+        numbers.push(member_id(&res, change_id));
+    }
+    let [one, two, three] = numbers[..] else {
+        panic!("three changes");
+    };
+
+    let mut socket = ws_subscribe(&server, &json!({ "query": { "change": [one, three] } }));
+    assert_eq!(ws_projection(&mut socket)["id"], one);
+    assert_eq!(ws_projection(&mut socket)["id"], three);
+    review(&server, two, "approve", "ok");
+    fence(&server, &mut socket, three);
+
+    let (st, list) =
+        common::http_get(&server.url(&format!("/api/changes?change={one}&change={three}")));
+    assert_eq!(st, 200, "{list}");
+    let listed: Vec<u64> = list["changes"]
+        .as_array()
+        .expect("changes")
+        .iter()
+        .filter_map(|change| change["id"].as_u64())
+        .collect();
+    assert_eq!(listed, [one, three]);
 }
 
 /// A tag subscription follows the set of changes that carry the tag. A
@@ -118,7 +153,7 @@ fn subscribe_with_positions_sends_the_entries_past_them() {
     let positions = json!({ one.to_string(): 2, two.to_string(): 0 });
     let mut socket = ws_subscribe(
         &server,
-        &json!({ "query": { "change": one }, "positions": positions }),
+        &json!({ "query": { "change": [one] }, "positions": positions }),
     );
     let stored = ws_entry(&mut socket);
     assert_eq!(
@@ -147,7 +182,7 @@ fn a_log_start_sends_every_entry() {
 
     let mut socket = ws_subscribe(
         &server,
-        &json!({ "query": { "change": one }, "start": "log" }),
+        &json!({ "query": { "change": [one] }, "start": "log" }),
     );
     assert_eq!(ws_entry(&mut socket)["kind"], "revision");
     assert_eq!(ws_entry(&mut socket)["kind"], "review");

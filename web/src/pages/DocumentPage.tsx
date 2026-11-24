@@ -10,17 +10,10 @@ import DocumentComposer from "../components/document/DocumentComposer";
 import SendBar from "../components/document/SendBar";
 import { type BlockLink, DocumentLinkContext } from "../lib/documentLink";
 import { referencesByLine } from "../lib/reference";
-import { useChangeStream } from "../lib/useChangeStream";
+import { useLiveChanges } from "../lib/useChangeStream";
 import { useDocument } from "../lib/useDocument";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
 import { ErrorPanel } from "./NotFound";
-
-/** Keeps one change live in the `["change", number]` cache entry, which
- * the references to the change render from. */
-function FollowChange({ change }: { change: number }) {
-  useChangeStream(useMemo(() => ({ query: { change } }), [change]));
-  return null;
-}
 
 /** A document: the blocks of its text, live, with the controls that edit
  * them. An edit of the author, or of the reviewer in another tab, shows
@@ -74,6 +67,7 @@ export default function DocumentPage() {
       ].sort((a, b) => a - b),
     [references],
   );
+  useLiveChanges(changes);
   useDocumentTitle(summary?.title ?? null);
 
   const failure = stored.error ?? error;
@@ -89,9 +83,6 @@ export default function DocumentPage() {
       className="page document-page"
       aria-busy={summary === undefined || text === undefined}
     >
-      {changes.map((change) => (
-        <FollowChange key={change} change={change} />
-      ))}
       <div className="crumb-line">
         <span>document {number}</span>
       </div>

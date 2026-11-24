@@ -51,7 +51,7 @@ describe("mock stream", () => {
     const got: StreamMessage[] = [];
     const handle = mockOpenStream((m) => got.push(m));
     const last = logFor(11).length - 1;
-    handle.subscribe({ query: { change: 11 }, positions: { 11: last } });
+    handle.subscribe({ query: { change: [11] }, positions: { 11: last } });
     expect(got.map((m) => "entry" in m && m.entry.position)).toEqual([last]);
     handle.close();
   });
@@ -60,7 +60,7 @@ describe("mock stream", () => {
     const got: StreamMessage[] = [];
     const handle = mockOpenStream((m) => got.push(m));
     handle.subscribe({
-      query: { change: 12, status: ["pending", "commented", "approved"] },
+      query: { change: [12], status: ["pending", "commented", "approved"] },
     });
     expect(got.map((m) => "projection" in m && m.projection.id)).toEqual([12]);
     mockAppend(12, "t-live", {

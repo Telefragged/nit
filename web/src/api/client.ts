@@ -99,6 +99,8 @@ const changeQuery = (query: ChangeQuery) => {
   if (query.repo !== undefined) params.set("repo", String(query.repo));
   for (const status of query.status ?? []) params.append("status", status);
   for (const tag of query.tag ?? []) params.append("tag", tag);
+  for (const change of query.change ?? [])
+    params.append("change", String(change));
   if (query.change_id !== undefined) params.set("change_id", query.change_id);
   return params.toString();
 };

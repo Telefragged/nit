@@ -97,3 +97,9 @@ export const usePublishedChange = (number: number | null) =>
     queryKey: ["change", number],
     queryFn: skipToken,
   }).data;
+
+export function useLiveChanges(numbers: readonly number[]): void {
+  useChangeStream(
+    numbers.length === 0 ? undefined : { query: { change: [...numbers] } },
+  );
+}

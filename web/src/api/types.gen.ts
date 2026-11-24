@@ -298,10 +298,11 @@ export type ChangeList = { changes: Array<ChangeProjection> };
  * (`?status={s}&status={s}`) and matches each change's status at its
  * **latest revision** (terminal states win). `tag` is repeatable too
  * (`?tag=key=value&tag=key=value`); each one matches the change's tags,
- * verbatim key and value, and every one given must match. `change` picks
- * the change with that number, `change_id` the one with that
- * `Change-Id`. Filters compose, so a tag match admits merged and
- * abandoned changes like any other; narrow with `status` to exclude them.
+ * verbatim key and value, and every one given must match. `change` is
+ * repeatable (`?change={n}&change={n}`) and picks the changes with those
+ * numbers. `change_id` picks the change with that `Change-Id`. Filters
+ * compose, so a tag match admits merged and abandoned changes like any
+ * other; narrow with `status` to exclude them.
  */
 export type ChangeQuery = {
   repo?: number;
@@ -310,7 +311,7 @@ export type ChangeQuery = {
    * A malformed pair fails the query deserialization.
    */
   tag?: Array<string>;
-  change?: ChangeNumber;
+  change?: Array<ChangeNumber>;
   change_id?: ChangeId;
 };
 

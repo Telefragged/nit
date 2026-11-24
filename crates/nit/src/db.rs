@@ -859,8 +859,8 @@ pub struct ChangeFilter {
     pub statuses: Vec<ChangeStatus>,
     /// A change must have every one of these, same key and same value.
     pub tags: Tags,
-    /// The change with this number.
-    pub change: Option<ChangeNumber>,
+    /// The changes with these numbers.
+    pub changes: Vec<ChangeNumber>,
     /// The change with this `Change-Id`. At most one per repo.
     pub change_id: Option<ChangeId>,
 }
@@ -871,7 +871,7 @@ impl From<ChangeQuery> for ChangeFilter {
         ChangeFilter {
             statuses: query.status,
             tags: query.tag.into_iter().collect(),
-            change: query.change,
+            changes: query.change,
             change_id: query.change_id,
         }
     }
@@ -899,9 +899,17 @@ impl ChangeFilter {
         let mut sql = String::new();
         let mut values: Vec<rusqlite::types::Value> = Vec::new();
         push_status_filter(&mut sql, &mut values, "status", &self.statuses);
-        if let Some(change) = self.change {
-            sql.push_str(" AND id = ?");
-            values.push(i64::try_from(change.get()).unwrap_or(i64::MAX).into());
+        if !self.changes.is_empty() {
+            let _ = write!(
+                sql,
+                " AND id IN ({})",
+                vec!["?"; self.changes.len()].join(",")
+            );
+            values.extend(
+                self.changes
+                    .iter()
+                    .map(|change| i64::try_from(change.get()).unwrap_or(i64::MAX).into()),
+            );
         }
         if let Some(change_id) = &self.change_id {
             sql.push_str(" AND change_id = ?");
