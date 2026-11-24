@@ -79,5 +79,7 @@ libc = { version = "0.2" }
 
 [target.wasm32-unknown-unknown.dependencies]
 hashbrown-986da7b5efc2b80e = { package = "hashbrown", version = "0.16", default-features = false, features = ["default-hasher", "inline-more"] }
+js-sys = { version = "0.3" }
+wasm-bindgen = { version = "0.2" }
 
 ### END HAKARI SECTION

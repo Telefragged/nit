@@ -26,6 +26,7 @@ export default tseslint.config(
       // Generated from crates/nit-types (nix run .#gen-types); ts-rs picks the
       // `type`/`Array<T>` style, prettier owns the formatting.
       "src/api/types.gen.ts",
+      "src/api/document.gen.ts",
       // Generated wasm-bindgen glue (nix run .#gen-wasm).
       "src/wasm/**",
     ],

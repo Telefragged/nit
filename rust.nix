@@ -234,12 +234,18 @@ rec {
   # any source file. `gen-types` writes it and `types-drift` diffs it.
   # `TS_RS_LARGE_INT=number` maps u64/i64 to the wire's `number`, not
   # bigint.
-  wireTypes = runCommand "nit-wire-types.gen.ts" { nativeBuildInputs = [ prettier ]; } ''
-    TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
-      ${testBuild "nit-types" [ "ts" ]}/tests/nit_types-* --exact export::write_wire_types
-    prettier --write types.gen.ts
-    mv types.gen.ts $out
-  '';
+  wireTypesOf =
+    packageId:
+    runCommand "${packageId}-wire-types.gen.ts" { nativeBuildInputs = [ prettier ]; } ''
+      TS_RS_LARGE_INT=number TYPES_GEN_OUT="$PWD/types.gen.ts" \
+        ${testBuild packageId [ "ts" ]}/tests/${
+          lib.replaceStrings [ "-" ] [ "_" ] packageId
+        }-* --exact export::write_wire_types
+      prettier --write types.gen.ts
+      mv types.gen.ts $out
+    '';
+  wireTypes = wireTypesOf "nit-types";
+  documentTypes = wireTypesOf "nit-document";
 
   # The public contract: the OpenAPI document the routes' utoipa
   # annotations produce and the CLI's clap syntax, written by
@@ -275,6 +281,13 @@ rec {
               }
               (
                 crate
+                # getrandom selects its JavaScript backend by this cfg.
+                // lib.optionalAttrs (crate.crateName == "getrandom") {
+                  extraRustcOpts = (crate.extraRustcOpts or [ ]) ++ [
+                    "--cfg"
+                    ''getrandom_backend=\"wasm_js\"''
+                  ];
+                }
                 // {
                   # buildRustCrate leaves CARGO_CFG_TARGET_FEATURE unset, so
                   # without this, wasm-bindgen's build script disables the

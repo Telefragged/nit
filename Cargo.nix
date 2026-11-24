@@ -2729,6 +2729,13 @@ rec {
             packageId = "cfg-if";
           }
           {
+            name = "js-sys";
+            packageId = "js-sys";
+            optional = true;
+            usesDefaultFeatures = false;
+            target = { target, features }: (("wasm32" == target."arch" or null) && (("unknown" == target."os" or null) || ("none" == target."os" or null)) && (builtins.elem "atomics" targetFeatures));
+          }
+          {
             name = "libc";
             packageId = "libc";
             usesDefaultFeatures = false;
@@ -2788,11 +2795,18 @@ rec {
             usesDefaultFeatures = false;
             target = { target, features }: (("wasm32" == target."arch" or null) && ("wasi" == target."os" or null) && ("p2" == target."env" or null));
           }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+            optional = true;
+            usesDefaultFeatures = false;
+            target = { target, features }: (("wasm32" == target."arch" or null) && (("unknown" == target."os" or null) || ("none" == target."os" or null)));
+          }
         ];
         features = {
           "wasm_js" = [ "dep:wasm-bindgen" "dep:js-sys" ];
         };
-        resolvedDefaultFeatures = [ "std" ];
+        resolvedDefaultFeatures = [ "std" "wasm_js" ];
       };
       "getrandom 0.4.3" = rec {
         crateName = "getrandom";
@@ -5788,9 +5802,19 @@ rec {
         libName = "nit_wasm";type = [ "cdylib" ];
         dependencies = [
           {
+            name = "getrandom";
+            packageId = "getrandom 0.3.4";
+            target = { target, features }: ("wasm32" == target."arch" or null);
+            features = [ "wasm_js" ];
+          }
+          {
             name = "imara-diff";
             packageId = "imara-diff";
             usesDefaultFeatures = false;
+          }
+          {
+            name = "nit-document";
+            packageId = "nit-document";
           }
           {
             name = "nit-types";
@@ -6556,10 +6580,10 @@ rec {
       };
       "pulldown-cmark" = rec {
         crateName = "pulldown-cmark";
-        version = "0.13.6";
+        version = "0.13.4";
         edition = "2021";
         crateBin = [];
-        sha256 = "0yxvd4k7xpdvjhmzxdpbaixphdy509s5yzzsyk9ks0azhd3bxcix";
+        sha256 = "0kii5zdm7nvdjh7rjkjpvxd0sx1cyd21p0qijmgiq1z7m3mniw79";
         libName = "pulldown_cmark";
         authors = [
           "Raph Levien <raph.levien@gmail.com>"
@@ -10699,6 +10723,11 @@ rec {
             features = [ "default-hasher" ];
           }
           {
+            name = "js-sys";
+            packageId = "js-sys";
+            target = { target, features }: (target.name == "wasm32-unknown-unknown");
+          }
+          {
             name = "libc";
             packageId = "libc";
             target = { target, features }: (target.name == "aarch64-apple-darwin");
@@ -10828,6 +10857,11 @@ rec {
           {
             name = "tracing-core";
             packageId = "tracing-core";
+          }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+            target = { target, features }: (target.name == "wasm32-unknown-unknown");
           }
         ];
         buildDependencies = [
