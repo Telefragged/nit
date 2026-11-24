@@ -1,4 +1,6 @@
+import { useShortcut } from "../../lib/shortcutKey";
 import { Button } from "../ui/button";
+import { Kbd } from "../ui/kbd";
 
 /** The bar at the bottom of the document page. Its button sends the
  * version on screen to the author, as Submit of the review page publishes
@@ -15,6 +17,8 @@ export default function SendBar({
   failure: string | null;
   onSend: () => void;
 }) {
+  const canSend = !sent && !sending;
+  useShortcut("s", canSend, onSend);
   return (
     <div className="review-bar">
       <span className="counts review-stats">
@@ -27,7 +31,8 @@ export default function SendBar({
       <div className="review-bar-actions">
         <Button
           variant="primary"
-          disabled={sent || sending}
+          disabled={!canSend}
+          aria-keyshortcuts="s"
           title={
             sent
               ? "No edits since the last send"
@@ -35,7 +40,7 @@ export default function SendBar({
           }
           onClick={onSend}
         >
-          Send to author
+          Send to author <Kbd aria-hidden>S</Kbd>
         </Button>
       </div>
     </div>

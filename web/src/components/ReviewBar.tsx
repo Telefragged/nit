@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   clearDecision,
   setDraftDecision,
@@ -9,7 +9,7 @@ import type { ChangeDetail, Decision } from "../api/types";
 import { DECISION_LABEL } from "../api/verdict";
 import { useAutosize } from "../lib/useAutosize";
 import { confirmDiscard } from "../lib/confirmDiscard";
-import { shortcutKey } from "../lib/shortcutKey";
+import { useShortcut } from "../lib/shortcutKey";
 import { cn } from "../lib/utils";
 import { DraftDecision } from "./badges";
 import Modal from "./Modal";
@@ -145,16 +145,7 @@ export default function ReviewBar({
     }
   }
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (shortcutKey(e) !== "s" || !canSubmit) return;
-      submit.mutate();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [canSubmit, submit]);
+  useShortcut("s", canSubmit, submit.mutate);
 
   const busy = saveDraft.isPending || clear.isPending;
 
