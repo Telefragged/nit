@@ -59,6 +59,9 @@ export interface Part {
 
 const processor = unified().use(remarkParse).use(remarkGfm).use(remarkRehype);
 
+const classesOf = (el: Element) =>
+  [el.properties.className ?? []].flat().map(String);
+
 /** The block elements of `tree`, top-level lists split into their items.
  * remark-rehype puts a newline text node between elements. */
 function* blockNodes(tree: Root): Generator<Element> {
@@ -80,7 +83,7 @@ function* blockNodes(tree: Root): Generator<Element> {
           ...node.properties,
           start: node.tagName === "ol" ? first + i : undefined,
           className: [
-            ...[node.properties.className ?? []].flat().map(String),
+            ...classesOf(node),
             ...(i < items.length - 1 ? ["doc-item"] : []),
           ],
         },
@@ -126,9 +129,7 @@ function tagParts(
     // no fence.
     const fenced = /^[\s>]*(```|~~~)/.test(lines[pos.start.line - 1] ?? "");
     const first = pos.start.line + (fenced ? 1 : 0);
-    const lang = [code.properties.className ?? []]
-      .flat()
-      .map(String)
+    const lang = classesOf(code)
       .find((c) => c.startsWith("language-"))
       ?.slice("language-".length);
     code.children = text.value
@@ -174,8 +175,7 @@ function tagParts(
   }
 }
 
-const isCodeLine = (el: Element) =>
-  [el.properties.className ?? []].flat().includes("code-line");
+const isCodeLine = (el: Element) => classesOf(el).includes("code-line");
 
 function mapTexts(node: Element, source: string, texts: SourceText[]) {
   const mapped = (text: Text) => {
@@ -321,10 +321,7 @@ const withClasses = (el: Element, classes: readonly string[]): Element =>
         ...el,
         properties: {
           ...el.properties,
-          className: [
-            ...[el.properties.className ?? []].flat().map(String),
-            ...classes,
-          ],
+          className: [...classesOf(el), ...classes],
         },
       };
 
