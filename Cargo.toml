@@ -2,6 +2,7 @@
 members = [
   "crates/nit",
   "crates/nit-contract",
+  "crates/nit-document",
   "crates/nit-types",
   "crates/nit-wasm",
   "crates/workspace-hack",
@@ -16,6 +17,7 @@ license = "MIT"
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 nit = { path = "crates/nit" }
+nit-document = { path = "crates/nit-document" }
 nit-types = { path = "crates/nit-types" }
 
 [workspace.lints.clippy]

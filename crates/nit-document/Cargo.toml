@@ -1,0 +1,27 @@
+[package]
+name = "nit-document"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The nit document: narration that embeds references to changes, stored as a CRDT"
+
+[lints]
+workspace = true
+
+[features]
+ts = ["dep:ts-rs", "ts-rs/no-serde-warnings", "nit-types/ts"]
+
+[dependencies]
+form_urlencoded = "1"
+loro = "1.19"
+nit-types = { workspace = true }
+percent-encoding = "2"
+pulldown-cmark = { version = "0.13", default-features = false }
+serde = { workspace = true }
+similar = "2"
+thiserror = "2"
+ts-rs = { version = "12", optional = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[dev-dependencies]
+proptest = "1"
