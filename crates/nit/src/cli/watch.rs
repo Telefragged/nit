@@ -24,7 +24,10 @@ use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
+use nit_document::wire::{DocumentNumber, DocumentQuery, DocumentSent, DocumentSubscription};
+use nit_document::{Version, Writer};
 use nit_types::domain::{ChangeNumber, LogEntry};
 use nit_types::events::{Start, StreamMessage, Subscription};
 
@@ -32,6 +35,7 @@ use crate::db::nit_data_dir;
 use crate::exe;
 
 use super::client::{Client, Retry, ServerOpt, Unreachable, next_text, retry_delay, server_url};
+use super::doc;
 use super::format::render_entries;
 use super::log::dropped_by_incoming;
 use super::parent::exit_with_parent;
@@ -54,6 +58,13 @@ const TOKEN_VAR: &str = "CLAUDE_CODE_MESSAGING_TOKEN";
 const LEAD: &str = "A reviewer acted on your changes. nit sent this, \
 not another Claude session. Act on it now, the way the nit:lifecycle \
 skill says.";
+
+const DOCUMENT_LEAD: &str = "A reviewer sent you a document. nit sent \
+this, not another Claude session. These are the lines that reviewers \
+changed. Act on them now: answer in the document with `nit doc`, or \
+change the code that the document describes.";
+
+type Delivered = BTreeMap<DocumentNumber, Version>;
 
 /// How many batches the follower may read ahead of the inbox.
 const QUEUE: usize = 32;
@@ -111,23 +122,36 @@ pub fn watch(args: WatchArgs) -> Result<()> {
     };
     // The parent is the session, or a shell that lives as long as it does.
     exit_with_parent()?;
-    let cursor = Cursor::open(&inbox.path, &args.select)?;
+    let cursor = Cursor::open(&inbox.path, &args.select, "positions")?;
+    let delivered = Cursor::open(&inbox.path, &args.select, "documents")?;
+    let documents = DocumentFollower {
+        client: client.clone(),
+        inbox: inbox.clone(),
+        query: DocumentQuery {
+            tag: selection.tags.to_vec(),
+        },
+        seen: delivered.read()?,
+        cursor: delivered,
+    };
+    std::thread::spawn(move || {
+        let Err(error) = follow(documents);
+        eprintln!("nit: the watch of documents stopped: {error:#}");
+    });
 
     let (entries, batches) = sync_channel(QUEUE);
-    let posted = cursor.read()?;
+    let posted: Positions = cursor.read()?;
     let follower_client = client.clone();
     let positions = posted.clone();
     let follower_inbox = inbox.clone();
     let follower = std::thread::spawn(move || {
-        Follower {
+        follow(Follower {
             client: follower_client,
             inbox: follower_inbox,
             selection,
             entries,
             positions,
             warned: None,
-        }
-        .run()
+        })
     });
 
     deliver(&inbox, &batches, &cursor, posted, &client)?;
@@ -184,6 +208,49 @@ fn next_run(batches: &Receiver<Vec<LogEntry>>) -> Option<Vec<LogEntry>> {
     Some(run)
 }
 
+trait Followed {
+    type Subscription: Serialize;
+    type Message: DeserializeOwned;
+
+    const PATH: &'static str;
+
+    fn client(&self) -> &Client;
+
+    fn subscription(&self) -> Self::Subscription;
+
+    fn connected(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn receive(&mut self, message: Self::Message) -> Result<()>;
+}
+
+fn follow<F: Followed>(mut followed: F) -> Result<std::convert::Infallible> {
+    // A server can accept the socket and then close it at once, for
+    // example when its read fails. The delay below spaces the reconnects
+    // for that case.
+    let mut silent_reconnects = 0;
+    loop {
+        let mut socket = followed
+            .client()
+            .ws_connect_when_up(F::PATH, &followed.subscription())?;
+        followed.connected()?;
+        let mut sent_anything = false;
+        while let Some(text) = next_text(&mut socket) {
+            sent_anything = true;
+            if let Ok(message) = serde_json::from_str(&text) {
+                followed.receive(message)?;
+            }
+        }
+        if sent_anything {
+            silent_reconnects = 0;
+        } else {
+            std::thread::sleep(retry_delay(silent_reconnects));
+            silent_reconnects += 1;
+        }
+    }
+}
+
 /// The selection being followed, and where its new entries go.
 struct Follower {
     client: Client,
@@ -196,52 +263,49 @@ struct Follower {
     warned: Option<String>,
 }
 
-impl Follower {
-    /// Sends each new entry of the selection to the posting loop. Returns
-    /// only by failing.
-    ///
-    /// It subscribes with the positions that it holds, so the server sends
-    /// the entries from them on, and every entry of a change that it lacks. A
-    /// closed socket, for example on a server restart, makes it subscribe
-    /// again, and on each connection it first matches the server's version
-    /// (see [`Follower::match_server`]).
-    ///
-    /// The author's own entries move the positions, and the follower
-    /// discards them. Thus the agent receives reviews and lifecycle
-    /// changes.
-    ///
-    /// # Errors
-    ///
-    /// When the server returns a malformed response, a fatal client
-    /// error, or the posting loop is gone.
-    fn run(mut self) -> Result<std::convert::Infallible> {
-        // A server can accept the socket and then close it at once, for
-        // example when its log read fails. The delay below spaces the
-        // reconnects for that case.
-        let mut silent_reconnects = 0;
-        loop {
-            let subscription = Subscription {
-                query: self.selection.change_query(),
-                positions: self.positions.clone(),
-                start: Start::Log,
-            };
-            let mut socket = self.client.ws_connect(&subscription)?;
-            self.match_server()?;
-            let mut sent_anything = false;
-            while let Some(text) = next_text(&mut socket) {
-                sent_anything = true;
-                let Ok(message) = serde_json::from_str::<StreamMessage>(&text) else {
-                    continue;
-                };
-                self.receive(message)?;
-            }
-            if sent_anything {
-                silent_reconnects = 0;
-            } else {
-                std::thread::sleep(retry_delay(silent_reconnects));
-                silent_reconnects += 1;
-            }
+impl Followed for Follower {
+    type Subscription = Subscription;
+    type Message = StreamMessage;
+
+    const PATH: &'static str = "/api/stream";
+
+    fn client(&self) -> &Client {
+        &self.client
+    }
+
+    fn subscription(&self) -> Subscription {
+        Subscription {
+            query: self.selection.change_query(),
+            positions: self.positions.clone(),
+            start: Start::Log,
         }
+    }
+
+    fn connected(&mut self) -> Result<()> {
+        self.match_server()
+    }
+
+    fn receive(&mut self, message: StreamMessage) -> Result<()> {
+        let StreamMessage::Entry(entry) = message else {
+            return Ok(());
+        };
+        if self.received_before(&entry) || dropped_by_incoming(&entry) {
+            return Ok(());
+        }
+        self.entries
+            .send(vec![entry])
+            .map_err(|_| anyhow!("the watch stopped posting"))
+    }
+}
+
+impl Follower {
+    fn received_before(&mut self, entry: &LogEntry) -> bool {
+        let next = self.positions.entry(entry.change_number).or_default();
+        if entry.position < *next {
+            return true;
+        }
+        *next = entry.position + 1;
+        false
     }
 
     /// Replaces this watch with the build of nit that the server runs.
@@ -283,29 +347,56 @@ impl Follower {
         self.warned = Some(server);
         Ok(())
     }
+}
 
-    /// Moves the position of the change of a new entry. Sends a new entry
-    /// of the reviewer to the posting loop.
-    ///
-    /// The follower keeps the position of a change that leaves the
-    /// selection. The server sends every entry of a change that matches
-    /// again, and the follower discards the entries that it received
-    /// before.
-    fn receive(&mut self, message: StreamMessage) -> Result<()> {
-        let StreamMessage::Entry(entry) = message else {
+struct DocumentFollower {
+    client: Client,
+    inbox: Inbox,
+    query: DocumentQuery,
+    seen: Delivered,
+    cursor: Cursor,
+}
+
+impl Followed for DocumentFollower {
+    type Subscription = DocumentSubscription;
+    type Message = DocumentSent;
+
+    const PATH: &'static str = "/api/documents/stream";
+
+    fn client(&self) -> &Client {
+        &self.client
+    }
+
+    fn subscription(&self) -> DocumentSubscription {
+        DocumentSubscription {
+            updates: BTreeMap::new(),
+            sent: Some(self.query.clone()),
+            seen: self.seen.clone(),
+        }
+    }
+
+    fn receive(&mut self, DocumentSent { document, version }: DocumentSent) -> Result<()> {
+        if self.seen.get(&document) == Some(&version) {
             return Ok(());
+        }
+        let replica = doc::load(&self.client, document)?;
+        let since = match self.seen.get(&document) {
+            Some(seen) if replica.contains(seen) => seen.clone(),
+            _ => replica.last_edit_by(Writer::Author),
         };
-        let next = self.positions.entry(entry.change_number).or_default();
-        if entry.position < *next {
-            return Ok(());
+        let edits: Vec<_> = replica
+            .edits_since(&since)?
+            .into_iter()
+            .filter(|edit| edit.by.contains(&Writer::Reviewer))
+            .collect();
+        if !edits.is_empty() {
+            self.inbox.send(&format!(
+                "{DOCUMENT_LEAD}\n\ndocument {document}  version {version}  since {since}\n{}",
+                doc::render_edits(&edits)
+            ))?;
         }
-        *next = entry.position + 1;
-        if dropped_by_incoming(&entry) {
-            return Ok(());
-        }
-        self.entries
-            .send(vec![entry])
-            .map_err(|_| anyhow!("the watch stopped posting"))
+        self.seen.insert(document, version);
+        self.cursor.write(&self.seen)
     }
 }
 
@@ -332,9 +423,9 @@ impl Cursor {
     /// # Errors
     ///
     /// When the data directory is unknown, or can't be created or cleaned.
-    fn open(inbox: &Path, select: &SelectArgs) -> Result<Cursor> {
+    fn open(inbox: &Path, select: &SelectArgs, extension: &str) -> Result<Cursor> {
         let dir = nit_data_dir()?.join("watch");
-        let path = state_path(&dir, inbox, select, "positions")?;
+        let path = state_path(&dir, inbox, select, extension)?;
         prune(&dir, SystemTime::now() - CURSOR_LIFETIME)?;
         Ok(Cursor { path })
     }
@@ -346,10 +437,10 @@ impl Cursor {
     ///
     /// When the file exists and can't be read or parsed, because
     /// starting over would repost entries the agent has seen.
-    fn read(&self) -> Result<Positions> {
+    fn read<T: serde::de::DeserializeOwned + Default>(&self) -> Result<T> {
         let text = match std::fs::read_to_string(&self.path) {
             Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Positions::new()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(T::default()),
             Err(e) => return Err(e).with_context(|| format!("read {}", self.path.display())),
         };
         serde_json::from_str(&text)
@@ -361,7 +452,7 @@ impl Cursor {
     /// # Errors
     ///
     /// When the file can't be written.
-    fn write(&self, positions: &Positions) -> Result<()> {
+    fn write<T: Serialize>(&self, positions: &T) -> Result<()> {
         // Written beside the cursor and renamed, because the read refuses
         // a half-written one and no later watch would start.
         let staged = self.path.with_extension("new");
@@ -604,10 +695,16 @@ mod tests {
     fn the_cursor_reads_back_what_it_wrote() {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let cursor = cursor(&dir);
-        assert_eq!(cursor.read().expect("a missing cursor"), Positions::new());
+        assert_eq!(
+            cursor.read::<Positions>().expect("a missing cursor"),
+            Positions::new()
+        );
         let positions = Positions::from([(ChangeNumber::new(7), 42)]);
         cursor.write(&positions).expect("write the cursor");
-        assert_eq!(cursor.read().expect("read the cursor"), positions);
+        assert_eq!(
+            cursor.read::<Positions>().expect("read the cursor"),
+            positions
+        );
     }
 
     #[test]
@@ -615,7 +712,10 @@ mod tests {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let cursor = cursor(&dir);
         std::fs::write(&cursor.path, "").expect("truncate the cursor");
-        assert!(cursor.read().is_err(), "an empty cursor reads as an error");
+        assert!(
+            cursor.read::<Positions>().is_err(),
+            "an empty cursor reads as an error"
+        );
     }
 
     #[test]

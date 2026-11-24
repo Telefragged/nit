@@ -14,9 +14,10 @@ use std::sync::mpsc::{Receiver, channel};
 use serde_json::Value;
 
 use common::{
-    GitRepo, TestServer, change_by_id, first_repo_id, get_changes, in_checkout, msg, nit, nit_env,
-    nit_register, nit_spawn, review,
+    GitRepo, TestServer, change_by_id, first_repo_id, get_changes, http_post, in_checkout, msg,
+    nit, nit_env, nit_register, nit_spawn, post, replica, review,
 };
+use nit_document::Writer;
 
 const I001: &str = "I0010000000000000000000000000000000000000";
 const I002: &str = "I0020000000000000000000000000000000000000";
@@ -119,6 +120,57 @@ fn watch_posts_a_review_to_the_inbox() {
     );
     assert!(text.contains("fix the unwrap"), "{text}");
     assert!(!text.contains("revision"), "dropped the push: {text}");
+}
+
+fn reviewer_sends(server: &TestServer, old: &str, new: &str) {
+    let mut reviewer = replica(server, 1);
+    let start = reviewer.version();
+    reviewer.editor(Writer::Reviewer).replace(old, new).unwrap();
+    let (st, res) = post(server, 1, &reviewer, &start);
+    assert_eq!(st, 200, "{res}");
+    let (st, res) = http_post(
+        &server.url("/api/documents/1/send"),
+        &serde_json::json!(reviewer.version()),
+    );
+    assert_eq!(st, 200, "{res}");
+}
+
+#[test]
+fn watch_posts_a_sent_document_to_the_inbox() {
+    let (g, server, inbox, _) = session();
+    let plan = g.dir.path().join("plan.md");
+    std::fs::write(&plan, "The plan.\n").unwrap();
+    let plan = plan.to_str().expect("utf-8 path");
+    let (ok, _, err) = nit(&server, &g, &["doc", "new", "--title", "Plan", "-F", plan]);
+    assert!(ok, "doc new failed: {err}");
+    let _watch = nit_spawn(&server, &g, &inbox.args(), &[]);
+
+    reviewer_sends(&server, "plan.\n", "plan.\nWhy not a new crate?\n");
+    let text = posted_text(&inbox.next());
+    assert!(text.contains("A reviewer sent you a document"), "{text}");
+    assert!(text.contains("document 1  version "), "{text}");
+    assert!(
+        text.contains("@@ -1,0 +1,1 @@ by reviewer\n+Why not a new crate?\n"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("The plan."),
+        "a line of the author is absent: {text}"
+    );
+
+    std::fs::write(plan, "It is small.\n").unwrap();
+    let (ok, _, err) = nit(&server, &g, &["doc", "append", "1", "-F", plan]);
+    assert!(ok, "doc append failed: {err}");
+    reviewer_sends(&server, "The plan.", "The first plan.");
+    let text = posted_text(&inbox.next());
+    assert!(
+        text.contains("@@ -0,1 +0,1 @@ by reviewer\n-The plan.\n+The first plan.\n"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("It is small."),
+        "a line of the author is absent: {text}"
+    );
 }
 
 /// The watch reads by the checkout's tag, so a change pushed after it
