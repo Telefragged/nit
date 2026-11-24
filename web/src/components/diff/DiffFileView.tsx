@@ -65,7 +65,9 @@ import {
   type Block,
   coveringPart,
   linkedPart,
+  MARK_CLASSES,
   type DocRow,
+  type Part,
   renderDoc,
   type RenderedDoc,
   rowBlocks,
@@ -143,7 +145,7 @@ function Code({
         h,
         r.from,
         r.to,
-        r.active ? "comment-range comment-range-active" : "comment-range",
+        r.active ? MARK_CLASSES.join(" ") : "comment-range",
       );
     }
     return h;
@@ -796,14 +798,18 @@ export default function DiffFileView({
   const blockItems = (side: Side, block: Block | undefined) =>
     block?.fromSource ? metaItems(side, block.lines[1]) : [];
 
-  /** The part of a rendered block to mark for anchor `at` on `side`: the
-   * innermost part that covers the anchor inside the block, or else the
-   * whole block that a thread on a blank line below it shows under. */
-  const tintOf = (side: Side, block: Block, at: LineOrRange) =>
-    coveringPart(block, at) ??
-    (shownLine(side, placementLine(at)) === block.lines[1]
-      ? block.parts[0]
-      : undefined);
+  const showsUnder = (side: Side, block: Block, at: LineOrRange) =>
+    shownLine(side, placementLine(at)) === block.lines[1];
+
+  const tintOf = (
+    side: Side,
+    block: Block,
+    at: LineOrRange,
+  ): Part | CommentRange | undefined => {
+    const part = coveringPart(block, at);
+    if (part) return "range" in at ? at.range : part;
+    return showsUnder(side, block, at) ? block.parts[0] : undefined;
+  };
 
   /** The part of a rendered block on `side` to mark for the hovered
    * thread's anchor, or else for the open editor's. Each block in the

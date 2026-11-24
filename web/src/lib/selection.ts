@@ -14,6 +14,13 @@
 import type { Side } from "../api/types";
 import type { LineOrRange } from "./comments";
 import { parseChars, type LinkSpan, type Lines } from "./diffLink";
+import {
+  before,
+  parseSourceMap,
+  type SourceMap,
+  type SourcePlace,
+  sourceAt,
+} from "./sourceMap";
 import type { DraftTarget } from "../pages/reviewContext";
 
 /** `Range.intersectsNode`, hand-rolled so jsdom tests and the browser run
@@ -118,7 +125,10 @@ const cellTextLength = (cell: Element): number =>
  * nearest edge. */
 function boundaryChar(cell: Element, node: Node, offset: number): number {
   const code = codeTextOf(cell);
-  if (!code) return 0;
+  return code ? offsetIn(code, node, offset) : 0;
+}
+
+function offsetIn(code: Element, node: Node, offset: number): number {
   const doc = code.ownerDocument;
   const whole = doc.createRange();
   whole.selectNodeContents(code);
@@ -135,17 +145,65 @@ function boundaryChar(cell: Element, node: Node, offset: number): number {
   return prefix.toString().length;
 }
 
-/** Every code cell the range sweeps, in document order — both sides; the
- * caller narrows to one. */
-function sweptCells(range: Range): HTMLElement[] {
-  const node = range.commonAncestorContainer;
-  const root = node instanceof Element ? node : node.parentElement;
+function swept(range: Range, selector: string): HTMLElement[] {
+  const root = elementOf(range.commonAncestorContainer);
   if (!root) return [];
-  const within = root.closest(".code");
+  const within = root.closest<HTMLElement>(selector);
   const candidates = within
     ? [within]
-    : Array.from(root.querySelectorAll(".code"));
-  return candidates.filter((c): c is HTMLElement => intersects(range, c));
+    : Array.from(root.querySelectorAll<HTMLElement>(selector));
+  return candidates.filter((c) => intersects(range, c));
+}
+
+const afterBreak = (el: HTMLElement, from: number, limit: number) =>
+  el.textContent[from] === "\n" && from + 1 < limit ? from + 1 : from;
+
+function endPlace(el: HTMLElement, map: SourceMap, to: number): SourcePlace {
+  const last = sourceAt(map, to - 1);
+  return el.textContent[to - 1] === "\n"
+    ? last
+    : { ...last, char: last.char + 1 };
+}
+
+function textTarget(range: Range): DraftTarget | SelectionMiss | null {
+  const texts = swept(range, "[data-source]");
+  const head = texts[0];
+  const file = pathOf(head);
+  if (!head || !file) return null;
+  if (texts.some((t) => pathOf(t) !== file)) return { miss: "cross-file" };
+  const side =
+    selectionAnchorSide(range.startContainer) ?? selectionAnchorSide(head);
+  const endSide = selectionAnchorSide(range.endContainer);
+  if (side === null || (endSide !== null && endSide !== side)) {
+    return { miss: "mixed-sides" };
+  }
+  const own = texts.filter((t) => selectionAnchorSide(t) === side);
+  const first = own[0];
+  const last = own.at(-1);
+  if (!first || !last) return null;
+  const firstMap = parseSourceMap(first.dataset.source ?? "");
+  const lastMap = parseSourceMap(last.dataset.source ?? "");
+  const to = offsetIn(last, range.endContainer, range.endOffset);
+  const from = afterBreak(
+    first,
+    offsetIn(first, range.startContainer, range.startOffset),
+    first === last ? to : first.textContent.length,
+  );
+  const start = sourceAt(firstMap, from);
+  const end = endPlace(last, lastMap, to);
+  if (!before(start, end) || end.char < 1) return null;
+  return {
+    file,
+    side,
+    at: {
+      range: {
+        start_line: start.line,
+        start_char: start.char,
+        end_line: end.line,
+        end_char: end.char,
+      },
+    },
+  };
 }
 
 /** The side both boundary cells can express, preferring "new" (the
@@ -285,9 +343,11 @@ export function selectionAnchorSide(anchor: Node | null): Side | null {
  * selection inside a single cell degrades to a plain line comment on that
  * cell — gerrit's `c`-on-a-line. A selection ending before a line's first
  * character ends on the previous line. In a rendered Markdown file, a
- * selection inside one block drafts on the smallest part that contains
- * all of it. A selection over several blocks drafts on their whole lines, from
- * the first block it touches to the last.
+ * selection drafts on the source of the text that it selects. A range
+ * with `side`, such as the range of a link, and a selection of no text,
+ * such as an image, draft on the smallest part that contains them. If
+ * they span several blocks, they draft on their whole lines, from the
+ * first block they touch to the last.
  *
  * `side` overrides the side that `sideOf` finds in the boundary cells.
  * Where both boundary cells show both sides, `sideOf` returns the new
@@ -297,10 +357,12 @@ export function selectionTarget(
   range: Range,
   side?: Side,
 ): DraftTarget | SelectionMiss | null {
-  const swept = sweptCells(range);
-  const firstSwept = swept[0];
-  const lastSwept = swept[swept.length - 1];
+  const cellsSwept = swept(range, ".code");
+  const firstSwept = cellsSwept[0];
+  const lastSwept = cellsSwept[cellsSwept.length - 1];
   if (firstSwept === undefined || lastSwept === undefined) {
+    const text = side === undefined ? textTarget(range) : null;
+    if (text) return text;
     const first = blockOf(range.startContainer);
     const last = blockOf(range.endContainer);
     if (!first || !last) return null;
@@ -314,7 +376,7 @@ export function selectionTarget(
   side ??= sideOf(startCell, endCell) ?? undefined;
   if (side === undefined) return { miss: "mixed-sides" };
 
-  const cells = swept.filter((c) => c.dataset[side] !== undefined);
+  const cells = cellsSwept.filter((c) => c.dataset[side] !== undefined);
   const firstCell = cells[0];
   const lastCell = cells[cells.length - 1];
   if (firstCell === undefined || lastCell === undefined) return null;

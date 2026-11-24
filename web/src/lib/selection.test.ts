@@ -4,7 +4,13 @@
 // no layout, so only the element structure, classes and data attributes
 // matter here.
 
+import { toJsxRuntime } from "hast-util-to-jsx-runtime";
+import type { ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { Side } from "../api/types";
+import { type Block, parseBlocks } from "./document";
 import {
   cellLine,
   linesRange,
@@ -484,6 +490,96 @@ describe("a rendered Markdown block", () => {
       at: {
         range: { start_line: 6, start_char: 6, end_line: 6, end_char: 9 },
       },
+    });
+  });
+});
+
+describe("a selection of rendered Markdown text", () => {
+  const blockHtml = (side: Side, block: Block | undefined) => {
+    if (!block) throw new Error("no block");
+    const html = renderToStaticMarkup(
+      toJsxRuntime(block.node, { Fragment, jsx, jsxs }) as ReactElement,
+    );
+    const [start, end] = block.lines;
+    return (
+      `<div class="doc-block" data-side="${side}" data-part` +
+      ` data-start="${start}" data-end="${end}"` +
+      ` data-end-char="${block.endChar}">${html}</div>`
+    );
+  };
+  const mountDoc = () => {
+    const source = (last: string) =>
+      ["# Title", "", "Some *text*", "more", "", last].join("\n");
+    const [title, text, b] = parseBlocks(source("b"));
+    const a = parseBlocks(source("a"))[2];
+    const section = document.createElement("section");
+    section.setAttribute("data-diff-path", "docs/a.md");
+    section.innerHTML =
+      blockHtml("new", title) +
+      blockHtml("new", text) +
+      `<div class="doc-row">${blockHtml("old", a)}${blockHtml("new", b)}</div>`;
+    document.body.appendChild(section);
+    return section;
+  };
+  const texts = () =>
+    [...mountDoc().querySelectorAll("[data-source]")].map((t) => {
+      if (!t.firstChild) throw new Error("no text");
+      return t.firstChild;
+    });
+  const target = (
+    start_line: number,
+    start_char: number,
+    end_line: number,
+    end_char: number,
+  ) => ({
+    file: "docs/a.md",
+    side: "new",
+    at: { range: { start_line, start_char, end_line, end_char } },
+  });
+
+  it("targets the source of the selected characters", () => {
+    const [, some] = texts();
+    if (!some) throw new Error("no text");
+    expect(selectionTarget(rangeOf(some, 1, some, 4))).toEqual(
+      target(3, 1, 3, 4),
+    );
+  });
+
+  it("targets the source from one block to another", () => {
+    const [title, , text] = texts();
+    if (!title || !text) throw new Error("no text");
+    expect(selectionTarget(rangeOf(title, 2, text, 2))).toEqual(
+      target(1, 4, 3, 8),
+    );
+  });
+
+  it("skips a selected line break at the start", () => {
+    const [, , , more] = texts();
+    if (!more) throw new Error("no text");
+    expect(selectionTarget(rangeOf(more, 0, more, 3))).toEqual(
+      target(4, 0, 4, 2),
+    );
+  });
+
+  it("ends a selection that ends on a line break at the end of its line", () => {
+    const [, , text, more] = texts();
+    if (!text || !more) throw new Error("no text");
+    expect(selectionTarget(rangeOf(text, 0, more, 1))).toEqual(
+      target(3, 6, 3, 11),
+    );
+  });
+
+  it("drops the text of the other side in a split view", () => {
+    const [, , , more, , b] = texts();
+    if (!more || !b) throw new Error("no text");
+    expect(selectionTarget(rangeOf(more, 1, b, 1))).toEqual(target(4, 0, 6, 1));
+  });
+
+  it("finds no range across the two sides", () => {
+    const [, , , , a, b] = texts();
+    if (!a || !b) throw new Error("no text");
+    expect(selectionTarget(rangeOf(a, 0, b, 1))).toEqual({
+      miss: "mixed-sides",
     });
   });
 });

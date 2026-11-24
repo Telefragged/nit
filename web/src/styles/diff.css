@@ -181,12 +181,12 @@
    reviewer attention, kept translucent so syntax colors read through;
    overlapping ranges nest and the wash stacks darker. The dotted rule
    points at the thread below the range's last line. */
-.code-text .comment-range {
+.comment-range {
   background: var(--color-mark-soft);
   border-bottom: 1px dotted var(--color-mark-text);
 }
 
-.code-text .comment-range-active {
+.comment-range-active {
   background: var(--color-mark-strong);
   border-bottom-style: solid;
 }
