@@ -87,6 +87,8 @@ trailer carries identity across rewrites.
 ## Layout
 
 - `crates/nit/` — Rust: axum server, git2 scanning, sqlite state, CLI
+- `crates/nit-document/` — the document model: narration that embeds
+  references to changes, on a CRDT
 - `web/` — React/TS SPA (Vite)
 - `docs/` — read the one you need:
   - `dev.md` — verification, formatting, testing, commit discipline,
@@ -94,6 +96,7 @@ trailer carries identity across rewrites.
   - `web.md` — the screenshot harness and the component gallery
   - `design.md` — the color, theme and type rules of the web UI
   - `generated.md` — the generated files, and when to regenerate them
+  - `documents.md` — how documents are stored, merged and tested
   - `releases.md` — the public contract, the release check, and releases
   - `design-review-guide.md` — design anti-patterns to catch when reviewing
     code, with bad-vs-good examples — read before a design review

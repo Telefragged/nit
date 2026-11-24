@@ -25,6 +25,7 @@ nit".
 | Skill            | What it does                                                                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `/nit:lifecycle` | Drive a change through the review loop — push each completed commit, act on the reviewer, answer feedback by amending in place, and land once approved.            |
+| `/nit:document`  | Write and answer a document: narration with live references to changes, which reviewers edit in the browser.                                                       |
 | `/nit:comment`   | Talk to the reviewer in nit — open and reply to threads with `nit comment`, anchored as tightly as possible, keeping the conversation in nit rather than the chat. |
 
 ## The watch — how the reviewer reaches the agent
