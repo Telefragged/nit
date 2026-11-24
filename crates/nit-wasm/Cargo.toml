@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 imara-diff = { version = "0.2.0", default-features = false }
+nit-document = { workspace = true }
 nit-types = { workspace = true }
 serde = { workspace = true }
 serde-wasm-bindgen = "0.6"
@@ -21,3 +22,8 @@ serde-wasm-bindgen = "0.6"
 # between the macro and the CLI produces JS glue that panics at init.
 wasm-bindgen = "=0.2.130"
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+# Loro numbers a replica at random, and getrandom needs this feature for
+# its JavaScript backend. rust.nix sets the cfg that selects the backend.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }

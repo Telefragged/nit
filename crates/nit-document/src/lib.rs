@@ -16,6 +16,8 @@
 //! with the writers that changed them ([`Edit`]).
 
 mod document;
+#[cfg(all(test, feature = "ts"))]
+mod export;
 mod reference;
 #[cfg(test)]
 mod tests;

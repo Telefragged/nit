@@ -3,6 +3,7 @@
   "entry": [
     "screenshots/*.mjs",
     "src/api/types.gen.ts",
+    "src/api/document.gen.ts",
     "gallery/main.tsx",
     "gallery/setup.ts"
   ],

@@ -177,8 +177,9 @@
           test-nit-document = rust.nextest "nit-document";
           contract = rust.contract;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
-            if ! diff -u ${./web/src/api/types.gen.ts} ${rust.wireTypes}; then
-              echo "web/src/api/types.gen.ts is stale — run: nix run .#gen-types" >&2
+            if ! diff -u ${./web/src/api/types.gen.ts} ${rust.wireTypes} ||
+              ! diff -u ${./web/src/api/document.gen.ts} ${rust.documentTypes}; then
+              echo "the generated types in web/src/api are stale — run: nix run .#gen-types" >&2
               exit 1
             fi
             touch $out
@@ -218,7 +219,8 @@
                   exit 1
                 fi
                 install -m644 ${(rustFor pkgs).wireTypes} web/src/api/types.gen.ts
-                echo "wrote web/src/api/types.gen.ts"
+                install -m644 ${(rustFor pkgs).documentTypes} web/src/api/document.gen.ts
+                echo "wrote web/src/api/types.gen.ts and web/src/api/document.gen.ts"
               '';
             }
           }/bin/gen-types";

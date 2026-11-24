@@ -21,6 +21,7 @@ use nit_types::graph::RepoHistory;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
+pub mod document;
 pub mod graph;
 
 mod intraline;
@@ -33,7 +34,7 @@ mod intraline;
 /// map the shape the server's JSON gives it (`Tags` is the one that
 /// crosses), so a value the fold built and a value the REST routes
 /// returned have the same shape.
-fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
+pub(crate) fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
     let serializer = serde_wasm_bindgen::Serializer::new()
         .serialize_missing_as_null(true)
         .serialize_maps_as_objects(true);
