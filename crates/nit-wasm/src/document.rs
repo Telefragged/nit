@@ -44,6 +44,31 @@ impl DocumentReplica {
         self.document.version().to_string()
     }
 
+    /// The `Run[]` of the document: its versions, the oldest first.
+    ///
+    /// # Errors
+    ///
+    /// When the runs fail to serialize.
+    pub fn runs(&self) -> Result<JsValue, JsValue> {
+        to_js(&self.document.runs())
+    }
+
+    /// The `Line[]` of a diff from the text at version `from` to the
+    /// text at version `to`: every line of both texts, as the lines
+    /// route of a file returns them.
+    ///
+    /// # Errors
+    ///
+    /// When `from` or `to` is not a version of this replica.
+    pub fn lines_between(&self, from: &str, to: &str) -> Result<JsValue, JsValue> {
+        let version = |version: &str| version.parse::<Version>().map_err(|e| error(&e));
+        let lines = self
+            .document
+            .lines_between(&version(from)?, &version(to)?)
+            .map_err(|e| error(&e))?;
+        to_js(&lines)
+    }
+
     /// Replaces the whole text with `text`, by one splice of the
     /// characters that differ. Equal texts make no edit.
     pub fn set_text(&mut self, text: &str) {
