@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 /** Whether a click is the plain click that the page handles itself: the
  * main button, with no command, control or alt key. Shift is left to the
  * caller. The browser handles any other click, for example a ctrl-click
@@ -27,4 +29,18 @@ export function shortcutKey(e: KeyboardEvent): string | null {
   const el = e.target as HTMLElement | null;
   if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return null;
   return (e.shiftKey ? "shift+" : "") + e.key.toLowerCase();
+}
+
+/** Runs `action` on each keypress of the shortcut `key`, while `enabled`. */
+export function useShortcut(key: string, enabled: boolean, action: () => void) {
+  useEffect(() => {
+    if (!enabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (shortcutKey(e) === key) action();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [key, enabled, action]);
 }
