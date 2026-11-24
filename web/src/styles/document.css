@@ -1,0 +1,135 @@
+.document-page {
+  --topbar-h: 40px;
+  --bars-h: var(--topbar-h);
+
+  padding-bottom: calc(var(--review-bar-h) + 64px);
+}
+
+.document-block {
+  position: relative;
+  margin-bottom: 14px;
+  padding-right: 56px;
+}
+
+.document-block.rendered-markdown {
+  max-width: none;
+  padding-block: 0;
+  padding-left: 0;
+}
+
+.document-block > .doc-block {
+  padding-left: 0;
+}
+
+.document-block > .doc-block > :last-child {
+  margin-bottom: 0;
+}
+
+.document-block:has(> .doc-block > .doc-item) {
+  margin-bottom: 4px;
+}
+
+.document-block > .doc-block[data-part]:hover:not(:has([data-part]:hover)),
+.document-block > .doc-block [data-part]:hover:not(:has([data-part]:hover)) {
+  outline: none;
+}
+
+.block-tools {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  opacity: 0;
+}
+
+.document-block:hover > .block-tools,
+.block-tools:focus-within {
+  opacity: 1;
+}
+
+.document-block > .editor,
+.document-composer > .editor {
+  max-width: none;
+  margin: 0;
+}
+
+.document-composer > .editor {
+  margin-bottom: 8px;
+}
+
+.document-composer {
+  margin-top: 24px;
+  margin-right: 56px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.composer-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.composer-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+}
+
+.reference-source {
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+}
+
+.reference-source a {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.reference-diff {
+  border: 1px solid var(--color-border);
+}
+
+.upload-markdown {
+  padding: 16px 24px;
+}
+
+.upload-text {
+  margin: 0;
+  padding: 8px 12px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.change-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-card);
+  color: var(--color-foreground);
+  font-size: 13px;
+}
+
+.change-card:hover {
+  background: var(--color-accent);
+  text-decoration: none;
+}
+
+.change-card-number {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+}
+
+.change-card-subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

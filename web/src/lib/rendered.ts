@@ -23,7 +23,7 @@ const KIND_BY_EXTENSION: Record<string, RenderedKind> = {
 };
 
 /** The kind of a file, by the extension of its path's last segment. */
-const kindOf = (path: string): RenderedKind | undefined =>
+export const pathKind = (path: string): RenderedKind | undefined =>
   KIND_BY_EXTENSION[
     splitExtension(path.split("/").at(-1) ?? "")[1].toLowerCase()
   ];
@@ -36,7 +36,7 @@ const kindOf = (path: string): RenderedKind | undefined =>
  * the attachment's URL. The commit's images have no URL, so they do not
  * render. */
 export function renderedKind(file: ReviewFile): RenderedKind | null {
-  const kind = kindOf(file.path);
+  const kind = pathKind(file.path);
   if (kind === undefined) return null;
   const fromUrl = file.attachment !== undefined && kind !== "markdown";
   return fromUrl || (kind !== "image" && !file.binary) ? kind : null;
@@ -64,6 +64,9 @@ export interface Outline {
   threads: number[];
   active: boolean;
 }
+
+/** The outlines of a view that shows none. */
+export const NO_OUTLINES: readonly Outline[] = [];
 
 export const plainOutline = (
   at: RenderedAnchor,

@@ -327,6 +327,53 @@ const captures = [
     name: "change-graph-filtered",
     path: "/repos/4?group=session-id&value=beta",
   },
+  { name: "document", path: "/documents/1" },
+  { name: "document-light", path: "/documents/1", colorScheme: "light" },
+  // The editor of the first block. The pointer is on the block, so its
+  // controls show beside it.
+  {
+    name: "document-editor",
+    path: "/documents/1",
+    fullPage: false,
+    actions: async (page) => {
+      await clickNow(page.getByRole("button", { name: "Edit block" }).first());
+      const editor = page.locator(".document-block textarea");
+      await fillNow(
+        editor,
+        "Three changes add rotation of refresh tokens. Read the schema first.",
+      );
+      await editor.hover();
+    },
+  },
+  {
+    name: "document-edited",
+    path: "/documents/1",
+    actions: async (page) => {
+      const scrollControlsAboveFixedBar = () =>
+        page.evaluate(() => {
+          window.scrollTo(0, document.documentElement.scrollHeight);
+        });
+      await scrollControlsAboveFixedBar();
+      await clickNow(page.getByRole("button", { name: "Add text" }));
+      await fillNow(
+        page.locator(".document-composer textarea"),
+        "## The test\n\nThe second use of one token fails.\n\nhttp://127.0.0.1:8877/changes/11?revision=1&file=tests%2Frotation.rs&line=13-15",
+      );
+      await scrollControlsAboveFixedBar();
+      await clickNow(page.getByRole("button", { name: "Add", exact: true }));
+      await untilReady(page);
+      await clickNow(page.getByRole("button", { name: "Send to author" }));
+      await untilDom(
+        page,
+        () => !!document.querySelector(".review-bar button:disabled"),
+      );
+      // A full-page capture draws each sticky header where the scroll
+      // position puts it.
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+      });
+    },
+  },
   // Change 11 at rev1 against base: the open r0 threads are ported, one to
   // its shifted lines and one to its file.
   {

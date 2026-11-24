@@ -29,6 +29,7 @@ import {
   revisionVersion,
 } from "../../lib/version";
 import { changeDetail as foldDetail, intoLog } from "../fold";
+import { mockDocumentRequest } from "./documents";
 import { mockAppend, picks, projection } from "./stream";
 import { addedFile, changedFile, diffKey, sideEnd } from "./builders";
 import blobs from "./blobs.json";
@@ -295,6 +296,10 @@ export function mockRequest(
   const p = url.pathname;
   const q = url.searchParams;
   let m: RegExpExecArray | null;
+
+  if (p.startsWith("/documents") || p.startsWith("/attachments/")) {
+    return mockDocumentRequest(method, p, body);
+  }
 
   if (method === "GET" && p === "/health") {
     return { status: "ok", version: "0.1.0+mock" };

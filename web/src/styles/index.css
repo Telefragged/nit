@@ -20,6 +20,7 @@
 @import "./comments.css" layer(components);
 @import "./highlight.css" layer(components);
 @import "./graph.css" layer(components);
+@import "./document.css" layer(components);
 
 /* The gallery builds from its own directory, which contains no component. */
 @source "..";

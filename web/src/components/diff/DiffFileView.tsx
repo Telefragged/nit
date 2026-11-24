@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { createDraft } from "../../api/client";
 import {
   type CommentRange,
@@ -105,6 +104,7 @@ import NewThreadEditor from "../NewThreadEditor";
 import Seg, { type SegOption } from "../Seg";
 import ThreadCount from "../ThreadCount";
 import DocBlock from "./DocBlock";
+import FileSection from "./FileSection";
 import FloatingPanel from "./FloatingPanel";
 import GapSeparator from "./GapSeparator";
 import LineLink from "./LineLink";
@@ -240,7 +240,7 @@ export default function DiffFileView({
   domId,
   collapsed,
   onToggle,
-  reveal,
+  reveal = null,
   onRevealed,
 }: {
   file: ReviewFile;
@@ -249,10 +249,12 @@ export default function DiffFileView({
   domId: string;
   collapsed: boolean;
   onToggle: () => void;
-  reveal: FileLink | null;
-  onRevealed: () => void;
+  reveal?: FileLink | null;
+  onRevealed?: () => void;
 }) {
   const ctx = useReview();
+  const closedEditorOfThisFile = () =>
+    ctx.editingTarget?.file !== file.path || ctx.setEditingTarget(null);
   const linkWholeFile = () => {
     ctx.selectLink({ file: file.path, lines: null });
   };
@@ -335,7 +337,7 @@ export default function DiffFileView({
     if (reveal === null || collapsed || section === null) return;
     const scroll = (to: Element) => {
       to.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
-      onRevealed();
+      onRevealed?.();
     };
     const lines = reveal.lines;
     if (showDoc) {
@@ -1015,107 +1017,78 @@ export default function DiffFileView({
     </FloatingPanel>
   );
 
-  const letter = statusLetter(file);
-
   return (
-    <section
+    <FileSection
       ref={sectionRef}
-      className={`file-section ${collapsed ? "collapsed" : ""}`}
-      id={domId}
-      data-diff-path={file.path}
-    >
-      <header
-        className="file-header"
-        role="button"
-        tabIndex={0}
-        onClick={(e) => {
-          // A click on a link or a button in the header is the control's.
-          if (!(e.target as Element).closest("a, button")) onToggle();
-        }}
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
-        aria-expanded={!collapsed}
-        title={collapsed ? "Expand file" : "Collapse file"}
-      >
-        {collapsed ? (
-          <ChevronRight className="fchevron" size={14} aria-hidden />
+      domId={domId}
+      path={file.path}
+      collapsed={collapsed}
+      onToggle={onToggle}
+      letter={statusLetter(file)}
+      mark={<StatusMark file={file} />}
+      title={
+        file.old_path ? (
+          <>
+            <span className="old-path">{file.old_path}</span> → {file.path}
+          </>
         ) : (
-          <ChevronDown className="fchevron" size={14} aria-hidden />
-        )}
-        <span className={letter ? `fstat fstat-${letter}` : "fstat"}>
-          <StatusMark file={file} />
-        </span>
-        <span className="fpath">
-          {file.old_path ? (
-            <>
-              <span className="old-path">{file.old_path}</span> → {file.path}
-            </>
+          displayPath(file.path)
+        )
+      }
+      controls={
+        <>
+          <a
+            className="file-link"
+            href={ctx.linkHref({ file: file.path, lines: null })}
+            title="Link to this file"
+            onClick={(e) => {
+              if (!plainClick(e) || e.shiftKey) return;
+              e.preventDefault();
+              linkWholeFile();
+            }}
+          >
+            #
+          </a>
+          <span className="spacer" />
+          {kind !== null && !file.binary ? (
+            <Seg
+              value={view}
+              options={VIEW_OPTIONS}
+              onChange={(next) => {
+                if (!closedEditorOfThisFile()) return;
+                if (required !== null && required !== next) linkWholeFile();
+                setView(next);
+              }}
+            />
+          ) : null}
+          {file.attachment ? (
+            file.attachment.revision === ctx.selected ? null : (
+              <span className="dim">
+                attached to r{file.attachment.revision}
+              </span>
+            )
+          ) : file.binary ? (
+            <span className="dim">binary</span>
           ) : (
-            displayPath(file.path)
+            <span>
+              <span className="plus">+{file.additions}</span>{" "}
+              <span className="minus">−{file.deletions}</span>
+            </span>
           )}
-        </span>
-        <a
-          className="file-link"
-          href={ctx.linkHref({ file: file.path, lines: null })}
-          title="Link to this file"
-          onClick={(e) => {
-            if (!plainClick(e) || e.shiftKey) return;
-            e.preventDefault();
-            linkWholeFile();
-          }}
-        >
-          #
-        </a>
-        <span className="spacer" />
-        {kind !== null && !file.binary ? (
-          <Seg
-            value={view}
-            options={VIEW_OPTIONS}
-            onChange={(next) => {
-              // The other view may have no place for an open editor.
-              if (
-                ctx.editingTarget?.file === file.path &&
-                !ctx.setEditingTarget(null)
-              )
-                return;
-              if (required !== null && required !== next) linkWholeFile();
-              setView(next);
+          {markCounts(threads).map(({ mark, count }) => (
+            <ThreadCount key={mark} mark={mark} count={count} word />
+          ))}
+          <NewThreadButton
+            anchor="file"
+            className="ml-auto"
+            onClick={() => {
+              setFileCommentOpen(true);
+              if (collapsed) onToggle();
             }}
           />
-        ) : null}
-        {file.attachment ? (
-          file.attachment.revision === ctx.selected ? null : (
-            <span className="dim">attached to r{file.attachment.revision}</span>
-          )
-        ) : file.binary ? (
-          <span className="dim">binary</span>
-        ) : (
-          <span>
-            <span className="plus">+{file.additions}</span>{" "}
-            <span className="minus">−{file.deletions}</span>
-          </span>
-        )}
-        {/* Threads visible in the current range for this file: the `threads`
-            prop is already range-filtered, so a thread pinned to a hidden
-            revision is not counted. */}
-        {markCounts(threads).map(({ mark, count }) => (
-          <ThreadCount key={mark} mark={mark} count={count} word />
-        ))}
-        <NewThreadButton
-          anchor="file"
-          className="ml-auto"
-          onClick={() => {
-            setFileCommentOpen(true);
-            if (collapsed) onToggle();
-          }}
-        />
-      </header>
-
+        </>
+      }
+    >
       {collapsed ? null : (
         <>
           {fileThreads.length > 0 || fileCommentOpen ? (
@@ -1224,6 +1197,6 @@ export default function DiffFileView({
           )}
         </>
       )}
-    </section>
+    </FileSection>
   );
 }

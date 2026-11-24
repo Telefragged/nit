@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { errorMessage } from "../lib/utils";
 
 export default function NotFound() {
   return (
@@ -13,11 +14,10 @@ export default function NotFound() {
 }
 
 export function ErrorPanel({ error }: { error: unknown }) {
-  const message = error instanceof Error ? error.message : String(error);
   return (
     <div className="error-panel">
       <div className="title">Request failed</div>
-      <div>{message}</div>
+      <div>{errorMessage(error)}</div>
     </div>
   );
 }

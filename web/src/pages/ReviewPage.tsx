@@ -16,10 +16,9 @@ import {
   useNavigationType,
   useParams,
 } from "react-router-dom";
-import { getChangeDrafts, getDiff, getRepo } from "../api/client";
+import { getRepo } from "../api/client";
 import { tagGraph } from "../api/fold";
 import type {
-  ChangeDetail,
   Draft,
   Revision,
   Side,
@@ -68,7 +67,6 @@ import {
   threadsByFile,
   type DiffRange,
 } from "../lib/comments";
-import { attachmentsOf, reviewFiles } from "../lib/attachments";
 import {
   baseVersion,
   isBase,
@@ -85,17 +83,18 @@ import {
   sameLink,
   type DiffLink,
 } from "../lib/diffLink";
-import { displayPath, fileAt, fileDomId, treeOrder } from "../lib/diffview";
+import { displayPath, fileAt, fileDomId } from "../lib/diffview";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt, scrollBehavior, whenPresent } from "../lib/scrollspy";
 import { shortcutKey } from "../lib/shortcutKey";
 import { shortSha } from "../lib/sha";
 import { timeAgo } from "../lib/time";
 import { useChangeLog } from "../lib/useChangeLog";
-import { useChangeStream } from "../lib/useChangeStream";
+import { useChangeStream, usePublishedChange } from "../lib/useChangeStream";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
+import { useDiff } from "../lib/useDiff";
 import { useDraftEditor } from "../lib/useDraftEditor";
-import { useDrafts } from "../lib/useDrafts";
+import { draftsQuery, useDrafts } from "../lib/useDrafts";
 import { useReviewSettings } from "../lib/reviewSettings";
 import { useThreads } from "../lib/useThreads";
 import { patchParams, useUrlParams } from "../lib/useUrlParams";
@@ -244,11 +243,7 @@ export default function ReviewPage() {
   // `change` composes the published projection with the drafts overlay
   // (`useDrafts`).
 
-  const publishedQ = useQuery<ChangeDetail>({
-    queryKey: ["change", changeNumber],
-    queryFn: skipToken,
-  });
-  const published = publishedQ.data;
+  const published = usePublishedChange(changeNumber);
   const log = useChangeLog(changeNumber, published);
 
   const repoQ = useQuery({
@@ -331,10 +326,7 @@ export default function ReviewPage() {
   );
   // The same read useDrafts makes for this change, for its error: an
   // unknown change number surfaces here, because the websocket says nothing.
-  const draftsQ = useQuery({
-    queryKey: ["drafts", changeNumber],
-    queryFn: () => getChangeDrafts(changeNumber),
-  });
+  const draftsQ = useQuery(draftsQuery(changeNumber));
   const overlay = draftsMap.get(changeNumber);
   const change = useMemo(
     () =>
@@ -364,30 +356,11 @@ export default function ReviewPage() {
   const againstRaw = searchParams.get("against");
   const against = deriveDiffBase(againstRaw, selected);
 
-  const shownAttachments = attachmentsOf(published, revisionVersion(selected));
-  // The diff includes the attachments of both sides, so the key includes
-  // their hashes, and an attach entry from the stream refetches the diff.
-  // The page keeps the old diff on screen until the new one arrives.
-  const attachKey = [...attachmentsOf(published, against), ...shownAttachments]
-    .map((a) => a.hash)
-    .join(",");
-  const diffView = [changeNumber, selected, against, whitespace];
-  const diffQ = useQuery({
-    queryKey: ["diff", ...diffView, attachKey],
-    queryFn: () => getDiff(changeNumber, selected, against, whitespace),
-    enabled: published !== undefined,
-    retry: false,
-    placeholderData: (previous, query) =>
-      diffView.every((part, i) => query?.queryKey[i + 1] === part)
-        ? previous
-        : undefined,
-  });
-  // The rail renders the same list as a tree, so the sections below follow
-  // the tree's order.
-  const files = useMemo(
-    () => treeOrder(reviewFiles(diffQ.data?.files ?? [], shownAttachments)),
-    [diffQ.data, shownAttachments],
-  );
+  const {
+    diff: diffQ,
+    files,
+    attachKey,
+  } = useDiff(published, changeNumber, selected, against, whitespace);
 
   // Collapsed-by-default file sections, keyed by file path so the
   // reviewer's open files survive revision/base switches; only another
