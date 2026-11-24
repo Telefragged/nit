@@ -79,6 +79,29 @@ export type PlacedReference = {
 export type Version = string;
 
 /**
+ * One version in the history of a document: a sequence of edits by one
+ * writer, with no edit of the other writer between them.
+ *
+ * [`Document::runs`] puts every edit of a document in one order, in
+ * which each edit follows the edits that its writer had seen. Concurrent
+ * edits take the order of their logical clocks, so every replica with
+ * the same edits has the same runs.
+ */
+export type Run = {
+  writer: Writer;
+  /**
+   * The version after the last edit of the run. It contains every
+   * edit of this run and of the runs before it.
+   */
+  version: Version;
+  /**
+   * The time of the last edit of the run, in RFC 3339, from the clock
+   * of its replica.
+   */
+  at: string;
+};
+
+/**
  * The number of a document on a server.
  */
 export type DocumentNumber = number;

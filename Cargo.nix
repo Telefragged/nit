@@ -5692,6 +5692,10 @@ rec {
             packageId = "form_urlencoded";
           }
           {
+            name = "jiff";
+            packageId = "jiff";
+          }
+          {
             name = "loro";
             packageId = "loro";
           }

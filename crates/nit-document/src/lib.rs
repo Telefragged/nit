@@ -12,6 +12,9 @@
 //!
 //! **Writer** — the side that made an edit ([`Writer`]).
 //!
+//! **Run** — one version in the history of a document: a sequence of
+//! edits by one writer ([`Run`]).
+//!
 //! **Edit** — the lines that differ between two versions of the text,
 //! with the writers that changed them ([`Edit`]).
 
@@ -24,7 +27,7 @@ mod tests;
 pub mod wire;
 
 pub use document::{
-    Document, Edit, Editor, LoadError, MergeError, ReplaceError, SpliceError, UnknownVersion,
+    Document, Edit, Editor, LoadError, MergeError, ReplaceError, Run, SpliceError, UnknownVersion,
     Update, Version, VersionError, Writer,
 };
 pub use reference::{

@@ -27,6 +27,7 @@ fn write_wire_types() {
         crate::LineRange,
         crate::PlacedReference,
         crate::Version,
+        crate::Run,
         crate::wire::DocumentNumber,
         crate::wire::CreateDocument,
         crate::wire::DocumentSummary,

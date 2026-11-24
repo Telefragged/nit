@@ -1791,6 +1791,7 @@ name = "nit-document"
 version = "0.3.0"
 dependencies = [
  "form_urlencoded",
+ "jiff",
  "loro",
  "nit-types",
  "percent-encoding",

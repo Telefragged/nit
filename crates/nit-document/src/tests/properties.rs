@@ -1,3 +1,4 @@
+use nit_types::diff::Line;
 use proptest::prelude::*;
 use proptest::sample::Index;
 
@@ -88,6 +89,20 @@ fn edits_give_the_text(replica: &Document, version: &crate::Version) -> Result<(
     Ok(())
 }
 
+fn side(lines: &[Line], number: impl Fn(&Line) -> Option<u64>) -> String {
+    let mut numbers = 1..;
+    let side: Vec<&str> = lines
+        .iter()
+        .filter(|line| number(line).is_some_and(|n| Some(n) == numbers.next()))
+        .map(|line| line.text.as_str())
+        .collect();
+    side.join("\n")
+}
+
+fn without_last_break(text: &str) -> String {
+    text.strip_suffix('\n').unwrap_or(text).to_owned()
+}
+
 fn config() -> ProptestConfig {
     ProptestConfig {
         cases: 512,
@@ -155,14 +170,29 @@ proptest! {
                 }
             }
         }
+        let runs = replicas[0].runs();
         for replica in &replicas[1..] {
             prop_assert_eq!(replica.text(), replicas[0].text());
             prop_assert_eq!(replica.version(), replicas[0].version());
+            prop_assert_eq!(&replica.runs(), &runs);
         }
+        for pair in runs.windows(2) {
+            prop_assert_ne!(pair[0].writer, pair[1].writer);
+        }
+        let mut before: (crate::Version, String) = ("-".parse().unwrap(), String::new());
+        for run in &runs {
+            let text = replicas[0].text_at(&run.version).unwrap();
+            let lines = replicas[0].lines_between(&before.0, &run.version).unwrap();
+            prop_assert_eq!(side(&lines, |line| line.new), without_last_break(&text));
+            prop_assert_eq!(side(&lines, |line| line.old), without_last_break(&before.1));
+            before = (run.version.clone(), text);
+        }
+        prop_assert_eq!(before, (replicas[0].version(), replicas[0].text()));
 
         let reloaded = Document::load(&replicas[0].save()).unwrap();
         prop_assert_eq!(reloaded.text(), replicas[0].text());
         prop_assert_eq!(reloaded.version(), replicas[0].version());
+        prop_assert_eq!(reloaded.runs(), runs);
 
         if let Some(version) = then {
             edits_give_the_text(&replicas[0], &version)?;

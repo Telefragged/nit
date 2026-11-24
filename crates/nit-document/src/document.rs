@@ -1,9 +1,14 @@
 use std::collections::{BTreeSet, HashMap};
 
 use loro::cursor::Side;
-use loro::{ExportMode, Frontiers, ID, LoroDoc, LoroText, LoroValue, PeerID, VersionVector};
+use loro::{
+    Counter, ExportMode, Frontiers, ID, Lamport, LoroDoc, LoroText, LoroValue, PeerID,
+    VersionVector,
+};
+use nit_types::diff::Line;
+use nit_types::domain::LineKind;
 use serde::{Deserialize, Serialize};
-use similar::{DiffTag, TextDiff};
+use similar::{ChangeTag, DiffTag, TextDiff};
 
 const TEXT: &str = "text";
 const WRITERS: &str = "writers";
@@ -181,12 +186,32 @@ pub struct Edit {
     pub by: Vec<Writer>,
 }
 
+/// One version in the history of a document: a sequence of edits by one
+/// writer, with no edit of the other writer between them.
+///
+/// [`Document::runs`] puts every edit of a document in one order, in
+/// which each edit follows the edits that its writer had seen. Concurrent
+/// edits take the order of their logical clocks, so every replica with
+/// the same edits has the same runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Run {
+    pub writer: Writer,
+    /// The version after the last edit of the run. It contains every
+    /// edit of this run and of the runs before it.
+    pub version: Version,
+    /// The time of the last edit of the run, in RFC 3339, from the clock
+    /// of its replica.
+    pub at: String,
+}
+
 impl Document {
     /// A replica of an empty document.
     #[must_use]
     pub fn new() -> Document {
         let doc = LoroDoc::new();
         doc.set_record_timestamp(true);
+        doc.set_change_merge_interval(0);
         Document { doc }
     }
 
@@ -304,6 +329,74 @@ impl Document {
         Version(self.doc.vv_to_frontiers(&vector))
     }
 
+    /// The history of the document as runs, the oldest first. The text
+    /// before the first run is the empty text, at version `-`. The
+    /// version of the last run is [`Document::version`].
+    ///
+    /// # Panics
+    ///
+    /// Never: every edit of a replica has a writer and a valid time.
+    #[must_use]
+    pub fn runs(&self) -> Vec<Run> {
+        let writers = self.writers();
+        let run = |writer: Writer, reached: &VersionVector, at: i64| Run {
+            writer,
+            version: Version(self.doc.vv_to_frontiers(reached)),
+            at: jiff::Timestamp::from_second(at)
+                .expect("Loro records a valid time")
+                .to_string(),
+        };
+        let mut runs = Vec::new();
+        let mut reached = VersionVector::default();
+        let mut open: Option<(Writer, i64)> = None;
+        for span in self.spans_in_causal_order() {
+            let writer = writers[&span.peer];
+            let mut at = span.at;
+            match open {
+                Some((last, before)) if last == writer => at = at.max(before),
+                Some((last, before)) => runs.push(run(last, &reached, before)),
+                None => {}
+            }
+            reached.insert(span.peer, span.end);
+            open = Some((writer, at));
+        }
+        runs.extend(open.map(|(writer, at)| run(writer, &reached, at)));
+        runs
+    }
+
+    /// Every line of the text at `to`, and every line that the text at
+    /// `from` has and the text at `to` lacks, in the order of a diff.
+    /// Line numbers count from 1.
+    ///
+    /// # Errors
+    ///
+    /// [`UnknownVersion`] if this replica lacks an edit of `from` or of
+    /// `to`.
+    pub fn lines_between(&self, from: &Version, to: &Version) -> Result<Vec<Line>, UnknownVersion> {
+        let (old, new) = (self.text_at(from)?, self.text_at(to)?);
+        let diff = TextDiff::from_lines(&old, &new);
+        let (mut old_line, mut new_line) = (0, 0);
+        Ok(diff
+            .iter_all_changes()
+            .map(|change| {
+                let (kind, in_old, in_new) = match change.tag() {
+                    ChangeTag::Equal => (LineKind::Context, true, true),
+                    ChangeTag::Insert => (LineKind::Add, false, true),
+                    ChangeTag::Delete => (LineKind::Del, true, false),
+                };
+                old_line += u64::from(in_old);
+                new_line += u64::from(in_new);
+                Line {
+                    kind,
+                    old: in_old.then_some(old_line),
+                    new: in_new.then_some(new_line),
+                    drift: false,
+                    text: change.value().trim_end_matches('\n').to_owned(),
+                }
+            })
+            .collect())
+    }
+
     /// Whether this replica has every edit of `version`.
     #[must_use]
     pub fn contains(&self, version: &Version) -> bool {
@@ -417,6 +510,37 @@ impl Document {
         self
     }
 
+    fn spans_in_causal_order(&self) -> Vec<Span> {
+        let mut spans: Vec<Span> = Vec::new();
+        for (&peer, &end) in self.doc.oplog_vv().iter() {
+            let mut counter = 0;
+            while counter < end {
+                let change = self
+                    .doc
+                    .get_change(ID::new(peer, counter))
+                    .expect("the replica has every edit that it lists");
+                let follows_own = change.deps.as_single() == Some(ID::new(peer, counter - 1));
+                counter += Counter::try_from(change.len).expect("a counter fits its type");
+                match spans.last_mut().filter(|_| follows_own) {
+                    Some(span) => (span.end, span.at) = (counter, change.timestamp),
+                    None => spans.push(Span {
+                        lamport: change.lamport,
+                        peer,
+                        end: counter,
+                        at: change.timestamp,
+                    }),
+                }
+            }
+        }
+        spans.sort_by_key(|span| (span.lamport, span.peer));
+        spans
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_time_of_next_edit(&self, seconds: i64) {
+        self.doc.set_next_commit_timestamp(seconds);
+    }
+
     fn content(&self) -> LoroText {
         self.doc.get_text(TEXT)
     }
@@ -449,6 +573,13 @@ impl Document {
             );
         }
     }
+}
+
+struct Span {
+    lamport: Lamport,
+    peer: PeerID,
+    end: Counter,
+    at: i64,
 }
 
 impl Editor<'_> {
