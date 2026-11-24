@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { changeDetail, foldEntry } from "../api/fold";
@@ -88,3 +88,12 @@ export function useChangeStream(
 
   return projections;
 }
+
+/** The published projection of change `number` from the ["change", id]
+ * cache, which `useChangeStream` writes. Undefined for null, and until the
+ * projection of the change arrives. */
+export const usePublishedChange = (number: number | null) =>
+  useQuery<ChangeDetail>({
+    queryKey: ["change", number],
+    queryFn: skipToken,
+  }).data;

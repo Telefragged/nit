@@ -14,7 +14,7 @@ import {
   type PageMessage,
 } from "../../lib/framePicker";
 import picker from "../../frame/picker?frame-script";
-import type { Outline } from "../../lib/rendered";
+import { NO_OUTLINES, type Outline } from "../../lib/rendered";
 import { shortcutKey } from "../../lib/shortcutKey";
 import { useUnlinkOnSelection } from "../../lib/useUnlinkOnSelection";
 import { OutlineBox, ScrollTargets } from "./ImageView";
@@ -42,19 +42,19 @@ const elementOf = (o: Outline) => ("element" in o.at ? o.at.element : null);
 export default function HtmlView({
   html,
   title,
-  outlines,
+  outlines = NO_OUTLINES,
   onLink,
   openEditor,
-  reveal,
-  panel,
+  reveal = null,
+  panel = null,
 }: {
   html: string;
   title: string;
-  outlines: readonly Outline[];
-  onLink: (at: RenderedAnchor | null) => void;
-  openEditor: (at: RenderedAnchor) => boolean;
-  reveal: string | null;
-  panel: { at: RenderedAnchor; content: ReactNode } | null;
+  outlines?: readonly Outline[];
+  onLink?: (at: RenderedAnchor | null) => void;
+  openEditor?: (at: RenderedAnchor) => boolean;
+  reveal?: string | null;
+  panel?: { at: RenderedAnchor; content: ReactNode } | null;
 }) {
   const stage = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -73,7 +73,7 @@ export default function HtmlView({
     stage,
     outlines.some((o) => o.form === "linked"),
     () => {
-      onLink(null);
+      onLink?.(null);
     },
   );
 
@@ -102,7 +102,7 @@ export default function HtmlView({
         setView(m.view);
         setHover(m.hover);
       } else if (m?.type === "link" && typeof m.path === "string") {
-        onLink({ element: m.path });
+        onLink?.({ element: m.path });
       } else if (m?.type === "key" && typeof m.key === "string") {
         const key = new KeyboardEvent("keydown", {
           key: m.key,
@@ -113,7 +113,8 @@ export default function HtmlView({
           cancelable: true,
         });
         if (m.selection !== null && shortcutKey(key) === "c") {
-          if (openEditor({ element: m.selection })) post({ type: "unselect" });
+          if (openEditor?.({ element: m.selection }))
+            post({ type: "unselect" });
           return;
         }
         window.dispatchEvent(key);

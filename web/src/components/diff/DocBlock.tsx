@@ -45,28 +45,28 @@ const docComponents: Components = {
   },
 };
 
-/** One block of a rendered Markdown file, with a link to its lines in
- * the gutter. `change` is the block's class suffix in a diff: added or
- * removed. `linked` is the part to show as linked: the block itself, or
- * a part inside it. `marked` is the part, or the range of text, to show
- * as hovered. A block that comes from source lines is a part for the `c`
- * key (lib/selection). */
+/** One block of a rendered Markdown text. With `file` and `press`, the
+ * gutter has a link to the lines of the block in that file. `change` is
+ * the block's class suffix in a diff: added or removed. `linked` is the
+ * part to show as linked: the block itself, or a part inside it. `marked`
+ * is the part, or the range of text, to show as hovered. A block that
+ * comes from source lines is a part for the `c` key (lib/selection). */
 function DocBlock({
   file,
   block,
   side,
-  change,
+  change = "",
   linked,
   marked,
   press,
 }: {
-  file: string;
+  file?: string;
   block: Block;
   side: Side;
-  change: string;
-  linked: Part | undefined;
-  marked: Part | CommentRange | undefined;
-  press: Press;
+  change?: string;
+  linked?: Part;
+  marked?: Part | CommentRange;
+  press?: Press;
 }) {
   // The library types its result as the global `JSX.Element`, which the
   // React 19 types do not declare.
@@ -94,7 +94,7 @@ function DocBlock({
       data-part={block.fromSource ? "" : undefined}
       data-end-char={block.fromSource ? block.endChar : undefined}
     >
-      {block.fromSource ? (
+      {block.fromSource && file !== undefined && press ? (
         <LineLink
           file={file}
           side={side}

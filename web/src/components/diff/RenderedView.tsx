@@ -1,41 +1,67 @@
 import { useQuery } from "@tanstack/react-query";
-import { type ReactNode, useMemo } from "react";
+import { type ComponentProps, useMemo } from "react";
 import { attachmentUrl } from "../../api/client";
 import type { ReviewFile } from "../../lib/attachments";
-import type { RenderedAnchor } from "../../lib/comments";
 import { displayPath } from "../../lib/diffview";
-import {
-  type Outline,
-  renderedSide,
-  sideText,
-  type RenderedKind,
-} from "../../lib/rendered";
+import { renderedSide, sideText, type RenderedKind } from "../../lib/rendered";
 import { fileLinesQuery } from "../../lib/useHunkExpansion";
 import { useReview } from "../../lib/reviewContext";
 import HtmlView from "./HtmlView";
 import ImageView from "./ImageView";
 
+type Marks = Omit<ComponentProps<typeof HtmlView>, "html" | "title">;
+
+/** The note in place of a file while its text loads, or after the load
+ * failed. */
+export function FileLoadNote({ failed }: { failed: boolean }) {
+  return (
+    <div className="diff-note" aria-busy={!failed}>
+      {failed ? "The file did not load" : "Loading the file…"}
+    </div>
+  );
+}
+
+/** An image at `src`, or the HTML page `text` in a sandbox with a
+ * separate origin, so its scripts cannot call the API. `text` is
+ * undefined while it loads, and `failed` is set when the load failed. */
+export function RenderedBody({
+  kind,
+  name,
+  src,
+  text,
+  failed,
+  ...marks
+}: {
+  kind: Exclude<RenderedKind, "markdown">;
+  name: string;
+  src: string | undefined;
+  text: string | undefined;
+  failed: boolean;
+} & Marks) {
+  if (kind === "image")
+    return (
+      <ImageView
+        src={src}
+        alt={name}
+        outlines={marks.outlines}
+        onLink={marks.onLink}
+        panel={marks.panel}
+      />
+    );
+  if (text === undefined) return <FileLoadNote failed={failed} />;
+  return <HtmlView html={text} title={name} {...marks} />;
+}
+
 /** The rendered body of an image or an HTML page, in place of its lines.
- * It renders the whole file, however little of it the diff shows. An
- * HTML page runs in a sandbox with a separate origin, so its scripts
- * cannot call the API. */
+ * It renders the whole file, however little of it the diff shows. */
 export default function RenderedView({
   file,
   kind,
-  outlines,
-  onLink,
-  openEditor,
-  reveal,
-  panel,
+  ...marks
 }: {
   file: ReviewFile;
   kind: Exclude<RenderedKind, "markdown">;
-  outlines: readonly Outline[];
-  onLink: (at: RenderedAnchor | null) => void;
-  openEditor: (at: RenderedAnchor) => boolean;
-  reveal: string | null;
-  panel: { at: RenderedAnchor; content: ReactNode } | null;
-}) {
+} & Required<Marks>) {
   const ctx = useReview();
   const whole = useQuery({
     ...fileLinesQuery(ctx, file),
@@ -44,32 +70,14 @@ export default function RenderedView({
   const lines = whole.data?.lines;
   const side = renderedSide(file);
   const text = useMemo(() => lines && sideText(lines, side), [lines, side]);
-  const name = displayPath(file.path);
-  if (kind === "image")
-    return (
-      <ImageView
-        src={file.attachment && attachmentUrl(file.attachment)}
-        alt={name}
-        outlines={outlines}
-        onLink={onLink}
-        panel={panel}
-      />
-    );
-  if (text === undefined)
-    return (
-      <div className="diff-note">
-        {whole.isError ? "The file did not load" : "Loading the file…"}
-      </div>
-    );
   return (
-    <HtmlView
-      html={text}
-      title={name}
-      outlines={outlines}
-      onLink={onLink}
-      openEditor={openEditor}
-      reveal={reveal}
-      panel={panel}
+    <RenderedBody
+      kind={kind}
+      name={displayPath(file.path)}
+      src={file.attachment && attachmentUrl(file.attachment)}
+      text={text}
+      failed={whole.isError}
+      {...marks}
     />
   );
 }

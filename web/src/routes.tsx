@@ -42,6 +42,7 @@ export const router = createBrowserRouter([
         ],
       },
       folding("changes/:id", () => import("./pages/ReviewPage.tsx")),
+      folding("documents/:number", () => import("./pages/DocumentPage.tsx")),
       { path: "*", element: <NotFound /> },
     ],
   },

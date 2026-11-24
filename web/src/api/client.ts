@@ -2,7 +2,9 @@
 // functions (via react-query); when VITE_MOCK is set every call is answered
 // by the contract-true fixtures in ./fixtures instead of the network.
 
+import type { DocumentNumber, DocumentSummary, Version } from "./document.gen";
 import type {
+  AttachmentHash,
   BatchSubmitResult,
   ChangeDrafts,
   ChangeList,
@@ -38,21 +40,36 @@ export class ApiError extends Error {
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+/** The answer of the fixtures to a request. The import is dynamic, so
+ * production bundles contain no fixtures. */
+const mocked = async (method: Method, path: string, body?: unknown) =>
+  (await import("./fixtures")).mockRequest(method, path, body);
+
+const decode = {
+  json: (res: Response): Promise<unknown> =>
+    res.status === 204 ? Promise.resolve(undefined) : res.json(),
+  bytes: async (res: Response) => new Uint8Array(await res.arrayBuffer()),
+  text: (res: Response) =>
+    /^text\/|json/.test(res.headers.get("Content-Type") ?? "")
+      ? res.text()
+      : null,
+};
+
+const isBytes = (body: unknown): body is Blob | Uint8Array<ArrayBuffer> =>
+  body instanceof Blob || body instanceof Uint8Array;
+
 async function request<T = void>(
   method: Method,
   path: string,
   body?: unknown,
+  kind: keyof typeof decode = "json",
 ): Promise<T> {
-  if (import.meta.env.VITE_MOCK) {
-    // Keeps fixtures out of production bundles.
-    const { mockRequest } = await import("./fixtures");
-    return mockRequest(method, path, body) as T;
-  }
+  if (import.meta.env.VITE_MOCK) return (await mocked(method, path, body)) as T;
+  const json = body !== undefined && !isBytes(body);
   const res = await fetch(`/api${path}`, {
     method,
-    headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: json ? { "Content-Type": "application/json" } : undefined,
+    body: isBytes(body) ? body : json ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
@@ -64,8 +81,7 @@ async function request<T = void>(
     }
     throw new ApiError(res.status, message);
   }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return (await decode[kind](res)) as T;
 }
 
 export const getHealth = () => request<Health>("GET", "/health");
@@ -174,7 +190,48 @@ export const clearDecision = (changeNumber: number) =>
 export const submitDecisions = (query: ChangeQuery) =>
   request<BatchSubmitResult>("POST", `/submit?${changeQuery(query)}`);
 
+const attachmentPath = ({
+  hash,
+  name,
+}: Pick<EffectiveAttachment, "hash" | "name">) =>
+  `/attachments/${hash}/${encodeURIComponent(name.split("/").at(-1) ?? "")}`;
+
 /** The URL of an attachment's bytes. The server picks the content type
  * from the name's last segment. */
-export const attachmentUrl = (attachment: EffectiveAttachment) =>
-  `/api/attachments/${attachment.hash}/${encodeURIComponent(attachment.name.split("/").at(-1) ?? "")}`;
+export const attachmentUrl = (
+  attachment: Pick<EffectiveAttachment, "hash" | "name">,
+) => `/api${attachmentPath(attachment)}`;
+
+/** The text of an attachment, or null when its content type is not
+ * text. */
+export const getAttachmentText = (
+  attachment: Pick<EffectiveAttachment, "hash" | "name">,
+) =>
+  request<string | null>("GET", attachmentPath(attachment), undefined, "text");
+
+export const getDocument = (number: DocumentNumber) =>
+  request<DocumentSummary>("GET", `/documents/${number}`);
+
+/** The bytes that a `DocumentReplica` loads. */
+export const getDocumentSnapshot = (number: DocumentNumber) =>
+  request<Uint8Array>(
+    "GET",
+    `/documents/${number}/snapshot`,
+    undefined,
+    "bytes",
+  );
+
+/** Merges the edits of a replica into the stored document. `update` is
+ * the bytes of `DocumentReplica.updates_since`. */
+export const postDocumentUpdate = (
+  number: DocumentNumber,
+  update: Uint8Array,
+) => request("POST", `/documents/${number}/updates`, update);
+
+/** Sends `version` of a document to the author. */
+export const sendDocument = (number: DocumentNumber, version: Version) =>
+  request<DocumentSummary>("POST", `/documents/${number}/send`, version);
+
+/** Stores a file, for an upload reference of a document. */
+export const uploadAttachment = (file: Blob) =>
+  request<{ hash: AttachmentHash }>("PUT", "/attachments", file);

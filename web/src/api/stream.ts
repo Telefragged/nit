@@ -5,6 +5,7 @@
 // stops matching. When VITE_MOCK is set the fixtures drive it instead of the
 // network, mirroring how client.ts routes HTTP.
 
+import { openSocket } from "./socket";
 import type { StreamMessage, Subscription } from "./types";
 
 export interface StreamHandle {
@@ -41,54 +42,22 @@ function openSocketStream(
   positions: () => Record<number, number>,
 ): StreamHandle {
   let subscription: Subscription | null = null;
-  let ws: WebSocket | null = null;
-  let closed = false;
-  let backoff = 0;
-
-  const url = () => {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${location.host}/api/stream`;
-  };
-
   const send = () => {
-    if (ws?.readyState !== WebSocket.OPEN || subscription === null) return;
-    ws.send(JSON.stringify({ ...subscription, positions: positions() }));
+    if (subscription === null) return;
+    socket.send(JSON.stringify({ ...subscription, positions: positions() }));
   };
-
-  const connect = () => {
-    ws = new WebSocket(url());
-    ws.onopen = () => {
-      backoff = 0;
-      send();
-    };
-    ws.onmessage = (ev) => {
-      let msg: StreamMessage;
-      try {
-        msg = JSON.parse(ev.data as string) as StreamMessage;
-      } catch {
-        return;
-      }
-      onMessage(msg);
-    };
-    ws.onclose = () => {
-      if (closed) return;
-      const delay = Math.min(500 * 2 ** backoff++, 10_000);
-      setTimeout(connect, delay);
-    };
-    ws.onerror = () => {
-      ws?.close();
-    };
-  };
-  connect();
-
+  const socket = openSocket("/stream", send, {
+    json: (message) => {
+      onMessage(message as StreamMessage);
+    },
+  });
   return {
     subscribe(next) {
       subscription = next;
       send();
     },
     close() {
-      closed = true;
-      ws?.close();
+      socket.close();
     },
   };
 }

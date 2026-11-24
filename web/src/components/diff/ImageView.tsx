@@ -2,7 +2,12 @@ import { MessageSquare } from "lucide-react";
 import { type CSSProperties, type ReactNode, useRef, useState } from "react";
 import type { Rect } from "../../api/types";
 import type { RenderedAnchor } from "../../lib/comments";
-import { type Outline, plainOutline, rectBetween } from "../../lib/rendered";
+import {
+  NO_OUTLINES,
+  type Outline,
+  plainOutline,
+  rectBetween,
+} from "../../lib/rendered";
 import { plainClick } from "../../lib/shortcutKey";
 import { useUnlinkOnSelection } from "../../lib/useUnlinkOnSelection";
 
@@ -46,7 +51,7 @@ export function OutlineBox({
 }: {
   outline: Outline;
   style: CSSProperties;
-  onLink: (at: RenderedAnchor) => void;
+  onLink?: (at: RenderedAnchor) => void;
   children?: ReactNode;
 }) {
   const { form, active, at } = outline;
@@ -64,7 +69,7 @@ export function OutlineBox({
           title="Show the threads here"
           aria-label="Show the threads here"
           onClick={() => {
-            onLink(at);
+            onLink?.(at);
           }}
         >
           <MessageSquare
@@ -78,18 +83,21 @@ export function OutlineBox({
   );
 }
 
+/** An image, with the outlines of its linked and commented regions.
+ * `onLink` receives the region that the reviewer drags, or null when the
+ * link clears. `panel` is the content under one region. */
 export default function ImageView({
   src,
   alt,
-  outlines,
+  outlines = NO_OUTLINES,
   onLink,
-  panel,
+  panel = null,
 }: {
   src: string | undefined;
   alt: string;
-  outlines: readonly Outline[];
-  onLink: (at: RenderedAnchor | null) => void;
-  panel: { at: RenderedAnchor; content: ReactNode } | null;
+  outlines?: readonly Outline[];
+  onLink?: (at: RenderedAnchor | null) => void;
+  panel?: { at: RenderedAnchor; content: ReactNode } | null;
 }) {
   const stage = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<Size | "failed" | null>(null);
@@ -109,7 +117,7 @@ export default function ImageView({
 
   const linked = linkedAt !== null;
   useUnlinkOnSelection(stage, linked, () => {
-    onLink(null);
+    onLink?.(null);
   });
 
   const pixel = (
@@ -164,10 +172,10 @@ export default function ImageView({
               () => {
                 document.removeEventListener("mousemove", move);
                 if (rect) {
-                  onLink({ region: { rect } });
+                  onLink?.({ region: { rect } });
                 } else {
                   setPendingDrag(null);
-                  if (linked) onLink(null);
+                  if (linked) onLink?.(null);
                 }
               },
               { once: true },

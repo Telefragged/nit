@@ -1,16 +1,18 @@
-.review-page {
+:is(.review-page, .document-page) {
   /* The height of the review bar, which is fixed at the bottom of the
-     page, and room for it under the page. */
+     page. */
   --review-bar-h: 46px;
 
-  padding-bottom: calc(var(--review-bar-h) + 10px);
-
   /* The heights of the two sticky bars above the files. The topbar is
-     outside this page, and chrome.css gives it the same 40px. A file
-     section outside this page has no bar above it. */
+     outside the page, and chrome.css gives it the same 40px. */
   --topbar-h: 40px;
   --diffbar-h: 33px;
+}
+
+.review-page {
   --bars-h: calc(var(--topbar-h) + var(--diffbar-h));
+
+  padding-bottom: calc(var(--review-bar-h) + 10px);
 }
 
 /* The header: the change's own lines at the left, and at the right the
