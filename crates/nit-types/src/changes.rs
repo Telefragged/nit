@@ -25,10 +25,11 @@ use crate::domain::ThreadProjection;
 /// (`?status={s}&status={s}`) and matches each change's status at its
 /// **latest revision** (terminal states win). `tag` is repeatable too
 /// (`?tag=key=value&tag=key=value`); each one matches the change's tags,
-/// verbatim key and value, and every one given must match. `change` picks
-/// the change with that number, `change_id` the one with that
-/// `Change-Id`. Filters compose, so a tag match admits merged and
-/// abandoned changes like any other; narrow with `status` to exclude them.
+/// verbatim key and value, and every one given must match. `change` is
+/// repeatable (`?change={n}&change={n}`) and picks the changes with those
+/// numbers. `change_id` picks the change with that `Change-Id`. Filters
+/// compose, so a tag match admits merged and abandoned changes like any
+/// other; narrow with `status` to exclude them.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(utoipa::ToSchema, utoipa::IntoParams)]
@@ -43,9 +44,8 @@ pub struct ChangeQuery {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub tag: Vec<Tag>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub change: Option<ChangeNumber>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub change: Vec<ChangeNumber>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub change_id: Option<ChangeId>,

@@ -157,7 +157,7 @@ export function useChangeLog(
   useEffect(() => {
     shown.current = feed;
     stream.current?.subscribe({
-      query: { change: feed.changeNumber },
+      query: { change: [feed.changeNumber] },
       start: "log",
     });
   }, [feed]);

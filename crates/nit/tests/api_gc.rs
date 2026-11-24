@@ -84,7 +84,7 @@ fn collect_sends_left_for_a_followed_change() {
     let server = TestServer::start(g.dir.path().join("nit.sqlite3"), None);
     let change_number = a_change(&server, &g, "feat");
     abandon(&server, change_number);
-    let mut socket = ws_subscribe(&server, &json!({ "query": { "change": change_number } }));
+    let mut socket = ws_subscribe(&server, &json!({ "query": { "change": [change_number] } }));
     assert!(ws_read(&mut socket)["projection"].is_object());
 
     collect(&server, Timestamp::now() + SignedDuration::from_hours(1));

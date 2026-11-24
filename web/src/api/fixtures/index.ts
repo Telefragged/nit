@@ -270,12 +270,11 @@ function wholeLines(file: AuthoredFile): Line[] {
 /** A change query read back from its query string. */
 function changeQuery(q: URLSearchParams): ChangeQuery {
   const repo = q.get("repo");
-  const change = q.get("change");
   return {
     repo: repo === null ? undefined : Number(repo),
     status: q.getAll("status") as ChangeStatus[],
     tag: q.getAll("tag"),
-    change: change === null ? undefined : Number(change),
+    change: q.getAll("change").map(Number),
     change_id: q.get("change_id") ?? undefined,
   };
 }

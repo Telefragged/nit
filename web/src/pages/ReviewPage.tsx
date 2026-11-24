@@ -306,7 +306,7 @@ export default function ReviewPage() {
   const subscription: Subscription = {
     query:
       published === undefined || tag === undefined
-        ? { change: changeNumber }
+        ? { change: [changeNumber] }
         : { repo: published.repo_id, tag: [tag] },
   };
   const memberProjections = useChangeStream(subscription);
