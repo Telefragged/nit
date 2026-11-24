@@ -20,7 +20,6 @@ import { getRepo } from "../api/client";
 import { tagGraph } from "../api/fold";
 import type {
   Draft,
-  Revision,
   Side,
   Subscription,
   Tags,
@@ -41,7 +40,7 @@ import NewRevisionToast from "../components/NewRevisionToast";
 import ReviewBar from "../components/ReviewBar";
 import ReviewColumns from "../components/ReviewColumns";
 import ReviewSettingsMenu from "../components/ReviewSettings";
-import Select, { type SelectOption } from "../components/Select";
+import DiffRangeSelect from "../components/DiffRangeSelect";
 import Shortcuts from "../components/Shortcuts";
 import {
   allExpanded,
@@ -159,69 +158,6 @@ function deriveDiffBase(raw: string | null, selected: number): ChangeVersion {
 /** The ?against param of `version`: none for a base. */
 const againstParam = (version: ChangeVersion) =>
   isBase(version) ? null : version;
-
-/** Gerrit-style diff range: [Base|rM] → [rN]. Left picks the diff base,
- * right the revision under review. Each rN row carries its own
- * comment-thread count (`counts`) so the reviewer sees where discussion
- * sits before switching. */
-function DiffRangeSelect({
-  revisions,
-  selected,
-  against,
-  counts,
-  onLeft,
-  onRight,
-}: {
-  revisions: Revision[];
-  selected: number;
-  against: ChangeVersion;
-  counts: Map<number, number>;
-  onLeft: (v: string) => void;
-  onRight: (n: number) => void;
-}) {
-  const option = (r: Revision): SelectOption => {
-    const n = counts.get(r.number) ?? 0;
-    return {
-      value: String(r.number),
-      label: `r${r.number}`,
-      detail: n > 0 ? commentCountLabel(n) : undefined,
-    };
-  };
-  return (
-    <>
-      <Select
-        // Wide enough for a revision and its comment count, so choosing one
-        // never reflows the toolbar around it.
-        className="min-w-[18ch]"
-        label="Diff base"
-        title="Base = parent commit; rM = interdiff against revision M"
-        placeholder="no base"
-        value={againstParam(against) ?? "base"}
-        onChange={onLeft}
-        options={[
-          { value: "base", label: "Base" },
-          ...revisions.map((r) => ({
-            ...option(r),
-            value: revisionVersion(r.number),
-            disabled: r.number >= selected,
-          })),
-        ]}
-      />
-      <span className="dim mono">→</span>
-      <Select
-        className="min-w-[18ch]"
-        label="Revision"
-        title="Revision under review"
-        placeholder="no revisions"
-        value={String(selected)}
-        onChange={(v) => {
-          onRight(Number(v));
-        }}
-        options={revisions.map(option)}
-      />
-    </>
-  );
-}
 
 export default function ReviewPage() {
   const { id } = useParams();
@@ -757,10 +693,22 @@ export default function ReviewPage() {
         <div className="diffbar">
           <div className="diffbar-mode">
             <DiffRangeSelect
-              revisions={revisions}
+              items={revisions}
+              option={(r) => {
+                const n = revisionCommentCounts.get(r.number) ?? 0;
+                return {
+                  label: `r${r.number}`,
+                  detail: n > 0 ? commentCountLabel(n) : undefined,
+                };
+              }}
+              baseValue={(r) => revisionVersion(r.number)}
+              first={{ value: "base", label: "Base" }}
               selected={selected}
-              against={against}
-              counts={revisionCommentCounts}
+              against={againstParam(against) ?? "base"}
+              baseTitle="Base = parent commit; rM = interdiff against revision M"
+              label="Revision"
+              title="Revision under review"
+              placeholder="no revisions"
               onLeft={onLeft}
               onRight={onRight}
             />

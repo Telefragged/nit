@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDocumentSnapshot, postDocumentUpdate } from "../api/client";
-import type { Version } from "../api/document.gen";
+import type { Run, Version } from "../api/document.gen";
+import type { Line } from "../api/types";
 import { followDocument } from "../api/documentStream";
 import { errorMessage } from "./utils";
 import { DocumentReplica } from "./wasm";
@@ -17,6 +18,8 @@ export interface LiveDocument {
   /** The Markdown text of the replica, absent until the snapshot loads. */
   text: string | undefined;
   version: Version | undefined;
+  /** The versions of the document, the oldest first. */
+  runs: readonly Run[];
   /** The failure of the load, or null. */
   error: unknown;
   /** Why the last edit did not reach the server, or null. */
@@ -33,7 +36,12 @@ export interface LiveDocument {
   hold: () => () => void;
   /** Resolves after the post of every edit so far. */
   posted: () => Promise<void>;
+  /** Every line of the texts at two versions of the replica, as the
+   * lines of a diff from `from` to `to`. */
+  lines: (from: Version, to: Version) => Line[];
 }
+
+const NO_RUNS: readonly Run[] = [];
 
 /** The reviewer's replica of document `number`, live.
  *
@@ -45,6 +53,7 @@ export function useDocument(number: number): LiveDocument {
     number: number;
     text: string;
     version: Version;
+    runs: Run[];
   }>();
   const [failed, setFailed] = useState<{ number: number; error: unknown }>();
   const [failure, setFailure] = useState<string | null>(null);
@@ -55,6 +64,7 @@ export function useDocument(number: number): LiveDocument {
         number,
         text: replica.text(),
         version: replica.version(),
+        runs: replica.runs() as Run[],
       });
     },
     [number],
@@ -162,15 +172,23 @@ export function useDocument(number: number): LiveDocument {
     [],
   );
 
+  const lines = useCallback(
+    (from: Version, to: Version) =>
+      (live.current?.replica.lines_between(from, to) ?? []) as Line[],
+    [],
+  );
+
   const current = shown?.number === number ? shown : undefined;
   return {
     text: current?.text,
     version: current?.version,
+    runs: current?.runs ?? NO_RUNS,
     error: failed?.number === number ? failed.error : null,
     failure,
     edit,
     append,
     hold,
     posted,
+    lines,
   };
 }

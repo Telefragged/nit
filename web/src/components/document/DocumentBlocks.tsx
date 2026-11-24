@@ -88,21 +88,26 @@ function BlockTools({
  * of the change that it shows, or its upload. Every other block renders
  * as Markdown. `references` contains the references of the text of the
  * block, by line (`referencesByLine`). `id` identifies the block on the
- * page. `children` are the controls of the block. */
-function DocumentBlock({
+ * page. `change` is the class suffix of a block that a diff adds or
+ * removes. `children` are the controls of the block. */
+export function DocumentBlock({
   block,
   references,
   id,
+  change = "",
   children,
 }: {
   block: Block;
   references: ReadonlyMap<number, Reference>;
   id: number;
+  change?: string;
   children?: ReactNode;
 }) {
   const reference = references.get(block.lines[0] - 1);
   return (
-    <div className={`document-block${reference ? "" : " rendered-markdown"}`}>
+    <div
+      className={`document-block${reference ? "" : " rendered-markdown"}${change}`}
+    >
       {children}
       {reference ? (
         <ReferenceView id={id} reference={reference} />
