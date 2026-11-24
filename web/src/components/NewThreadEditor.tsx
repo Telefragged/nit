@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createDraft } from "../api/client";
-import { useReview } from "../pages/reviewContext";
+import { useReview } from "../lib/reviewContext";
 import { revisionVersion } from "../lib/version";
 import CommentEditor from "./CommentEditor";
 

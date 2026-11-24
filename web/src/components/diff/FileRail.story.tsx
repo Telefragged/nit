@@ -9,7 +9,7 @@ import {
 import type { DiffFile, FileStatus } from "../../api/types";
 import type { ReviewFile } from "../../lib/attachments";
 import type { UiThread } from "../../lib/comments";
-import { ReviewContext } from "../../pages/reviewContext";
+import { ReviewContext } from "../../lib/reviewContext";
 import ReviewColumns from "../ReviewColumns";
 import FileRail from "./FileRail";
 

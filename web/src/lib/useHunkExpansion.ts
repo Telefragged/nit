@@ -4,7 +4,7 @@ import { getFileLines } from "../api/client";
 import type { DiffFile, Line, Side } from "../api/types";
 import type { ReviewFile } from "./attachments";
 import { gapLines, skipped } from "./diffview";
-import type { ReviewCtx } from "../pages/reviewContext";
+import type { ReviewCtx } from "./reviewContext";
 
 /** Whether `file`'s hunks hold all of its lines, with no gap above,
  * between or below them. */

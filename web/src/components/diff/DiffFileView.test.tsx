@@ -24,7 +24,7 @@ import type {
 } from "../../lib/comments";
 import { selectionTarget } from "../../lib/selection";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
-import { ReviewContext } from "../../pages/reviewContext";
+import { ReviewContext } from "../../lib/reviewContext";
 import DiffFileView from "./DiffFileView";
 
 afterEach(cleanup);

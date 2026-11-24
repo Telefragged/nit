@@ -3,7 +3,7 @@
 import type { ReviewFile } from "../../lib/attachments";
 import type { UiThread } from "../../lib/comments";
 import { span } from "../../lib/diffview";
-import type { ReviewCtx } from "../../pages/reviewContext";
+import type { ReviewCtx } from "../../lib/reviewContext";
 import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../types";
 import type {
   CommentInput,

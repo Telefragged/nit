@@ -7,7 +7,7 @@ import {
   threadComment,
   uiThread,
 } from "../api/fixtures/builders";
-import { ReviewContext } from "../pages/reviewContext";
+import { ReviewContext } from "../lib/reviewContext";
 import CommentThread from "./CommentThread";
 
 const queryClient = new QueryClient();

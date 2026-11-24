@@ -11,7 +11,7 @@ import {
   type RenderedKind,
 } from "../../lib/rendered";
 import { fileLinesQuery } from "../../lib/useHunkExpansion";
-import { useReview } from "../../pages/reviewContext";
+import { useReview } from "../../lib/reviewContext";
 import HtmlView from "./HtmlView";
 import ImageView from "./ImageView";
 
