@@ -15,13 +15,22 @@ publish = false
 
 ### BEGIN HAKARI SECTION
 [dependencies]
+arrayvec = { version = "0.7" }
+bitflags = { version = "2", default-features = false, features = ["std"] }
 futures-core = { version = "0.3" }
 futures-sink = { version = "0.3" }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
+hashbrown-9067fe90e8c1f593 = { package = "hashbrown", version = "0.17", default-features = false, features = ["default-hasher"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
 memchr = { version = "2" }
-serde_core = { version = "1", features = ["alloc"] }
-serde_json = { version = "1", features = ["raw_value"] }
+proc-macro2 = { version = "1" }
+regex-syntax = { version = "0.8" }
+serde = { version = "1", features = ["alloc", "derive", "rc"] }
+serde_core = { version = "1", features = ["alloc", "rc"] }
+serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
+smallvec = { version = "1", default-features = false, features = ["const_new", "serde", "write"] }
+tracing = { version = "0.1", features = ["log"] }
+tracing-core = { version = "0.1" }
 
 [build-dependencies]
 proc-macro2 = { version = "1" }
@@ -29,7 +38,48 @@ quote = { version = "1" }
 syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "full", "visit", "visit-mut"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "full", "visit-mut"] }
 
+[target.x86_64-unknown-linux-gnu.dependencies]
+libc = { version = "0.2" }
+linux-raw-sys = { version = "0.12", default-features = false, features = ["auxvec", "elf", "errno", "general", "ioctl", "no_std", "prctl"] }
+rustix = { version = "1", features = ["event", "fs", "process", "termios"] }
+
+[target.x86_64-unknown-linux-gnu.build-dependencies]
+libc = { version = "0.2" }
+
+[target.x86_64-unknown-linux-musl.dependencies]
+libc = { version = "0.2" }
+linux-raw-sys = { version = "0.12", default-features = false, features = ["auxvec", "elf", "errno", "general", "ioctl", "no_std", "prctl"] }
+rustix = { version = "1", features = ["event", "fs", "process", "termios"] }
+
+[target.x86_64-unknown-linux-musl.build-dependencies]
+libc = { version = "0.2" }
+
+[target.aarch64-unknown-linux-gnu.dependencies]
+libc = { version = "0.2" }
+linux-raw-sys = { version = "0.12", default-features = false, features = ["auxvec", "elf", "errno", "general", "ioctl", "no_std", "prctl"] }
+rustix = { version = "1", features = ["event", "fs", "process", "termios"] }
+
+[target.aarch64-unknown-linux-gnu.build-dependencies]
+libc = { version = "0.2" }
+
+[target.aarch64-unknown-linux-musl.dependencies]
+libc = { version = "0.2" }
+linux-raw-sys = { version = "0.12", default-features = false, features = ["auxvec", "elf", "errno", "general", "ioctl", "no_std", "prctl"] }
+rustix = { version = "1", features = ["event", "fs", "process", "termios"] }
+
+[target.aarch64-unknown-linux-musl.build-dependencies]
+libc = { version = "0.2" }
+
+[target.aarch64-apple-darwin.dependencies]
+errno = { version = "0.3" }
+libc = { version = "0.2" }
+rustix = { version = "1", features = ["event", "fs", "process", "termios"] }
+
+[target.aarch64-apple-darwin.build-dependencies]
+libc = { version = "0.2" }
+
 [target.wasm32-unknown-unknown.dependencies]
+hashbrown-986da7b5efc2b80e = { package = "hashbrown", version = "0.16", default-features = false, features = ["default-hasher", "inline-more"] }
 js-sys = { version = "0.3" }
 wasm-bindgen = { version = "0.2" }
 

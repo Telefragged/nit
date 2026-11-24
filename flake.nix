@@ -174,6 +174,7 @@
           # the no-feature baseline an optional feature (the server's
           # `features = ["clap"]`, the web's `features = ["ts"]`) would mask.
           test-nit-types = rust.nextest "nit-types";
+          test-nit-document = rust.nextest "nit-document";
           contract = rust.contract;
           types-drift = pkgs.runCommand "types-drift-check" { } ''
             if ! diff -u ${./web/src/api/types.gen.ts} ${rust.wireTypes}; then

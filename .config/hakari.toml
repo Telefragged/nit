@@ -15,3 +15,13 @@ platforms = [
 ]
 
 unify-target-host = "unify-if-both"
+
+# The random-number crates need a JavaScript backend on wasm32. Without
+# this exclusion, workspace-hack gives them to nit-wasm, whether or not
+# it uses a crate that depends on them.
+[final-excludes]
+third-party = [
+  { name = "getrandom" },
+  { name = "rand" },
+  { name = "rand_core" },
+]
