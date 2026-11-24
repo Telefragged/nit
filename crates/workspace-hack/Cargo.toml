@@ -15,7 +15,6 @@ publish = false
 
 ### BEGIN HAKARI SECTION
 [dependencies]
-arrayvec = { version = "0.7" }
 bitflags = { version = "2", default-features = false, features = ["std"] }
 futures-core = { version = "0.3" }
 futures-sink = { version = "0.3" }
@@ -80,7 +79,5 @@ libc = { version = "0.2" }
 
 [target.wasm32-unknown-unknown.dependencies]
 hashbrown-986da7b5efc2b80e = { package = "hashbrown", version = "0.16", default-features = false, features = ["default-hasher", "inline-more"] }
-js-sys = { version = "0.3" }
-wasm-bindgen = { version = "0.2" }
 
 ### END HAKARI SECTION

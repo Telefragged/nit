@@ -6,6 +6,7 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
+use tokio::sync::watch;
 
 use nit_types::domain::ChangeNumber;
 use nit_types::events::{Start, StreamMessage, Subscription};
@@ -23,27 +24,35 @@ pub(super) async fn stream(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.on_upgrade(move |socket| {
+        let appended = state.appended_watch();
+        follow(socket, state, appended, read)
+    })
 }
 
 /// Runs the loop of a client socket.
 ///
-/// The socket reads the log after a subscription and after each update of
-/// the appended watch.
-///
 /// If a read fails, the loop closes the socket. The client then subscribes
 /// again.
-async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
-    let mut appended = state.appended_watch();
+pub(super) async fn follow<S, F, Fut>(
+    mut socket: WebSocket,
+    state: Arc<AppState>,
+    mut changed: watch::Receiver<()>,
+    read: F,
+) where
+    S: serde::de::DeserializeOwned,
+    F: Fn(Arc<AppState>, S) -> Fut,
+    Fut: Future<Output = Result<(Vec<Message>, S), Error>>,
+{
     let mut shutdown = state.shutdown_watch();
-    let mut subscription: Option<Subscription> = None;
+    let mut subscription: Option<S> = None;
     loop {
         tokio::select! {
             incoming = socket.recv() => {
                 let Some(Ok(msg)) = incoming else { break };
                 match msg {
                     Message::Text(text) => {
-                        let Ok(next) = serde_json::from_str::<Subscription>(&text) else {
+                        let Ok(next) = serde_json::from_str::<S>(&text) else {
                             continue;
                         };
                         subscription = Some(next);
@@ -52,8 +61,8 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                     _ => continue,
                 }
             }
-            changed = appended.changed() => {
-                if changed.is_err() {
+            update = changed.changed() => {
+                if update.is_err() {
                     break;
                 }
             }
@@ -63,25 +72,30 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         let Some(current) = subscription.take() else {
             continue;
         };
-        appended.borrow_and_update();
-        let Ok((messages, next)) = read(&state, current).await else {
+        changed.borrow_and_update();
+        let Ok((frames, next)) = read(Arc::clone(&state), current).await else {
             break;
         };
         subscription = Some(next);
-        for message in messages {
-            if send(&mut socket, &message).await.is_err() {
+        for frame in frames {
+            if socket.send(frame).await.is_err() {
                 return;
             }
         }
     }
 }
 
+pub(super) fn text_frame<T: serde::Serialize>(value: &T) -> Result<Message, Error> {
+    let text = serde_json::to_string(value).map_err(|e| Error::internal(e.to_string()))?;
+    Ok(Message::Text(text.into()))
+}
+
 /// Returns the messages that the client of a subscription lacks, and the
 /// subscription with the positions after those messages.
 async fn read(
-    state: &Arc<AppState>,
+    state: Arc<AppState>,
     mut subscription: Subscription,
-) -> Result<(Vec<StreamMessage>, Subscription), Error> {
+) -> Result<(Vec<Message>, Subscription), Error> {
     with_conn(state.pool(), move |conn| {
         let positions = &mut subscription.positions;
         let mut left: BTreeMap<ChangeNumber, u64> = std::mem::take(positions);
@@ -106,15 +120,8 @@ async fn read(
             }
         }
         messages.extend(left.into_keys().map(StreamMessage::Left));
-        Ok((messages, subscription))
+        let frames = messages.iter().map(text_frame).collect::<Result<_, _>>()?;
+        Ok((frames, subscription))
     })
     .await
-}
-
-async fn send(socket: &mut WebSocket, msg: &StreamMessage) -> Result<(), ()> {
-    let text = serde_json::to_string(msg).map_err(|_| ())?;
-    socket
-        .send(Message::Text(text.into()))
-        .await
-        .map_err(|_| ())
 }

@@ -5545,6 +5545,10 @@ rec {
             packageId = "mime_guess";
           }
           {
+            name = "nit-document";
+            packageId = "nit-document";
+          }
+          {
             name = "nit-types";
             packageId = "nit-types";
             features = [ "clap" ];
@@ -5707,6 +5711,10 @@ rec {
             name = "ts-rs";
             packageId = "ts-rs";
             optional = true;
+          }
+          {
+            name = "utoipa";
+            packageId = "utoipa";
           }
           {
             name = "workspace-hack";
@@ -10651,10 +10659,6 @@ rec {
         libName = "workspace_hack";
         dependencies = [
           {
-            name = "arrayvec";
-            packageId = "arrayvec";
-          }
-          {
             name = "bitflags";
             packageId = "bitflags 2.13.2";
             usesDefaultFeatures = false;
@@ -10693,11 +10697,6 @@ rec {
             rename = "hashbrown-9067fe90e8c1f593";
             usesDefaultFeatures = false;
             features = [ "default-hasher" ];
-          }
-          {
-            name = "js-sys";
-            packageId = "js-sys";
-            target = { target, features }: (target.name == "wasm32-unknown-unknown");
           }
           {
             name = "libc";
@@ -10829,11 +10828,6 @@ rec {
           {
             name = "tracing-core";
             packageId = "tracing-core";
-          }
-          {
-            name = "wasm-bindgen";
-            packageId = "wasm-bindgen";
-            target = { target, features }: (target.name == "wasm32-unknown-unknown");
           }
         ];
         buildDependencies = [

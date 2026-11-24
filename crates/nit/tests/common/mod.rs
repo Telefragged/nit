@@ -12,6 +12,7 @@
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use git2::{Oid, Repository, RepositoryInitOptions, Signature, Time};
+use nit_document::{Document, Version};
 use serde_json::{Value, json};
 
 /// Strictly increasing commit timestamps so equal-content commits get distinct
@@ -275,7 +276,7 @@ pub fn nit_env(
 }
 
 /// The `nit` child every helper runs, configured but not spawned.
-fn nit_command(server: &TestServer, repo: &GitRepo, args: &[&str]) -> std::process::Command {
+pub fn nit_command(server: &TestServer, repo: &GitRepo, args: &[&str]) -> std::process::Command {
     let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_nit"));
     cmd.args(args);
     in_checkout(&mut cmd, server, repo);
@@ -373,6 +374,10 @@ pub fn http_get_bytes(url: &str) -> (u16, ureq::http::HeaderMap, Vec<u8>) {
 
 pub fn http_put_bytes(url: &str, body: &[u8]) -> (u16, Value) {
     read(agent().put(url).send(body).unwrap())
+}
+
+pub fn http_post_bytes(url: &str, body: &[u8]) -> (u16, Value) {
+    read(agent().post(url).send(body).unwrap())
 }
 
 pub fn http_delete(url: &str) -> (u16, Value) {
@@ -588,7 +593,11 @@ pub type WsSock = tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std
 
 /// Subscribes the socket with `subscription`, a JSON `Subscription`.
 pub fn ws_subscribe(server: &TestServer, subscription: &Value) -> WsSock {
-    let url = format!("ws://{}/api/stream", server.addr);
+    ws_subscribe_at(server, "/api/stream", subscription)
+}
+
+pub fn ws_subscribe_at(server: &TestServer, path: &str, subscription: &Value) -> WsSock {
+    let url = format!("ws://{}{path}", server.addr);
     let (mut socket, _) = tungstenite::connect(&url).expect("ws connect");
     let sub = subscription.to_string();
     socket
@@ -609,17 +618,49 @@ pub fn ws_entry(socket: &mut WsSock) -> Value {
 /// frame that never arrives makes the test hang.
 pub fn ws_read(socket: &mut WsSock) -> Value {
     loop {
+        if let tungstenite::Message::Text(t) = ws_frame(socket) {
+            return serde_json::from_str(t.as_str()).expect("a stream frame");
+        }
+    }
+}
+
+pub fn ws_read_binary(socket: &mut WsSock) -> Vec<u8> {
+    loop {
+        if let tungstenite::Message::Binary(bytes) = ws_frame(socket) {
+            return bytes.to_vec();
+        }
+    }
+}
+
+fn ws_frame(socket: &mut WsSock) -> tungstenite::Message {
+    loop {
         match socket.read() {
-            Ok(tungstenite::Message::Text(t)) => {
-                return serde_json::from_str(t.as_str()).expect("a stream frame");
-            }
             Ok(tungstenite::Message::Ping(p)) => {
                 let _ = socket.send(tungstenite::Message::Pong(p));
             }
-            Ok(_) => {}
+            Ok(frame) => return frame,
             Err(e) => panic!("the stream closed: {e}"),
         }
     }
+}
+
+pub fn replica(server: &TestServer, number: u64) -> Document {
+    let (st, _, snapshot) =
+        http_get_bytes(&server.url(&format!("/api/documents/{number}/snapshot")));
+    assert_eq!(st, 200);
+    Document::load(&snapshot).expect("the server stores a snapshot")
+}
+
+pub fn post(
+    server: &TestServer,
+    number: u64,
+    document: &Document,
+    since: &Version,
+) -> (u16, Value) {
+    http_post_bytes(
+        &server.url(&format!("/api/documents/{number}/updates")),
+        document.updates_since(since).as_bytes(),
+    )
 }
 
 /// A running `nit` process, so the test can act while a watch runs.
