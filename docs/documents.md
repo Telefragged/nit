@@ -2,7 +2,7 @@
 
 A document is one Markdown text that embeds references to changes. Authors write documents to explain sets of changes, or to propose work before the changes exist. Reviewers edit the same text in the browser, at `/documents/<number>`.
 
-The model is `crates/nit-document`. Its crate docs define the terms: document, reference, writer, edit.
+The model is `crates/nit-document`. Its crate docs define the terms: document, reference, writer, run, edit.
 
 ## The layout of the crate
 
@@ -31,13 +31,28 @@ Every edit is a splice of the text. Two replicas that have the same edits have t
 
 - `tests/properties.rs` generates concurrent splices on three replicas, with late, reordered and repeated deliveries. It also compares one replica with a `String`, and it applies the edits of `edits_since` to the text of the old version. Two concurrent `Editor::set_text` edits of different parts of a text both remain.
 - `tests/reference.rs` prints and parses generated references.
+- `tests/runs.rs` checks the runs of sequential and of concurrent edits, and the lines of a diff. The convergence property also compares the runs of the three replicas.
 - `Editor::splice` and `Document::merge` assert in every build that each edit has a writer. `Editor::splice` also asserts that the text changed only in the range of the splice.
+
+## Versions
+
+The history of a document is a list of runs. A run is a sequence of edits by one writer, with no edit of the other writer between them, and one run is one version of the document. `Document::runs` computes them from the edits of the snapshot.
+
+`Document::runs` puts the edits in one order. Loro gives each edit a logical clock, which is later than the clock of every edit that the writer had seen. The order is by that clock, and then by the number of the replica. So each edit follows the edits that it depends on, every prefix of the order is a version, and all replicas with the same edits have the same runs. Consecutive edits of one replica that follow no edit of another replica keep one place in the order, at the clock of the first. Two writers who edit at the same time therefore make one run each, not one run for each key press.
+
+A `Run` contains its writer, the version after its last edit, and the time of that edit. `Document::lines_between` returns every line of the texts at two versions as the lines of one diff, in the shape that the lines route of a file has.
+
+The document page lists the versions, the newest first. A press on a version shows the diff that its run made, and a base picker selects another version to start the diff at, as the base picker of the review page does. The `version` and `against` parameters of the address contain the two versions.
+
+The diff renders with `renderDoc`, the code that renders the diff of a Markdown file on the review page, and a block of the diff renders with the component that renders a block of the live document. As there, a separator is in place of the unchanged blocks far from a change, and its buttons show them (`useDocRows`). The diff has no controls that edit. Updates still arrive while the page shows a diff, and the list of versions follows them.
 
 ## The stored format
 
 `crates/nit-document/tests/snapshots` contains one snapshot for each stored format, with its text in a Markdown file. Changes that cannot load an old snapshot fail `stored_snapshots_load`. Correct `Document::load` then, and never the files. To add a format, run the ignored test `write_snapshot` with a new file number.
 
-## The author's side
+The ignored test `write_web_fixture` writes `web/src/api/fixtures/rotationPlan.json`, the snapshot of the document that the mock API of the web serves. Its history has four runs by both writers.
+
+## The authors' side
 
 `nit doc show` prints the text exactly as the server stores it, and `nit doc edit` replaces one exact text. `nit doc --help` lists the commands. The plugin skill `nit:document` instructs agents how to use them.
 

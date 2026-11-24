@@ -1,5 +1,4 @@
 .document-page {
-  --topbar-h: 40px;
   --bars-h: var(--topbar-h);
 
   padding-bottom: calc(var(--review-bar-h) + 64px);
@@ -32,6 +31,17 @@
 .document-block > .doc-block[data-part]:hover:not(:has([data-part]:hover)),
 .document-block > .doc-block [data-part]:hover:not(:has([data-part]:hover)) {
   outline: none;
+}
+
+.document-block:is(.doc-added, .doc-removed) {
+  --tint-left-of-text: 12px;
+
+  margin-left: calc(-1 * var(--tint-left-of-text));
+  padding-left: var(--tint-left-of-text);
+}
+
+.document-page > .hunk-row {
+  margin: 0 56px 14px 0;
 }
 
 .block-tools {
@@ -132,4 +142,28 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.document-page > .diffbar {
+  margin-bottom: 14px;
+  border: 1px solid var(--color-border);
+}
+
+.document-page:has(> .diffbar) {
+  --bars-h: calc(var(--topbar-h) + var(--diffbar-h));
+}
+
+.version-list {
+  margin: 24px 56px 0 0;
+}
+
+.version-row {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.version-row:hover,
+.version-row[aria-current="true"] {
+  background: var(--color-accent);
 }

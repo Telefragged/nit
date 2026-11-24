@@ -1,8 +1,8 @@
 import { DocumentReplica } from "../../lib/wasm";
 import { ApiError } from "../client";
-import type { DocumentSummary, Version } from "../document.gen";
-import { ATTACHMENT_PREFIX } from "../types";
+import type { DocumentSummary, Run, Version } from "../document.gen";
 import blobs from "./blobs.json";
+import rotation from "./rotationPlan.json";
 
 interface DocumentRecord {
   number: number;
@@ -11,60 +11,15 @@ interface DocumentRecord {
   replica: DocumentReplica;
 }
 
-const file = (revision: number, path: string, rest = "") =>
-  `/changes/11?revision=${revision}${rest}&file=${encodeURIComponent(path)}`;
-const ROTATE = "src/auth/rotate.rs";
-const attachment = (name: string) =>
-  `/changes/12?revision=0&file=${encodeURIComponent(ATTACHMENT_PREFIX + name)}`;
-
-const ROTATION_PLAN = `Three changes add rotation of refresh tokens. Read them in this order: the schema, the rotation, and then the documentation.
-
-[change 10](/changes/10)
-
-[change 11](/changes/11)
-
-## Reuse revokes the family
-
-\`rotate\` looks up the presented token. A token that was rotated before is a sign of theft, so the whole family is revoked.
-
-[rotate.rs](${file(1, ROTATE)}&line=20-28)
-
-Revision 0 trusted the lookup. Revision 1 rewrote these lines, and [the test](${file(1, "tests/rotation.rs")}) covers the reuse.
-
-[rotate.rs at revision 0](${file(0, ROTATE)}&line=20-21)
-
-## The store after the review
-
-The interdiff from revision 0 to revision 1 shows what the review changed:
-
-- The lookup trims the presented token.
-- A rebase renamed the parameter of \`insert\`.
-
-[store.rs](${file(1, "src/auth/store.rs", "&against=r0")})
-
-## The flow and the plan
-
-[flow.svg](${attachment("web/screenshots/flow.svg")})
-
-[rotation.md](${attachment("plan/rotation.md")})
-
-[nit-log.txt](/api/attachments/${"a".repeat(64)}/nit-log.txt)
-`;
-
-/** The snapshot of a document with no text, in hexadecimal. */
-const EMPTY =
-  "6c6f726f000000000000000000000000532e0cfc00032f0000004c4f524f0000000200767600000001000200e762c96c0100000005000000020066720002007676dbd8c9c8160000000000000000000000";
-
 function rotationPlan(): DocumentRecord {
-  const bytes = EMPTY.match(/../g) ?? [];
+  const bytes = rotation.snapshot.match(/../g) ?? [];
   const replica = new DocumentReplica(
     Uint8Array.from(bytes, (byte) => parseInt(byte, 16)),
   );
-  replica.set_text(ROTATION_PLAN);
   return {
     number: 1,
     title: "Refresh token rotation",
-    sent: null,
+    sent: (replica.runs() as Run[])[1]?.version ?? null,
     replica,
   };
 }

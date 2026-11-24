@@ -70,7 +70,6 @@ import {
   renderDoc,
   type RenderedDoc,
   rowBlocks,
-  shownRows,
 } from "../../lib/document";
 import { highlight, languageFor, markTextRange } from "../../lib/highlight";
 import {
@@ -107,6 +106,7 @@ import DocBlock from "./DocBlock";
 import FileSection from "./FileSection";
 import FloatingPanel from "./FloatingPanel";
 import GapSeparator from "./GapSeparator";
+import { useDocRows } from "./useDocRows";
 import LineLink from "./LineLink";
 import RenderedView from "./RenderedView";
 import StatusMark from "./StatusMark";
@@ -179,8 +179,6 @@ const VIEW_OPTIONS: SegOption<View>[] = [
   { value: "raw", label: "Raw", title: "The lines of the diff" },
   { value: "rendered", label: "Rendered", title: "The file, rendered" },
 ];
-
-const NO_ROWS: ReadonlySet<number> = new Set();
 
 /** Class suffix marking a rebase-drift line, so its gutter and code cell
  * render contained. */
@@ -293,13 +291,7 @@ export default function DiffFileView({
     () => (showDoc && whole.data ? renderDoc(whole.data.lines, docOnly) : null),
     [showDoc, whole.data, docOnly],
   );
-  // The rows of the rendered diff that the reviewer chose to show out of
-  // a hidden run, by index. A new parse starts with none.
-  const [shown, setShown] = useState<{
-    doc: RenderedDoc | null;
-    rows: ReadonlySet<number>;
-  }>({ doc: null, rows: new Set() });
-  const revealedRows = shown.doc === doc ? shown.rows : NO_ROWS;
+  const docRows = useDocRows(doc);
   /** The line that a thread on `line` of `side` shows under: the last line
    * of its block in a rendered Markdown file, else the line itself. */
   const shownLine = useCallback(
@@ -879,11 +871,6 @@ export default function DiffFileView({
     );
   };
 
-  /** The rows of a rendered Markdown file. Side by side, the old side's
-   * blocks show to the left of the new side's blocks. Unified, a removed
-   * block shows above the block that replaces it. An unchanged block
-   * shows the threads of both sides. A run of unchanged blocks far from a
-   * change shows as one separator, like a run of unchanged lines. */
   function documentRows(doc: RenderedDoc) {
     const split = rendered === "split";
     const pair = (key: number, left: ReactNode, right: ReactNode) =>
@@ -898,35 +885,9 @@ export default function DiffFileView({
           {right}
         </Fragment>
       );
-    const keep = (row: DocRow, ri: number) =>
-      revealedRows.has(ri) ||
+    const keep = (row: DocRow) =>
       rowBlocks(row).some(([side, b]) => pinned(side, b));
-    // Gaps are keyed by their order, not by their first row, so that a
-    // reveal from the top edge does not remount the separator and its
-    // focused button.
-    let gaps = 0;
-    return shownRows(doc.rows, keep).map((item) => {
-      if ("from" in item) {
-        const { from, to } = item;
-        return (
-          <GapSeparator
-            key={`g${gaps++}`}
-            more={to - from + 1}
-            unit="block"
-            step={1}
-            down={from > 0}
-            up={to < doc.rows.length - 1}
-            reveal={(end, count) => {
-              const rows = new Set(revealedRows);
-              const n = Math.min(count, to - from + 1);
-              for (let i = 0; i < n; i++)
-                rows.add(end === "down" ? from + i : to - i);
-              setShown({ doc, rows });
-            }}
-          />
-        );
-      }
-      const { index: ri, row } = item;
+    return docRows(keep, (row, ri) => {
       if (!("same" in row)) {
         const drift = (b: Block) => (doc.drift.has(b) ? " drift" : "");
         return pair(
