@@ -14,6 +14,7 @@ use nit_types::domain::Side;
 use nit_types::domain::ThreadProjection;
 
 use super::client::{Client, ServerOpt, server_url};
+use super::doc::read_text;
 use super::format::{ChangeTarget, print_comment};
 
 #[derive(clap::Args)]
@@ -123,12 +124,8 @@ pub fn comment(args: CommentArgs) -> Result<()> {
 ///
 /// Trailing newlines are trimmed — a heredoc or editor always appends one,
 /// and it would read as a trailing hard break in the rendered markdown.
-fn read_body(path: &str) -> Result<String> {
-    let mut text = if path == "-" {
-        std::io::read_to_string(std::io::stdin()).context("reading body from stdin")?
-    } else {
-        std::fs::read_to_string(path).with_context(|| format!("reading body from {path}"))?
-    };
+pub(super) fn read_body(path: &str) -> Result<String> {
+    let mut text = read_text(path)?;
     text.truncate(text.trim_end_matches(['\n', '\r']).len());
     Ok(text)
 }

@@ -193,6 +193,8 @@ impl Client {
 
     /// Opens the change stream and sends `subscribe` on it, retrying while
     /// the server is unreachable.
+    /// Opens the change stream and sends `subscribe` on it, retrying while
+    /// the server is unreachable.
     pub(crate) fn ws_connect(&self, subscribe: &Subscription) -> Result<WsConn> {
         let url = format!("{}/api/stream", self.base.replacen("http", "ws", 1));
         let sub = serde_json::to_string(subscribe)?;
@@ -241,6 +243,31 @@ impl Client {
             .map_err(|e| e.into_error(&self.base))
     }
 
+    pub(crate) fn get_bytes(&self, path: &str) -> Result<Vec<u8>> {
+        let url = format!("{}{path}", self.base);
+        self.agent
+            .get(&url)
+            .call()
+            .map_err(|e| classify(e, path))
+            .and_then(|response| Self::success(response, path))
+            .and_then(|mut response| {
+                response
+                    .body_mut()
+                    .read_to_vec()
+                    .map_err(|e| classify(e, path))
+            })
+            .map_err(|e| e.into_error(&self.base))
+    }
+
+    pub(crate) fn post_bytes<T: DeserializeOwned>(&self, path: &str, body: &[u8]) -> Result<T> {
+        let url = format!("{}{path}", self.base);
+        self.send_body(self.agent.post(&url), path, body)
+    }
+
+    pub(crate) fn page(&self, path: &str) -> String {
+        format!("{}{path}", self.base)
+    }
+
     /// Streams `file` as the body of a PUT.
     pub(crate) fn put_file<T: DeserializeOwned>(
         &self,
@@ -248,9 +275,17 @@ impl Client {
         file: std::fs::File,
     ) -> Result<T> {
         let url = format!("{}{path}", self.base);
-        self.agent
-            .put(&url)
-            .send(file)
+        self.send_body(self.agent.put(&url), path, file)
+    }
+
+    fn send_body<T: DeserializeOwned>(
+        &self,
+        request: ureq::RequestBuilder<ureq::typestate::WithBody>,
+        path: &str,
+        body: impl ureq::AsSendBody,
+    ) -> Result<T> {
+        request
+            .send(body)
             .map_err(|e| classify(e, path))
             .and_then(|response| Self::read(response, path))
             .map_err(|e| e.into_error(&self.base))
