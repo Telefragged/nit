@@ -19,6 +19,7 @@ mod document;
 mod reference;
 #[cfg(test)]
 mod tests;
+pub mod wire;
 
 pub use document::{
     Document, Edit, Editor, LoadError, MergeError, ReplaceError, SpliceError, UnknownVersion,

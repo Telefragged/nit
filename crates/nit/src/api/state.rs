@@ -36,6 +36,7 @@ pub struct AppState {
     /// A stream socket reads the log after each update, so the value is
     /// unused.
     appended: watch::Sender<()>,
+    documents: watch::Sender<()>,
     /// Process-global allocator for draft ids.
     ///
     /// Seeded past the `draft_comments` rows in use.
@@ -72,6 +73,7 @@ impl AppState {
             pool,
             blobs,
             appended: watch::channel(()).0,
+            documents: watch::channel(()).0,
             next_id: AtomicU64::new(max_id + 1),
             shutdown,
         }))
@@ -86,6 +88,20 @@ impl AppState {
     #[must_use]
     pub fn appended_watch(&self) -> watch::Receiver<()> {
         self.appended.subscribe()
+    }
+
+    /// Returns a receiver that changes after each committed write to a
+    /// document. The caller calls `borrow_and_update` on it before it
+    /// loads a document, as for [`AppState::appended_watch`].
+    #[must_use]
+    pub fn documents_watch(&self) -> watch::Receiver<()> {
+        self.documents.subscribe()
+    }
+
+    pub(super) fn commit_and_signal_documents(&self, tx: Transaction) -> Result<(), Error> {
+        tx.commit()?;
+        self.documents.send_replace(());
+        Ok(())
     }
 
     /// The attachment store, beside the database file.

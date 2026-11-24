@@ -24,6 +24,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use deadpool_sqlite::{Config, Hook, HookError, Pool, Runtime};
 use std::fmt::Write as _;
 
+use nit_document::Version;
+use nit_document::wire::{DocumentNumber, DocumentQuery, DocumentSummary};
 use nit_types::changes::ChangeQuery;
 use nit_types::domain::AttachmentHash;
 use nit_types::domain::ChangeNumber;
@@ -330,6 +332,27 @@ const MIGRATIONS: &[&str] = &[
     FROM draft_comments;
     DROP TABLE draft_comments;
     ALTER TABLE draft_comments_new RENAME TO draft_comments;
+    ",
+    "
+    CREATE TABLE documents (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      title        TEXT NOT NULL,
+      snapshot     BLOB NOT NULL,
+      version      TEXT NOT NULL,
+      sent_version TEXT
+    );
+    CREATE TABLE document_tags (
+      document INTEGER NOT NULL REFERENCES documents(id),
+      key      TEXT NOT NULL,
+      value    TEXT NOT NULL,
+      PRIMARY KEY (document, key)
+    ) WITHOUT ROWID;
+    CREATE INDEX document_tags_by_value ON document_tags (key, value);
+    CREATE TABLE document_attachments (
+      document INTEGER NOT NULL REFERENCES documents(id),
+      hash     TEXT NOT NULL REFERENCES attachments(hash),
+      PRIMARY KEY (document, hash)
+    ) WITHOUT ROWID;
     ",
 ];
 
@@ -743,6 +766,7 @@ pub fn delete_unrelated_attachments(
         "DELETE FROM attachments
           WHERE created_at < ?1
             AND hash NOT IN (SELECT hash FROM change_attachments)
+            AND hash NOT IN (SELECT hash FROM document_attachments)
          RETURNING hash",
     )?
     .query_map([cutoff.to_string()], |r| r.get::<_, String>(0))?
@@ -1306,6 +1330,143 @@ pub fn delete_draft_review(tx: &Transaction, change_number: ChangeNumber) -> Res
     tx.execute(
         "DELETE FROM draft_reviews WHERE change_number = ?1",
         params![i64::try_from(change_number.get())?],
+    )?;
+    Ok(())
+}
+
+fn map_document(row: &rusqlite::Row) -> rusqlite::Result<DocumentSummary> {
+    let version = |text: String| stored(text.parse::<Version>(), rusqlite::types::Type::Text);
+    Ok(DocumentSummary {
+        number: DocumentNumber::new(col_u64(row.get("id")?)?),
+        title: row.get("title")?,
+        version: version(row.get("version")?)?,
+        sent: row
+            .get::<_, Option<String>>("sent_version")?
+            .map(version)
+            .transpose()?,
+    })
+}
+
+const DOCUMENT_COLUMNS: &str = "d.id, d.title, d.version, d.sent_version";
+
+/// Stores a new document with its tags, and returns its number.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn insert_document(
+    tx: &Transaction,
+    title: &str,
+    tags: &Tags,
+    snapshot: &[u8],
+    version: &Version,
+) -> Result<DocumentNumber> {
+    tx.execute(
+        "INSERT INTO documents (title, snapshot, version) VALUES (?1, ?2, ?3)",
+        params![title, snapshot, version.to_string()],
+    )?;
+    let id = tx.last_insert_rowid();
+    let mut insert =
+        tx.prepare("INSERT INTO document_tags (document, key, value) VALUES (?1, ?2, ?3)")?;
+    for (key, value) in tags.iter() {
+        insert.execute(params![id, key, value])?;
+    }
+    Ok(DocumentNumber::new(u64::try_from(id)?))
+}
+
+/// # Errors
+///
+/// On a database failure, or a stored version that is malformed.
+pub fn get_document(conn: &Connection, number: DocumentNumber) -> Result<Option<DocumentSummary>> {
+    Ok(conn
+        .query_row(
+            &format!("SELECT {DOCUMENT_COLUMNS} FROM documents d WHERE d.id = ?1"),
+            [i64::try_from(number.get())?],
+            map_document,
+        )
+        .optional()?)
+}
+
+/// The snapshot of a document: its text and its full history.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn document_snapshot(conn: &Connection, number: DocumentNumber) -> Result<Option<Vec<u8>>> {
+    Ok(conn
+        .query_row(
+            "SELECT snapshot FROM documents WHERE id = ?1",
+            [i64::try_from(number.get())?],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+/// The documents that a query selects, ascending by number.
+///
+/// # Errors
+///
+/// On a database failure, or a stored version that is malformed.
+pub fn documents(conn: &Connection, query: &DocumentQuery) -> Result<Vec<DocumentSummary>> {
+    use rusqlite::types::Value;
+    let mut sql = format!("SELECT {DOCUMENT_COLUMNS} FROM documents d WHERE 1");
+    let mut values: Vec<Value> = Vec::new();
+    for tag in &query.tag {
+        sql.push_str(
+            " AND EXISTS (SELECT 1 FROM document_tags t
+                           WHERE t.document = d.id AND t.key = ? AND t.value = ?)",
+        );
+        values.push(Value::Text(tag.key().to_owned()));
+        values.push(Value::Text(tag.value().to_owned()));
+    }
+    sql.push_str(" ORDER BY d.id");
+    conn.prepare(&sql)?
+        .query_map(rusqlite::params_from_iter(values), map_document)?
+        .map(|row| Ok(row?))
+        .collect()
+}
+
+/// Stores the snapshot of a document after a merge, with the uploads
+/// that its text references.
+///
+/// # Errors
+///
+/// On a database failure, including an upload that the store lacks.
+pub fn store_document(
+    tx: &Transaction,
+    number: DocumentNumber,
+    snapshot: &[u8],
+    version: &Version,
+    uploads: &[AttachmentHash],
+) -> Result<()> {
+    let id = i64::try_from(number.get())?;
+    tx.execute(
+        "UPDATE documents SET snapshot = ?2, version = ?3 WHERE id = ?1",
+        params![id, snapshot, version.to_string()],
+    )?;
+    tx.execute("DELETE FROM document_attachments WHERE document = ?1", [id])?;
+    for hash in uploads {
+        tx.execute(
+            "INSERT OR IGNORE INTO document_attachments (document, hash) VALUES (?1, ?2)",
+            params![id, hash.as_str()],
+        )?;
+    }
+    Ok(())
+}
+
+/// Records the version that a reviewer sent to the author.
+///
+/// # Errors
+///
+/// On a database failure.
+pub fn set_document_sent(
+    tx: &Transaction,
+    number: DocumentNumber,
+    version: &Version,
+) -> Result<()> {
+    tx.execute(
+        "UPDATE documents SET sent_version = ?2 WHERE id = ?1",
+        params![i64::try_from(number.get())?, version.to_string()],
     )?;
     Ok(())
 }

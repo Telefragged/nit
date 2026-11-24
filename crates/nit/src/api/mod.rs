@@ -24,6 +24,7 @@ pub mod views;
 mod attachments;
 mod changes;
 mod comments;
+mod documents;
 mod drafts;
 mod gc;
 mod history;
@@ -148,6 +149,15 @@ fn routes() -> utoipa_axum::router::OpenApiRouter<Arc<AppState>> {
         .routes(routes!(comments::abandon_change))
         .routes(routes!(comments::reopen_change))
         .routes(routes!(drafts::edit_draft, drafts::delete_draft))
+        .routes(routes!(
+            documents::list_documents,
+            documents::create_document
+        ))
+        .routes(routes!(documents::stream))
+        .routes(routes!(documents::get_document))
+        .routes(routes!(documents::snapshot))
+        .routes(routes!(documents::merge_update))
+        .routes(routes!(documents::send_document))
         .routes(routes!(stream::stream))
 }
 

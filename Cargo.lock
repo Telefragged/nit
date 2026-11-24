@@ -1753,6 +1753,7 @@ dependencies = [
  "jiff",
  "mimalloc",
  "mime_guess",
+ "nit-document",
  "nit-types",
  "rusqlite",
  "rustix",
@@ -1797,6 +1798,7 @@ dependencies = [
  "similar",
  "thiserror 2.0.20",
  "ts-rs",
+ "utoipa",
  "workspace-hack",
 ]
 
@@ -3302,7 +3304,6 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 name = "workspace-hack"
 version = "0.1.0"
 dependencies = [
- "arrayvec",
  "bitflags 2.13.2",
  "errno",
  "futures-core",
@@ -3310,7 +3311,6 @@ dependencies = [
  "futures-util",
  "hashbrown 0.16.1",
  "hashbrown 0.17.1",
- "js-sys",
  "libc",
  "linux-raw-sys",
  "log",
@@ -3327,7 +3327,6 @@ dependencies = [
  "syn 3.0.6",
  "tracing",
  "tracing-core",
- "wasm-bindgen",
 ]
 
 [[package]]
