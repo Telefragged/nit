@@ -6,7 +6,7 @@ The model is `crates/nit-document`. Its crate docs define the terms: document, r
 
 ## The layout of the crate
 
-The layout of the crate lets a reference in a document show one public item.
+The crate has the layout of the `/explain` skill, so that each reference in a document shows one public item.
 
 - `lib.rs` is the list of the public API. Each module is private, and `lib.rs` exports each public item by its identifier. `wire` is the one public module, because it contains only the shapes of the HTTP API.
 - The first `impl` block of a type contains its public methods, and nothing else. A second `impl` block contains the private and the test-only methods.
