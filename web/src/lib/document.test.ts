@@ -9,8 +9,8 @@ import {
   linkedPart,
   parseBlocks,
   renderDoc,
+  markedElement,
   shownRows,
-  withClasses,
 } from "./document";
 
 const doc = [
@@ -153,18 +153,55 @@ describe("coveringPart", () => {
   });
 });
 
-describe("withClasses", () => {
+describe("markedElement", () => {
   it("adds a class to a marked element and copies only its ancestors", () => {
     const [list] = parseBlocks("- a\n- b");
-    const item = list?.parts[1]?.node;
-    if (!list || !item) throw new Error("no item");
-    const marked = withClasses(list.node, [[item, "linked"]]);
+    const part = list?.parts[1];
+    if (!list || !part?.node) throw new Error("no item");
+    const { node: marked } = markedElement(list, part, undefined);
     expect(marked).not.toBe(list.node);
     const copy = marked.children.find((c) => c.type === "element");
     expect(copy?.type === "element" && copy.properties.className).toEqual([
       "linked",
     ]);
-    expect(withClasses(list.node, [[undefined, "linked"]])).toBe(list.node);
+    expect(markedElement(list, undefined, undefined).node).toBe(list.node);
+  });
+
+  const marks = (node: RootContent): string => {
+    if (node.type === "text") return node.value;
+    if (node.type !== "element") return "";
+    const inner = node.children.map(marks).join("");
+    const cls = [node.properties.className ?? []].flat();
+    if (cls.includes("comment-range")) return `[${inner}]`;
+    const mark = node.properties.dataMark;
+    if (typeof mark !== "string") return inner;
+    const [from, to] = mark.split("-").map(Number);
+    return `${inner.slice(0, from)}[${inner.slice(from, to)}]${inner.slice(to)}`;
+  };
+
+  it("marks only the rendered text whose source lies in a range", () => {
+    const [p] = parseBlocks("> Some **bold** and\n> more \\* text");
+    if (!p) throw new Error("no block");
+    const range = { start_line: 1, start_char: 10, end_line: 2, end_char: 9 };
+    expect(marks(markedElement(p, undefined, range).node)).toBe(
+      "\nSome b[old][ and\nmore *] text\n",
+    );
+  });
+
+  it("marks the characters of a code line", () => {
+    const [fence] = parseBlocks("- x\n\n  ```\n  let a;\n  ```");
+    if (!fence) throw new Error("no block");
+    const range = { start_line: 4, start_char: 6, end_line: 4, end_char: 7 };
+    expect(marks(markedElement(fence, undefined, range).node)).toContain(
+      "let [a];",
+    );
+  });
+
+  it("hovers the part that covers a range over syntax only", () => {
+    const [p] = parseBlocks("**bold**");
+    if (!p) throw new Error("no block");
+    const range = { start_line: 1, start_char: 0, end_line: 1, end_char: 2 };
+    expect(markedElement(p, undefined, range).hovered).toBe(p.parts[0]);
   });
 });
 

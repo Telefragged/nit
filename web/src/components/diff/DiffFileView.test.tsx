@@ -22,6 +22,7 @@ import type {
   RenderedAnchor,
   UiThread,
 } from "../../lib/comments";
+import { selectionTarget } from "../../lib/selection";
 import { EXPAND_STEP, fileLinesQuery } from "../../lib/useHunkExpansion";
 import { ReviewContext } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
@@ -364,8 +365,8 @@ describe("a rendered attachment", () => {
     expect(block?.nextElementSibling?.querySelector("textarea")).not.toBeNull();
   });
 
-  it("tints the innermost part that a hovered thread's anchor covers", () => {
-    const table = attachedFile("t.md", "| A | B |\n|---|---|\n| x | y |\n", 2);
+  it("tints the text of a hovered thread's range, or else the part of its line", () => {
+    const table = attachedFile("t.md", "| A | B |\n|---|---|\n| x | yz |\n", 2);
     const hovered = (at: LineOrRange) => {
       const thread = uiThread({
         id: 1,
@@ -373,15 +374,32 @@ describe("a rendered attachment", () => {
       });
       const { container } = renderFile("unified", table, [thread]);
       hoverThread(container);
-      const tinted = [...container.querySelectorAll(".line-hover")].map(
-        (el) => el.tagName,
-      );
+      const tinted = [
+        ...container.querySelectorAll(".line-hover, .comment-range"),
+      ].map((el) => `${el.tagName}:${el.textContent}`);
       cleanup();
       return tinted;
     };
-    const cell = { start_line: 3, start_char: 6, end_line: 3, end_char: 7 };
-    expect(hovered({ range: cell })).toEqual(["TD"]);
-    expect(hovered({ line: 3 })).toEqual(["TR"]);
+    const cell = { start_line: 3, start_char: 7, end_line: 3, end_char: 8 };
+    expect(hovered({ range: cell })).toEqual(["SPAN:z"]);
+    expect(hovered({ line: 3 })).toEqual(["TR:xyz"]);
+  });
+
+  it("drafts on the source of the text that a selection selects", () => {
+    const doc = attachedFile("d.md", "Some **bold** text\n", 2);
+    const { container } = renderFile("unified", doc, []);
+    const bold = container.querySelector("strong")?.firstChild;
+    if (!bold) throw new Error("no text");
+    const range = document.createRange();
+    range.setStart(bold, 1);
+    range.setEnd(bold, 4);
+    expect(selectionTarget(range)).toEqual({
+      file: doc.path,
+      side: "new",
+      at: {
+        range: { start_line: 1, start_char: 8, end_line: 1, end_char: 11 },
+      },
+    });
   });
 
   it("tints the block above a hovered thread on a blank line", () => {
@@ -400,7 +418,7 @@ describe("a rendered attachment", () => {
     expect(tinted).toEqual(["First."]);
   });
 
-  it("tints a part in each block that a hovered thread's range spans", () => {
+  it("tints the text in each block that a hovered thread's range spans", () => {
     const doc = attachedFile("d.md", "First.\n\n- a\n- b\n\nLast one.\n", 2);
     const thread = uiThread({
       id: 1,
@@ -416,10 +434,10 @@ describe("a rendered attachment", () => {
     });
     const { container } = renderFile("unified", doc, [thread]);
     hoverThread(container);
-    const tinted = [...container.querySelectorAll(".line-hover")].map((el) =>
-      el.textContent.replace(/^\d+/, ""),
+    const tinted = [...container.querySelectorAll(".comment-range")].map(
+      (el) => el.textContent,
     );
-    expect(tinted).toEqual(["First.", "a", "b", "Last one."]);
+    expect(tinted).toEqual(["rst.", "a", "b", "Last"]);
   });
 
   it("marks the linked part, or else the block that the link overlaps", () => {

@@ -1,16 +1,22 @@
 // Splits a Markdown file into the blocks that the review page renders, and
 // tags the parts inside them that a comment can anchor to.
 
-import type { Element, ElementContent, Root, RootContent } from "hast";
+import type { Element, ElementContent, Root, RootContent, Text } from "hast";
 import { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import type { Line, Side } from "../api/types";
+import type { CommentRange, Line, Side } from "../api/types";
 import type { LineOrRange } from "./comments";
 import type { Lines } from "./diffLink";
 import { sideText } from "./rendered";
+import {
+  alignText,
+  formatSourceMap,
+  renderedSlice,
+  type SourceMap,
+} from "./sourceMap";
 
 /** One block of a rendered Markdown file: a top-level element, or one
  * item of a top-level list. */
@@ -29,6 +35,15 @@ export interface Block {
   /** The parts that the page can show as linked or as hovered: the block
    * itself first, then the parts inside it, in document order. */
   parts: Part[];
+  /** The texts of the block that a selection maps to source, in document
+   * order. None for a block that does not come from source lines. */
+  texts: SourceText[];
+}
+
+interface SourceText {
+  node: Element;
+  map: SourceMap;
+  text: Text;
 }
 
 /** A part of a block that the page can show as linked or as hovered:
@@ -95,7 +110,12 @@ function tag(el: Element, part: Part, lines: readonly string[]) {
 /** Tags each part inside `node`, and adds it to `parts`. The code of a
  * code block becomes one tagged `span.code-line` per line, with the
  * fence's language as `data-lang`. */
-function tagParts(node: Element, lines: readonly string[], parts: Part[]) {
+function tagParts(
+  node: Element,
+  lines: readonly string[],
+  parts: Part[],
+  texts: SourceText[],
+) {
   const pos = node.position;
   const code = node.children.find(
     (c): c is Element => c.type === "element" && c.tagName === "code",
@@ -115,15 +135,23 @@ function tagParts(node: Element, lines: readonly string[], parts: Part[]) {
       .replace(/\n$/, "")
       .split("\n")
       .flatMap((value, i): ElementContent[] => {
+        const text: Text = { type: "text", value };
         const line: Element = {
           type: "element",
           tagName: "span",
           properties: { className: ["code-line"], dataLang: lang },
-          children: [{ type: "text", value }],
+          children: [text],
         };
-        const part = { node: line, lines: [first + i, first + i] as Lines };
+        const n = first + i;
+        const part = { node: line, lines: [n, n] as Lines };
         tag(line, part, lines);
         parts.push(part);
+        const source = lines[n - 1] ?? "";
+        const map = source.endsWith(value)
+          ? [{ at: 0, line: n, char: source.length - value.length }]
+          : alignText(value, source, { line: n, char: 0 });
+        line.properties.dataSource = formatSourceMap(map);
+        texts.push({ node: line, map, text });
         return [line, { type: "text", value: "\n" }];
       });
     return;
@@ -142,8 +170,42 @@ function tagParts(node: Element, lines: readonly string[], parts: Part[]) {
       tag(child, part, lines);
       parts.push(part);
     }
-    tagParts(child, lines, parts);
+    tagParts(child, lines, parts, texts);
   }
+}
+
+const isCodeLine = (el: Element) =>
+  [el.properties.className ?? []].flat().includes("code-line");
+
+function mapTexts(node: Element, source: string, texts: SourceText[]) {
+  const mapped = (text: Text) => {
+    const at = text.position;
+    if (at?.start.offset === undefined) return undefined;
+    return alignText(text.value, source.slice(at.start.offset, at.end.offset), {
+      line: at.start.line,
+      char: at.start.column - 1,
+    });
+  };
+  const [only, ...rest] = node.children;
+  const map = only?.type === "text" && rest.length === 0 && mapped(only);
+  if (only?.type === "text" && map) {
+    node.properties.dataSource = formatSourceMap(map);
+    texts.push({ node, map, text: only });
+    return;
+  }
+  node.children = node.children.map((child) => {
+    if (child.type === "element") mapTexts(child, source, texts);
+    const map = child.type === "text" && mapped(child);
+    if (child.type !== "text" || !map) return child;
+    const span: Element = {
+      type: "element",
+      tagName: "span",
+      properties: { dataSource: formatSourceMap(map) },
+      children: [child],
+    };
+    texts.push({ node: span, map, text: child });
+    return span;
+  });
 }
 
 /** Passes every URL through react-markdown's filter, which drops a
@@ -176,13 +238,16 @@ export function parseBlocks(text: string): Block[] {
     while (end > start && !lines[end - 1]) end--;
     const endChar = lines[end - 1]?.length ?? 0;
     const parts: Part[] = [{ lines: [start, end] }];
-    tagParts(node, lines, parts);
+    const texts: SourceText[] = [];
+    tagParts(node, lines, parts, texts);
+    if (pos) mapTexts(node, text, texts);
     blocks.push({
       node,
       fromSource: pos !== undefined,
       lines: [start, end],
       endChar,
       parts,
+      texts,
     });
   }
   return blocks;
@@ -236,24 +301,99 @@ export function coveringPart(block: Block, at: LineOrRange): Part | undefined {
   return block.parts.filter(covers).at(-1) ?? block.parts[0];
 }
 
-/** `node` with `className` added to each element of `marks`, as a copy of
- * the elements on the path to them. The rest of the tree is shared. */
-export function withClasses(
-  node: Element,
-  marks: readonly (readonly [Element | undefined, string])[],
-): Element {
-  if (marks.every(([el]) => !el)) return node;
-  const own = marks.filter(([el]) => el === node).map(([, cls]) => cls);
-  const children = node.children.map((child) =>
-    child.type === "element" ? withClasses(child, marks) : child,
+/** The classes of the rendered text that a hovered thread, or the open
+ * editor, covers. */
+export const MARK_CLASSES = ["comment-range", "comment-range-active"];
+
+function edited(node: Element, edit: (el: Element) => Element): Element {
+  const own = edit(node);
+  const children = own.children.map((child) =>
+    child.type === "element" ? edited(child, edit) : child,
   );
-  const changed = children.some((child, i) => child !== node.children[i]);
-  if (own.length === 0 && !changed) return node;
-  const className = [
-    [node.properties.className ?? []].flat().map(String),
-    own,
-  ].flat();
-  return { ...node, properties: { ...node.properties, className }, children };
+  const changed = children.some((child, i) => child !== own.children[i]);
+  return changed ? { ...own, children } : own;
+}
+
+const withClasses = (el: Element, classes: readonly string[]): Element =>
+  classes.length === 0
+    ? el
+    : {
+        ...el,
+        properties: {
+          ...el.properties,
+          className: [
+            ...[el.properties.className ?? []].flat().map(String),
+            ...classes,
+          ],
+        },
+      };
+
+const withCodeMark = (el: Element, [from, to]: [number, number]): Element => ({
+  ...el,
+  properties: { ...el.properties, dataMark: `${from}-${to}` },
+});
+
+function withTextMark(
+  el: Element,
+  text: Text,
+  [from, to]: [number, number],
+): Element {
+  const piece = (value: string): ElementContent[] =>
+    value ? [{ type: "text", value }] : [];
+  return {
+    ...el,
+    children: [
+      ...piece(text.value.slice(0, from)),
+      {
+        type: "element",
+        tagName: "span",
+        properties: { className: MARK_CLASSES },
+        children: [{ type: "text", value: text.value.slice(from, to) }],
+      },
+      ...piece(text.value.slice(to)),
+    ],
+  };
+}
+
+/** The element of `block` to render, and the part to show as hovered.
+ * The element of `linked` has the class `linked`. When `marked` is a
+ * range, the text of the block in the range is marked. If no text of the
+ * block lies in the range, the part that covers the range is hovered.
+ * The hovered part has the class `line-hover`. */
+export function markedElement(
+  block: Block,
+  linked: Part | undefined,
+  marked: Part | CommentRange | undefined,
+): { node: Element; hovered: Part | undefined } {
+  const slices = new Map<Element, { text: Text; slice: [number, number] }>();
+  let part: Part | undefined;
+  if (marked && "start_line" in marked) {
+    for (const { node, map, text } of block.texts) {
+      const slice = renderedSlice(map, text.value.length, marked);
+      if (slice) slices.set(node, { text, slice });
+    }
+    if (slices.size === 0) part = coveringPart(block, { range: marked });
+  } else {
+    part = marked;
+  }
+  if (!linked?.node && !part?.node && slices.size === 0) {
+    return { node: block.node, hovered: part };
+  }
+  const node = edited(block.node, (el) => {
+    const own = withClasses(
+      el,
+      [
+        el === linked?.node && "linked",
+        el === part?.node && "line-hover",
+      ].filter((c) => typeof c === "string"),
+    );
+    const mark = slices.get(el);
+    if (!mark) return own;
+    return isCodeLine(el)
+      ? withCodeMark(own, mark.slice)
+      : withTextMark(own, mark.text, mark.slice);
+  });
+  return { node, hovered: part };
 }
 
 /** The block that shows a thread on source line `line`: the last block

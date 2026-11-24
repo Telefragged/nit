@@ -3,6 +3,7 @@ import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import {
   add,
+  attachedFile,
   ctx,
   del,
   draft,
@@ -12,7 +13,7 @@ import {
 } from "../../api/fixtures/builders";
 import type { Anchor, DiffFile } from "../../api/types";
 import type { LineOrRange, UiThread } from "../../lib/comments";
-import { ReviewContext } from "../../pages/reviewContext";
+import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
 import DiffFileView from "./DiffFileView";
 
 const queryClient = new QueryClient();
@@ -129,21 +130,51 @@ const FILE_THREAD = uiThread({
   ],
 });
 
+const DOC_LINES = [
+  "# Token rotation",
+  "",
+  "The store **rotates** a refresh token once,",
+  "and revokes the family of a reused token.",
+  "",
+  "- Keep the `lookup` and the swap in one transaction.",
+];
+const DOC = attachedFile("plan.md", DOC_LINES.join("\n"), 1);
+const charOf = (line: number, word: string) =>
+  (DOC_LINES[line - 1] ?? "").indexOf(word);
+const DOC_REVIEW = reviewCtx({
+  editingTarget: {
+    file: DOC.path,
+    side: "new",
+    at: {
+      range: {
+        start_line: 3,
+        start_char: charOf(3, "rotates"),
+        end_line: 4,
+        end_char: charOf(4, "family") + "family".length,
+      },
+    },
+  },
+});
+
 function Section({
   layout,
+  file = FILE,
   threads = THREADS,
+  value = review,
 }: {
   layout: "unified" | "split";
+  file?: DiffFile;
   threads?: UiThread[];
+  value?: ReviewCtx;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
-        <ReviewContext.Provider value={review}>
+        <ReviewContext.Provider value={value}>
           <div className="diff-column" style={{ width: 1160 }}>
             <DiffFileView
-              file={FILE}
+              file={file}
               layout={layout}
               threads={threads}
               domId="file-0"
@@ -174,4 +205,10 @@ export function Split() {
 /** A thread on the whole file. */
 export function FileThread() {
   return <Section layout="unified" threads={[FILE_THREAD]} />;
+}
+
+export function MarkdownSelection() {
+  return (
+    <Section layout="unified" file={DOC} threads={[]} value={DOC_REVIEW} />
+  );
 }
