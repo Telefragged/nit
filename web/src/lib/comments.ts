@@ -9,6 +9,7 @@
 // side-effect-free, so the rules are unit-tested without a DOM.
 
 import { fromLog, unresolvedThreads } from "../api/fold";
+import { fileAt } from "./diffview";
 import { revisionOf, revisionVersion } from "./version";
 import type {
   Anchor,
@@ -16,6 +17,7 @@ import type {
   ChangeProjection,
   CommentRange,
   Decision,
+  DiffFile,
   FileAnchor,
   Side,
   Draft,
@@ -277,6 +279,32 @@ export function threadInRange(
 ): boolean {
   const version = placeVersion(anchor);
   return version === null || versionColumn(version, selected, against) !== null;
+}
+
+/** The file threads that the diff range shows, by the path of the file in
+ * `files`: a thread on a displayed version, and a thread on the whole
+ * file. A thread on any other version is absent, except the thread
+ * `linked`, so that the page can always scroll to it. */
+export function threadsByFile(
+  threads: readonly UiThread[],
+  files: readonly DiffFile[],
+  selected: number,
+  against: ChangeVersion,
+  linked: number | null,
+): Map<string, UiThread[]> {
+  const map = new Map<string, UiThread[]>();
+  for (const t of threads) {
+    const at = shownAt(t);
+    const path = anchorFile(at);
+    if (path === null) continue;
+    const isLinked = t.id !== null && t.id === linked;
+    if (!threadInRange(at, selected, against) && !isLinked) continue;
+    const key = fileAt(files, path)?.path ?? path;
+    const list = map.get(key) ?? [];
+    list.push(t);
+    map.set(key, list);
+  }
+  return map;
 }
 
 /**

@@ -359,7 +359,7 @@ describe("linked lines", () => {
 
   it("spans whole lines on the side the link names", () => {
     mountUnified([rows]);
-    const range = linesRange({
+    const range = linesRange(document, {
       file: "src/a.rs",
       lines: { side: "old", start: 4, end: 6 },
     });
@@ -376,7 +376,7 @@ describe("linked lines", () => {
   it("finds no range when an end line does not render", () => {
     mountUnified([rows]);
     expect(
-      linesRange({
+      linesRange(document, {
         file: "src/a.rs",
         lines: { side: "new", start: 4, end: 9 },
       }),
@@ -472,7 +472,7 @@ describe("a rendered Markdown block", () => {
   it("targets the parts whose lines a link spans", () => {
     mountDoc();
     const linked = (start: number, end: number, chars?: [number, number]) => {
-      const range = linesRange({
+      const range = linesRange(document, {
         file: "docs/a.md",
         lines: { side: "new", start, end, ...(chars && { chars }) },
       });

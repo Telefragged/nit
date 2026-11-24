@@ -48,7 +48,7 @@ import {
   treePaths,
 } from "../../lib/diffview";
 import { buildTree, type TreeNode } from "../../lib/fileTree";
-import { REVEAL, useReview } from "../../pages/reviewContext";
+import { REVEAL, useReview } from "../../lib/reviewContext";
 import { Button } from "../ui/button";
 import StatusMark from "./StatusMark";
 

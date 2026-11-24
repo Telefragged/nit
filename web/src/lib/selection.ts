@@ -21,7 +21,7 @@ import {
   type SourcePlace,
   sourceAt,
 } from "./sourceMap";
-import type { DraftTarget } from "../pages/reviewContext";
+import type { DraftTarget } from "./reviewContext";
 
 /** `Range.intersectsNode`, hand-rolled so jsdom tests and the browser run
  * the same code: overlap is strict (touching at a boundary is not
@@ -46,9 +46,8 @@ const cellOf = (node: Node): HTMLElement | null =>
 const pathOf = (el: Element | null | undefined) =>
   el?.closest("section[data-diff-path]")?.getAttribute("data-diff-path");
 
-/** The section of `file`. */
-const sectionOf = (file: string) =>
-  [...document.querySelectorAll("section[data-diff-path]")].find(
+const sectionOf = (root: ParentNode, file: string) =>
+  [...root.querySelectorAll("section[data-diff-path]")].find(
     (s) => s.getAttribute("data-diff-path") === file,
   );
 
@@ -267,17 +266,18 @@ export function partLink(el: Element): LinkSpan | null {
   };
 }
 
-/** A range over the lines that `link` spans in its file's section: from
+/** A range over the lines that `link` spans in its file's section in
+ * `root`: from
  * the start of the first line to the end of the last. In a rendered
  * Markdown file, it covers the part that spans exactly those lines, and
  * those characters for a table cell. Else it runs from the block that
  * starts on the first line to the block that ends on the last. Null when
  * either end does not render. */
-export function linesRange({
-  file,
-  lines: { side, start, end, chars },
-}: LinkSpan): Range | null {
-  const section = sectionOf(file);
+export function linesRange(
+  root: ParentNode,
+  { file, lines: { side, start, end, chars } }: LinkSpan,
+): Range | null {
+  const section = sectionOf(root, file);
   const block = `.doc-block[data-side="${side}"]`;
   const lines =
     `[data-start="${start}"][data-end="${end}"]` +

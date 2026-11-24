@@ -13,7 +13,8 @@ import {
 } from "../../api/fixtures/builders";
 import type { Anchor, DiffFile } from "../../api/types";
 import type { LineOrRange, UiThread } from "../../lib/comments";
-import { ReviewContext, type ReviewCtx } from "../../pages/reviewContext";
+import { ReviewContext, type ReviewCtx } from "../../lib/reviewContext";
+import DiffColumn from "./DiffColumn";
 import DiffFileView from "./DiffFileView";
 
 const queryClient = new QueryClient();
@@ -172,19 +173,21 @@ function Section({
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
         <ReviewContext.Provider value={value}>
-          <div className="diff-column" style={{ width: 1160 }}>
-            <DiffFileView
-              file={file}
-              layout={layout}
-              threads={threads}
-              domId="file-0"
-              collapsed={collapsed}
-              onToggle={() => {
-                setCollapsed((was) => !was);
-              }}
-              reveal={null}
-              onRevealed={() => undefined}
-            />
+          <div style={{ width: 1160 }}>
+            <DiffColumn layout={layout} ready={value.against}>
+              <DiffFileView
+                file={file}
+                layout={layout}
+                threads={threads}
+                domId="file-0"
+                collapsed={collapsed}
+                onToggle={() => {
+                  setCollapsed((was) => !was);
+                }}
+                reveal={null}
+                onRevealed={() => undefined}
+              />
+            </DiffColumn>
           </div>
         </ReviewContext.Provider>
       </QueryClientProvider>

@@ -8,7 +8,7 @@ import {
   spanOver,
 } from "./diffLink";
 import { rowLines } from "./selection";
-import { useReview } from "../pages/reviewContext";
+import { useReview } from "./reviewContext";
 
 /** A press on the line number that names `lines` on `side`: one line, or
  * the lines of a rendered block. With `extend`, it stretches the linked

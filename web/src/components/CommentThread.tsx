@@ -15,7 +15,7 @@ import {
 import { linksThread } from "../lib/diffLink";
 import { timeAgo } from "../lib/time";
 import { baseVersion } from "../lib/version";
-import { REVEAL, useReview } from "../pages/reviewContext";
+import { REVEAL, useReview } from "../lib/reviewContext";
 import CommentEditor from "./CommentEditor";
 import Markdown from "./Markdown";
 import { Button } from "./ui/button";

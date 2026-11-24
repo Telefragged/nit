@@ -3,7 +3,7 @@ import type { Side } from "../../api/types";
 import { pressLink } from "../../lib/diffLink";
 import { plainClick } from "../../lib/shortcutKey";
 import type { Press } from "../../lib/useLineDrag";
-import { useReview } from "../../pages/reviewContext";
+import { useReview } from "../../lib/reviewContext";
 
 /** A line number in a gutter, as a link to lines `start` through `end`:
  * one line, or the lines of a rendered block, which it labels by its first

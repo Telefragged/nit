@@ -16,14 +16,16 @@ import {
   useNavigationType,
   useParams,
 } from "react-router-dom";
-import { getChangeDrafts, getDiff, getPorted, getRepo } from "../api/client";
+import { getChangeDrafts, getDiff, getRepo } from "../api/client";
 import { tagGraph } from "../api/fold";
 import type {
   ChangeDetail,
+  Draft,
   Revision,
   Side,
   Subscription,
   Tags,
+  ThreadProjection,
   ChangeVersion,
 } from "../api/types";
 import { StatusChip } from "../components/badges";
@@ -33,6 +35,7 @@ import NewThreadButton from "../components/NewThreadButton";
 import NewThreadEditor from "../components/NewThreadEditor";
 import ChangeLog from "../components/ChangeLog";
 import CommentThread from "../components/CommentThread";
+import DiffColumn from "../components/diff/DiffColumn";
 import DiffFileView from "../components/diff/DiffFileView";
 import FileRail from "../components/diff/FileRail";
 import NewRevisionToast from "../components/NewRevisionToast";
@@ -55,18 +58,15 @@ import {
   anchorRevision,
   commentPlacement,
   firstLine,
-  assembleThreads,
   commentCountLabel,
   nodeActivity,
   placementLine,
   pendingUnresolvedCount,
-  portThreads,
   shownAt,
   threadCountByRevision,
-  threadInRange,
   threadKey,
+  threadsByFile,
   type DiffRange,
-  type UiThread,
 } from "../lib/comments";
 import { attachmentsOf, reviewFiles } from "../lib/attachments";
 import {
@@ -76,9 +76,7 @@ import {
   revisionOf,
   revisionVersion,
 } from "../lib/version";
-import { confirmDiscard } from "../lib/confirmDiscard";
 import {
-  pressLink,
   fileLink,
   linkedThread,
   linksThread,
@@ -86,33 +84,28 @@ import {
   parseLink,
   sameLink,
   type DiffLink,
-  type LinkSpan,
 } from "../lib/diffLink";
 import { displayPath, fileAt, fileDomId, treeOrder } from "../lib/diffview";
 import { repoPath } from "../lib/repo";
 import { activeIndexAt, scrollBehavior, whenPresent } from "../lib/scrollspy";
-import { plainClick, shortcutKey } from "../lib/shortcutKey";
-import type { SelectionMiss } from "../lib/selection";
-import {
-  cellLine,
-  linesRange,
-  partLink,
-  selectionAnchorSide,
-  selectionTarget,
-} from "../lib/selection";
+import { shortcutKey } from "../lib/shortcutKey";
 import { shortSha } from "../lib/sha";
 import { timeAgo } from "../lib/time";
 import { useChangeLog } from "../lib/useChangeLog";
 import { useChangeStream } from "../lib/useChangeStream";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
+import { useDraftEditor } from "../lib/useDraftEditor";
 import { useDrafts } from "../lib/useDrafts";
 import { useReviewSettings } from "../lib/reviewSettings";
+import { useThreads } from "../lib/useThreads";
 import { patchParams, useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
-import { targetLine, type DraftTarget, type ReviewCtx } from "./reviewContext";
-import { REVEAL, ReviewContext, sameTarget } from "./reviewContext";
+import { REVEAL, ReviewContext, type ReviewCtx } from "../lib/reviewContext";
 
 const TAG_KEY = "nit.review-tag";
+
+const NO_THREADS: ThreadProjection[] = [];
+const NO_DRAFTS: Draft[] = [];
 
 /** The location state of a navigation that must not move the view. */
 const QUIET = "quiet";
@@ -152,33 +145,6 @@ function selectTag(
     entries[0] ??
     null
   );
-}
-
-/** Why `c` drafted nothing — each names the rule the selection broke and
- * the selection that satisfies it. */
-const MISS_TEXT: Record<SelectionMiss["miss"], string> = {
-  "mixed-sides":
-    "A comment can only span one side of the diff. Select from the old or the new side, not both.",
-  "cross-file": "A comment can only span one file. Select within a file.",
-  "hunk-gap":
-    "A comment can only span consecutive lines. This selection jumps a hunk gap.",
-};
-
-/** Where to hang the miss bubble, in the diff column's own coordinates so
- * it scrolls with the lines it is about: under the rejected selection, and
- * flush with the column its code text starts in — measuring the selection's
- * own left edge would hang the bubble off the line-number gutters, which
- * the union rect of a multi-line range reaches. */
-function missAnchor(range: Range, col: DOMRect): { top: number; left: number } {
-  const start =
-    range.startContainer instanceof Element
-      ? range.startContainer
-      : range.startContainer.parentElement;
-  const text = start?.closest(".code")?.querySelector(".code-text") ?? null;
-  return {
-    top: range.getBoundingClientRect().bottom - col.top,
-    left: (text?.getBoundingClientRect().left ?? col.left) - col.left,
-  };
 }
 
 /** Resolve the ?against param into a diff base for the selected revision.
@@ -292,17 +258,12 @@ export default function ReviewPage() {
 
   const [settings, saveSettings] = useReviewSettings();
   const { layout, whitespace } = settings;
-  const [editingTarget, setEditingTarget] = useState<DraftTarget | null>(null);
-  const editorDirty = useRef(false);
-  const diffColumnRef = useRef<HTMLDivElement>(null);
+  const editor = useDraftEditor();
+  const { editingTarget, setEditingTarget } = editor;
   const [activeFile, setActiveFile] = useState<number | null>(null);
   const [changeCommentOpen, setChangeCommentOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-
-  const [selectionMiss, setSelectionMiss] = useState<
-    (SelectionMiss & { top: number; left: number; diff: string }) | null
-  >(null);
 
   const revisions = published?.revisions ?? [];
   const latest = revisions[revisions.length - 1];
@@ -403,13 +364,6 @@ export default function ReviewPage() {
   const againstRaw = searchParams.get("against");
   const against = deriveDiffBase(againstRaw, selected);
 
-  // The miss bubble's offset was measured against one diff, and the page
-  // outlives every way of replacing it (it is reused across /changes/:id).
-  // Adjust-during-render, like `shownChange` below: a bubble hanging over
-  // code it never described must not paint even once.
-  const diffKey = `${changeNumber}:${selected}:${against}:${layout}:${whitespace}`;
-  if (selectionMiss && selectionMiss.diff !== diffKey) setSelectionMiss(null);
-
   const shownAttachments = attachmentsOf(published, revisionVersion(selected));
   // The diff includes the attachments of both sides, so the key includes
   // their hashes, and an attach entry from the stream refetches the diff.
@@ -493,21 +447,10 @@ export default function ReviewPage() {
     [files],
   );
 
-  /** Collapsing the section that hosts the open inline CommentEditor
-   * unmounts it and destroys its draft — the same discard path the guarded
-   * setEditingTarget covers: confirm while dirty. `hidesEditor` says
-   * whether the attempted collapse covers the editor's section; returns
-   * false when the user keeps their text, and the caller must abort the
-   * collapse (no state change). On an accepted discard the target is
-   * cleared too — left in place, re-expanding the file would resurrect an
-   * empty editor at the stale anchor. */
-  const confirmEditorCollapse = useCallback((hidesEditor: boolean): boolean => {
-    if (!hidesEditor) return true;
-    if (!confirmDiscard(editorDirty.current)) return false;
-    editorDirty.current = false;
-    setEditingTarget(null);
-    return true;
-  }, []);
+  const confirmEditorCollapse = useCallback(
+    (hidesEditor: boolean) => !hidesEditor || setEditingTarget(null),
+    [setEditingTarget],
+  );
 
   // An open editor's anchor is its *visual* column, which a range switch
   // would silently re-map to a different version at save time
@@ -562,28 +505,9 @@ export default function ReviewPage() {
       selectLink: (to: DiffLink) => {
         updateParams(linkParams(to), QUIET);
       },
-      editingTarget,
-      // Moving or clearing the target unmounts the inline CommentEditor and
-      // destroys its draft, so this is a discard path: confirm while dirty.
-      // Same-anchor calls are no-ops; a move within the same file/side/line
-      // (a re-selected range) keeps the editor mounted — same React key —
-      // so nothing is discarded and no confirmation is owed.
-      setEditingTarget: (t) => {
-        const cur = editingTarget;
-        if (t && cur && sameTarget(t, cur)) return true;
-        const sameCell =
-          t !== null &&
-          cur !== null &&
-          t.file === cur.file &&
-          t.side === cur.side &&
-          targetLine(t) === targetLine(cur);
-        if (!sameCell && !confirmDiscard(editorDirty.current)) return false;
-        setEditingTarget(t);
-        return true;
-      },
-      setEditorDirty: (dirty: boolean) => {
-        editorDirty.current = dirty;
-      },
+      editingTarget: editor.editingTarget,
+      setEditingTarget: editor.setEditingTarget,
+      setEditorDirty: editor.setEditorDirty,
     }),
     [
       changeNumber,
@@ -596,67 +520,36 @@ export default function ReviewPage() {
       link,
       searchParams,
       updateParams,
-      editingTarget,
+      editor.editingTarget,
+      editor.setEditingTarget,
+      editor.setEditorDirty,
     ],
   );
 
-  // The reviewer's view of every thread: published threads merged with their
-  // pending drafts, plus draft-only new threads (lib/comments).
-  const threads = useMemo(
-    () => assembleThreads(change?.threads ?? [], change?.drafts ?? []),
-    [change?.threads, change?.drafts],
-  );
+  const {
+    threads,
+    shown: shownThreads,
+    ported: portedQ,
+  } = useThreads({
+    changeNumber,
+    published: change?.threads ?? NO_THREADS,
+    drafts: change?.drafts ?? NO_DRAFTS,
+    selected,
+    against,
+    includeResolved: settings.ported === "all",
+    linked: linkedId,
+    enabled: published !== undefined,
+  });
 
   const revisionCommentCounts = useMemo(
     () => threadCountByRevision(threads),
     [threads],
   );
 
-  // The ported comments of the shown range, resolved threads included, so
-  // the setting and the link filter them without a refetch. The key
-  // carries the earlier threads, so a thread published since refetches;
-  // the anchors themselves change only with the revisions. A linked thread
-  // ports even when it is resolved and the setting hides resolved threads:
-  // the reviewer followed a link to that one thread.
-  const includeResolved = settings.ported === "all";
-  const portKey = useMemo(
-    () =>
-      threads
-        .filter((t) => t.id !== null && anchorRevision(t.anchor) < selected)
-        .map((t) => t.id)
-        .join(","),
-    [threads, selected],
-  );
-  const portedQ = useQuery({
-    queryKey: ["ported", changeNumber, selected, against, portKey],
-    queryFn: () => getPorted(changeNumber, selected, against),
-    enabled: published !== undefined && selected > 0,
-  });
-  const ported = useMemo(() => {
-    const all = portedQ.data ?? [];
-    if (includeResolved) return all;
-    const resolved = new Set(
-      threads.filter((t) => t.resolved).map((t) => t.id),
-    );
-    return all.filter(
-      (p) => p.thread_id === linkedId || !resolved.has(p.thread_id),
-    );
-  }, [portedQ.data, includeResolved, threads, linkedId]);
-  const shownThreads = useMemo(
-    () => portThreads(threads, ported, selected, against),
-    [threads, ported, selected, against],
-  );
-
   const navigate = useNavigate();
   const fileCount = files.length;
 
-  // Keyboard nav: [ / ] previous/next file (revealed like a rail click:
-  // expanded, then scrolled), n / shift+n next/previous change, r the latest
-  // revision, c comments on the selected text or else the linked lines, a
-  // opens the reply modal, ? opens the list of these keys. A layout effect,
-  // so the listener gets the link from the commit that marks the linked
-  // lines: a c pressed once they show comments on them.
-  useLayoutEffect(() => {
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const key = shortcutKey(e);
       if (key === "[" || key === "]") {
@@ -676,43 +569,6 @@ export default function ReviewPage() {
         // Guarded, because switchRange asks the reviewer to discard an open
         // comment editor — the latest revision is where they already are.
         if (selected !== latestRevision) onRight(latestRevision);
-      } else if (key === "c") {
-        const sel = document.getSelection();
-        const linked = fileLink(link);
-        let range: Range | null = null;
-        let result: DraftTarget | SelectionMiss | null = null;
-        if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
-          range = sel.getRangeAt(0);
-          result = selectionTarget(range);
-        } else if (linked?.lines) {
-          const { side, start, end, chars } = linked.lines;
-          if (start === end && !chars) {
-            result = { file: linked.file, side, at: { line: start } };
-          } else {
-            range = linesRange({ file: linked.file, lines: linked.lines });
-            result = range && selectionTarget(range, side);
-          }
-        } else if (linked?.rendered) {
-          const { side, at } = linked.rendered;
-          result = { file: linked.file, side, at };
-        }
-        if (!result) return;
-        // preventDefault, or the keystroke lands in the editor's textarea.
-        e.preventDefault();
-        if ("miss" in result) {
-          const col = diffColumnRef.current?.getBoundingClientRect();
-          if (col && range) {
-            setSelectionMiss({
-              ...result,
-              ...missAnchor(range, col),
-              diff: diffKey,
-            });
-          }
-          return;
-        }
-        // The editor renders its own range highlight. A declined discard
-        // keeps the DOM selection.
-        if (ctxValue.setEditingTarget(result)) sel?.removeAllRanges();
       } else if (key === "a") {
         // preventDefault, or the keystroke's own text insertion lands in
         // the cover-message textarea the opening modal focuses.
@@ -734,96 +590,10 @@ export default function ReviewPage() {
     rowIds,
     changeNumber,
     navigate,
-    ctxValue,
-    diffKey,
     selected,
     latestRevision,
     onRight,
-    link,
   ]);
-
-  // Side-by-side selection paint: tag the diff column with the side the
-  // current selection's anchor sits in, so styles/diff.css can blank the other
-  // column's ::selection. The interleaved subgrid makes a one-column drag's
-  // DOM range sweep the other column's cells too — without this they light
-  // up even though they are not part of the selected text. Cleared when the
-  // selection collapses or leaves the diff (unified diffs have no
-  // data-side, so the attribute never gets set there).
-  useEffect(() => {
-    const onSelectionChange = () => {
-      const col = diffColumnRef.current;
-      if (!col) return;
-      const sel = document.getSelection();
-      const side =
-        sel && !sel.isCollapsed ? selectionAnchorSide(sel.anchorNode) : null;
-      // selectionchange fires continuously through a drag; only touch the
-      // attribute (and the style recalc it triggers across the diff) when
-      // the side actually flips.
-      if (side === col.getAttribute("data-sel-side")) return;
-      if (side) col.setAttribute("data-sel-side", side);
-      else col.removeAttribute("data-sel-side");
-    };
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () => {
-      document.removeEventListener("selectionchange", onSelectionChange);
-    };
-  }, []);
-
-  // A click on a line's code links the line, as a click on its number
-  // does. A click on a part of a rendered Markdown file links the part. A
-  // shift-click extends the linked span over the lines. A click that ends
-  // a text selection leaves the link alone. A shift-press would extend the
-  // text selection from the caret, so the mousedown handler cancels it.
-  useEffect(() => {
-    const clicked = (e: MouseEvent): LinkSpan | null => {
-      const el = e.target;
-      if (!(el instanceof Element) || !diffColumnRef.current?.contains(el)) {
-        return null;
-      }
-      const at = cellLine(el);
-      return at
-        ? {
-            file: at.file,
-            lines: { side: at.side, start: at.line, end: at.line },
-          }
-        : partLink(el);
-    };
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.shiftKey && plainClick(e) && clicked(e)) e.preventDefault();
-    };
-    const onClick = (e: MouseEvent) => {
-      const at = clicked(e);
-      if (at === null || !plainClick(e)) return;
-      if (document.getSelection()?.isCollapsed === false) return;
-      const { side, start, end } = at.lines;
-      ctxValue.selectLink(
-        e.shiftKey
-          ? pressLink(link, at.file, side, [start, end], true).span
-          : at,
-      );
-    };
-    document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("click", onClick);
-    return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("click", onClick);
-    };
-  }, [link, ctxValue]);
-
-  // A miss answers one selection, so it stands until the reviewer starts
-  // another. `selectstart`, not `selectionchange`: the latter also fires
-  // for the very selection the miss is about, and it is queued as a task,
-  // so it can arrive after the keystroke and blink the answer away as it
-  // appears.
-  useEffect(() => {
-    const onSelectStart = () => {
-      setSelectionMiss(null);
-    };
-    document.addEventListener("selectstart", onSelectStart);
-    return () => {
-      document.removeEventListener("selectstart", onSelectStart);
-    };
-  }, []);
 
   // Scroll spy: keep activeFile — the rail highlight and the [ / ] cursor —
   // on the file section currently under the sticky chrome. The threshold is
@@ -861,29 +631,10 @@ export default function ReviewPage() {
     };
   }, [fileCount]);
 
-  // File threads shown in the current diff range: a line comment whose
-  // version is one of the displayed columns, or a file-level
-  // comment (no column to filter by). Everything pinned to another
-  // revision drops out — of the diff, the rail counts, and the leftover
-  // group alike.
-  const threadsByFile = useMemo(() => {
-    const map = new Map<string, UiThread[]>();
-    for (const t of shownThreads) {
-      const at = shownAt(t);
-      const path = anchorFile(at);
-      if (path === null) continue;
-      // The linked thread shows even outside the range, so the page can
-      // always scroll to it.
-      const shown = threadInRange(at, selected, against);
-      if (!shown && !linksThread(link, t.id)) continue;
-      const file = fileAt(files, path);
-      const key = file ? file.path : path;
-      const list = map.get(key) ?? [];
-      list.push(t);
-      map.set(key, list);
-    }
-    return map;
-  }, [shownThreads, files, selected, against, link]);
+  const threadsOfFile = useMemo(
+    () => threadsByFile(shownThreads, files, selected, against, linkedId),
+    [shownThreads, files, selected, against, linkedId],
+  );
 
   // Adjust-during-render, like `shownChange` above: the file a link names
   // expands in the same render that reads the link, so it never paints
@@ -974,7 +725,7 @@ export default function ReviewPage() {
   const changeLevelThreads = shownThreads.filter(
     (t) => anchorFile(shownAt(t)) === null,
   );
-  const orphanFileThreads = [...threadsByFile.entries()].filter(
+  const orphanFileThreads = [...threadsOfFile.entries()].filter(
     ([path]) => !files.some((f) => f.path === path),
   );
 
@@ -1057,7 +808,7 @@ export default function ReviewPage() {
           rail={
             <FileRail
               files={files}
-              threadsByFile={threadsByFile}
+              threadsByFile={threadsOfFile}
               activeIndex={activeFile}
               onSelect={revealFile}
               allExpanded={allFilesExpanded}
@@ -1075,22 +826,10 @@ export default function ReviewPage() {
             />
           }
         >
-          {/* The diff base of the rendered diff. It is absent while the
-              diff of the current range loads. */}
-          <div
-            className="diff-column"
-            ref={diffColumnRef}
-            data-diff-ready={diffQ.isSuccess ? against : undefined}
+          <DiffColumn
+            layout={layout}
+            ready={diffQ.isSuccess ? against : undefined}
           >
-            {selectionMiss ? (
-              <div
-                className="selection-miss"
-                role="status"
-                style={{ top: selectionMiss.top, left: selectionMiss.left }}
-              >
-                {MISS_TEXT[selectionMiss.miss]}
-              </div>
-            ) : null}
             {changeLevelThreads.length > 0 || changeCommentOpen ? (
               <section className="change-threads">
                 <div className="thread-group-title">Change discussion</div>
@@ -1129,7 +868,7 @@ export default function ReviewPage() {
                   key={file.path}
                   file={file}
                   layout={layout}
-                  threads={threadsByFile.get(file.path) ?? []}
+                  threads={threadsOfFile.get(file.path) ?? []}
                   domId={fileDomId(i)}
                   collapsed={!expanded.has(file.path)}
                   reveal={pendingFile?.file === file.path ? pendingFile : null}
@@ -1177,7 +916,7 @@ export default function ReviewPage() {
                 ))}
               </section>
             ) : null}
-          </div>
+          </DiffColumn>
         </ReviewColumns>
 
         <ChangeLog feed={log} threads={change.threads} />

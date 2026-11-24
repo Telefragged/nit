@@ -96,8 +96,8 @@ import {
   targetLine,
   targetRange,
   type DraftTarget,
-} from "../../pages/reviewContext";
-import { useReview } from "../../pages/reviewContext";
+} from "../../lib/reviewContext";
+import { useReview } from "../../lib/reviewContext";
 import CommentEditor from "../CommentEditor";
 import CommentThread from "../CommentThread";
 import NewThreadButton from "../NewThreadButton";
