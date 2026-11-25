@@ -179,6 +179,18 @@ pub fn intraline_marks(regions: JsValue) -> Result<JsValue, JsValue> {
     to_js(&intraline::marks(&regions))
 }
 
+/// The replacements that change the text `old` into the text `new`, in
+/// order: each an `old` span and the `new` span that replaces it, as
+/// `[start, end]` in UTF-16 code units with the end exclusive.
+///
+/// # Errors
+///
+/// When the replacements fail to serialize.
+#[wasm_bindgen]
+pub fn text_replacements(old: &str, new: &str) -> Result<JsValue, JsValue> {
+    to_js(&intraline::replacements(old, new))
+}
+
 /// Projects a `ChangeProjection` to its published `ChangeDetail`.
 ///
 /// The reviewer's drafts and draft decision are not log state, so they

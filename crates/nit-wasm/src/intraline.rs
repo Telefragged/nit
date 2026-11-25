@@ -63,6 +63,122 @@ pub fn marks(regions: &[Region]) -> Vec<Marks> {
         .collect()
 }
 
+/// A span of an old text, and the span of the new text that replaces it.
+///
+/// Each span is `(start, end)` in UTF-16 code units, the end exclusive.
+/// The old span of an insertion is empty, and so is the new span of a
+/// deletion.
+#[derive(Serialize)]
+pub struct Replacement {
+    old: (usize, usize),
+    new: (usize, usize),
+}
+
+/// The replacements that change `old` into `new`, in order. Texts past
+/// the budget give none.
+///
+/// The texts differ by words: a replacement starts and ends between two
+/// words, or next to white space or punctuation. An insertion or a
+/// deletion that fits at several places starts at the first of them that
+/// follows white space, so that it covers a word with the space after it.
+pub fn replacements(old: &str, new: &str) -> Vec<Replacement> {
+    let (old, new) = (Words::new(old), Words::new(new));
+    let mut edits = hunks(&old.words, &new.words);
+    let mut previous_end = (0, 0);
+    for at in 0..edits.len() {
+        let next_start = edits
+            .get(at + 1)
+            .map_or((old.words.len(), new.words.len()), |next| {
+                (next.old.start, next.new.start)
+            });
+        let edit = &mut edits[at];
+        if edit.old.is_empty() {
+            move_to_word_start(&new.words, &mut edit.new, previous_end.1, next_start.1);
+            let unchanged_words_between = edit.new.start - previous_end.1;
+            edit.old = empty_range_at(previous_end.0 + unchanged_words_between);
+        } else if edit.new.is_empty() {
+            move_to_word_start(&old.words, &mut edit.old, previous_end.0, next_start.0);
+            let unchanged_words_between = edit.old.start - previous_end.0;
+            edit.new = empty_range_at(previous_end.1 + unchanged_words_between);
+        }
+        previous_end = (edit.old.end, edit.new.end);
+    }
+    edits
+        .iter()
+        .map(|edit| Replacement {
+            old: (
+                old.unit_offset_of_word[edit.old.start],
+                old.unit_offset_of_word[edit.old.end],
+            ),
+            new: (
+                new.unit_offset_of_word[edit.new.start],
+                new.unit_offset_of_word[edit.new.end],
+            ),
+        })
+        .collect()
+}
+
+fn empty_range_at(at: usize) -> Range<usize> {
+    at..at
+}
+
+struct Words<'a> {
+    words: Vec<&'a str>,
+    unit_offset_of_word: Vec<usize>,
+}
+
+impl<'a> Words<'a> {
+    fn new(text: &'a str) -> Self {
+        let is_word_char = |c: char| c.is_alphanumeric() || c == '_';
+        let (mut words, mut unit_offset_of_word) = (Vec::new(), Vec::new());
+        let (mut from, mut units) = (0, 0);
+        let mut chars = text.char_indices().peekable();
+        while let Some((at, c)) = chars.next() {
+            let ends = chars
+                .peek()
+                .is_none_or(|&(_, next)| !(is_word_char(c) && is_word_char(next)));
+            if ends {
+                let word = &text[from..at + c.len_utf8()];
+                words.push(word);
+                unit_offset_of_word.push(units);
+                units += word.encode_utf16().count();
+                from = at + c.len_utf8();
+            }
+        }
+        let offset_of_text_end = units;
+        unit_offset_of_word.push(offset_of_text_end);
+        Self {
+            words,
+            unit_offset_of_word,
+        }
+    }
+}
+
+fn move_to_word_start(words: &[&str], span: &mut Range<usize>, floor: usize, ceiling: usize) {
+    let (from, len) = (span.start, span.len());
+    let mut first_equivalent = from;
+    while first_equivalent > floor
+        && words[first_equivalent - 1] == words[first_equivalent + len - 1]
+    {
+        first_equivalent -= 1;
+    }
+    let mut last_equivalent = from;
+    while last_equivalent + len < ceiling && words[last_equivalent] == words[last_equivalent + len]
+    {
+        last_equivalent += 1;
+    }
+    let follows_white_space =
+        |at: usize| at == floor || words[at - 1].chars().all(char::is_whitespace);
+    let starts_with_line_break = |at: usize| words[at] == "\n";
+    let mut places = first_equivalent..=last_equivalent;
+    let to = places
+        .clone()
+        .find(|&at| follows_white_space(at))
+        .or_else(|| places.find(|&at| starts_with_line_break(at)))
+        .unwrap_or(from);
+    *span = to..to + len;
+}
+
 /// One side of a region: its lines run together, newline-terminated.
 ///
 /// Each line's place in the run is recorded alongside it. Terminating the
@@ -139,12 +255,11 @@ struct Edit {
     new: Range<usize>,
 }
 
-/// The code units of one side, as diff tokens.
-struct Units<'a>(&'a [u16]);
+struct Tokens<'a, T>(&'a [T]);
 
-impl<'a> TokenSource for Units<'a> {
-    type Token = u16;
-    type Tokenizer = Copied<slice::Iter<'a, u16>>;
+impl<'a, T: Copy + Eq + std::hash::Hash> TokenSource for Tokens<'a, T> {
+    type Token = T;
+    type Tokenizer = Copied<slice::Iter<'a, T>>;
 
     fn tokenize(&self) -> Self::Tokenizer {
         self.0.iter().copied()
@@ -155,18 +270,22 @@ impl<'a> TokenSource for Units<'a> {
     }
 }
 
-fn edits(old: &[u16], new: &[u16]) -> Vec<Edit> {
+fn hunks<T: Copy + Eq + std::hash::Hash>(old: &[T], new: &[T]) -> Vec<Edit> {
     if old.len() > BUDGET || new.len() > BUDGET {
         return Vec::new();
     }
-    let input = InternedInput::new(Units(old), Units(new));
-    let mut edits: Vec<Edit> = Diff::compute(Algorithm::Myers, &input)
+    let input = InternedInput::new(Tokens(old), Tokens(new));
+    Diff::compute(Algorithm::Myers, &input)
         .hunks()
         .map(|hunk| Edit {
             old: hunk.before.start as usize..hunk.before.end as usize,
             new: hunk.after.start as usize..hunk.after.end as usize,
         })
-        .collect();
+        .collect()
+}
+
+fn edits(old: &[u16], new: &[u16]) -> Vec<Edit> {
+    let mut edits = hunks(old, new);
     coalesce(&mut edits, old, new);
     for edit in &mut edits {
         trim(edit, old, new);
@@ -243,6 +362,21 @@ mod tests {
                 .collect()
         };
         (cut(old, &out[0].old), cut(new, &out[0].new))
+    }
+
+    #[test]
+    fn a_replacement_pairs_the_old_span_with_the_new_span() {
+        let spans = |old: &str, new: &str| -> Vec<_> {
+            replacements(old, new)
+                .iter()
+                .map(|r| (r.old, r.new))
+                .collect()
+        };
+        assert_eq!(spans("one two\nthree", "one 2\nthree"), [((4, 7), (4, 5))]);
+        assert_eq!(spans("one three", "one two three"), [((4, 4), (4, 8))]);
+        assert_eq!(spans("one two three", "one three"), [((4, 8), (4, 4))]);
+        assert_eq!(spans("- one.", "- one.\n- two."), [((6, 6), (6, 13))]);
+        assert_eq!(spans("same", "same"), []);
     }
 
     #[test]
