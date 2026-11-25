@@ -362,9 +362,6 @@ fn resolution_applied_in_draft_order() {
     assert_eq!(t["comments"].as_array().unwrap().len(), 2);
 }
 
-/// A pure rebase (same patch-id + message, new parent) appends a revision but
-/// carries the verdict forward; reviewing the new revision still works because
-/// a live tip pins it.
 #[test]
 fn pure_rebase_carries_status_forward() {
     let g = GitRepo::new();

@@ -91,7 +91,8 @@ pub struct RevisionPayload {
     pub parent_sha: Sha,
     pub fork_sha: Sha,
     pub message: String,
-    /// `false` only for a pure rebase (patch-id-equal, message unchanged).
+    /// `false` only for a pure rebase: the message is unchanged, and the
+    /// tree equals the prior commit replayed onto the new parent.
     ///
     /// The new revision then inherits the prior revision's review status
     /// rather than resetting to `pending`.
