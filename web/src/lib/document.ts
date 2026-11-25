@@ -16,6 +16,7 @@ import {
   formatSourceMap,
   renderedSlice,
   type SourceMap,
+  type SourcePlace,
 } from "./sourceMap";
 
 /** One block of a rendered Markdown file: a top-level element, or one
@@ -330,6 +331,17 @@ const withCodeMark = (el: Element, [from, to]: [number, number]): Element => ({
   properties: { ...el.properties, dataMark: `${from}-${to}` },
 });
 
+const span = (
+  className: string[],
+  children: ElementContent[],
+  properties: Element["properties"] = {},
+): Element => ({
+  type: "element",
+  tagName: "span",
+  properties: { ...properties, className },
+  children,
+});
+
 function withTextMark(
   el: Element,
   text: Text,
@@ -341,12 +353,7 @@ function withTextMark(
     ...el,
     children: [
       ...piece(text.value.slice(0, from)),
-      {
-        type: "element",
-        tagName: "span",
-        properties: { className: MARK_CLASSES },
-        children: [{ type: "text", value: text.value.slice(from, to) }],
-      },
+      span(MARK_CLASSES, [{ type: "text", value: text.value.slice(from, to) }]),
       ...piece(text.value.slice(to)),
     ],
   };
@@ -391,6 +398,76 @@ export function markedElement(
       : withTextMark(own, mark.text, mark.slice);
   });
   return { node, hovered: part };
+}
+
+/** A text that a diff removed, and the place in the new source where
+ * it was. */
+export interface Deletion {
+  at: SourcePlace;
+  text: string;
+}
+
+/** The element of `block` with the changes of a diff inside its text.
+ * The rendered text whose source lies in one of `inserted` is in a
+ * `span.doc-inserted`. Each of `deleted` is an empty
+ * `span.doc-deletion`, with the text as `data-removed`, before the first
+ * rendered character at or after its place. A deletion after every
+ * character goes after the last text. */
+export function changedElement(
+  block: Block,
+  inserted: readonly CommentRange[],
+  deleted: readonly Deletion[],
+): Element {
+  const last = block.texts.at(-1);
+  const cuts = deleted.flatMap(({ at, text }) => {
+    const rest = {
+      start_line: at.line,
+      start_char: at.char,
+      end_line: Infinity,
+      end_char: Infinity,
+    };
+    for (const { node, map, text: rendered } of block.texts) {
+      const slice = renderedSlice(map, rendered.value.length, rest);
+      if (slice) return [{ node, at: slice[0], text }];
+    }
+    return last ? [{ node: last.node, at: last.text.value.length, text }] : [];
+  });
+  const texts = new Map(block.texts.map((text) => [text.node, text]));
+  return edited(block.node, (el) => {
+    const source = texts.get(el);
+    if (!source) return el;
+    const { value } = source.text;
+    const slices = inserted.flatMap((range) => {
+      const slice = renderedSlice(source.map, value.length, range);
+      return slice ? [slice] : [];
+    });
+    const points = cuts.filter((cut) => cut.node === el);
+    if (slices.length === 0 && points.length === 0) return el;
+    const edges = [
+      ...new Set([
+        0,
+        value.length,
+        ...slices.flat(),
+        ...points.map((cut) => cut.at),
+      ]),
+    ].sort((a, b) => a - b);
+    const children = edges.flatMap((from, i): ElementContent[] => {
+      const here = points.filter((cut) => cut.at === from);
+      const removed = here.map((cut) => cut.text).join(" … ");
+      const to = edges[i + 1] ?? from;
+      const piece: Text = { type: "text", value: value.slice(from, to) };
+      const inside = slices.some(([start, end]) => start <= from && to <= end);
+      return [
+        ...(here.length > 0
+          ? [span(["doc-deletion"], [], { dataRemoved: removed })]
+          : []),
+        ...(to === from
+          ? []
+          : [inside ? span(["doc-inserted"], [piece]) : piece]),
+      ];
+    });
+    return { ...el, children };
+  });
 }
 
 /** The block that shows a thread on source line `line`: the last block
