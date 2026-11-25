@@ -68,6 +68,10 @@ export interface ReviewCtx {
   linkHref: (link: DiffLink) => string;
   /** Writes `link` into the URL without moving the view. */
   selectLink: (link: DiffLink) => void;
+  /** Set where the files show outside the page of their change. The
+   * header of a file then shows `source`, the change and the revision,
+   * and the link of the file calls `open`, which opens that page. */
+  outside?: { source: string; open: (link: DiffLink) => void };
   editingTarget: DraftTarget | null;
   /** Guarded: moving or clearing the target unmounts the inline editor, so
    * this confirms first while `editorDirty` is set, returning whether the

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useContext, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { LineRange, Reference } from "../../api/document.gen";
 import type { ChangeDetail, Draft } from "../../api/types";
 import type { ReviewFile } from "../../lib/attachments";
@@ -18,7 +18,12 @@ import { draftsQuery } from "../../lib/useDrafts";
 import { useDraftEditor } from "../../lib/useDraftEditor";
 import { fileLinesQuery } from "../../lib/useHunkExpansion";
 import { useThreads } from "../../lib/useThreads";
-import { baseVersion, isBase, revisionVersion } from "../../lib/version";
+import {
+  baseVersion,
+  isBase,
+  revisionOf,
+  revisionVersion,
+} from "../../lib/version";
 import DiffColumn from "../diff/DiffColumn";
 import DiffFileView from "../diff/DiffFileView";
 import { FileLoadNote } from "../diff/RenderedView";
@@ -150,6 +155,12 @@ function RevisionDiff({
       selectLink: (to) => {
         onLink({ block, link: to });
       },
+      outside: {
+        source: `change ${change.id} ${isBase(against) ? "" : `revision ${revisionOf(against)} → `}revision ${revision}`,
+        open: (to) => {
+          void navigate(changeHref(change.id, revision, against, to));
+        },
+      },
       editingTarget,
       setEditingTarget,
       setEditorDirty,
@@ -180,12 +191,6 @@ function RevisionDiff({
   const busy = diff.isLoading || drafts.isLoading || ported.isLoading;
   return (
     <ReviewContext.Provider value={ctx}>
-      <div className="reference-source">
-        <Link to={changeHref(change.id, revision, against, null)}>
-          change {change.id}
-        </Link>
-        , {isBase(against) ? `r${revision}` : `${against} → r${revision}`}
-      </div>
       <div className="reference-diff" aria-busy={busy}>
         <DiffColumn
           layout="unified"

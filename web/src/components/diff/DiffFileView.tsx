@@ -1001,11 +1001,15 @@ export default function DiffFileView({
           <a
             className="file-link"
             href={ctx.linkHref({ file: file.path, lines: null })}
-            title="Link to this file"
+            title={
+              ctx.outside ? "Open this file in its change" : "Link to this file"
+            }
             onClick={(e) => {
               if (!plainClick(e) || e.shiftKey) return;
               e.preventDefault();
-              linkWholeFile();
+              if (ctx.outside)
+                ctx.outside.open({ file: file.path, lines: null });
+              else linkWholeFile();
             }}
           >
             #
@@ -1039,9 +1043,14 @@ export default function DiffFileView({
           {markCounts(threads).map(({ mark, count }) => (
             <ThreadCount key={mark} mark={mark} count={count} word />
           ))}
+          {ctx.outside ? (
+            <span className="ml-auto font-sans font-medium text-muted-foreground">
+              {ctx.outside.source}
+            </span>
+          ) : null}
           <NewThreadButton
             anchor="file"
-            className="ml-auto"
+            className={ctx.outside ? undefined : "ml-auto"}
             onClick={() => {
               setFileCommentOpen(true);
               if (collapsed) onToggle();
