@@ -584,7 +584,8 @@ export type RevisionPayload = {
   fork_sha: Sha;
   message: string;
   /**
-   * `false` only for a pure rebase (patch-id-equal, message unchanged).
+   * `false` only for a pure rebase: the message is unchanged, and the
+   * tree equals the prior commit replayed onto the new parent.
    *
    * The new revision then inherits the prior revision's review status
    * rather than resetting to `pending`.

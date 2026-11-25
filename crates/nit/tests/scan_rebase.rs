@@ -1,8 +1,3 @@
-//! Pure-rebase vs reword semantics through `POST /api/push`: a patch-id-equal,
-//! same-message commit on a new parent appends a revision but carries the
-//! reviewed status forward; changing the message resets the change to pending.
-//! Asserted through `GET /api/changes/{id}`.
-
 mod common;
 
 use common::{
@@ -32,9 +27,6 @@ fn approve(server: &TestServer, change_number: u64) {
     review(server, change_number, "approve", "lgtm");
 }
 
-/// A pure rebase (same patch-id + same message, new parent) appends a revision
-/// but the status at the latest revision carries the approval forward; a
-/// reword (message changed) resets that change to pending.
 #[test]
 fn pure_rebase_carries_status_forward_then_reword_resets() {
     let g = GitRepo::new();

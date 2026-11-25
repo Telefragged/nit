@@ -8,7 +8,6 @@
 //! Keep refs (GC safety) are an idempotent side effect.
 //!
 //! - [`identity`] — `Change-Id:` trailer extraction and validation.
-//! - [`objects`] — patch-ids and GC-safety keep refs.
 
 pub mod identity;
 pub mod objects;
@@ -149,8 +148,8 @@ fn walk_linear(repo: &Repository, base: Oid, tip: Oid) -> Result<Vec<Commit<'_>>
 
 /// True when a revision differs from its predecessor only by a rebase.
 ///
-/// That is a patch-id-equal commit with an unchanged message.
-/// Unverifiable objects make it false.
+/// That is an unchanged message, and a tree that equals the old commit
+/// replayed onto the new parent. Unverifiable objects make it false.
 #[must_use]
 pub fn pure_rebase(
     repo: &Repository,
@@ -159,14 +158,23 @@ pub fn pure_rebase(
     new_sha: &Sha,
     new_msg: &str,
 ) -> bool {
-    if old_msg != new_msg {
-        return false;
+    old_msg == new_msg && replays(repo, old_sha, new_sha).unwrap_or(false)
+}
+
+fn replays(repo: &Repository, old: &Sha, new: &Sha) -> Result<bool, git2::Error> {
+    let old = repo.find_commit(Oid::from_str(old.as_str())?)?;
+    let new = repo.find_commit(Oid::from_str(new.as_str())?)?;
+    if old.parent(0)?.tree_id() == new.parent(0)?.tree_id() {
+        return Ok(old.tree_id() == new.tree_id());
     }
-    old_sha == new_sha
-        || matches!(
-            (objects::sha_patch_id(repo, old_sha), objects::sha_patch_id(repo, new_sha)),
-            (Some(x), Some(y)) if x == y
-        )
+    let scratch = Repository::open(repo.path())?;
+    // libgit2 writes to the backend of the highest priority. The disk
+    // backends have priority 1 and 2.
+    scratch.odb()?.add_new_mempack_backend(1000)?;
+    let new = scratch.find_commit(new.id())?;
+    let mut picked =
+        scratch.cherrypick_commit(&scratch.find_commit(old.id())?, &new.parent(0)?, 0, None)?;
+    Ok(!picked.has_conflicts() && picked.write_tree_to(&scratch)? == new.tree_id())
 }
 
 /// The canonical ref's current HEAD sha.
@@ -319,7 +327,7 @@ mod tests {
 
     use git2::{Oid, Repository, Signature};
 
-    use super::{canonical_history, detect_merges, sha_of};
+    use super::{canonical_history, detect_merges, pure_rebase, sha_of};
     use nit_types::domain::{ChangeId, ChangeNumber, Sha};
     use nit_types::domain::{ChangeProjection, RevisionProjection};
 
@@ -545,5 +553,66 @@ mod tests {
         let absent = Sha::new("0".repeat(40)).expect("40 zeroes name no object");
         let got = detect_merges(&repo, &absent, &sha_of(merged), &open(&[&change]));
         assert_eq!(got, vec![]);
+    }
+
+    fn object_count(repo: &Repository) -> usize {
+        let mut count = 0;
+        repo.odb()
+            .expect("odb")
+            .foreach(|_| {
+                count += 1;
+                true
+            })
+            .expect("list objects");
+        count
+    }
+
+    const BASE: &str = "1\n2\n3\n4\n5\n6\n7\n8\n";
+    const EDIT_LINE_4: &str = "1\n2\n3\nX\n5\n6\n7\n8\n";
+    const EDIT_CONTEXT_LINE_7: &str = "1\n2\n3\n4\n5\n6\nY\n8\n";
+    const EDIT_LINES_4_AND_7: &str = "1\n2\n3\nX\n5\n6\nY\n8\n";
+    const EDIT_LINES_1_4_AND_7: &str = "Z\n2\n3\nX\n5\n6\nY\n8\n";
+
+    fn rebase_of(rebased: &str) -> (tempfile::TempDir, Repository, Sha, Sha) {
+        let (dir, repo, root) = repo();
+        let base = commit(&repo, &[root], 0, "base\n", &[("a.txt", BASE)]);
+        let old = commit(&repo, &[base], 0, "m\n", &[("a.txt", EDIT_LINE_4)]);
+        let moved = commit(
+            &repo,
+            &[base],
+            0,
+            "main\n",
+            &[("a.txt", EDIT_CONTEXT_LINE_7)],
+        );
+        let new = commit(&repo, &[moved], 0, "m\n", &[("a.txt", rebased)]);
+        (dir, repo, sha_of(old), sha_of(new))
+    }
+
+    #[test]
+    fn a_base_edit_in_the_context_is_a_pure_rebase() {
+        let (_dir, repo, old, new) = rebase_of(EDIT_LINES_4_AND_7);
+        assert!(pure_rebase(&repo, &old, "m\n", &new, "m\n"));
+    }
+
+    #[test]
+    fn an_edit_on_top_of_the_rebase_is_not_pure_and_writes_nothing() {
+        let (_dir, repo, old, new) = rebase_of(EDIT_LINES_1_4_AND_7);
+        let before = object_count(&repo);
+        assert!(!pure_rebase(&repo, &old, "m\n", &new, "m\n"));
+        assert_eq!(object_count(&repo), before);
+    }
+
+    #[test]
+    fn a_message_edit_is_not_pure() {
+        let (_dir, repo, root) = repo();
+        let old = commit(&repo, &[root], 0, "m\n", &[("a.txt", "a\n")]);
+        let new = commit(&repo, &[root], 0, "n\n", &[("a.txt", "a\n")]);
+        assert!(!pure_rebase(
+            &repo,
+            &sha_of(old),
+            "m\n",
+            &sha_of(new),
+            "n\n"
+        ));
     }
 }
