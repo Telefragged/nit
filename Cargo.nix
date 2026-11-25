@@ -5682,7 +5682,7 @@ rec {
       };
       "nit-document" = rec {
         crateName = "nit-document";
-        version = "0.3.0";
+        version = "0.4.0";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/nit-document; };
         libName = "nit_document";

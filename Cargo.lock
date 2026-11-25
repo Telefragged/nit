@@ -1788,7 +1788,7 @@ dependencies = [
 
 [[package]]
 name = "nit-document"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "form_urlencoded",
  "jiff",
