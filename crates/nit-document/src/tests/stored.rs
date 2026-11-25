@@ -129,6 +129,14 @@ fn write_web_fixture() {
         ),
     );
 
+    for (old, new) in [
+        ("looks up the presented token", "finds the presented token"),
+        ("so the whole family is revoked", "so the family is revoked"),
+    ] {
+        reviewer.set_time_of_next_edit(NINE + 160 * 60);
+        reviewer.editor(Writer::Reviewer).replace(old, new).unwrap();
+    }
+
     let mut snapshot = String::new();
     for byte in reviewer.save() {
         write!(snapshot, "{byte:02x}").unwrap();
