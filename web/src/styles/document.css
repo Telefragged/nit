@@ -83,17 +83,6 @@
   color: var(--color-muted-foreground);
 }
 
-.reference-source {
-  margin-bottom: 4px;
-  font-size: 12px;
-  color: var(--color-muted-foreground);
-}
-
-.reference-source a {
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-
 .reference-diff {
   border: 1px solid var(--color-border);
 }
