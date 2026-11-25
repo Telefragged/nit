@@ -640,12 +640,12 @@ button.rail-toggle,
 }
 
 .doc-added {
-  background-color: var(--color-add-bg);
+  background-color: var(--doc-tint, var(--color-add-bg));
   background-image: linear-gradient(var(--color-add), var(--color-add));
 }
 
 .doc-removed {
-  background-color: var(--color-del-bg);
+  background-color: var(--doc-tint, var(--color-del-bg));
   background-image: linear-gradient(var(--color-del), var(--color-del));
 }
 

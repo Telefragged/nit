@@ -132,6 +132,7 @@ fn write_web_fixture() {
     for (old, new) in [
         ("looks up the presented token", "finds the presented token"),
         ("so the whole family is revoked", "so the family is revoked"),
+        ("- A rebase renamed the parameter of `insert`.\n", ""),
     ] {
         reviewer.set_time_of_next_edit(NINE + 160 * 60);
         reviewer.editor(Writer::Reviewer).replace(old, new).unwrap();

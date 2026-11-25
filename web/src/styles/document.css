@@ -35,6 +35,7 @@
 
 .document-block:is(.doc-added, .doc-removed) {
   --tint-left-of-text: 12px;
+  --doc-tint: transparent;
 
   margin-left: calc(-1 * var(--tint-left-of-text));
   padding-left: var(--tint-left-of-text);
