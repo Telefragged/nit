@@ -42,7 +42,7 @@ The history of a document is a list of runs. A run is a sequence of edits by one
 
 A `Run` contains its writer, the version after its last edit, and the time of that edit. `Document::lines_between` returns every line of the texts at two versions as the lines of one diff, in the shape that the lines route of a file has.
 
-The document page lists the versions, the newest first. A press on a version shows the diff that its run made, and a base picker selects another version to start the diff at, as the base picker of the review page does. The `version` and `against` parameters of the address contain the two versions.
+The document page lists the versions, the oldest first. A press on a version shows the diff that its run made, and a base picker selects another version to start the diff at, as the base picker of the review page does. The `version` and `against` parameters of the address contain the two versions.
 
 The diff renders with `renderDoc`, the code that renders the diff of a Markdown file on the review page, and a block of the diff renders with the component that renders a block of the live document. As there, a separator is in place of the unchanged blocks far from a change, and its buttons show them (`useDocRows`). The diff has no controls that edit. Updates still arrive while the page shows a diff, and the list of versions follows them.
 
