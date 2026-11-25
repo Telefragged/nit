@@ -13,7 +13,7 @@ use jiff::{SignedDuration, Timestamp};
 use nit_types::gc::{DEFAULT_RETENTION_DAYS, GcReport, GcRequest};
 
 use crate::db;
-use crate::gitscan::objects;
+use crate::gitscan::keep_refs;
 
 use super::attachments::Collected;
 use super::{AppJson, AppState, Appends, Error, with_conn};
@@ -74,7 +74,7 @@ pub async fn collect_changes(state: &Arc<AppState>, cutoff: Timestamp) -> Result
                 continue;
             };
             for &(_, number) in repo_changes {
-                objects::delete_keep_refs(&repo, number);
+                keep_refs::delete_keep_refs(&repo, number);
             }
         }
         Ok(deleted.len() as u64)

@@ -14,7 +14,7 @@ use nit_types::repos::{CreateRepo, RelocateRepo, Repo, RepoList, SetCanonicalRef
 
 use crate::db;
 use crate::gitscan;
-use crate::gitscan::objects;
+use crate::gitscan::keep_refs;
 
 use super::canonical_git_dir;
 use super::{AppJson, AppPath, AppState, Appends, Error, with_conn};
@@ -207,7 +207,7 @@ pub(super) async fn remove_repo(
         // two can leave extra refs that pin objects. It never leaves a
         // change without its objects.
         if let Ok(repo) = Repository::open(&row.git_dir) {
-            objects::delete_all_keep_refs(&repo);
+            keep_refs::delete_all_keep_refs(&repo);
         }
         Ok(StatusCode::NO_CONTENT)
     })

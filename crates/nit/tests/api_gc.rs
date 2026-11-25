@@ -6,7 +6,7 @@ use common::{
     GitRepo, TestServer, a_change, abandon, collect, http_get, msg, sweep, ws_read, ws_subscribe,
 };
 use jiff::{SignedDuration, Timestamp};
-use nit::gitscan::objects::keep_ref_prefix;
+use nit::gitscan::keep_refs::keep_ref_prefix;
 use nit_types::domain::ChangeNumber;
 use serde_json::json;
 
