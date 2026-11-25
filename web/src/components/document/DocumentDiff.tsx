@@ -16,10 +16,11 @@ const idDistinctAcrossSides = (side: Side, block: Block) =>
  *
  * A changed block of text shows its changes inside the text: an
  * insertion is marked, and a marker stands in place of a deletion, with
- * the removed text on hover. A block that the diff adds or removes whole
- * shows with its mark, as do a reference, a code block, and a block that
- * the diff replaces most of. A removed block then shows above the block
- * that replaces it. */
+ * the removed text on hover. A block that the diff adds whole has a
+ * green line on its left, and a block that the diff removes whole has a
+ * red line. A reference, a code block, and a block that the diff
+ * replaces most of show in the same way: the old block above the new
+ * block. */
 export default function DocumentDiff({ lines }: { lines: readonly Line[] }) {
   const doc = useMemo(() => renderDoc(lines), [lines]);
   const sides = useMemo(() => {
