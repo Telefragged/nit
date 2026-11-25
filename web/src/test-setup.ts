@@ -7,13 +7,19 @@ afterEach(() => {
   localStorage.clear();
 });
 
-// jsdom has no matchMedia, so a page that reads a media query throws
-// without this stub. No query matches.
-window.matchMedia = (media) => ({ matches: false, media }) as MediaQueryList;
+// jsdom has no matchMedia, so a call to matchMedia throws without this
+// stub.
+const ignore = () => undefined;
+window.matchMedia = (media) =>
+  ({
+    matches: false,
+    media,
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }) as unknown as MediaQueryList;
 
 // jsdom has no ResizeObserver. A group of resizable panels creates one.
 // jsdom has no layout either, so no element ever changes its size.
-const ignore = () => undefined;
 window.ResizeObserver = class {
   observe = ignore;
   unobserve = ignore;

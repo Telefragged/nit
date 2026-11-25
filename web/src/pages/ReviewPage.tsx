@@ -94,7 +94,7 @@ import { useDocumentTitle } from "../lib/useDocumentTitle";
 import { useDiff } from "../lib/useDiff";
 import { useDraftEditor } from "../lib/useDraftEditor";
 import { draftsQuery, useDrafts } from "../lib/useDrafts";
-import { useReviewSettings } from "../lib/reviewSettings";
+import { useDiffLayout, useReviewSettings } from "../lib/reviewSettings";
 import { useThreads } from "../lib/useThreads";
 import { patchParams, useUrlParams } from "../lib/useUrlParams";
 import { ErrorPanel } from "./NotFound";
@@ -188,7 +188,8 @@ export default function ReviewPage() {
   });
 
   const [settings, saveSettings] = useReviewSettings();
-  const { layout, whitespace } = settings;
+  const { whitespace } = settings;
+  const layout = useDiffLayout(settings.layout);
   const editor = useDraftEditor();
   const { editingTarget, setEditingTarget } = editor;
   const [activeFile, setActiveFile] = useState<number | null>(null);

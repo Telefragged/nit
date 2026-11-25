@@ -39,11 +39,13 @@ describe("the review settings popover", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Side-by-side" }));
     fireEvent.click(screen.getByRole("button", { name: "Ignore" }));
+    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
     expect(changes).toEqual([
       { layout: "split", ported: "open", whitespace: "compare" },
       { layout: "split", ported: "open", whitespace: "ignore" },
+      { layout: "auto", ported: "open", whitespace: "ignore" },
     ]);
-    expect(pressed("Side-by-side")).toBe("true");
+    expect(pressed("Auto")).toBe("true");
     expect(
       screen.queryByRole("dialog", { name: "Review settings" }),
     ).not.toBeNull();

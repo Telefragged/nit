@@ -20,6 +20,11 @@ const LAYOUT_OPTIONS: SegOption<ReviewSettings["layout"]>[] = [
     label: "Side-by-side",
     title: "Two columns, old on the left",
   },
+  {
+    value: "auto",
+    label: "Auto",
+    title: "Two columns in a wide window, one column in a narrow window",
+  },
 ];
 
 const PORTED_OPTIONS: SegOption<ReviewSettings["ported"]>[] = [
