@@ -32,3 +32,6 @@ similar_names = "allow"
 
 [workspace.lints.rust]
 warnings = "deny"
+
+[profile.dev.package."*"]
+opt-level = 3
