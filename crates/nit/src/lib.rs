@@ -9,7 +9,7 @@
 //! - [`review`] — the per-change fold: a change's reviewable state is the
 //!   replay of its append-only log.
 //! - [`gitscan`] — the git layer: the push walk, merged detection,
-//!   and GC-safety keep refs ([`gitscan::objects`]).
+//!   and GC-safety keep refs ([`gitscan::keep_refs`]).
 //! - [`hunks`] — line-level diffing: the hunks of one file's two versions.
 //! - [`api`] — the axum HTTP layer (wire contract: the `nit_types`
 //!   crate) plus the `nit serve` wiring.

@@ -10,7 +10,7 @@
 //! - [`identity`] — `Change-Id:` trailer extraction and validation.
 
 pub mod identity;
-pub mod objects;
+pub mod keep_refs;
 
 use std::collections::HashMap;
 
@@ -316,7 +316,7 @@ pub fn canonical_history(
 /// The keep-ref maintenance for one change's revisions — idempotent.
 pub fn maintain_keep_refs(repo: &Repository, change: &ChangeProjection) {
     for revision in &change.revisions {
-        objects::ensure_keep_ref(repo, change.id, revision.number, &revision.commit_sha);
+        keep_refs::ensure_keep_ref(repo, change.id, revision.number, &revision.commit_sha);
     }
 }
 
