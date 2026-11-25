@@ -122,9 +122,6 @@ export default function DocumentPage() {
       className="page document-page"
       aria-busy={summary === undefined || text === undefined}
     >
-      <div className="crumb-line">
-        <span>document {number}</span>
-      </div>
       <div className="subject-line">
         <h1>{summary?.title}</h1>
       </div>
