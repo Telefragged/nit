@@ -41,10 +41,6 @@
   padding-left: var(--tint-left-of-text);
 }
 
-.document-page > .hunk-row {
-  margin: 0 56px 14px 0;
-}
-
 .block-tools {
   position: absolute;
   top: 0;
