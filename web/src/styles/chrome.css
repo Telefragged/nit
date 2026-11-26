@@ -142,72 +142,8 @@
   box-shadow: inset 0 0 0 1.5px var(--color-faint-foreground);
 }
 
-/* The page of repositories, with a sticky sidebar at its left. */
-.repo-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
+.repo-page {
   padding: 20px 16px 64px;
-}
-
-.repo-layout > main {
-  flex: 1;
-  min-width: 0;
-}
-
-.repo-sidebar {
-  width: 270px;
-  flex: none;
-  position: sticky;
-  top: 60px;
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
-}
-
-/* A row in a list of links: the repo sidebar, and the tag graph of the
-   review page. The row of the page on screen carries `aria-current`. */
-.nav-row {
-  border-radius: 4px;
-}
-
-.nav-row:hover {
-  background: var(--color-accent);
-  text-decoration: none;
-}
-
-.nav-row[aria-current="page"] {
-  background: var(--color-accent);
-}
-
-.repo-link {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 8px;
-  padding: 5px 8px;
-  color: var(--color-foreground);
-}
-
-.repo-name {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.repo-open {
-  font-size: 11px;
-  color: var(--color-muted-foreground);
-}
-
-.repo-path {
-  grid-column: 1 / -1;
-  font-size: 11px;
-  color: var(--color-faint-foreground);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sha {

@@ -57,4 +57,10 @@
   --color-input: var(--color-border-strong);
   --color-ring: var(--color-foreground);
   --shadow-overlay: 0 8px 24px var(--color-shadow);
+  --color-sidebar: var(--color-card);
+  --color-sidebar-foreground: var(--color-foreground);
+  --color-sidebar-accent: var(--color-accent);
+  --color-sidebar-accent-foreground: var(--color-foreground);
+  --color-sidebar-border: var(--color-border);
+  --color-sidebar-ring: var(--color-foreground);
 }

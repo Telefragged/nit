@@ -1,9 +1,10 @@
 import { Link, Outlet } from "react-router-dom";
 import About from "./components/About";
+import { SidebarLayout } from "./components/AppSidebar";
 
 export default function App() {
   return (
-    <>
+    <SidebarLayout>
       <header className="topbar">
         <Link to="/" className="logo" aria-label="nit" title="nit">
           <img src="/favicon.svg" alt="" width={20} height={20} />
@@ -20,6 +21,6 @@ export default function App() {
         <About />
       </header>
       <Outlet />
-    </>
+    </SidebarLayout>
   );
 }

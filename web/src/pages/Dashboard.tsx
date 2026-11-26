@@ -121,7 +121,7 @@ export default function Dashboard() {
     [changesQuery, historyQuery, tagsQuery].some((q) => q.isLoading);
 
   return (
-    <main aria-busy={busy}>
+    <main className="repo-page" aria-busy={busy}>
       <div className="graph-toolbar">
         <div>
           Group by

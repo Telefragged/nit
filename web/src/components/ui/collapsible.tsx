@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 
 export const Collapsible = CollapsiblePrimitive.Root;
 
+export const CollapsibleTrigger = CollapsiblePrimitive.Trigger;
+
 /** The part of a collapsible that shows while it is open. Its height
  * moves between the height of its content and nothing. */
 export function CollapsiblePanel({

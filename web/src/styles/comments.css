@@ -419,7 +419,8 @@ summary.log-line:hover {
 .review-bar {
   position: fixed;
   bottom: 0;
-  left: 0;
+  left: var(--sidebar-width, 0);
+  transition: left 200ms linear;
   right: 0;
   z-index: var(--z-review-bar);
   background: var(--color-card);
@@ -430,6 +431,14 @@ summary.log-line:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+[data-slot="sidebar"][data-state="collapsed"] ~ * .review-bar {
+  left: var(--sidebar-width-icon);
+}
+
+[data-slot="sidebar-wrapper"][data-resizing] .review-bar {
+  transition: none;
 }
 
 .review-bar-actions {
