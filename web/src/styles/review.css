@@ -377,13 +377,16 @@ button.rail-toggle,
   align-content: center;
   height: var(--row-h);
   padding: 0 8px 0 var(--rail-w);
+  border-radius: 4px;
   font-size: 12px;
   color: var(--color-muted-foreground);
 }
 
 .tag-nav-row:hover,
 .tag-nav-row[aria-current="page"] {
+  background: var(--color-accent);
   color: var(--color-foreground);
+  text-decoration: none;
 }
 
 .tag-nav-row .subj {
