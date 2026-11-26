@@ -126,6 +126,17 @@ function useResizeDrag() {
     const followPointer = () => {
       wrapper.dataset.resizing = "";
     };
+    const animateEdges = () => {
+      delete wrapper.dataset.resizing;
+    };
+    const followPointerAfterAnimation = (e: TransitionEvent) => {
+      if (
+        e.propertyName === "width" &&
+        e.target instanceof HTMLElement &&
+        e.target.dataset.slot === "sidebar-gap"
+      )
+        followPointer();
+    };
     const move = (e: PointerEvent) => {
       if (!dragged && Math.abs(e.clientX - down.clientX) > 3) {
         dragged = true;
@@ -134,6 +145,7 @@ function useResizeDrag() {
       if (!dragged) return;
       if (e.clientX > switchThresholdForThisDrag !== shown) {
         shown = !shown;
+        animateEdges();
         setOpen(shown);
       }
       if (shown) {
@@ -151,11 +163,13 @@ function useResizeDrag() {
       rail.removeEventListener("pointermove", move);
       rail.removeEventListener("pointerup", up);
       rail.removeEventListener("lostpointercapture", end);
-      delete wrapper.dataset.resizing;
+      wrapper.removeEventListener("transitionend", followPointerAfterAnimation);
+      animateEdges();
     };
     rail.addEventListener("pointermove", move);
     rail.addEventListener("pointerup", up);
     rail.addEventListener("lostpointercapture", end);
+    wrapper.addEventListener("transitionend", followPointerAfterAnimation);
   };
 }
 
