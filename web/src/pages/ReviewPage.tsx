@@ -825,17 +825,16 @@ export default function ReviewPage() {
         </ReviewColumns>
 
         <ChangeLog feed={log} threads={change.threads} />
-
-        <ReviewBar
-          change={change}
-          tag={tag}
-          drafted={drafted}
-          selectedRevision={selected}
-          unresolved={pendingUnresolvedCount(threads)}
-          replyOpen={replyOpen}
-          onReplyOpenChange={setReplyOpen}
-        />
       </main>
+      <ReviewBar
+        change={change}
+        tag={tag}
+        drafted={drafted}
+        selectedRevision={selected}
+        unresolved={pendingUnresolvedCount(threads)}
+        replyOpen={replyOpen}
+        onReplyOpenChange={setReplyOpen}
+      />
     </ReviewContext.Provider>
   );
 }

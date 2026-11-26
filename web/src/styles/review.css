@@ -1,11 +1,13 @@
 :is(.review-page, .document-page) {
   --diffbar-h: 33px;
+
+  min-height: calc(100svh - var(--review-bar-h));
 }
 
 .review-page {
   --bars-h: var(--diffbar-h);
 
-  padding-bottom: calc(var(--review-bar-h) + 10px);
+  padding-bottom: 10px;
 }
 
 /* The header: the change's own lines at the left, and at the right the
