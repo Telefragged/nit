@@ -5,7 +5,10 @@ import { repos } from "../api/fixtures/data";
 import { renderPage, user } from "../test/page";
 import { SidebarLayout } from "./AppSidebar";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 const lumenId = repos.find((r) => r.git_dir.endsWith("/lumen/.git"))?.id;
 const lumenHref = `/repos/${String(lumenId)}`;
@@ -25,6 +28,11 @@ const renderAt = (url: string) =>
       <Route path="repos/:repoId" element={<main />} />
     </Route>,
   );
+
+const sidebarWidth = () =>
+  document
+    .querySelector<HTMLElement>('[data-slot="sidebar-wrapper"]')
+    ?.style.getPropertyValue("--sidebar-width");
 
 const active = () =>
   document.querySelectorAll('[data-sidebar="menu-sub-button"][data-active]');
@@ -57,5 +65,26 @@ describe("the app sidebar", () => {
     expect(
       document.querySelectorAll('[data-sidebar="menu-sub-button"]'),
     ).toHaveLength(0);
+  });
+
+  it("opens collapsed when the reviewer collapsed it before", async () => {
+    localStorage.setItem("nit.sidebar-open", "false");
+    await renderAt("/");
+    expect(
+      document.querySelector<HTMLElement>('[data-slot="sidebar"]')?.dataset
+        .state,
+    ).toBe("collapsed");
+  });
+
+  it("opens at the width that the reviewer dragged it to before", async () => {
+    localStorage.setItem("nit.sidebar-width", "300");
+    await renderAt("/");
+    expect(sidebarWidth()).toBe("300px");
+  });
+
+  it("keeps a saved width inside the allowed widths", async () => {
+    localStorage.setItem("nit.sidebar-width", "999");
+    await renderAt("/");
+    expect(sidebarWidth()).toBe("320px");
   });
 });

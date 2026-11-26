@@ -1,6 +1,7 @@
 import * as React from "react";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
+import { readSaved, writeSaved } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 import {
@@ -14,6 +15,22 @@ const SIDEBAR_MIN_WIDTH_PX = 256;
 const SIDEBAR_MAX_WIDTH_PX = 320;
 const SIDEBAR_ICON_WIDTH_PX = 48;
 const SNAP_DISTANCE_PX = 48;
+const OPEN_KEY = "nit.sidebar-open";
+const WIDTH_KEY = "nit.sidebar-width";
+
+function savedOpen(): boolean {
+  const saved = readSaved(OPEN_KEY);
+  return typeof saved === "boolean" ? saved : true;
+}
+
+function savedWidth(): number {
+  const saved = readSaved(WIDTH_KEY);
+  return typeof saved === "number" ? clampWidth(saved) : SIDEBAR_MIN_WIDTH_PX;
+}
+
+function clampWidth(width: number): number {
+  return Math.min(SIDEBAR_MAX_WIDTH_PX, Math.max(SIDEBAR_MIN_WIDTH_PX, width));
+}
 
 interface SidebarContextProps {
   open: boolean;
@@ -37,8 +54,16 @@ function SidebarProvider({
   children,
   ...props
 }: React.ComponentProps<"div">) {
-  const [open, setOpen] = React.useState(true);
-  const contextValue = React.useMemo(() => ({ open, setOpen }), [open]);
+  const [open, setOpenState] = React.useState(savedOpen);
+  const [width] = React.useState(savedWidth);
+  const setOpen = React.useCallback((next: boolean) => {
+    setOpenState(next);
+    writeSaved(OPEN_KEY, next);
+  }, []);
+  const contextValue = React.useMemo(
+    () => ({ open, setOpen }),
+    [open, setOpen],
+  );
 
   return (
     <SidebarContext.Provider value={contextValue}>
@@ -47,7 +72,7 @@ function SidebarProvider({
           data-slot="sidebar-wrapper"
           style={
             {
-              "--sidebar-width": `${SIDEBAR_MIN_WIDTH_PX}px`,
+              "--sidebar-width": `${width}px`,
               "--sidebar-width-icon": `${SIDEBAR_ICON_WIDTH_PX}px`,
               ...style,
             } as React.CSSProperties
@@ -123,6 +148,7 @@ function useResizeDrag() {
       : SIDEBAR_ICON_WIDTH_PX + SNAP_DISTANCE_PX;
     let shown = open;
     let dragged = false;
+    let width: number | null = null;
     const followPointer = () => {
       wrapper.dataset.resizing = "";
     };
@@ -149,10 +175,7 @@ function useResizeDrag() {
         setOpen(shown);
       }
       if (shown) {
-        const width = Math.min(
-          SIDEBAR_MAX_WIDTH_PX,
-          Math.max(SIDEBAR_MIN_WIDTH_PX, e.clientX),
-        );
+        width = clampWidth(e.clientX);
         wrapper.style.setProperty("--sidebar-width", `${width}px`);
       }
     };
@@ -165,6 +188,7 @@ function useResizeDrag() {
       rail.removeEventListener("lostpointercapture", end);
       wrapper.removeEventListener("transitionend", followPointerAfterAnimation);
       animateEdges();
+      if (width !== null) writeSaved(WIDTH_KEY, width);
     };
     rail.addEventListener("pointermove", move);
     rail.addEventListener("pointerup", up);
