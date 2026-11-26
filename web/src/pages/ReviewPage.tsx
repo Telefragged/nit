@@ -66,13 +66,7 @@ import {
   threadsByFile,
   type DiffRange,
 } from "../lib/comments";
-import {
-  baseVersion,
-  isBase,
-  parseVersion,
-  revisionOf,
-  revisionVersion,
-} from "../lib/version";
+import { baseVersion, isBase, parseVersion, revisionOf } from "../lib/version";
 import {
   fileLink,
   linkedThread,
@@ -693,22 +687,12 @@ export default function ReviewPage() {
         <div className="diffbar">
           <div className="diffbar-mode">
             <DiffRangeSelect
-              items={revisions}
-              option={(r) => {
+              details={revisions.map((r) => {
                 const n = revisionCommentCounts.get(r.number) ?? 0;
-                return {
-                  label: `r${r.number}`,
-                  detail: n > 0 ? commentCountLabel(n) : undefined,
-                };
-              }}
-              baseValue={(r) => revisionVersion(r.number)}
-              first={{ value: "base", label: "Base" }}
+                return n > 0 ? commentCountLabel(n) : undefined;
+              })}
               selected={selected}
               against={againstParam(against) ?? "base"}
-              baseTitle="Base = parent commit; rM = interdiff against revision M"
-              label="Revision"
-              title="Revision under review"
-              placeholder="no revisions"
               onLeft={onLeft}
               onRight={onRight}
             />
