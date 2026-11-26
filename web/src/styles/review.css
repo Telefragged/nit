@@ -765,6 +765,19 @@ button.rail-toggle,
   padding: 0;
 }
 
+.rendered-markdown details {
+  margin: 0 0 14px;
+}
+
+.rendered-markdown details[open] > summary {
+  margin-bottom: 10px;
+}
+
+:is(.rendered-markdown, .comment-body) summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .rendered-markdown blockquote {
   border-left: 3px solid var(--color-border-strong);
   padding-left: 14px;

@@ -234,6 +234,22 @@ describe("renderDoc", () => {
           ].join(" "),
     );
 
+  it("opens a collapsible group that changes, and no other group", () => {
+    const group = (n: number, text: string) => [
+      both(n, n, "<details>"),
+      both(n + 1, n + 1, ""),
+      text === "same" ? both(n + 2, n + 2, text) : add(n + 2, text),
+      both(n + 3, n + 3, ""),
+      both(n + 4, n + 4, "</details>"),
+      both(n + 5, n + 5, ""),
+    ];
+    const doc = renderDoc([...group(1, "same"), ...group(7, "added")]);
+    expect(doc.new.map((block) => block.node.properties.open)).toEqual([
+      undefined,
+      true,
+    ]);
+  });
+
   it("puts a removed block above the block that replaces it", () => {
     const rows = shape([
       both(1, 1, "# Title"),
