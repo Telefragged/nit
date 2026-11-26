@@ -8,7 +8,8 @@ const WRITER = { author: "Author", reviewer: "Reviewer" };
  * time of each. A press on a version calls `onSelect` with its index
  * in `runs`, and with `extend` when the Shift key is down. `selected` is
  * the range of versions that the page shows, or null. `sent` is
- * the version last sent to the author. */
+ * the version last sent to the author: the versions that reviewers wrote
+ * after it are drafts. */
 export default function VersionList({
   runs,
   sent,
@@ -21,6 +22,7 @@ export default function VersionList({
   onSelect: (index: number, extend: boolean) => void;
 }) {
   if (runs.length === 0) return null;
+  const sentIndex = runs.findIndex((run) => run.version === sent);
   return (
     <div className="log-rows">
       {runs.map((run, index) => (
@@ -43,8 +45,11 @@ export default function VersionList({
               <span className={`byline byline-${run.writer}`}>
                 {WRITER[run.writer]}
               </span>
-              {run.version === sent ? (
-                <span className="dim">, sent to the author</span>
+              {run.writer === "reviewer" && index > sentIndex ? (
+                <>
+                  {" "}
+                  <span className="draft-label">Draft</span>
+                </>
               ) : null}
             </span>
             <span className="dim log-time" title={run.at}>
