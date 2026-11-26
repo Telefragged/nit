@@ -1,6 +1,7 @@
 import type { CommentRange, DiffFile, Hunk, Line, Side } from "../api/types";
 import { ATTACHMENT_PREFIX, COMMIT_MSG_PATH } from "../api/types";
 import type { ReviewFile } from "./attachments";
+import type { ReviewSettings } from "./reviewSettings";
 import { buildTree, fileOrder } from "./fileTree";
 import { intraline_marks } from "./wasm";
 
@@ -255,6 +256,35 @@ export function oneSided(file: Totals): boolean {
 /** The one side that a file with one side has, else undefined. */
 export const onlySide = (file: Totals): Side | undefined =>
   file.old_total === 0 ? "new" : file.new_total === 0 ? "old" : undefined;
+
+/** The character columns of the longest line of `hunks`. A tab extends a
+ * line to the next multiple of 8, as the `tab-size` of base.css does. */
+export function widestLine(hunks: readonly Hunk[]): number {
+  let widest = 0;
+  for (const hunk of hunks) {
+    for (const { text } of hunk.lines) {
+      let n = 0;
+      for (const c of text) n = c === "\t" ? n + 8 - (n % 8) : n + 1;
+      widest = Math.max(widest, n);
+    }
+  }
+  return widest;
+}
+
+/** The layout that draws `file`. Two columns would leave one column of a
+ * file with one side blank, so that file gets one column. For `auto`,
+ * `fit` is the number of characters that fit on a line of one code column
+ * of the split layout, and null until it is measured. */
+export function fileLayout(
+  file: Totals,
+  layout: ReviewSettings["layout"],
+  widest: number,
+  fit: number | null,
+): "unified" | "split" {
+  if (oneSided(file)) return "unified";
+  if (layout !== "auto") return layout;
+  return fit !== null && widest <= fit ? "split" : "unified";
+}
 
 /** The file's line count on `side`. */
 const total = (file: Totals, side: Side) =>
