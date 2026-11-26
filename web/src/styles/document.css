@@ -38,6 +38,7 @@
   --doc-tint: transparent;
 
   margin-left: calc(-1 * var(--tint-left-of-text));
+  padding-block: 0;
   padding-left: var(--tint-left-of-text);
 }
 
