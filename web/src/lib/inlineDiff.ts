@@ -112,12 +112,12 @@ function deletionsByBlock(
       text += oldText.slice(from, span[0]);
       from = span[1];
     }
-    text = (text + oldText.slice(from, r.old[1])).trim();
+    text += oldText.slice(from, r.old[1]);
     const firstBlockEndingAtOrAfter = changedBlocks.find(
       (item) => item.span[1] >= r.new[0],
     );
     const owner = firstBlockEndingAtOrAfter ?? changedBlocks.at(-1);
-    if (text === "" || !owner) continue;
+    if (text.trim() === "" || !owner) continue;
     const list = deleted.get(owner.block) ?? [];
     list.push({ at: now.place(r.new[0]), text });
     deleted.set(owner.block, list);
@@ -126,8 +126,7 @@ function deletionsByBlock(
 }
 
 /** The blocks that a changed row shows, with the changes inside the
- * text of the new blocks: an insertion is marked, and a marker stands in
- * place of a deletion. A block that the diff adds or removes whole shows
+ * text of the new blocks: an insertion and a deletion are marked. A block that the diff adds or removes whole shows
  * whole.
  *
  * The row shows its old and new blocks whole (`wholeRow`) when one side

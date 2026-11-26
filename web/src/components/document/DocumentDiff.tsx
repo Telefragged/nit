@@ -14,8 +14,8 @@ const idDistinctAcrossSides = (side: Side, block: Block) =>
  * blocks have no controls.
  *
  * A changed block of text shows its changes inside the text: an
- * insertion is marked, and a marker stands in place of a deletion, with
- * the removed text on hover. A block that the diff adds whole has a
+ * insertion is marked, and a deletion shows at its place, marked as
+ * removed. A block that the diff adds whole has a
  * green line on its left, and a block that the diff removes whole has a
  * red line. A reference, a code block, and a block that the diff
  * replaces most of show in the same way: the old block above the new
