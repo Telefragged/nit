@@ -3,7 +3,7 @@
 }
 
 .review-page {
-  --bars-h: calc(var(--topbar-h) + var(--diffbar-h));
+  --bars-h: var(--diffbar-h);
 
   padding-bottom: calc(var(--review-bar-h) + 10px);
 }
@@ -71,7 +71,7 @@
 
 .diffbar {
   position: sticky;
-  top: var(--topbar-h);
+  top: 0;
   z-index: var(--z-diffbar);
   display: flex;
   align-items: center;

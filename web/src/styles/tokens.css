@@ -1,17 +1,11 @@
-/* Color and type tokens, by role. Each color has a light and a dark value,
-   and the system setting selects one. docs/design.md states the rules for
-   their use. */
-
 :root {
   color-scheme: light dark;
 
   --z-file-header: 10;
   --z-file-popup: 15;
   --z-diffbar: 20;
-  --z-topbar: 30;
   --z-review-bar: 40;
   --z-overlay: 50;
-  --topbar-h: 40px;
   --review-bar-h: 46px;
 }
 

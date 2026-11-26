@@ -6,12 +6,8 @@ import { isNewer, useReleaseCheck } from "../lib/releaseCheck";
 import { timeAgo } from "../lib/time";
 import Modal from "./Modal";
 import { Button } from "./ui/button";
+import { SidebarMenuButton } from "./ui/sidebar";
 
-/**
- * The topbar's about button and the dialog it opens. The dialog shows the
- * server's version and, when the reviewer turns on the release check, the
- * latest release. A red dot on the button marks a newer release.
- */
 export default function About() {
   const [open, setOpen] = useState(false);
   const health = useQuery({ queryKey: ["health"], queryFn: getHealth });
@@ -28,19 +24,17 @@ export default function About() {
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="relative"
+      <SidebarMenuButton
+        className="relative w-fit"
         aria-label={label}
-        title={label}
+        collapsedTooltip={label}
         onClick={() => {
           setOpen(true);
         }}
       >
         <Info size={15} aria-hidden />
         {update ? <span className="about-dot" /> : null}
-      </Button>
+      </SidebarMenuButton>
       {open ? (
         <Modal
           title="About nit"
