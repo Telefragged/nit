@@ -1,5 +1,6 @@
 import type { Run } from "../../api/document.gen";
 import { ago } from "../../api/fixtures/builders";
+import type { VersionRange } from "../../lib/documentVersions";
 import VersionList from "./VersionList";
 
 const RUNS: Run[] = [
@@ -9,8 +10,8 @@ const RUNS: Run[] = [
   { writer: "reviewer", version: "318@2", at: ago(2) },
 ];
 
-const list = (selected: number | null) => (
-  <div className="document-page" style={{ width: 720 }}>
+const list = (selected: VersionRange | null) => (
+  <div className="document-page" style={{ width: 300 }}>
     <VersionList
       runs={RUNS}
       sent="264@2"
@@ -22,4 +23,6 @@ const list = (selected: number | null) => (
 
 export const Default = () => list(null);
 
-export const Selected = () => list(2);
+export const Selected = () => list({ from: 2, to: 2 });
+
+export const Range = () => list({ from: 1, to: 3 });

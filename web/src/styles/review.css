@@ -1,11 +1,4 @@
 :is(.review-page, .document-page) {
-  /* The height of the review bar, which is fixed at the bottom of the
-     page. */
-  --review-bar-h: 46px;
-
-  /* The heights of the two sticky bars above the files. The topbar is
-     outside the page, and chrome.css gives it the same 40px. */
-  --topbar-h: 40px;
   --diffbar-h: 33px;
 }
 

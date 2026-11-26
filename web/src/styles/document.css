@@ -130,23 +130,18 @@
   white-space: nowrap;
 }
 
-.document-page > .diffbar {
-  margin-bottom: 14px;
-  border: 1px solid var(--color-border);
-}
-
-.document-page:has(> .diffbar) {
-  --bars-h: calc(var(--topbar-h) + var(--diffbar-h));
-}
-
-.version-list {
-  margin: 24px 56px 0 0;
-}
-
 .version-row {
   width: 100%;
   text-align: left;
   cursor: pointer;
+}
+
+.version-row .log-kind {
+  width: auto;
+}
+
+.version-row .log-summary {
+  white-space: normal;
 }
 
 .version-row:hover,

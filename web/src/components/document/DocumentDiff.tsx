@@ -19,16 +19,26 @@ const idDistinctAcrossSides = (side: Side, block: Block) =>
  * green line on its left, and a block that the diff removes whole has a
  * red line. A reference, a code block, and a block that the diff
  * replaces most of show in the same way: the old block above the new
- * block. */
-export default function DocumentDiff({ lines }: { lines: readonly Line[] }) {
-  const doc = useMemo(() => renderDoc(lines), [lines]);
+ * block.
+ *
+ * With `only`, the lines have no change, and the component renders that
+ * side of them. */
+export default function DocumentDiff({
+  lines,
+  only,
+}: {
+  lines: readonly Line[];
+  only?: Side;
+}) {
+  const doc = useMemo(() => renderDoc(lines, only), [lines, only]);
   const sides = useMemo(() => {
     const side = (side: Side) => {
       const text = sideText(lines, side);
       return { lines: text.split("\n"), references: referencesByLine(text) };
     };
-    return { old: side("old"), new: side("new") };
-  }, [lines]);
+    const shown = side(only ?? "new");
+    return { old: only ? shown : side("old"), new: shown };
+  }, [lines, only]);
   const blocks = useMemo(() => {
     const reference = (side: Side) => (block: Block) =>
       sides[side].references.has(block.lines[0] - 1);

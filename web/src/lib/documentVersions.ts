@@ -1,21 +1,24 @@
-import type { Run, Version } from "../api/document.gen";
+import type { Run } from "../api/document.gen";
 
-/** The version of a document with no edit. */
-export const EMPTY: Version = "-";
-
-/** Two versions of a document to compare, as indexes of its runs. */
+/** The versions of a document that the page shows, as indexes of its
+ * runs. With `from` equal to `to`, the page shows the text at that
+ * version. Otherwise it shows the diff from the text at `from` to the
+ * text at `to`. */
 export interface VersionRange {
-  /** The run whose version the diff ends at. */
+  from: number;
   to: number;
-  /** The run whose version the diff starts at, or null for the empty
-   * text. */
-  from: number | null;
 }
 
+/** The range that shows the text at run `index`. */
+export const oneVersion = (index: number): VersionRange => ({
+  from: index,
+  to: index,
+});
+
 /** The range that the `version` and `against` parameters of the page
- * select, or null when `version` is the version of no run. Without a
- * valid `against`, the diff starts at the run before `version`, so it
- * shows what that run changed. */
+ * select, or null when `version` is the version of no run. Without an
+ * `against` that is the version of an earlier run, the range is the one
+ * version. */
 export function versionRange(
   runs: readonly Run[],
   version: string | null,
@@ -23,43 +26,42 @@ export function versionRange(
 ): VersionRange | null {
   const to = runs.findIndex((run) => run.version === version);
   if (to < 0) return null;
-  if (against === EMPTY) return { to, from: null };
   const from = runs.findIndex((run) => run.version === against);
-  if (from >= 0 && from < to) return { to, from };
-  return runRange(to);
+  return from >= 0 && from < to ? { from, to } : oneVersion(to);
 }
 
-/** The range that shows what run `to` changed: the diff from the run
- * before it, or from the empty text for the first run. */
-export const runRange = (to: number): VersionRange => ({
-  to,
-  from: to > 0 ? to - 1 : null,
-});
-
-/** The version that `range` starts at. Undefined when `runs` lacks the
- * run. */
-export const fromVersion = (
-  runs: readonly Run[],
-  range: VersionRange,
-): Version | undefined =>
-  range.from === null ? EMPTY : runs[range.from]?.version;
+/** `range` with its end moved to run `index`, or with its start moved
+ * there when the run is before the range. Without a range, the result
+ * is the one version. */
+export function extendedRange(
+  range: VersionRange | null,
+  index: number,
+): VersionRange {
+  if (!range) return oneVersion(index);
+  return index < range.from
+    ? { from: index, to: range.to }
+    : { from: range.from, to: index };
+}
 
 /** The `version` and `against` parameters of the page for `range`, as a
- * patch of the query. Null selects the live document. A range that
- * starts at the run before its version has no `against`. */
+ * patch of the query. Null selects the live document. A range of one
+ * version has no `against`. */
 export function rangeParams(
   runs: readonly Run[],
   range: VersionRange | null,
 ): { version: string | null; against: string | null } {
   const to = range && runs[range.to];
   if (!range || !to) return { version: null, against: null };
-  const from = fromVersion(runs, range);
-  const before = fromVersion(runs, runRange(range.to));
   return {
     version: to.version,
-    against: from === undefined || from === before ? null : from,
+    against:
+      range.from === range.to ? null : (runs[range.from]?.version ?? null),
   };
 }
+
+/** What the page shows for `range`, in words. */
+export const rangeLabel = ({ from, to }: VersionRange) =>
+  from === to ? `Version ${to}` : `Versions ${from} to ${to}`;
 
 /** The label of run `index`, as `r0` is the label of a revision. */
 export const versionLabel = (index: number) => `v${index}`;

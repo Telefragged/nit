@@ -11,6 +11,8 @@
   --z-topbar: 30;
   --z-review-bar: 40;
   --z-overlay: 50;
+  --topbar-h: 40px;
+  --review-bar-h: 46px;
 }
 
 /* Tailwind makes a utility for each token of this block, and `static`
