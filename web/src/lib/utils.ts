@@ -1,5 +1,9 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+const twMerge = extendTailwindMerge({
+  extend: { theme: { shadow: ["overlay"] } },
+});
 
 /** Joins class names. Of two Tailwind classes for one property, the later
  * one stays. */

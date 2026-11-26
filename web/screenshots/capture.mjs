@@ -254,12 +254,20 @@ const hoverThread = async (page, text, selector) => {
 const expandAllFiles = (page) =>
   clickNow(page.getByRole("button", { name: "Expand all" }));
 
-const untilLiveDocumentButton = (page) =>
-  untilDom(page, () =>
-    [...document.querySelectorAll("button")].some(
-      (button) => button.textContent === "Live document",
-    ),
+const untilVersionsShown = (page, count) =>
+  untilDom(
+    page,
+    (count) =>
+      document.querySelectorAll('.version-row[aria-current="true"]').length ===
+      count,
+    count,
   );
+
+const showVersion1 = async (page) => {
+  await clickNow(page.getByRole("button", { name: "Document history" }));
+  await clickNow(page.getByRole("button", { name: "v1 Reviewer" }));
+  await untilVersionsShown(page, 1);
+};
 
 /** Opens the picker whose label is `label`, so the capture shows its
  * list. The list mounts after the click. */
@@ -337,39 +345,31 @@ const captures = [
   { name: "document", path: "/documents/1" },
   { name: "document-light", path: "/documents/1", colorScheme: "light" },
   {
-    name: "document-versions",
+    name: "document-history",
     path: "/documents/1",
     fullPage: false,
     actions: async (page) => {
-      await page.evaluate(() => {
-        window.scrollTo(0, document.documentElement.scrollHeight);
-      });
+      await clickNow(page.getByRole("button", { name: "Document history" }));
+      await untilReady(page);
+    },
+  },
+  {
+    name: "document-version",
+    path: "/documents/1",
+    actions: async (page) => {
+      await showVersion1(page);
+      await untilReady(page);
     },
   },
   {
     name: "document-diff",
     path: "/documents/1",
     actions: async (page) => {
-      await clickNow(page.getByRole("button", { name: "v1 Reviewer" }));
-      await untilLiveDocumentButton(page);
-      await untilReady(page);
-    },
-  },
-  {
-    name: "document-diff-base",
-    path: "/documents/1",
-    actions: async (page) => {
+      await showVersion1(page);
+      await page.keyboard.down("Shift");
       await clickNow(page.getByRole("button", { name: "v3 Reviewer" }));
-      await untilLiveDocumentButton(page);
-      await openPicker(page, "Diff base");
-      await clickNow(page.getByRole("option", { name: "v0 author" }));
-      await untilDom(
-        page,
-        () =>
-          !!document.querySelector('[role="listbox"]')?.closest("[hidden]") &&
-          !document.querySelector("[data-ending-style]") &&
-          !!document.querySelector(".doc-removed"),
-      );
+      await page.keyboard.up("Shift");
+      await untilVersionsShown(page, 3);
       await untilReady(page);
     },
   },

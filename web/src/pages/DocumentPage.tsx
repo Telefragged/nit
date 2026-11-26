@@ -3,23 +3,21 @@ import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getDocument, sendDocument } from "../api/client";
 import type { Version } from "../api/document.gen";
-import DiffRangeSelect from "../components/DiffRangeSelect";
 import DocumentBlocks, {
   type DocumentActions,
 } from "../components/document/DocumentBlocks";
 import DocumentComposer from "../components/document/DocumentComposer";
 import DocumentDiff from "../components/document/DocumentDiff";
+import DocumentHistory from "../components/document/DocumentHistory";
 import SendBar from "../components/document/SendBar";
 import VersionList from "../components/document/VersionList";
-import { Button } from "../components/ui/button";
 import { type BlockLink, DocumentLinkContext } from "../lib/documentLink";
 import {
-  EMPTY,
-  fromVersion,
+  extendedRange,
+  oneVersion,
+  rangeLabel,
   rangeParams,
-  runRange,
   type VersionRange,
-  versionLabel,
   versionRange,
 } from "../lib/documentVersions";
 import { referencesByLine } from "../lib/reference";
@@ -34,10 +32,12 @@ import { ErrorPanel } from "./NotFound";
  * arrive. Each edit on this page goes to the server at once. Authors
  * learn of the edits when a reviewer sends the document.
  *
- * The page lists the versions of the document. With a `version`
- * parameter, the page shows the diff that the version made, without
- * controls. An `against` parameter is the version that the diff starts
- * at. */
+ * A button of the bar opens the history of the document: its versions,
+ * in a popover. A press on a version shows the text at that version,
+ * without controls, and a press with Shift shows the diff from the
+ * version on screen. The `version` and `against` parameters of the
+ * address contain the range. The Live button of the popover shows the
+ * live document again. */
 export default function DocumentPage() {
   const number = Number(useParams().number);
   const stored = useQuery({
@@ -53,7 +53,7 @@ export default function DocumentPage() {
     () => versionRange(runs, params.get("version"), params.get("against")),
     [runs, params],
   );
-  const from = range ? fromVersion(runs, range) : undefined;
+  const from = range ? runs[range.from]?.version : undefined;
   const to = range ? runs[range.to]?.version : undefined;
   const diff = useMemo(
     () => (from !== undefined && to !== undefined ? lines(from, to) : null),
@@ -125,48 +125,12 @@ export default function DocumentPage() {
       <div className="subject-line">
         <h1>{summary?.title}</h1>
       </div>
-      {range ? (
-        <div className="diffbar">
-          <div className="diffbar-mode">
-            <DiffRangeSelect
-              items={runs}
-              option={(run, index) => ({
-                label: versionLabel(index),
-                detail: run.writer,
-              })}
-              baseValue={(_, index) => String(index)}
-              first={{ value: EMPTY, label: "Empty" }}
-              selected={range.to}
-              against={range.from === null ? EMPTY : String(range.from)}
-              baseTitle="Empty = the document with no text; vM = the diff from version M"
-              label="Version"
-              title="The version that the diff ends at"
-              placeholder="no versions"
-              onLeft={(value) => {
-                showRange({
-                  to: range.to,
-                  from: value === EMPTY ? null : Number(value),
-                });
-              }}
-              onRight={(to) => {
-                showRange(runRange(to));
-              }}
-            />
-          </div>
-          <div className="diffbar-toggles">
-            <Button
-              onClick={() => {
-                showRange(null);
-              }}
-            >
-              Live document
-            </Button>
-          </div>
-        </div>
-      ) : null}
       <DocumentLinkContext.Provider value={link}>
         {diff ? (
-          <DocumentDiff lines={diff} />
+          <DocumentDiff
+            lines={diff}
+            only={range?.from === range?.to ? "new" : undefined}
+          />
         ) : text !== undefined ? (
           <>
             <DocumentBlocks
@@ -180,16 +144,7 @@ export default function DocumentPage() {
           <div className="skeleton" style={{ height: 260 }} />
         )}
       </DocumentLinkContext.Provider>
-      <VersionList
-        runs={runs}
-        sent={summary?.sent ?? null}
-        selected={range?.to ?? null}
-        onSelect={(index) => {
-          showRange(runRange(index));
-          window.scrollTo(0, 0);
-        }}
-      />
-      {summary && version !== undefined && !range ? (
+      {summary && version !== undefined ? (
         <SendBar
           sent={summary.sent === version}
           sending={send.isPending}
@@ -197,6 +152,26 @@ export default function DocumentPage() {
           onSend={() => {
             send.mutate(version);
           }}
+          history={
+            <DocumentHistory
+              shown={range && rangeLabel(range)}
+              onLive={() => {
+                showRange(null);
+              }}
+            >
+              <VersionList
+                runs={runs}
+                sent={summary.sent}
+                selected={range}
+                onSelect={(index, extend) => {
+                  showRange(
+                    extend ? extendedRange(range, index) : oneVersion(index),
+                  );
+                }}
+              />
+            </DocumentHistory>
+          }
+          live={range === null}
         />
       ) : null}
     </main>
