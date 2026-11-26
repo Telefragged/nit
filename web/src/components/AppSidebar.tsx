@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { NavLink, useParams } from "react-router-dom";
+import { Link, NavLink, useParams } from "react-router-dom";
 import { ChevronRight, FolderGit2 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -22,6 +24,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { listRepos } from "../api/client";
+import About from "./About";
 import { repoPath } from "../lib/repo";
 import { ErrorPanel } from "../pages/NotFound";
 
@@ -39,6 +42,19 @@ function AppSidebar() {
   const query = useQuery({ queryKey: ["repos"], queryFn: listRepos });
   return (
     <Sidebar>
+      <SidebarHeader className="flex-row items-center gap-2">
+        <Link to="/" className="flex shrink-0 p-2" aria-label="nit" title="nit">
+          <img src="/favicon.svg" alt="" width={16} height={16} />
+        </Link>
+        {import.meta.env.VITE_MOCK ? (
+          <span
+            className="mock-flag group-data-[collapsible=icon]:hidden"
+            title="The page shows fixtures, and no server is behind it"
+          >
+            Mock data
+          </span>
+        ) : null}
+      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup aria-busy={query.isLoading}>
           <SidebarGroupContent>
@@ -94,6 +110,9 @@ function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <About />
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );

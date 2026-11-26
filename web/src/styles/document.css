@@ -1,6 +1,4 @@
 .document-page {
-  --bars-h: var(--topbar-h);
-
   padding-bottom: calc(var(--review-bar-h) + 64px);
 }
 

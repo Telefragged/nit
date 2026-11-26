@@ -300,10 +300,7 @@ const applySetting = async (page, name) => {
  * page or significant state is added.
  */
 const captures = [
-  // Main page: the repo sidebar beside a prompt to pick a repository.
   { name: "repos", path: "/" },
-  // The about dialog with the release check on: the mock's latest release
-  // is newer than its version, so the topbar button shows the red dot.
   {
     name: "about-release",
     path: "/",

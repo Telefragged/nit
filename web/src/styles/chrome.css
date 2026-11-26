@@ -1,38 +1,4 @@
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: var(--topbar-h);
-  padding: 0 16px;
-  background: var(--color-card);
-  border-bottom: 1px solid var(--color-border);
-  position: sticky;
-  top: 0;
-  z-index: var(--z-topbar);
-}
-
-.topbar .logo {
-  display: flex;
-}
-
-.topbar .crumb {
-  color: var(--color-muted-foreground);
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.topbar .crumb .sep {
-  margin: 0 6px;
-  color: var(--color-faint-foreground);
-}
-
-.topbar .spacer {
-  flex: 1;
-}
-
-.topbar .mock-flag {
+.mock-flag {
   padding: 0 6px;
   border: 1px solid var(--color-border-strong);
   border-radius: 3px;
