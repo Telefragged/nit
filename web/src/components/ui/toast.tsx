@@ -1,6 +1,5 @@
 import { Toast as ToastPrimitive } from "@base-ui/react/toast";
-import { X } from "lucide-react";
-import { Button } from "./button";
+import { Button, CloseButton } from "./button";
 
 export const ToastProvider = ToastPrimitive.Provider;
 
@@ -24,12 +23,7 @@ export function Toaster() {
               <ToastPrimitive.Description className="text-muted-foreground" />
             </ToastPrimitive.Content>
             <ToastPrimitive.Action render={<Button size="sm" />} />
-            <ToastPrimitive.Close
-              aria-label="Close"
-              render={<Button variant="ghost" size="icon" />}
-            >
-              <X size={14} aria-hidden />
-            </ToastPrimitive.Close>
+            <ToastPrimitive.Close render={<CloseButton />} />
           </ToastPrimitive.Root>
         ))}
       </ToastPrimitive.Viewport>

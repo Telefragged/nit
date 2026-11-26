@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -22,6 +23,15 @@ const buttonVariants = cva(
     defaultVariants: { variant: "outline", size: "default" },
   },
 );
+
+/** The button that closes a panel: a cross with the label "Close". */
+export function CloseButton(props: Omit<ButtonPrimitive.Props, "children">) {
+  return (
+    <Button variant="ghost" size="icon" aria-label="Close" {...props}>
+      <X size={14} aria-hidden />
+    </Button>
+  );
+}
 
 export function Button({
   className,
