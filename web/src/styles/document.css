@@ -24,7 +24,9 @@
   margin-bottom: 0;
 }
 
-.document-block:has(> .doc-block > .doc-item) {
+.document-block:has(> .doc-block > :is(ul, ol)):has(
+    + .document-block > .doc-block > :is(ul, ol)
+  ) {
   margin-bottom: 4px;
 }
 
